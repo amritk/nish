@@ -14,7 +14,7 @@
 // to stay in the same order as stage0's table — the `.err` goldens match on
 // the whole sentence.
 
-import { BUILTIN_SCHEME } from "./branding";
+import { BUILTIN_SCHEME } from "./branding"
 
 /** One name a `nish:` module exports, and the builtin it stands for. */
 export class BuiltinExport {
@@ -23,7 +23,7 @@ export class BuiltinExport {
    * exported name where the global form is dotted: `nish:process` exports
    * `exit`, and both compilers know it as `process.exit`.
    */
-  canonical: string;
+  canonical: string
   /**
    * The two halves of `canonical`, so that a dotted builtin can be dispatched
    * without taking the name apart again: `"process"` and `"exit"` for
@@ -32,20 +32,20 @@ export class BuiltinExport {
    * neither; here every builtin is reached through a namespace and a member,
    * so the pair is what the checkers actually want.
    */
-  namespace: string;
-  member: string;
+  namespace: string
+  member: string
   /**
    * Whether the name is read as a value rather than called. The two take
    * different paths on both sides, so the kind is carried rather than guessed
    * from the name.
    */
-  isProperty: boolean;
+  isProperty: boolean
 
   constructor(namespace: string, member: string, isProperty: boolean) {
-    this.canonical = namespace.length > 0 ? `${namespace}.${member}` : member;
-    this.namespace = namespace;
-    this.member = member;
-    this.isProperty = isProperty;
+    this.canonical = namespace.length > 0 ? `${namespace}.${member}` : member
+    this.namespace = namespace
+    this.member = member
+    this.isProperty = isProperty
   }
 }
 
@@ -55,28 +55,28 @@ export class BuiltinExport {
  * unknown `nish:sqlite` has to be reported as a bad module rather than as the
  * missing file it would become if it fell through to path resolution.
  */
-export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME);
+export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME)
 
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
-  specifier === `${BUILTIN_SCHEME}io`;
+  specifier === `${BUILTIN_SCHEME}io`
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io`;
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io`
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync";
+    return "readFileSync, readFileSyncOrNull, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, argv, platform, arch";
+    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, argv, platform, arch"
   }
-  return "write, writeError, panic";
-};
+  return "write, writeError, panic"
+}
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
@@ -91,27 +91,27 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "readdirSync" ||
       name === "realpathSync"
     ) {
-      return new BuiltinExport("", name, false);
+      return new BuiltinExport("", name, false)
     }
-    return null;
+    return null
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
     if (name === "exit") {
-      return new BuiltinExport("process", "exit", false);
+      return new BuiltinExport("process", "exit", false)
     }
     if (name === "getenv" || name === "spawnSync" || name === "spawnSyncTo" || name === "monotonicNanos") {
-      return new BuiltinExport("", name, false);
+      return new BuiltinExport("", name, false)
     }
     if (name === "argv" || name === "platform" || name === "arch") {
-      return new BuiltinExport("process", name, true);
+      return new BuiltinExport("process", name, true)
     }
-    return null;
+    return null
   }
   if (specifier === `${BUILTIN_SCHEME}io`) {
     if (name === "write" || name === "writeError" || name === "panic") {
-      return new BuiltinExport("", name, false);
+      return new BuiltinExport("", name, false)
     }
-    return null;
+    return null
   }
-  return null;
-};
+  return null
+}

@@ -52,23 +52,23 @@
  * this program at all", every compiler in the chain answers it, and stage0 is
  * the one that will not be here to.
  */
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { extraArgs, linkPrograms, root } from "./corpus.js";
-import { fileURLToPath } from "node:url";
-import { linkWith, seedForOracle, spawnSeed, withoutSeed } from "./seed.js";
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
+import { extraArgs, linkPrograms, root } from "./corpus.js"
+import { fileURLToPath } from "node:url"
+import { linkWith, seedForOracle, spawnSeed, withoutSeed } from "./seed.js"
 
-const CASES = path.join(root, "tests", "cases");
-const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt");
-const REFUSALS = path.join(root, "tests", "self", "parser-refusals.txt");
+const CASES = path.join(root, "tests", "cases")
+const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt")
+const REFUSALS = path.join(root, "tests", "self", "parser-refusals.txt")
 
 /** The register, as every message about it names it. */
-const REFUSALS_FILE = path.relative(root, REFUSALS);
+const REFUSALS_FILE = path.relative(root, REFUSALS)
 
 /** `--number-mode` is the only flag `self/dump-checked.ts` takes. */
-const SUPPORTED_FLAGS = new Set(["--number-mode"]);
+const SUPPORTED_FLAGS = new Set(["--number-mode"])
 
 /**
  * A `<case>  <the rest of the line>` list — the shape
@@ -84,16 +84,20 @@ const SUPPORTED_FLAGS = new Set(["--number-mode"]);
  * quotes what the programmer wrote — and no case name can.
  */
 const register = (file) => {
-  const rows = new Map();
-  if (!fs.existsSync(file)) { return rows; }
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const text = line.replace(/^\s*#.*$/, "").trim();
-    if (text.length === 0) { continue; }
-    const at = text.search(/\s/);
-    rows.set(at < 0 ? text : text.slice(0, at), at < 0 ? "" : text.slice(at).trim());
+  const rows = new Map()
+  if (!fs.existsSync(file)) {
+    return rows
   }
-  return rows;
-};
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.replace(/^\s*#.*$/, "").trim()
+    if (text.length === 0) {
+      continue
+    }
+    const at = text.search(/\s/)
+    rows.set(at < 0 ? text : text.slice(0, at), at < 0 ? "" : text.slice(at).trim())
+  }
+  return rows
+}
 
 /**
  * The register against the bucket, in both directions, as a function of what a
@@ -118,24 +122,26 @@ const register = (file) => {
  * is a wish, which is the argument the register itself makes.
  */
 const auditRegister = ({ bucket, unproven, registered, present, whole }) => {
-  const failed = [];
+  const failed = []
   for (const { name, where, sentence } of bucket) {
-    const pinned = registered.get(name);
-    registered.delete(name);
+    const pinned = registered.get(name)
+    registered.delete(name)
     if (pinned === undefined) {
       if (present.has(name)) {
         failed.push(
           `${where}: refused by stage1's parser and not in ${REFUSALS_FILE} — ` +
             `add the line: ${name}\t${sentence}`
-        );
+        )
       }
     } else if (pinned !== sentence) {
       failed.push(
         `${where}: ${REFUSALS_FILE} pins ${JSON.stringify(pinned)}, got ${JSON.stringify(sentence)}`
-      );
+      )
     }
   }
-  if (!whole) { return failed; }
+  if (!whole) {
+    return failed
+  }
   // The direction the register is *for*: its purpose is to shrink, so a line
   // the walk above did not match is a claim about nothing.
   for (const name of registered.keys()) {
@@ -143,16 +149,16 @@ const auditRegister = ({ bucket, unproven, registered, present, whole }) => {
       failed.push(
         `${name}: skipped by this run, so nothing here proves it — remove it ` +
           `from ${REFUSALS_FILE}, or the flag in its \`.args\` that skipped it`
-      );
-      continue;
+      )
+      continue
     }
     const why = present.has(name)
       ? "stage1's parser does not refuse it any more"
-      : "names no case in this corpus";
-    failed.push(`${name}: ${why} — remove it from ${REFUSALS_FILE}`);
+      : "names no case in this corpus"
+    failed.push(`${name}: ${why} — remove it from ${REFUSALS_FILE}`)
   }
-  return failed;
-};
+  return failed
+}
 
 /**
  * `auditRegister`'s four failures, watched happening, before a compiler is
@@ -166,8 +172,8 @@ const auditRegister = ({ bucket, unproven, registered, present, whole }) => {
  * to add without answering it here.
  */
 const selfCheck = () => {
-  const present = new Set(["reject_here", "reject_gone", "reject_flagged"]);
-  const one = (name, sentence, where = `tests/cases/${name}.ts`) => [{ name, where, sentence }];
+  const present = new Set(["reject_here", "reject_gone", "reject_flagged"])
+  const one = (name, sentence, where = `tests/cases/${name}.ts`) => [{ name, where, sentence }]
   const audit = (over) =>
     auditRegister({
       bucket: [],
@@ -176,8 +182,8 @@ const selfCheck = () => {
       present,
       whole: true,
       ...over,
-    });
-  const pinned = () => new Map([["reject_here", "found `??`"]]);
+    })
+  const pinned = () => new Map([["reject_here", "found `??`"]])
   const cases = [
     [
       "a registered case refused with its sentence says nothing",
@@ -222,55 +228,66 @@ const selfCheck = () => {
       audit({ registered: new Map([["reject_gone", "found `??`"]]), whole: false }),
       [],
     ],
-  ];
-  const failed = [];
+  ]
+  const failed = []
   for (const [what, got, wanted] of cases) {
     if (wanted.length === 0) {
-      if (got.length > 0) { failed.push(`self-check: ${what} — reported ${JSON.stringify(got[0])}`); }
+      if (got.length > 0) {
+        failed.push(`self-check: ${what} — reported ${JSON.stringify(got[0])}`)
+      }
     } else if (got.length !== 1) {
-      failed.push(`self-check: ${what} — wanted one failure, got ${got.length}`);
+      failed.push(`self-check: ${what} — wanted one failure, got ${got.length}`)
     } else {
-      const missing = wanted.find((fragment) => !got[0].includes(fragment));
+      const missing = wanted.find((fragment) => !got[0].includes(fragment))
       if (missing !== undefined) {
-        failed.push(`self-check: ${what} — wanted ${JSON.stringify(missing)} in ${JSON.stringify(got[0])}`);
+        failed.push(`self-check: ${what} — wanted ${JSON.stringify(missing)} in ${JSON.stringify(got[0])}`)
       }
     }
   }
-  return { failed, count: cases.length };
-};
+  return { failed, count: cases.length }
+}
 
 /** The flags this case is compiled with, split into what stage1 takes and what it does not. */
 const argsFor = (file) => {
-  const flags = [];
-  const unsupported = [];
-  const raw = extraArgs(file);
+  const flags = []
+  const unsupported = []
+  const raw = extraArgs(file)
   for (let i = 0; i < raw.length; i++) {
-    if (SUPPORTED_FLAGS.has(raw[i])) { flags.push(raw[i], raw[++i]); }
-    else { unsupported.push(raw[i]); }
+    if (SUPPORTED_FLAGS.has(raw[i])) {
+      flags.push(raw[i], raw[++i])
+    } else {
+      unsupported.push(raw[i])
+    }
   }
-  return { flags, unsupported };
-};
+  return { flags, unsupported }
+}
 
 const compare = (seed, binary, entry) => {
-  const { flags, unsupported } = argsFor(entry.file);
-  if (unsupported.length > 0) { return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` }; }
-  const named = path.relative(root, entry.file);
+  const { flags, unsupported } = argsFor(entry.file)
+  if (unsupported.length > 0) {
+    return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` }
+  }
+  const named = path.relative(root, entry.file)
   // A `tests/link` case may be refused by the compiler or only by the linker,
   // and `expected.err` does not say which. A compile answers it: what compiles
   // is a `--link` failure, and the dump entry point below does not link.
   if (entry.linked && compiles(seed, named, flags)) {
-    return { skipped: "it compiles; only `--link` refuses it, and dump_checked does not link" };
+    return { skipped: "it compiles; only `--link` refuses it, and dump_checked does not link" }
   }
   const run = spawnSync(binary, [...flags, named], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-  });
-  const output = `${run.stdout}${run.stderr}`;
-  if (run.status === 0) { return { failed: "stage1 accepted it" }; }
-  const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
+  })
+  const output = `${run.stdout}${run.stderr}`
+  if (run.status === 0) {
+    return { failed: "stage1 accepted it" }
+  }
+  const missing = entry.fragments.filter((fragment) => !output.includes(fragment))
   const failed =
-    missing.length > 0 ? `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` : null;
+    missing.length > 0
+      ? `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}`
+      : null
   // A parser refusal is counted in the bucket, which the register holds to a
   // ceiling, and it is held to the case's fragments as well: since stage0
   // retired, a case's `.err` pins the sentence stage1 answers with, whichever
@@ -278,24 +295,30 @@ const compare = (seed, binary, entry) => {
   // bucket, so it is the bucket's name rather than part of the sentence, and
   // the register does not repeat it on every line.
   if (/syntax error:/.test(output)) {
-    return { parser: firstLine(output).replace(/^syntax error: /, ""), failed, fragments: entry.fragments.length };
+    return {
+      parser: firstLine(output).replace(/^syntax error: /, ""),
+      failed,
+      fragments: entry.fragments.length,
+    }
   }
-  if (failed !== null) { return { failed }; }
-  return { fragments: entry.fragments.length };
-};
+  if (failed !== null) {
+    return { failed }
+  }
+  return { fragments: entry.fragments.length }
+}
 
 /** Whether the seed compiles the program at all, IR written to a directory it then forgets. */
 const compiles = (seed, named, flags) => {
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-reject-"));
-  const r = spawnSeed(seed, [named, "-o", `${out}${path.sep}`, ...flags]);
-  fs.rmSync(out, { recursive: true, force: true });
-  return r.status === 0;
-};
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-reject-"))
+  const r = spawnSeed(seed, [named, "-o", `${out}${path.sep}`, ...flags])
+  fs.rmSync(out, { recursive: true, force: true })
+  return r.status === 0
+}
 
 const firstLine = (output) => {
-  const line = output.trim().split("\n")[0] ?? "";
-  return line.replace(/^[^:]*:\d+:\d+: /, "");
-};
+  const line = output.trim().split("\n")[0] ?? ""
+  return line.replace(/^[^:]*:\d+:\d+: /, "")
+}
 
 /**
  * Every negative case: the single-module `reject_*` goldens, then the whole
@@ -303,12 +326,16 @@ const firstLine = (output) => {
  * backlog and the parser-refusal register list a case under.
  */
 const corpus = () => {
-  const entries = [];
+  const entries = []
   for (const name of fs.readdirSync(CASES).sort()) {
-    if (!name.startsWith("reject_") || !name.endsWith(".ts")) { continue; }
-    const file = path.join(CASES, name);
-    const err = file.replace(/\.ts$/, ".err");
-    if (!fs.existsSync(err)) { continue; }
+    if (!name.startsWith("reject_") || !name.endsWith(".ts")) {
+      continue
+    }
+    const file = path.join(CASES, name)
+    const err = file.replace(/\.ts$/, ".err")
+    if (!fs.existsSync(err)) {
+      continue
+    }
     entries.push({
       name: path.basename(name, ".ts"),
       file,
@@ -319,50 +346,53 @@ const corpus = () => {
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.length > 0),
-    });
+    })
   }
   for (const program of linkPrograms()) {
-    if (program.expectedErr === null) { continue; }
+    if (program.expectedErr === null) {
+      continue
+    }
     // `tests/link/<name>/expected.err` is one needle, newlines and all.
     entries.push({
       name: `link/${program.name}`,
       file: program.main,
       linked: true,
       fragments: [program.expectedErr],
-    });
+    })
   }
-  return entries;
-};
+  return entries
+}
 
 /**
  * `self/dump-checked.ts`, linked by the seed. What this oracle compares
  * against is each case's checked-in `.err` fragments, which outlive stage0's `src/`, so
  * the compiler that builds the binary must too (WP19 G2.3).
  */
-const build = (seed) => linkWith(
-    seed,
-    path.join("self", "dump-checked.ts"),
-    path.join(root, "build", "self", "dump_checked")
-  );
+const build = (seed) =>
+  linkWith(seed, path.join("self", "dump-checked.ts"), path.join(root, "build", "self", "dump_checked"))
 
 const main = (argv) => {
-  const verbose = argv.includes("--verbose");
-  const named = withoutSeed(argv).filter((a) => !a.startsWith("--"));
+  const verbose = argv.includes("--verbose")
+  const named = withoutSeed(argv).filter((a) => !a.startsWith("--"))
   // Before anything is built, because a broken gate should cost a millisecond
   // to find rather than the two minutes the corpus takes.
-  const selfChecked = selfCheck();
+  const selfChecked = selfCheck()
   if (selfChecked.failed.length > 0) {
-    for (const f of selfChecked.failed) { process.stdout.write(`  FAIL ${f}\n`); }
-    return 1;
+    for (const f of selfChecked.failed) {
+      process.stdout.write(`  FAIL ${f}\n`)
+    }
+    return 1
   }
-  const seed = seedForOracle(argv);
+  const seed = seedForOracle(argv)
   if (seed.error !== undefined) {
-    process.stderr.write(`${seed.error}\n`);
-    return 1;
+    process.stderr.write(`${seed.error}\n`)
+    return 1
   }
-  const binary = build(seed);
-  if (binary === null) { return 1; }
-  const all = corpus();
+  const binary = build(seed)
+  if (binary === null) {
+    return 1
+  }
+  const all = corpus()
   const inputs =
     named.length > 0
       ? // Deduplicated, so that naming a case twice does not compile it twice
@@ -370,37 +400,43 @@ const main = (argv) => {
         [...new Set(named.map((f) => path.resolve(f)))].map(
           (f) => all.find((e) => e.file === f) ?? { name: f, file: f, linked: false, fragments: [] }
         )
-      : all;
-  const known = register(BACKLOG);
-  let agreed = 0;
-  let checked = 0;
-  const parser = [];
-  const bucket = [];
-  const skipped = [];
+      : all
+  const known = register(BACKLOG)
+  let agreed = 0
+  let checked = 0
+  const parser = []
+  const bucket = []
+  const skipped = []
   // Registered cases this run could not ask the question of, so that a skip is
   // never audited as the parser having changed its mind.
-  const unproven = new Set();
-  const failed = [];
-  const pending = [];
+  const unproven = new Set()
+  const failed = []
+  const pending = []
   for (const entry of inputs) {
-    const result = compare(seed, binary, entry);
-    const where = path.relative(root, entry.file);
+    const result = compare(seed, binary, entry)
+    const where = path.relative(root, entry.file)
     if (result.parser !== undefined) {
-      parser.push(`${where}: ${result.parser}`);
-      bucket.push({ name: entry.name, where, sentence: result.parser });
-      if (result.failed !== null) { failed.push(`${where}: ${result.failed}`); }
-      else { checked += result.fragments; }
+      parser.push(`${where}: ${result.parser}`)
+      bucket.push({ name: entry.name, where, sentence: result.parser })
+      if (result.failed !== null) {
+        failed.push(`${where}: ${result.failed}`)
+      } else {
+        checked += result.fragments
+      }
     } else if (result.skipped !== undefined) {
-      skipped.push(`${where}: ${result.skipped}`);
-      unproven.add(entry.name);
+      skipped.push(`${where}: ${result.skipped}`)
+      unproven.add(entry.name)
     } else if (result.failed !== undefined) {
-      if (known.has(entry.name)) { pending.push(`${where}: ${result.failed}`); }
-      else { failed.push(`${where}: ${result.failed}`); }
+      if (known.has(entry.name)) {
+        pending.push(`${where}: ${result.failed}`)
+      } else {
+        failed.push(`${where}: ${result.failed}`)
+      }
     } else if (known.has(entry.name)) {
-      failed.push(`${where}: agrees now — remove it from tests/self/reject_backlog.txt`);
+      failed.push(`${where}: agrees now — remove it from tests/self/reject_backlog.txt`)
     } else {
-      agreed++;
-      checked += result.fragments;
+      agreed++
+      checked += result.fragments
     }
   }
   failed.push(
@@ -411,23 +447,33 @@ const main = (argv) => {
       present: new Set(all.map((entry) => entry.name)),
       whole: named.length === 0,
     })
-  );
-  for (const f of failed) { process.stdout.write(`  FAIL ${f}\n`); }
-  if (verbose) {
-    for (const p of pending) { process.stdout.write(`  backlog ${p}\n`); }
-    for (const p of parser) { process.stdout.write(`  parser ${p}\n`); }
-    for (const s of skipped) { process.stdout.write(`  skip ${s}\n`); }
+  )
+  for (const f of failed) {
+    process.stdout.write(`  FAIL ${f}\n`)
   }
-  const compared = inputs.length - parser.length - skipped.length - pending.length;
-  const note = pending.length > 0 ? `, ${pending.length} in the backlog` : "";
+  if (verbose) {
+    for (const p of pending) {
+      process.stdout.write(`  backlog ${p}\n`)
+    }
+    for (const p of parser) {
+      process.stdout.write(`  parser ${p}\n`)
+    }
+    for (const s of skipped) {
+      process.stdout.write(`  skip ${s}\n`)
+    }
+  }
+  const compared = inputs.length - parser.length - skipped.length - pending.length
+  const note = pending.length > 0 ? `, ${pending.length} in the backlog` : ""
   process.stdout.write(
     `${agreed}/${compared} cases rejected with the expected message (${checked} fragments), ` +
       `${parser.length} refused by the parser instead (register self-check ` +
       `${selfChecked.count}/${selfChecked.count}), ${skipped.length} skipped${note}, ` +
       `seed ${seed.label}\n`
-  );
-  return failed.length === 0 ? 0 : 1;
-};
+  )
+  return failed.length === 0 ? 0 : 1
+}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
-export { compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main(process.argv.slice(2)))
+}
+export { compare, corpus, build }

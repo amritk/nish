@@ -23,7 +23,7 @@
 // `docs/ARCHITECTURE.md`.
 
 /** The language, as a diagnostic names it: "`eval` is forbidden in Nish". */
-export const LANGUAGE: string = "Nish";
+export const LANGUAGE: string = "Nish"
 
 /**
  * The compiler: the npm package, the `bin` entry, the word a generated file
@@ -32,7 +32,7 @@ export const LANGUAGE: string = "Nish";
  * and `packageVersion()`, and `tests/self/ir_oracle.js` compares the two byte
  * for byte on every `-g` case.
  */
-export const CLI: string = "nish";
+export const CLI: string = "nish"
 
 /**
  * The scheme a *builtin* module is imported under: `nish:fs`. It resolves to
@@ -40,7 +40,7 @@ export const CLI: string = "nish";
  * what separates it from the standard library below. A literal, like every
  * value here, for the reason the header gives.
  */
-export const BUILTIN_SCHEME: string = "nish:";
+export const BUILTIN_SCHEME: string = "nish:"
 
 /**
  * The specifier the *standard library* is imported under: `nish/text` is
@@ -49,7 +49,7 @@ export const BUILTIN_SCHEME: string = "nish:";
  * §2 is why it is here: it is the package's own name, and both compilers have
  * to agree on it before either can resolve a bare specifier.
  */
-export const STD_PREFIX: string = "nish/";
+export const STD_PREFIX: string = "nish/"
 
 /**
  * The `exports` condition a package declares to say that it has Nish source
@@ -61,7 +61,7 @@ export const STD_PREFIX: string = "nish/";
  * bare specifier — a package that matched under stage0 and not under stage1
  * would be a program that compiles with one compiler and not the other.
  */
-export const PACKAGE_CONDITION: string = "nish";
+export const PACKAGE_CONDITION: string = "nish"
 
 /**
  * The mode-qualified spellings of the condition above: `nish-i32`, `nish-f64`.
@@ -72,7 +72,7 @@ export const PACKAGE_CONDITION: string = "nish";
  * of the dependency is checked. A function rather than a constant, so the
  * literal rule above still holds of everything a constant here holds.
  */
-export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`;
+export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CONDITION}-${numberMode}`
 
 /**
  * The package version, baked in rather than read from `package.json`: stage1
@@ -81,10 +81,10 @@ export const packageConditionFor = (numberMode: string): string => `${PACKAGE_CO
  * `package.json` disagree, which is the check that keeps a `npm version` bump
  * from going stale here.
  */
-export const VERSION: string = "0.12.0";
+export const VERSION: string = "0.12.0"
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
-export const RUNTIME_HEADER: string = "nish.h";
+export const RUNTIME_HEADER: string = "nish.h"
 
 /** Include guard on a generated header: `NISH_ADD_H` for `build/add.h`. */
-export const HEADER_GUARD_PREFIX: string = "NISH";
+export const HEADER_GUARD_PREFIX: string = "NISH"

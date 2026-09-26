@@ -33,71 +33,71 @@
  * public domain.
  */
 const fnv1a = (key: string): u32 => {
-  let hash: u32 = 2166136261;
-  let i = 0;
+  let hash: u32 = 2166136261
+  let i = 0
   while (i < key.length) {
-    hash = hash ^ toU32(key.charCodeAt(i));
-    hash = hash * 16777619;
-    i = i + 1;
+    hash = hash ^ toU32(key.charCodeAt(i))
+    hash = hash * 16777619
+    i = i + 1
   }
-  return hash;
-};
+  return hash
+}
 
 /** The same hash as an `i32`: same bits, which is what the support oracle prints. */
-export const hashString = (key: string): i32 => toI32(fnv1a(key));
+export const hashString = (key: string): i32 => toI32(fnv1a(key))
 
 /** The initial bucket count. Small: most scopes hold a handful of names. */
-const INITIAL_SLOTS: i32 = 16;
+const INITIAL_SLOTS: i32 = 16
 
 /**
  * The most entries a 24-bit index-plus-one field holds, 2^24 - 1: Node's own
  * `Map` limit. It is also that field's mask, so the cap and the unpacking are
  * one number and cannot drift apart.
  */
-const INDEX_CAP: i32 = 16777215;
+const INDEX_CAP: i32 = 16777215
 
 /** The first bucket for `hash`: its low bits folded with its high half. */
-export const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) & mask;
+export const home = (hash: u32, mask: i32): i32 => toI32(hash ^ (hash >>> 16)) & mask
 
 /** The eight hash bits a bucket keeps: the top of the hash, independent of `home`'s low bits. */
-export const fingerprint = (hash: u32): u32 => hash >>> 24;
+export const fingerprint = (hash: u32): u32 => hash >>> 24
 
 /** The bucket word for entry `index`: the fingerprint, then the index plus one. */
-export const slotOf = (hash: u32, index: i32): u32 => (fingerprint(hash) << 24) | toU32(index + 1);
+export const slotOf = (hash: u32, index: i32): u32 => (fingerprint(hash) << 24) | toU32(index + 1)
 
 /** The entry index an occupied bucket word points at. */
-export const entryOf = (slot: u32): i32 => toI32(slot & toU32(INDEX_CAP)) - 1;
+export const entryOf = (slot: u32): i32 => toI32(slot & toU32(INDEX_CAP)) - 1
 
 export class StringMap {
   /** Bucket -> fingerprint in the top 8 bits, entry index plus one in the low 24. 0 is empty. */
-  slots: u32[];
+  slots: u32[]
   /** `slots.length - 1`; the length is always a power of two. */
-  mask: i32;
+  mask: i32
   /** The entries, in insertion order. */
-  keys: string[];
-  values: i32[];
+  keys: string[]
+  values: i32[]
   /** Each entry's full hash, so a probe and a rebuild never hash a key again. */
-  hashes: u32[];
+  hashes: u32[]
 
   constructor() {
-    this.slots = new Array<u32>(INITIAL_SLOTS);
-    this.mask = INITIAL_SLOTS - 1;
-    this.keys = [];
-    this.values = [];
-    this.hashes = [];
+    this.slots = new Array<u32>(INITIAL_SLOTS)
+    this.mask = INITIAL_SLOTS - 1
+    this.keys = []
+    this.values = []
+    this.hashes = []
   }
 
   /** How many entries the map holds. */
   size(): i32 {
-    return this.keys.length;
+    return this.keys.length
   }
 
   keyAt(index: i32): string {
-    return this.keys[index];
+    return this.keys[index]
   }
 
   valueAt(index: i32): i32 {
-    return this.values[index];
+    return this.values[index]
   }
 
   /**
@@ -108,30 +108,30 @@ export class StringMap {
    * keeps at least a quarter of the buckets empty, so this always terminates.
    */
   probe(key: string, hash: u32): i32 {
-    const wanted = fingerprint(hash);
-    let bucket = home(hash, this.mask);
-    let slot = this.slots[bucket];
+    const wanted = fingerprint(hash)
+    let bucket = home(hash, this.mask)
+    let slot = this.slots[bucket]
     while (slot !== 0) {
       if (fingerprint(slot) === wanted) {
-        const at = entryOf(slot);
+        const at = entryOf(slot)
         if (this.hashes[at] === hash && this.keys[at] === key) {
-          return at;
+          return at
         }
       }
-      bucket = (bucket + 1) & this.mask;
-      slot = this.slots[bucket];
+      bucket = (bucket + 1) & this.mask
+      slot = this.slots[bucket]
     }
-    return -1 - bucket;
+    return -1 - bucket
   }
 
   /** The entry index for `key`, or -1 when the map does not hold it. */
   find(key: string): i32 {
-    const at = this.probe(key, fnv1a(key));
-    return at < 0 ? -1 : at;
+    const at = this.probe(key, fnv1a(key))
+    return at < 0 ? -1 : at
   }
 
   has(key: string): boolean {
-    return this.find(key) >= 0;
+    return this.find(key) >= 0
   }
 
   /**
@@ -140,44 +140,44 @@ export class StringMap {
    * caller says what "absent" means.
    */
   get(key: string, missing: i32): i32 {
-    const at = this.find(key);
-    return at < 0 ? missing : this.values[at];
+    const at = this.find(key)
+    return at < 0 ? missing : this.values[at]
   }
 
   /** Insert `key`, or overwrite the value it already has. */
   set(key: string, value: i32): void {
-    const hash = fnv1a(key);
-    const at = this.probe(key, hash);
+    const hash = fnv1a(key)
+    const at = this.probe(key, hash)
     if (at >= 0) {
-      this.values[at] = value;
-      return;
+      this.values[at] = value
+      return
     }
-    this.insertAt(-1 - at, key, hash, value);
+    this.insertAt(-1 - at, key, hash, value)
   }
 
   /** Insert `key` unless the map holds it, leaving a value it has alone; true when it was absent. One probe either way. */
   add(key: string, value: i32): boolean {
-    const hash = fnv1a(key);
-    const at = this.probe(key, hash);
+    const hash = fnv1a(key)
+    const at = this.probe(key, hash)
     if (at >= 0) {
-      return false;
+      return false
     }
-    this.insertAt(-1 - at, key, hash, value);
-    return true;
+    this.insertAt(-1 - at, key, hash, value)
+    return true
   }
 
   /** Append an entry and point `bucket`, the empty one a probe for `key` stopped at, to it. */
   insertAt(bucket: i32, key: string, hash: u32, value: i32): void {
     if (this.keys.length >= INDEX_CAP) {
-      panic("StringMap maximum size exceeded");
+      panic("StringMap maximum size exceeded")
     }
-    this.keys.push(key);
-    this.values.push(value);
-    this.hashes.push(hash);
-    this.slots[bucket] = slotOf(hash, this.keys.length - 1);
+    this.keys.push(key)
+    this.values.push(value)
+    this.hashes.push(hash)
+    this.slots[bucket] = slotOf(hash, this.keys.length - 1)
     // Grow at three quarters full, before the probe chains get long.
     if (this.keys.length * 4 > this.slots.length * 3) {
-      this.grow();
+      this.grow()
     }
   }
 
@@ -187,18 +187,18 @@ export class StringMap {
    * holding — survives, and no key is hashed or compared.
    */
   grow(): void {
-    const wider = this.slots.length * 2;
-    this.slots = new Array<u32>(wider);
-    this.mask = wider - 1;
-    let i = 0;
+    const wider = this.slots.length * 2
+    this.slots = new Array<u32>(wider)
+    this.mask = wider - 1
+    let i = 0
     while (i < this.keys.length) {
-      const hash = this.hashes[i];
-      let bucket = home(hash, this.mask);
+      const hash = this.hashes[i]
+      let bucket = home(hash, this.mask)
       while (this.slots[bucket] !== 0) {
-        bucket = (bucket + 1) & this.mask;
+        bucket = (bucket + 1) & this.mask
       }
-      this.slots[bucket] = slotOf(hash, i);
-      i = i + 1;
+      this.slots[bucket] = slotOf(hash, i)
+      i = i + 1
     }
   }
 }
@@ -209,26 +209,26 @@ export class StringMap {
  * wrong.
  */
 export class StringSet {
-  map: StringMap;
+  map: StringMap
 
   constructor() {
-    this.map = new StringMap();
+    this.map = new StringMap()
   }
 
   size(): i32 {
-    return this.map.size();
+    return this.map.size()
   }
 
   at(index: i32): string {
-    return this.map.keyAt(index);
+    return this.map.keyAt(index)
   }
 
   has(key: string): boolean {
-    return this.map.has(key);
+    return this.map.has(key)
   }
 
   /** Add `key`; true when it was not already there. One probe either way. */
   add(key: string): boolean {
-    return this.map.add(key, 0);
+    return this.map.add(key, 0)
   }
 }

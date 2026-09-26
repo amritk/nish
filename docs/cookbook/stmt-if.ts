@@ -1,16 +1,16 @@
 const abs = (x: number): number => {
   if (x < 0) {
-    return -x;
+    return -x
   }
-  return x;
-};
+  return x
+}
 
 const pick = (flag: boolean, a: number, b: number): number => {
-  let r = 0;
+  let r = 0
   if (flag) {
-    r = a;
+    r = a
   } else {
-    r = b;
+    r = b
   }
-  return r;
-};
+  return r
+}

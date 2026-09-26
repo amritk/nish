@@ -29,42 +29,48 @@
  * `npm test` without a separate command first. Where the download fails, the
  * answer is an error naming every way to supply a seed.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
+import fs from "node:fs"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
 
 /** The repository root. */
-const root = path.resolve(import.meta.dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..")
 
 /**
  * `.js` / `.mjs` / `.cjs` is a Node entry point and everything else a native
  * binary — `scripts/bootstrap.sh`'s rule for `NISH_BOOTSTRAP`, so that one
  * path spells a seed in both places.
  */
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
 
 /** A spawnable compiler: `cmd` plus what comes before the program's own arguments. */
 const resolveSeed = (spec) => {
-  const file = path.resolve(root, spec);
-  const refuse = (why) => ({ error: `seed ${spec} ${why}` });
-  if (!fs.existsSync(file)) { return refuse("does not exist"); }
-  if (!fs.statSync(file).isFile()) { return refuse("is not a file"); }
+  const file = path.resolve(root, spec)
+  const refuse = (why) => ({ error: `seed ${spec} ${why}` })
+  if (!fs.existsSync(file)) {
+    return refuse("does not exist")
+  }
+  if (!fs.statSync(file).isFile()) {
+    return refuse("is not a file")
+  }
   const seed = NODE_ENTRY.test(file)
     ? { label: spec, cmd: process.execPath, prefix: [file] }
-    : { label: spec, cmd: file, prefix: [] };
+    : { label: spec, cmd: file, prefix: [] }
   if (seed.prefix.length === 0) {
     try {
-      fs.accessSync(file, fs.constants.X_OK);
+      fs.accessSync(file, fs.constants.X_OK)
     } catch {
-      return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
+      return refuse("is not executable (only .js/.mjs/.cjs are run under node)")
     }
   }
-  if (spawnSeed(seed, ["--version"]).status !== 0) { return refuse("is not runnable (`--version` failed)"); }
-  return seed;
-};
+  if (spawnSeed(seed, ["--version"]).status !== 0) {
+    return refuse("is not runnable (`--version` failed)")
+  }
+  return seed
+}
 
 /** Where `scripts/fetch-seed.sh` leaves the released compiler. */
-const FETCHED = path.join("build", "seed", "bin", "nish");
+const FETCHED = path.join("build", "seed", "bin", "nish")
 
 /**
  * The seed nobody named: `NISH_BOOTSTRAP` first, then a compiler left in the
@@ -73,19 +79,23 @@ const FETCHED = path.join("build", "seed", "bin", "nish");
  * `NISH_BOOTSTRAP= npm test` turns the seed off for one run.
  */
 const defaultSeedSpec = () => {
-  const fromEnvironment = process.env.NISH_BOOTSTRAP;
-  if (fromEnvironment !== undefined && fromEnvironment !== "") { return fromEnvironment; }
-  for (const inTree of [path.join("build", "nish"), FETCHED]) {
-    if (fs.existsSync(path.join(root, inTree))) { return inTree; }
+  const fromEnvironment = process.env.NISH_BOOTSTRAP
+  if (fromEnvironment !== undefined && fromEnvironment !== "") {
+    return fromEnvironment
   }
-  return null;
-};
+  for (const inTree of [path.join("build", "nish"), FETCHED]) {
+    if (fs.existsSync(path.join(root, inTree))) {
+      return inTree
+    }
+  }
+  return null
+}
 
 /** `--seed <path>` out of an argument list, or null when it is not there. */
 const namedSeedSpec = (argv) => {
-  const at = argv.indexOf("--seed");
-  return at >= 0 ? (argv[at + 1] ?? null) : null;
-};
+  const at = argv.indexOf("--seed")
+  return at >= 0 ? (argv[at + 1] ?? null) : null
+}
 
 /**
  * The same list without `--seed` and its value. Every oracle reads its
@@ -93,9 +103,9 @@ const namedSeedSpec = (argv) => {
  * value on the command line that looks exactly like one.
  */
 const withoutSeed = (argv) => {
-  const at = argv.indexOf("--seed");
-  return at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-};
+  const at = argv.indexOf("--seed")
+  return at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv
+}
 
 /**
  * The seed for `tests/run.js` and the oracles: the order above, then the
@@ -103,32 +113,35 @@ const withoutSeed = (argv) => {
  * one step here that reaches the network, and a run should say when it did.
  */
 const seedForOracle = (argv) => {
-  const named = namedSeedSpec(argv);
-  const spec = named ?? defaultSeedSpec();
-  if (spec !== null) { return resolveSeed(spec); }
-  process.stderr.write("note: no seed in the tree, so scripts/fetch-seed.sh is fetching the last release\n");
+  const named = namedSeedSpec(argv)
+  const spec = named ?? defaultSeedSpec()
+  if (spec !== null) {
+    return resolveSeed(spec)
+  }
+  process.stderr.write("note: no seed in the tree, so scripts/fetch-seed.sh is fetching the last release\n")
   const fetched = spawnSync("sh", [path.join(root, "scripts", "fetch-seed.sh")], {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "inherit", "inherit"],
-  });
+  })
   if (fetched.status !== 0 || !fs.existsSync(path.join(root, FETCHED))) {
     return {
       error:
         "no seed: pass --seed <nish>, set NISH_BOOTSTRAP, run `bash scripts/fetch-seed.sh` " +
         "to fetch the last release into build/seed (it just failed), or run `npm run build` " +
         "to leave one in build/nish",
-    };
+    }
   }
-  return resolveSeed(FETCHED);
-};
+  return resolveSeed(FETCHED)
+}
 
-const spawnSeed = (seed, args, options = {}) => spawnSync(seed.cmd, [...seed.prefix, ...args], {
+const spawnSeed = (seed, args, options = {}) =>
+  spawnSync(seed.cmd, [...seed.prefix, ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
     ...options,
-  });
+  })
 
 /**
  * Build one Nish program natively with the seed and answer where the binary
@@ -137,13 +150,13 @@ const spawnSeed = (seed, args, options = {}) => spawnSync(seed.cmd, [...seed.pre
  * on a real seed is the rolling freeze doing its job and worth reading.
  */
 const linkWith = (seed, source, out) => {
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  const built = spawnSeed(seed, [path.join(root, source), "--link", out])
   if (built.status !== 0) {
-    process.stderr.write(`${seed.label} could not build ${source}:\n${built.stderr}\n`);
-    return null;
+    process.stderr.write(`${seed.label} could not build ${source}:\n${built.stderr}\n`)
+    return null
   }
-  return out;
-};
+  return out
+}
 
-export { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed, root, seedForOracle, spawnSeed, withoutSeed };
+export { defaultSeedSpec, linkWith, namedSeedSpec, resolveSeed, root, seedForOracle, spawnSeed, withoutSeed }

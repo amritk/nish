@@ -33,9 +33,9 @@
 // instead (`fusedCalleesOf`), and the emitter lowers it (`emitFusedCall`, both
 // in `self/emit-map.ts`).
 
-import { CheckContext } from "./context";
-import { isAssignmentOperator, unwrapParens } from "./emit-util";
-import { isCollectionStruct, isMapOwner } from "./generics";
+import { CheckContext } from "./context"
+import { isAssignmentOperator, unwrapParens } from "./emit-util"
+import { isCollectionStruct, isMapOwner } from "./generics"
 import {
   N_BINARY,
   N_BLOCK,
@@ -54,7 +54,7 @@ import {
   N_TRUE,
   N_UNARY,
   Node,
-} from "./nodes";
+} from "./nodes"
 import {
   CheckedProgram,
   FUSE_PROBE,
@@ -64,8 +64,8 @@ import {
   FUSE_WRITE_FOUND,
   FunctionSig,
   StructInfo,
-} from "./program";
-import { T_STRING } from "./types";
+} from "./program"
+import { T_STRING } from "./types"
 
 /**
  * Pattern 1: `call` is `m.set(k, E)`, just checked. When `E` asks about `k` in
@@ -73,31 +73,32 @@ import { T_STRING } from "./types";
  * whose probe that one `get` or `has` reads.
  */
 export const recordUpdateFusion = (ctx: CheckContext, call: Node): void => {
-  const owner = collectionOwnerOf(ctx.program, call, "set");
+  const owner = collectionOwnerOf(ctx.program, call, "set")
   if (owner === null || ctx.program.isCollections()) {
-    return;
+    return
   }
-  const args = call.children[1].children;
+  const args = call.children[1].children
   if (args.length !== 2) {
-    return;
+    return
   }
-  const receiver = call.children[0].children[0];
-  const key = args[0];
+  const receiver = call.children[0].children[0]
+  const key = args[0]
   if (!isFusablePlace(ctx.program, receiver) || !isFusableKey(ctx.program, key)) {
-    return;
+    return
   }
-  const calls: Node[] = [];
+  const calls: Node[] = []
   if (!isInert(ctx, args[1], calls) || calls.length !== 1) {
-    return;
+    return
   }
-  const use = calls[0];
-  const asks = collectionOwnerOf(ctx.program, use, "get") !== null || collectionOwnerOf(ctx.program, use, "has") !== null;
+  const use = calls[0]
+  const asks =
+    collectionOwnerOf(ctx.program, use, "get") !== null || collectionOwnerOf(ctx.program, use, "has") !== null
   if (!asks || !sameCallTarget(ctx.program, use, receiver, key)) {
-    return;
+    return
   }
-  ctx.program.fusion.record(call.id, FUSE_UPDATE, call.id);
-  ctx.program.fusion.record(use.id, FUSE_USE, call.id);
-};
+  ctx.program.fusion.record(call.id, FUSE_UPDATE, call.id)
+  ctx.program.fusion.record(use.id, FUSE_USE, call.id)
+}
 
 /**
  * Patterns 2 and 3: `stmt` is an `if`, just checked. When its condition is
@@ -107,38 +108,43 @@ export const recordUpdateFusion = (ctx: CheckContext, call: Node): void => {
  */
 export const recordGuardFusion = (ctx: CheckContext, stmt: Node): void => {
   if (ctx.program.isCollections()) {
-    return;
+    return
   }
-  let condition = unwrapParens(stmt.children[0]);
-  const absent = condition.kind === N_UNARY && condition.text === "!";
+  let condition = unwrapParens(stmt.children[0])
+  const absent = condition.kind === N_UNARY && condition.text === "!"
   if (absent) {
-    condition = unwrapParens(condition.children[0]);
+    condition = unwrapParens(condition.children[0])
   }
-  const owner = collectionOwnerOf(ctx.program, condition, "has");
+  const owner = collectionOwnerOf(ctx.program, condition, "has")
   if (owner === null) {
-    return;
+    return
   }
-  const receiver = condition.children[0].children[0];
-  const key = condition.children[1].children[0];
+  const receiver = condition.children[0].children[0]
+  const key = condition.children[1].children[0]
   if (!isFusablePlace(ctx.program, receiver) || !isFusableKey(ctx.program, key)) {
-    return;
+    return
   }
-  const write = firstCallOf(stmt.children[1]);
+  const write = firstCallOf(stmt.children[1])
   if (write === null || !sameCallTarget(ctx.program, write, receiver, key)) {
-    return;
+    return
   }
   if (isMapOwner(owner)) {
-    const args = write.children[1].children;
-    const calls: Node[] = [];
-    if (collectionOwnerOf(ctx.program, write, "set") === null || args.length !== 2 || !isInert(ctx, args[1], calls) || calls.length > 0) {
-      return;
+    const args = write.children[1].children
+    const calls: Node[] = []
+    if (
+      collectionOwnerOf(ctx.program, write, "set") === null ||
+      args.length !== 2 ||
+      !isInert(ctx, args[1], calls) ||
+      calls.length > 0
+    ) {
+      return
     }
   } else if (!absent || collectionOwnerOf(ctx.program, write, "add") === null) {
-    return;
+    return
   }
-  ctx.program.fusion.record(condition.id, FUSE_PROBE, condition.id);
-  ctx.program.fusion.record(write.id, absent ? FUSE_WRITE_ABSENT : FUSE_WRITE_FOUND, condition.id);
-};
+  ctx.program.fusion.record(condition.id, FUSE_PROBE, condition.id)
+  ctx.program.fusion.record(write.id, absent ? FUSE_WRITE_ABSENT : FUSE_WRITE_FOUND, condition.id)
+}
 
 /**
  * The table `call` is a call of `name` on, when it is one on the global `Map`
@@ -147,79 +153,79 @@ export const recordGuardFusion = (ctx: CheckContext, stmt: Node): void => {
  */
 const collectionOwnerOf = (program: CheckedProgram, call: Node, name: string): StructInfo | null => {
   if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER || call.children[0].text !== name) {
-    return null;
+    return null
   }
-  const sig: FunctionSig | null = program.nodeCallees[call.id];
+  const sig: FunctionSig | null = program.nodeCallees[call.id]
   if (sig === null) {
-    return null;
+    return null
   }
-  const owner = sig.owner;
+  const owner = sig.owner
   if (owner === null || !isCollectionStruct(owner) || call.children[1].children.length === 0) {
-    return null;
+    return null
   }
-  return owner;
-};
+  return owner
+}
 
 /** The call a branch starts with, when its first statement is one: `{ m.set(k, E); ... }` or `m.set(k, E);`. */
 const firstCallOf = (branch: Node): Node | null => {
-  let first = branch;
+  let first = branch
   if (branch.kind === N_BLOCK) {
     if (branch.children.length === 0) {
-      return null;
+      return null
     }
-    first = branch.children[0];
+    first = branch.children[0]
   }
   if (first.kind !== N_EXPR_STMT) {
-    return null;
+    return null
   }
-  const call = unwrapParens(first.children[0]);
-  return call.kind === N_CALL && call.children[0].kind === N_MEMBER ? call : null;
-};
+  const call = unwrapParens(first.children[0])
+  return call.kind === N_CALL && call.children[0].kind === N_MEMBER ? call : null
+}
 
 /** Whether `call` is on `receiver` with `key` as its first argument, both spelled the same. */
 const sameCallTarget = (program: CheckedProgram, call: Node, receiver: Node, key: Node): boolean =>
   call.children[0].kind === N_MEMBER &&
   call.children[1].children.length > 0 &&
   samePlace(program, call.children[0].children[0], receiver) &&
-  samePlace(program, call.children[1].children[0], key);
+  samePlace(program, call.children[1].children[0], key)
 
 /** A receiver both calls evaluate to the same table: a local or parameter, or a `this.<field>` path. */
 const isFusablePlace = (program: CheckedProgram, node: Node): boolean =>
-  node.kind === N_IDENT ? program.nodeLocals[node.id] !== null : isThisPath(node);
+  node.kind === N_IDENT ? program.nodeLocals[node.id] !== null : isThisPath(node)
 
 /** `this.a.b`: a chain of field reads that starts at `this`. */
 const isThisPath = (node: Node): boolean => {
   if (node.kind === N_THIS) {
-    return true;
+    return true
   }
-  return node.kind === N_MEMBER && isThisPath(node.children[0]);
-};
+  return node.kind === N_MEMBER && isThisPath(node.children[0])
+}
 
 /** A key that means the same at both calls: a place, or a literal. */
 const isFusableKey = (program: CheckedProgram, node: Node): boolean =>
-  isKeyLiteral(node) || isFusablePlace(program, node);
+  isKeyLiteral(node) || isFusablePlace(program, node)
 
 const isKeyLiteral = (node: Node): boolean =>
-  node.kind === N_NUMBER || node.kind === N_STRING || node.kind === N_TRUE || node.kind === N_FALSE;
+  node.kind === N_NUMBER || node.kind === N_STRING || node.kind === N_TRUE || node.kind === N_FALSE
 
 /** Whether `a` and `b` are spelled the same way and name the same place. */
 const samePlace = (program: CheckedProgram, a: Node, b: Node): boolean => {
   if (a.kind !== b.kind) {
-    return false;
+    return false
   }
   if (a.kind === N_IDENT) {
-    const local = program.nodeLocals[a.id];
-    const other = program.nodeLocals[b.id];
-    return a.text === b.text && local !== null && other !== null && local === other;
+    const local = program.nodeLocals[a.id]
+    const other = program.nodeLocals[b.id]
+    return a.text === b.text && local !== null && other !== null && local === other
   }
   if (a.kind === N_THIS) {
-    return true;
+    return true
   }
   if (a.kind === N_MEMBER) {
-    return a.text === b.text && samePlace(program, a.children[0], b.children[0]);
+    return a.text === b.text && samePlace(program, a.children[0], b.children[0])
   }
-  return isKeyLiteral(a) && a.text === b.text;
-};
+  return isKeyLiteral(a) && a.text === b.text
+}
 
 /**
  * Whether evaluating `node` can do nothing to a table: no allocation, no
@@ -229,7 +235,7 @@ const samePlace = (program: CheckedProgram, a: Node, b: Node): boolean => {
  * which the caller holds to `samePlace`, so they are not walked here.
  */
 const isInert = (ctx: CheckContext, node: Node, calls: Node[]): boolean => {
-  const program = ctx.program;
+  const program = ctx.program
   switch (node.kind) {
     case N_IDENT:
     case N_NUMBER:
@@ -238,33 +244,37 @@ const isInert = (ctx: CheckContext, node: Node, calls: Node[]): boolean => {
     case N_FALSE:
     case N_NULL:
     case N_THIS:
-      return true;
+      return true
     case N_PAREN:
-      return isInert(ctx, node.children[0], calls);
+      return isInert(ctx, node.children[0], calls)
     case N_UNARY:
-      return node.text !== "++" && node.text !== "--" && isInert(ctx, node.children[0], calls);
+      return node.text !== "++" && node.text !== "--" && isInert(ctx, node.children[0], calls)
     case N_BINARY:
       // A string `+` builds a new string, which is an allocation.
       if (isAssignmentOperator(node.text) || (node.text === "+" && program.nodeTypes[node.id] === T_STRING)) {
-        return false;
+        return false
       }
-      return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls);
+      return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls)
     case N_CONDITIONAL:
-      return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls) && isInert(ctx, node.children[2], calls);
+      return (
+        isInert(ctx, node.children[0], calls) &&
+        isInert(ctx, node.children[1], calls) &&
+        isInert(ctx, node.children[2], calls)
+      )
     case N_MEMBER:
       // A field, `.length` or `.size` of a value, or an enum member; a
       // namespace's property (`Math.PI`, `process.argv`) is the builtins' to
       // lower, and is left out rather than looked into.
       if (program.nodeTypes[node.children[0].id] >= 0) {
-        return isInert(ctx, node.children[0], calls);
+        return isInert(ctx, node.children[0], calls)
       }
-      return program.isEnumMember(ctx.table, node);
+      return program.isEnumMember(ctx.table, node)
     case N_INDEX:
-      return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls);
+      return isInert(ctx, node.children[0], calls) && isInert(ctx, node.children[1], calls)
     case N_CALL:
-      calls.push(node);
-      return true;
+      calls.push(node)
+      return true
     default:
-      return false;
+      return false
   }
-};
+}

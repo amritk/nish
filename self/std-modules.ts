@@ -7,15 +7,15 @@
 // into whatever imports it, so all this module answers is a path and a listing;
 // everything after that is the ordinary module path.
 
-import { CLI, STD_PREFIX } from "./branding";
-import { normalizePath } from "./paths";
-import { splitByte } from "./strings";
+import { CLI, STD_PREFIX } from "./branding"
+import { normalizePath } from "./paths"
+import { splitByte } from "./strings"
 
-const SLASH: i32 = 47;
-const DOT: i32 = 46;
+const SLASH: i32 = 47
+const DOT: i32 = 46
 
 /** The directory the library lives in, relative to the package root. */
-export const STD_DIR: string = "std";
+export const STD_DIR: string = "std"
 
 /**
  * `nish/text` -> `std/text.ts`: the name a standard-library module carries in
@@ -31,7 +31,7 @@ export const STD_DIR: string = "std";
  * what goes in the IR, so the name is the one that may not depend on it.
  */
 export const stdModuleName = (specifier: string): string =>
-  `${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`;
+  `${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`
 
 /**
  * `nish/text` -> `<package root>/std/text.ts`, normalised: the file to open.
@@ -42,7 +42,7 @@ export const stdModuleName = (specifier: string): string =>
  * headers equal, because the header is `stdModuleName` now.
  */
 export const stdModulePath = (root: string, specifier: string): string =>
-  normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`);
+  normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`)
 
 /**
  * Whether `nish/<name>` names a module *inside* the library
@@ -61,11 +61,11 @@ export const stdModulePath = (root: string, specifier: string): string =>
 export const isStdModuleName = (name: string): boolean => {
   for (const segment of splitByte(name, SLASH)) {
     if (segment.length === 0 || segment.charCodeAt(0) === DOT) {
-      return false;
+      return false
     }
   }
-  return true;
-};
+  return true
+}
 
 /**
  * The modules the library has, for the diagnostic that lists them.
@@ -78,7 +78,7 @@ export const isStdModuleName = (name: string): boolean => {
  * arrangement that keeps `VERSION` in `branding.ts` honest against
  * `package.json`.
  */
-export const stdModuleNames = (): string => "collections, json, map, pair, testing, text, threads";
+export const stdModuleNames = (): string => "collections, json, map, pair, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -86,7 +86,7 @@ export const stdModuleNames = (): string => "collections, json, map, pair, testi
  * `Set` is what loads it — and it writes no `.ll` of its own: every instance a
  * module uses is emitted into that module.
  */
-export const COLLECTIONS_SPECIFIER: string = "nish/collections";
+export const COLLECTIONS_SPECIFIER: string = "nish/collections"
 
 /**
  * Whether a module is the standard library's `std/collections.ts`. The
@@ -96,7 +96,7 @@ export const COLLECTIONS_SPECIFIER: string = "nish/collections";
  * written.
  */
 export const isCollectionsModule = (packageName: string, name: string): boolean =>
-  packageName === CLI && name === stdModuleName(COLLECTIONS_SPECIFIER);
+  packageName === CLI && name === stdModuleName(COLLECTIONS_SPECIFIER)
 
 /**
  * `nish/map`: `reserve` and `getOrInsert` (docs/wp32-map.md §9.2). Their
@@ -104,8 +104,8 @@ export const isCollectionsModule = (packageName: string, name: string): boolean 
  * to the table's `reserveSlots` and to one `probe` and a write through its
  * answer, so like `nish/collections` it writes no `.ll` of its own.
  */
-export const MAP_EXTRAS_SPECIFIER: string = "nish/map";
+export const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 
 /** Whether a module is the standard library's `std/map.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isMapExtrasModule = (packageName: string, name: string): boolean =>
-  packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER);
+  packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER)

@@ -19,64 +19,64 @@
 
 /** Sum of a Float64Array: the host passes the whole buffer once. */
 export const sumF64 = (xs: Float64Array): f64 => {
-  let total: f64 = 0;
+  let total: f64 = 0
   for (const x of xs) {
-    total += x;
+    total += x
   }
-  return total;
-};
+  return total
+}
 
 export const sumI32 = (xs: Int32Array): i32 => {
-  let total: i32 = 0;
+  let total: i32 = 0
   for (const x of xs) {
-    total += x;
+    total += x
   }
-  return total;
-};
+  return total
+}
 
 /** A new array: the host gets a copy (wasm) or a fresh typed array (N-API). */
 export const scale = (xs: Float64Array, k: f64): Float64Array => {
-  const out = new Float64Array(xs.length);
+  const out = new Float64Array(xs.length)
   for (let i = 0; i < xs.length && i < out.length; i++) {
-    out[i] = xs[i] * k;
+    out[i] = xs[i] * k
   }
-  return out;
-};
+  return out
+}
 
 export const squares = (n: i32): Int32Array => {
-  const out = new Int32Array(n);
+  const out = new Int32Array(n)
   for (let i = 0; i < out.length; i++) {
-    out[i] = i * i;
+    out[i] = i * i
   }
-  return out;
-};
+  return out
+}
 
 /** Writes through its parameter: the header spells it `nish_array *`, and the host's buffer changes in place. */
 export const fill = (xs: Int32Array, v: i32): void => {
   for (let i = 0; i < xs.length; i++) {
-    xs[i] = v;
+    xs[i] = v
   }
-};
+}
 
 export const widen = (xs: Int32Array): BigInt64Array => {
-  const out = new BigInt64Array(xs.length);
+  const out = new BigInt64Array(xs.length)
   for (let i = 0; i < xs.length; i++) {
     // Converted first and stored under its own test: `toI64` is a call, and a
     // call may change an array's length, so a bound tested before it no longer
     // proves `out[i]` in range after it.
-    const wide = toI64(xs[i]);
+    const wide = toI64(xs[i])
     if (i < out.length) {
-      out[i] = wide;
+      out[i] = wide
     }
   }
-  return out;
-};
+  return out
+}
 
 /** i64 in and out: JS passes a bigint. */
 export const sumI64 = (xs: BigInt64Array): i64 => {
-  let total: i64 = 0;
+  let total: i64 = 0
   for (const x of xs) {
-    total += x;
+    total += x
   }
-  return total;
-};
+  return total
+}

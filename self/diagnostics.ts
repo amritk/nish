@@ -46,19 +46,19 @@
 // than `npm test`, so this is still a rule a reader keeps on a machine without
 // clang — but it is no longer only that.
 
-import { codeFor } from "./codes";
-import { compareStrings, jsonQuote, StringBuilder } from "./strings";
-import { StringMap } from "./map";
+import { codeFor } from "./codes"
+import { compareStrings, jsonQuote, StringBuilder } from "./strings"
+import { StringMap } from "./map"
 
-const CH_LF: i32 = 10;
-const CH_CR: i32 = 13;
-const CH_TAB: i32 = 9;
+const CH_LF: i32 = 10
+const CH_CR: i32 = 13
+const CH_TAB: i32 = 9
 
 /** Errors printed in full before the report is cut short with `...and N more`. */
-export const MAX_REPORTED_ERRORS: i32 = 20;
+export const MAX_REPORTED_ERRORS: i32 = 20
 
 /** The `kind` word of a WP15 §8 diagnostic, in the summary line and in `--json`. */
-export const PERFORMANCE: string = "performance";
+export const PERFORMANCE: string = "performance"
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are
@@ -66,43 +66,43 @@ export const PERFORMANCE: string = "performance";
  * scan per diagnostic would be quadratic in a file with many errors.
  */
 export class SourceFile {
-  path: string;
-  text: string;
+  path: string
+  text: string
   /** Byte offset of the first character of each line; `starts[0]` is 0. */
-  starts: i32[];
+  starts: i32[]
 
   constructor(path: string, text: string) {
-    this.path = path;
-    this.text = text;
-    this.starts = [];
-    this.starts.push(0);
-    let i = 0;
+    this.path = path
+    this.text = text
+    this.starts = []
+    this.starts.push(0)
+    let i = 0
     while (i < text.length) {
       if (text.charCodeAt(i) === CH_LF) {
-        this.starts.push(i + 1);
+        this.starts.push(i + 1)
       }
-      i = i + 1;
+      i = i + 1
     }
   }
 
   /** The 0-based line containing `offset`, by binary search over the line starts. */
   lineIndex(offset: i32): i32 {
-    let low = 0;
-    let high = this.starts.length - 1;
+    let low = 0
+    let high = this.starts.length - 1
     while (low < high) {
-      const mid = low + ((high - low + 1) >> 1);
+      const mid = low + ((high - low + 1) >> 1)
       if (this.starts[mid] <= offset) {
-        low = mid;
+        low = mid
       } else {
-        high = mid - 1;
+        high = mid - 1
       }
     }
-    return low;
+    return low
   }
 
   /** The 1-based line of `offset`, as the summary line prints it. */
   lineOf(offset: i32): i32 {
-    return this.lineIndex(offset) + 1;
+    return this.lineIndex(offset) + 1
   }
 
   /**
@@ -116,7 +116,7 @@ export class SourceFile {
    * comment under it, so the wrong pick has to be typed deliberately.
    */
   byteColumnOf(offset: i32): i32 {
-    return offset - this.starts[this.lineIndex(offset)] + 1;
+    return offset - this.starts[this.lineIndex(offset)] + 1
   }
 
   /**
@@ -132,7 +132,7 @@ export class SourceFile {
    * (`tests/cases/reject_diag_utf8`).
    */
   columnOf(offset: i32): i32 {
-    return this.codeUnits(this.starts[this.lineIndex(offset)], offset) + 1;
+    return this.codeUnits(this.starts[this.lineIndex(offset)], offset) + 1
   }
 
   /**
@@ -150,9 +150,9 @@ export class SourceFile {
    * `examples/` is 503 bytes.
    */
   codeUnits(from: i32, to: i32): i32 {
-    const length = this.text.length;
-    let units = 0;
-    let i = from;
+    const length = this.text.length
+    let units = 0
+    let i = from
     while (i < to) {
       if (i >= length) {
         // An offset does reach past the last byte: a span whose end is the end
@@ -161,38 +161,38 @@ export class SourceFile {
         // `getLineAndCharacterOfPosition` answers `position - lineStart` with no
         // line to bound it — so each one is a column
         // (`tests/self/diagnostics-fixture.txt`, `error at 325`).
-        units = units + 1;
+        units = units + 1
       } else {
-        const byte = this.text.charCodeAt(i);
+        const byte = this.text.charCodeAt(i)
         if (startsCharacter(byte)) {
-          units = units + (isFourByteLead(byte) ? 2 : 1);
+          units = units + (isFourByteLead(byte) ? 2 : 1)
         }
       }
-      i = i + 1;
+      i = i + 1
     }
-    return units;
+    return units
   }
 
   /** The text of a 0-based line without its terminator, `\r\n` included. */
   lineText(line: i32): string {
-    const from = this.starts[line];
-    const to = line + 1 < this.starts.length ? this.starts[line + 1] : this.text.length;
-    let end = to;
+    const from = this.starts[line]
+    const to = line + 1 < this.starts.length ? this.starts[line + 1] : this.text.length
+    let end = to
     if (end > from && this.text.charCodeAt(end - 1) === CH_LF) {
-      end = end - 1;
+      end = end - 1
     }
     if (end > from && this.text.charCodeAt(end - 1) === CH_CR) {
-      end = end - 1;
+      end = end - 1
     }
-    return this.text.substring(from, end);
+    return this.text.substring(from, end)
   }
 }
 
 /** Whether a UTF-8 byte begins a character rather than continuing the one before it. */
-const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80;
+const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80
 
 /** Whether a UTF-8 byte opens a four-byte sequence, which is two UTF-16 code units. */
-const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0;
+const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0
 
 /**
  * One error, anchored to a half-open byte span of one file. `line` and
@@ -200,29 +200,29 @@ const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0;
  * because the sort in `DiagnosticSink` reads them for every comparison.
  */
 export class Diagnostic {
-  source: SourceFile;
-  start: i32;
-  end: i32;
+  source: SourceFile
+  start: i32
+  end: i32
   /** `error` or `syntax error`: the word before the text in the summary line. */
-  kind: string;
+  kind: string
   /** The message alone, without location prefix or excerpt. */
-  text: string;
-  line: i32;
-  column: i32;
+  text: string
+  line: i32
+  column: i32
 
   constructor(source: SourceFile, start: i32, end: i32, kind: string, text: string) {
-    this.source = source;
-    this.start = start;
-    this.end = end < start ? start : end;
-    this.kind = kind;
-    this.text = text;
-    this.line = source.lineOf(start);
-    this.column = source.columnOf(start);
+    this.source = source
+    this.start = start
+    this.end = end < start ? start : end
+    this.kind = kind
+    this.text = text
+    this.line = source.lineOf(start)
+    this.column = source.columnOf(start)
   }
 
   /** `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. */
   summary(): string {
-    return `${this.source.path}:${this.line}:${this.column}: ${this.kind}: ${this.text}`;
+    return `${this.source.path}:${this.line}:${this.column}: ${this.kind}: ${this.text}`
   }
 
   /**
@@ -232,56 +232,56 @@ export class Diagnostic {
    * terminal.
    */
   excerpt(): string {
-    const line = this.source.lineIndex(this.start);
-    const text = this.source.lineText(line);
-    const lineNo = `${this.line}`;
-    const lineStart = this.source.starts[line];
-    const lineEnd = lineStart + text.length;
-    const markerEnd = this.end < lineEnd ? this.end : lineEnd;
+    const line = this.source.lineIndex(this.start)
+    const text = this.source.lineText(line)
+    const lineNo = `${this.line}`
+    const lineStart = this.source.starts[line]
+    const lineEnd = lineStart + text.length
+    const markerEnd = this.end < lineEnd ? this.end : lineEnd
     // In code units, like the column: the caret has to land under the byte the
     // column names, and a terminal counts characters rather than bytes
     // (`formatSourceExcerpt` in stage0's `src/diagnostics.ts` pads by code units too).
-    let markerLength = this.source.codeUnits(this.start, markerEnd);
+    let markerLength = this.source.codeUnits(this.start, markerEnd)
     if (markerLength < 1) {
-      markerLength = 1;
+      markerLength = 1
     }
 
     // One pad character per code unit, as `formatSourceExcerpt` in
     // stage0's `src/diagnostics.ts` emits one per JavaScript string index. `codeUnits`
     // cannot do it: the tab has to be mirrored per character, not counted.
-    const prefix = this.start - lineStart;
-    const pad = new StringBuilder();
-    let i = 0;
+    const prefix = this.start - lineStart
+    const pad = new StringBuilder()
+    let i = 0
     while (i < prefix) {
-      const byte = text.charCodeAt(i);
+      const byte = text.charCodeAt(i)
       if (startsCharacter(byte)) {
-        pad.addChar(byte === CH_TAB ? CH_TAB : 32);
+        pad.addChar(byte === CH_TAB ? CH_TAB : 32)
         if (isFourByteLead(byte)) {
-          pad.addChar(32);
+          pad.addChar(32)
         }
       }
-      i = i + 1;
+      i = i + 1
     }
-    const marker = new StringBuilder();
-    marker.addChar(94); // '^'
-    let tilde = 1;
+    const marker = new StringBuilder()
+    marker.addChar(94) // '^'
+    let tilde = 1
     while (tilde < markerLength) {
-      marker.addChar(126); // '~'
-      tilde = tilde + 1;
+      marker.addChar(126) // '~'
+      tilde = tilde + 1
     }
 
-    const gutter = new StringBuilder();
-    let space = 0;
+    const gutter = new StringBuilder()
+    let space = 0
     while (space < lineNo.length) {
-      gutter.addChar(32);
-      space = space + 1;
+      gutter.addChar(32)
+      space = space + 1
     }
-    return `  ${lineNo} | ${text}\n  ${gutter.toText()} | ${pad.toText()}${marker.toText()}`;
+    return `  ${lineNo} | ${text}\n  ${gutter.toText()} | ${pad.toText()}${marker.toText()}`
   }
 
   /** The summary and the excerpt: what `CompileError.message` holds in stage0. */
   message(): string {
-    return `${this.summary()}\n${this.excerpt()}`;
+    return `${this.summary()}\n${this.excerpt()}`
   }
 
   /**
@@ -296,13 +296,13 @@ export class Diagnostic {
    * `tests/run.js` compares the two compilers' `--json` byte for byte.
    */
   json(): string {
-    const endLine = this.source.lineOf(this.end);
-    const endColumn = this.source.columnOf(this.end);
-    const performance = this.kind === PERFORMANCE;
-    const severity = performance ? PERFORMANCE : "error";
-    const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`;
-    const code = codeFor(this.kind, this.text);
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}}`;
+    const endLine = this.source.lineOf(this.end)
+    const endColumn = this.source.columnOf(this.end)
+    const performance = this.kind === PERFORMANCE
+    const severity = performance ? PERFORMANCE : "error"
+    const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`
+    const code = codeFor(this.kind, this.text)
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}}`
   }
 }
 
@@ -313,37 +313,37 @@ export class Diagnostic {
  * — and then by position.
  */
 export class DiagnosticSink {
-  items: Diagnostic[];
+  items: Diagnostic[]
   /**
    * The WP15 §8 performance warnings, in report order rather than in the order
    * the analysis found them — `reportPerformance` inserts each one where
    * `compareWarnings` puts it. Kept apart from `items` so `hasErrors` stays a
    * statement about errors and nothing here can ever stop a compilation.
    */
-  warnings: Diagnostic[];
+  warnings: Diagnostic[]
   /** File path -> the order it was first mentioned in. */
-  fileOrder: StringMap;
+  fileOrder: StringMap
   /**
    * File path -> the order it was first *warned* about. A table of its own for
    * the reason `reportPerformance` does not touch `fileOrder`: that one is the
    * error report's index, and a warning may not move one error in front of
    * another.
    */
-  warningFileOrder: StringMap;
+  warningFileOrder: StringMap
 
   constructor() {
-    this.items = [];
-    this.warnings = [];
-    this.fileOrder = new StringMap();
-    this.warningFileOrder = new StringMap();
+    this.items = []
+    this.warnings = []
+    this.fileOrder = new StringMap()
+    this.warningFileOrder = new StringMap()
   }
 
   report(source: SourceFile, start: i32, end: i32, text: string): void {
-    this.reportKind(source, start, end, "error", text);
+    this.reportKind(source, start, end, "error", text)
   }
 
   reportKind(source: SourceFile, start: i32, end: i32, kind: string, text: string): void {
-    this.add(new Diagnostic(source, start, end, kind, text));
+    this.add(new Diagnostic(source, start, end, kind, text))
   }
 
   /**
@@ -356,9 +356,9 @@ export class DiagnosticSink {
    */
   add(diagnostic: Diagnostic): void {
     if (!this.fileOrder.has(diagnostic.source.path)) {
-      this.fileOrder.set(diagnostic.source.path, this.fileOrder.size());
+      this.fileOrder.set(diagnostic.source.path, this.fileOrder.size())
     }
-    this.items.push(diagnostic);
+    this.items.push(diagnostic)
   }
 
   /**
@@ -381,16 +381,16 @@ export class DiagnosticSink {
    */
   reportPerformance(source: SourceFile, start: i32, end: i32, text: string): void {
     if (!this.warningFileOrder.has(source.path)) {
-      this.warningFileOrder.set(source.path, this.warningFileOrder.size());
+      this.warningFileOrder.set(source.path, this.warningFileOrder.size())
     }
-    const warning = new Diagnostic(source, start, end, PERFORMANCE, text);
-    this.warnings.push(warning);
-    let i = this.warnings.length - 1;
+    const warning = new Diagnostic(source, start, end, PERFORMANCE, text)
+    this.warnings.push(warning)
+    let i = this.warnings.length - 1
     while (i > 0 && this.compareWarnings(this.warnings[i - 1], warning) > 0) {
-      this.warnings[i] = this.warnings[i - 1];
-      i = i - 1;
+      this.warnings[i] = this.warnings[i - 1]
+      i = i - 1
     }
-    this.warnings[i] = warning;
+    this.warnings[i] = warning
   }
 
   /**
@@ -406,46 +406,46 @@ export class DiagnosticSink {
    * them in, which is what makes a multi-warning golden reproducible.
    */
   compareWarnings(a: Diagnostic, b: Diagnostic): i32 {
-    const fileA = this.warningFileOrder.get(a.source.path, 0);
-    const fileB = this.warningFileOrder.get(b.source.path, 0);
+    const fileA = this.warningFileOrder.get(a.source.path, 0)
+    const fileB = this.warningFileOrder.get(b.source.path, 0)
     if (fileA !== fileB) {
-      return fileA - fileB;
+      return fileA - fileB
     }
     if (a.line !== b.line) {
-      return a.line - b.line;
+      return a.line - b.line
     }
     if (a.column !== b.column) {
-      return a.column - b.column;
+      return a.column - b.column
     }
-    return compareStrings(codeFor(a.kind, a.text), codeFor(b.kind, b.text));
+    return compareStrings(codeFor(a.kind, a.text), codeFor(b.kind, b.text))
   }
 
   hasErrors(): boolean {
-    return this.items.length > 0;
+    return this.items.length > 0
   }
 
   warningCount(): i32 {
-    return this.warnings.length;
+    return this.warnings.length
   }
 
   count(): i32 {
-    return this.items.length;
+    return this.items.length
   }
 
   /** Negative, zero or positive as `a` should be reported before `b`. */
   compare(a: Diagnostic, b: Diagnostic): i32 {
-    const fileA = this.fileOrder.get(a.source.path, 0);
-    const fileB = this.fileOrder.get(b.source.path, 0);
+    const fileA = this.fileOrder.get(a.source.path, 0)
+    const fileB = this.fileOrder.get(b.source.path, 0)
     if (fileA !== fileB) {
-      return fileA - fileB;
+      return fileA - fileB
     }
     if (a.line !== b.line) {
-      return a.line - b.line;
+      return a.line - b.line
     }
     if (a.column !== b.column) {
-      return a.column - b.column;
+      return a.column - b.column
     }
-    return 0;
+    return 0
   }
 
   /**
@@ -457,40 +457,40 @@ export class DiagnosticSink {
    * cascade a single bad declaration can produce.
    */
   sorted(): Diagnostic[] {
-    let source: Diagnostic[] = [];
-    let target: Diagnostic[] = [];
+    let source: Diagnostic[] = []
+    let target: Diagnostic[] = []
     for (const item of this.items) {
-      source.push(item);
-      target.push(item);
+      source.push(item)
+      target.push(item)
     }
-    let width = 1;
+    let width = 1
     while (width < source.length) {
-      let low = 0;
+      let low = 0
       while (low < source.length) {
-        const mid = low + width < source.length ? low + width : source.length;
-        const high = low + width * 2 < source.length ? low + width * 2 : source.length;
-        let left = low;
-        let right = mid;
-        let out = low;
+        const mid = low + width < source.length ? low + width : source.length
+        const high = low + width * 2 < source.length ? low + width * 2 : source.length
+        let left = low
+        let right = mid
+        let out = low
         while (out < high) {
-          const takeLeft = left < mid && (right >= high || this.compare(source[left], source[right]) <= 0);
+          const takeLeft = left < mid && (right >= high || this.compare(source[left], source[right]) <= 0)
           if (takeLeft) {
-            target[out] = source[left];
-            left = left + 1;
+            target[out] = source[left]
+            left = left + 1
           } else {
-            target[out] = source[right];
-            right = right + 1;
+            target[out] = source[right]
+            right = right + 1
           }
-          out = out + 1;
+          out = out + 1
         }
-        low = low + width * 2;
+        low = low + width * 2
       }
-      const swap = source;
-      source = target;
-      target = swap;
-      width = width * 2;
+      const swap = source
+      source = target
+      target = swap
+      width = width * 2
     }
-    return source;
+    return source
   }
 
   /**
@@ -499,22 +499,22 @@ export class DiagnosticSink {
    * prints exactly its message, as stage0 does.
    */
   format(max: i32): string {
-    const errors = this.sorted();
+    const errors = this.sorted()
     if (errors.length === 1) {
-      return errors[0].message();
+      return errors[0].message()
     }
-    const lines: string[] = [];
-    let i = 0;
+    const lines: string[] = []
+    let i = 0
     while (i < errors.length && i < max) {
-      lines.push(errors[i].message());
-      i = i + 1;
+      lines.push(errors[i].message())
+      i = i + 1
     }
-    const hidden = errors.length - max;
+    const hidden = errors.length - max
     if (hidden > 0) {
-      lines.push(`...and ${hidden} more error${hidden === 1 ? "" : "s"}`);
+      lines.push(`...and ${hidden} more error${hidden === 1 ? "" : "s"}`)
     }
-    lines.push(`${errors.length} errors`);
-    return lines.join("\n");
+    lines.push(`${errors.length} errors`)
+    return lines.join("\n")
   }
 
   /**
@@ -526,22 +526,22 @@ export class DiagnosticSink {
    */
   formatWarnings(max: i32): string {
     if (this.warnings.length === 0) {
-      return "";
+      return ""
     }
     if (this.warnings.length === 1) {
-      return this.warnings[0].message();
+      return this.warnings[0].message()
     }
-    const lines: string[] = [];
-    let i = 0;
+    const lines: string[] = []
+    let i = 0
     while (i < this.warnings.length && i < max) {
-      lines.push(this.warnings[i].message());
-      i = i + 1;
+      lines.push(this.warnings[i].message())
+      i = i + 1
     }
-    const hidden = this.warnings.length - max;
+    const hidden = this.warnings.length - max
     if (hidden > 0) {
-      lines.push(`...and ${hidden} more performance warning${hidden === 1 ? "" : "s"}`);
+      lines.push(`...and ${hidden} more performance warning${hidden === 1 ? "" : "s"}`)
     }
-    lines.push(`${this.warnings.length} performance warnings`);
-    return lines.join("\n");
+    lines.push(`${this.warnings.length} performance warnings`)
+    return lines.join("\n")
   }
 }

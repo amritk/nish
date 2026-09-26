@@ -59,16 +59,16 @@
 //
 // Without `-g` nothing here runs and the IR is byte for byte what it was.
 
-import { CLI, VERSION } from "./branding";
-import { SourceFile } from "./diagnostics";
-import { internalErrorFor } from "./ice";
-import { IRFunction, IRModule } from "./ir";
-import { StringMap } from "./map";
-import { Node } from "./nodes";
-import { CheckedProgram, EnumInfo, FunctionSig, StructInfo } from "./program";
-import { ResultLayout, resultLayout } from "./result";
-import { StringBuilder } from "./strings";
-import { Local } from "./symbols";
+import { CLI, VERSION } from "./branding"
+import { SourceFile } from "./diagnostics"
+import { internalErrorFor } from "./ice"
+import { IRFunction, IRModule } from "./ir"
+import { StringMap } from "./map"
+import { Node } from "./nodes"
+import { CheckedProgram, EnumInfo, FunctionSig, StructInfo } from "./program"
+import { ResultLayout, resultLayout } from "./result"
+import { StringBuilder } from "./strings"
+import { Local } from "./symbols"
 import {
   intBits,
   T_BOOL,
@@ -84,10 +84,10 @@ import {
   T_U8,
   T_VOID,
   TypeTable,
-} from "./types";
+} from "./types"
 
 /** The directory a `DIFile` names; see the header for why it is not the working directory. */
-const DEBUG_COMPILATION_DIR: string = ".";
+const DEBUG_COMPILATION_DIR: string = "."
 
 /**
  * The `!DIBasicType` of a scalar, named as the C ABI header
@@ -98,51 +98,51 @@ const DEBUG_COMPILATION_DIR: string = ".";
 const basicType = (type: i32, json: boolean): string => {
   switch (type) {
     case T_I32:
-      return '!DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)';
+      return '!DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)'
     case T_I64:
-      return '!DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)';
+      return '!DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)'
     case T_U8:
-      return '!DIBasicType(name: "unsigned char", size: 8, encoding: DW_ATE_unsigned_char)';
+      return '!DIBasicType(name: "unsigned char", size: 8, encoding: DW_ATE_unsigned_char)'
     case T_U16:
-      return '!DIBasicType(name: "unsigned short", size: 16, encoding: DW_ATE_unsigned)';
+      return '!DIBasicType(name: "unsigned short", size: 16, encoding: DW_ATE_unsigned)'
     case T_U32:
-      return '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)';
+      return '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)'
     case T_U64:
-      return '!DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)';
+      return '!DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)'
     case T_F32:
-      return '!DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)';
+      return '!DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)'
     case T_F64:
-      return '!DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)';
+      return '!DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)'
     case T_BOOL:
-      return '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)';
+      return '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)'
     default:
-      process.exit(internalErrorFor(`debug: no DWARF basic type for type id ${type}`, json));
+      process.exit(internalErrorFor(`debug: no DWARF basic type for type id ${type}`, json))
   }
-};
+}
 
 /** Storage size of a field, for `DW_TAG_member`; pointers are 64-bit on every supported target. */
 const bitsOf = (type: i32): i32 => {
-  const bits = intBits(type);
+  const bits = intBits(type)
   if (bits > 0) {
-    return bits;
+    return bits
   }
   if (type === T_F32) {
-    return 32;
+    return 32
   }
   if (type === T_BOOL) {
-    return 8;
+    return 8
   }
   if (type === T_VOID) {
-    return 0;
+    return 0
   }
-  return 64;
-};
+  return 64
+}
 
 /**
  * `bitsOf` for a type id that may be an enum (WP23): an enum is an `i32`, and
  * `intBits` is deliberately 0 for it so that arithmetic stays refused.
  */
-const bitsOfIn = (table: TypeTable, type: i32): i32 => table.isEnum(type) ? 32 : bitsOf(type);
+const bitsOfIn = (table: TypeTable, type: i32): i32 => (table.isEnum(type) ? 32 : bitsOf(type))
 
 /**
  * A metadata string literal: backslash and double quote escaped, as stage0's `src/`
@@ -150,32 +150,32 @@ const bitsOfIn = (table: TypeTable, type: i32): i32 => table.isEnum(type) ? 32 :
  * only strings that reach here are file paths and source identifiers.
  */
 const quote = (text: string): string => {
-  const out = new StringBuilder();
-  out.addChar(34);
-  let i = 0;
+  const out = new StringBuilder()
+  out.addChar(34)
+  let i = 0
   while (i < text.length) {
-    const code = text.charCodeAt(i);
+    const code = text.charCodeAt(i)
     if (code === 92 || code === 34) {
-      out.addChar(92);
+      out.addChar(92)
     }
-    out.addChar(code);
-    i = i + 1;
+    out.addChar(code)
+    i = i + 1
   }
-  out.addChar(34);
-  return out.toText();
-};
+  out.addChar(34)
+  return out.toText()
+}
 
 export class DebugInfo {
-  module: IRModule;
-  program: CheckedProgram;
-  table: TypeTable;
-  source: SourceFile;
+  module: IRModule
+  program: CheckedProgram
+  table: TypeTable
+  source: SourceFile
   /** The foreign pointer's `void *`, memoised apart from `typeKeys`; see `foreignPointer`. */
-  cptr: string;
+  cptr: string
   /** `!N` of the `DICompileUnit` every `DISubprogram` names as its `unit`. */
-  cu: string;
+  cu: string
   /** `!N` of this module's own `DIFile`. */
-  file: string;
+  file: string
   /**
    * One `DIFile` per source file a declaration comes from, by path. There is
    * more than one: a class this module never named can still reach it through
@@ -183,59 +183,59 @@ export class DebugInfo {
    * describing its fields with *this* module's file would point a debugger at
    * lines in the wrong source.
    */
-  fileKeys: StringMap;
-  fileRefs: string[];
+  fileKeys: StringMap
+  fileRefs: string[]
   /**
    * `TypeTable.mangle` -> index into `typeRefs`. A composite is reserved
    * before its members are built, so a field whose type is the struct itself
    * finds the reference already there instead of recursing forever.
    */
-  typeKeys: StringMap;
-  typeRefs: string[];
+  typeKeys: StringMap
+  typeRefs: string[]
   /** The `DISubprogram` of the function being emitted: the scope of every location and variable. */
-  subprogram: string;
+  subprogram: string
 
   constructor(module: IRModule, program: CheckedProgram, table: TypeTable) {
-    this.module = module;
-    this.program = program;
-    this.table = table;
-    this.source = program.source;
-    this.typeKeys = new StringMap();
-    this.typeRefs = [];
-    this.fileKeys = new StringMap();
-    this.fileRefs = [];
-    this.subprogram = "";
-    this.cptr = "";
+    this.module = module
+    this.program = program
+    this.table = table
+    this.source = program.source
+    this.typeKeys = new StringMap()
+    this.typeRefs = []
+    this.fileKeys = new StringMap()
+    this.fileRefs = []
+    this.subprogram = ""
+    this.cptr = ""
     // Every field carries a value before a method is called on `this`, which is
     // what the language asks of a constructor; the two that matter are filled
     // in immediately below.
-    this.cu = "";
-    this.file = "";
+    this.cu = ""
+    this.file = ""
     // The compile unit refers to the file, so reserve its number first (`!0`, as clang does).
-    this.cu = module.reserveMetadata();
-    this.file = this.fileOf(program.source);
+    this.cu = module.reserveMetadata()
+    this.file = this.fileOf(program.source)
     module.setMetadata(
       this.cu,
       `distinct !DICompileUnit(language: DW_LANG_C99, file: ${this.file}, producer: ${quote(`${CLI} ${VERSION}`)}, isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
-    );
-    module.addNamedMetadata(`!llvm.dbg.cu = !{${this.cu}}`);
-    const dwarf = module.addMetadata('!{i32 7, !"Dwarf Version", i32 5}');
-    const version = module.addMetadata('!{i32 2, !"Debug Info Version", i32 3}');
-    module.addNamedMetadata(`!llvm.module.flags = !{${dwarf}, ${version}}`);
+    )
+    module.addNamedMetadata(`!llvm.dbg.cu = !{${this.cu}}`)
+    const dwarf = module.addMetadata('!{i32 7, !"Dwarf Version", i32 5}')
+    const version = module.addMetadata('!{i32 2, !"Debug Info Version", i32 3}')
+    module.addNamedMetadata(`!llvm.module.flags = !{${dwarf}, ${version}}`)
   }
 
   /** The `DIFile` of one source file, interned so the module's own is written once. */
   fileOf(source: SourceFile): string {
-    const known = this.fileKeys.get(source.path, -1);
+    const known = this.fileKeys.get(source.path, -1)
     if (known >= 0) {
-      return this.fileRefs[known];
+      return this.fileRefs[known]
     }
     const ref = this.module.addMetadata(
       `!DIFile(filename: ${quote(source.path)}, directory: ${quote(DEBUG_COMPILATION_DIR)})`
-    );
-    this.fileKeys.set(source.path, this.fileRefs.length);
-    this.fileRefs.push(ref);
-    return ref;
+    )
+    this.fileKeys.set(source.path, this.fileRefs.length)
+    this.fileRefs.push(ref)
+    return ref
   }
 
   /**
@@ -244,7 +244,7 @@ export class DebugInfo {
    * file is a parameter rather than this module's.
    */
   lineOf(source: SourceFile, node: Node): i32 {
-    return source.lineOf(node.start);
+    return source.lineOf(node.start)
   }
 
   // ---- Types ----------------------------------------------------------------
@@ -252,42 +252,46 @@ export class DebugInfo {
   /** Metadata reference for a type; `null` for `void` (only valid in a subroutine type's return slot). */
   typeRef(type: i32): string {
     if (type === T_VOID) {
-      return "null";
+      return "null"
     }
     if (this.table.isNullable(type)) {
-      return this.typeRef(this.table.refOf(type));
+      return this.typeRef(this.table.refOf(type))
     }
     if (type === T_CPTR) {
-      return this.foreignPointer();
+      return this.foreignPointer()
     }
-    const key = this.table.mangle(type);
-    const known = this.typeKeys.get(key, -1);
+    const key = this.table.mangle(type)
+    const known = this.typeKeys.get(key, -1)
     if (known >= 0) {
-      return this.typeRefs[known];
+      return this.typeRefs[known]
     }
-    let ref = "";
+    let ref = ""
     if (type === T_STRING) {
-      const ch = this.module.addMetadata('!DIBasicType(name: "char", size: 8, encoding: DW_ATE_signed_char)');
-      ref = this.pointerTo(ch);
+      const ch = this.module.addMetadata('!DIBasicType(name: "char", size: 8, encoding: DW_ATE_signed_char)')
+      ref = this.pointerTo(ch)
     } else if (this.table.isArray(type)) {
-      ref = this.pointerTo(this.arrayHeader(this.table.refOf(type), this.table.typeName(type)));
+      ref = this.pointerTo(this.arrayHeader(this.table.refOf(type), this.table.typeName(type)))
     } else if (this.table.isStruct(type)) {
-      const info = this.program.struct(this.table.nameOf(type));
+      const info = this.program.struct(this.table.nameOf(type))
       if (info === null) {
-        process.exit(internalErrorFor(`debug: no struct recorded for \`${this.table.nameOf(type)}\``, this.table.json));
+        process.exit(
+          internalErrorFor(`debug: no struct recorded for \`${this.table.nameOf(type)}\``, this.table.json)
+        )
       } else {
-        ref = this.pointerTo(this.composite(info));
+        ref = this.pointerTo(this.composite(info))
       }
     } else if (this.table.isEnum(type)) {
       // WP23: an enum is an `i32` with names attached, which is exactly what
       // DWARF's enumeration type is for — so a debugger prints `While` rather
       // than `2`, and the distinctness the checker enforces survives into the
       // debugger.
-      const declared = this.program.enumNamed(this.table.nameOf(type));
+      const declared = this.program.enumNamed(this.table.nameOf(type))
       if (declared === null) {
-        process.exit(internalErrorFor(`debug: no enum recorded for \`${this.table.nameOf(type)}\``, this.table.json));
+        process.exit(
+          internalErrorFor(`debug: no enum recorded for \`${this.table.nameOf(type)}\``, this.table.json)
+        )
       } else {
-        ref = this.enumeration(declared);
+        ref = this.enumeration(declared)
       }
     } else if (this.table.isResult(type)) {
       // A `Result` has no `StructInfo` — its layout is derived from the type —
@@ -295,23 +299,23 @@ export class DebugInfo {
       // `p *r` shows `ok`, `value` and `error` rather than an opaque pointer.
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
-      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)));
+      ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
     } else {
-      ref = this.module.addMetadata(basicType(type, this.table.json));
+      ref = this.module.addMetadata(basicType(type, this.table.json))
     }
-    this.setTypeRef(key, ref);
-    return ref;
+    this.setTypeRef(key, ref)
+    return ref
   }
 
   /** Record `ref` as the metadata for `key`, replacing a reservation made by `composite`. */
   setTypeRef(key: string, ref: string): void {
-    const known = this.typeKeys.get(key, -1);
+    const known = this.typeKeys.get(key, -1)
     if (known >= 0) {
-      this.typeRefs[known] = ref;
-      return;
+      this.typeRefs[known] = ref
+      return
     }
-    this.typeKeys.set(key, this.typeRefs.length);
-    this.typeRefs.push(ref);
+    this.typeKeys.set(key, this.typeRefs.length)
+    this.typeRefs.push(ref)
   }
 
   /**
@@ -324,13 +328,13 @@ export class DebugInfo {
    */
   foreignPointer(): string {
     if (this.cptr === "") {
-      this.cptr = this.pointerTo("null");
+      this.cptr = this.pointerTo("null")
     }
-    return this.cptr;
+    return this.cptr
   }
 
   pointerTo(base: string): string {
-    return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: 64)`);
+    return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: 64)`)
   }
 
   /** One `DW_TAG_member`; an empty `file` is a member with no declaration to point at. */
@@ -343,10 +347,10 @@ export class DebugInfo {
     file: string,
     line: i32
   ): string {
-    const at = file.length === 0 ? "" : `, file: ${file}, line: ${line}`;
+    const at = file.length === 0 ? "" : `, file: ${file}, line: ${line}`
     return this.module.addMetadata(
       `!DIDerivedType(tag: DW_TAG_member, name: ${quote(name)}, scope: ${scope}${at}, baseType: ${type}, size: ${sizeBits}, offset: ${offsetBits})`
-    );
+    )
   }
 
   /**
@@ -355,63 +359,63 @@ export class DebugInfo {
    * `Box<i32>` for an instantiation, as clang names a C++ template's (WP18 §6.7).
    */
   composite(info: StructInfo): string {
-    const ref = this.module.reserveMetadata();
-    this.setTypeRef(this.table.mangle(info.type), this.pointerTo(ref));
-    const file = this.fileOf(info.origin);
-    const members: string[] = [];
+    const ref = this.module.reserveMetadata()
+    this.setTypeRef(this.table.mangle(info.type), this.pointerTo(ref))
+    const file = this.fileOf(info.origin)
+    const members: string[] = []
     for (const f of info.fields) {
-      const line = this.lineOf(info.origin, f.decl);
+      const line = this.lineOf(info.origin, f.decl)
       if (f.inline()) {
         // An array stored in the object (`self/inline-arrays.ts`): the member
         // is the header itself, whose `data` points at the slots after it.
-        const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type));
-        members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line));
-        continue;
+        const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type))
+        members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line))
+        continue
       }
-      const base = this.typeRef(f.type);
-      members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line));
+      const base = this.typeRef(f.type)
+      members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line))
     }
-    const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(info.type))}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
-    );
-    return ref;
+    )
+    return ref
   }
 
   /** `enum Kind { ... }` as DWARF sees it: a 32-bit signed enumeration with one enumerator per member (WP23). */
   enumeration(info: EnumInfo): string {
-    const file = this.fileOf(info.origin);
-    const enumerators: string[] = [];
-    let i = 0;
+    const file = this.fileOf(info.origin)
+    const enumerators: string[] = []
+    let i = 0
     while (i < info.memberNames.length) {
       enumerators.push(
         this.module.addMetadata(
           `!DIEnumerator(name: ${quote(info.memberNames[i])}, value: ${info.memberValues[i]})`
         )
-      );
-      i = i + 1;
+      )
+      i = i + 1
     }
-    const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`);
+    const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`)
     return this.module.addMetadata(
       `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
-    );
+    )
   }
 
   /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
   arrayHeader(elem: i32, name: string): string {
-    const ref = this.module.reserveMetadata();
-    const long = this.typeRef(T_I64);
-    const members: string[] = [];
-    members.push(this.member("len", ref, long, 64, 0, "", 0));
-    members.push(this.member("cap", ref, long, 64, 64, "", 0));
-    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128, "", 0));
-    const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
+    const ref = this.module.reserveMetadata()
+    const long = this.typeRef(T_I64)
+    const members: string[] = []
+    members.push(this.member("len", ref, long, 64, 0, "", 0))
+    members.push(this.member("cap", ref, long, 64, 64, "", 0))
+    members.push(this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128, "", 0))
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(name)}, file: ${this.file}, size: 192, align: 64, elements: ${elements})`
-    );
-    return ref;
+    )
+    return ref
   }
 
   /**
@@ -421,34 +425,34 @@ export class DebugInfo {
    * to take a source line from, so the members carry none.
    */
   resultComposite(layout: ResultLayout): string {
-    const ref = this.module.reserveMetadata();
-    const names: string[] = [];
-    const types: i32[] = [];
-    const offsets: i32[] = [];
-    names.push("ok");
-    types.push(T_BOOL);
-    offsets.push(layout.okOffset);
+    const ref = this.module.reserveMetadata()
+    const names: string[] = []
+    const types: i32[] = []
+    const offsets: i32[] = []
+    names.push("ok")
+    types.push(T_BOOL)
+    offsets.push(layout.okOffset)
     if (layout.hasValue) {
-      names.push("value");
-      types.push(layout.valueType);
-      offsets.push(layout.valueOffset);
+      names.push("value")
+      types.push(layout.valueType)
+      offsets.push(layout.valueOffset)
     }
-    names.push("error");
-    types.push(layout.errorType);
-    offsets.push(layout.errorOffset);
-    const members: string[] = [];
-    let i = 0;
+    names.push("error")
+    types.push(layout.errorType)
+    offsets.push(layout.errorOffset)
+    const members: string[] = []
+    let i = 0
     while (i < names.length) {
-      const base = this.typeRef(types[i]);
-      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0));
-      i = i + 1;
+      const base = this.typeRef(types[i])
+      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0))
+      i = i + 1
     }
-    const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(layout.name)}, file: ${this.file}, size: ${layout.size * 8}, align: ${layout.align * 8}, elements: ${elements})`
-    );
-    return ref;
+    )
+    return ref
   }
 
   /**
@@ -460,58 +464,58 @@ export class DebugInfo {
    * the in-memory composite is what a local, a field and `p *r` see.
    */
   resultWord(type: i32): string {
-    const key = `${this.table.mangle(type)}.word`;
-    const known = this.typeKeys.get(key, -1);
+    const key = `${this.table.mangle(type)}.word`
+    const known = this.typeKeys.get(key, -1)
     if (known >= 0) {
-      return this.typeRefs[known];
+      return this.typeRefs[known]
     }
-    const layout = resultLayout(this.table, type);
-    const ref = this.module.reserveMetadata();
-    const union = this.module.reserveMetadata();
-    const armNames: string[] = [];
-    const armTypes: i32[] = [];
+    const layout = resultLayout(this.table, type)
+    const ref = this.module.reserveMetadata()
+    const union = this.module.reserveMetadata()
+    const armNames: string[] = []
+    const armTypes: i32[] = []
     if (layout.hasValue) {
-      armNames.push("value");
-      armTypes.push(layout.valueType);
+      armNames.push("value")
+      armTypes.push(layout.valueType)
     }
     if (layout.errorType !== T_VOID) {
-      armNames.push("error");
-      armTypes.push(layout.errorType);
+      armNames.push("error")
+      armTypes.push(layout.errorType)
     }
-    let armBits = 8;
+    let armBits = 8
     for (const arm of armTypes) {
-      const bits = bitsOfIn(this.table, arm);
+      const bits = bitsOfIn(this.table, arm)
       if (bits > armBits) {
-        armBits = bits;
+        armBits = bits
       }
     }
-    const arms: string[] = [];
-    let i = 0;
+    const arms: string[] = []
+    let i = 0
     while (i < armNames.length) {
-      const base = this.typeRef(armTypes[i]);
-      arms.push(this.member(armNames[i], union, base, bitsOfIn(this.table, armTypes[i]), 0, "", 0));
-      i = i + 1;
+      const base = this.typeRef(armTypes[i])
+      arms.push(this.member(armNames[i], union, base, bitsOfIn(this.table, armTypes[i]), 0, "", 0))
+      i = i + 1
     }
-    const armElements = this.module.addMetadata(`!{${arms.join(", ")}}`);
+    const armElements = this.module.addMetadata(`!{${arms.join(", ")}}`)
     this.module.setMetadata(
       union,
       `distinct !DICompositeType(tag: DW_TAG_union_type, name: ${quote(`${layout.name}.arms`)}, file: ${this.file}, size: ${armBits}, elements: ${armElements})`
-    );
-    const members: string[] = [];
-    members.push(this.member("ok", ref, this.typeRef(T_I32), 32, 0, "", 0));
-    members.push(this.member("as", ref, union, armBits, 32, "", 0));
-    const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
+    )
+    const members: string[] = []
+    members.push(this.member("ok", ref, this.typeRef(T_I32), 32, 0, "", 0))
+    members.push(this.member("as", ref, union, armBits, 32, "", 0))
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`)
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(`${layout.name}.word`)}, file: ${this.file}, size: 64, align: 32, elements: ${elements})`
-    );
-    this.setTypeRef(key, ref);
-    return ref;
+    )
+    this.setTypeRef(key, ref)
+    return ref
   }
 
   /** The type a call boundary really carries (WP17: packed, for a small `Result`). */
   abiTypeRef(type: i32): string {
-    return this.table.resultByValue(type) ? this.resultWord(type) : this.typeRef(type);
+    return this.table.resultByValue(type) ? this.resultWord(type) : this.typeRef(type)
   }
 
   // ---- Functions --------------------------------------------------------------
@@ -534,64 +538,71 @@ export class DebugInfo {
    * Reading a function's position off the arrow is what made the two compilers
    * disagree about three `!DILocation` columns (tests/cases/dbg_arrow).
    */
-  beginFunction(fn: IRFunction, sig: FunctionSig, artificial: boolean, name: string, privateAbi: boolean): void {
-    const line = this.lineOf(this.source, sig.decl);
-    const types: string[] = [];
+  beginFunction(
+    fn: IRFunction,
+    sig: FunctionSig,
+    artificial: boolean,
+    name: string,
+    privateAbi: boolean
+  ): void {
+    const line = this.lineOf(this.source, sig.decl)
+    const types: string[] = []
     if (artificial) {
-      types.push(this.typeRef(T_I32));
+      types.push(this.typeRef(T_I32))
     } else {
-      types.push(this.abiTypeRef(sig.returnType));
-      let k = 0;
+      types.push(this.abiTypeRef(sig.returnType))
+      let k = 0
       while (k < sig.paramTypes.length) {
         // WP29: a compile-time function parameter has no LLVM parameter to describe.
         if (!sig.isCompileTime(k)) {
-          types.push(this.abiTypeRef(sig.paramTypes[k]));
+          types.push(this.abiTypeRef(sig.paramTypes[k]))
         }
-        k = k + 1;
+        k = k + 1
       }
     }
     const signature = this.module.addMetadata(
       `!DISubroutineType(types: ${this.module.addMetadata(`!{${types.join(", ")}}`)})`
-    );
+    )
     // A method's `sourceName` already reads `Owner.method`.
-    const printed = name.length > 0 ? name : sig.sourceName;
-    const flags = artificial ? "DIFlagPrototyped | DIFlagArtificial" : "DIFlagPrototyped";
-    const spFlags = fn.linkage === "internal" ? "DISPFlagDefinition | DISPFlagLocalToUnit" : "DISPFlagDefinition";
+    const printed = name.length > 0 ? name : sig.sourceName
+    const flags = artificial ? "DIFlagPrototyped | DIFlagArtificial" : "DIFlagPrototyped"
+    const spFlags =
+      fn.linkage === "internal" ? "DISPFlagDefinition | DISPFlagLocalToUnit" : "DISPFlagDefinition"
     this.subprogram = this.module.addMetadata(
       `distinct !DISubprogram(name: ${quote(printed)}, linkageName: ${quote(fn.name)}, scope: ${this.file}, file: ${this.file}, line: ${line}, type: ${signature}, scopeLine: ${line}, flags: ${flags}, spFlags: ${spFlags}, unit: ${this.cu})`
-    );
-    fn.subprogram = this.subprogram;
-    fn.setLocation(this.locationOf(sig.decl));
+    )
+    fn.subprogram = this.subprogram
+    fn.setLocation(this.locationOf(sig.decl))
     if (artificial) {
-      return;
+      return
     }
 
-    this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)");
-    let i = 0;
-    let arg = 0;
+    this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)")
+    let i = 0
+    let arg = 0
     while (i < sig.paramNames.length) {
       if (sig.isCompileTime(i)) {
-        i = i + 1;
-        continue;
+        i = i + 1
+        continue
       }
-      arg = arg + 1;
-      const isThis = sig.owner !== null && i === 0;
-      const extra = isThis ? ", flags: DIFlagArtificial | DIFlagObjectPointer" : "";
+      arg = arg + 1
+      const isThis = sig.owner !== null && i === 0
+      const extra = isThis ? ", flags: DIFlagArtificial | DIFlagObjectPointer" : ""
       const variable = this.module.addMetadata(
         `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${arg}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
-      );
+      )
       fn.emit(
         `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`
-      );
-      i = i + 1;
+      )
+      i = i + 1
     }
   }
 
   /** `!N` of the `DILocation` for the start of `node` in the current function; identical positions share one. */
   locationOf(node: Node): string {
-    const line = this.source.lineOf(node.start);
-    const column = this.source.byteColumnOf(node.start);
-    return this.module.addMetadata(`!DILocation(line: ${line}, column: ${column}, scope: ${this.subprogram})`);
+    const line = this.source.lineOf(node.start)
+    const column = this.source.byteColumnOf(node.start)
+    return this.module.addMetadata(`!DILocation(line: ${line}, column: ${column}, scope: ${this.subprogram})`)
   }
 
   /**
@@ -600,21 +611,23 @@ export class DebugInfo {
    * type `type`, which is what a narrowed read of it is.
    */
   describeValue(fn: IRFunction, local: Local, type: i32, value: string, node: Node): void {
-    this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)");
+    this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)")
     const variable = this.module.addMetadata(
       `!DILocalVariable(name: ${quote(local.name)}, scope: ${this.subprogram}, file: ${this.file}, line: ${this.lineOf(this.source, node)}, type: ${this.typeRef(type)})`
-    );
-    fn.emit(`call void @llvm.dbg.value(metadata ${this.table.llvmType(type)} ${value}, metadata ${variable}, metadata !DIExpression())`);
+    )
+    fn.emit(
+      `call void @llvm.dbg.value(metadata ${this.table.llvmType(type)} ${value}, metadata ${variable}, metadata !DIExpression())`
+    )
   }
 
   /** `llvm.dbg.declare` for a `let`/`const` slot, at the current location. */
   declareLocal(fn: IRFunction, local: Local, slot: string, node: Node): void {
-    this.module.addDeclaration("declare void @llvm.dbg.declare(metadata, metadata, metadata)");
+    this.module.addDeclaration("declare void @llvm.dbg.declare(metadata, metadata, metadata)")
     const variable = this.module.addMetadata(
       `!DILocalVariable(name: ${quote(local.name)}, scope: ${this.subprogram}, file: ${this.file}, line: ${this.lineOf(this.source, node)}, type: ${this.typeRef(local.type)})`
-    );
+    )
     fn.emit(
       `call void @llvm.dbg.declare(metadata ${this.table.llvmType(local.type)}* ${slot}, metadata ${variable}, metadata !DIExpression())`
-    );
+    )
   }
 }

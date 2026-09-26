@@ -18,33 +18,35 @@
 //
 // Arguments spelled `i32:1,2,3`, `f64:0.5,1.5`, `i64:1,2` become the matching
 // typed array; anything else is a Number.
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 /** Instantiate a freestanding Nish wasm module and return its exports (scalars only). */
 export const load = async (bytes) => {
-  const { instance } = await WebAssembly.instantiate(bytes, {});
-  return instance.exports;
-};
-
-const TYPED = { i32: Int32Array, f64: Float64Array, i64: BigInt64Array };
-const parseArg = (text) => {
-  const m = /^(i32|f64|i64):(.*)$/.exec(text);
-  if (!m) { return Number(text); }
-  const items = m[2] === "" ? [] : m[2].split(",");
-  return TYPED[m[1]].from(m[1] === "i64" ? items.map(BigInt) : items.map(Number));
-};
-const show = (v) => (ArrayBuffer.isView(v) ? Array.from(v).join(", ") : String(v));
-
-const [file = "build/add.wasm", fn = "add", ...rawArgs] = process.argv.slice(2);
-// `<stem>.mjs` next to the module is the marshalling loader `--emit-dts` generated.
-const companion = path.resolve(file).replace(/\.wasm$/i, ".mjs");
-const loader = existsSync(companion) ? (await import(pathToFileURL(companion))).load : load;
-const exports = await loader(readFileSync(file));
-if (typeof exports[fn] !== "function") {
-  console.error(`${file} does not export a function named ${fn}`);
-  process.exit(1);
+  const { instance } = await WebAssembly.instantiate(bytes, {})
+  return instance.exports
 }
-const args = rawArgs.length > 0 ? rawArgs.map(parseArg) : [2, 3];
-console.log(`${fn}(${args.map(show).join(", ")}) = ${show(exports[fn](...args))}`);
+
+const TYPED = { i32: Int32Array, f64: Float64Array, i64: BigInt64Array }
+const parseArg = (text) => {
+  const m = /^(i32|f64|i64):(.*)$/.exec(text)
+  if (!m) {
+    return Number(text)
+  }
+  const items = m[2] === "" ? [] : m[2].split(",")
+  return TYPED[m[1]].from(m[1] === "i64" ? items.map(BigInt) : items.map(Number))
+}
+const show = (v) => (ArrayBuffer.isView(v) ? Array.from(v).join(", ") : String(v))
+
+const [file = "build/add.wasm", fn = "add", ...rawArgs] = process.argv.slice(2)
+// `<stem>.mjs` next to the module is the marshalling loader `--emit-dts` generated.
+const companion = path.resolve(file).replace(/\.wasm$/i, ".mjs")
+const loader = existsSync(companion) ? (await import(pathToFileURL(companion))).load : load
+const exports = await loader(readFileSync(file))
+if (typeof exports[fn] !== "function") {
+  console.error(`${file} does not export a function named ${fn}`)
+  process.exit(1)
+}
+const args = rawArgs.length > 0 ? rawArgs.map(parseArg) : [2, 3]
+console.log(`${fn}(${args.map(show).join(", ")}) = ${show(exports[fn](...args))}`)

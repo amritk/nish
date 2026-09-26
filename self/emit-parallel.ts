@@ -30,11 +30,11 @@
 // ever reads it. The trampoline has no `-g` subprogram: it is not in the
 // source, and a function without one may call one that has one.
 
-import { Emitter } from "./emit";
-import { internalErrorFor } from "./ice";
-import { IRFunction, IRParam } from "./ir";
-import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf } from "./parallel";
-import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
+import { Emitter } from "./emit"
+import { internalErrorFor } from "./ice"
+import { IRFunction, IRParam } from "./ir"
+import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf } from "./parallel"
+import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -49,13 +49,13 @@ import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program";
  * it never changes a result.
  */
 const regionGrain = (caller: FunctionSig): i32 => {
-  const body = parallelBodyOf(caller);
-  return body === null || parallelRoleOf(caller) !== PAR_MAP ? 1 : mapGrain(body);
-};
+  const body = parallelBodyOf(caller)
+  return body === null || parallelRoleOf(caller) !== PAR_MAP ? 1 : mapGrain(body)
+}
 
 /** Whether the call from `caller` to `callee` is the one that becomes a region. */
 export const isParallelRegionCall = (caller: FunctionSig | null, callee: FunctionSig): boolean =>
-  caller !== null && isParallelEntry(caller) && parallelRoleOf(callee) === PAR_CHUNK;
+  caller !== null && isParallelEntry(caller) && parallelRoleOf(callee) === PAR_CHUNK
 
 /**
  * The region in place of `chunk(args..., 0, hi)`: `types` and `values` are the
@@ -69,11 +69,11 @@ export const emitParallelRegion = (
   types: string[],
   values: string[]
 ): void => {
-  const caller = emitter.currentSig;
+  const caller = emitter.currentSig
   if (caller === null) {
-    process.exit(internalErrorFor(`emitter: \`${chunk.name}\` called outside a function`, emitter.opts.json));
+    process.exit(internalErrorFor(`emitter: \`${chunk.name}\` called outside a function`, emitter.opts.json))
   }
-  const count = types.length;
+  const count = types.length
   if (
     count < 2 ||
     values.length !== count ||
@@ -83,57 +83,57 @@ export const emitParallelRegion = (
   ) {
     process.exit(
       internalErrorFor(`emitter: \`${chunk.name}\` is not a chunk loop over [0, n)`, emitter.opts.json)
-    );
+    )
   }
-  const fieldTypes: string[] = [];
-  let i = 0;
+  const fieldTypes: string[] = []
+  let i = 0
   while (i < count - 2 && i < types.length) {
-    fieldTypes.push(types[i]);
-    i = i + 1;
+    fieldTypes.push(types[i])
+    i = i + 1
   }
-  const ctxType = `{ ${fieldTypes.join(", ")} }`;
-  const fn = emitter.fn;
-  const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0);
-  const hi = values[count - 1];
-  const grain = regionGrain(caller);
+  const ctxType = `{ ${fieldTypes.join(", ")} }`
+  const fn = emitter.fn
+  const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0)
+  const hi = values[count - 1]
+  const grain = regionGrain(caller)
   // A range the partitioner would not divide is the chunk loop over all of it
   // on this thread, which is what `nish_parallel_range` would run too; called
   // directly it is a call LLVM can inline, where the partitioner's is through a
   // pointer. That is what keeps a short map as cheap as the loop it replaces.
-  const seqBlock = fn.newBlock("par.seq");
-  const regionBlock = fn.newBlock("par.region");
-  const doneBlock = fn.newBlock("par.done");
-  const small = fn.emitValue(`icmp sle i32 ${hi}, ${grain}`);
-  fn.emit(`br i1 ${small}, label %${seqBlock.label}, label %${regionBlock.label}`);
-  fn.placeBlock(seqBlock);
-  const operands: string[] = [];
-  i = 0;
+  const seqBlock = fn.newBlock("par.seq")
+  const regionBlock = fn.newBlock("par.region")
+  const doneBlock = fn.newBlock("par.done")
+  const small = fn.emitValue(`icmp sle i32 ${hi}, ${grain}`)
+  fn.emit(`br i1 ${small}, label %${seqBlock.label}, label %${regionBlock.label}`)
+  fn.placeBlock(seqBlock)
+  const operands: string[] = []
+  i = 0
   while (i < types.length && i < values.length) {
-    operands.push(`${types[i]} ${values[i]}`);
-    i = i + 1;
+    operands.push(`${types[i]} ${values[i]}`)
+    i = i + 1
   }
-  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`);
-  fn.emit(`br label %${doneBlock.label}`);
-  fn.placeBlock(regionBlock);
-  i = 0;
+  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  fn.emit(`br label %${doneBlock.label}`)
+  fn.placeBlock(regionBlock)
+  i = 0
   while (i < fieldTypes.length && i < values.length) {
     // Read before the call below, which ends the length facts.
-    const type = fieldTypes[i];
-    const value = values[i];
-    const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${i}`);
-    fn.emit(`store ${type} ${value}, ${type}* ${at}`);
-    i = i + 1;
+    const type = fieldTypes[i]
+    const value = values[i]
+    const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${i}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
+    i = i + 1
   }
-  const raw = fn.emitValue(`bitcast ${ctxType}* ${slot} to i8*`);
-  const len = fn.emitValue(`sext i32 ${hi} to i64`);
-  const trampoline = `${caller.name}$chunk`;
+  const raw = fn.emitValue(`bitcast ${ctxType}* ${slot} to i8*`)
+  const len = fn.emitValue(`sext i32 ${hi} to i64`)
+  const trampoline = `${caller.name}$chunk`
   fn.emit(
     `call void ${emitter.useRuntime("nish_parallel_range")}(void (i64, i64, i8*)* @${trampoline}, i8* ${raw}, i64 ${len}, i64 ${grain})`
-  );
-  fn.emit(`br label %${doneBlock.label}`);
-  fn.placeBlock(doneBlock);
-  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes));
-};
+  )
+  fn.emit(`br label %${doneBlock.label}`)
+  fn.placeBlock(doneBlock)
+  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes))
+}
 
 /**
  * `void <name>(i64 lo, i64 hi, i8* ctx)`, the `nish_par_body` the partitioner
@@ -148,39 +148,39 @@ const chunkTrampoline = (
   ctxType: string,
   fieldTypes: string[]
 ): IRFunction => {
-  const optimize = emitter.opts.optimizeAttributes;
-  const attrs: string[] = [];
+  const optimize = emitter.opts.optimizeAttributes
+  const attrs: string[] = []
   if (optimize) {
-    attrs.push("noundef");
+    attrs.push("noundef")
   }
-  const params: IRParam[] = [];
-  params.push(new IRParam("lo", "i64", attrs));
-  params.push(new IRParam("hi", "i64", attrs));
-  params.push(new IRParam("ctx", "i8*", attrs));
-  const fn = new IRFunction(name, params, "void");
-  fn.linkage = "internal";
+  const params: IRParam[] = []
+  params.push(new IRParam("lo", "i64", attrs))
+  params.push(new IRParam("hi", "i64", attrs))
+  params.push(new IRParam("ctx", "i8*", attrs))
+  const fn = new IRFunction(name, params, "void")
+  fn.linkage = "internal"
   if (optimize) {
     // As `nish_parallel_range`'s entry says: nothing unwinds, and nothing
     // more is claimed about a body that runs a whole chunk.
-    const group: string[] = [];
-    group.push("nounwind");
-    fn.attrGroup = emitter.module.attrGroupFor(group);
+    const group: string[] = []
+    group.push("nounwind")
+    fn.attrGroup = emitter.module.attrGroupFor(group)
   }
-  const typed = fn.emitValue(`bitcast i8* %ctx to ${ctxType}*`);
-  const operands: string[] = [];
-  let i = 0;
+  const typed = fn.emitValue(`bitcast i8* %ctx to ${ctxType}*`)
+  const operands: string[] = []
+  let i = 0
   while (i < fieldTypes.length) {
-    const type = fieldTypes[i];
-    const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${i}`);
-    const value = fn.emitValue(`load ${type}, ${type}* ${at}`);
-    operands.push(`${type} ${value}`);
-    i = i + 1;
+    const type = fieldTypes[i]
+    const at = fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${i}`)
+    const value = fn.emitValue(`load ${type}, ${type}* ${at}`)
+    operands.push(`${type} ${value}`)
+    i = i + 1
   }
-  const lo = fn.emitValue("trunc i64 %lo to i32");
-  const hi = fn.emitValue("trunc i64 %hi to i32");
-  operands.push(`i32 ${lo}`);
-  operands.push(`i32 ${hi}`);
-  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`);
-  fn.emit("ret void");
-  return fn;
-};
+  const lo = fn.emitValue("trunc i64 %lo to i32")
+  const hi = fn.emitValue("trunc i64 %hi to i32")
+  operands.push(`i32 ${lo}`)
+  operands.push(`i32 ${hi}`)
+  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  fn.emit("ret void")
+  return fn
+}

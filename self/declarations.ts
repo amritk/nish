@@ -10,20 +10,20 @@
 // beats one about a node kind. What is left is the semantic half: names,
 // types, arity and the rules about `main`.
 
-import { CheckContext } from "./context";
-import { isNishSpecifier, nishModuleNames } from "./nish-modules";
-import { STD_PREFIX } from "./branding";
-import { parseBareSpecifier } from "./packages";
-import { rejectForeignPointer, resolveType } from "./annotations";
-import { functionTypeHereMessage, isFunctionParameter } from "./generics";
-import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
-import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
-import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types";
+import { CheckContext } from "./context"
+import { isNishSpecifier, nishModuleNames } from "./nish-modules"
+import { STD_PREFIX } from "./branding"
+import { parseBareSpecifier } from "./packages"
+import { rejectForeignPointer, resolveType } from "./annotations"
+import { functionTypeHereMessage, isFunctionParameter } from "./generics"
+import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes"
+import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
+import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
 
 /** Symbol the entry module's `export function main` is emitted under. */
-export const ENTRY_MAIN_SYMBOL: string = "nish_main";
+export const ENTRY_MAIN_SYMBOL: string = "nish_main"
 
-export const isExported = (node: Node): boolean => (node.flags & FLAG_EXPORTED) !== 0;
+export const isExported = (node: Node): boolean => (node.flags & FLAG_EXPORTED) !== 0
 
 /**
  * The parameters of a function, method or constructor, appended to `sig`.
@@ -45,51 +45,51 @@ export const collectParams = (
   foreign: boolean
 ): void => {
   if (owner >= 0) {
-    sig.paramNames.push("this");
-    sig.paramTypes.push(owner);
+    sig.paramNames.push("this")
+    sig.paramTypes.push(owner)
   }
   for (const param of list.children) {
-    const name = param.children[0].text;
+    const name = param.children[0].text
     // WP29: a function-typed parameter is resolved at each call rather than
     // here — it names a callee, not a type — so it takes its position and no
     // more. Only a top-level function may have one; everywhere else the
     // parameter is refused by what it belongs to.
     if (isFunctionParameter(param)) {
       if (owner >= 0 || foreign) {
-        const what = foreign ? "a `declare function`" : "a method or a constructor";
-        ctx.error(param.children[1], functionTypeHereMessage(name, what));
-        continue;
+        const what = foreign ? "a `declare function`" : "a method or a constructor"
+        ctx.error(param.children[1], functionTypeHereMessage(name, what))
+        continue
       }
       if (sig.paramNames.indexOf(name) >= 0) {
-        ctx.error(param, `Duplicate parameter \`${name}\``);
-        continue;
+        ctx.error(param, `Duplicate parameter \`${name}\``)
+        continue
       }
       while (sig.compileTime.length < sig.paramNames.length) {
-        sig.compileTime.push(false);
+        sig.compileTime.push(false)
       }
-      sig.compileTime.push(true);
-      sig.paramNames.push(name);
-      sig.paramTypes.push(T_VOID);
-      continue;
+      sig.compileTime.push(true)
+      sig.paramNames.push(name)
+      sig.paramTypes.push(T_VOID)
+      continue
     }
-    const type = resolveType(param.children[1], ctx);
-    let duplicate = false;
+    const type = resolveType(param.children[1], ctx)
+    let duplicate = false
     for (const seen of sig.paramNames) {
       if (seen === name) {
-        duplicate = true;
+        duplicate = true
       }
     }
     if (duplicate) {
-      ctx.error(param, `Duplicate parameter \`${name}\``);
-      continue;
+      ctx.error(param, `Duplicate parameter \`${name}\``)
+      continue
     }
     if (!foreign) {
-      rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1]);
+      rejectForeignPointer(ctx, type, "a parameter of a function this program defines", param.children[1])
     }
-    sig.paramNames.push(name);
-    sig.paramTypes.push(type);
+    sig.paramNames.push(name)
+    sig.paramTypes.push(type)
   }
-};
+}
 
 /**
  * One `function` declaration's signature. The body is not looked at: pass 2
@@ -97,25 +97,25 @@ export const collectParams = (
  * functions call each other in any order.
  */
 export const collectFunctionSignature = (ctx: CheckContext, decl: Node): FunctionSig => {
-  const name = decl.children[0].text;
-  const sig = new FunctionSig(name, name, decl);
-  sig.origin = ctx.source;
-  sig.exported = isExported(decl);
-  sig.role = ROLE_FUNCTION;
+  const name = decl.children[0].text
+  const sig = new FunctionSig(name, name, decl)
+  sig.origin = ctx.source
+  sig.exported = isExported(decl)
+  sig.role = ROLE_FUNCTION
   if (name.startsWith("nish_")) {
-    ctx.error(decl.children[0], "Function names starting with `nish_` are reserved for the runtime");
+    ctx.error(decl.children[0], "Function names starting with `nish_` are reserved for the runtime")
   }
-  const foreign = sig.foreign();
-  collectParams(ctx, sig, decl.children[1], -1, foreign);
-  const returnAnnotation = decl.children[2];
+  const foreign = sig.foreign()
+  collectParams(ctx, sig, decl.children[1], -1, foreign)
+  const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
-    ctx.error(decl.children[0], `Function \`${name}\` needs an explicit return type annotation`);
-    sig.returnType = T_ERROR;
+    ctx.error(decl.children[0], `Function \`${name}\` needs an explicit return type annotation`)
+    sig.returnType = T_ERROR
   } else {
-    sig.returnType = resolveType(returnAnnotation, ctx);
+    sig.returnType = resolveType(returnAnnotation, ctx)
   }
   if (foreign) {
-    checkForeignSignature(ctx, sig, decl, name);
+    checkForeignSignature(ctx, sig, decl, name)
   } else {
     // WP27 S2: a foreign pointer never crosses a boundary this compiler
     // describes. `--emit-header`, `--emit-dts` and `--emit-napi` all render an
@@ -123,10 +123,15 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     // whose provenance and lifetime are unknown — so rather than teach three
     // generators to skip it, the type is refused where it would reach them.
     // The parameters were answered for by `collectParams` above.
-    rejectForeignPointer(ctx, sig.returnType, "the return type of a function this program defines", returnAnnotation);
+    rejectForeignPointer(
+      ctx,
+      sig.returnType,
+      "the return type of a function this program defines",
+      returnAnnotation
+    )
   }
-  return sig;
-};
+  return sig
+}
 
 /**
  * The rules a `declare function` adds (WP27 S1, widened by S2): no body, not
@@ -140,22 +145,22 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
  */
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   if (sig.body() !== null) {
-    ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body");
+    ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body")
   }
   if (sig.exported) {
     ctx.error(
       decl.children[0],
       `\`declare function ${name}\` cannot be exported: it is a C function this program calls, not one it defines`
-    );
+    )
   }
-  let i = 0;
+  let i = 0
   while (i < sig.paramTypes.length) {
     if (!isForeignType(ctx.table, sig.paramTypes[i])) {
-      const spelled = ctx.table.typeName(sig.paramTypes[i]);
+      const spelled = ctx.table.typeName(sig.paramTypes[i])
       ctx.error(
         decl,
         `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only`
-      );
+      )
     } else if (ctx.table.isNullable(sig.paramTypes[i])) {
       // A parameter cannot be `CPtr | null`, and the asymmetry with the return
       // type is the rule §3 states as "`null` only from a foreign call": the
@@ -166,18 +171,18 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       ctx.error(
         decl,
         `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` cannot be nullable: a foreign pointer is narrowed with \`!== null\` before it is passed back, because only the C function it came from can hand out a null one`
-      );
+      )
     }
-    i = i + 1;
+    i = i + 1
   }
   if (!isForeignType(ctx.table, sig.returnType)) {
-    const spelled = ctx.table.typeName(sig.returnType);
+    const spelled = ctx.table.typeName(sig.returnType)
     ctx.error(
       decl.children[2],
       `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar or \`CPtr\` only`
-    );
+    )
   }
-};
+}
 
 /**
  * The entry module's `export function main`, renamed to `@nish_main` so the
@@ -192,27 +197,27 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
     ctx.error(
       sig.decl.children[1].children[0],
       "`main` cannot take parameters (command-line arguments are not supported yet)"
-    );
+    )
   }
   if (sig.returnType !== T_VOID && sig.returnType !== T_I32 && sig.returnType !== T_ERROR) {
-    const spelled = ctx.table.typeName(sig.returnType);
+    const spelled = ctx.table.typeName(sig.returnType)
     const hint =
-      ctx.table.typeName(sig.returnType) === "f64" ? "; under --number-mode f64 declare `main(): i32`" : "";
+      ctx.table.typeName(sig.returnType) === "f64" ? "; under --number-mode f64 declare `main(): i32`" : ""
     ctx.error(
       sig.decl.children[2],
       `\`main\` must return void or an i32 number (the process exit code), not ${spelled}${hint}`
-    );
+    )
   }
   if (ctx.errored) {
     // A rejected `main` is not the entry's `main`: stage0 throws from here and
     // never records it, so a *second* module declaring one is not yet a second
     // (`tests/link/main_in_import` in f64 mode reported both there and one
     // here).
-    return;
+    return
   }
-  sig.name = ENTRY_MAIN_SYMBOL;
-  ctx.program.entryMain = sig;
-};
+  sig.name = ENTRY_MAIN_SYMBOL
+  ctx.program.entryMain = sig
+}
 
 /**
  * One binding per name in an `import`. The parser has already refused every
@@ -220,7 +225,7 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
  * specifier rule and the empty list.
  */
 export const collectImports = (ctx: CheckContext, decl: Node): void => {
-  const specifier = decl.text;
+  const specifier = decl.text
   // Four forms are legal. `nish:` names a builtin and resolves to no file, so
   // it is let through here and validated in pass 1b, where an unknown one reads
   // as a bad module instead of a missing file; `nish/` names a standard-library
@@ -241,25 +246,25 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     ctx.errorAtSpecifier(
       decl,
       `Import specifier \`${specifier}\` must be relative (\`./x\`, \`../x\`), a package name (\`hash\`, \`@scope/hash\`), or one of ${nishModuleNames()} and ${STD_PREFIX}<module>`
-    );
-    return;
+    )
+    return
   }
-  const specs = decl.children[0];
+  const specs = decl.children[0]
   if (specs.kind !== N_LIST || specs.children.length === 0) {
-    ctx.error(decl, "Empty import list");
-    return;
+    ctx.error(decl, "Empty import list")
+    return
   }
   for (const spec of specs.children) {
-    const importedName = spec.children[0].text;
-    ctx.program.imports.push(new ImportBinding(specifier, importedName, spec.text, spec, decl));
+    const importedName = spec.children[0].text
+    ctx.program.imports.push(new ImportBinding(specifier, importedName, spec.text, spec, decl))
     // An imported name may be written as a type before pass 1b can say what
     // it is; `resolveType` resolves it provisionally and binding rejects the
     // ones that turn out to be functions or constants.
-    ctx.program.typeNames.add(spec.text);
+    ctx.program.typeNames.add(spec.text)
   }
-};
+}
 
 /** Whether a top-level node is a declaration this pass collects a signature for. */
-export const isFunctionDeclaration = (node: Node): boolean => node.kind === N_FUNCTION;
+export const isFunctionDeclaration = (node: Node): boolean => node.kind === N_FUNCTION
 
-export const isImportDeclaration = (node: Node): boolean => node.kind === N_IMPORT;
+export const isImportDeclaration = (node: Node): boolean => node.kind === N_IMPORT

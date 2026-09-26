@@ -14,24 +14,24 @@
 // 16 bits so no version relies on signed overflow.
 const half = (n: number): Result<number, number> => {
   if (n % 2 !== 0) {
-    return Err(n);
+    return Err(n)
   }
-  return Ok(n / 2);
-};
+  return Ok(n / 2)
+}
 
 const combine = (r: Result<number, number>): number => {
   if (r.isErr()) {
-    return -1;
+    return -1
   }
-  return r.value;
-};
+  return r.value
+}
 
 export const main = (): number => {
-  const N = 200000000; // bench:n
-  let acc = 0;
+  const N = 200000000 // bench:n
+  let acc = 0
   for (let i = 0; i < N; i++) {
-    acc = (acc + combine(half((i + acc) & 0xffff))) & 0xffff;
+    acc = (acc + combine(half((i + acc) & 0xffff))) & 0xffff
   }
-  console.log(acc);
-  return 0;
-};
+  console.log(acc)
+  return 0
+}

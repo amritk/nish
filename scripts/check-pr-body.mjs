@@ -20,9 +20,9 @@
 // Exit 0 when the body is clean, 1 when it is not, with each pattern it
 // carries named on stderr. Not shipped in the npm package: it imports from
 // `.claude/`, which the tarball does not carry.
-import { bannedIn } from "../.claude/hooks/attribution-patterns.mjs";
+import { bannedIn } from "../.claude/hooks/attribution-patterns.mjs"
 
-const found = bannedIn([process.env.BODY ?? ""]);
+const found = bannedIn([process.env.BODY ?? ""])
 if (found.length > 0) {
   process.stderr.write(
     "The pull request body carries tool attribution:\n\n" +
@@ -30,7 +30,7 @@ if (found.length > 0) {
       "\nCLAUDE.md forbids session links, tracking IDs, model names and platform\n" +
       "attributions in PR text. Edit the body to remove them; the check runs again\n" +
       "on the edit. A footer the platform appended after the pull request was\n" +
-      "opened fails this too, and the fix is the same.\n",
-  );
+      "opened fails this too, and the fix is the same.\n"
+  )
 }
-process.exit(found.length > 0 ? 1 : 0);
+process.exit(found.length > 0 ? 1 : 0)

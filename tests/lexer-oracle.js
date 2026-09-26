@@ -24,15 +24,15 @@
  *     that is a keyword there and not here is an `IDENT`, which is what it is
  *     to this lexer: the parser refuses `try` as a statement, not as a token.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
-import ts from "typescript";
-import { fileURLToPath } from "node:url";
-import { seedWithoutStage0 } from "./self/goldens.js";
-import { linkWith, namedSeedSpec, withoutSeed } from "./self/seed.js";
+import fs from "node:fs"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
+import ts from "typescript"
+import { fileURLToPath } from "node:url"
+import { seedWithoutStage0 } from "./self/goldens.js"
+import { linkWith, namedSeedSpec, withoutSeed } from "./self/seed.js"
 
-const root = path.resolve(import.meta.dirname, "..");
+const root = path.resolve(import.meta.dirname, "..")
 
 /** Our name for each TypeScript token kind; anything absent is reported as unmapped. */
 const NAMES = new Map([
@@ -104,7 +104,7 @@ const NAMES = new Map([
   [ts.SyntaxKind.LessThanLessThanEqualsToken, "<<="],
   [ts.SyntaxKind.GreaterThanGreaterThanEqualsToken, ">>="],
   [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken, ">>>="],
-]);
+])
 
 /** The keywords Nish-0 knows; every other TypeScript keyword is an identifier here. */
 const KEYWORDS = new Set([
@@ -135,27 +135,30 @@ const KEYWORDS = new Set([
   "implements",
   "extends",
   "super",
-]);
+])
 
 /** Byte offset of every UTF-16 index in `source`, so the two streams can be compared. */
 const byteOffsets = (source) => {
-  const offsets = new Int32Array(source.length + 1);
-  let bytes = 0;
+  const offsets = new Int32Array(source.length + 1)
+  let bytes = 0
   for (let i = 0; i < source.length; i++) {
-    offsets[i] = bytes;
-    const code = source.codePointAt(i);
-    if (code < 0x80) { bytes += 1; }
-    else if (code < 0x800) { bytes += 2; }
-    else if (code < 0x10000) { bytes += 3; }
-    else {
-      bytes += 4;
-      offsets[i + 1] = bytes; // the low surrogate shares the code point's end
-      i++;
+    offsets[i] = bytes
+    const code = source.codePointAt(i)
+    if (code < 0x80) {
+      bytes += 1
+    } else if (code < 0x800) {
+      bytes += 2
+    } else if (code < 0x10000) {
+      bytes += 3
+    } else {
+      bytes += 4
+      offsets[i + 1] = bytes // the low surrogate shares the code point's end
+      i++
     }
   }
-  offsets[source.length] = bytes;
-  return offsets;
-};
+  offsets[source.length] = bytes
+  return offsets
+}
 
 /**
  * The token stream of `source` as `dump_tokens` would print it, or
@@ -164,86 +167,106 @@ const byteOffsets = (source) => {
  * does not lex is not evidence about a lexer that agrees.
  */
 const scanWithTypeScript = (source) => {
-  const offsets = byteOffsets(source);
-  const lines = [];
-  let error;
+  const offsets = byteOffsets(source)
+  const lines = []
+  let error
   const scanner = ts.createScanner(ts.ScriptTarget.ES2020, true, ts.LanguageVariant.Standard, source, (m) => {
-    error = error ?? m.message;
-  });
+    error = error ?? m.message
+  })
   /** Open template substitutions, each counting the `{` inside it, exactly as the lexer does. */
-  const braces = [];
+  const braces = []
   for (;;) {
-    let kind = scanner.scan();
-    if (error !== undefined) { return { error }; }
+    let kind = scanner.scan()
+    if (error !== undefined) {
+      return { error }
+    }
     // The scanner hands back a bare `>` so that the parser can close nested
     // type arguments one at a time; it merges `>>` / `>=` / `>>>=` only when
     // asked. `self/lexer.ts` always merges, because Nish-0 has no generic
     // type argument list to close, so ask here too.
-    if (kind === ts.SyntaxKind.GreaterThanToken) { kind = scanner.reScanGreaterToken(); }
+    if (kind === ts.SyntaxKind.GreaterThanToken) {
+      kind = scanner.reScanGreaterToken()
+    }
     if (kind === ts.SyntaxKind.CloseBraceToken && braces.length > 0) {
       if (braces[braces.length - 1] === 0) {
-        braces.pop();
-        kind = scanner.reScanTemplateToken(false);
-        if (error !== undefined) { return { error }; }
+        braces.pop()
+        kind = scanner.reScanTemplateToken(false)
+        if (error !== undefined) {
+          return { error }
+        }
       } else {
-        braces[braces.length - 1] -= 1;
+        braces[braces.length - 1] -= 1
       }
     } else if (kind === ts.SyntaxKind.OpenBraceToken && braces.length > 0) {
-      braces[braces.length - 1] += 1;
+      braces[braces.length - 1] += 1
     }
-    if (kind === ts.SyntaxKind.TemplateHead || kind === ts.SyntaxKind.TemplateMiddle) { braces.push(0); }
+    if (kind === ts.SyntaxKind.TemplateHead || kind === ts.SyntaxKind.TemplateMiddle) {
+      braces.push(0)
+    }
 
-    const start = offsets[scanner.getTokenStart()];
-    const end = offsets[scanner.getTokenEnd()];
-    let name = NAMES.get(kind);
+    const start = offsets[scanner.getTokenStart()]
+    const end = offsets[scanner.getTokenEnd()]
+    let name = NAMES.get(kind)
     if (name === undefined) {
-      const text = source.slice(scanner.getTokenStart(), scanner.getTokenEnd());
+      const text = source.slice(scanner.getTokenStart(), scanner.getTokenEnd())
       // A keyword: ours if Nish-0 has it, an identifier if not.
-      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(text)) { name = KEYWORDS.has(text) ? text : "IDENT"; }
-      else { return { error: `unmapped token ${ts.SyntaxKind[kind]} at ${start}` }; }
+      if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(text)) {
+        name = KEYWORDS.has(text) ? text : "IDENT"
+      } else {
+        return { error: `unmapped token ${ts.SyntaxKind[kind]} at ${start}` }
+      }
     }
-    let line = `${name} ${start} ${end}`;
-    if (name === "IDENT") { line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`; }
-    else if (name === "NUMBER" || name === "BIGINT") {
-      line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`;
+    let line = `${name} ${start} ${end}`
+    if (name === "IDENT") {
+      line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`
+    } else if (name === "NUMBER" || name === "BIGINT") {
+      line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`
     } else if (name.startsWith("TEMPLATE") || name === "STRING") {
-      line += ` #${Buffer.byteLength(scanner.getTokenValue(), "utf8")}`;
+      line += ` #${Buffer.byteLength(scanner.getTokenValue(), "utf8")}`
     } else if (name === "PRIVATE_IDENT") {
-      line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`;
+      line += ` ${source.slice(scanner.getTokenStart(), scanner.getTokenEnd())}`
     }
-    lines.push(line);
-    if (kind === ts.SyntaxKind.EndOfFileToken) { break; }
+    lines.push(line)
+    if (kind === ts.SyntaxKind.EndOfFileToken) {
+      break
+    }
   }
-  return { lines };
-};
+  return { lines }
+}
 
 const compare = (binary, file) => {
-  const source = fs.readFileSync(file, "utf8");
-  const oracle = scanWithTypeScript(source);
-  if (oracle.error !== undefined) { return { skipped: oracle.error }; }
-  const run = spawnSync(binary, [file], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (run.status !== 0) {
-    return { failed: `dump_tokens exited ${run.status}: ${run.stdout.trim().split("\n").pop()}` };
+  const source = fs.readFileSync(file, "utf8")
+  const oracle = scanWithTypeScript(source)
+  if (oracle.error !== undefined) {
+    return { skipped: oracle.error }
   }
-  const ours = run.stdout.split("\n").filter((l) => l.length > 0);
-  const want = oracle.lines;
+  const run = spawnSync(binary, [file], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+  if (run.status !== 0) {
+    return { failed: `dump_tokens exited ${run.status}: ${run.stdout.trim().split("\n").pop()}` }
+  }
+  const ours = run.stdout.split("\n").filter((l) => l.length > 0)
+  const want = oracle.lines
   for (let i = 0; i < Math.max(ours.length, want.length); i++) {
     if (ours[i] !== want[i]) {
       return {
         failed: `line ${i + 1}: ours \`${ours[i] ?? "<end>"}\`, typescript \`${want[i] ?? "<end>"}\``,
-      };
+      }
     }
   }
-  return { tokens: want.length };
-};
+  return { tokens: want.length }
+}
 
 const corpus = () => {
-  const dirs = [path.join(root, "tests", "cases"), path.join(root, "examples"), path.join(root, "self")];
-  const files = [];
+  const dirs = [path.join(root, "tests", "cases"), path.join(root, "examples"), path.join(root, "self")]
+  const files = []
   for (const dir of dirs) {
-    if (!fs.existsSync(dir)) { continue; }
+    if (!fs.existsSync(dir)) {
+      continue
+    }
     for (const name of fs.readdirSync(dir).sort()) {
-      if (name.endsWith(".ts")) { files.push(path.join(dir, name)); }
+      if (name.endsWith(".ts")) {
+        files.push(path.join(dir, name))
+      }
     }
   }
   for (const dir of [
@@ -251,16 +274,20 @@ const corpus = () => {
     path.join(root, "docs", "cookbook"),
     path.join(root, "tests", "lexer"),
   ]) {
-    if (!fs.existsSync(dir)) { continue; }
+    if (!fs.existsSync(dir)) {
+      continue
+    }
     for (const name of fs.readdirSync(dir).sort()) {
       // `errors.ts` is the one fixture the oracle cannot judge: the scanner
       // recovers from a lexical error and this lexer stops, so it has a golden
       // of its own in `tests/run.js` instead.
-      if (name.endsWith(".ts") && name !== "errors.ts") { files.push(path.join(dir, name)); }
+      if (name.endsWith(".ts") && name !== "errors.ts") {
+        files.push(path.join(dir, name))
+      }
     }
   }
-  return files;
-};
+  return files
+}
 
 /**
  * Build `self/dump-tokens.ts` natively with the seed; returns the binary path,
@@ -270,43 +297,56 @@ const corpus = () => {
  * the `typescript` package and outlives stage0's `src/`, so the compiler that links its
  * subject must outlive stage0's `src/` too: `seedWithoutStage0` in `tests/self/goldens.js`.
  */
-const build = (seed) => linkWith(seed, path.join("self", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"));
+const build = (seed) =>
+  linkWith(seed, path.join("self", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"))
 
 const main = (argv) => {
-  const verbose = argv.includes("--verbose");
-  const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
-  const seed = seedWithoutStage0(namedSeedSpec(argv));
+  const verbose = argv.includes("--verbose")
+  const files = withoutSeed(argv).filter((a) => !a.startsWith("--"))
+  const seed = seedWithoutStage0(namedSeedSpec(argv))
   if (seed.error !== undefined) {
-    process.stderr.write(`${seed.error}\n`);
-    return 1;
+    process.stderr.write(`${seed.error}\n`)
+    return 1
   }
-  const binary = build(seed);
-  if (binary === null) { return 1; }
-  const inputs = files.length > 0 ? files.map((f) => path.resolve(f)) : corpus();
-  let agreed = 0;
-  let tokens = 0;
-  const skipped = [];
-  const failed = [];
+  const binary = build(seed)
+  if (binary === null) {
+    return 1
+  }
+  const inputs = files.length > 0 ? files.map((f) => path.resolve(f)) : corpus()
+  let agreed = 0
+  let tokens = 0
+  const skipped = []
+  const failed = []
   for (const file of inputs) {
-    const result = compare(binary, file);
-    const name = path.relative(root, file);
-    if (result.skipped !== undefined) { skipped.push(`${name}: ${result.skipped}`); }
-    else if (result.failed !== undefined) { failed.push(`${name}: ${result.failed}`); }
-    else {
-      agreed++;
-      tokens += result.tokens;
+    const result = compare(binary, file)
+    const name = path.relative(root, file)
+    if (result.skipped !== undefined) {
+      skipped.push(`${name}: ${result.skipped}`)
+    } else if (result.failed !== undefined) {
+      failed.push(`${name}: ${result.failed}`)
+    } else {
+      agreed++
+      tokens += result.tokens
     }
   }
   const summary =
     `${agreed}/${inputs.length - skipped.length} files agree (${tokens} tokens), ` +
-    `${skipped.length} skipped, seed ${seed.label}`;
+    `${skipped.length} skipped, seed ${seed.label}`
   if (verbose || failed.length > 0) {
-    for (const f of failed) { process.stdout.write(`  FAIL ${f}\n`); }
-    if (verbose) { for (const s of skipped) { process.stdout.write(`  skip ${s}\n`); } }
+    for (const f of failed) {
+      process.stdout.write(`  FAIL ${f}\n`)
+    }
+    if (verbose) {
+      for (const s of skipped) {
+        process.stdout.write(`  skip ${s}\n`)
+      }
+    }
   }
-  process.stdout.write(`${summary}\n`);
-  return failed.length === 0 ? 0 : 1;
-};
+  process.stdout.write(`${summary}\n`)
+  return failed.length === 0 ? 0 : 1
+}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
-export { scanWithTypeScript, compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main(process.argv.slice(2)))
+}
+export { scanWithTypeScript, compare, corpus, build }

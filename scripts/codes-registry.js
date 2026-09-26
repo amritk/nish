@@ -31,17 +31,29 @@
  *     codes" the same answer, which is what let the first instance of this
  *     survive unnoticed. This one raises instead.
  */
-import fs from "node:fs";
-import path from "node:path";
+import fs from "node:fs"
+import path from "node:path"
 
-const root = path.resolve(import.meta.dirname, "..");
+const root = path.resolve(import.meta.dirname, "..")
+
+/**
+ * One string literal in either quote: the formatter writes a fragment that
+ * holds a `"` with single quotes, because that needs no escape.
+ */
+export const STRING_LITERAL = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g
 
 /**
  * One entry of the emitted table: the quoted fragment on its own line, then
  * the code on the next. Anchored to the line rather than to a column, for the
  * reason in the header.
  */
-const PAIR = /^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm;
+const PAIR = new RegExp(`^\\s+(${STRING_LITERAL.source}),\\n\\s+"(NL\\d{4})",$`, "gm")
+
+/** The text of a string literal in either quote, as JavaScript reads it. */
+const unquote = (literal) =>
+  literal.startsWith("'")
+    ? JSON.parse(`"${literal.slice(1, -1).replaceAll("\\'", "'").replaceAll('"', '\\"')}"`)
+    : JSON.parse(literal)
 
 /**
  * Every `{ fragment, code }` of one registry file, in the order the file holds
@@ -58,16 +70,16 @@ const PAIR = /^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm;
  * message names the text by.
  */
 export const parseCodesRegistry = (text, label) => {
-  const pairs = [];
+  const pairs = []
   for (const m of text.matchAll(PAIR)) {
-    pairs.push({ fragment: JSON.parse(m[1]), code: m[2] });
+    pairs.push({ fragment: unquote(m[1]), code: m[2] })
   }
   if (pairs.length === 0) {
-    throw new Error(`${label}: no diagnostic codes parsed -- the registry's shape has moved`);
+    throw new Error(`${label}: no diagnostic codes parsed -- the registry's shape has moved`)
   }
-  return pairs;
-};
+  return pairs
+}
 
 /** The same, for a registry on disk. The three callers all read a file. */
 export const readCodesRegistry = (file) =>
-  parseCodesRegistry(fs.readFileSync(file, "utf8"), path.relative(root, file));
+  parseCodesRegistry(fs.readFileSync(file, "utf8"), path.relative(root, file))

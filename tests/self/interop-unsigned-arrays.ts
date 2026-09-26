@@ -32,55 +32,55 @@
 //               in a value type while the payload crosses in memory
 
 export const sumU8 = (xs: u8[]): i32 => {
-  let total = 0;
+  let total = 0
   for (let i = 0; i < xs.length; i++) {
-    total = total + toI32(xs[i]);
+    total = total + toI32(xs[i])
   }
-  return total;
-};
+  return total
+}
 
 export const fillU8 = (xs: u8[], v: u8): void => {
   for (let i = 0; i < xs.length; i++) {
-    xs[i] = v;
+    xs[i] = v
   }
-};
+}
 
 export const highU8 = (): u8[] => {
-  const out = new Array<u8>(2);
-  out[0] = 200;
-  out[1] = 255;
-  return out;
-};
+  const out = new Array<u8>(2)
+  out[0] = 200
+  out[1] = 255
+  return out
+}
 
 export const sumU16 = (xs: u16[]): i32 => {
-  let total = 0;
+  let total = 0
   for (let i = 0; i < xs.length; i++) {
-    total = total + toI32(xs[i]);
+    total = total + toI32(xs[i])
   }
-  return total;
-};
+  return total
+}
 
 export const maxU32 = (): u32[] => {
-  const out = new Array<u32>(2);
-  out[0] = 4294967295;
-  out[1] = 2147483648;
-  return out;
-};
+  const out = new Array<u32>(2)
+  out[0] = 4294967295
+  out[1] = 2147483648
+  return out
+}
 
 export const sumU64 = (xs: u64[]): u64 => {
-  let total: u64 = 0;
+  let total: u64 = 0
   for (let i = 0; i < xs.length; i++) {
-    total = total + xs[i];
+    total = total + xs[i]
   }
-  return total;
-};
+  return total
+}
 
 export const countU8 = (xs: u8[], needle: u8): i32 => {
-  let n = 0;
+  let n = 0
   for (let i = 0; i < xs.length; i++) {
     if (xs[i] === needle) {
-      n = n + 1;
+      n = n + 1
     }
   }
-  return n;
-};
+  return n
+}

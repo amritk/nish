@@ -20,10 +20,10 @@ import {
   repeatString,
   splitByte,
   StringBuilder,
-} from "../../self/strings";
-import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../self/map";
-import { nishExportTarget } from "../../self/manifest";
-import { parseBareSpecifier } from "../../self/packages";
+} from "../../self/strings"
+import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../self/map"
+import { nishExportTarget } from "../../self/manifest"
+import { parseBareSpecifier } from "../../self/packages"
 import {
   basename,
   basenameWithout,
@@ -33,46 +33,46 @@ import {
   relativePath,
   resolveModule,
   resolvePath,
-} from "../../self/paths";
+} from "../../self/paths"
 
-const TAB: i32 = 9;
-const NEWLINE: i32 = 10;
-const HASH: i32 = 35;
+const TAB: i32 = 9
+const NEWLINE: i32 = 10
+const HASH: i32 = 35
 
 /** The non-comment, non-blank lines of the case file. */
 const caseLines = (text: string): string[] => {
-  const lines: string[] = [];
+  const lines: string[] = []
   for (const line of splitByte(text, NEWLINE)) {
     if (line.length > 0 && line.charCodeAt(0) !== HASH) {
-      lines.push(line);
+      lines.push(line)
     }
   }
-  return lines;
-};
+  return lines
+}
 
 /** Every string function, over one case from the `text` section. */
 const reportText = (out: string[], value: string): void => {
-  out.push(`json ${jsonQuote(value)}`);
-  out.push(`ir ${irEscape(value)}`);
-  out.push(`hash ${hashString(value)}`);
-  out.push(`split ${jsonQuote(splitByte(value, 47).join("|"))}`);
-  out.push(`repeat ${jsonQuote(repeatString(value, 3))}`);
-};
+  out.push(`json ${jsonQuote(value)}`)
+  out.push(`ir ${irEscape(value)}`)
+  out.push(`hash ${hashString(value)}`)
+  out.push(`split ${jsonQuote(splitByte(value, 47).join("|"))}`)
+  out.push(`repeat ${jsonQuote(repeatString(value, 3))}`)
+}
 
 /** Every path function, over one `base<TAB>spec` case. */
 const reportPath = (out: string[], base: string, spec: string): void => {
-  out.push(`normalize ${jsonQuote(normalizePath(base))}`);
-  out.push(`dirname ${jsonQuote(dirname(base))}`);
-  out.push(`basename ${jsonQuote(basename(base))}`);
-  out.push(`stem ${jsonQuote(basenameWithout(base, ".ts"))}`);
-  out.push(`resolve ${jsonQuote(resolvePath(base, spec))}`);
-  out.push(`module ${jsonQuote(resolveModule(base, spec))}`);
-};
+  out.push(`normalize ${jsonQuote(normalizePath(base))}`)
+  out.push(`dirname ${jsonQuote(dirname(base))}`)
+  out.push(`basename ${jsonQuote(basename(base))}`)
+  out.push(`stem ${jsonQuote(basenameWithout(base, ".ts"))}`)
+  out.push(`resolve ${jsonQuote(resolvePath(base, spec))}`)
+  out.push(`module ${jsonQuote(resolveModule(base, spec))}`)
+}
 
 /** `relativePath`, over one `from<TAB>to` case; both are rooted at the same base. */
 const reportRelative = (out: string[], from: string, to: string): void => {
-  out.push(`relative ${jsonQuote(relativePath(from, to))}`);
-};
+  out.push(`relative ${jsonQuote(relativePath(from, to))}`)
+}
 
 /**
  * `self/manifest.ts` and `self/packages.ts`, over one `pkg` or `spec` case
@@ -82,20 +82,26 @@ const reportRelative = (out: string[], from: string, to: string): void => {
  * under one compiler and not the other is a program that compiles with one and
  * not the other, which no golden of one compiler's own output would catch.
  */
-const reportPackage = (out: string[], subpath: string, primary: string, fallback: string, manifest: string): void => {
-  const target = nishExportTarget(manifest, subpath, primary, fallback);
-  out.push(`pkg ${target === null ? "null" : jsonQuote(target)}`);
-};
+const reportPackage = (
+  out: string[],
+  subpath: string,
+  primary: string,
+  fallback: string,
+  manifest: string
+): void => {
+  const target = nishExportTarget(manifest, subpath, primary, fallback)
+  out.push(`pkg ${target === null ? "null" : jsonQuote(target)}`)
+}
 
 /** `parseBareSpecifier`, over one `spec` case: the name and the `exports` key. */
 const reportSpecifier = (out: string[], specifier: string): void => {
-  const parsed = parseBareSpecifier(specifier);
+  const parsed = parseBareSpecifier(specifier)
   if (parsed === null) {
-    out.push("spec null");
-    return;
+    out.push("spec null")
+    return
   }
-  out.push(`spec ${jsonQuote(parsed.name)} ${jsonQuote(parsed.subpath)}`);
-};
+  out.push(`spec ${jsonQuote(parsed.name)} ${jsonQuote(parsed.subpath)}`)
+}
 
 /**
  * The map, against the same cases: insert in order, look every key up, then
@@ -104,84 +110,84 @@ const reportSpecifier = (out: string[], specifier: string): void => {
  * entry list in `self/map.ts`.
  */
 const reportMap = (out: string[], keys: string[]): void => {
-  const map = new StringMap();
-  let i = 0;
+  const map = new StringMap()
+  let i = 0
   while (i < keys.length) {
-    map.set(keys[i], i);
-    i = i + 1;
+    map.set(keys[i], i)
+    i = i + 1
   }
-  out.push(`map size ${map.size()}`);
-  i = 0;
+  out.push(`map size ${map.size()}`)
+  i = 0
   while (i < map.size()) {
-    out.push(`map entry ${i} ${jsonQuote(map.keyAt(i))} ${map.valueAt(i)}`);
-    i = i + 1;
+    out.push(`map entry ${i} ${jsonQuote(map.keyAt(i))} ${map.valueAt(i)}`)
+    i = i + 1
   }
   for (const key of keys) {
-    out.push(`map get ${jsonQuote(key)} ${map.get(key, -1)}`);
+    out.push(`map get ${jsonQuote(key)} ${map.get(key, -1)}`)
   }
-  out.push(`map missing ${map.get("no such key", -1)} ${map.has("no such key") ? 1 : 0}`);
+  out.push(`map missing ${map.get("no such key", -1)} ${map.has("no such key") ? 1 : 0}`)
   // Overwriting must not append an entry, and must not move the one it hits.
   for (const key of keys) {
-    map.set(key, 1000);
+    map.set(key, 1000)
   }
-  out.push(`map size after overwrite ${map.size()}`);
-  out.push(`map first after overwrite ${jsonQuote(map.keyAt(0))} ${map.valueAt(0)}`);
+  out.push(`map size after overwrite ${map.size()}`)
+  out.push(`map first after overwrite ${jsonQuote(map.keyAt(0))} ${map.valueAt(0)}`)
 
-  const set = new StringSet();
-  let added = 0;
+  const set = new StringSet()
+  let added = 0
   for (const key of keys) {
     if (set.add(key)) {
-      added = added + 1;
+      added = added + 1
     }
   }
-  out.push(`set size ${set.size()} added ${added}`);
-};
+  out.push(`set size ${set.size()} added ${added}`)
+}
 
 /**
  * Growth: 300 keys is past four rehashes from the initial 16 buckets, so this
  * is the check that `grow` re-files every entry and keeps insertion order.
  */
 const reportGrowth = (out: string[]): void => {
-  const map = new StringMap();
-  let i = 0;
+  const map = new StringMap()
+  let i = 0
   while (i < 300) {
-    map.set(`key${i}`, i * 7);
-    i = i + 1;
+    map.set(`key${i}`, i * 7)
+    i = i + 1
   }
-  let sum = 0;
-  i = 0;
+  let sum = 0
+  i = 0
   while (i < 300) {
-    sum = sum + map.get(`key${i}`, -1);
-    i = i + 1;
+    sum = sum + map.get(`key${i}`, -1)
+    i = i + 1
   }
-  out.push(`grow size ${map.size()} sum ${sum} slots ${map.slots.length}`);
-  out.push(`grow order ${jsonQuote(map.keyAt(0))} ${jsonQuote(map.keyAt(299))}`);
+  out.push(`grow size ${map.size()} sum ${sum} slots ${map.slots.length}`)
+  out.push(`grow order ${jsonQuote(map.keyAt(0))} ${jsonQuote(map.keyAt(299))}`)
 
   // 100000 keys take the table to 2^18 buckets, past the 2^16 where the
   // bucket index starts to draw on the bits the fold XORs in. Every re-file
   // is from the stored hashes, so a wrong one loses a key here. The 2^24 - 1
   // entry cap is not driven: reaching it is gigabytes of arena for a panic.
-  const big = new StringMap();
-  i = 0;
+  const big = new StringMap()
+  i = 0
   while (i < 100000) {
-    big.set(`n${i}`, i);
-    i = i + 1;
+    big.set(`n${i}`, i)
+    i = i + 1
   }
-  let wrong = 0;
-  let strays = 0;
-  i = 0;
+  let wrong = 0
+  let strays = 0
+  i = 0
   while (i < 100000) {
     if (big.get(`n${i}`, -1) !== i) {
-      wrong = wrong + 1;
+      wrong = wrong + 1
     }
     if (big.has(`m${i}`)) {
-      strays = strays + 1;
+      strays = strays + 1
     }
-    i = i + 1;
+    i = i + 1
   }
-  out.push(`grow size ${big.size()} wrong ${wrong} slots ${big.slots.length} strays ${strays}`);
-  out.push(`grow order ${jsonQuote(big.keyAt(0))} ${jsonQuote(big.keyAt(99999))}`);
-};
+  out.push(`grow size ${big.size()} wrong ${wrong} slots ${big.slots.length} strays ${strays}`)
+  out.push(`grow order ${jsonQuote(big.keyAt(0))} ${jsonQuote(big.keyAt(99999))}`)
+}
 
 /**
  * The probe's two filters, each turned away on purpose. The first is a key
@@ -191,130 +197,132 @@ const reportGrowth = (out: string[]): void => {
  * the hash matches too, and only the string compare tells the keys apart.
  */
 const reportProbe = (out: string[]): void => {
-  const resident = toU32(hashString("k0"));
-  let i = 1;
-  let twin = "";
+  const resident = toU32(hashString("k0"))
+  let i = 1
+  let twin = ""
   while (twin.length === 0) {
-    const candidate = `k${i}`;
-    const hash = toU32(hashString(candidate));
-    const sameFingerprint = fingerprint(hash) === fingerprint(resident);
+    const candidate = `k${i}`
+    const hash = toU32(hashString(candidate))
+    const sameFingerprint = fingerprint(hash) === fingerprint(resident)
     if (sameFingerprint && home(hash, 15) === home(resident, 15) && hash !== resident) {
-      twin = candidate;
+      twin = candidate
     }
-    i = i + 1;
+    i = i + 1
   }
-  const map = new StringMap();
-  map.set("k0", 1);
-  const before = map.get(twin, -1);
-  map.set(twin, 2);
-  out.push(`probe fingerprint ${jsonQuote(twin)} ${before} ${map.get("k0", -1)} ${map.get(twin, -1)} ${map.size()}`);
+  const map = new StringMap()
+  map.set("k0", 1)
+  const before = map.get(twin, -1)
+  map.set(twin, 2)
+  out.push(
+    `probe fingerprint ${jsonQuote(twin)} ${before} ${map.get("k0", -1)} ${map.get(twin, -1)} ${map.size()}`
+  )
 
-  const collided = new StringMap();
-  collided.set("c2ya8", 1);
-  const missed = collided.get("czki6", -1);
-  collided.set("czki6", 2);
+  const collided = new StringMap()
+  collided.set("c2ya8", 1)
+  const missed = collided.get("czki6", -1)
+  collided.set("czki6", 2)
   out.push(
     `probe collision ${hashString("c2ya8")} ${hashString("czki6")} ${missed} ${collided.get("c2ya8", -1)} ${collided.get("czki6", -1)} ${collided.size()} ${jsonQuote(collided.keyAt(1))}`
-  );
-  const set = new StringSet();
-  const first = set.add("c2ya8");
-  const second = set.add("czki6");
-  const again = set.add("c2ya8");
-  out.push(`probe set ${first ? 1 : 0} ${second ? 1 : 0} ${again ? 1 : 0} ${set.size()}`);
+  )
+  const set = new StringSet()
+  const first = set.add("c2ya8")
+  const second = set.add("czki6")
+  const again = set.add("c2ya8")
+  out.push(`probe set ${first ? 1 : 0} ${second ? 1 : 0} ${again ? 1 : 0} ${set.size()}`)
 
   // The slot packing at both ends, without a 16M-entry map: the largest legal
   // index (2^24 - 2, whose index + 1 fills the field) under a fingerprint of
   // 0xFF, and index 0 under a fingerprint of 0. Both halves must survive, and
   // neither word may be the empty bucket's 0.
-  const high: u32 = 4294967295;
-  const top = slotOf(high, 16777214);
-  const low: u32 = 0;
-  const bottom = slotOf(low, 0);
+  const high: u32 = 4294967295
+  const top = slotOf(high, 16777214)
+  const low: u32 = 0
+  const bottom = slotOf(low, 0)
   out.push(
     `probe pack ${toI32(fingerprint(top))} ${entryOf(top)} ${top !== 0 ? 1 : 0} ${toI32(fingerprint(bottom))} ${entryOf(bottom)} ${bottom !== 0 ? 1 : 0}`
-  );
-};
+  )
+}
 
 export const main = (): number => {
   if (process.argv.length < 2) {
-    console.error("usage: support <cases.txt>");
-    return 2;
+    console.error("usage: support <cases.txt>")
+    return 2
   }
-  const source = readFileSyncOrNull(process.argv[1]);
+  const source = readFileSyncOrNull(process.argv[1])
   if (source === null) {
-    console.error(`support: cannot read ${process.argv[1]}`);
-    return 1;
+    console.error(`support: cannot read ${process.argv[1]}`)
+    return 1
   }
 
-  const out: string[] = [];
-  const texts: string[] = [];
+  const out: string[] = []
+  const texts: string[] = []
   for (const line of caseLines(source)) {
-    const fields = splitByte(line, TAB);
-    const section = fields[0];
+    const fields = splitByte(line, TAB)
+    const section = fields[0]
     if (section === "text") {
-      texts.push(fields[1]);
-      out.push(`# text ${jsonQuote(fields[1])}`);
-      reportText(out, fields[1]);
+      texts.push(fields[1])
+      out.push(`# text ${jsonQuote(fields[1])}`)
+      reportText(out, fields[1])
     } else if (section === "path") {
-      out.push(`# path ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`);
-      reportPath(out, fields[1], fields[2]);
+      out.push(`# path ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`)
+      reportPath(out, fields[1], fields[2])
     } else if (section === "rel") {
-      out.push(`# rel ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`);
-      reportRelative(out, fields[1], fields[2]);
+      out.push(`# rel ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`)
+      reportRelative(out, fields[1], fields[2])
     } else if (section === "pkg") {
-      out.push(`# pkg ${jsonQuote(fields[1])} ${fields[2]} ${fields[3]} ${jsonQuote(fields[4])}`);
-      reportPackage(out, fields[1], fields[2], fields[3], fields[4]);
+      out.push(`# pkg ${jsonQuote(fields[1])} ${fields[2]} ${fields[3]} ${jsonQuote(fields[4])}`)
+      reportPackage(out, fields[1], fields[2], fields[3], fields[4])
     } else if (section === "spec") {
-      out.push(`# spec ${jsonQuote(fields[1])}`);
-      reportSpecifier(out, fields[1]);
+      out.push(`# spec ${jsonQuote(fields[1])}`)
+      reportSpecifier(out, fields[1])
     } else if (section === "num") {
-      out.push(`# num ${fields[1]}`);
-      out.push(`f64 ${f64Hex(Number(fields[1]))}`);
-      out.push(`f32 ${f32Hex(Number(fields[1]))}`);
+      out.push(`# num ${fields[1]}`)
+      out.push(`f64 ${f64Hex(Number(fields[1]))}`)
+      out.push(`f32 ${f32Hex(Number(fields[1]))}`)
     } else {
-      console.error(`support: unknown section \`${section}\``);
-      return 1;
+      console.error(`support: unknown section \`${section}\``)
+      return 1
     }
   }
 
   // Ordering, over every pair of text cases: the sign is what a sort reads.
   for (const a of texts) {
     for (const b of texts) {
-      out.push(`compare ${jsonQuote(a)} ${jsonQuote(b)} ${compareStrings(a, b)}`);
+      out.push(`compare ${jsonQuote(a)} ${jsonQuote(b)} ${compareStrings(a, b)}`)
     }
   }
 
   // Every byte, which is where the two escapes differ from each other.
-  let byte = 0;
+  let byte = 0
   while (byte < 256) {
-    const one = String.fromCharCode(byte);
-    out.push(`byte ${byte} ${irEscape(one)}`);
+    const one = String.fromCharCode(byte)
+    out.push(`byte ${byte} ${irEscape(one)}`)
     if (byte < 128) {
-      out.push(`byte json ${byte} ${jsonQuote(one)}`);
+      out.push(`byte json ${byte} ${jsonQuote(one)}`)
     }
-    byte = byte + 1;
+    byte = byte + 1
   }
 
   // Every bit position, which is where the hex formatter's shifting is.
-  let bit = 0;
+  let bit = 0
   while (bit < 64) {
-    out.push(`bit ${bit} ${hexOfI64(toI64(1) << toI64(bit), 16)}`);
-    bit = bit + 1;
+    out.push(`bit ${bit} ${hexOfI64(toI64(1) << toI64(bit), 16)}`)
+    bit = bit + 1
   }
 
-  out.push(`join ${jsonQuote(joinPath(["a", "", "b/../c", "."]))}`);
-  const builder = new StringBuilder();
-  out.push(`builder empty ${builder.isEmpty() ? 1 : 0} ${builder.length()}`);
-  builder.add("ab");
-  builder.addChar(99);
-  out.push(`builder ${jsonQuote(builder.toText())} ${builder.length()} ${builder.isEmpty() ? 1 : 0}`);
-  builder.reset();
-  out.push(`builder reset ${jsonQuote(builder.toText())} ${builder.isEmpty() ? 1 : 0}`);
+  out.push(`join ${jsonQuote(joinPath(["a", "", "b/../c", "."]))}`)
+  const builder = new StringBuilder()
+  out.push(`builder empty ${builder.isEmpty() ? 1 : 0} ${builder.length()}`)
+  builder.add("ab")
+  builder.addChar(99)
+  out.push(`builder ${jsonQuote(builder.toText())} ${builder.length()} ${builder.isEmpty() ? 1 : 0}`)
+  builder.reset()
+  out.push(`builder reset ${jsonQuote(builder.toText())} ${builder.isEmpty() ? 1 : 0}`)
 
-  reportMap(out, texts);
-  reportGrowth(out);
-  reportProbe(out);
+  reportMap(out, texts)
+  reportGrowth(out)
+  reportProbe(out)
 
-  write(`${out.join("\n")}\n`);
-  return 0;
-};
+  write(`${out.join("\n")}\n`)
+  return 0
+}

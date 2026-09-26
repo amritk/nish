@@ -88,21 +88,21 @@
  * whose program is gone goes with it. Each move is printed, and the diff of
  * the register is the review.
  */
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import crypto from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 /** Resolved without asking any module that might not survive R6. */
-const root = path.resolve(import.meta.dirname, "..", "..");
-const STORE = path.join(root, "tests", "differential", "goldens", "rewrites.txt");
-const REGISTER = path.join(root, "tests", "differential", "goldens", "unfrozen.txt");
+const root = path.resolve(import.meta.dirname, "..", "..")
+const STORE = path.join(root, "tests", "differential", "goldens", "rewrites.txt")
+const REGISTER = path.join(root, "tests", "differential", "goldens", "unfrozen.txt")
 
 /**
  * 64 bits of SHA-256, for a source file and for a stored body alike. A body id
  * is the content, so identical text is stored once; a source hash is the guard.
  */
-const ID_CHARS = 16;
+const ID_CHARS = 16
 
 /**
  * The repository root, as the store spells it. A rewritten module imports the
@@ -112,11 +112,11 @@ const ID_CHARS = 16;
  * of them — and a body that contains the token itself is refused rather than
  * round-tripped, because the substitution would not be reversible.
  */
-const ROOT_TOKEN = "<root>";
+const ROOT_TOKEN = "<root>"
 
-const digest = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, ID_CHARS);
+const digest = (text) => crypto.createHash("sha256").update(text).digest("hex").slice(0, ID_CHARS)
 
-const relative = (file) => path.relative(root, file).split(path.sep).join("/");
+const relative = (file) => path.relative(root, file).split(path.sep).join("/")
 
 const header = (note) => [
   "# The JavaScript every differential program rewrites to, as stage0's checker typed it.",
@@ -124,59 +124,63 @@ const header = (note) => [
   "# WP19 gate G2.4: the WP13 oracle's reference, written down before stage0 can take it.",
   "# Do not edit by hand — `goldens.js`'s header says what is keyed on what.",
   `# ${note}`,
-];
+]
 
 /** The store's text with this checkout's path put back. */
-const local = (text) => text.split(ROOT_TOKEN).join(root);
+const local = (text) => text.split(ROOT_TOKEN).join(root)
 
 /** The store, parsed. Bodies are length-framed, so no line of JavaScript needs escaping. */
 const readStore = () => {
   if (!fs.existsSync(STORE)) {
-    return { error: `${relative(STORE)} is missing` };
+    return { error: `${relative(STORE)} is missing` }
   }
-  const lines = fs.readFileSync(STORE, "utf8").split("\n");
-  const programs = new Map();
-  const bodies = new Map();
-  const heading = [];
-  let current = null;
+  const lines = fs.readFileSync(STORE, "utf8").split("\n")
+  const programs = new Map()
+  const bodies = new Map()
+  const heading = []
+  let current = null
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]
     if (line.startsWith("#")) {
       // Only the lines before the first record: a `#` inside a body is
       // JavaScript, and a body's lines are consumed by count below.
-      if (programs.size === 0) { heading.push(line); }
-      continue;
+      if (programs.size === 0) {
+        heading.push(line)
+      }
+      continue
     }
-    if (line.length === 0) { continue; }
+    if (line.length === 0) {
+      continue
+    }
     if (line.startsWith("program ")) {
-      current = { name: line.slice("program ".length), flags: [], modules: [], entry: null };
-      programs.set(current.name, current);
-      continue;
+      current = { name: line.slice("program ".length), flags: [], modules: [], entry: null }
+      programs.set(current.name, current)
+      continue
     }
     if (line.startsWith("  ") && current === null) {
-      return { error: `${relative(STORE)}:${i + 1}: a record's field before any \`program\` line` };
+      return { error: `${relative(STORE)}:${i + 1}: a record's field before any \`program\` line` }
     }
     if (line.startsWith("  flags ")) {
-      current.flags = line.slice("  flags ".length).split(" ").filter(Boolean);
-      continue;
+      current.flags = line.slice("  flags ".length).split(" ").filter(Boolean)
+      continue
     }
     if (line.startsWith("  module ")) {
-      const [srcHash, source, id, out] = line.slice("  module ".length).split(" ");
-      current.modules.push({ srcHash, source, id, out });
-      continue;
+      const [srcHash, source, id, out] = line.slice("  module ".length).split(" ")
+      current.modules.push({ srcHash, source, id, out })
+      continue
     }
     if (line.startsWith("  entry ")) {
-      const [id, out] = line.slice("  entry ".length).split(" ");
-      current.entry = { id, out };
-      continue;
+      const [id, out] = line.slice("  entry ".length).split(" ")
+      current.entry = { id, out }
+      continue
     }
     if (line.startsWith("body ")) {
-      const [id, count, bytes] = line.slice("body ".length).split(" ");
-      const text = lines.slice(i + 1, i + 1 + Number(count)).join("\n");
+      const [id, count, bytes] = line.slice("body ".length).split(" ")
+      const text = lines.slice(i + 1, i + 1 + Number(count)).join("\n")
       if (Buffer.byteLength(text) !== Number(bytes)) {
         return {
           error: `${relative(STORE)}:${i + 1}: body ${id} is ${Buffer.byteLength(text)} bytes, not ${bytes}`,
-        };
+        }
       }
       // The id *is* the content, so a body that does not hash to its own id has
       // been edited by hand. Checked on every read rather than only under
@@ -185,16 +189,16 @@ const readStore = () => {
       if (digest(text) !== id) {
         return {
           error: `${relative(STORE)}:${i + 1}: body ${id} hashes to ${digest(text)}; it was edited by hand`,
-        };
+        }
       }
-      bodies.set(id, text);
-      i += Number(count);
-      continue;
+      bodies.set(id, text)
+      i += Number(count)
+      continue
     }
-    return { error: `${relative(STORE)}:${i + 1}: unexpected line \`${line.slice(0, 60)}\`` };
+    return { error: `${relative(STORE)}:${i + 1}: unexpected line \`${line.slice(0, 60)}\`` }
   }
-  return { programs, bodies, heading };
-};
+  return { programs, bodies, heading }
+}
 
 /**
  * Why this program's frozen rewrite may not be used, or null when it may.
@@ -207,51 +211,59 @@ const readStore = () => {
  */
 const staleness = (record, prog, bodies) => {
   if (record.flags.join(" ") !== prog.args.join(" ")) {
-    return `its flags moved: the store holds \`${record.flags.join(" ") || "(none)"}\` and \`${prog.name}.args\` now says \`${prog.args.join(" ") || "(none)"}\``;
+    return `its flags moved: the store holds \`${record.flags.join(" ") || "(none)"}\` and \`${prog.name}.args\` now says \`${prog.args.join(" ") || "(none)"}\``
   }
   for (const module of record.modules) {
-    const file = path.join(root, module.source);
-    if (!fs.existsSync(file)) { return `${module.source} is gone`; }
-    const now = digest(fs.readFileSync(file));
-    if (now !== module.srcHash) {
-      return `${module.source} changed since the rewrite was frozen (${module.srcHash} -> ${now})`;
+    const file = path.join(root, module.source)
+    if (!fs.existsSync(file)) {
+      return `${module.source} is gone`
     }
-    if (!bodies.has(module.id)) { return `the stored body ${module.id} of ${module.out} is missing`; }
+    const now = digest(fs.readFileSync(file))
+    if (now !== module.srcHash) {
+      return `${module.source} changed since the rewrite was frozen (${module.srcHash} -> ${now})`
+    }
+    if (!bodies.has(module.id)) {
+      return `the stored body ${module.id} of ${module.out} is missing`
+    }
   }
-  if (record.entry === null || !bodies.has(record.entry.id)) { return "its generated entry module is missing"; }
-  return null;
-};
+  if (record.entry === null || !bodies.has(record.entry.id)) {
+    return "its generated entry module is missing"
+  }
+  return null
+}
 
 /**
  * Write one program's frozen rewrite into `outDir` and answer it in the shape
  * `rewriteProgram` answers, so that the runner cannot tell the two apart.
  */
 const materialize = (record, bodies, outDir) => {
-  fs.mkdirSync(outDir, { recursive: true });
-  const modules = [];
+  fs.mkdirSync(outDir, { recursive: true })
+  const modules = []
   for (const module of record.modules) {
-    const at = path.join(outDir, module.out);
-    fs.writeFileSync(at, local(bodies.get(module.id)));
-    modules.push(at);
+    const at = path.join(outDir, module.out)
+    fs.writeFileSync(at, local(bodies.get(module.id)))
+    modules.push(at)
   }
-  const entry = path.join(outDir, record.entry.out);
-  fs.writeFileSync(entry, local(bodies.get(record.entry.id)));
-  return { entry, modules, frozen: true };
-};
+  const entry = path.join(outDir, record.entry.out)
+  fs.writeFileSync(entry, local(bodies.get(record.entry.id)))
+  return { entry, modules, frozen: true }
+}
 
 /**
  * The lines one record occupies in the store, as `readStore` reads them back:
  * `--update` rewrites the store from what it parsed, minus what it dropped.
  */
 const recordLines = (record) => {
-  const lines = [`program ${record.name}`];
-  if (record.flags.length > 0) { lines.push(`  flags ${record.flags.join(" ")}`); }
-  for (const module of record.modules) {
-    lines.push(`  module ${module.srcHash} ${module.source} ${module.id} ${module.out}`);
+  const lines = [`program ${record.name}`]
+  if (record.flags.length > 0) {
+    lines.push(`  flags ${record.flags.join(" ")}`)
   }
-  lines.push(`  entry ${record.entry.id} ${record.entry.out}`);
-  return lines;
-};
+  for (const module of record.modules) {
+    lines.push(`  module ${module.srcHash} ${module.source} ${module.id} ${module.out}`)
+  }
+  lines.push(`  entry ${record.entry.id} ${record.entry.out}`)
+  return lines
+}
 
 /**
  * The header's own count of what the store holds, derived from the store rather
@@ -260,37 +272,42 @@ const recordLines = (record) => {
  * with a check behind it instead of a decoration a hand edit can rewrite.
  */
 const storeNote = (records, bodies) => {
-  let live = 0;
-  let moduleCount = 0;
+  let live = 0
+  let moduleCount = 0
   for (const record of records) {
-    for (const module of record.modules) { live += Buffer.byteLength(bodies.get(module.id) ?? ""); }
-    live += Buffer.byteLength(bodies.get(record.entry.id) ?? "");
-    moduleCount += record.modules.length + 1;
+    for (const module of record.modules) {
+      live += Buffer.byteLength(bodies.get(module.id) ?? "")
+    }
+    live += Buffer.byteLength(bodies.get(record.entry.id) ?? "")
+    moduleCount += record.modules.length + 1
   }
-  let stored = 0;
-  for (const text of bodies.values()) { stored += Buffer.byteLength(text); }
+  let stored = 0
+  for (const text of bodies.values()) {
+    stored += Buffer.byteLength(text)
+  }
   return (
     `${records.length} programs, ${moduleCount} modules, ${bodies.size} distinct ` +
     `(${(live / 1024).toFixed(1)} KiB live, ${(stored / 1024).toFixed(1)} KiB stored)`
-  );
-};
-
+  )
+}
 
 /**
  * The store's text for these records, holding only the bodies they use, in the
  * order they were read. Rewriting an unchanged store gives back its own bytes.
  */
 const storeText = (records, bodies) => {
-  const used = new Set(records.flatMap((record) => [...record.modules.map((m) => m.id), record.entry.id]));
-  const kept = new Map([...bodies].filter(([id]) => used.has(id)));
-  const note = storeNote(records, kept);
-  const lines = [...header(note)];
-  for (const record of records) { lines.push(...recordLines(record)); }
-  for (const [id, text] of kept) {
-    lines.push(`body ${id} ${text.split("\n").length} ${Buffer.byteLength(text)}`, text);
+  const used = new Set(records.flatMap((record) => [...record.modules.map((m) => m.id), record.entry.id]))
+  const kept = new Map([...bodies].filter(([id]) => used.has(id)))
+  const note = storeNote(records, kept)
+  const lines = [...header(note)]
+  for (const record of records) {
+    lines.push(...recordLines(record))
   }
-  return { text: `${lines.join("\n")}\n`, note };
-};
+  for (const [id, text] of kept) {
+    lines.push(`body ${id} ${text.split("\n").length} ${Buffer.byteLength(text)}`, text)
+  }
+  return { text: `${lines.join("\n")}\n`, note }
+}
 
 const REGISTER_HEADER = [
   "# Differential programs with no frozen rewrite, so nothing compares them against Node.",
@@ -299,204 +316,239 @@ const REGISTER_HEADER = [
   "# a line out when its program is gone. The rewriter that wrote the store was",
   "# stage0's and is deleted, so a line here is coverage lost, not a task deferred:",
   "# the way back is a rewriter typed by stage1's `--emit-checked` (wp19 §6).",
-];
+]
 
 /** The register: program name to the reason it has no frozen rewrite. */
 const readRegister = () => {
-  const rows = new Map();
-  if (!fs.existsSync(REGISTER)) { return rows; }
-  for (const line of fs.readFileSync(REGISTER, "utf8").split("\n")) {
-    const text = line.replace(/^\s*#.*$/, "").trim();
-    if (text.length === 0) { continue; }
-    const at = text.search(/\s/);
-    if (at < 0) { rows.set(text, ""); }
-    else { rows.set(text.slice(0, at), text.slice(at).trim()); }
+  const rows = new Map()
+  if (!fs.existsSync(REGISTER)) {
+    return rows
   }
-  return rows;
-};
+  for (const line of fs.readFileSync(REGISTER, "utf8").split("\n")) {
+    const text = line.replace(/^\s*#.*$/, "").trim()
+    if (text.length === 0) {
+      continue
+    }
+    const at = text.search(/\s/)
+    if (at < 0) {
+      rows.set(text, "")
+    } else {
+      rows.set(text.slice(0, at), text.slice(at).trim())
+    }
+  }
+  return rows
+}
 
 const registerText = (rows) =>
-  `${[...REGISTER_HEADER, ...[...rows].map(([name, why]) => (why.length > 0 ? `${name} ${why}` : name))].join("\n")}\n`;
+  `${[...REGISTER_HEADER, ...[...rows].map(([name, why]) => (why.length > 0 ? `${name} ${why}` : name))].join("\n")}\n`
 
 const parse = (argv) => {
-  const options = { update: false, verbose: false, only: undefined };
+  const options = { update: false, verbose: false, only: undefined }
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--update") { options.update = true; }
+    const arg = argv[i]
+    if (arg === "--update") {
+      options.update = true
+    }
     // Freshness is the only check left, so `--fresh` asks for what every run
     // does; it stays a flag because `tests/run.js` passes it.
     else if (arg === "--fresh") {
       // Every run checks freshness, so the flag asks for nothing extra.
+    } else if (arg === "--verbose") {
+      options.verbose = true
+    } else if (arg === "--only") {
+      options.only = argv[++i]
+    } else if (!arg.startsWith("-") && options.only === undefined) {
+      options.only = arg
+    } else {
+      return { error: `unknown option: ${arg}` }
     }
-    else if (arg === "--verbose") { options.verbose = true; }
-    else if (arg === "--only") { options.only = argv[++i]; }
-    else if (!arg.startsWith("-") && options.only === undefined) { options.only = arg; }
-    else { return { error: `unknown option: ${arg}` }; }
   }
-  return options;
-};
+  return options
+}
 
 /**
  * `--update`: bring the store and the register into agreement with the corpus
  * without writing a single rewrite, since nothing can write one any more.
  */
 const update = (programs, store, register) => {
-  const byName = new Map(programs.map((p) => [p.name, p]));
-  const records = [];
-  const moves = [];
+  const byName = new Map(programs.map((p) => [p.name, p]))
+  const records = []
+  const moves = []
   for (const [name, record] of store.programs) {
-    const prog = byName.get(name);
+    const prog = byName.get(name)
     if (prog === undefined) {
-      moves.push(`dropped the record of ${name}, which is not a program any more`);
-      continue;
+      moves.push(`dropped the record of ${name}, which is not a program any more`)
+      continue
     }
-    const why = staleness(record, prog, store.bodies);
+    const why = staleness(record, prog, store.bodies)
     if (why === null) {
-      records.push(record);
-      continue;
+      records.push(record)
+      continue
     }
-    register.set(name, `stale since R6: ${why}`);
-    moves.push(`registered ${name}: its frozen rewrite is stale (${why})`);
+    register.set(name, `stale since R6: ${why}`)
+    moves.push(`registered ${name}: its frozen rewrite is stale (${why})`)
   }
-  const frozen = new Set(records.map((r) => r.name));
+  const frozen = new Set(records.map((r) => r.name))
   for (const prog of programs) {
-    if (frozen.has(prog.name) || register.has(prog.name)) { continue; }
-    register.set(prog.name, "added after R6: no rewriter to freeze it with");
-    moves.push(`registered ${prog.name}: it has no frozen rewrite`);
+    if (frozen.has(prog.name) || register.has(prog.name)) {
+      continue
+    }
+    register.set(prog.name, "added after R6: no rewriter to freeze it with")
+    moves.push(`registered ${prog.name}: it has no frozen rewrite`)
   }
   for (const name of [...register.keys()]) {
-    if (byName.has(name) && !frozen.has(name)) { continue; }
-    register.delete(name);
+    if (byName.has(name) && !frozen.has(name)) {
+      continue
+    }
+    register.delete(name)
     moves.push(
       byName.has(name)
         ? `unregistered ${name}: it has a fresh frozen rewrite`
         : `unregistered ${name}, which is not a program any more`
-    );
+    )
   }
-  const { text, note } = storeText(records, store.bodies);
-  const before = fs.readFileSync(STORE, "utf8");
-  if (text !== before) { fs.writeFileSync(STORE, text); }
-  const rows = new Map([...register].sort(([a], [b]) => a.localeCompare(b)));
-  const registered = registerText(rows);
-  const was = fs.existsSync(REGISTER) ? fs.readFileSync(REGISTER, "utf8") : null;
-  if (registered !== was) { fs.writeFileSync(REGISTER, registered); }
-  for (const move of moves) { process.stdout.write(`  ${move}\n`); }
+  const { text, note } = storeText(records, store.bodies)
+  const before = fs.readFileSync(STORE, "utf8")
+  if (text !== before) {
+    fs.writeFileSync(STORE, text)
+  }
+  const rows = new Map([...register].sort(([a], [b]) => a.localeCompare(b)))
+  const registered = registerText(rows)
+  const was = fs.existsSync(REGISTER) ? fs.readFileSync(REGISTER, "utf8") : null
+  if (registered !== was) {
+    fs.writeFileSync(REGISTER, registered)
+  }
+  for (const move of moves) {
+    process.stdout.write(`  ${move}\n`)
+  }
   process.stdout.write(
     `rewrites: ${note}, ${relative(STORE)} ${text === before ? "unchanged" : "updated"}; ` +
       `${rows.size} registered, ${relative(REGISTER)} ${registered === was ? "unchanged" : "updated"}\n`
-  );
-  return 0;
-};
+  )
+  return 0
+}
 
 const main = async (argv) => {
-  const options = parse(argv);
+  const options = parse(argv)
   if (options.error !== undefined) {
-    process.stderr.write(`${options.error}\n`);
-    return 2;
+    process.stderr.write(`${options.error}\n`)
+    return 2
   }
-  const { verbose, only } = options;
+  const { verbose, only } = options
   if (options.update && only !== undefined) {
     // The store is one file over the whole corpus, so a filtered update would
     // register every program the filter did not name as gone.
-    process.stderr.write("--update rewrites the whole store; drop the filter\n");
-    return 2;
+    process.stderr.write("--update rewrites the whole store; drop the filter\n")
+    return 2
   }
   // Imported here rather than at module scope: `lib.js` reads this file's store,
   // and a static import in both directions would evaluate one of them against
   // the other's uninitialised bindings.
-  const { discoverPrograms } = await import("./lib.js");
-  let programs = discoverPrograms({});
-  if (only !== undefined) { programs = programs.filter((p) => p.name.includes(only)); }
+  const { discoverPrograms } = await import("./lib.js")
+  let programs = discoverPrograms({})
+  if (only !== undefined) {
+    programs = programs.filter((p) => p.name.includes(only))
+  }
   if (programs.length === 0) {
-    process.stderr.write(`no programs selected${only === undefined ? "" : ` by \`${only}\``}\n`);
-    return 2;
+    process.stderr.write(`no programs selected${only === undefined ? "" : ` by \`${only}\``}\n`)
+    return 2
   }
 
-  const store = readStore();
+  const store = readStore()
   if (store.error !== undefined) {
-    process.stdout.write(`  FAIL ${store.error}\n`);
-    return 1;
+    process.stdout.write(`  FAIL ${store.error}\n`)
+    return 1
   }
-  const register = readRegister();
-  if (options.update) { return update(programs, store, register); }
+  const register = readRegister()
+  if (options.update) {
+    return update(programs, store, register)
+  }
 
-  let failed = 0;
-  let stale = 0;
-  let modules = 0;
-  let checked = 0;
-  let registered = 0;
+  let failed = 0
+  let stale = 0
+  let modules = 0
+  let checked = 0
+  let registered = 0
   const fail = (line) => {
-    process.stdout.write(`  FAIL ${line}\n`);
-    failed++;
-  };
+    process.stdout.write(`  FAIL ${line}\n`)
+    failed++
+  }
 
   // Every selected program has a fresh record or a line in the register --
   // exactly one of the two -- and nothing is stored for a program that is gone.
   for (const prog of programs) {
-    const record = store.programs.get(prog.name);
-    const listed = register.has(prog.name);
+    const record = store.programs.get(prog.name)
+    const listed = register.has(prog.name)
     if (record === undefined) {
       if (listed) {
-        registered++;
-        if (verbose) { process.stdout.write(`  unfrozen ${prog.name}: ${register.get(prog.name)}\n`); }
+        registered++
+        if (verbose) {
+          process.stdout.write(`  unfrozen ${prog.name}: ${register.get(prog.name)}\n`)
+        }
       } else {
         fail(
           `${prog.name} has no frozen rewrite and is not in ${relative(REGISTER)} ` +
             "(`node tests/differential/goldens.js --update` registers it)"
-        );
+        )
       }
-      continue;
+      continue
     }
     if (listed) {
-      fail(`${prog.name} has a frozen rewrite and a line in ${relative(REGISTER)}; remove the line`);
-      continue;
+      fail(`${prog.name} has a frozen rewrite and a line in ${relative(REGISTER)}; remove the line`)
+      continue
     }
-    const why = staleness(record, prog, store.bodies);
+    const why = staleness(record, prog, store.bodies)
     if (why !== null) {
-      fail(`${prog.name} is stale: ${why}`);
+      fail(`${prog.name} is stale: ${why}`)
       process.stdout.write(
         "       the frozen rewrite is of a program that no longer exists; " +
           "`node tests/differential/goldens.js --update` moves it into the register\n"
-      );
-      stale++;
-      continue;
+      )
+      stale++
+      continue
     }
-    checked++;
-    modules += record.modules.length + 1;
-    if (verbose) { process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`); }
+    checked++
+    modules += record.modules.length + 1
+    if (verbose) {
+      process.stdout.write(`  fresh ${prog.name} (${record.modules.length + 1} modules)\n`)
+    }
   }
 
   // A record or a register line with no program is the other direction of the
   // same question, and the one a loop over the corpus cannot see: deleting a
   // corpus program would otherwise take its coverage away with nothing named.
   if (only === undefined) {
-    const live = new Set(programs.map((p) => p.name));
+    const live = new Set(programs.map((p) => p.name))
     for (const name of store.programs.keys()) {
-      if (!live.has(name)) { fail(`the store holds ${name}, which is not a program any more`); }
+      if (!live.has(name)) {
+        fail(`the store holds ${name}, which is not a program any more`)
+      }
     }
     for (const name of register.keys()) {
-      if (!live.has(name)) { fail(`${relative(REGISTER)} names ${name}, which is not a program any more`); }
+      if (!live.has(name)) {
+        fail(`${relative(REGISTER)} names ${name}, which is not a program any more`)
+      }
     }
   }
 
   // The header's counts, recomputed from what was parsed: the only thing
   // standing behind the store's own description of itself.
-  const want = `# ${storeNote([...store.programs.values()], store.bodies)}`;
-  const heading = store.heading.at(-1) ?? "";
+  const want = `# ${storeNote([...store.programs.values()], store.bodies)}`
+  const heading = store.heading.at(-1) ?? ""
   if (only === undefined && heading !== want) {
-    fail("the store's header does not describe the store");
-    process.stdout.write(`      header: ${heading}\n      actual: ${want}\n`);
+    fail("the store's header does not describe the store")
+    process.stdout.write(`      header: ${heading}\n      actual: ${want}\n`)
   }
 
-  const bytes = fs.statSync(STORE).size;
+  const bytes = fs.statSync(STORE).size
   process.stdout.write(
     `rewrites: ${checked}/${programs.length} programs fresh, ${registered} registered unfrozen, ` +
       `${modules} modules, ${stale} stale, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB stored\n`
-  );
-  return failed === 0 ? 0 : 1;
-};
+  )
+  return failed === 0 ? 0 : 1
+}
 
-export { materialize, readRegister, readStore, staleness, REGISTER };
+export { materialize, readRegister, readStore, staleness, REGISTER }
 
 // Started with `.then` rather than a top-level `await`: `lib.js` imports this
 // file, and `main` imports `lib.js` back, so awaiting here would leave this
@@ -505,8 +557,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (e) => {
-      console.error(e);
-      process.exit(2);
+      console.error(e)
+      process.exit(2)
     }
-  );
+  )
 }

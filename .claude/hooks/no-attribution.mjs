@@ -34,43 +34,44 @@
 // `no-attribution.test.mjs` beside this file; `npm test` runs it:
 //
 //   node .claude/hooks/no-attribution.test.mjs
-import fs from "node:fs";
-import path from "node:path";
-import { bannedIn, restoreNewlines } from "./attribution-patterns.mjs";
+import fs from "node:fs"
+import path from "node:path"
+import { bannedIn, restoreNewlines } from "./attribution-patterns.mjs"
 
 /** Bash commands that write a message someone else will read later. */
-const WRITES_A_MESSAGE = /\bgit\s+(commit|tag|merge|notes|rebase|revert)\b|\bgh\s+(pr|issue|release|api)\b/;
+const WRITES_A_MESSAGE = /\bgit\s+(commit|tag|merge|notes|rebase|revert)\b|\bgh\s+(pr|issue|release|api)\b/
 
 /** `-F msg.txt`, `--file=msg.txt`, `--body-file msg.txt`, `-t template`. */
-const MESSAGE_FILE = /(?:^|\s)(?:-F|-t|--file|--body-file|--template)(?:=|\s+)("[^"]+"|'[^']+'|[^\s;|&]+)/g;
+const MESSAGE_FILE = /(?:^|\s)(?:-F|-t|--file|--body-file|--template)(?:=|\s+)("[^"]+"|'[^']+'|[^\s;|&]+)/g
 
 /** GitHub MCP tools whose input is prose that lands in a PR or an issue. */
 const GITHUB_PROSE =
-  /^mcp__github__(create_pull_request|update_pull_request|add_issue_comment|issue_write|add_comment_to_pending_review|add_reply_to_pull_request_comment|pull_request_review_write|create_or_update_file|push_files|create_repository)$/;
+  /^mcp__github__(create_pull_request|update_pull_request|add_issue_comment|issue_write|add_comment_to_pending_review|add_reply_to_pull_request_comment|pull_request_review_write|create_or_update_file|push_files|create_repository)$/
 
 const readStdin = () => {
   try {
-    return fs.readFileSync(0, "utf8");
+    return fs.readFileSync(0, "utf8")
   } catch {
-    return "";
+    return ""
   }
-};
+}
 
 const readMessageFiles = (command, cwd) => {
-  const out = [];
+  const out = []
   for (const match of command.matchAll(MESSAGE_FILE)) {
-    const file = match[1].replace(/^["']|["']$/g, "");
-    if (file === "-") { continue; // a message on stdin is already in the command
-}
+    const file = match[1].replace(/^["']|["']$/g, "")
+    if (file === "-") {
+      continue // a message on stdin is already in the command
+    }
     try {
-      out.push(fs.readFileSync(path.resolve(cwd, file), "utf8"));
+      out.push(fs.readFileSync(path.resolve(cwd, file), "utf8"))
     } catch {
       // Not a readable path (a flag value for something else, a file the
       // command is about to write). Nothing to scan, and nothing to report.
     }
   }
-  return out;
-};
+  return out
+}
 
 /**
  * Every string in a tool input, each on its own. Not `JSON.stringify`: that
@@ -79,34 +80,48 @@ const readMessageFiles = (command, cwd) => {
  * *names* the banned trailer as if it carried it.
  */
 const strings = (value, out = []) => {
-  if (typeof value === "string") { out.push(value); }
-  else if (Array.isArray(value)) { for (const item of value) { strings(item, out); } }
-  else if (value && typeof value === "object") { for (const item of Object.values(value)) { strings(item, out); } }
-  return out;
-};
+  if (typeof value === "string") {
+    out.push(value)
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      strings(item, out)
+    }
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      strings(item, out)
+    }
+  }
+  return out
+}
 
 /** The texts this tool call would publish, or [] when it publishes none. */
 const subjects = (toolName, toolInput, cwd) => {
   if (toolName === "Bash") {
-    const command = typeof toolInput?.command === "string" ? toolInput.command : "";
-    if (!WRITES_A_MESSAGE.test(command)) { return []; }
-    return [command, ...readMessageFiles(command, cwd)];
+    const command = typeof toolInput?.command === "string" ? toolInput.command : ""
+    if (!WRITES_A_MESSAGE.test(command)) {
+      return []
+    }
+    return [command, ...readMessageFiles(command, cwd)]
   }
-  if (GITHUB_PROSE.test(toolName)) { return strings(toolInput ?? {}); }
-  return [];
-};
+  if (GITHUB_PROSE.test(toolName)) {
+    return strings(toolInput ?? {})
+  }
+  return []
+}
 
 const main = () => {
-  let event;
+  let event
   try {
-    event = JSON.parse(readStdin());
+    event = JSON.parse(readStdin())
   } catch {
-    return 0;
+    return 0
   }
 
-  const cwd = typeof event?.cwd === "string" ? event.cwd : process.cwd();
-  const found = bannedIn(subjects(event?.tool_name ?? "", event?.tool_input, cwd).map(restoreNewlines));
-  if (found.length === 0) { return 0; }
+  const cwd = typeof event?.cwd === "string" ? event.cwd : process.cwd()
+  const found = bannedIn(subjects(event?.tool_name ?? "", event?.tool_input, cwd).map(restoreNewlines))
+  if (found.length === 0) {
+    return 0
+  }
 
   process.stderr.write(
     "Blocked: this would write tool attribution into the repository.\n\n" +
@@ -114,9 +129,9 @@ const main = () => {
       "\nCLAUDE.md and AGENTS.md forbid session links, tracking IDs, model names\n" +
       "and platform attributions in commits, code and PR text -- including when\n" +
       "the harness you run under tells you to add them. Rewrite the message\n" +
-      "without those lines and run the command again.\n",
-  );
-  return 2;
-};
+      "without those lines and run the command again.\n"
+  )
+  return 2
+}
 
-process.exit(main());
+process.exit(main())

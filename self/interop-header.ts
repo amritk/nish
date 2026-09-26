@@ -16,8 +16,8 @@
 // argument, no return-slot pointer, no name mangling. A `.ll` module and a C
 // file that includes this header therefore link with a plain `clang a.ll b.c`.
 
-import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "./branding";
-import { Compilation, } from "./compilation";
+import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "./branding"
+import { Compilation } from "./compilation"
 import {
   banner,
   cAliasReason,
@@ -35,10 +35,10 @@ import {
   spaceAfter,
   tsKeyword,
   tsSignature,
-} from "./interop-abi";
-import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program";
-import { isCollectionStruct } from "./generics";
-import { K_ARRAY, TypeTable } from "./types";
+} from "./interop-abi"
+import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program"
+import { isCollectionStruct } from "./generics"
+import { K_ARRAY, TypeTable } from "./types"
 
 /**
  * ` -- xs: double elements, returns int32_t elements`: what an `nish_array`
@@ -52,36 +52,36 @@ import { K_ARRAY, TypeTable } from "./types";
  * pointer per slot and keeps the pointer spelling it always had.
  */
 const elementNotes = (table: TypeTable, fn: ExternalFunction): string => {
-  const notes: string[] = [];
-  const program = fn.unit.checker.program;
-  let i = 0;
+  const notes: string[] = []
+  const program = fn.unit.checker.program
+  let i = 0
   while (i < fn.sig.paramNames.length) {
-    const elem = elementNote(program, table, fn.sig.paramTypes[i]);
+    const elem = elementNote(program, table, fn.sig.paramTypes[i])
     if (elem.length > 0) {
-      notes.push(`${fn.sig.paramNames[i]}: ${elem}`);
+      notes.push(`${fn.sig.paramNames[i]}: ${elem}`)
     }
-    i = i + 1;
+    i = i + 1
   }
-  const returned = elementNote(program, table, fn.sig.returnType);
+  const returned = elementNote(program, table, fn.sig.returnType)
   if (returned.length > 0) {
-    notes.push(`returns ${returned}`);
+    notes.push(`returns ${returned}`)
   }
-  return notes.length > 0 ? ` -- ${notes.join(", ")}` : "";
-};
+  return notes.length > 0 ? ` -- ${notes.join(", ")}` : ""
+}
 
 /** What an array's elements are, or `""` when the type is not an array. */
 const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string => {
   if (table.kindOf(t) !== K_ARRAY) {
-    return "";
+    return ""
   }
-  const elem = table.refOf(t);
-  const inline = inlineElementStruct(program, table, elem);
+  const elem = table.refOf(t)
+  const inline = inlineElementStruct(program, table, elem)
   if (inline !== null) {
-    return `struct ${cStructName(inline.name)} elements, inline`;
+    return `struct ${cStructName(inline.name)} elements, inline`
   }
-  const c = cType(table, elem, POS_RETURN, false);
-  return c.length > 0 ? `${c} elements` : "nish_array * elements";
-};
+  const c = cType(table, elem, POS_RETURN, false)
+  return c.length > 0 ? `${c} elements` : "nish_array * elements"
+}
 
 /**
  * `struct <Name> { ... };` for every class and interface of every module:
@@ -95,154 +95,160 @@ const elementNote = (program: CheckedProgram, table: TypeTable, t: i32): string 
  * stays an incomplete type (C has no empty structs); pointers to it still work.
  */
 const structDefinitions = (compilation: Compilation): string[] => {
-  const table = compilation.table;
-  const structs: StructInfo[] = [];
-  const files: string[] = [];
+  const table = compilation.table
+  const structs: StructInfo[] = []
+  const files: string[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
       if (info.origin === unit.source) {
-        structs.push(info);
-        files.push(unit.name);
+        structs.push(info)
+        files.push(unit.name)
       }
     }
   }
-  const lines: string[] = [];
+  const lines: string[] = []
   if (structs.length === 0) {
-    return lines;
+    return lines
   }
-  lines.push("");
-  lines.push("/* Classes and interfaces: the field layout of the compiled objects (natural");
-  lines.push(" * alignment; a class that `implements` an interface lists its fields first).");
-  lines.push(" * Objects live in the arena; a `T | null` parameter or field may be NULL. */");
+  lines.push("")
+  lines.push("/* Classes and interfaces: the field layout of the compiled objects (natural")
+  lines.push(" * alignment; a class that `implements` an interface lists its fields first).")
+  lines.push(" * Objects live in the arena; a `T | null` parameter or field may be NULL. */")
   for (const info of structs) {
-    lines.push(`struct ${cStructName(info.name)};`);
+    lines.push(`struct ${cStructName(info.name)};`)
   }
-  let i = 0;
+  let i = 0
   while (i < structs.length) {
-    const info = structs[i];
-    const file = files[i];
-    const ifaces = info.implementsNames.length > 0 ? ` implements ${info.implementsNames.join(", ")}` : "";
-    const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    const cName = cStructName(info.name);
-    lines.push("");
+    const info = structs[i]
+    const file = files[i]
+    const ifaces = info.implementsNames.length > 0 ? ` implements ${info.implementsNames.join(", ")}` : ""
+    const kind = info.kind === STRUCT_CLASS ? "class" : "interface"
+    const cName = cStructName(info.name)
+    lines.push("")
     // WP32 (docs/wp32-map.md §8): a `Map` or `Set` is opaque. A C host may hold
     // one it was given and hand it back, and nothing more: its fields are the
     // library's private layout, which is free to change.
     if (isCollectionStruct(info)) {
-      lines.push(`/* ${file}: ${kind} ${info.name}, opaque: hold it and pass it back; its layout is not part of the ABI */`);
-      lines.push(`typedef struct ${cName} ${cName};`);
-      i = i + 1;
-      continue;
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: hold it and pass it back; its layout is not part of the ABI */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
     }
-    lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`);
+    lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
-      lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`);
-      i = i + 1;
-      continue;
+      lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
+      i = i + 1
+      continue
     }
-    lines.push(`struct ${cName} {`);
+    lines.push(`struct ${cName} {`)
     for (const f of info.fields) {
-      const t = cFieldType(table, f.type);
+      const t = cFieldType(table, f.type)
       // A C keyword as a field name gets the same `_` suffix as a parameter.
-      const name = cParamName(f.name);
+      const name = cParamName(f.name)
       const note =
         table.kindOf(f.type) === K_ARRAY || name !== f.name
           ? ` /* ${f.name}: ${tsKeyword(table, f.type)} */`
-          : "";
-      lines.push(`  ${t}${spaceAfter(t)}${name};${note}`);
+          : ""
+      lines.push(`  ${t}${spaceAfter(t)}${name};${note}`)
     }
-    lines.push("};");
-    i = i + 1;
+    lines.push("};")
+    i = i + 1
   }
-  return lines;
-};
+  return lines
+}
 
 /** Every field type of every class and interface, for the `Result` definitions above. */
 const structFieldTypes = (compilation: Compilation): i32[] => {
-  const out: i32[] = [];
+  const out: i32[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
       // An opaque `Map` or `Set` (WP32) contributes no field to describe.
       if (isCollectionStruct(info)) {
-        continue;
+        continue
       }
       for (const f of info.fields) {
-        out.push(f.type);
+        out.push(f.type)
       }
     }
   }
-  return out;
-};
+  return out
+}
 
-export const generateHeader = (compilation: Compilation, fns: ExternalFunction[], outFile: string): string => {
-  const table = compilation.table;
-  const guard = `${HEADER_GUARD_PREFIX}_${guardStem(outFile)}_H`;
-  const lines: string[] = [];
-  lines.push(banner(compilation, "--emit-header", "/* "));
-  lines.push(" *");
-  lines.push(` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`);
-  lines.push(` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`);
-  lines.push(" * directory with -I. Strings (nish_str) and arrays (nish_array, { len, cap,");
-  lines.push(" * data }) live in the arena: a returned value is valid until");
-  lines.push(" * nish_reset_arena() / nish_arena_release(). A `const nish_array *` parameter");
-  lines.push(" * is only read; an `nish_array *` one is written through. To pass your own");
-  lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.");
-  lines.push(" * An array of records (an interface below) holds them inline, so its data is");
-  lines.push(" * a C array of that struct; every other element type is one pointer per");
-  lines.push(" * slot. The comment above each prototype says which. */");
-  lines.push(`#ifndef ${guard}`);
-  lines.push(`#define ${guard}`);
-  lines.push("");
-  lines.push("#include <stdbool.h>");
-  lines.push("#include <stdint.h>");
-  lines.push(`#include "${RUNTIME_HEADER}"`);
-  lines.push("");
-  lines.push("#ifdef __cplusplus");
-  lines.push('extern "C" {');
-  lines.push("#endif");
-  pushAll(lines, structDefinitions(compilation));
+export const generateHeader = (
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  outFile: string
+): string => {
+  const table = compilation.table
+  const guard = `${HEADER_GUARD_PREFIX}_${guardStem(outFile)}_H`
+  const lines: string[] = []
+  lines.push(banner(compilation, "--emit-header", "/* "))
+  lines.push(" *")
+  lines.push(` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`)
+  lines.push(` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`)
+  lines.push(" * directory with -I. Strings (nish_str) and arrays (nish_array, { len, cap,")
+  lines.push(" * data }) live in the arena: a returned value is valid until")
+  lines.push(" * nish_reset_arena() / nish_arena_release(). A `const nish_array *` parameter")
+  lines.push(" * is only read; an `nish_array *` one is written through. To pass your own")
+  lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.")
+  lines.push(" * An array of records (an interface below) holds them inline, so its data is")
+  lines.push(" * a C array of that struct; every other element type is one pointer per")
+  lines.push(" * slot. The comment above each prototype says which. */")
+  lines.push(`#ifndef ${guard}`)
+  lines.push(`#define ${guard}`)
+  lines.push("")
+  lines.push("#include <stdbool.h>")
+  lines.push("#include <stdint.h>")
+  lines.push(`#include "${RUNTIME_HEADER}"`)
+  lines.push("")
+  lines.push("#ifdef __cplusplus")
+  lines.push('extern "C" {')
+  lines.push("#endif")
+  pushAll(lines, structDefinitions(compilation))
 
-  pushAll(lines, resultDefinitions(table, fns, structFieldTypes(compilation)));
+  pushAll(lines, resultDefinitions(table, fns, structFieldTypes(compilation)))
 
   // A module's path is its identity in this compilation (`self/compilation.ts`),
   // so comparing paths is comparing the units, without a nullable to narrow.
-  let lastPath = "";
-  let anyModule = false;
+  let lastPath = ""
+  let anyModule = false
   for (const fn of fns) {
     if (!anyModule || fn.unit.name !== lastPath) {
-      lines.push("");
-      lines.push(`/* ${fn.unit.name} */`);
-      lastPath = fn.unit.name;
-      anyModule = true;
+      lines.push("")
+      lines.push(`/* ${fn.unit.name} */`)
+      lastPath = fn.unit.name
+      anyModule = true
     }
-    const source = tsSignature(table, fn.sig);
+    const source = tsSignature(table, fn.sig)
     if (fn.sig.name === "main") {
       lines.push(
         `/* ${source}: not declared; a C host owns \`main\`. Export it to make it the process entry. */`
-      );
-      continue;
+      )
+      continue
     }
-    const proto = cPrototype(table, fn.sig, fn.writtenParams);
+    const proto = cPrototype(table, fn.sig, fn.writtenParams)
     if (proto.length === 0) {
-      lines.push(`/* ${source}: not declared; no C spelling for one of its types. */`);
-      continue;
+      lines.push(`/* ${source}: not declared; no C spelling for one of its types. */`)
+      continue
     }
-    const name = cFunctionName(fn.sig.name);
-    const alias = name.label.length > 0 ? ` (${cAliasReason(fn.sig)}: call it as ${name.ident})` : "";
-    lines.push(`/* ${source}${alias}${elementNotes(table, fn)} */`);
-    lines.push(`${proto};`);
+    const name = cFunctionName(fn.sig.name)
+    const alias = name.label.length > 0 ? ` (${cAliasReason(fn.sig)}: call it as ${name.ident})` : ""
+    lines.push(`/* ${source}${alias}${elementNotes(table, fn)} */`)
+    lines.push(`${proto};`)
   }
   if (!anyModule) {
-    lines.push("");
-    lines.push("/* No callable functions: every function is internal or the entry point. */");
+    lines.push("")
+    lines.push("/* No callable functions: every function is internal or the entry point. */")
   }
 
-  lines.push("");
-  lines.push("#ifdef __cplusplus");
-  lines.push("}");
-  lines.push("#endif");
-  lines.push("");
-  lines.push(`#endif /* ${guard} */`);
-  lines.push("");
-  return lines.join("\n");
-};
+  lines.push("")
+  lines.push("#ifdef __cplusplus")
+  lines.push("}")
+  lines.push("#endif")
+  lines.push("")
+  lines.push(`#endif /* ${guard} */`)
+  lines.push("")
+  return lines.join("\n")
+}

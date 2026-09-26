@@ -23,6 +23,6 @@
  * compiler; `docs/wp23-language-surface.md` §5 is the argument for that.
  */
 export interface Pair<A, B> {
-  first: A;
-  second: B;
+  first: A
+  second: B
 }

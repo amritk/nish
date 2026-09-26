@@ -23,17 +23,17 @@
 // the emitter already used, so the header, the `.d.ts` and the N-API shim
 // describe exactly the symbols and signatures that ended up in the IR.
 
-import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes";
-import { CLI } from "./branding";
-import { Compilation, ModuleUnit } from "./compilation";
-import { StringMap, StringSet } from "./map";
-import { ROOT_PACKAGE } from "./packages";
-import { hasFunctionParameter } from "./generics";
-import { basename } from "./paths";
-import { N_CONSTRUCTOR, Node } from "./nodes";
-import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program";
-import { ResultLayout, resultLayout } from "./result";
-import { StringBuilder } from "./strings";
+import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes"
+import { CLI } from "./branding"
+import { Compilation, ModuleUnit } from "./compilation"
+import { StringMap, StringSet } from "./map"
+import { ROOT_PACKAGE } from "./packages"
+import { hasFunctionParameter } from "./generics"
+import { basename } from "./paths"
+import { N_CONSTRUCTOR, Node } from "./nodes"
+import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program"
+import { ResultLayout, resultLayout } from "./result"
+import { StringBuilder } from "./strings"
 import {
   K_ARRAY,
   K_NULLABLE,
@@ -52,45 +52,45 @@ import {
   T_U8,
   T_VOID,
   TypeTable,
-} from "./types";
+} from "./types"
 
 /** Where a type is spelled: a parameter may be `const`-qualified, a return is not. */
-export const POS_PARAM: i32 = 0;
-export const POS_RETURN: i32 = 1;
+export const POS_PARAM: i32 = 0
+export const POS_RETURN: i32 = 1
 
-const CHAR_DOT: i32 = 46;
-const CHAR_DOLLAR: i32 = 36;
-const CHAR_UNDERSCORE: i32 = 95;
-const CHAR_ZERO: i32 = 48;
-const CHAR_NINE: i32 = 57;
-const CHAR_UPPER_A: i32 = 65;
-const CHAR_UPPER_Z: i32 = 90;
-const CHAR_LOWER_A: i32 = 97;
-const CHAR_LOWER_Z: i32 = 122;
+const CHAR_DOT: i32 = 46
+const CHAR_DOLLAR: i32 = 36
+const CHAR_UNDERSCORE: i32 = 95
+const CHAR_ZERO: i32 = 48
+const CHAR_NINE: i32 = 57
+const CHAR_UPPER_A: i32 = 65
+const CHAR_UPPER_Z: i32 = 90
+const CHAR_LOWER_A: i32 = 97
+const CHAR_LOWER_Z: i32 = 122
 /** `a` - `A`: the one bit that separates the two ASCII cases. */
-const CASE_SHIFT: i32 = 32;
+const CASE_SHIFT: i32 = 32
 
 /** Append every element of `src` to `dst`; the loop stage0's `src/` writes as a spread. */
 export const pushAll = (dst: string[], src: string[]): void => {
   for (const line of src) {
-    dst.push(line);
+    dst.push(line)
   }
-};
+}
 
 export class ExternalFunction {
-  sig: FunctionSig;
-  unit: ModuleUnit;
+  sig: FunctionSig
+  unit: ModuleUnit
   /**
    * Names of the array parameters the function (or a callee, by the same
    * fixpoint that decides `readonly` in the IR) stores through. Every other
    * array parameter is provably read-only, so C may spell it `const`.
    */
-  writtenParams: StringSet;
+  writtenParams: StringSet
 
   constructor(sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet) {
-    this.sig = sig;
-    this.unit = unit;
-    this.writtenParams = writtenParams;
+    this.sig = sig
+    this.unit = unit
+    this.writtenParams = writtenParams
   }
 }
 
@@ -108,15 +108,15 @@ export class ExternalFunction {
  * imported symbol from being declared once per importer.
  */
 export const externalFunctions = (compilation: Compilation): ExternalFunction[] => {
-  const units: AnalysisUnit[] = [];
+  const units: AnalysisUnit[] = []
   for (const unit of compilation.modules) {
-    units.push(new AnalysisUnit(unit.checker.program, unit.parents));
+    units.push(new AnalysisUnit(unit.checker.program, unit.parents))
   }
-  const facts = analyzeFunctions(units, compilation.table, compilation.opts, compilation.runtime);
-  const out: ExternalFunction[] = [];
+  const facts = analyzeFunctions(units, compilation.table, compilation.opts, compilation.runtime)
+  const out: ExternalFunction[] = []
   for (const unit of compilation.modules) {
-    const program = unit.checker.program;
-    const entryMain = program.entryMain;
+    const program = unit.checker.program
+    const entryMain = program.entryMain
     // WP21 S1: a dependency package's `export` is an export to an Nish
     // consumer, not a promise to a C host -- wp21-packages.md sections 1 and 4
     // are explicit that a package's artifact rows are a narrowed projection of
@@ -129,53 +129,53 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
     // language does not have. So it waits on that construct rather than on a
     // stage of WP21: none of S3, S4 or S5 owns it (wp21-packages.md 10d).
     if (program.packageName !== ROOT_PACKAGE) {
-      continue;
+      continue
     }
     for (const sig of program.functions) {
       if (!sig.definedIn(program.source)) {
-        continue;
+        continue
       }
       if (entryMain !== null && sig === entryMain) {
-        continue;
+        continue
       }
       if (!sig.exported && compilation.opts.strictExports) {
-        continue;
+        continue
       }
       // WP29: an instantiation that was given a function, or an arrow lifted
       // out of one, is a symbol of the compiled program and nothing a host can
       // call by name, so no sidecar describes it.
       if (sig.compileTimeOnly()) {
-        continue;
+        continue
       }
       out.push(
         new ExternalFunction(sig, unit, writtenArrayParams(compilation.table, sig, facts.get(sig.name)))
-      );
+      )
     }
   }
-  return out;
-};
+  return out
+}
 
 const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet => {
-  const written = new StringSet();
+  const written = new StringSet()
   if (facts === null) {
-    return written;
+    return written
   }
-  let i = 0;
+  let i = 0
   while (i < sig.paramNames.length) {
     // A `readonly T[]` is `const` because its type says so, and the fixpoint is
     // never consulted for one: `writesThrough` is a conservative *may-write*
     // that every escape sets, so a `readonly` parameter that is only returned
     // or stored would otherwise lose the `const` its annotation promised.
     if (table.isArray(sig.paramTypes[i]) && !table.isReadonlyArray(sig.paramTypes[i])) {
-      const pointer = facts.pointerParam(sig.paramNames[i]);
+      const pointer = facts.pointerParam(sig.paramNames[i])
       if (pointer !== null && pointer.writesThrough) {
-        written.add(sig.paramNames[i]);
+        written.add(sig.paramNames[i])
       }
     }
-    i = i + 1;
+    i = i + 1
   }
-  return written;
-};
+  return written
+}
 
 /**
  * How an array with a scalar element type crosses to JavaScript (WP4/WP8):
@@ -193,26 +193,26 @@ const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionF
  */
 export class TypedView {
   /** The language's array alias and the JS constructor whose element layout matches it. */
-  ctor: string;
-  elemSize: i32;
-  cElem: string;
-  napiType: string;
+  ctor: string
+  elemSize: i32
+  cElem: string
+  napiType: string
 
   constructor(ctor: string, elemSize: i32, cElem: string, napiType: string) {
-    this.ctor = ctor;
-    this.elemSize = elemSize;
-    this.cElem = cElem;
-    this.napiType = napiType;
+    this.ctor = ctor
+    this.elemSize = elemSize
+    this.cElem = cElem
+    this.napiType = napiType
   }
 }
 
 export const typedView = (table: TypeTable, t: i32): TypedView | null => {
   if (table.kindOf(t) !== K_ARRAY) {
-    return null;
+    return null
   }
   switch (table.kindOf(table.refOf(t))) {
     case T_I32:
-      return new TypedView("Int32Array", 4, "int32_t", "napi_int32_array");
+      return new TypedView("Int32Array", 4, "int32_t", "napi_int32_array")
     // WP30: every unsigned width has an exact typed array, and an array of one
     // needs none of the masking its *scalar* boundary does (wp8-interop.md,
     // "The unsigned widths"). A scalar `u32` result reaches JS through an i32
@@ -223,23 +223,23 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
     // rather than by generated arithmetic. The narrow widths get *simpler*
     // here, not harder, which reads like an omission unless it is said.
     case T_U8:
-      return new TypedView("Uint8Array", 1, "uint8_t", "napi_uint8_array");
+      return new TypedView("Uint8Array", 1, "uint8_t", "napi_uint8_array")
     case T_U16:
-      return new TypedView("Uint16Array", 2, "uint16_t", "napi_uint16_array");
+      return new TypedView("Uint16Array", 2, "uint16_t", "napi_uint16_array")
     case T_U32:
-      return new TypedView("Uint32Array", 4, "uint32_t", "napi_uint32_array");
+      return new TypedView("Uint32Array", 4, "uint32_t", "napi_uint32_array")
     case T_U64:
-      return new TypedView("BigUint64Array", 8, "uint64_t", "napi_biguint64_array");
+      return new TypedView("BigUint64Array", 8, "uint64_t", "napi_biguint64_array")
     case T_F32:
-      return new TypedView("Float32Array", 4, "float", "napi_float32_array");
+      return new TypedView("Float32Array", 4, "float", "napi_float32_array")
     case T_F64:
-      return new TypedView("Float64Array", 8, "double", "napi_float64_array");
+      return new TypedView("Float64Array", 8, "double", "napi_float64_array")
     case T_I64:
-      return new TypedView("BigInt64Array", 8, "int64_t", "napi_bigint64_array");
+      return new TypedView("BigInt64Array", 8, "int64_t", "napi_bigint64_array")
     default:
-      return null;
+      return null
   }
-};
+}
 
 /**
  * C spelling of a type at a parameter or return position; `""` when C has no
@@ -249,43 +249,43 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
 export const cType = (table: TypeTable, t: i32, position: i32, written: boolean): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return "int32_t";
+      return "int32_t"
     case T_I64:
-      return "int64_t";
+      return "int64_t"
     // WP15: the unsigned widths are the <stdint.h> twins of the signed ones;
     // the LLVM type is the same, so the C prototype is the only place the
     // signedness of a parameter is visible to a host.
     case T_U8:
-      return "uint8_t";
+      return "uint8_t"
     case T_U16:
-      return "uint16_t";
+      return "uint16_t"
     case T_U32:
-      return "uint32_t";
+      return "uint32_t"
     case T_U64:
-      return "uint64_t";
+      return "uint64_t"
     case T_F32:
-      return "float";
+      return "float"
     case T_F64:
-      return "double";
+      return "double"
     case T_BOOL:
-      return "bool";
+      return "bool"
     case T_STRING:
       // Strings are immutable, so a callee can promise not to write through
       // a parameter; a returned string is arena-owned and not const.
-      return position === POS_PARAM ? "const nish_str *" : "nish_str *";
+      return position === POS_PARAM ? "const nish_str *" : "nish_str *"
     case K_ARRAY:
       // One header type for every element type (the comment above the
       // prototype names it). `const` is the `readonly` proof from attributes.ts.
-      return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *";
+      return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *"
     case T_VOID:
-      return "void";
+      return "void"
     case K_STRUCT:
       // A class or interface value is a pointer to its `struct` (declared in the
       // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
-      return `struct ${cStructName(table.nameOf(t))} *`;
+      return `struct ${cStructName(table.nameOf(t))} *`
     case K_NULLABLE:
-      return cType(table, table.refOf(t), position, false);
+      return cType(table, table.refOf(t), position, false)
     // WP17: a `Result` small enough to pack travels *by value* — in either
     // direction — as the one-word struct `cResultWord` declares, which is the
     // declaration clang itself lowers to `i64` on every native target, so the
@@ -293,11 +293,11 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
     // is the arena pointer WP16 has always used
     // (`docs/wp17-result-abi.md` §3).
     case K_RESULT:
-      return table.resultByValue(t) ? cResultWord(table, t) : `struct ${cResultName(table, t)} *`;
+      return table.resultByValue(t) ? cResultWord(table, t) : `struct ${cResultName(table, t)} *`
     default:
-      return "";
+      return ""
   }
-};
+}
 
 /**
  * The LLVM struct name as a C identifier: `nish_result.i32.$IoError` becomes
@@ -306,7 +306,8 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
  * separator: `Result<i32, string>` is `..._i32_str` and a `Result` over a
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
  */
-export const cResultName = (table: TypeTable, t: i32): string => collapseSeparators(table.resultStructName(t), false);
+export const cResultName = (table: TypeTable, t: i32): string =>
+  collapseSeparators(table.resultStructName(t), false)
 
 /**
  * `.` and `$` to `_`, and optionally the `_` the user wrote to `_0`. Shared by
@@ -314,22 +315,22 @@ export const cResultName = (table: TypeTable, t: i32): string => collapseSeparat
  * and differ only in whether their input is entirely the mangler's.
  */
 const collapseSeparators = (name: string, escapeUnderscore: boolean): string => {
-  const out = new StringBuilder();
-  let i = 0;
+  const out = new StringBuilder()
+  let i = 0
   while (i < name.length) {
-    const c = name.charCodeAt(i);
+    const c = name.charCodeAt(i)
     if (c === CHAR_DOT || c === CHAR_DOLLAR) {
-      out.addChar(CHAR_UNDERSCORE);
+      out.addChar(CHAR_UNDERSCORE)
     } else if (escapeUnderscore && c === CHAR_UNDERSCORE) {
-      out.addChar(CHAR_UNDERSCORE);
-      out.addChar(CHAR_ZERO);
+      out.addChar(CHAR_UNDERSCORE)
+      out.addChar(CHAR_ZERO)
     } else {
-      out.addChar(c);
+      out.addChar(c)
     }
-    i = i + 1;
+    i = i + 1
   }
-  return out.toText();
-};
+  return out.toText()
+}
 
 /**
  * The C spelling of a class or interface name.
@@ -362,13 +363,13 @@ const collapseSeparators = (name: string, escapeUnderscore: boolean): string => 
  */
 export const cStructName = (name: string): string => {
   if (name.indexOf("$") < 0) {
-    return name;
+    return name
   }
-  return `nish_gen_${collapseSeparators(name, true)}`;
-};
+  return `nish_gen_${collapseSeparators(name, true)}`
+}
 
 /** The by-value spelling: one 64-bit word, `_word` as in the DWARF and the note. */
-export const cResultWord = (table: TypeTable, t: i32): string => `${cResultName(table, t)}_word`;
+export const cResultWord = (table: TypeTable, t: i32): string => `${cResultName(table, t)}_word`
 
 /**
  * C spelling of a struct field. Everything a field can hold has one: the
@@ -377,27 +378,27 @@ export const cResultWord = (table: TypeTable, t: i32): string => `${cResultName(
  */
 export const cFieldType = (table: TypeTable, t: i32): string => {
   if (table.kindOf(t) === K_ARRAY) {
-    return "nish_array *";
+    return "nish_array *"
   }
   // A field holds the in-memory `Result`, never the packed return word.
   if (table.kindOf(t) === K_RESULT) {
-    return `struct ${cResultName(table, t)} *`;
+    return `struct ${cResultName(table, t)} *`
   }
-  const c = cType(table, t, POS_RETURN, false);
-  return c.length > 0 ? c : "void *";
-};
+  const c = cType(table, t, POS_RETURN, false)
+  return c.length > 0 ? c : "void *"
+}
 
 /** Every `Result` type mentioned inside `t`, itself included, innermost first. */
 export const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
-  const kind = table.kindOf(t);
+  const kind = table.kindOf(t)
   if (kind === K_ARRAY || kind === K_NULLABLE) {
-    resultTypesIn(table, table.refOf(t), out);
+    resultTypesIn(table, table.refOf(t), out)
   } else if (kind === K_RESULT) {
-    resultTypesIn(table, table.okOf(t), out);
-    resultTypesIn(table, table.errOf(t), out);
-    out.push(t);
+    resultTypesIn(table, table.okOf(t), out)
+    resultTypesIn(table, table.errOf(t), out)
+    out.push(t)
   }
-};
+}
 
 /**
  * One `Result` type the generated C must define. `word` is set for a type
@@ -406,16 +407,16 @@ export const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
  * or a payload of another `Result`. Both can be true of one type.
  */
 export class ResultUse {
-  type: i32;
-  layout: ResultLayout;
-  word: boolean;
-  object: boolean;
+  type: i32
+  layout: ResultLayout
+  word: boolean
+  object: boolean
 
   constructor(type: i32, layout: ResultLayout) {
-    this.type = type;
-    this.layout = layout;
-    this.word = false;
-    this.object = false;
+    this.type = type
+    this.layout = layout
+    this.word = false
+    this.object = false
   }
 }
 
@@ -425,28 +426,28 @@ export class ResultUse {
  * it).
  */
 export const resultTypesUsed = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] => {
-  const uses: ResultUse[] = [];
-  const index = new StringMap();
+  const uses: ResultUse[] = []
+  const index = new StringMap()
   for (const fn of fns) {
     if (fn.sig.name === "main") {
-      continue;
+      continue
     }
-    noteResultTypes(table, uses, index, fn.sig.returnType, table.resultByValue(fn.sig.returnType));
-    let i = 0;
+    noteResultTypes(table, uses, index, fn.sig.returnType, table.resultByValue(fn.sig.returnType))
+    let i = 0
     while (i < fn.sig.paramTypes.length) {
-      const t = fn.sig.paramTypes[i];
-      noteResultTypes(table, uses, index, t, table.resultByValue(t));
-      i = i + 1;
+      const t = fn.sig.paramTypes[i]
+      noteResultTypes(table, uses, index, t, table.resultByValue(t))
+      i = i + 1
     }
   }
   // A class field holding a `Result` is the pointer too, and the header
   // declares its struct so a host can follow it rather than being left with an
   // incomplete type.
   for (const t of fields) {
-    noteResultTypes(table, uses, index, t, false);
+    noteResultTypes(table, uses, index, t, false)
   }
-  return uses;
-};
+  return uses
+}
 
 /** Record every `Result` inside `t`, in first-seen order; stage0's `src/` writes this as a closure. */
 const noteResultTypes = (
@@ -456,37 +457,37 @@ const noteResultTypes = (
   t: i32,
   byValue: boolean
 ): void => {
-  const inner: i32[] = [];
-  resultTypesIn(table, t, inner);
+  const inner: i32[] = []
+  resultTypesIn(table, t, inner)
   for (const type of inner) {
-    const name = cResultName(table, type);
-    let at = index.get(name, -1);
+    const name = cResultName(table, type)
+    let at = index.get(name, -1)
     if (at < 0) {
-      at = uses.length;
-      index.set(name, at);
-      uses.push(new ResultUse(type, resultLayout(table, type)));
+      at = uses.length
+      index.set(name, at)
+      uses.push(new ResultUse(type, resultLayout(table, type)))
     }
     // Only the outermost type of a by-value return travels in a register;
     // anything nested inside it is a payload, and a payload is a pointer.
-    const use = uses[at];
+    const use = uses[at]
     if (byValue && type === t) {
-      use.word = true;
+      use.word = true
     } else {
-      use.object = true;
+      use.object = true
     }
   }
-};
+}
 
 /** TypeScript source spelling of a signature, for comments and declarations. */
 export const tsSignature = (table: TypeTable, sig: FunctionSig): string => {
-  const params: string[] = [];
-  let i = 0;
+  const params: string[] = []
+  let i = 0
   while (i < sig.paramNames.length) {
-    params.push(`${sig.paramNames[i]}: ${tsKeyword(table, sig.paramTypes[i])}`);
-    i = i + 1;
+    params.push(`${sig.paramNames[i]}: ${tsKeyword(table, sig.paramTypes[i])}`)
+    i = i + 1
   }
-  return `${sig.sourceName}(${params.join(", ")}): ${tsKeyword(table, sig.returnType)}`;
-};
+  return `${sig.sourceName}(${params.join(", ")}): ${tsKeyword(table, sig.returnType)}`
+}
 
 /**
  * The source keyword for a type, as the user wrote it (`number` for i32/f64;
@@ -495,35 +496,35 @@ export const tsSignature = (table: TypeTable, sig: FunctionSig): string => {
 export const tsKeyword = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return "number";
+      return "number"
     case T_F64:
-      return "number";
+      return "number"
     case T_BOOL:
-      return "boolean";
+      return "boolean"
     case K_STRUCT:
-      return table.nameOf(t);
+      return table.nameOf(t)
     // WP23: an enum does not cross to C or JS — `cType` and `wasmType` have no
     // entry for it — but it can still appear in the comment above a
     // declaration that was skipped, and there it reads as its own name.
     case K_ENUM:
-      return table.nameOf(t);
+      return table.nameOf(t)
     case K_ARRAY:
       // The comment above the prototype is the signature as it was written, so
       // a `readonly T[]` says so: it is what makes the `const` on the C
       // parameter beside it read as the promise the source made.
       return table.isReadonlyArray(t)
         ? `readonly ${tsKeyword(table, table.refOf(t))}[]`
-        : `${tsKeyword(table, table.refOf(t))}[]`;
+        : `${tsKeyword(table, table.refOf(t))}[]`
     case K_NULLABLE:
-      return `${tsKeyword(table, table.refOf(t))} | null`;
+      return `${tsKeyword(table, table.refOf(t))} | null`
     // WP17: the type as the programmer wrote it, for the comment above the
     // declaration; `cType` / `wasmType` decide how it actually crosses.
     case K_RESULT:
-      return `Result<${tsKeyword(table, table.okOf(t))}, ${tsKeyword(table, table.errOf(t))}>`;
+      return `Result<${tsKeyword(table, table.okOf(t))}, ${tsKeyword(table, table.errOf(t))}>`
     default:
-      return table.scalarName(t);
+      return table.scalarName(t)
   }
-};
+}
 
 /**
  * Identifiers that are legal parameter names in the language but would not
@@ -534,96 +535,95 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
  * stage0's `src/` holds these in a `Set`. A chain of comparisons is what the language
  * has, and it costs about what hashing the name would have cost anyway.
  */
-export const isCReserved = (name: string): boolean => (
-    name === "auto" ||
-    name === "bool" ||
-    name === "break" ||
-    name === "case" ||
-    name === "char" ||
-    name === "const" ||
-    name === "continue" ||
-    name === "default" ||
-    name === "do" ||
-    name === "double" ||
-    name === "else" ||
-    name === "enum" ||
-    name === "extern" ||
-    name === "false" ||
-    name === "float" ||
-    name === "for" ||
-    name === "goto" ||
-    name === "if" ||
-    name === "inline" ||
-    name === "int" ||
-    name === "long" ||
-    name === "register" ||
-    name === "restrict" ||
-    name === "return" ||
-    name === "short" ||
-    name === "signed" ||
-    name === "sizeof" ||
-    name === "static" ||
-    name === "struct" ||
-    name === "switch" ||
-    name === "true" ||
-    name === "typedef" ||
-    name === "union" ||
-    name === "unsigned" ||
-    name === "void" ||
-    name === "volatile" ||
-    name === "while" ||
-    name === "_Bool" ||
-    name === "alignas" ||
-    name === "alignof" ||
-    name === "and" ||
-    name === "asm" ||
-    name === "catch" ||
-    name === "class" ||
-    name === "delete" ||
-    name === "explicit" ||
-    name === "export" ||
-    name === "friend" ||
-    name === "mutable" ||
-    name === "namespace" ||
-    name === "new" ||
-    name === "not" ||
-    name === "operator" ||
-    name === "or" ||
-    name === "private" ||
-    name === "protected" ||
-    name === "public" ||
-    name === "template" ||
-    name === "this" ||
-    name === "throw" ||
-    name === "try" ||
-    name === "typename" ||
-    name === "using" ||
-    name === "virtual" ||
-    name === "xor" ||
-    name === "nish_str" ||
-    name === "nish_arena" ||
-    name === "nish_array" ||
-    name === "env" ||
-    name === "info" ||
-    name === "argv" ||
-    name === "argc" ||
-    name === "type" ||
-    name === "out" ||
-    name === "result" ||
-    name === "mark"
-  );
+export const isCReserved = (name: string): boolean =>
+  name === "auto" ||
+  name === "bool" ||
+  name === "break" ||
+  name === "case" ||
+  name === "char" ||
+  name === "const" ||
+  name === "continue" ||
+  name === "default" ||
+  name === "do" ||
+  name === "double" ||
+  name === "else" ||
+  name === "enum" ||
+  name === "extern" ||
+  name === "false" ||
+  name === "float" ||
+  name === "for" ||
+  name === "goto" ||
+  name === "if" ||
+  name === "inline" ||
+  name === "int" ||
+  name === "long" ||
+  name === "register" ||
+  name === "restrict" ||
+  name === "return" ||
+  name === "short" ||
+  name === "signed" ||
+  name === "sizeof" ||
+  name === "static" ||
+  name === "struct" ||
+  name === "switch" ||
+  name === "true" ||
+  name === "typedef" ||
+  name === "union" ||
+  name === "unsigned" ||
+  name === "void" ||
+  name === "volatile" ||
+  name === "while" ||
+  name === "_Bool" ||
+  name === "alignas" ||
+  name === "alignof" ||
+  name === "and" ||
+  name === "asm" ||
+  name === "catch" ||
+  name === "class" ||
+  name === "delete" ||
+  name === "explicit" ||
+  name === "export" ||
+  name === "friend" ||
+  name === "mutable" ||
+  name === "namespace" ||
+  name === "new" ||
+  name === "not" ||
+  name === "operator" ||
+  name === "or" ||
+  name === "private" ||
+  name === "protected" ||
+  name === "public" ||
+  name === "template" ||
+  name === "this" ||
+  name === "throw" ||
+  name === "try" ||
+  name === "typename" ||
+  name === "using" ||
+  name === "virtual" ||
+  name === "xor" ||
+  name === "nish_str" ||
+  name === "nish_arena" ||
+  name === "nish_array" ||
+  name === "env" ||
+  name === "info" ||
+  name === "argv" ||
+  name === "argc" ||
+  name === "type" ||
+  name === "out" ||
+  name === "result" ||
+  name === "mark"
 
-export const cParamName = (name: string): string => isCReserved(name) ? `${name}_` : name;
+export const cParamName = (name: string): string => (isCReserved(name) ? `${name}_` : name)
 
 /** A C identifier and the asm label that binds it to the real LLVM symbol. */
 export class CName {
-  ident: string;
+  ident: string
   /** ` NISH_SYMBOL("...")`, or the empty string when the identifier is already the symbol. */
-  label: string;
+  label: string
 
   constructor(ident: string, label: string) {
-    this.ident = ident;
-    this.label = label;
+    this.ident = ident
+    this.label = label
   }
 }
 
@@ -653,16 +653,16 @@ export class CName {
  */
 export const cFunctionName = (symbol: string): CName => {
   if (symbol.indexOf("$") >= 0) {
-    return new CName(cStructName(symbol), ` NISH_SYMBOL("${symbol}")`);
+    return new CName(cStructName(symbol), ` NISH_SYMBOL("${symbol}")`)
   }
   if (symbol.indexOf(".") >= 0) {
-    return new CName(collapseSeparators(symbol, false), ` NISH_SYMBOL("${symbol}")`);
+    return new CName(collapseSeparators(symbol, false), ` NISH_SYMBOL("${symbol}")`)
   }
   if (!isCReserved(symbol)) {
-    return new CName(symbol, "");
+    return new CName(symbol, "")
   }
-  return new CName(`${symbol}_`, ` NISH_SYMBOL("${symbol}")`);
-};
+  return new CName(`${symbol}_`, ` NISH_SYMBOL("${symbol}")`)
+}
 
 /**
  * The name a JavaScript host calls a function by, in the `.d.ts`, the wasm
@@ -678,7 +678,7 @@ export const cFunctionName = (symbol: string): CName => {
  * one reading the `.d.ts` call the same instantiation by the same name. The
  * comment above each declaration says which instantiation it is.
  */
-export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name);
+export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name)
 
 /**
  * Why a function is declared under a C name that is not its symbol, for the
@@ -686,26 +686,26 @@ export const jsExportName = (sig: FunctionSig): string => cStructName(sig.name);
  * which template it came from, since the C name alone does not read as one.
  */
 export const cAliasReason = (sig: FunctionSig): string => {
-  const owner = sig.owner;
-  const instance = sig.instance;
+  const owner = sig.owner
+  const instance = sig.instance
   // WP18 G8: an instantiation of a generic method names the method it came
   // from, as written (`Holder.pick`), before anything about its receiver.
-  const template: TemplateInfo | null = instance === null ? null : instance.template;
+  const template: TemplateInfo | null = instance === null ? null : instance.template
   if (owner !== null && template !== null) {
-    return `an instantiation of the generic method ${template.sourceName}`;
+    return `an instantiation of the generic method ${template.sourceName}`
   }
   if (owner !== null) {
-    const generic = owner.instance;
-    return generic === null ? "a method" : `a method of an instantiation of ${generic.template.sourceName}`;
+    const generic = owner.instance
+    return generic === null ? "a method" : `a method of an instantiation of ${generic.template.sourceName}`
   }
   if (template !== null) {
-    return `an instantiation of ${template.sourceName}`;
+    return `an instantiation of ${template.sourceName}`
   }
   if (sig.name.indexOf(".") >= 0) {
-    return "in a package";
+    return "in a package"
   }
-  return "a C keyword";
-};
+  return "a C keyword"
+}
 
 /**
  * Pairs of functions that a C sidecar would declare under one identifier, as
@@ -714,25 +714,25 @@ export const cAliasReason = (sig: FunctionSig): string => {
  * with no C prototype is never declared, and `main` never is.
  */
 export const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalFunction[] => {
-  const seen = new StringMap();
-  const out: ExternalFunction[] = [];
-  let i = 0;
+  const seen = new StringMap()
+  const out: ExternalFunction[] = []
+  let i = 0
   while (i < declared.length) {
-    const fn = declared[i];
+    const fn = declared[i]
     if (fn.sig.name !== "main" && cPrototype(table, fn.sig, fn.writtenParams).length > 0) {
-      const ident = cFunctionName(fn.sig.name).ident;
-      const at = seen.get(ident, -1);
+      const ident = cFunctionName(fn.sig.name).ident
+      const at = seen.get(ident, -1)
       if (at >= 0 && at < declared.length) {
-        out.push(declared[at]);
-        out.push(fn);
+        out.push(declared[at])
+        out.push(fn)
       } else {
-        seen.set(ident, i);
+        seen.set(ident, i)
       }
     }
-    i = i + 1;
+    i = i + 1
   }
-  return out;
-};
+  return out
+}
 
 /**
  * What a sidecar refuses to describe, reported into the compilation's sink;
@@ -751,72 +751,88 @@ export const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): Ex
  *     would declare twice and which would not compile.
  */
 export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFunction[]): boolean => {
-  let ok = true;
+  let ok = true
   for (const unit of compilation.modules) {
-    const program = unit.checker.program;
+    const program = unit.checker.program
     if (program.packageName !== ROOT_PACKAGE) {
-      continue;
+      continue
     }
     for (const template of program.templateList) {
       // WP29: a template over a function has no instantiation a host could
       // call, so its having none is not a gap in the sidecar.
       if (hasFunctionParameter(template.decl)) {
-        continue;
+        continue
       }
       if (template.origin === unit.source && template.exported && template.count === 0) {
-        reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C signature", "function", "a symbol");
-        ok = false;
+        reportUninstantiated(
+          compilation,
+          unit,
+          template.sourceName,
+          template.decl,
+          "C signature",
+          "function",
+          "a symbol"
+        )
+        ok = false
       }
     }
     for (const template of program.structTemplateList) {
       if (template.origin === unit.source && template.exported && template.count === 0) {
-        const kind = template.kind === STRUCT_CLASS ? "class" : "interface";
-        reportUninstantiated(compilation, unit, template.sourceName, template.decl, "C layout", kind, "a struct");
-        ok = false;
+        const kind = template.kind === STRUCT_CLASS ? "class" : "interface"
+        reportUninstantiated(
+          compilation,
+          unit,
+          template.sourceName,
+          template.decl,
+          "C layout",
+          kind,
+          "a struct"
+        )
+        ok = false
       }
     }
     // WP18 G8: a generic method of an exported class. It is minted once per
     // receiver, so it is one declaration however many templates it has, and it
     // is uninstantiated only when none of them was ever called.
-    const instantiated = new StringSet();
+    const instantiated = new StringSet()
     for (const template of program.methodTemplateList) {
       if (template.count > 0) {
-        instantiated.add(`${template.decl.id}`);
+        instantiated.add(`${template.decl.id}`)
       }
     }
-    const reported = new StringSet();
+    const reported = new StringSet()
     for (const template of program.methodTemplateList) {
-      const key = `${template.decl.id}`;
-      const owner = template.owner;
+      const key = `${template.decl.id}`
+      const owner = template.owner
       if (owner === null || template.origin !== unit.source || !template.exported || instantiated.has(key)) {
-        continue;
+        continue
       }
       if (reported.add(key)) {
         // Named as declared, `Box.pick`, not after whichever receiver minted it.
-        const shown = `${owner.decl.children[0].text}.${template.decl.children[0].text}`;
-        reportUninstantiated(compilation, unit, shown, template.decl, "C signature", "method", "a symbol");
-        ok = false;
+        const shown = `${owner.decl.children[0].text}.${template.decl.children[0].text}`
+        reportUninstantiated(compilation, unit, shown, template.decl, "C signature", "method", "a symbol")
+        ok = false
       }
     }
   }
-  const clashes = cNameClashes(compilation.table, cDeclared);
-  let i = 0;
+  const clashes = cNameClashes(compilation.table, cDeclared)
+  let i = 0
   while (i < clashes.length) {
-    const first = clashes[i].sig;
-    const second = clashes[i + 1];
-    const at = sigNameNode(second.sig);
+    const first = clashes[i].sig
+    const second = clashes[i + 1]
+    const at = sigNameNode(second.sig)
     compilation.sink.report(
       second.unit.source,
       at.start,
       at.end,
       `\`${first.sourceName}\` and \`${second.sig.sourceName}\` are both \`${cFunctionName(first.name).ident}\`` +
         " in C, so a header that declared both would not compile: rename one of them"
-    );
-    ok = false;
-    i = i + 2;
+    )
+    ok = false
+    i = i + 2
   }
-  return ok;
-};
+  return ok
+}
 
 const reportUninstantiated = (
   compilation: Compilation,
@@ -827,69 +843,70 @@ const reportUninstantiated = (
   kind: string,
   becomes: string
 ): void => {
-  const at = decl.children[0];
+  const at = decl.children[0]
   compilation.sink.report(
     unit.source,
     at.start,
     at.end,
     `\`${name}\` is generic, so it has no single ${what}: a generic ${kind} becomes ${becomes}` +
       " only where it is instantiated, and this program instantiates none"
-  );
-};
+  )
+}
 
 /**
  * The name a clash diagnostic points at, or the declaration for a constructor,
  * which has none: `nameNode` in `self/compilation.ts`, for the same reason.
  */
-const sigNameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
+const sigNameNode = (sig: FunctionSig): Node =>
+  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
 export const cPrototype = (table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string => {
-  const ret = cType(table, sig.returnType, POS_RETURN, false);
+  const ret = cType(table, sig.returnType, POS_RETURN, false)
   if (ret.length === 0) {
-    return "";
+    return ""
   }
-  const params: string[] = [];
-  let i = 0;
+  const params: string[] = []
+  let i = 0
   while (i < sig.paramNames.length) {
-    const t = cType(table, sig.paramTypes[i], POS_PARAM, writtenParams.has(sig.paramNames[i]));
+    const t = cType(table, sig.paramTypes[i], POS_PARAM, writtenParams.has(sig.paramNames[i]))
     if (t.length === 0) {
-      return "";
+      return ""
     }
-    params.push(`${t}${spaceAfter(t)}${cParamName(sig.paramNames[i])}`);
-    i = i + 1;
+    params.push(`${t}${spaceAfter(t)}${cParamName(sig.paramNames[i])}`)
+    i = i + 1
   }
-  const name = cFunctionName(sig.name);
-  const list = params.length > 0 ? params.join(", ") : "void";
-  return `${ret}${spaceAfter(ret)}${name.ident}(${list})${name.label}`;
-};
+  const name = cFunctionName(sig.name)
+  const list = params.length > 0 ? params.join(", ") : "void"
+  return `${ret}${spaceAfter(ret)}${name.ident}(${list})${name.label}`
+}
 
 /** A pointer type already ends in `*`; every other one needs a space before the name. */
-export const spaceAfter = (type: string): string => type.endsWith("*") ? "" : " ";
+export const spaceAfter = (type: string): string => (type.endsWith("*") ? "" : " ")
 
 /** `ADD` for `build/add.h`: the stem of an output path as an identifier fragment. */
 export const guardStem = (outFile: string): string => {
-  const stem = stripHeaderSuffix(basename(outFile));
-  const id = new StringBuilder();
-  let i = 0;
+  const stem = stripHeaderSuffix(basename(outFile))
+  const id = new StringBuilder()
+  let i = 0
   while (i < stem.length) {
-    const c = stem.charCodeAt(i);
+    const c = stem.charCodeAt(i)
     if (c >= CHAR_LOWER_A && c <= CHAR_LOWER_Z) {
-      id.addChar(c - CASE_SHIFT);
+      id.addChar(c - CASE_SHIFT)
     } else if ((c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z) || (c >= CHAR_ZERO && c <= CHAR_NINE)) {
-      id.addChar(c);
+      id.addChar(c)
     } else {
-      id.addChar(CHAR_UNDERSCORE);
+      id.addChar(CHAR_UNDERSCORE)
     }
-    i = i + 1;
+    i = i + 1
   }
-  const text = id.toText();
+  const text = id.toText()
   if (text.length === 0) {
-    return "MODULE";
+    return "MODULE"
   }
-  const first = text.charCodeAt(0);
-  return first >= CHAR_ZERO && first <= CHAR_NINE ? `_${text}` : text;
-};
+  const first = text.charCodeAt(0)
+  return first >= CHAR_ZERO && first <= CHAR_NINE ? `_${text}` : text
+}
 
 /**
  * The one trailing `.h` / `.hpp` / `.d.ts` / `.c`, case-insensitively, that
@@ -899,37 +916,38 @@ export const guardStem = (outFile: string): string => {
  */
 const stripHeaderSuffix = (stem: string): string => {
   if (endsWithFold(stem, ".d.ts")) {
-    return stem.substring(0, stem.length - 5);
+    return stem.substring(0, stem.length - 5)
   }
   if (endsWithFold(stem, ".hpp")) {
-    return stem.substring(0, stem.length - 4);
+    return stem.substring(0, stem.length - 4)
   }
   if (endsWithFold(stem, ".h") || endsWithFold(stem, ".c")) {
-    return stem.substring(0, stem.length - 2);
+    return stem.substring(0, stem.length - 2)
   }
-  return stem;
-};
+  return stem
+}
 
 /** `endsWith` with ASCII case folding, which is all the `/i` flag means here. */
 export const endsWithFold = (text: string, suffix: string): boolean => {
   if (suffix.length > text.length) {
-    return false;
+    return false
   }
-  const offset = text.length - suffix.length;
-  let i = 0;
+  const offset = text.length - suffix.length
+  let i = 0
   while (i < suffix.length) {
     if (foldByte(text.charCodeAt(offset + i)) !== foldByte(suffix.charCodeAt(i))) {
-      return false;
+      return false
     }
-    i = i + 1;
+    i = i + 1
   }
-  return true;
-};
+  return true
+}
 
-const foldByte = (c: i32): i32 => c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z ? c + CASE_SHIFT : c;
+const foldByte = (c: i32): i32 => (c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z ? c + CASE_SHIFT : c)
 
 /** `// Generated by nish --emit-x from main.ts; do not edit.` (the CLI names itself). */
-export const banner = (compilation: Compilation, flag: string, comment: string): string => `${comment}Generated by ${CLI} ${flag} from ${compilation.entry().name}; do not edit.`;
+export const banner = (compilation: Compilation, flag: string, comment: string): string =>
+  `${comment}Generated by ${CLI} ${flag} from ${compilation.entry().name}; do not edit.`
 
 /**
  * `Result` definitions (WP17). Two shapes, and a signature uses whichever its
@@ -951,66 +969,66 @@ export const banner = (compilation: Compilation, flag: string, comment: string):
  * build rather than mis-read a register.
  */
 export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] => {
-  const uses = resultTypesUsed(table, fns, fields);
-  const lines: string[] = [];
+  const uses = resultTypesUsed(table, fns, fields)
+  const lines: string[] = []
   if (uses.length === 0) {
-    return lines;
+    return lines
   }
-  lines.push("");
-  lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a");
-  lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then");
-  lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena");
-  lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every");
-  lines.push(" * other arena value. */");
-  lines.push("#if defined(__cplusplus)");
-  lines.push("#define NISH_RESULT_ASSERT(c, m) static_assert(c, m)");
-  lines.push("#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L");
-  lines.push("#define NISH_RESULT_ASSERT(c, m) _Static_assert(c, m)");
-  lines.push("#else");
-  lines.push("#define NISH_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */");
-  lines.push("#endif");
+  lines.push("")
+  lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a")
+  lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then")
+  lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena")
+  lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every")
+  lines.push(" * other arena value. */")
+  lines.push("#if defined(__cplusplus)")
+  lines.push("#define NISH_RESULT_ASSERT(c, m) static_assert(c, m)")
+  lines.push("#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L")
+  lines.push("#define NISH_RESULT_ASSERT(c, m) _Static_assert(c, m)")
+  lines.push("#else")
+  lines.push("#define NISH_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */")
+  lines.push("#endif")
   for (const use of uses) {
-    lines.push("");
-    pushAll(lines, resultDefinition(table, use));
+    lines.push("")
+    pushAll(lines, resultDefinition(table, use))
   }
-  return lines;
-};
+  return lines
+}
 
 const resultDefinition = (table: TypeTable, use: ResultUse): string[] => {
-  const layout = use.layout;
-  const lines: string[] = [];
-  lines.push(`/* ${tsKeyword(table, use.type)} */`);
+  const layout = use.layout
+  const lines: string[] = []
+  lines.push(`/* ${tsKeyword(table, use.type)} */`)
   if (use.object) {
-    lines.push(`struct ${cResultName(table, use.type)} {`);
-    lines.push("  bool ok; /* 1 = value, 0 = error */");
+    lines.push(`struct ${cResultName(table, use.type)} {`)
+    lines.push("  bool ok; /* 1 = value, 0 = error */")
     if (layout.hasValue) {
-      lines.push(`  ${resultField(table, layout.valueType, "value")}`);
+      lines.push(`  ${resultField(table, layout.valueType, "value")}`)
     }
-    lines.push(`  ${resultField(table, layout.errorType, "error")}`);
-    lines.push("};");
+    lines.push(`  ${resultField(table, layout.errorType, "error")}`)
+    lines.push("};")
   }
   if (use.word) {
-    const arms: string[] = [];
+    const arms: string[] = []
     if (layout.hasValue) {
-      arms.push(resultField(table, layout.valueType, "value"));
+      arms.push(resultField(table, layout.valueType, "value"))
     }
-    arms.push(resultField(table, layout.errorType, "error"));
-    const name = cResultWord(table, use.type);
-    lines.push(`typedef struct ${name} {`);
-    lines.push("  int32_t ok; /* 1 = value, 0 = error */");
-    lines.push(`  union { ${arms.join(" ")} } as; /* the arm \`ok\` selects; the other is not written */`);
-    lines.push(`} ${name};`);
+    arms.push(resultField(table, layout.errorType, "error"))
+    const name = cResultWord(table, use.type)
+    lines.push(`typedef struct ${name} {`)
+    lines.push("  int32_t ok; /* 1 = value, 0 = error */")
+    lines.push(`  union { ${arms.join(" ")} } as; /* the arm \`ok\` selects; the other is not written */`)
+    lines.push(`} ${name};`)
     lines.push(
       `NISH_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(table, use.type)} travels in one 64-bit register");`
-    );
+    )
   }
-  return lines;
-};
+  return lines
+}
 
 /** One member of a `Result` definition; the payload note names the source type. */
 const resultField = (table: TypeTable, t: i32, name: string): string => {
-  const c = cFieldType(table, t);
-  const kind = table.kindOf(t);
-  const note = kind === K_ARRAY || kind === K_RESULT ? ` /* ${tsKeyword(table, t)} */` : "";
-  return `${c}${spaceAfter(c)}${name};${note}`;
-};
+  const c = cFieldType(table, t)
+  const kind = table.kindOf(t)
+  const note = kind === K_ARRAY || kind === K_RESULT ? ` /* ${tsKeyword(table, t)} */` : ""
+  return `${c}${spaceAfter(c)}${name};${note}`
+}

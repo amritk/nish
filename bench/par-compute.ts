@@ -4,40 +4,40 @@
 // write without `nish/threads`, `par-compute par` runs `parallelMapInto` over
 // the same arrays, and both print the same checksum: the sum of the results,
 // added up in index order on one thread.
-import { parallelMapInto } from "nish/threads";
+import { parallelMapInto } from "nish/threads"
 
 const settle = (x: f64): f64 => {
-  let v = x;
+  let v = x
   for (let k: i32 = 0; k < 64; k++) {
-    v = Math.sqrt(v * v + 1.0) - 0.5 * v;
+    v = Math.sqrt(v * v + 1.0) - 0.5 * v
   }
-  return v;
-};
+  return v
+}
 
 export const main = (): i32 => {
-  const n: i32 = 2097152; // bench:n
-  const par = process.argv.length > 1 && process.argv[1] === "par";
-  const src = new Array<f64>(n);
-  const dst = new Array<f64>(n);
-  let x: f64 = 0.0;
+  const n: i32 = 2097152 // bench:n
+  const par = process.argv.length > 1 && process.argv[1] === "par"
+  const src = new Array<f64>(n)
+  const dst = new Array<f64>(n)
+  let x: f64 = 0.0
   for (let i: i32 = 0; i < toI32(src.length); i++) {
-    src[i] = x;
-    x = x + 0.000001;
+    src[i] = x
+    x = x + 0.000001
   }
   if (par) {
-    parallelMapInto(src, dst, settle);
+    parallelMapInto(src, dst, settle)
   } else {
     for (let i: i32 = 0; i < toI32(src.length); i++) {
-      const y = settle(src[i]);
+      const y = settle(src[i])
       if (i < toI32(dst.length)) {
-        dst[i] = y;
+        dst[i] = y
       }
     }
   }
-  let sum: f64 = 0.0;
+  let sum: f64 = 0.0
   for (let i: i32 = 0; i < toI32(dst.length); i++) {
-    sum = sum + dst[i];
+    sum = sum + dst[i]
   }
-  console.log(`${sum}`);
-  return 0;
-};
+  console.log(`${sum}`)
+  return 0
+}

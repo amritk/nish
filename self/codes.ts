@@ -31,21 +31,21 @@
  */
 
 /** No rule matched: the diagnostic has no code yet. */
-export const UNCODED: string = "NL0000";
+export const UNCODED: string = "NL0000"
 
 /** Every syntax error shares one code: stage0 takes that text from the `typescript` package. */
-export const SYNTAX: string = "NL0001";
+export const SYNTAX: string = "NL0001"
 
 /**
  * Band 0 is what is wrong with the *run* rather than with the program: the C
  * toolchain `--link` needs could not be used (exit 3), and an internal compiler
  * error (exit 70). Neither has a source location.
  */
-export const TOOLCHAIN: string = "NL0002";
-export const INTERNAL: string = "NL0003";
+export const TOOLCHAIN: string = "NL0002"
+export const INTERNAL: string = "NL0003"
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 480;
+export const RULE_COUNT: i32 = 480
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -409,7 +409,7 @@ export const diagnosticRules = (): string[] => [
   "NL2101",
   "` requires two operands of the same numeric type, got ",
   "NL2102",
-  "\"`) are not supported; modules have no top-level code",
+  '"`) are not supported; modules have no top-level code',
   "NL2033",
   "Generic type parameters are forbidden on a method in ",
   "NL1055",
@@ -993,7 +993,7 @@ export const diagnosticRules = (): string[] => [
   "NL2117",
   "Cannot push ",
   "NL2186",
-];
+]
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
 export const performanceRules = (): string[] => [
@@ -1021,7 +1021,7 @@ export const performanceRules = (): string[] => [
   "NL9009",
   "is at or beyond the",
   "NL9004",
-];
+]
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
@@ -1030,26 +1030,26 @@ export const performanceRules = (): string[] => [
  */
 export const codeFor = (kind: string, text: string): string => {
   if (kind === "syntax error") {
-    return SYNTAX;
+    return SYNTAX
   }
   if (kind === "performance") {
-    const perf: string[] = performanceRules();
-    let i: i32 = 0;
+    const perf: string[] = performanceRules()
+    let i: i32 = 0
     while (i < perf.length) {
       if (text.indexOf(perf[i]) >= 0) {
-        return perf[i + 1];
+        return perf[i + 1]
       }
-      i = i + 2;
+      i = i + 2
     }
-    return UNCODED;
+    return UNCODED
   }
-  const rules: string[] = diagnosticRules();
-  let j: i32 = 0;
+  const rules: string[] = diagnosticRules()
+  let j: i32 = 0
   while (j < rules.length) {
     if (text.indexOf(rules[j]) >= 0) {
-      return rules[j + 1];
+      return rules[j + 1]
     }
-    j = j + 2;
+    j = j + 2
   }
-  return UNCODED;
-};
+  return UNCODED
+}

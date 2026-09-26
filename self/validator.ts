@@ -14,9 +14,9 @@
 // a banned identifier, a `__proto__` or `.prototype` member, an `Object.*`
 // shape mutation, a string-keyed element access.
 
-import { LANGUAGE } from "./branding";
-import { CheckContext } from "./context";
-import { unwrapParens } from "./emit-util";
+import { LANGUAGE } from "./branding"
+import { CheckContext } from "./context"
+import { unwrapParens } from "./emit-util"
 import {
   N_BIGINT,
   N_BINARY,
@@ -40,87 +40,87 @@ import {
   N_UNARY,
   N_VAR,
   Node,
-} from "./nodes";
+} from "./nodes"
 
 /**
  * `undefined`, as a value and as a type. One sentence for both, and for the
  * checker's refusal of `x === undefined` where `x` is not a `Map.get` result,
  * the one thing `undefined` may be compared with (WP32).
  */
-export const undefinedForbidden = (): string => "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
+export const undefinedForbidden = (): string =>
+  "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type"
 
 /** The message for an identifier that may never appear as a value, or "". */
 const forbiddenValue = (name: string): string => {
   if (name === "eval") {
-    return "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)";
+    return "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)"
   }
   if (name === "Function") {
-    return "`Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)";
+    return "`Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)"
   }
   if (name === "Proxy") {
-    return "`Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)";
+    return "`Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)"
   }
   if (name === "Reflect") {
-    return "`Reflect` is forbidden in " + LANGUAGE + " (no runtime reflection)";
+    return "`Reflect` is forbidden in " + LANGUAGE + " (no runtime reflection)"
   }
   if (name === "Symbol") {
-    return "`Symbol` is forbidden in " + LANGUAGE + " (no symbol type)";
+    return "`Symbol` is forbidden in " + LANGUAGE + " (no symbol type)"
   }
   if (name === "globalThis") {
-    return "`globalThis` is forbidden in " + LANGUAGE + " (no global object)";
+    return "`globalThis` is forbidden in " + LANGUAGE + " (no global object)"
   }
   if (name === "arguments") {
-    return "`arguments` is forbidden in " + LANGUAGE + " (functions have fixed arity)";
+    return "`arguments` is forbidden in " + LANGUAGE + " (functions have fixed arity)"
   }
   if (name === "undefined") {
-    return undefinedForbidden();
+    return undefinedForbidden()
   }
   if (name === "debugger") {
     // `debugger;` parses as an expression statement naming an identifier, so
     // this is where it lands rather than in the parser.
-    return "`debugger` is forbidden in " + LANGUAGE + " (no debugger hook)";
+    return "`debugger` is forbidden in " + LANGUAGE + " (no debugger hook)"
   }
-  return "";
-};
+  return ""
+}
 
 /** The message for a type name that may never be referenced, or "". */
 const forbiddenType = (name: string): string => {
   if (name === "Function") {
-    return "`Function` type is forbidden in " + LANGUAGE + " (no dynamic function values)";
+    return "`Function` type is forbidden in " + LANGUAGE + " (no dynamic function values)"
   }
   if (name === "Symbol") {
-    return "`Symbol` type is forbidden in " + LANGUAGE + " (no symbol type)";
+    return "`Symbol` type is forbidden in " + LANGUAGE + " (no symbol type)"
   }
   if (name === "Proxy") {
-    return "`Proxy` type is forbidden in " + LANGUAGE + " (no dynamic property interception)";
+    return "`Proxy` type is forbidden in " + LANGUAGE + " (no dynamic property interception)"
   }
   if (name === "symbol") {
-    return "`symbol` type is forbidden in " + LANGUAGE + " (no symbol type)";
+    return "`symbol` type is forbidden in " + LANGUAGE + " (no symbol type)"
   }
   if (name === "bigint") {
-    return "`bigint` type is forbidden in " + LANGUAGE + " (use number, i32, or f64)";
+    return "`bigint` type is forbidden in " + LANGUAGE + " (use number, i32, or f64)"
   }
   if (name === "undefined") {
-    return undefinedForbidden();
+    return undefinedForbidden()
   }
   if (name === "any") {
-    return "`any` is forbidden in " + LANGUAGE;
+    return "`any` is forbidden in " + LANGUAGE
   }
   if (name === "unknown") {
-    return "`unknown` is forbidden in " + LANGUAGE;
+    return "`unknown` is forbidden in " + LANGUAGE
   }
-  return "";
-};
+  return ""
+}
 
 /** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
-const isShapeMutation = (member: string): boolean => (
-    member === "assign" ||
-    member === "create" ||
-    member === "defineProperty" ||
-    member === "defineProperties" ||
-    member === "setPrototypeOf" ||
-    member === "getPrototypeOf"
-  );
+const isShapeMutation = (member: string): boolean =>
+  member === "assign" ||
+  member === "create" ||
+  member === "defineProperty" ||
+  member === "defineProperties" ||
+  member === "setPrototypeOf" ||
+  member === "getPrototypeOf"
 
 /**
  * Whether an element-access key *looks* numeric. It is a syntactic test, not
@@ -130,19 +130,19 @@ const isShapeMutation = (member: string): boolean => (
 const isNumericIndexShape = (expr: Node): boolean => {
   switch (expr.kind) {
     case N_IDENT:
-      return true;
+      return true
     case N_NUMBER:
-      return true;
+      return true
     case N_CALL:
-      return true;
+      return true
     case N_MEMBER:
-      return true;
+      return true
     case N_INDEX:
-      return true;
+      return true
     case N_PAREN:
-      return isNumericIndexShape(expr.children[0]);
+      return isNumericIndexShape(expr.children[0])
     case N_UNARY:
-      return expr.text === "-" || expr.text === "+";
+      return expr.text === "-" || expr.text === "+"
     case N_BINARY:
       if (
         expr.text === "+" ||
@@ -151,13 +151,13 @@ const isNumericIndexShape = (expr: Node): boolean => {
         expr.text === "/" ||
         expr.text === "%"
       ) {
-        return isNumericIndexShape(expr.children[0]) && isNumericIndexShape(expr.children[1]);
+        return isNumericIndexShape(expr.children[0]) && isNumericIndexShape(expr.children[1])
       }
-      return false;
+      return false
     default:
-      return false;
+      return false
   }
-};
+}
 
 /**
  * Sweep a whole tree. Every rejection is reported and the walk continues, so
@@ -166,53 +166,53 @@ const isNumericIndexShape = (expr: Node): boolean => {
  * than a bail-out.
  */
 export const validate = (ctx: CheckContext, node: Node): void => {
-  visit(ctx, node, false);
-};
+  visit(ctx, node, false)
+}
 
 const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => {
   switch (node.kind) {
     case N_IDENT: {
-      const message = forbiddenValue(node.text);
+      const message = forbiddenValue(node.text)
       if (message.length > 0) {
-        ctx.error(node, message);
+        ctx.error(node, message)
       }
-      break;
+      break
     }
     case N_TYPE_REF: {
-      const message = forbiddenType(node.text);
+      const message = forbiddenType(node.text)
       if (message.length > 0) {
-        ctx.error(node, message);
+        ctx.error(node, message)
       }
-      break;
+      break
     }
     case N_MEMBER:
-      rejectForbiddenMember(ctx, node);
-      break;
+      rejectForbiddenMember(ctx, node)
+      break
     case N_INDEX:
-      rejectForbiddenIndex(ctx, node);
-      break;
+      rejectForbiddenIndex(ctx, node)
+      break
     case N_BIGINT:
-      ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)");
-      break;
+      ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)")
+      break
     case N_TYPE_UNION:
       // Everything but `T | null` is refused here, before the checker reports
       // the offending member on its own — `T | undefined` is a union first.
-      checkNullUnion(ctx, node);
-      break;
+      checkNullUnion(ctx, node)
+      break
     case N_PROPERTY:
       if (node.text === "__proto__") {
-        ctx.errorAtKey(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)");
+        ctx.errorAtKey(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)")
       }
-      break;
+      break
     case N_NEW:
-      rejectForbiddenNew(ctx, node);
-      break;
+      rejectForbiddenNew(ctx, node)
+      break
     case N_CALL:
-      rejectForbiddenCall(ctx, node);
-      break;
+      rejectForbiddenCall(ctx, node)
+      break
     case N_ENUM:
-      rejectComputedEnumMembers(ctx, node);
-      break;
+      rejectComputedEnumMembers(ctx, node)
+      break
     case N_BINARY:
       // WP32: `x === undefined` and `x !== undefined` are how a maybe is
       // tested, so `undefined` is let through as an operand of those two and
@@ -220,23 +220,23 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       if (node.text === "===" || node.text === "!==") {
         for (const child of node.children) {
           if (!isUndefined(child)) {
-            visit(ctx, child, inTypePosition);
+            visit(ctx, child, inTypePosition)
           }
         }
-        return;
+        return
       }
-      break;
+      break
     case N_VAR:
       // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
       // type is spelled, and `V` itself is still swept. On a `let` the
       // checker refuses it, with the rewrite the unannotated `let` gets.
       for (const decl of node.children[0].children) {
-        visitDeclaration(ctx, decl, inTypePosition);
+        visitDeclaration(ctx, decl, inTypePosition)
       }
-      return;
+      return
     case N_MODULE_CONST:
-      refuseUndefinedIn(ctx, node);
-      break;
+      refuseUndefinedIn(ctx, node)
+      break
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -244,23 +244,25 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       // refuses it, exactly as stage0 does.
       ctx.error(
         node,
-        "`throw` is forbidden in " + LANGUAGE + " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process"
-      );
-      break;
+        "`throw` is forbidden in " +
+          LANGUAGE +
+          " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process"
+      )
+      break
     default:
-      break;
+      break
   }
   for (const child of node.children) {
-    visit(ctx, child, inTypePosition);
+    visit(ctx, child, inTypePosition)
   }
-};
+}
 
 /** The identifier `undefined`, as a value. */
-export const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined";
+export const isUndefined = (node: Node): boolean => node.kind === N_IDENT && node.text === "undefined"
 
 /** The type `undefined`, as a union member. */
 export const isUndefinedType = (node: Node): boolean =>
-  node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0;
+  node.kind === N_TYPE_REF && node.text === "undefined" && node.children[0].children.length === 0
 
 /**
  * `V | undefined`, `undefined | V`, or `V | null | undefined` for a nullable
@@ -269,19 +271,19 @@ export const isUndefinedType = (node: Node): boolean =>
  */
 export const isMaybeAnnotation = (annotation: Node): boolean => {
   if (annotation.kind !== N_TYPE_UNION) {
-    return false;
+    return false
   }
-  let undefineds = 0;
-  let nulls = 0;
+  let undefineds = 0
+  let nulls = 0
   for (const member of annotation.children) {
     if (isUndefinedType(member)) {
-      undefineds = undefineds + 1;
+      undefineds = undefineds + 1
     } else if (member.kind === N_TYPE_NULL) {
-      nulls = nulls + 1;
+      nulls = nulls + 1
     }
   }
-  return undefineds === 1 && nulls <= 1 && annotation.children.length - undefineds - nulls === 1;
-};
+  return undefineds === 1 && nulls <= 1 && annotation.children.length - undefineds - nulls === 1
+}
 
 /**
  * A declaration annotated with the maybe type whose initialiser is a call of
@@ -292,10 +294,11 @@ export const isMaybeAnnotation = (annotation: Node): boolean => {
  * below as the union it is.
  */
 const isMaybeDeclaration = (decl: Node): boolean => {
-  const init = unwrapParens(decl.children[2]);
-  const callsGet = init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get";
-  return callsGet && isMaybeAnnotation(decl.children[1]);
-};
+  const init = unwrapParens(decl.children[2])
+  const callsGet =
+    init.kind === N_CALL && init.children[0].kind === N_MEMBER && init.children[0].text === "get"
+  return callsGet && isMaybeAnnotation(decl.children[1])
+}
 
 /**
  * `undefined` anywhere in a module constant's initialiser. The `===` exemption
@@ -304,28 +307,28 @@ const isMaybeDeclaration = (decl: Node): boolean => {
  */
 const refuseUndefinedIn = (ctx: CheckContext, node: Node): void => {
   if (isUndefined(node)) {
-    ctx.error(node, undefinedForbidden());
-    return;
+    ctx.error(node, undefinedForbidden())
+    return
   }
   for (const child of node.children) {
-    refuseUndefinedIn(ctx, child);
+    refuseUndefinedIn(ctx, child)
   }
-};
+}
 
 /** One declaration of a `const` list, whose annotation may be the maybe type. */
 const visitDeclaration = (ctx: CheckContext, decl: Node, inTypePosition: boolean): void => {
   if (!isMaybeDeclaration(decl)) {
-    visit(ctx, decl, inTypePosition);
-    return;
+    visit(ctx, decl, inTypePosition)
+    return
   }
-  visit(ctx, decl.children[0], inTypePosition);
+  visit(ctx, decl.children[0], inTypePosition)
   for (const member of decl.children[1].children) {
     if (!isUndefinedType(member)) {
-      visit(ctx, member, inTypePosition);
+      visit(ctx, member, inTypePosition)
     }
   }
-  visit(ctx, decl.children[2], inTypePosition);
-};
+  visit(ctx, decl.children[2], inTypePosition)
+}
 
 /**
  * An enum member's value has to be a numeric literal, because an enum lowers
@@ -335,99 +338,96 @@ const visitDeclaration = (ctx: CheckContext, decl: Node, inTypePosition: boolean
  */
 const rejectComputedEnumMembers = (ctx: CheckContext, node: Node): void => {
   for (const member of node.children[1].children) {
-    const initializer = member.children[1];
+    const initializer = member.children[1]
     if (initializer.kind !== N_EMPTY && !isNumericLiteralShape(initializer)) {
       ctx.error(
         initializer,
         "Enum members must be numeric literals in " + LANGUAGE + " (enums lower to plain integers)"
-      );
+      )
     }
   }
-};
+}
 
 /** A numeric literal, or one with a leading `-`: everything an enum member may be. */
 const isNumericLiteralShape = (expr: Node): boolean => {
   if (expr.kind === N_NUMBER) {
-    return true;
+    return true
   }
-  return expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER;
-};
+  return expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER
+}
 
 const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
   // Against the member name, as stage0 hands `access.name` to `fail`
   // (stage0's `src/validator.ts`), not against the whole access.
   if (node.text === "__proto__") {
-    ctx.errorAtProperty(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)");
-    return;
+    ctx.errorAtProperty(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)")
+    return
   }
   if (node.text === "prototype") {
-    ctx.errorAtProperty(node, "`.prototype` access is forbidden in " + LANGUAGE + " (no prototype chain)");
-    return;
+    ctx.errorAtProperty(node, "`.prototype` access is forbidden in " + LANGUAGE + " (no prototype chain)")
+    return
   }
-  const receiver = node.children[0];
+  const receiver = node.children[0]
   if (receiver.kind === N_IDENT && receiver.text === "Object" && isShapeMutation(node.text)) {
     ctx.error(
       node,
       "`Object." + node.text + "` is forbidden in " + LANGUAGE + " (object layout is fixed at compile time)"
-    );
+    )
   }
-};
+}
 
 const rejectForbiddenIndex = (ctx: CheckContext, node: Node): void => {
-  const key = node.children[1];
+  const key = node.children[1]
   if (key.kind === N_STRING || key.kind === N_TEMPLATE) {
     ctx.error(
       key,
       "String-keyed element access is forbidden in " +
         LANGUAGE +
         "; use `obj.name` (no dynamic property lookup)"
-    );
-    return;
+    )
+    return
   }
   if (!isNumericIndexShape(key)) {
-    ctx.error(
-      key,
-      "Element access requires a numeric index in " + LANGUAGE + " (no dynamic property lookup)"
-    );
+    ctx.error(key, "Element access requires a numeric index in " + LANGUAGE + " (no dynamic property lookup)")
   }
-};
+}
 
 const rejectForbiddenNew = (ctx: CheckContext, node: Node): void => {
-  const callee = node.children[0];
+  const callee = node.children[0]
   if (callee.kind !== N_IDENT) {
-    return;
+    return
   }
   if (callee.text === "Function") {
-    ctx.error(node, "`new Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
+    ctx.error(node, "`new Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)")
   } else if (callee.text === "Proxy") {
-    ctx.error(node, "`new Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)");
+    ctx.error(node, "`new Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)")
   }
-};
+}
 
 const rejectForbiddenCall = (ctx: CheckContext, node: Node): void => {
-  const callee = node.children[0];
+  const callee = node.children[0]
   if (callee.kind !== N_IDENT) {
-    return;
+    return
   }
   if (callee.text === "eval") {
-    ctx.error(node, "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
+    ctx.error(node, "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)")
   } else if (callee.text === "Function") {
-    ctx.error(node, "`Function` constructor is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
+    ctx.error(node, "`Function` constructor is forbidden in " + LANGUAGE + " (no interpreter at runtime)")
   }
-};
+}
 
 /** `T | null` is the only union; anything else is refused with one message. */
 const checkNullUnion = (ctx: CheckContext, node: Node): void => {
-  let nulls = 0;
+  let nulls = 0
   for (const member of node.children) {
     if (member.kind === N_TYPE_NULL) {
-      nulls = nulls + 1;
+      nulls = nulls + 1
     }
   }
   if (nulls !== 1 || node.children.length !== 2) {
     ctx.error(
       node,
       "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
-    );
+    )
   }
-};
+}

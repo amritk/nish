@@ -30,8 +30,8 @@
 // exactly as an `f32` parameter means, and every f32 is exactly representable
 // in the double a result comes back as.
 
-import { LANGUAGE } from "./branding";
-import { Compilation } from "./compilation";
+import { LANGUAGE } from "./branding"
+import { Compilation } from "./compilation"
 import {
   banner,
   endsWithFold,
@@ -44,9 +44,9 @@ import {
   tsSignature,
   TypedView,
   typedView,
-} from "./interop-abi";
-import { basename } from "./paths";
-import { FunctionSig } from "./program";
+} from "./interop-abi"
+import { basename } from "./paths"
+import { FunctionSig } from "./program"
 import {
   K_ARRAY,
   K_RESULT,
@@ -61,23 +61,23 @@ import {
   T_U8,
   T_VOID,
   TypeTable,
-} from "./types";
+} from "./types"
 
 /** `x.d.ts` -> `x.mjs`. */
 export const wasmLoaderPath = (dtsFile: string): string => {
-  const stem = endsWithFold(dtsFile, ".d.ts") ? dtsFile.substring(0, dtsFile.length - 5) : dtsFile;
-  return `${stem}.mjs`;
-};
+  const stem = endsWithFold(dtsFile, ".d.ts") ? dtsFile.substring(0, dtsFile.length - 5) : dtsFile
+  return `${stem}.mjs`
+}
 
 export class WasmBridge {
   /** Functions JS can call: every type is a scalar or a typed view. */
-  bridged: ExternalFunction[];
+  bridged: ExternalFunction[]
   /** True when some bridged function passes an array, so the module must link runtime-wasm.c. */
-  needsRuntime: boolean;
+  needsRuntime: boolean
 
   constructor(bridged: ExternalFunction[], needsRuntime: boolean) {
-    this.bridged = bridged;
-    this.needsRuntime = needsRuntime;
+    this.bridged = bridged
+    this.needsRuntime = needsRuntime
   }
 }
 
@@ -102,41 +102,42 @@ export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
     // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
     // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
     case T_I32:
-      return "number";
+      return "number"
     case T_U8:
-      return "number";
+      return "number"
     case T_U16:
-      return "number";
+      return "number"
     case T_U32:
-      return "number";
+      return "number"
     case T_F32:
-      return "number";
+      return "number"
     case T_F64:
-      return "number";
+      return "number"
     case T_I64:
-      return "bigint";
+      return "bigint"
     case T_U64:
-      return "bigint";
+      return "bigint"
     case T_BOOL:
-      return position === POS_PARAM ? "boolean" : "WasmBool";
+      return position === POS_PARAM ? "boolean" : "WasmBool"
     // Only a result can be `void`; a parameter of that type does not exist,
     // and spelling one `void` would be a declaration the loader cannot honour.
     case T_VOID:
-      return position === POS_RETURN ? "void" : "";
+      return position === POS_RETURN ? "void" : ""
     case K_ARRAY: {
-      const view = typedView(table, t);
-      return view === null ? "" : view.ctor;
+      const view = typedView(table, t)
+      return view === null ? "" : view.ctor
     }
     // WP17: the packed shape, in either direction. The loader is what turns
     // the bigint the export answers into this object, and an argument back.
     case K_RESULT:
-      return table.resultByValue(t) ? wasmResultType(table, t) : "";
+      return table.resultByValue(t) ? wasmResultType(table, t) : ""
     default:
-      return "";
+      return ""
   }
-};
+}
 
-const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean => wasmType(table, t, position).length > 0;
+const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean =>
+  wasmType(table, t, position).length > 0
 
 /**
  * Why this function is not on the bridge, or `""` when it is. Naming the
@@ -148,23 +149,23 @@ const wasmCrosses = (table: TypeTable, t: i32, position: i32): boolean => wasmTy
  */
 export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
   if (sig.name === "main") {
-    return "`main` is reserved for a process entry";
+    return "`main` is reserved for a process entry"
   }
-  const tail = " runtime the freestanding wasm profile does not include";
-  let i = 0;
+  const tail = " runtime the freestanding wasm profile does not include"
+  let i = 0
   while (i < sig.paramTypes.length) {
     if (!wasmCrosses(table, sig.paramTypes[i], POS_PARAM)) {
-      const t = tsKeyword(table, sig.paramTypes[i]);
-      return `argument ${i + 1} (${sig.paramNames[i]}) is \`${t}\`, which needs the ${LANGUAGE}${tail}`;
+      const t = tsKeyword(table, sig.paramTypes[i])
+      return `argument ${i + 1} (${sig.paramNames[i]}) is \`${t}\`, which needs the ${LANGUAGE}${tail}`
     }
-    i = i + 1;
+    i = i + 1
   }
   if (!wasmCrosses(table, sig.returnType, POS_RETURN)) {
-    const t = tsKeyword(table, sig.returnType);
-    return `the result is \`${t}\`, which needs the ${LANGUAGE}${tail}`;
+    const t = tsKeyword(table, sig.returnType)
+    return `the result is \`${t}\`, which needs the ${LANGUAGE}${tail}`
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * The mask a narrow unsigned *argument* needs on the way in, or `""` when the
@@ -188,15 +189,15 @@ export const wasmSkipReason = (table: TypeTable, sig: FunctionSig): string => {
  * wraps.
  */
 const wasmUnsignedIn = (table: TypeTable, t: i32): string => {
-  const kind = table.kindOf(t);
+  const kind = table.kindOf(t)
   if (kind === T_U8) {
-    return "0xff";
+    return "0xff"
   }
   if (kind === T_U16) {
-    return "0xffff";
+    return "0xffff"
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * How an unsigned *result* is read back; `value` unchanged when the raw value
@@ -214,66 +215,66 @@ const wasmUnsignedIn = (table: TypeTable, t: i32): string => {
  * language agree on what a `u32` above 2^31 is.
  */
 const wasmUnsignedOut = (table: TypeTable, t: i32, value: string): string => {
-  const kind = table.kindOf(t);
+  const kind = table.kindOf(t)
   if (kind === T_U8) {
-    return `${value} & 0xff`;
+    return `${value} & 0xff`
   }
   if (kind === T_U16) {
-    return `${value} & 0xffff`;
+    return `${value} & 0xffff`
   }
   if (kind === T_U32) {
-    return `${value} >>> 0`;
+    return `${value} >>> 0`
   }
   if (kind === T_U64) {
-    return `BigInt.asUintN(64, ${value})`;
+    return `BigInt.asUintN(64, ${value})`
   }
-  return value;
-};
+  return value
+}
 
 /** Whether `wasmUnsignedOut` has anything to do, which decides if the export needs a wrapper at all. */
 const wasmUnsignedResult = (table: TypeTable, t: i32): boolean => {
-  const kind = table.kindOf(t);
-  return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64;
-};
+  const kind = table.kindOf(t)
+  return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64
+}
 
 /** The JS type of one packed `Result` payload, or `""` when it cannot cross. */
 export const wasmPayloadType = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return "number";
+      return "number"
     case T_U8:
-      return "number";
+      return "number"
     case T_U16:
-      return "number";
+      return "number"
     case T_U32:
-      return "number";
+      return "number"
     case T_F32:
-      return "number";
+      return "number"
     // The loader builds the object, so it converts; a payload boolean is a
     // real boolean rather than the `WasmBool` a bare `i1` return comes back as.
     case T_BOOL:
-      return "boolean";
+      return "boolean"
     default:
-      return "";
+      return ""
   }
-};
+}
 
 /** `{ ok: true; value: number } | { ok: false; error: number }`. */
 export const wasmResultType = (table: TypeTable, t: i32): string => {
-  const error = wasmPayloadType(table, table.errOf(t));
+  const error = wasmPayloadType(table, table.errOf(t))
   if (error.length === 0) {
-    return "";
+    return ""
   }
-  const ok = table.okOf(t);
+  const ok = table.okOf(t)
   if (table.kindOf(ok) === T_VOID) {
-    return `{ ok: true } | { ok: false; error: ${error} }`;
+    return `{ ok: true } | { ok: false; error: ${error} }`
   }
-  const value = wasmPayloadType(table, ok);
+  const value = wasmPayloadType(table, ok)
   if (value.length === 0) {
-    return "";
+    return ""
   }
-  return `{ ok: true; value: ${value} } | { ok: false; error: ${error} }`;
-};
+  return `{ ok: true; value: ${value} } | { ok: false; error: ${error} }`
+}
 
 /**
  * How the loader reads one packed payload out of the high half of the word.
@@ -284,27 +285,27 @@ export const wasmResultType = (table: TypeTable, t: i32): string => {
 const wasmPayloadReader = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return "(p) => Number(BigInt.asIntN(32, p))";
+      return "(p) => Number(BigInt.asIntN(32, p))"
     case T_U8:
-      return "(p) => Number(BigInt.asUintN(8, p))";
+      return "(p) => Number(BigInt.asUintN(8, p))"
     case T_U16:
-      return "(p) => Number(BigInt.asUintN(16, p))";
+      return "(p) => Number(BigInt.asUintN(16, p))"
     case T_U32:
-      return "(p) => Number(p)";
+      return "(p) => Number(p)"
     case T_F32:
-      return "f32Bits";
+      return "f32Bits"
     case T_BOOL:
-      return "(p) => (p & 1n) === 1n";
+      return "(p) => (p & 1n) === 1n"
     default:
-      return "";
+      return ""
   }
-};
+}
 
 /** `resultOut(<call>, <ok reader or null>, <err reader>)` for a by-value `Result` return. */
 const wasmResultUnpack = (table: TypeTable, call: string, t: i32): string => {
-  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadReader(table, table.okOf(t));
-  return `resultOut(${call}, ${ok}, ${wasmPayloadReader(table, table.errOf(t))})`;
-};
+  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadReader(table, table.okOf(t))
+  return `resultOut(${call}, ${ok}, ${wasmPayloadReader(table, table.errOf(t))})`
+}
 
 /**
  * The inverse of `wasmPayloadReader`: how the loader puts one payload into the
@@ -314,172 +315,172 @@ const wasmResultUnpack = (table: TypeTable, call: string, t: i32): string => {
 const wasmPayloadWriter = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
-      return "(v) => BigInt.asUintN(32, BigInt(v))";
+      return "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U8:
-      return "(v) => BigInt.asUintN(32, BigInt(v))";
+      return "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U16:
-      return "(v) => BigInt.asUintN(32, BigInt(v))";
+      return "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_U32:
-      return "(v) => BigInt.asUintN(32, BigInt(v))";
+      return "(v) => BigInt.asUintN(32, BigInt(v))"
     case T_F32:
-      return "f32Word";
+      return "f32Word"
     case T_BOOL:
-      return "(v) => (v ? 1n : 0n)";
+      return "(v) => (v ? 1n : 0n)"
     default:
-      return "";
+      return ""
   }
-};
+}
 
 /** `resultIn(<arg>, <ok writer or null>, <err writer>)` for a by-value `Result` argument. */
 const wasmResultPack = (table: TypeTable, arg: string, t: i32): string => {
-  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadWriter(table, table.okOf(t));
-  return `resultIn(${arg}, ${ok}, ${wasmPayloadWriter(table, table.errOf(t))})`;
-};
+  const ok = table.kindOf(table.okOf(t)) === T_VOID ? "null" : wasmPayloadWriter(table, table.okOf(t))
+  return `resultIn(${arg}, ${ok}, ${wasmPayloadWriter(table, table.errOf(t))})`
+}
 
 /** True when some bridged signature carries an f32 payload, so the loader needs the bit view. */
 const wasmNeedsF32 = (table: TypeTable, fns: ExternalFunction[]): boolean => {
   for (const fn of fns) {
     if (wasmCarriesF32(table, fn.sig.returnType)) {
-      return true;
+      return true
     }
-    let i = 0;
+    let i = 0
     while (i < fn.sig.paramTypes.length) {
       if (wasmCarriesF32(table, fn.sig.paramTypes[i])) {
-        return true;
+        return true
       }
-      i = i + 1;
+      i = i + 1
     }
   }
-  return false;
-};
+  return false
+}
 
 const wasmCarriesF32 = (table: TypeTable, t: i32): boolean => {
   if (table.kindOf(t) !== K_RESULT) {
-    return false;
+    return false
   }
-  return table.kindOf(table.okOf(t)) === T_F32 || table.kindOf(table.errOf(t)) === T_F32;
-};
+  return table.kindOf(table.okOf(t)) === T_F32 || table.kindOf(table.errOf(t)) === T_F32
+}
 
 /** True when some bridged signature takes or returns a packed `Result`. */
 const wasmHasPackedResult = (table: TypeTable, fns: ExternalFunction[]): boolean => {
   for (const fn of fns) {
     if (wasmTakesPacked(table, fn.sig)) {
-      return true;
+      return true
     }
   }
-  return false;
-};
+  return false
+}
 
 const wasmTakesPacked = (table: TypeTable, sig: FunctionSig): boolean => {
   if (table.resultByValue(sig.returnType)) {
-    return true;
+    return true
   }
-  let i = 0;
+  let i = 0
   while (i < sig.paramTypes.length) {
     if (table.resultByValue(sig.paramTypes[i])) {
-      return true;
+      return true
     }
-    i = i + 1;
+    i = i + 1
   }
-  return false;
-};
+  return false
+}
 
 export const wasmBridged = (table: TypeTable, fns: ExternalFunction[]): WasmBridge => {
-  const bridged: ExternalFunction[] = [];
+  const bridged: ExternalFunction[] = []
   for (const fn of fns) {
     if (wasmSkipReason(table, fn.sig).length === 0) {
-      bridged.push(fn);
+      bridged.push(fn)
     }
   }
-  let needsRuntime = false;
+  let needsRuntime = false
   for (const fn of bridged) {
     if (typedView(table, fn.sig.returnType) !== null) {
-      needsRuntime = true;
+      needsRuntime = true
     }
-    let i = 0;
+    let i = 0
     while (i < fn.sig.paramTypes.length) {
       if (typedView(table, fn.sig.paramTypes[i]) !== null) {
-        needsRuntime = true;
+        needsRuntime = true
       }
-      i = i + 1;
+      i = i + 1
     }
   }
-  return new WasmBridge(bridged, needsRuntime);
-};
+  return new WasmBridge(bridged, needsRuntime)
+}
 
 /** Names the loader's own locals use; a parameter spelled the same gets an underscore. */
-const wasmIsLoaderLocal = (name: string): boolean => (
-    name === "raw" ||
-    name === "memory" ||
-    name === "header" ||
-    name === "arrayIn" ||
-    name === "arrayOut" ||
-    name === "copyBack" ||
-    name === "scoped" ||
-    name === "result" ||
-    name === "instance" ||
-    name === "bytes"
-  );
+const wasmIsLoaderLocal = (name: string): boolean =>
+  name === "raw" ||
+  name === "memory" ||
+  name === "header" ||
+  name === "arrayIn" ||
+  name === "arrayOut" ||
+  name === "copyBack" ||
+  name === "scoped" ||
+  name === "result" ||
+  name === "instance" ||
+  name === "bytes"
 
-const wasmJsParam = (name: string): string => wasmIsLoaderLocal(name) ? `${name}_` : name;
+const wasmJsParam = (name: string): string => (wasmIsLoaderLocal(name) ? `${name}_` : name)
 
 /** One non-array argument: packed, masked to its unsigned width, or as it came. */
 const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32): string => {
-  const t = sig.paramTypes[i];
+  const t = sig.paramTypes[i]
   if (table.resultByValue(t)) {
-    return wasmResultPack(table, params[i], t);
+    return wasmResultPack(table, params[i], t)
   }
-  const mask = wasmUnsignedIn(table, t);
-  return mask.length > 0 ? `${params[i]} & ${mask}` : params[i];
-};
+  const mask = wasmUnsignedIn(table, t)
+  return mask.length > 0 ? `${params[i]} & ${mask}` : params[i]
+}
 
 /** The call's value as JS should see it. The three cases are mutually exclusive. */
 const wasmReturned = (table: TypeTable, sig: FunctionSig, ret: TypedView | null, call: string): string => {
   if (ret !== null) {
-    return `arrayOut(${call}, ${ret.ctor})`;
+    return `arrayOut(${call}, ${ret.ctor})`
   }
   if (table.resultByValue(sig.returnType)) {
-    return wasmResultUnpack(table, call, sig.returnType);
+    return wasmResultUnpack(table, call, sig.returnType)
   }
-  return wasmUnsignedOut(table, sig.returnType, call);
-};
+  return wasmUnsignedOut(table, sig.returnType, call)
+}
 
 /**
  * The raw export an entry calls. The wasm export is the LLVM symbol itself, and
  * an instantiation's can hold the mangling's `.` (`sum$arr.i32`, WP18 G8),
  * which a property access cannot spell, so that one is indexed by its string.
  */
-const wasmRaw = (sig: FunctionSig): string => sig.name.indexOf(".") >= 0 ? `raw["${sig.name}"]` : `raw.${sig.name}`;
+const wasmRaw = (sig: FunctionSig): string =>
+  sig.name.indexOf(".") >= 0 ? `raw["${sig.name}"]` : `raw.${sig.name}`
 
 const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
-  const sig = fn.sig;
-  const name = jsExportName(sig);
-  const raw = wasmRaw(sig);
-  const ret = typedView(table, sig.returnType);
-  const views: (TypedView | null)[] = [];
-  let anyMask = false;
-  let i = 0;
+  const sig = fn.sig
+  const name = jsExportName(sig)
+  const raw = wasmRaw(sig)
+  const ret = typedView(table, sig.returnType)
+  const views: (TypedView | null)[] = []
+  let anyMask = false
+  let i = 0
   while (i < sig.paramTypes.length) {
-    views.push(typedView(table, sig.paramTypes[i]));
+    views.push(typedView(table, sig.paramTypes[i]))
     if (wasmUnsignedIn(table, sig.paramTypes[i]).length > 0) {
-      anyMask = true;
+      anyMask = true
     }
-    i = i + 1;
+    i = i + 1
   }
-  const packed = wasmTakesPacked(table, sig);
-  const out = wasmUnsignedResult(table, sig.returnType);
-  const lines: string[] = [];
-  const params: string[] = [];
-  i = 0;
+  const packed = wasmTakesPacked(table, sig)
+  const out = wasmUnsignedResult(table, sig.returnType)
+  const lines: string[] = []
+  const params: string[] = []
+  i = 0
   while (i < sig.paramNames.length) {
-    params.push(wasmJsParam(sig.paramNames[i]));
-    i = i + 1;
+    params.push(wasmJsParam(sig.paramNames[i]))
+    i = i + 1
   }
 
-  let anyView = ret !== null;
+  let anyView = ret !== null
   for (const view of views) {
     if (view !== null) {
-      anyView = true;
+      anyView = true
     }
   }
   if (!anyView) {
@@ -487,63 +488,63 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
     // but no arena scope — nothing was copied into the module for the call, so
     // there is nothing to release.
     if (packed || out || anyMask) {
-      const operands: string[] = [];
-      i = 0;
+      const operands: string[] = []
+      i = 0
       while (i < sig.paramTypes.length) {
-        operands.push(wasmOperand(table, sig, params, i));
-        i = i + 1;
+        operands.push(wasmOperand(table, sig, params, i))
+        i = i + 1
       }
-      const call = `${raw}(${operands.join(", ")})`;
-      lines.push(`${name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`);
-      return lines;
+      const call = `${raw}(${operands.join(", ")})`
+      lines.push(`${name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`)
+      return lines
     }
-    lines.push(`${name}: ${raw},`);
-    return lines;
+    lines.push(`${name}: ${raw},`)
+    return lines
   }
 
-  const body: string[] = [];
-  const args: string[] = [];
-  i = 0;
+  const body: string[] = []
+  const args: string[] = []
+  i = 0
   while (i < sig.paramTypes.length) {
-    const view = views[i];
+    const view = views[i]
     if (view === null) {
-      args.push(wasmOperand(table, sig, params, i));
+      args.push(wasmOperand(table, sig, params, i))
     } else {
-      const param = sig.paramNames[i];
+      const param = sig.paramNames[i]
       body.push(
         `const ${param}$ = arrayIn(${params[i]}, ${view.ctor}, ${view.elemSize}, "${name}: argument ${i + 1} (${param})");`
-      );
-      args.push(`${param}$`);
+      )
+      args.push(`${param}$`)
     }
-    i = i + 1;
+    i = i + 1
   }
-  const call = `${raw}(${args.join(", ")})`;
-  const isVoid = table.kindOf(sig.returnType) === T_VOID;
-  const value = wasmReturned(table, sig, ret, call);
-  const copyBacks: string[] = [];
-  i = 0;
+  const call = `${raw}(${args.join(", ")})`
+  const isVoid = table.kindOf(sig.returnType) === T_VOID
+  const value = wasmReturned(table, sig, ret, call)
+  const copyBacks: string[] = []
+  i = 0
   while (i < sig.paramNames.length) {
     if (views[i] !== null && fn.writtenParams.has(sig.paramNames[i])) {
-      copyBacks.push(`copyBack(${sig.paramNames[i]}$, ${params[i]});`);
+      copyBacks.push(`copyBack(${sig.paramNames[i]}$, ${params[i]});`)
     }
-    i = i + 1;
+    i = i + 1
   }
   if (copyBacks.length === 0) {
-    body.push(isVoid ? `${value};` : `return ${value};`);
+    body.push(isVoid ? `${value};` : `return ${value};`)
   } else {
-    body.push(isVoid ? `${value};` : `const result = ${value};`);
-    pushAll(body, copyBacks);
+    body.push(isVoid ? `${value};` : `const result = ${value};`)
+    pushAll(body, copyBacks)
     if (!isVoid) {
-      body.push("return result;");
+      body.push("return result;")
     }
   }
-  lines.push(`${name}: (${params.join(", ")}) => scoped(() => {`);
+  lines.push(`${name}: (${params.join(", ")}) => scoped(() => {`)
   for (const line of body) {
-    lines.push(`  ${line}`);
+    lines.push(`  ${line}`)
   }
-  lines.push("}),");
-  return lines;
-};
+  lines.push("}),")
+  return lines
+}
 
 /**
  * The loader's half of WP17. A packed `Result` reaches JS as the wasm export's
@@ -552,122 +553,122 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
  * a caller never sees the encoding.
  */
 const wasmResultHelpers = (table: TypeTable, bridged: ExternalFunction[]): string[] => {
-  const lines: string[] = [];
+  const lines: string[] = []
   if (!wasmHasPackedResult(table, bridged)) {
-    return lines;
+    return lines
   }
-  lines.push("  /** A Result in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */");
-  lines.push("  const resultOut = (word, readValue, readError) => {");
-  lines.push("    const payload = BigInt.asUintN(32, word >> 32n);");
-  lines.push("    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };");
-  lines.push("    return readValue === null ? { ok: true } : { ok: true, value: readValue(payload) };");
-  lines.push("  };");
-  lines.push("  const resultIn = (r, writeValue, writeError) => {");
-  lines.push('    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")');
-  lines.push('      throw new TypeError("expected { ok: true, value } or { ok: false, error }");');
+  lines.push("  /** A Result in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */")
+  lines.push("  const resultOut = (word, readValue, readError) => {")
+  lines.push("    const payload = BigInt.asUintN(32, word >> 32n);")
+  lines.push("    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };")
+  lines.push("    return readValue === null ? { ok: true } : { ok: true, value: readValue(payload) };")
+  lines.push("  };")
+  lines.push("  const resultIn = (r, writeValue, writeError) => {")
+  lines.push('    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")')
+  lines.push('      throw new TypeError("expected { ok: true, value } or { ok: false, error }");')
   lines.push(
     "    const payload = r.ok ? (writeValue === null ? 0n : writeValue(r.value)) : writeError(r.error);"
-  );
-  lines.push("    return (payload << 32n) | (r.ok ? 1n : 0n);");
-  lines.push("  };");
+  )
+  lines.push("    return (payload << 32n) | (r.ok ? 1n : 0n);")
+  lines.push("  };")
   if (wasmNeedsF32(table, bridged)) {
-    lines.push("  /** An f32 payload is the same 32 bits, not a converted number. */");
-    lines.push("  const f32View = new Float32Array(1);");
-    lines.push("  const f32Words = new Uint32Array(f32View.buffer);");
-    lines.push("  const f32Bits = (p) => {");
-    lines.push("    f32Words[0] = Number(p);");
-    lines.push("    return f32View[0];");
-    lines.push("  };");
-    lines.push("  const f32Word = (v) => {");
-    lines.push("    f32View[0] = v;");
-    lines.push("    return BigInt(f32Words[0]);");
-    lines.push("  };");
+    lines.push("  /** An f32 payload is the same 32 bits, not a converted number. */")
+    lines.push("  const f32View = new Float32Array(1);")
+    lines.push("  const f32Words = new Uint32Array(f32View.buffer);")
+    lines.push("  const f32Bits = (p) => {")
+    lines.push("    f32Words[0] = Number(p);")
+    lines.push("    return f32View[0];")
+    lines.push("  };")
+    lines.push("  const f32Word = (v) => {")
+    lines.push("    f32View[0] = v;")
+    lines.push("    return BigInt(f32Words[0]);")
+    lines.push("  };")
   }
-  return lines;
-};
+  return lines
+}
 
 export const generateWasmLoader = (
   compilation: Compilation,
   fns: ExternalFunction[],
   dtsFile: string
 ): string => {
-  const table = compilation.table;
-  const bridge = wasmBridged(table, fns);
-  const lines: string[] = [];
-  lines.push(banner(compilation, "--emit-dts", "// "));
-  lines.push(`// Loader for the wasm build; ${basename(dtsFile)} declares it. Build the module with`);
+  const table = compilation.table
+  const bridge = wasmBridged(table, fns)
+  const lines: string[] = []
+  lines.push(banner(compilation, "--emit-dts", "// "))
+  lines.push(`// Loader for the wasm build; ${basename(dtsFile)} declares it. Build the module with`)
   lines.push(
     bridge.needsRuntime
       ? "//   scripts/build.sh <module.ll> runtime/runtime-wasm.c -o <module>.wasm --profile wasm"
       : "//   scripts/build.sh <module.ll> -o <module>.wasm --profile wasm"
-  );
-  lines.push("// Typed-array arguments are copied into the module's arena for the duration");
-  lines.push("// of the call and results are copied out, so the arrays you hold stay yours.");
-  lines.push("");
-  lines.push("/** Instantiate the module and return its exports, arrays marshalled. */");
-  lines.push("export async function load(bytes) {");
-  lines.push("  const { instance } = await WebAssembly.instantiate(bytes, {});");
-  lines.push("  const raw = instance.exports;");
+  )
+  lines.push("// Typed-array arguments are copied into the module's arena for the duration")
+  lines.push("// of the call and results are copied out, so the arrays you hold stay yours.")
+  lines.push("")
+  lines.push("/** Instantiate the module and return its exports, arrays marshalled. */")
+  lines.push("export async function load(bytes) {")
+  lines.push("  const { instance } = await WebAssembly.instantiate(bytes, {});")
+  lines.push("  const raw = instance.exports;")
   if (bridge.needsRuntime) {
-    lines.push("  const memory = raw.memory;");
+    lines.push("  const memory = raw.memory;")
     lines.push(
       "  // Header field offsets on wasm32: len at 0 (i64), cap at 8 (i64), data at 16 (i32 pointer)."
-    );
-    lines.push("  const header = (hdr) => {");
-    lines.push("    const view = new DataView(memory.buffer);");
+    )
+    lines.push("  const header = (hdr) => {")
+    lines.push("    const view = new DataView(memory.buffer);")
     lines.push(
       "    return { len: Number(view.getBigUint64(hdr, true)), data: view.getUint32(hdr + 16, true) };"
-    );
-    lines.push("  };");
-    lines.push("  /** Copy a typed array into a fresh arena array; returns the header pointer. */");
-    lines.push("  const arrayIn = (value, Ctor, elemSize, what) => {");
+    )
+    lines.push("  };")
+    lines.push("  /** Copy a typed array into a fresh arena array; returns the header pointer. */")
+    lines.push("  const arrayIn = (value, Ctor, elemSize, what) => {")
     // `u` is left out of the vowel set on purpose; `withArticle` in
     // interop-napi.ts carries the reason. `Uint8Array` takes `a`, the way
     // "a user" does.
     lines.push(
       '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIO]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);'
-    );
-    lines.push("    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));");
-    lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);");
-    lines.push("    return hdr;");
-    lines.push("  };");
-    lines.push("  /** Copy an arena array out as a fresh typed array. */");
-    lines.push("  const arrayOut = (hdr, Ctor) => {");
-    lines.push("    const { len, data } = header(hdr);");
-    lines.push("    return new Ctor(memory.buffer, data, len).slice();");
-    lines.push("  };");
-    lines.push("  /** After a call that writes through an array parameter: bring the arena bytes back. */");
-    lines.push("  const copyBack = (hdr, value) => {");
-    lines.push("    const { len, data } = header(hdr);");
-    lines.push("    value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));");
-    lines.push("  };");
-    lines.push("  /** Run `fn`, then release everything it allocated in the arena, even when it traps. */");
-    lines.push("  const scoped = (fn) => {");
-    lines.push("    const mark = raw.nish_arena_mark();");
-    lines.push("    try {");
-    lines.push("      return fn();");
-    lines.push("    } finally {");
-    lines.push("      raw.nish_arena_release(mark);");
-    lines.push("    }");
-    lines.push("  };");
-    pushAll(lines, wasmResultHelpers(table, bridge.bridged));
-    lines.push("  return {");
-    lines.push("    memory,");
-    lines.push("    nish_reset_arena: raw.nish_reset_arena,");
-    lines.push("    nish_free_arena: raw.nish_free_arena,");
+    )
+    lines.push("    const hdr = raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length));")
+    lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);")
+    lines.push("    return hdr;")
+    lines.push("  };")
+    lines.push("  /** Copy an arena array out as a fresh typed array. */")
+    lines.push("  const arrayOut = (hdr, Ctor) => {")
+    lines.push("    const { len, data } = header(hdr);")
+    lines.push("    return new Ctor(memory.buffer, data, len).slice();")
+    lines.push("  };")
+    lines.push("  /** After a call that writes through an array parameter: bring the arena bytes back. */")
+    lines.push("  const copyBack = (hdr, value) => {")
+    lines.push("    const { len, data } = header(hdr);")
+    lines.push("    value.set(new value.constructor(memory.buffer, data, Math.min(len, value.length)));")
+    lines.push("  };")
+    lines.push("  /** Run `fn`, then release everything it allocated in the arena, even when it traps. */")
+    lines.push("  const scoped = (fn) => {")
+    lines.push("    const mark = raw.nish_arena_mark();")
+    lines.push("    try {")
+    lines.push("      return fn();")
+    lines.push("    } finally {")
+    lines.push("      raw.nish_arena_release(mark);")
+    lines.push("    }")
+    lines.push("  };")
+    pushAll(lines, wasmResultHelpers(table, bridge.bridged))
+    lines.push("  return {")
+    lines.push("    memory,")
+    lines.push("    nish_reset_arena: raw.nish_reset_arena,")
+    lines.push("    nish_free_arena: raw.nish_free_arena,")
   } else {
-    pushAll(lines, wasmResultHelpers(table, bridge.bridged));
-    lines.push("  return {");
-    lines.push("    memory: raw.memory,");
+    pushAll(lines, wasmResultHelpers(table, bridge.bridged))
+    lines.push("  return {")
+    lines.push("    memory: raw.memory,")
   }
   for (const fn of bridge.bridged) {
-    lines.push(`    /** ${fn.unit.name}: ${tsSignature(table, fn.sig)} */`);
+    lines.push(`    /** ${fn.unit.name}: ${tsSignature(table, fn.sig)} */`)
     for (const line of wasmWrapper(table, fn)) {
-      lines.push(`    ${line}`);
+      lines.push(`    ${line}`)
     }
   }
-  lines.push("  };");
-  lines.push("}");
-  lines.push("");
-  return lines.join("\n");
-};
+  lines.push("  };")
+  lines.push("}")
+  lines.push("")
+  return lines.join("\n")
+}

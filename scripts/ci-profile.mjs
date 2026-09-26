@@ -33,20 +33,21 @@
  * runner measured about 1.34x this box on the same suite, so the shape
  * transfers and the absolute seconds do not.
  */
-import { spawn } from "node:child_process";
+import { spawn } from "node:child_process"
 
-const argv = process.argv.slice(2);
-const asJson = argv.includes("--json");
-const topAt = argv.indexOf("--top");
-const TOP = topAt >= 0 && Number.isFinite(Number(argv[topAt + 1])) ? Number(argv[topAt + 1]) : 40;
+const argv = process.argv.slice(2)
+const asJson = argv.includes("--json")
+const topAt = argv.indexOf("--top")
+const TOP = topAt >= 0 && Number.isFinite(Number(argv[topAt + 1])) ? Number(argv[topAt + 1]) : 40
 
 /**
  * Everything after `--` is the command to profile. The default is the suite as
  * CI runs it, minus the build: `npm test` would rebuild `dist/` first, and a
  * `tsc` run is not what this is measuring.
  */
-const dashdash = argv.indexOf("--");
-const command = dashdash >= 0 && argv.length > dashdash + 1 ? argv.slice(dashdash + 1) : ["node", "tests/run.js"];
+const dashdash = argv.indexOf("--")
+const command =
+  dashdash >= 0 && argv.length > dashdash + 1 ? argv.slice(dashdash + 1) : ["node", "tests/run.js"]
 
 /**
  * One row per line the child printed, with `dt` the gap since the line before
@@ -54,26 +55,26 @@ const command = dashdash >= 0 && argv.length > dashdash + 1 ? argv.slice(dashdas
  * check in the log, and `t` is kept as well as `dt` because "which minute of
  * the run was this" is how a reader locates a slow block.
  */
-const rows = [];
-const t0 = process.hrtime.bigint();
-let last = 0;
-let buffered = "";
+const rows = []
+const t0 = process.hrtime.bigint()
+let last = 0
+let buffered = ""
 
 const takeLine = (line) => {
-  const t = Number(process.hrtime.bigint() - t0) / 1e6;
-  rows.push({ t, dt: t - last, text: line });
-  last = t;
-};
+  const t = Number(process.hrtime.bigint() - t0) / 1e6
+  rows.push({ t, dt: t - last, text: line })
+  last = t
+}
 
 const onData = (data) => {
-  buffered += data;
-  let i = buffered.indexOf("\n");
+  buffered += data
+  let i = buffered.indexOf("\n")
   while (i >= 0) {
-    takeLine(buffered.slice(0, i));
-    buffered = buffered.slice(i + 1);
-    i = buffered.indexOf("\n");
+    takeLine(buffered.slice(0, i))
+    buffered = buffered.slice(i + 1)
+    i = buffered.indexOf("\n")
   }
-};
+}
 
 /**
  * A heartbeat on stderr, because the tables below cannot be printed until the
@@ -83,27 +84,29 @@ const onData = (data) => {
  * the oracles working or the run wedged.
  */
 const heartbeat = setInterval(() => {
-  const latest = rows.length > 0 ? rows[rows.length - 1].text.slice(0, 72) : "nothing printed yet";
-  const elapsed = (Number(process.hrtime.bigint() - t0) / 1e9).toFixed(0);
-  process.stderr.write(`[ci-profile] ${elapsed}s, ${rows.length} lines: ${latest}\n`);
-}, 30_000);
-heartbeat.unref();
+  const latest = rows.length > 0 ? rows[rows.length - 1].text.slice(0, 72) : "nothing printed yet"
+  const elapsed = (Number(process.hrtime.bigint() - t0) / 1e9).toFixed(0)
+  process.stderr.write(`[ci-profile] ${elapsed}s, ${rows.length} lines: ${latest}\n`)
+}, 30_000)
+heartbeat.unref()
 
-const child = spawn(command[0], command.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
-child.stdout.setEncoding("utf8");
-child.stderr.setEncoding("utf8");
-child.stdout.on("data", onData);
-child.stderr.on("data", onData);
+const child = spawn(command[0], command.slice(1), { stdio: ["ignore", "pipe", "pipe"] })
+child.stdout.setEncoding("utf8")
+child.stderr.setEncoding("utf8")
+child.stdout.on("data", onData)
+child.stderr.on("data", onData)
 
 const status = await new Promise((resolve) => {
-  child.on("close", (code) => resolve(code ?? 1));
+  child.on("close", (code) => resolve(code ?? 1))
   child.on("error", (err) => {
-    console.error(`could not run ${command.join(" ")}: ${err.message}`);
-    resolve(1);
-  });
-});
-clearInterval(heartbeat);
-if (buffered.length > 0) { takeLine(buffered); }
+    console.error(`could not run ${command.join(" ")}: ${err.message}`)
+    resolve(1)
+  })
+})
+clearInterval(heartbeat)
+if (buffered.length > 0) {
+  takeLine(buffered)
+}
 
 /**
  * A check's name up to its first colon, which is how this suite names a family:
@@ -113,23 +116,23 @@ if (buffered.length > 0) { takeLine(buffered); }
  * keep the oracles — each of which prints one long line — apart.
  */
 const familyOf = (text) => {
-  const body = text.replace(/^(PASS|FAIL|SKIP)\s+/, "");
-  const colon = body.indexOf(":");
-  return colon > 0 ? body.slice(0, colon) : body.slice(0, 40);
-};
-
-const families = new Map();
-for (const row of rows) {
-  const key = familyOf(row.text);
-  const seen = families.get(key) ?? { ms: 0, lines: 0 };
-  seen.ms += row.dt;
-  seen.lines += 1;
-  families.set(key, seen);
+  const body = text.replace(/^(PASS|FAIL|SKIP)\s+/, "")
+  const colon = body.indexOf(":")
+  return colon > 0 ? body.slice(0, colon) : body.slice(0, 40)
 }
 
-const total = rows.length > 0 ? rows[rows.length - 1].t : 0;
-const byCost = [...rows].sort((a, b) => b.dt - a.dt).slice(0, TOP);
-const byFamily = [...families].sort((a, b) => b[1].ms - a[1].ms).slice(0, TOP);
+const families = new Map()
+for (const row of rows) {
+  const key = familyOf(row.text)
+  const seen = families.get(key) ?? { ms: 0, lines: 0 }
+  seen.ms += row.dt
+  seen.lines += 1
+  families.set(key, seen)
+}
+
+const total = rows.length > 0 ? rows[rows.length - 1].t : 0
+const byCost = [...rows].sort((a, b) => b.dt - a.dt).slice(0, TOP)
+const byFamily = [...families].sort((a, b) => b[1].ms - a[1].ms).slice(0, TOP)
 
 if (asJson) {
   console.log(
@@ -145,14 +148,14 @@ if (asJson) {
       null,
       2
     )
-  );
-  process.exit(status);
+  )
+  process.exit(status)
 }
 
-const secs = (ms) => `${(ms / 1000).toFixed(1)}s`.padStart(8);
+const secs = (ms) => `${(ms / 1000).toFixed(1)}s`.padStart(8)
 
-console.log(`\n${command.join(" ")}`);
-console.log(`exit ${status} — ${secs(total).trim()} of wall clock over ${rows.length} printed lines\n`);
+console.log(`\n${command.join(" ")}`)
+console.log(`exit ${status} — ${secs(total).trim()} of wall clock over ${rows.length} printed lines\n`)
 
 /**
  * The run's own verdict, echoed verbatim.
@@ -164,25 +167,34 @@ console.log(`exit ${status} — ${secs(total).trim()} of wall clock over ${rows.
  * the exit status the thing to do). So the summary is printed before the
  * timings, where it cannot be missed.
  */
-const verdict = rows.filter((r) => r.text.trim().length > 0).slice(-3);
+const verdict = rows.filter((r) => r.text.trim().length > 0).slice(-3)
 if (verdict.length > 0) {
-  console.log("=== what the run itself reported ===");
-  for (const row of verdict) { console.log(`  ${row.text}`); }
-  console.log("");
+  console.log("=== what the run itself reported ===")
+  for (const row of verdict) {
+    console.log(`  ${row.text}`)
+  }
+  console.log("")
 }
 
-console.log(`=== the ${byCost.length} most expensive checks (cost = the gap before the line was printed) ===`);
-for (const row of byCost) { console.log(`${secs(row.dt)}  at ${secs(row.t)}  ${row.text.slice(0, 104)}`); }
+console.log(`=== the ${byCost.length} most expensive checks (cost = the gap before the line was printed) ===`)
+for (const row of byCost) {
+  console.log(`${secs(row.dt)}  at ${secs(row.t)}  ${row.text.slice(0, 104)}`)
+}
 
-console.log(`\n=== the ${byFamily.length} most expensive families (cumulative) ===`);
-for (const [name, f] of byFamily) { console.log(`${secs(f.ms)}  ${String(f.lines).padStart(5)} line(s)  ${name.slice(0, 84)}`); }
+console.log(`\n=== the ${byFamily.length} most expensive families (cumulative) ===`)
+for (const [name, f] of byFamily) {
+  console.log(`${secs(f.ms)}  ${String(f.lines).padStart(5)} line(s)  ${name.slice(0, 84)}`)
+}
 
 /**
  * The share the expensive tail accounts for, because "the top ten are 70% of
  * the run" is the sentence that decides whether to optimise a check or the
  * shape of the job around it.
  */
-const topTen = [...rows].sort((a, b) => b.dt - a.dt).slice(0, 10).reduce((sum, r) => sum + r.dt, 0);
-console.log(`\nthe ten most expensive checks are ${((topTen / total) * 100).toFixed(0)}% of the run.`);
+const topTen = [...rows]
+  .sort((a, b) => b.dt - a.dt)
+  .slice(0, 10)
+  .reduce((sum, r) => sum + r.dt, 0)
+console.log(`\nthe ten most expensive checks are ${((topTen / total) * 100).toFixed(0)}% of the run.`)
 
-process.exit(status);
+process.exit(status)

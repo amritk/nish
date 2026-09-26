@@ -41,8 +41,8 @@ import {
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
   isSpawnCall,
-} from "./emit-builtins";
-import { stringifyCallee, stringConstructCallees } from "./emit-strings";
+} from "./emit-builtins"
+import { stringifyCallee, stringConstructCallees } from "./emit-strings"
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -52,7 +52,7 @@ import {
   FLOW_RETURNED,
   isScalarArgument,
   rootsHoldNoPointer,
-} from "./escape";
+} from "./escape"
 import {
   arrayMethodName,
   dottedName,
@@ -67,8 +67,8 @@ import {
   storesInlineElements,
   templateParts,
   unwrapParens,
-} from "./emit-util";
-import { StringMap, StringSet } from "./map";
+} from "./emit-util"
+import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
   N_BINARY,
@@ -99,16 +99,11 @@ import {
   N_VAR_DECL,
   N_WHILE,
   Node,
-} from "./nodes";
-import { Options } from "./options";
-import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel";
-import { ParentTable } from "./parents";
-import {
-  CheckedProgram,
-  FunctionSig,
-  inlineElementStruct,
-  ROLE_CONSTRUCTOR,
-} from "./program";
+} from "./nodes"
+import { Options } from "./options"
+import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
+import { ParentTable } from "./parents"
+import { CheckedProgram, FunctionSig, inlineElementStruct, ROLE_CONSTRUCTOR } from "./program"
 import {
   EFFECT_NONE,
   EFFECT_READ,
@@ -117,10 +112,10 @@ import {
   maxEffect,
   RuntimeFunction,
   RuntimeTable,
-} from "./runtime";
-import { Local, STORAGE_PARAM } from "./symbols";
-import { isResultConstructorCall, resultMethodName } from "./emit-result";
-import { resultLayout } from "./result";
+} from "./runtime"
+import { Local, STORAGE_PARAM } from "./symbols"
+import { isResultConstructorCall, resultMethodName } from "./emit-result"
+import { resultLayout } from "./result"
 import {
   isInteger,
   K_ARRAY,
@@ -132,63 +127,63 @@ import {
   T_STRING,
   T_VOID,
   TypeTable,
-} from "./types";
-import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map";
+} from "./types"
+import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map"
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
-const ARRAY_HEADER_BYTES: i32 = 24;
+const ARRAY_HEADER_BYTES: i32 = 24
 
 /** One module and the parent links its analyses walk. */
 export class AnalysisUnit {
-  program: CheckedProgram;
-  parents: ParentTable;
+  program: CheckedProgram
+  parents: ParentTable
 
   constructor(program: CheckedProgram, parents: ParentTable) {
-    this.program = program;
-    this.parents = parents;
+    this.program = program
+    this.parents = parents
   }
 }
 
 /** What a function does with one pointer-typed parameter: a struct (`this` included) or an array. */
 export class PointerParamFacts {
-  name: string;
+  name: string
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
-  size: i32;
+  size: i32
   /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
-  align: i32;
+  align: i32
   /** Stores through the pointer, directly or via a callee (fixpoint). */
-  writesThrough: boolean;
+  writesThrough: boolean
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
-  captured: boolean;
+  captured: boolean
   /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
-  passedToCallees: string[];
-  passedToIndices: i32[];
+  passedToCallees: string[]
+  passedToIndices: i32[]
 
   constructor(name: string, size: i32, align: i32) {
-    this.name = name;
-    this.size = size;
-    this.align = align;
-    this.writesThrough = false;
-    this.captured = false;
-    this.passedToCallees = [];
-    this.passedToIndices = [];
+    this.name = name
+    this.size = size
+    this.align = align
+    this.writesThrough = false
+    this.captured = false
+    this.passedToCallees = []
+    this.passedToIndices = []
   }
 }
 
 /** A call to a pointer-returning user function, and where its result flows. */
 export class CallSite {
-  callee: string;
-  flow: i32;
+  callee: string
+  flow: i32
   /** WP9: the result is reachable after this function returns, other than through its return value. */
-  escapes: boolean;
+  escapes: boolean
   /** The call, which the arena-loop diagnostic reports at and names the line of. */
-  node: Node;
+  node: Node
 
   constructor(callee: string, flow: i32, escapes: boolean, node: Node) {
-    this.callee = callee;
-    this.flow = flow;
-    this.escapes = escapes;
-    this.node = node;
+    this.callee = callee
+    this.flow = flow
+    this.escapes = escapes
+    this.node = node
   }
 }
 
@@ -199,31 +194,31 @@ export class CallSite {
  * arena-loop diagnostic names.
  */
 export class LoopScope {
-  loop: Node;
+  loop: Node
   /** The statement each pass runs: what the scope brackets. */
-  body: Node;
+  body: Node
   /** The node whose line the reason names, or null. */
-  at: Node | null;
+  at: Node | null
   /** The local or the callee the reason names, or `""`. */
-  name: string;
+  name: string
   /** A `LOOP_*` reason from escape.ts; `LOOP_NOTHING` when nothing refused the scope. */
-  why: i32;
-  scoped: boolean;
+  why: i32
+  scoped: boolean
   /**
    * A pass can `return` what it allocated, whatever else refused it: no
    * bracket, automatic or written, could release that pass, so the
    * arena-loop diagnostic has no rewrite to offer and says nothing.
    */
-  handsBack: boolean;
+  handsBack: boolean
 
   constructor(loop: Node, body: Node) {
-    this.loop = loop;
-    this.body = body;
-    this.scoped = false;
-    this.why = 0;
-    this.at = null;
-    this.name = "";
-    this.handsBack = false;
+    this.loop = loop
+    this.body = body
+    this.scoped = false
+    this.why = 0
+    this.at = null
+    this.name = ""
+    this.handsBack = false
   }
 }
 
@@ -239,31 +234,31 @@ export class LoopScope {
  */
 export class HoistedHeader {
   /** The binding the path is rooted at; identity, not name, is what matches. */
-  root: Local;
+  root: Local
   /** The property chain below the root: `".xs"`, `".state.atMostIndex"`, or `""`. */
-  path: string;
-  arr: string;
+  path: string
+  arr: string
   /** `""` when the loop never asks for it, so nothing is loaded for it either. */
-  len: string;
-  data: string;
+  len: string
+  data: string
 
   constructor(root: Local, path: string, arr: string, len: string, data: string) {
-    this.root = root;
-    this.path = path;
-    this.arr = arr;
-    this.len = len;
-    this.data = data;
+    this.root = root
+    this.path = path
+    this.arr = arr
+    this.len = len
+    this.data = data
   }
 }
 
 export class FunctionFacts {
-  hasLoops: boolean;
+  hasLoops: boolean
   /** The body loads from memory it does not own (a header read, a field or element read). */
-  readsMemory: boolean;
+  readsMemory: boolean
   /** Every loop in the body is counted; vacuously true without loops. */
-  loopsBounded: boolean;
+  loopsBounded: boolean
   /** Contains `throw`, which lowers to `llvm.trap`: a side effect that never returns. */
-  hasTrap: boolean;
+  hasTrap: boolean
   /**
    * WP15 section 2c: the function may move an array's `len` -- `a.push(v)`,
    * which also moves `cap` and `data` when it grows, or `a.pop()`, which moves
@@ -283,7 +278,7 @@ export class FunctionFacts {
    * may be a push to the array that loop is reading, because two names can
    * hold one array and nothing here proves they do not.
    */
-  resizesArray: boolean;
+  resizesArray: boolean
   /**
    * WP29 P1: the function writes memory its caller could observe, directly or
    * through a callee (fixpoint over the call graph). `effect` is the wrong
@@ -307,58 +302,58 @@ export class FunctionFacts {
    * does not count either. `writesThrough` per pointer parameter is the finer
    * fact; this one is whole-function and deliberately coarse.
    */
-  sharedWrite: boolean;
+  sharedWrite: boolean
   /** The first node in the body that writes shared memory; `null` when a callee is the reason. */
-  writeSite: Node | null;
+  writeSite: Node | null
   /**
    * The first callee, by symbol and in the order the body reaches them, that
    * carries `sharedWrite`; `""` when `writeSite` is set.
    */
-  writeVia: string;
-  effect: i32;
-  willReturn: boolean;
+  writeVia: string
+  effect: i32
+  willReturn: boolean
   /** Can reach a `noreturn` runtime call, directly or through a callee. */
-  callsNoReturn: boolean;
+  callsNoReturn: boolean
   /** Parameter names that escape; decides `nocapture` for strings. */
-  escaping: StringSet;
+  escaping: StringSet
   /** User functions and runtime symbols called directly, by LLVM symbol. */
-  callees: StringSet;
+  callees: StringSet
   /** Parameter names in signature order (`this` first for methods). */
-  paramNames: string[];
+  paramNames: string[]
   /** Per pointer-typed parameter, in signature order. */
-  pointerParams: PointerParamFacts[];
+  pointerParams: PointerParamFacts[]
   /** A constructor: `this` is a fresh allocation, so it is `noalias`. */
-  freshThis: boolean;
+  freshThis: boolean
   /** `sizeof` the returned struct, or 0 when the return type is not a struct. */
-  returnDeref: i32;
+  returnDeref: i32
   /** The alignment a returned pointer is guaranteed to have; see `pointerAlign`. */
-  returnAlign: i32;
+  returnAlign: i32
   // ---- WP6 memory strategy (see escape.ts) ----
   /** Node id -> the allocation there is lowered to an entry-block alloca. */
-  stackSites: boolean[];
+  stackSites: boolean[]
   /** Locals that only ever hold a stack object: accesses through them are own memory. */
-  stackLocals: Local[];
+  stackLocals: Local[]
   /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
-  stackParams: StringSet;
+  stackParams: StringSet
   /** Bracket the body with `nish_arena_mark` / `nish_arena_release`. Decided after the fixpoint. */
-  arenaScope: boolean;
+  arenaScope: boolean
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
-  allocates: boolean;
+  allocates: boolean
   /** The body has an arena allocation of its own that flows `local`. */
-  directArena: boolean;
+  directArena: boolean
   /** An allocation may survive the call other than through the return value. */
-  allocLeaks: boolean;
+  allocLeaks: boolean
   /**
    * WP9: an allocation is reachable *by the caller* after the call, other than
    * through the return value (fixpoint over callees). Refines `allocLeaks`,
    * which also counts a value assigned to a local of the frame; see the header
    * of escape.ts. `allocEscapes` implies `allocLeaks`, never the reverse.
    */
-  allocEscapes: boolean;
+  allocEscapes: boolean
   /** An allocation of this function is returned: the caller owns it, so no scope here. */
-  returnsAllocation: boolean;
+  returnsAllocation: boolean
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
-  usesArenaControl: boolean;
+  usesArenaControl: boolean
   /**
    * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
    * through a callee (fixpoint). Such a function answers a number that depends
@@ -367,15 +362,15 @@ export class FunctionFacts {
    * it. It is deliberately not folded into `usesArenaControl`: reading
    * the position invalidates nothing, so it must not cost a function its scope.
    */
-  readsArenaState: boolean;
+  readsArenaState: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
-  callSites: CallSite[];
+  callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
-  escapingNodes: Node[];
+  escapingNodes: Node[]
   /** `EscapeResult.arenaNodes`: the sites that bump the arena themselves. */
-  arenaNodes: Node[];
+  arenaNodes: Node[]
   /** Every loop of the body, and whether its passes are scoped. Decided after the scopes are settled. */
-  loopScopes: LoopScope[];
+  loopScopes: LoopScope[]
   /**
    * Every arena allocation made while this function runs, by itself or by
    * anything it calls, is unreachable once it returns except through its
@@ -397,23 +392,23 @@ export class FunctionFacts {
    * parameter. The read is not an allocation site, so nothing sees it, and
    * `tests/cases/mem_callee_scope_nested` is that program.
    */
-  contained: boolean;
+  contained: boolean
   /** The first allocation of this function's own that escapes, or null; see `EscapeResult.escapeSite`. */
-  escapeSite: Node | null;
+  escapeSite: Node | null
   /** The return type is a number, a `boolean`, an `enum` or `void`: nothing a release could free. */
-  returnsScalar: boolean;
+  returnsScalar: boolean
   /** The function as a diagnostic names it: `Owner.method` for a member. */
-  sourceName: string;
+  sourceName: string
   /** Allocates from the arena in its own body, before any callee is counted. */
-  allocatesItself: boolean;
+  allocatesItself: boolean
   /** Calls `Arena.mark`, `Arena.release` or `Arena.reset` in its own body: the program is managing this memory. */
-  managesArena: boolean;
+  managesArena: boolean
   /**
    * Leaves arena memory behind when it returns: it allocates, itself or
    * through a callee that does, and has no scope to take it back. Settled with
    * the scopes; what the callee rule and the arena-loop diagnostic ask.
    */
-  netAllocates: boolean;
+  netAllocates: boolean
   /**
    * WP15 section 2c: the array headers the enclosing loops lifted into their
    * preheaders, innermost scope last, with `hoistedScopeStarts` marking where
@@ -421,108 +416,108 @@ export class FunctionFacts {
    * `emit-arrays.ts` fills it when a loop opens and truncates it when the loop
    * closes, and it is empty outside one.
    */
-  hoistedHeaders: HoistedHeader[];
-  hoistedScopeStarts: i32[];
+  hoistedHeaders: HoistedHeader[]
+  hoistedScopeStarts: i32[]
 
   constructor(paramNames: string[], nodeCount: i32) {
-    this.hasLoops = false;
-    this.readsMemory = false;
-    this.loopsBounded = true;
-    this.hasTrap = false;
-    this.resizesArray = false;
-    this.sharedWrite = false;
-    this.writeSite = null;
-    this.writeVia = "";
-    this.effect = EFFECT_NONE;
-    this.willReturn = true;
-    this.callsNoReturn = false;
-    this.escaping = new StringSet();
-    this.callees = new StringSet();
-    this.paramNames = paramNames;
-    this.pointerParams = [];
-    this.freshThis = false;
-    this.returnDeref = 0;
-    this.returnAlign = 8;
-    this.hoistedHeaders = [];
-    this.hoistedScopeStarts = [];
-    this.stackSites = new Array<boolean>(nodeCount);
-    this.stackLocals = [];
-    this.stackParams = new StringSet();
-    this.arenaScope = false;
-    this.allocates = false;
-    this.directArena = false;
-    this.allocLeaks = false;
-    this.allocEscapes = false;
-    this.returnsAllocation = false;
-    this.usesArenaControl = false;
-    this.readsArenaState = false;
-    this.callSites = [];
-    this.escapingNodes = [];
-    this.arenaNodes = [];
-    this.loopScopes = [];
-    this.contained = false;
-    this.escapeSite = null;
-    this.returnsScalar = false;
-    this.sourceName = "";
-    this.allocatesItself = false;
-    this.managesArena = false;
-    this.netAllocates = false;
+    this.hasLoops = false
+    this.readsMemory = false
+    this.loopsBounded = true
+    this.hasTrap = false
+    this.resizesArray = false
+    this.sharedWrite = false
+    this.writeSite = null
+    this.writeVia = ""
+    this.effect = EFFECT_NONE
+    this.willReturn = true
+    this.callsNoReturn = false
+    this.escaping = new StringSet()
+    this.callees = new StringSet()
+    this.paramNames = paramNames
+    this.pointerParams = []
+    this.freshThis = false
+    this.returnDeref = 0
+    this.returnAlign = 8
+    this.hoistedHeaders = []
+    this.hoistedScopeStarts = []
+    this.stackSites = new Array<boolean>(nodeCount)
+    this.stackLocals = []
+    this.stackParams = new StringSet()
+    this.arenaScope = false
+    this.allocates = false
+    this.directArena = false
+    this.allocLeaks = false
+    this.allocEscapes = false
+    this.returnsAllocation = false
+    this.usesArenaControl = false
+    this.readsArenaState = false
+    this.callSites = []
+    this.escapingNodes = []
+    this.arenaNodes = []
+    this.loopScopes = []
+    this.contained = false
+    this.escapeSite = null
+    this.returnsScalar = false
+    this.sourceName = ""
+    this.allocatesItself = false
+    this.managesArena = false
+    this.netAllocates = false
   }
 
   /** The pointer facts of the parameter called `name`, or `null` when it is not one. */
   pointerParam(name: string): PointerParamFacts | null {
     for (const pp of this.pointerParams) {
       if (pp.name === name) {
-        return pp;
+        return pp
       }
     }
-    return null;
+    return null
   }
 
   /** The pointer facts of parameter `index`, resolved through `paramNames`. */
   pointerParamAt(index: i32): PointerParamFacts | null {
     if (index < 0 || index >= this.paramNames.length) {
-      return null;
+      return null
     }
-    return this.pointerParam(this.paramNames[index]);
+    return this.pointerParam(this.paramNames[index])
   }
 
   /** WP6: the allocation at `node` was proved not to outlive the function. */
   isStackSite(node: Node): boolean {
-    return this.stackSites[node.id];
+    return this.stackSites[node.id]
   }
 
   /** Each pass of `body` is bracketed with its own arena scope: it is the body of a scoped loop. */
   scopesPass(body: Node): boolean {
     for (const scope of this.loopScopes) {
       if (scope.body === body) {
-        return scope.scoped;
+        return scope.scoped
       }
     }
-    return false;
+    return false
   }
 
   scopesAnyPass(): boolean {
     for (const scope of this.loopScopes) {
       if (scope.scoped) {
-        return true;
+        return true
       }
     }
-    return false;
+    return false
   }
 
   /** WP17: the object the by-value `Result` parameter `name` unpacks into is an alloca. */
   isStackParam(name: string): boolean {
-    return this.stackParams.has(name);
+    return this.stackParams.has(name)
   }
 
   holdsStackObject(local: Local): boolean {
     for (const candidate of this.stackLocals) {
       if (candidate === local) {
-        return true;
+        return true
       }
     }
-    return false;
+    return false
   }
 }
 
@@ -538,80 +533,80 @@ export class FunctionFacts {
  * program is analysed under exactly the keys it always was.
  */
 export class FactsTable {
-  index: StringMap;
-  list: FunctionFacts[];
+  index: StringMap
+  list: FunctionFacts[]
 
   constructor() {
-    this.index = new StringMap();
-    this.list = [];
+    this.index = new StringMap()
+    this.list = []
   }
 
   set(name: string, facts: FunctionFacts): void {
-    const at = this.index.get(name, -1);
+    const at = this.index.get(name, -1)
     if (at >= 0) {
       // A symbol is unique across a program (the driver rejects clashes), so
       // this only happens on the second collection round, which replaces the
       // first round's facts in place.
-      this.list[at] = facts;
-      return;
+      this.list[at] = facts
+      return
     }
-    this.index.set(name, this.list.length);
-    this.list.push(facts);
+    this.index.set(name, this.list.length)
+    this.list.push(facts)
   }
 
   get(name: string): FunctionFacts | null {
-    const at = this.index.get(name, -1);
-    return at < 0 ? null : this.list[at];
+    const at = this.index.get(name, -1)
+    return at < 0 ? null : this.list[at]
   }
 
   /** The position of `name`'s facts in `list`, or -1 for a symbol with none (a runtime function). */
   indexOf(name: string): i32 {
-    return this.index.get(name, -1);
+    return this.index.get(name, -1)
   }
 }
 
 // ---- Escape classification --------------------------------------------------------------
 
 /** How the enclosing construct consumes a parameter reference. */
-export const USE_NONE: i32 = 0; // consumed on the spot
-export const USE_ESCAPE: i32 = 1; // retained: returned, stored, aliased, or not modelled
-export const USE_ARGUMENT: i32 = 2; // passed to a user function
-export const USE_READ: i32 = 3; // receiver of a field, element, `.length` or `for...of` read
-export const USE_WRITE: i32 = 4; // receiver of a field store, element store or `push`
+export const USE_NONE: i32 = 0 // consumed on the spot
+export const USE_ESCAPE: i32 = 1 // retained: returned, stored, aliased, or not modelled
+export const USE_ARGUMENT: i32 = 2 // passed to a user function
+export const USE_READ: i32 = 3 // receiver of a field, element, `.length` or `for...of` read
+export const USE_WRITE: i32 = 4 // receiver of a field store, element store or `push`
 
 export class ParamUse {
-  kind: i32;
+  kind: i32
   /** For `USE_ARGUMENT`: the callee and the parameter index (`this` counts as 0). */
-  callee: FunctionSig | null;
-  index: i32;
+  callee: FunctionSig | null
+  index: i32
 
   constructor(kind: i32) {
-    this.kind = kind;
-    this.callee = null;
-    this.index = 0;
+    this.kind = kind
+    this.callee = null
+    this.index = 0
   }
 }
 
-const use = (kind: i32): ParamUse => new ParamUse(kind);
+const use = (kind: i32): ParamUse => new ParamUse(kind)
 
 const argumentUse = (callee: FunctionSig, index: i32): ParamUse => {
-  const result = new ParamUse(USE_ARGUMENT);
-  result.callee = callee;
-  result.index = index;
-  return result;
-};
+  const result = new ParamUse(USE_ARGUMENT)
+  result.callee = callee
+  result.index = index
+  return result
+}
 
 /** The position of `node` in its `N_LIST` parent, which is the argument index. */
 const indexInList = (list: Node, node: Node): i32 => {
-  let i = 0;
+  let i = 0
   while (i < list.children.length) {
     if (list.children[i] === node) {
-      return i;
+      return i
     }
-    i = i + 1;
+    i = i + 1
   }
-  return -1;
-};
+  return -1
+}
 
 /**
  * Classify a reference to a parameter by walking up through the transparent
@@ -619,194 +614,207 @@ const indexInList = (list: Node, node: Node): i32 => {
  * that consumes the value. Anything not explicitly harmless escapes.
  */
 export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): ParamUse => {
-  const program = unit.program;
-  let node = ref;
+  const program = unit.program
+  let node = ref
   // Set once the value is an inline element: the address of a slot in the array.
-  let interior = false;
+  let interior = false
   for (;;) {
-    const parent = unit.parents.parentOf(node);
+    const parent = unit.parents.parentOf(node)
     if (parent === null) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
     if (parent.kind === N_PAREN) {
-      node = parent;
-      continue;
+      node = parent
+      continue
     }
     if (parent.kind === N_CONDITIONAL) {
       if (parent.children[0] === node) {
-        return use(USE_NONE);
+        return use(USE_NONE)
       }
-      node = parent;
-      continue;
+      node = parent
+      continue
     }
     if (parent.kind === N_TEMPLATE) {
       // A concatenating template copies its holes and the runtime keeps
       // nothing; only the single-hole passthrough hands the value on.
       if (!isStringPassthrough(program, parent)) {
-        return use(USE_NONE);
+        return use(USE_NONE)
       }
-      node = parent;
-      continue;
+      node = parent
+      continue
     }
     if (parent.kind === N_INDEX && parent.children[0] === node) {
       if (yieldsInteriorPointer(unit, table, parent)) {
-        node = parent;
-        interior = true;
-        continue;
+        node = parent
+        interior = true
+        continue
       }
-      return classifyElementUse(unit, table, parent);
+      return classifyElementUse(unit, table, parent)
     }
     if (parent.kind === N_MEMBER) {
-      return classifyMemberUse(unit, table, parent);
+      return classifyMemberUse(unit, table, parent)
     }
     if (parent.kind === N_LIST) {
-      return classifyArgumentUse(unit, table, parent, node);
+      return classifyArgumentUse(unit, table, parent, node)
     }
     if (parent.kind === N_CALL) {
-      return use(USE_NONE); // the callee position of `p(...)`, which the checker refuses anyway
+      return use(USE_NONE) // the callee position of `p(...)`, which the checker refuses anyway
     }
     if (parent.kind === N_NEW) {
-      return use(USE_ESCAPE); // the constructed name, not an argument
+      return use(USE_ESCAPE) // the constructed name, not an argument
     }
     if (parent.kind === N_BINARY) {
       // WP32: `a ?? d` hands on whichever operand it answers, as a ternary does.
       if (parent.text === "??") {
-        node = parent;
-        continue;
+        node = parent
+        continue
       }
       // Assignment retains the right-hand side; every other operator consumes both operands.
       if (isAssignmentOperator(parent.text)) {
         if (parent.children[1] !== node) {
-          return use(USE_NONE);
+          return use(USE_NONE)
         }
         // WP15 §2a: `xs[i] = p` into an inline-element array copies `p`'s bytes
         // into the slot, exactly as `push` does; nothing keeps the pointer.
-        const target = unwrapParens(parent.children[0]);
+        const target = unwrapParens(parent.children[0])
         if (target.kind === N_INDEX && storesInlineElements(program, table, target.children[0])) {
-          return use(USE_READ);
+          return use(USE_READ)
         }
-        return use(USE_ESCAPE);
+        return use(USE_ESCAPE)
       }
-      return use(USE_NONE);
+      return use(USE_NONE)
     }
     // An element of an array literal whose elements are inline is copied into
     // the fresh block the literal allocates, so the value is read, not kept.
     if (parent.kind === N_ARRAY && storesInlineElements(program, table, parent)) {
-      return use(USE_READ);
+      return use(USE_READ)
     }
     if (parent.kind === N_FOR_OF) {
       // WP32: a walk of a `Set` itself hands it to the table's walk methods,
       // `walkOpen` first, whose stores into the table are the walk's only
       // writes; `m.keys()` reaches here as the receiver of that call instead.
-      const read = program.nodeCallees[parent.id];
+      const read = program.nodeCallees[parent.id]
       if (read !== null && parent.children[1] === node) {
-        const owner = read.owner;
-        const open: FunctionSig | null = owner === null ? null : owner.method("walkOpen");
-        return open === null ? use(USE_ESCAPE) : argumentUse(open, 0);
+        const owner = read.owner
+        const open: FunctionSig | null = owner === null ? null : owner.method("walkOpen")
+        return open === null ? use(USE_ESCAPE) : argumentUse(open, 0)
       }
       // The loop variable of an inline-element array is each slot's address,
       // so the array itself is what the body holds (`yieldsInteriorPointer`).
       if (parent.children[1] !== node) {
-        return use(USE_ESCAPE);
+        return use(USE_ESCAPE)
       }
       if (!storesInlineElements(program, table, node)) {
-        return use(USE_READ);
+        return use(USE_READ)
       }
-      return classifyElementHolder(unit, table, program.nodeLocals[parent.children[0].children[0].children[0].id], parent);
+      return classifyElementHolder(
+        unit,
+        table,
+        program.nodeLocals[parent.children[0].children[0].children[0].id],
+        parent
+      )
     }
     // `const p = xs[i]`: the local holds the slot, and is what uses it.
     if (interior && parent.kind === N_VAR_DECL && parent.children[2] === node) {
-      return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent));
+      return classifyElementHolder(unit, table, program.nodeLocals[parent.id], enclosingBlock(unit, parent))
     }
     if (parent.kind === N_UNARY) {
-      return use(USE_NONE);
+      return use(USE_NONE)
     }
     if (parent.kind === N_EXPR_STMT || parent.kind === N_THROW) {
-      return use(USE_NONE);
+      return use(USE_NONE)
     }
     if (parent.kind === N_IF || parent.kind === N_WHILE || parent.kind === N_DO) {
-      return use(USE_NONE);
+      return use(USE_NONE)
     }
     if (parent.kind === N_FOR) {
-      return use(USE_NONE);
+      return use(USE_NONE)
     }
-    return use(USE_ESCAPE); // return, variable initializer, array/object literal element, ...
+    return use(USE_ESCAPE) // return, variable initializer, array/object literal element, ...
   }
-};
+}
 
 /** `p.f`, `p.f = v`, `p.m(...)`, `p.length`: the member access is the consumer. */
 const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
-  const program = unit.program;
-  const above = unit.parents.parentOf(access);
+  const program = unit.program
+  const above = unit.parents.parentOf(access)
   if (above !== null && above.kind === N_CALL && above.children[0] === access) {
-    const callee = program.nodeCallees[above.id];
+    const callee = program.nodeCallees[above.id]
     if (callee !== null) {
-      return argumentUse(callee, 0);
+      return argumentUse(callee, 0)
     }
     // `p.push(v)` and `p.pop()` store into the array header; `indexOf` and
     // `join` only read it, and so do the string byte methods, whose runtime
     // parameters are all `nocapture readonly` and whose `substring` copies
     // what it keeps. Anything else is treated as retaining the receiver.
-    const method = arrayMethodName(program, table, above);
+    const method = arrayMethodName(program, table, above)
     if (method === "push" || method === "pop") {
-      return use(USE_WRITE);
+      return use(USE_WRITE)
     }
     if (method.length > 0) {
-      return use(USE_READ);
+      return use(USE_READ)
     }
     // WP16: `r.orReturn()`, `r.unwrapOr(d)` and `r.expect(m)` load out of the
     // receiver and never store the pointer itself anywhere.
     if (resultMethodName(program, table, above).length > 0) {
-      return use(USE_READ);
+      return use(USE_READ)
     }
-    return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE);
+    return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE)
   }
   // An inline array field's slots are bytes of the object itself, so writing
   // an element of `p.f` writes through `p` (`self/inline-arrays.ts`). The
   // pointer layout's slots are an allocation of their own, and there the
   // same store is only a read of `p`.
-  if (above !== null && above.kind === N_INDEX && above.children[0] === access && isInlineField(program, table, access)) {
-    const store = unit.parents.parentOf(above);
-    if (isAssignmentTarget(store, above) || (store !== null && store.kind === N_UNARY && (store.text === "++" || store.text === "--"))) {
-      return use(USE_WRITE);
+  if (
+    above !== null &&
+    above.kind === N_INDEX &&
+    above.children[0] === access &&
+    isInlineField(program, table, access)
+  ) {
+    const store = unit.parents.parentOf(above)
+    if (
+      isAssignmentTarget(store, above) ||
+      (store !== null && store.kind === N_UNARY && (store.text === "++" || store.text === "--"))
+    ) {
+      return use(USE_WRITE)
     }
   }
-  return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ);
-};
+  return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ)
+}
 
 /** Whether `access` reads an array field stored inside its object (`FieldInfo.inlineCapacity`). */
 const isInlineField = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
-  const receiver = program.nodeTypes[access.children[0].id];
+  const receiver = program.nodeTypes[access.children[0].id]
   if (receiver < 0) {
-    return false;
+    return false
   }
-  const t = table.stripNull(receiver);
+  const t = table.stripNull(receiver)
   if (!table.isStruct(t)) {
-    return false;
+    return false
   }
-  const info = program.struct(table.nameOf(t));
+  const info = program.struct(table.nameOf(t))
   if (info === null) {
-    return false;
+    return false
   }
-  const field = info.field(access.text);
-  return field !== null && field.inline();
-};
+  const field = info.field(access.text)
+  return field !== null && field.inline()
+}
 
 /** An argument of `f(...)` or `new C(...)`: the list is the parent, the call is above it. */
 const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, node: Node): ParamUse => {
-  const program = unit.program;
-  const owner = unit.parents.parentOf(list);
+  const program = unit.program
+  const owner = unit.parents.parentOf(list)
   if (owner === null) {
-    return use(USE_ESCAPE);
+    return use(USE_ESCAPE)
   }
   if (owner.kind === N_CALL) {
-    const index = indexInList(list, node);
+    const index = indexInList(list, node)
     if (index < 0) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
-    const callee = program.nodeCallees[owner.id];
+    const callee = program.nodeCallees[owner.id]
     if (callee !== null) {
-      return argumentUse(callee, index + (callee.owner !== null ? 1 : 0));
+      return argumentUse(callee, index + (callee.owner !== null ? 1 : 0))
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
     // the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as the
@@ -818,29 +826,29 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     // the object into the slot, so the pointer is read and then forgotten —
     // the one shape where a push does not retain what it was given.
     if (isPushCall(program, table, owner)) {
-      const receiver = methodReceiver(owner);
-      const inline = receiver !== null && storesInlineElements(program, table, receiver);
-      return use(inline ? USE_READ : USE_ESCAPE);
+      const receiver = methodReceiver(owner)
+      const inline = receiver !== null && storesInlineElements(program, table, receiver)
+      return use(inline ? USE_READ : USE_ESCAPE)
     }
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
-    return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE);
+    return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE)
   }
   if (owner.kind === N_NEW) {
     // `new C(...)` has two lists: type arguments and value arguments.
     if (owner.children[2] !== list) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
-    const index = indexInList(list, node);
-    const ctor = constructorOf(program, table, intrinsicType(program, owner));
+    const index = indexInList(list, node)
+    const ctor = constructorOf(program, table, intrinsicType(program, owner))
     if (index < 0 || ctor === null) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
-    return argumentUse(ctor, index + 1);
+    return argumentUse(ctor, index + 1)
   }
-  return use(USE_ESCAPE);
-};
+  return use(USE_ESCAPE)
+}
 
 /**
  * `xs[i]` whose value is the address of a slot inside `xs`'s data block
@@ -858,16 +866,16 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
  */
 export const yieldsInteriorPointer = (unit: AnalysisUnit, table: TypeTable, access: Node): boolean => {
   if (!storesInlineElements(unit.program, table, access.children[0])) {
-    return false;
+    return false
   }
-  let node = access;
-  let parent = unit.parents.parentOf(node);
+  let node = access
+  let parent = unit.parents.parentOf(node)
   while (parent !== null && parent.kind === N_PAREN) {
-    node = parent;
-    parent = unit.parents.parentOf(node);
+    node = parent
+    parent = unit.parents.parentOf(node)
   }
-  return parent !== null && parent.kind !== N_MEMBER && !isAssignmentTarget(parent, node);
-};
+  return parent !== null && parent.kind !== N_MEMBER && !isAssignmentTarget(parent, node)
+}
 
 /**
  * A local that holds an inline element (`const p = xs[i]`, or the variable of
@@ -877,57 +885,62 @@ export const yieldsInteriorPointer = (unit: AnalysisUnit, table: TypeTable, acce
  * keeps the slot's address and escapes. `within` is where the local is
  * visible: its block, or the `for...of`.
  */
-const classifyElementHolder = (unit: AnalysisUnit, table: TypeTable, holder: Local | null, within: Node | null): ParamUse => {
+const classifyElementHolder = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  holder: Local | null,
+  within: Node | null
+): ParamUse => {
   if (holder === null || within === null) {
-    return use(USE_ESCAPE);
+    return use(USE_ESCAPE)
   }
-  const refs: Node[] = [];
-  collectRefs(unit.program, within, holder, refs);
-  let kind = USE_READ;
+  const refs: Node[] = []
+  collectRefs(unit.program, within, holder, refs)
+  let kind = USE_READ
   for (const ref of refs) {
-    let node = ref;
-    let parent = unit.parents.parentOf(node);
+    let node = ref
+    let parent = unit.parents.parentOf(node)
     while (parent !== null && parent.kind === N_PAREN) {
-      node = parent;
-      parent = unit.parents.parentOf(node);
+      node = parent
+      parent = unit.parents.parentOf(node)
     }
     if (parent === null || parent.kind !== N_MEMBER) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
-    const found = classifyMemberUse(unit, table, parent);
+    const found = classifyMemberUse(unit, table, parent)
     if (found.kind === USE_WRITE) {
-      kind = USE_WRITE;
+      kind = USE_WRITE
     } else if (found.kind !== USE_READ) {
-      return use(USE_ESCAPE);
+      return use(USE_ESCAPE)
     }
   }
-  return use(kind);
-};
+  return use(kind)
+}
 
 /** Every identifier under `node` that names `local`, skipping lifted arrow bodies. */
 const collectRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
   if (node.kind === N_ARROW) {
-    return;
+    return
   }
   if (node.kind === N_IDENT) {
-    const named = program.nodeLocals[node.id];
+    const named = program.nodeLocals[node.id]
     if (named !== null && named === local) {
-      out.push(node);
+      out.push(node)
     }
   }
   for (const child of node.children) {
-    collectRefs(program, child, local, out);
+    collectRefs(program, child, local, out)
   }
-};
+}
 
 /** The block a declaration's scope ends with, or null when it is not in one. */
 const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
-  let node: Node | null = unit.parents.parentOf(decl);
+  let node: Node | null = unit.parents.parentOf(decl)
   while (node !== null && node.kind !== N_BLOCK) {
-    node = unit.parents.parentOf(node);
+    node = unit.parents.parentOf(node)
   }
-  return node;
-};
+  return node
+}
 
 /**
  * The parameter is the indexing base of `access` (`p[i]`, `p[i][j]`, ...).
@@ -936,53 +949,53 @@ const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
  * write through `p`, conservatively, as docs/wp4-arrays.md specifies.
  */
 const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
-  const program = unit.program;
-  let node = access;
+  const program = unit.program
+  let node = access
   for (;;) {
-    const parent = unit.parents.parentOf(node);
+    const parent = unit.parents.parentOf(node)
     if (parent === null) {
-      return use(USE_READ);
+      return use(USE_READ)
     }
     if (
       parent.kind === N_PAREN ||
       (parent.kind === N_INDEX && parent.children[0] === node) ||
       (parent.kind === N_BINARY && parent.text === "??") // WP32: as a ternary's arm
     ) {
-      node = parent;
-      continue;
+      node = parent
+      continue
     }
     if (parent.kind === N_CONDITIONAL) {
       if (parent.children[0] === node) {
-        return use(USE_READ);
+        return use(USE_READ)
       }
-      node = parent;
-      continue;
+      node = parent
+      continue
     }
     if (isAssignmentTarget(parent, node)) {
-      return use(USE_WRITE);
+      return use(USE_WRITE)
     }
     if (parent.kind === N_MEMBER) {
-      const above = unit.parents.parentOf(parent);
-      const called = above !== null && above.kind === N_CALL && above.children[0] === parent;
-      return use(called || isAssignmentTarget(above, parent) ? USE_WRITE : USE_READ);
+      const above = unit.parents.parentOf(parent)
+      const called = above !== null && above.kind === N_CALL && above.children[0] === parent
+      return use(called || isAssignmentTarget(above, parent) ? USE_WRITE : USE_READ)
     }
     if (parent.kind === N_LIST) {
-      const owner = unit.parents.parentOf(parent);
+      const owner = unit.parents.parentOf(parent)
       if (owner !== null && owner.kind === N_CALL) {
         // The constructor or function may store through the element; builtins are nocapture.
-        return use(program.nodeCallees[owner.id] !== null ? USE_WRITE : USE_READ);
+        return use(program.nodeCallees[owner.id] !== null ? USE_WRITE : USE_READ)
       }
       if (owner !== null && owner.kind === N_NEW) {
-        return use(USE_WRITE);
+        return use(USE_WRITE)
       }
-      return use(USE_READ);
+      return use(USE_READ)
     }
     if (parent.kind === N_CALL || parent.kind === N_NEW) {
-      return use(parent.kind === N_NEW ? USE_WRITE : USE_READ);
+      return use(parent.kind === N_NEW ? USE_WRITE : USE_READ)
     }
-    return use(USE_READ);
+    return use(USE_READ)
   }
-};
+}
 
 /**
  * The constructor `new` runs for a struct type. `null` when the type is not
@@ -990,23 +1003,23 @@ const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node):
  */
 export const constructorOf = (program: CheckedProgram, table: TypeTable, type: i32): FunctionSig | null => {
   if (type < 0 || !table.isStruct(type)) {
-    return null;
+    return null
   }
-  const info = program.struct(table.nameOf(type));
-  return info === null ? null : info.ctor;
-};
+  const info = program.struct(table.nameOf(type))
+  return info === null ? null : info.ctor
+}
 
 /** `` `${s}` ``: a template that lowers to its single string hole unchanged. */
 const isStringPassthrough = (program: CheckedProgram, template: Node): boolean => {
   if (!isTemplateExpression(template)) {
-    return false;
+    return false
   }
-  const parts = templateParts(template);
+  const parts = templateParts(template)
   if (parts.length !== 1 || parts[0].kind === N_TEMPLATE_TEXT) {
-    return false;
+    return false
   }
-  return program.nodeTypes[parts[0].id] === T_STRING;
-};
+  return program.nodeTypes[parts[0].id] === T_STRING
+}
 
 // ---- Per-function collection ------------------------------------------------------------
 
@@ -1017,17 +1030,17 @@ const isStringPassthrough = (program: CheckedProgram, template: Node): boolean =
  */
 const structSize = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
   if (type < 0) {
-    return 0;
+    return 0
   }
   if (table.isResult(type)) {
-    return resultLayout(table, type).size;
+    return resultLayout(table, type).size
   }
   if (!table.isStruct(type)) {
-    return 0;
+    return 0
   }
-  const info = program.struct(table.nameOf(type));
-  return info === null ? 0 : info.size;
-};
+  const info = program.struct(table.nameOf(type))
+  return info === null ? 0 : info.size
+}
 
 /**
  * The alignment a pointer of this type is *guaranteed* to have, which is 8 for
@@ -1045,14 +1058,14 @@ const structSize = (program: CheckedProgram, table: TypeTable, type: i32): i32 =
  */
 const pointerAlign = (program: CheckedProgram, table: TypeTable, type: i32): i32 => {
   if (type < 0) {
-    return 8;
+    return 8
   }
-  const record = inlineElementStruct(program, table, table.stripNull(type));
+  const record = inlineElementStruct(program, table, table.stripNull(type))
   if (record === null || record.align >= 8) {
-    return 8;
+    return 8
   }
-  return record.align;
-};
+  return record.align
+}
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
 /**
@@ -1072,21 +1085,21 @@ const isPointerParam = (table: TypeTable, type: i32): boolean => {
   // construction; if it named exclusions instead, the next pointer-shaped type
   // would be admitted by a case nobody remembered to write, and a wrong
   // attribute is undefined behaviour rather than a missed optimisation.
-  const inner = table.stripNull(type);
+  const inner = table.stripNull(type)
   if (table.isResult(inner)) {
-    return !table.resultByValue(inner);
+    return !table.resultByValue(inner)
   }
-  return table.isStruct(inner) || table.isArray(inner);
-};
+  return table.isStruct(inner) || table.isArray(inner)
+}
 
 class FactCollector {
-  unit: AnalysisUnit;
-  table: TypeTable;
-  opts: Options;
-  sig: FunctionSig;
-  facts: FunctionFacts;
+  unit: AnalysisUnit
+  table: TypeTable
+  opts: Options
+  sig: FunctionSig
+  facts: FunctionFacts
   /** Round 1's fixpoint, or `null` in round 1 itself; see `bodyMayExtend`. */
-  known: FactsTable | null;
+  known: FactsTable | null
 
   constructor(
     unit: AnalysisUnit,
@@ -1096,77 +1109,77 @@ class FactCollector {
     facts: FunctionFacts,
     known: FactsTable | null
   ) {
-    this.unit = unit;
-    this.table = table;
-    this.opts = opts;
-    this.sig = sig;
-    this.facts = facts;
-    this.known = known;
+    this.unit = unit
+    this.table = table
+    this.opts = opts
+    this.sig = sig
+    this.facts = facts
+    this.known = known
   }
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
   paramRef(node: Node): string {
     if (node.kind !== N_IDENT && node.kind !== N_THIS) {
-      return "";
+      return ""
     }
-    const local = this.unit.program.nodeLocals[node.id];
+    const local = this.unit.program.nodeLocals[node.id]
     if (local === null || local.storage !== STORAGE_PARAM) {
-      return "";
+      return ""
     }
     for (const name of this.facts.paramNames) {
       if (name === local.name) {
-        return name;
+        return name
       }
     }
-    return "";
+    return ""
   }
 
   noteUse(name: string, ref: Node): void {
-    const found = classifyUse(this.unit, this.table, ref);
-    const pointer = this.facts.pointerParam(name);
+    const found = classifyUse(this.unit, this.table, ref)
+    const pointer = this.facts.pointerParam(name)
     if (found.kind === USE_ESCAPE) {
-      this.facts.escaping.add(name);
+      this.facts.escaping.add(name)
       if (pointer !== null) {
-        pointer.captured = true;
-        pointer.writesThrough = true; // an alias may be written through later
+        pointer.captured = true
+        pointer.writesThrough = true // an alias may be written through later
       }
-      return;
+      return
     }
     if (found.kind === USE_ARGUMENT) {
       // Strings escape conservatively when handed to any user function;
       // structs and arrays are resolved by the fixpoint against the callee.
-      const callee = found.callee;
+      const callee = found.callee
       if (pointer !== null && callee !== null) {
-        pointer.passedToCallees.push(callee.name);
-        pointer.passedToIndices.push(found.index);
+        pointer.passedToCallees.push(callee.name)
+        pointer.passedToIndices.push(found.index)
       } else {
-        this.facts.escaping.add(name);
+        this.facts.escaping.add(name)
       }
-      return;
+      return
     }
     if (found.kind === USE_WRITE && pointer !== null) {
-      pointer.writesThrough = true;
+      pointer.writesThrough = true
     }
   }
 
   /** `expr` denotes a stack object: a stack allocation itself, or a local that only holds one. */
   isStackOwned(expr: Node): boolean {
-    const e = unwrapParens(expr);
+    const e = unwrapParens(expr)
     if (this.facts.isStackSite(e)) {
-      return true;
+      return true
     }
     if (e.kind !== N_IDENT) {
-      return false;
+      return false
     }
-    const local = this.unit.program.nodeLocals[e.id];
-    return local !== null && this.facts.holdsStackObject(local);
+    const local = this.unit.program.nodeLocals[e.id]
+    return local !== null && this.facts.holdsStackObject(local)
   }
 
   /** WP29 P1: `node` writes memory a caller could observe. The first one in the walk is the one named. */
   noteSharedWrite(node: Node): void {
     if (!this.facts.sharedWrite) {
-      this.facts.sharedWrite = true;
-      this.facts.writeSite = node;
+      this.facts.sharedWrite = true
+      this.facts.writeSite = node
     }
   }
 
@@ -1177,88 +1190,90 @@ class FactCollector {
    * store through `this.inner` may reach an object that came from outside.
    */
   initialisesThis(receiver: Node): boolean {
-    return this.facts.freshThis && unwrapParens(receiver).kind === N_THIS;
+    return this.facts.freshThis && unwrapParens(receiver).kind === N_THIS
   }
 
   /** A store into `receiver`'s array: shared unless the array is this function's own stack object. */
   noteArrayWrite(node: Node, receiver: Node | null): void {
     if (this.facts.sharedWrite) {
-      return; // already named; no need to ask whose array it is
+      return // already named; no need to ask whose array it is
     }
     if (receiver === null || !this.isStackOwned(receiver)) {
-      this.noteSharedWrite(node);
+      this.noteSharedWrite(node)
     }
   }
 
   visit(node: Node): void {
-    const program = this.unit.program;
+    const program = this.unit.program
     // WP29: an arrow argument is lifted into a function of its own, which has
     // facts of its own; its body is not this function's, and neither it nor a
     // function named as an argument is a value this function holds.
     if (node.kind === N_ARROW) {
-      return;
+      return
     }
     if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
-      this.facts.hasLoops = true;
+      this.facts.hasLoops = true
       if (!isCountedLoop(this.unit, this.table, node, this.known)) {
-        this.facts.loopsBounded = false;
+        this.facts.loopsBounded = false
       }
     }
     if (node.kind === N_THROW) {
-      this.facts.hasTrap = true;
+      this.facts.hasTrap = true
     }
     // WP32 S5: a fused lookup, and a `nish/map` call, call the table's
     // pieces rather than what they were checked as (`fusedCalleesOf`).
-    const fused: FunctionSig[] | null = node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null;
+    const fused: FunctionSig[] | null =
+      node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
-      this.addSigs(fused);
+      this.addSigs(fused)
     } else if (node.kind === N_CALL) {
-      const callee = program.nodeCallees[node.id];
+      const callee = program.nodeCallees[node.id]
       if (callee !== null) {
-        this.facts.callees.add(callee.name);
+        this.facts.callees.add(callee.name)
       }
       // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
       // finds the key, that table's `valueAt` (`checkMapGet`).
-      const reads: FunctionSig | null = callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null;
+      const reads: FunctionSig | null =
+        callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null
       if (reads !== null) {
-        this.facts.callees.add(reads.name);
+        this.facts.callees.add(reads.name)
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
     // (`emitWalk`); the loop records the reader, and the rest are its owner's.
     if (node.kind === N_FOR_OF) {
-      const read = program.nodeCallees[node.id];
+      const read = program.nodeCallees[node.id]
       if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
-          this.facts.callees.add(sig.name);
+          this.facts.callees.add(sig.name)
         }
       }
     }
-    const param = this.paramRef(node);
+    const param = this.paramRef(node)
     if (param.length > 0) {
-      this.noteUse(param, node);
+      this.noteUse(param, node)
     }
-    this.collectStringFacts(node);
-    this.collectClassFacts(node);
-    this.collectResultFacts(node);
-    this.collectArrayFacts(node);
-    this.collectDivisionFacts(node);
-    this.collectNamespacePropertyFacts(node);
-    this.collectIdentifierBuiltinFacts(node);
+    this.collectStringFacts(node)
+    this.collectClassFacts(node)
+    this.collectResultFacts(node)
+    this.collectArrayFacts(node)
+    this.collectDivisionFacts(node)
+    this.collectNamespacePropertyFacts(node)
+    this.collectIdentifierBuiltinFacts(node)
     for (const child of node.children) {
-      this.visit(child);
+      this.visit(child)
     }
   }
 
   addSigs(sigs: FunctionSig[]): void {
     for (const sig of sigs) {
-      this.facts.callees.add(sig.name);
+      this.facts.callees.add(sig.name)
     }
   }
 
   addCallees(names: string[]): void {
     for (const name of names) {
-      this.facts.callees.add(name);
+      this.facts.callees.add(name)
     }
   }
 
@@ -1268,44 +1283,52 @@ class FactCollector {
    * `self/emit-strings.ts` exactly; an omission here is a wrong attribute.
    */
   collectStringFacts(node: Node): void {
-    const program = this.unit.program;
-    const table = this.table;
-    if (node.kind === N_CALL && node.children[0].kind === N_MEMBER && !receiverIsValue(program, node.children[0].children[0])) {
-      this.addCallees(builtinCallees(program, table, node));
-      return;
+    const program = this.unit.program
+    const table = this.table
+    if (
+      node.kind === N_CALL &&
+      node.children[0].kind === N_MEMBER &&
+      !receiverIsValue(program, node.children[0].children[0])
+    ) {
+      this.addCallees(builtinCallees(program, table, node))
+      return
     }
     if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {
-      const op = node.text;
+      const op = node.text
       if (op === "+") {
-        this.facts.callees.add("nish_str_concat");
+        this.facts.callees.add("nish_str_concat")
       } else if (op === "===" || op === "!==") {
-        this.facts.callees.add("nish_str_eq");
+        this.facts.callees.add("nish_str_eq")
       }
-      return;
+      return
     }
     if (node.kind === N_CALL && isStringMethodCall(program, node)) {
       // The byte methods all read the string's bytes; `substring` and `slice`
       // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
-      this.facts.readsMemory = true;
+      this.facts.readsMemory = true
       this.addCallees(
-        stringConstructCallees(node.children[0].text, this.opts.uncheckedIndexing, program.nodeProvenIndex[node.id])
-      );
-      return;
+        stringConstructCallees(
+          node.children[0].text,
+          this.opts.uncheckedIndexing,
+          program.nodeProvenIndex[node.id]
+        )
+      )
+      return
     }
     if (node.kind === N_MEMBER && program.nodeTypes[node.children[0].id] === T_STRING) {
-      this.facts.readsMemory = true; // `.length` loads the header through the string pointer
-      return;
+      this.facts.readsMemory = true // `.length` loads the header through the string pointer
+      return
     }
     if (isTemplateExpression(node)) {
-      const parts = templateParts(node);
+      const parts = templateParts(node)
       if (parts.length > 1) {
-        this.facts.callees.add("nish_str_concat");
+        this.facts.callees.add("nish_str_concat")
       }
       for (const part of parts) {
         if (part.kind !== N_TEMPLATE_TEXT) {
-          const callee = stringifyCallee(program.nodeTypes[part.id]);
+          const callee = stringifyCallee(program.nodeTypes[part.id])
           if (callee.length > 0) {
-            this.facts.callees.add(callee);
+            this.facts.callees.add(callee)
           }
         }
       }
@@ -1318,52 +1341,52 @@ class FactCollector {
    * does. A stack object is the function's own alloca and is none of those.
    */
   collectClassFacts(node: Node): void {
-    const program = this.unit.program;
-    const table = this.table;
+    const program = this.unit.program
+    const table = this.table
     if (node.kind === N_MEMBER) {
-      const receiver = node.children[0];
-      const type = program.nodeTypes[receiver.id];
+      const receiver = node.children[0]
+      const type = program.nodeTypes[receiver.id]
       if (type < 0 || !table.isStruct(type)) {
-        return;
+        return
       }
-      const above = this.unit.parents.parentOf(node);
+      const above = this.unit.parents.parentOf(node)
       if (above !== null && above.kind === N_CALL && above.children[0] === node) {
-        return; // the call itself is reported through `nodeCallees`
+        return // the call itself is reported through `nodeCallees`
       }
       if (this.isStackOwned(receiver)) {
-        return; // own alloca (WP6)
+        return // own alloca (WP6)
       }
       if (isAssignmentTarget(above, node) && above !== null) {
-        this.facts.effect = EFFECT_WRITE;
+        this.facts.effect = EFFECT_WRITE
         if (!this.initialisesThis(receiver)) {
-          this.noteSharedWrite(above);
+          this.noteSharedWrite(above)
         }
         if (above.text !== "=") {
-          this.facts.readsMemory = true;
+          this.facts.readsMemory = true
         }
       } else {
-        this.facts.readsMemory = true;
+        this.facts.readsMemory = true
       }
-      return;
+      return
     }
     if (node.kind === N_NEW) {
-      const type = program.nodeTypes[node.id];
+      const type = program.nodeTypes[node.id]
       if (type < 0 || !table.isStruct(type)) {
-        return;
+        return
       }
       if (!this.facts.isStackSite(node)) {
-        this.facts.effect = EFFECT_WRITE;
-        this.facts.callees.add("nish_alloc_struct");
+        this.facts.effect = EFFECT_WRITE
+        this.facts.callees.add("nish_alloc_struct")
       }
-      const ctor = constructorOf(program, table, intrinsicType(program, node));
+      const ctor = constructorOf(program, table, intrinsicType(program, node))
       if (ctor !== null) {
-        this.facts.callees.add(ctor.name);
+        this.facts.callees.add(ctor.name)
       }
-      return;
+      return
     }
     if (node.kind === N_OBJECT && !this.facts.isStackSite(node)) {
-      this.facts.effect = EFFECT_WRITE;
-      this.facts.callees.add("nish_alloc_struct");
+      this.facts.effect = EFFECT_WRITE
+      this.facts.callees.add("nish_alloc_struct")
     }
   }
 
@@ -1376,158 +1399,158 @@ class FactCollector {
    *   unwrapOr / expect       read; `expect` also calls the two runtime symbols
    */
   collectResultFacts(node: Node): void {
-    const program = this.unit.program;
-    const table = this.table;
+    const program = this.unit.program
+    const table = this.table
     if (node.kind === N_CALL) {
       // WP17: a call that answers a `Result` in a register hands back no
       // memory, so the *caller* builds the object the rest of the lowering
       // reads. That is an allocation of this function — an own alloca when the
       // escape analysis says so, an arena bump otherwise — and the allocator
       // call has to be reported here, because the callee no longer makes it.
-      const callee = program.nodeCallees[node.id];
+      const callee = program.nodeCallees[node.id]
       if (callee !== null) {
         if (table.resultByValue(callee.returnType)) {
           if (!this.facts.isStackSite(node)) {
-            this.facts.callees.add("nish_alloc_struct");
+            this.facts.callees.add("nish_alloc_struct")
           }
-          this.facts.effect = EFFECT_WRITE;
+          this.facts.effect = EFFECT_WRITE
         }
-        return;
+        return
       }
-      const method = resultMethodName(program, table, node);
+      const method = resultMethodName(program, table, node)
       if (method.length > 0) {
         if (this.isStackOwned(node.children[0].children[0])) {
-          return; // own alloca (WP6)
+          return // own alloca (WP6)
         }
-        this.facts.readsMemory = true;
+        this.facts.readsMemory = true
         if (method === "orReturn") {
-          this.facts.effect = EFFECT_WRITE;
-          this.facts.callees.add("nish_alloc_struct");
+          this.facts.effect = EFFECT_WRITE
+          this.facts.callees.add("nish_alloc_struct")
         } else if (method === "expect") {
-          this.facts.callees.add("nish_write");
-          this.facts.callees.add("nish_exit");
+          this.facts.callees.add("nish_write")
+          this.facts.callees.add("nish_exit")
         }
-        return;
+        return
       }
       // `Ok(...)` / `Err(...)`: a user function of that name is in `nodeCallees`
       // and is reported through the call graph instead.
       if (!isResultConstructorCall(program, table, node)) {
-        return;
+        return
       }
       if (!this.facts.isStackSite(node)) {
-        this.facts.callees.add("nish_alloc_struct");
+        this.facts.callees.add("nish_alloc_struct")
       }
-      this.facts.effect = EFFECT_WRITE;
-      return;
+      this.facts.effect = EFFECT_WRITE
+      return
     }
     if (node.kind === N_MEMBER) {
-      const receiver = node.children[0];
+      const receiver = node.children[0]
       if (!table.isResult(program.nodeTypes[receiver.id])) {
-        return;
+        return
       }
-      const above = this.unit.parents.parentOf(node);
+      const above = this.unit.parents.parentOf(node)
       if (above !== null && above.kind === N_CALL && above.children[0] === node) {
-        return; // the method call above
+        return // the method call above
       }
       if (this.isStackOwned(receiver)) {
-        return; // own alloca (WP6)
+        return // own alloca (WP6)
       }
-      this.facts.readsMemory = true;
+      this.facts.readsMemory = true
     }
   }
 
   /** Array constructs, mirroring `self/emit-arrays.ts`. */
   collectArrayFacts(node: Node): void {
-    const program = this.unit.program;
-    const table = this.table;
+    const program = this.unit.program
+    const table = this.table
     if (node.kind === N_INDEX && this.isArrayValued(node.children[0])) {
-      this.facts.readsMemory = true;
+      this.facts.readsMemory = true
       // Mirrors `emitBoundsCheck` exactly, proof and all: an access the checker
       // proved in range emits no call, so listing `nish_panic_index` here would
       // cost the function `willreturn` for a `noreturn` callee that is not in
       // its IR.
       if (!this.opts.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
-        this.facts.callees.add("nish_panic_index");
+        this.facts.callees.add("nish_panic_index")
       }
-      return;
+      return
     }
     if (node.kind === N_MEMBER && this.isArrayValued(node.children[0])) {
-      this.facts.readsMemory = true; // `.length`
-      return;
+      this.facts.readsMemory = true // `.length`
+      return
     }
     if (node.kind === N_FOR_OF) {
-      this.facts.readsMemory = true;
-      return;
+      this.facts.readsMemory = true
+      return
     }
     if (node.kind === N_ARRAY || (node.kind === N_NEW && this.isArrayValued(node))) {
       if (!this.facts.isStackSite(node)) {
-        this.facts.effect = EFFECT_WRITE;
+        this.facts.effect = EFFECT_WRITE
       }
-      return;
+      return
     }
-    const method = arrayMethodName(program, table, node);
+    const method = arrayMethodName(program, table, node)
     if (method.length > 0) {
-      this.collectMethodFacts(node, method);
-      return;
+      this.collectMethodFacts(node, method)
+      return
     }
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
-      this.facts.effect = EFFECT_WRITE;
-      this.noteArrayWrite(node, node.children[0].children[0]);
+      this.facts.effect = EFFECT_WRITE
+      this.noteArrayWrite(node, node.children[0].children[0])
     }
   }
 
   isArrayValued(expr: Node): boolean {
-    const type = this.unit.program.nodeTypes[expr.id];
-    return type >= 0 && this.table.isArray(type);
+    const type = this.unit.program.nodeTypes[expr.id]
+    return type >= 0 && this.table.isArray(type)
   }
 
   /** What each array method does to memory; mirrors the lowerings exactly. */
   collectMethodFacts(call: Node, method: string): void {
     if (method === "push") {
-      this.facts.effect = EFFECT_WRITE;
-      this.noteArrayWrite(call, methodReceiver(call));
-      this.facts.resizesArray = true;
-      this.facts.callees.add("nish_array_grow");
-      return;
+      this.facts.effect = EFFECT_WRITE
+      this.noteArrayWrite(call, methodReceiver(call))
+      this.facts.resizesArray = true
+      this.facts.callees.add("nish_array_grow")
+      return
     }
     if (method === "pop") {
       // Stores the shortened length back, and panics on an empty array.
-      this.facts.effect = EFFECT_WRITE;
-      this.noteArrayWrite(call, methodReceiver(call));
-      this.facts.resizesArray = true;
+      this.facts.effect = EFFECT_WRITE
+      this.noteArrayWrite(call, methodReceiver(call))
+      this.facts.resizesArray = true
       if (!this.opts.uncheckedIndexing) {
-        this.facts.callees.add("nish_panic_index");
+        this.facts.callees.add("nish_panic_index")
       }
-      return;
+      return
     }
     if (method === "join") {
-      this.facts.effect = EFFECT_WRITE; // one arena allocation
-      this.facts.callees.add("nish_alloc_struct");
-      return;
+      this.facts.effect = EFFECT_WRITE // one arena allocation
+      this.facts.callees.add("nish_alloc_struct")
+      return
     }
-    this.facts.readsMemory = true; // `indexOf` scans the elements
-    const receiver = methodReceiver(call);
+    this.facts.readsMemory = true // `indexOf` scans the elements
+    const receiver = methodReceiver(call)
     if (receiver === null) {
-      return;
+      return
     }
-    const type = this.unit.program.nodeTypes[receiver.id];
+    const type = this.unit.program.nodeTypes[receiver.id]
     if (type >= 0 && this.table.isArray(type) && this.table.refOf(type) === T_STRING) {
-      this.facts.callees.add("nish_str_eq");
+      this.facts.callees.add("nish_str_eq")
     }
   }
 
   /** Every integer division may call the noreturn panic. */
   collectDivisionFacts(node: Node): void {
     if (node.kind !== N_BINARY) {
-      return;
+      return
     }
-    const op = node.text;
+    const op = node.text
     if (op !== "/" && op !== "%" && op !== "/=" && op !== "%=") {
-      return;
+      return
     }
-    const left = this.unit.program.nodeTypes[node.children[0].id];
+    const left = this.unit.program.nodeTypes[node.children[0].id]
     if (left >= 0 && isInteger(left)) {
-      this.facts.callees.add("nish_panic_div");
+      this.facts.callees.add("nish_panic_div")
     }
   }
 
@@ -1540,52 +1563,52 @@ class FactCollector {
    * the analysis is told it emits never drift apart.
    */
   collectNamespacePropertyFacts(node: Node): void {
-    let name = "";
+    let name = ""
     if (node.kind === N_MEMBER) {
       if (receiverIsValue(this.unit.program, node.children[0])) {
-        return;
+        return
       }
-      name = dottedName(node);
+      name = dottedName(node)
     } else if (node.kind === N_IDENT) {
       // The same property, reached through `import { argv } from
       // "nish:process"`. An attribute that depended on which spelling a
       // program used would be a miscompile waiting for the other one.
-      name = this.unit.program.nodeBuiltins[node.id];
+      name = this.unit.program.nodeBuiltins[node.id]
     } else {
-      return;
+      return
     }
     if (name === "process.argv") {
-      this.facts.readsMemory = true;
+      this.facts.readsMemory = true
     } else if (name === "process.platform") {
-      this.facts.callees.add("nish_platform");
+      this.facts.callees.add("nish_platform")
     } else if (name === "process.arch") {
-      this.facts.callees.add("nish_arch");
+      this.facts.callees.add("nish_arch")
     }
   }
 
   /** WP7: `toI32`, `parseInt`, `readFileSync` and the rest, called by plain identifier. */
   collectIdentifierBuiltinFacts(node: Node): void {
     if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT) {
-      return;
+      return
     }
     if (this.unit.program.nodeCallees[node.id] !== null) {
-      return; // a user function of that name wins
+      return // a user function of that name wins
     }
     // Under a `nish:` import the identifier is the local name, so the checker
     // recorded which builtin it is; a dotted one is what the other helper
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
-    const imported = this.unit.program.nodeBuiltins[node.id];
+    const imported = this.unit.program.nodeBuiltins[node.id]
     if (imported.length > 0) {
       this.addCallees(
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
-      );
-      return;
+      )
+      return
     }
-    this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node));
+    this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node))
   }
 }
 
@@ -1603,38 +1626,38 @@ export const collectFacts = (
   nodeCount: i32,
   known: FactsTable | null
 ): FunctionFacts => {
-  const program = unit.program;
-  const facts = new FunctionFacts(sig.paramNames, nodeCount);
-  facts.freshThis = sig.role === ROLE_CONSTRUCTOR;
-  facts.returnDeref = structSize(program, table, sig.returnType);
-  facts.returnAlign = pointerAlign(program, table, sig.returnType);
+  const program = unit.program
+  const facts = new FunctionFacts(sig.paramNames, nodeCount)
+  facts.freshThis = sig.role === ROLE_CONSTRUCTOR
+  facts.returnDeref = structSize(program, table, sig.returnType)
+  facts.returnAlign = pointerAlign(program, table, sig.returnType)
   if (memory !== null) {
-    facts.stackSites = memory.stackSites;
-    facts.stackLocals = memory.stackLocals;
-    facts.stackParams = memory.stackParams;
-    facts.directArena = memory.directArena;
-    facts.allocates = memory.directArena;
-    facts.allocLeaks = memory.allocLeaks;
-    facts.allocEscapes = memory.allocEscapes;
-    facts.returnsAllocation = memory.returnsAllocation;
-    facts.usesArenaControl = memory.usesArenaControl;
-    facts.callSites = memory.callSites;
-    facts.escapingNodes = memory.escapingNodes;
-    facts.arenaNodes = memory.arenaNodes;
-    facts.escapeSite = memory.escapeSite;
+    facts.stackSites = memory.stackSites
+    facts.stackLocals = memory.stackLocals
+    facts.stackParams = memory.stackParams
+    facts.directArena = memory.directArena
+    facts.allocates = memory.directArena
+    facts.allocLeaks = memory.allocLeaks
+    facts.allocEscapes = memory.allocEscapes
+    facts.returnsAllocation = memory.returnsAllocation
+    facts.usesArenaControl = memory.usesArenaControl
+    facts.callSites = memory.callSites
+    facts.escapingNodes = memory.escapingNodes
+    facts.arenaNodes = memory.arenaNodes
+    facts.escapeSite = memory.escapeSite
     // The half of `contained` that needs no fixpoint; the other is added after it.
-    facts.contained = rootsHoldNoPointer(program, table, sig);
+    facts.contained = rootsHoldNoPointer(program, table, sig)
   }
   // A `returned` or `leaked` allocation is still an allocation.
   if (facts.returnsAllocation || facts.allocLeaks) {
-    facts.allocates = true;
+    facts.allocates = true
   }
-  facts.allocatesItself = facts.allocates;
-  facts.sourceName = sig.sourceName;
-  facts.returnsScalar = sig.returnType === T_VOID || isScalarArgument(table, sig.returnType);
-  let i = 0;
+  facts.allocatesItself = facts.allocates
+  facts.sourceName = sig.sourceName
+  facts.returnsScalar = sig.returnType === T_VOID || isScalarArgument(table, sig.returnType)
+  let i = 0
   while (i < sig.paramNames.length) {
-    const type = sig.paramTypes[i];
+    const type = sig.paramTypes[i]
     if (isPointerParam(table, type)) {
       facts.pointerParams.push(
         new PointerParamFacts(
@@ -1642,9 +1665,9 @@ export const collectFacts = (
           structSize(program, table, table.stripNull(type)),
           pointerAlign(program, table, type)
         )
-      );
+      )
     }
-    i = i + 1;
+    i = i + 1
   }
 
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
@@ -1657,22 +1680,22 @@ export const collectFacts = (
   // pointer facts stay empty because S1's boundary is scalars only, so a
   // foreign callee has no pointer to capture (`docs/wp27-ffi.md` §3).
   if (sig.foreign()) {
-    facts.effect = EFFECT_WRITE;
-    facts.sharedWrite = true; // no site and no callee to name: the body is C
-    facts.willReturn = false;
-    facts.readsMemory = true;
+    facts.effect = EFFECT_WRITE
+    facts.sharedWrite = true // no site and no callee to name: the body is C
+    facts.willReturn = false
+    facts.readsMemory = true
     // S1's boundary is scalars only, so a C body cannot reach an array header
     // at all; this says otherwise for the same reason the three lines above
     // do. S2 widening the type check must revisit the block rather than
     // inherit a `false` nobody re-derived.
-    facts.resizesArray = true;
-    return facts;
+    facts.resizesArray = true
+    return facts
   }
 
-  const collector = new FactCollector(unit, table, opts, sig, facts, known);
-  const body = sig.body();
+  const collector = new FactCollector(unit, table, opts, sig, facts, known)
+  const body = sig.body()
   if (body !== null) {
-    collector.visit(body);
+    collector.visit(body)
   }
 
   // The two arena builtins that report the bump position. Read here rather
@@ -1681,24 +1704,24 @@ export const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isParallelEntry(sig)) {
-    markParallelEntry(facts);
+    markParallelEntry(facts)
   }
   if (isMapRoute(sig)) {
-    markMapRoute(table, sig, facts);
+    markMapRoute(table, sig, facts)
   }
 
-  facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
-  facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark");
+  facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
+  facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark")
 
   if (facts.readsMemory) {
-    facts.effect = maxEffect(facts.effect, EFFECT_READ);
+    facts.effect = maxEffect(facts.effect, EFFECT_READ)
   }
   if (facts.hasTrap) {
-    facts.effect = EFFECT_WRITE;
+    facts.effect = EFFECT_WRITE
   }
-  facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn;
-  return facts;
-};
+  facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn
+  return facts
+}
 
 /**
  * WP29 P1: the facts of a `parallelMapInto` or `parallelReduce` instance are
@@ -1721,15 +1744,15 @@ export const collectFacts = (
  * function, whose own facts are unaffected.
  */
 const markParallelEntry = (facts: FunctionFacts): void => {
-  facts.callees.add("nish_parallel_range");
+  facts.callees.add("nish_parallel_range")
   for (const name of facts.paramNames) {
-    facts.escaping.add(name);
+    facts.escaping.add(name)
   }
   for (const pp of facts.pointerParams) {
-    pp.captured = true;
-    pp.writesThrough = true;
+    pp.captured = true
+    pp.writesThrough = true
   }
-};
+}
 
 /**
  * WP32 S5: the body of a `nish/map` instance is what Node runs, and natively
@@ -1745,16 +1768,17 @@ const markParallelEntry = (facts: FunctionFacts): void => {
  * does, so for it this changes nothing but the order the facts are found in.
  */
 const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
-  const routed = routeCalleesOf(table, sig);
-  const receiver: PointerParamFacts | null = sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null;
+  const routed = routeCalleesOf(table, sig)
+  const receiver: PointerParamFacts | null =
+    sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null
   for (const callee of routed) {
-    facts.callees.add(callee.name);
+    facts.callees.add(callee.name)
     if (receiver !== null) {
-      receiver.passedToCallees.push(callee.name);
-      receiver.passedToIndices.push(0);
+      receiver.passedToCallees.push(callee.name)
+      receiver.passedToIndices.push(0)
     }
   }
-};
+}
 
 // ---- The fixpoint ------------------------------------------------------------------------
 
@@ -1773,22 +1797,22 @@ export const analyzeFunctions = (
   runtime: RuntimeTable
 ): FactsTable => {
   // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
-  const first = collectRound(units, table, opts, null, null);
-  propagate(first, runtime);
-  const escapes = new EscapeSet();
+  const first = collectRound(units, table, opts, null, null)
+  propagate(first, runtime)
+  const escapes = new EscapeSet()
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       if (sig.definedIn(unit.program.source)) {
         // WP18: over the instantiation's own side tables, so `Box<i32>` being
         // stack-allocated in one instantiation and arena-allocated in another
         // is two answers rather than one.
-        const instance = sig.instance;
+        const instance = sig.instance
         if (instance !== null) {
-          unit.program.enterInstance(instance);
+          unit.program.enterInstance(instance)
         }
-        escapes.set(sig.name, analyzeEscapes(unit, table, sig, first, opts));
+        escapes.set(sig.name, analyzeEscapes(unit, table, sig, first, opts))
         if (instance !== null) {
-          unit.program.leaveInstance();
+          unit.program.leaveInstance()
         }
       }
     }
@@ -1798,29 +1822,29 @@ export const analyzeFunctions = (
   // `for...of` ask whether its calls actually grow an array (WP15 section 2c)
   // rather than assuming every one of them does. `resizesArray` is settled by
   // then: it is syntax plus the call graph, and neither moves between rounds.
-  const facts = collectRound(units, table, opts, escapes, first);
-  propagate(facts, runtime);
+  const facts = collectRound(units, table, opts, escapes, first)
+  propagate(facts, runtime)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
-    f.contained = f.contained || !f.allocEscapes;
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
+    f.contained = f.contained || !f.allocEscapes
   }
-  scopeParallelBodies(units, facts);
-  settleCalleeScopes(facts);
+  scopeParallelBodies(units, facts)
+  settleCalleeScopes(facts)
   // The per-pass scopes read the settled answers: which callees still leave
   // memory behind, and which let an allocation escape.
   for (const unit of units) {
     for (const sig of unit.program.functions) {
-      const f = facts.get(sig.name);
+      const f = facts.get(sig.name)
       if (f === null || !f.hasLoops || !sig.definedIn(unit.program.source)) {
-        continue;
+        continue
       }
-      const instance = sig.instance;
+      const instance = sig.instance
       if (instance !== null) {
-        unit.program.enterInstance(instance);
+        unit.program.enterInstance(instance)
       }
-      decideLoopScopes(unit, table, sig, f, facts);
+      decideLoopScopes(unit, table, sig, f, facts)
       if (instance !== null) {
-        unit.program.leaveInstance();
+        unit.program.leaveInstance()
       }
     }
   }
@@ -1829,14 +1853,14 @@ export const analyzeFunctions = (
     // so nothing else moves. A scoped pass reads its mark inline and calls
     // only the release.
     if (f.arenaScope) {
-      f.callees.add("nish_arena_mark");
+      f.callees.add("nish_arena_mark")
     }
     if (f.arenaScope || f.scopesAnyPass()) {
-      f.callees.add("nish_arena_release");
+      f.callees.add("nish_arena_release")
     }
   }
-  return facts;
-};
+  return facts
+}
 
 /**
  * WP29: a data-parallel body that allocates gets an arena scope of its own, so
@@ -1865,14 +1889,14 @@ export const analyzeFunctions = (
 const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => {
   for (const unit of units) {
     for (const call of unit.program.parallelCalls) {
-      const body = parallelBodyOf(call.sig);
-      const f: FunctionFacts | null = body === null ? null : facts.get(body.name);
+      const body = parallelBodyOf(call.sig)
+      const f: FunctionFacts | null = body === null ? null : facts.get(body.name)
       if (f !== null && f.allocates && !f.arenaScope && recyclesPerElement(f)) {
-        f.arenaScope = true;
+        f.arenaScope = true
       }
     }
   }
-};
+}
 
 /**
  * The automatic arena scope for a function whose callees are what allocate.
@@ -1911,89 +1935,89 @@ const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => 
  * scope nobody needed, never a missing one.
  */
 const settleCalleeScopes = (facts: FactsTable): void => {
-  let changed = true;
+  let changed = true
   while (changed) {
-    changed = false;
+    changed = false
     for (const f of facts.list) {
       if (!f.netAllocates && !f.arenaScope && (f.allocatesItself || someCalleeNetAllocates(facts, f))) {
-        f.netAllocates = true;
-        changed = true;
+        f.netAllocates = true
+        changed = true
       }
     }
   }
-  const before: boolean[] = [];
-  const state: i32[] = [];
+  const before: boolean[] = []
+  const state: i32[] = []
   for (const f of facts.list) {
-    before.push(f.netAllocates);
-    state.push(0);
+    before.push(f.netAllocates)
+    state.push(0)
   }
-  let i = 0;
+  let i = 0
   while (i < state.length) {
     if (state[i] === 0) {
-      settleScope(facts, i, state, before);
+      settleScope(facts, i, state, before)
     }
-    i = i + 1;
+    i = i + 1
   }
-};
+}
 
 const someCalleeNetAllocates = (facts: FactsTable, f: FunctionFacts): boolean => {
-  let c = 0;
+  let c = 0
   while (c < f.callees.size()) {
-    const g = facts.get(f.callees.at(c));
+    const g = facts.get(f.callees.at(c))
     if (g !== null && g.netAllocates) {
-      return true;
+      return true
     }
-    c = c + 1;
+    c = c + 1
   }
-  return false;
-};
+  return false
+}
 
 /** `state`: 0 not yet visited, 1 being settled (on the walk), 2 settled. */
 const settleScope = (facts: FactsTable, i: i32, state: i32[], before: boolean[]): void => {
-  state[i] = 1;
-  const f = facts.list[i];
-  let calleeAllocates = false;
-  let c = 0;
+  state[i] = 1
+  const f = facts.list[i]
+  let calleeAllocates = false
+  let c = 0
   while (c < f.callees.size()) {
-    const j = facts.indexOf(f.callees.at(c));
+    const j = facts.indexOf(f.callees.at(c))
     // `state` and `before` hold one entry per function, so a symbol with facts
     // is always inside both; the tests are what let the bounds prover see it,
     // and the second is repeated because the recursive call drops the first.
     if (j >= 0 && j < state.length && state[j] === 0) {
-      settleScope(facts, j, state, before);
+      settleScope(facts, j, state, before)
     }
     if (j >= 0 && j < state.length && j < before.length) {
       if (state[j] === 2 ? facts.list[j].netAllocates : before[j]) {
-        calleeAllocates = true;
+        calleeAllocates = true
       }
     }
-    c = c + 1;
+    c = c + 1
   }
   if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar && !f.usesArenaControl) {
-    f.arenaScope = true;
+    f.arenaScope = true
   }
-  f.netAllocates = !f.arenaScope && (f.allocatesItself || calleeAllocates);
-  state[i] = 2;
-};
+  f.netAllocates = !f.arenaScope && (f.allocatesItself || calleeAllocates)
+  state[i] = 2
+}
 
 /** Escape results by symbol, the second round's input. */
 export class EscapeSet {
-  index: StringMap;
-  list: EscapeResult[];
+  index: StringMap
+  list: EscapeResult[]
 
   constructor() {
-    this.index = new StringMap();
-    this.list = [];
+    this.index = new StringMap()
+    this.list = []
   }
 
   set(name: string, result: EscapeResult): void {
-    this.index.set(name, this.list.length);
-    this.list.push(result);
+    this.index.set(name, this.list.length)
+    this.list.push(result)
   }
 
   get(name: string): EscapeResult | null {
-    const at = this.index.get(name, -1);
-    return at < 0 ? null : this.list[at];
+    const at = this.index.get(name, -1)
+    return at < 0 ? null : this.list[at]
   }
 }
 
@@ -2004,178 +2028,180 @@ const collectRound = (
   escapes: EscapeSet | null,
   known: FactsTable | null
 ): FactsTable => {
-  const facts = new FactsTable();
+  const facts = new FactsTable()
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       if (!sig.definedIn(unit.program.source)) {
-        continue; // an imported signature belongs to the module that defines it
+        continue // an imported signature belongs to the module that defines it
       }
-      let memory: EscapeResult | null = null;
+      let memory: EscapeResult | null = null
       if (escapes !== null) {
-        memory = escapes.get(sig.name);
+        memory = escapes.get(sig.name)
       }
       // WP18: per instantiation, over that instantiation's side tables. The
       // facts are keyed by symbol already, so `eq$i32` being `readnone` and
       // `eq$str` `readonly` needs nothing but the right tables here.
-      const instance = sig.instance;
+      const instance = sig.instance
       if (instance !== null) {
-        unit.program.enterInstance(instance);
+        unit.program.enterInstance(instance)
       }
-      facts.set(
-        sig.name,
-        collectFacts(unit, table, opts, sig, memory, unit.program.nodeTypes.length, known)
-      );
+      facts.set(sig.name, collectFacts(unit, table, opts, sig, memory, unit.program.nodeTypes.length, known))
       if (instance !== null) {
-        unit.program.leaveInstance();
+        unit.program.leaveInstance()
       }
     }
   }
-  return facts;
-};
+  return facts
+}
 
 /** Propagate effects, termination, pointer facts and allocation facts to a fixpoint. */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
-  let changed = true;
+  let changed = true
   while (changed) {
-    changed = false;
+    changed = false
     for (const f of facts.list) {
-      let c = 0;
+      let c = 0
       while (c < f.callees.size()) {
         if (propagateCallee(facts, runtime, f, f.callees.at(c))) {
-          changed = true;
+          changed = true
         }
-        c = c + 1;
+        c = c + 1
       }
       // A pointer-returning callee that allocates makes its result an allocation of this function.
       for (const site of f.callSites) {
-        const callee = facts.get(site.callee);
+        const callee = facts.get(site.callee)
         if (callee === null || !callee.allocates) {
-          continue;
+          continue
         }
         if (site.escapes && !f.allocEscapes) {
           // WP9: this function stored the callee's result where its own caller can reach it.
-          f.allocEscapes = true;
-          changed = true;
+          f.allocEscapes = true
+          changed = true
         }
         if (site.flow === FLOW_LOCAL && !f.directArena) {
-          f.directArena = true;
-          changed = true;
+          f.directArena = true
+          changed = true
         } else if (site.flow === FLOW_RETURNED && !f.returnsAllocation) {
-          f.returnsAllocation = true;
-          changed = true;
+          f.returnsAllocation = true
+          changed = true
         } else if (site.flow === FLOW_LEAKS && !f.allocLeaks) {
-          f.allocLeaks = true;
-          changed = true;
+          f.allocLeaks = true
+          changed = true
         }
       }
       // A pointer inherits what every callee it is passed to does with the
       // corresponding parameter. An unknown callee is assumed to do both.
       for (const pp of f.pointerParams) {
-        let i = 0;
+        let i = 0
         while (i < pp.passedToCallees.length) {
-          const g = facts.get(pp.passedToCallees[i]);
-          let writes = true;
-          let captures = true;
+          const g = facts.get(pp.passedToCallees[i])
+          let writes = true
+          let captures = true
           if (g !== null) {
-            const target = g.pointerParamAt(pp.passedToIndices[i]);
+            const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
-              writes = target.writesThrough;
-              captures = target.captured;
+              writes = target.writesThrough
+              captures = target.captured
             }
           }
           if (writes && !pp.writesThrough) {
-            pp.writesThrough = true;
-            changed = true;
+            pp.writesThrough = true
+            changed = true
           }
           if (captures && !pp.captured) {
-            pp.captured = true;
-            changed = true;
+            pp.captured = true
+            changed = true
           }
-          i = i + 1;
+          i = i + 1
         }
       }
     }
   }
-  nameWriteVia(facts, runtime);
-};
+  nameWriteVia(facts, runtime)
+}
 
 /** One caller/callee edge; answers whether anything about the caller moved. */
-const propagateCallee = (facts: FactsTable, runtime: RuntimeTable, f: FunctionFacts, callee: string): boolean => {
-  let changed = false;
-  const calleeFacts = facts.get(callee);
-  const rt = runtime.lookup(callee);
+const propagateCallee = (
+  facts: FactsTable,
+  runtime: RuntimeTable,
+  f: FunctionFacts,
+  callee: string
+): boolean => {
+  let changed = false
+  const calleeFacts = facts.get(callee)
+  const rt = runtime.lookup(callee)
   // The inline arena allocator is not in the runtime table (it is emitted as
   // an IR definition), but callers must still see it as a writing, willreturn
   // callee.
-  const isAllocator = callee === "nish_alloc_struct";
-  let calleeEffect = EFFECT_WRITE;
-  let calleeReturns = false;
-  let calleeNoReturn = false;
+  const isAllocator = callee === "nish_alloc_struct"
+  let calleeEffect = EFFECT_WRITE
+  let calleeReturns = false
+  let calleeNoReturn = false
   if (calleeFacts !== null) {
-    calleeEffect = calleeFacts.effect;
-    calleeReturns = calleeFacts.willReturn;
-    calleeNoReturn = calleeFacts.callsNoReturn;
+    calleeEffect = calleeFacts.effect
+    calleeReturns = calleeFacts.willReturn
+    calleeNoReturn = calleeFacts.callsNoReturn
   } else if (isAllocator) {
-    calleeEffect = EFFECT_WRITE;
-    calleeReturns = hasAttr(inlineAllocatorAttrs(), "willreturn");
+    calleeEffect = EFFECT_WRITE
+    calleeReturns = hasAttr(inlineAllocatorAttrs(), "willreturn")
   } else if (rt !== null) {
-    calleeEffect = rt.effect;
-    calleeReturns = hasAttr(rt.attrs, "willreturn");
-    calleeNoReturn = rt.noreturn;
+    calleeEffect = rt.effect
+    calleeReturns = hasAttr(rt.attrs, "willreturn")
+    calleeNoReturn = rt.noreturn
   }
   if (!f.sharedWrite && writesShared(calleeFacts, rt, callee)) {
-    f.sharedWrite = true;
-    changed = true;
+    f.sharedWrite = true
+    changed = true
   }
-  const merged = maxEffect(f.effect, calleeEffect);
+  const merged = maxEffect(f.effect, calleeEffect)
   if (merged !== f.effect) {
-    f.effect = merged;
-    changed = true;
+    f.effect = merged
+    changed = true
   }
   if (f.willReturn && !calleeReturns) {
-    f.willReturn = false;
-    changed = true;
+    f.willReturn = false
+    changed = true
   }
   if (calleeNoReturn && !f.callsNoReturn) {
-    f.callsNoReturn = true;
-    f.willReturn = false;
-    changed = true;
+    f.callsNoReturn = true
+    f.willReturn = false
+    changed = true
   }
   if (calleeFacts !== null) {
     // WP6: allocation facts flow up the call graph (see escape.ts).
     if (calleeFacts.allocates && !f.allocates) {
-      f.allocates = true;
-      changed = true;
+      f.allocates = true
+      changed = true
     }
     if (calleeFacts.allocLeaks && !f.allocLeaks) {
-      f.allocLeaks = true;
-      changed = true;
+      f.allocLeaks = true
+      changed = true
     }
     // WP9: whatever a callee lets out of its own frame is out of this one too.
     if (calleeFacts.allocEscapes && !f.allocEscapes) {
-      f.allocEscapes = true;
-      changed = true;
+      f.allocEscapes = true
+      changed = true
     }
     // WP15 section 2c: growing an array is a property of the whole closure,
     // the same way allocation is -- a caller that pushes nothing still moves a
     // header when the callee it invokes does.
     if (calleeFacts.resizesArray && !f.resizesArray) {
-      f.resizesArray = true;
-      changed = true;
+      f.resizesArray = true
+      changed = true
     }
     if (calleeFacts.usesArenaControl && !f.usesArenaControl) {
-      f.usesArenaControl = true;
-      changed = true;
+      f.usesArenaControl = true
+      changed = true
     }
     if (calleeFacts.readsArenaState && !f.readsArenaState) {
-      f.readsArenaState = true;
-      changed = true;
+      f.readsArenaState = true
+      changed = true
     }
   }
-  return changed;
-};
+  return changed
+}
 
-const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0;
+const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0
 
 /**
  * WP29 P1: calling `callee`, whose facts and runtime entry the caller has
@@ -2188,13 +2214,13 @@ const writesShared = (
   callee: string
 ): boolean => {
   if (calleeFacts !== null) {
-    return calleeFacts.sharedWrite;
+    return calleeFacts.sharedWrite
   }
   if (callee === "nish_alloc_struct") {
-    return false; // the inline arena allocator; see `FunctionFacts.sharedWrite`
+    return false // the inline arena allocator; see `FunctionFacts.sharedWrite`
   }
-  return rt === null || rt.sharedWrite();
-};
+  return rt === null || rt.sharedWrite()
+}
 
 /**
  * WP29 P1: `writeVia` for every function whose shared write is a callee's,
@@ -2207,22 +2233,22 @@ const writesShared = (
 const nameWriteVia = (facts: FactsTable, runtime: RuntimeTable): void => {
   for (const f of facts.list) {
     if (!f.sharedWrite || f.writeSite !== null) {
-      continue;
+      continue
     }
-    let c = 0;
+    let c = 0
     while (c < f.callees.size() && f.writeVia.length === 0) {
-      const callee = f.callees.at(c);
+      const callee = f.callees.at(c)
       if (writesShared(facts.get(callee), runtime.lookup(callee), callee)) {
-        f.writeVia = callee;
+        f.writeVia = callee
       }
-      c = c + 1;
+      c = c + 1
     }
   }
-};
+}
 
 // ---- Counted loops ------------------------------------------------------------------------
 
-const INT32_MAX: f64 = 2147483647.0;
+const INT32_MAX: f64 = 2147483647.0
 
 /**
  * True for `for (let i = <init>; i CMP bound; STEP) body` over i32 when the
@@ -2239,108 +2265,108 @@ export const isCountedLoop = (
   loop: Node,
   known: FactsTable | null
 ): boolean => {
-  const program = unit.program;
+  const program = unit.program
   if (loop.kind === N_FOR_OF) {
     // WP32: a walk re-reads the entry count every pass, and a body that sets
     // a new key extends it forever, as JavaScript's does; it is never counted.
     if (program.nodeCallees[loop.id] !== null) {
-      return false;
+      return false
     }
-    return !bodyMayExtend(unit, table, loop.children[2], known);
+    return !bodyMayExtend(unit, table, loop.children[2], known)
   }
   if (loop.kind !== N_FOR) {
-    return false;
+    return false
   }
-  const init = loop.children[0];
-  const condition = loop.children[1];
-  const step = loop.children[2];
+  const init = loop.children[0]
+  const condition = loop.children[1]
+  const step = loop.children[2]
   if (init.kind !== N_VAR || condition.kind === N_EMPTY || step.kind === N_EMPTY) {
-    return false;
+    return false
   }
-  const declarations = init.children[0];
+  const declarations = init.children[0]
   if (declarations.children.length !== 1) {
-    return false;
+    return false
   }
-  const iv = program.nodeLocals[declarations.children[0].id];
+  const iv = program.nodeLocals[declarations.children[0].id]
   if (iv === null || iv.type !== T_I32) {
-    return false;
+    return false
   }
 
-  const cond = unwrapParens(condition);
+  const cond = unwrapParens(condition)
   if (cond.kind !== N_BINARY || !isName(cond.children[0], iv.name)) {
-    return false;
+    return false
   }
-  const cmp = cond.text;
-  const upward = cmp === "<" || cmp === "<=";
-  const downward = cmp === ">" || cmp === ">=";
-  const inclusive = cmp === "<=" || cmp === ">=";
-  const bound = unwrapParens(cond.children[1]);
+  const cmp = cond.text
+  const upward = cmp === "<" || cmp === "<="
+  const downward = cmp === ">" || cmp === ">="
+  const inclusive = cmp === "<=" || cmp === ">="
+  const bound = unwrapParens(cond.children[1])
   if (bound.kind !== N_IDENT && bound.kind !== N_NUMBER) {
-    return false;
+    return false
   }
 
-  const delta = stepOf(unwrapParens(step), iv.name);
+  const delta = stepOf(unwrapParens(step), iv.name)
   if (delta === 0) {
-    return false;
+    return false
   }
   if (!((upward && delta > 0) || (downward && delta < 0))) {
-    return false;
+    return false
   }
 
   if (bound.kind === N_IDENT) {
     if (absOf(delta) !== 1 || inclusive) {
-      return false;
+      return false
     }
   } else if (upward) {
     // In `f64`, as stage0's `src/` computes it: a bound past the i32 range must still
     // compare as out of range rather than wrapping into it.
-    const written: f64 = Number(bound.text);
-    const last: f64 = inclusive ? written : written - 1.0;
+    const written: f64 = Number(bound.text)
+    const last: f64 = inclusive ? written : written - 1.0
     if (last + toF64(delta) > INT32_MAX) {
-      return false;
+      return false
     }
   }
   // Downward from a non-negative literal bound: `bound - |step| >= -INT32_MAX`, so no wrap.
 
-  const guarded: string[] = [iv.name];
+  const guarded: string[] = [iv.name]
   if (bound.kind === N_IDENT) {
-    guarded.push(bound.text);
+    guarded.push(bound.text)
   }
-  return !bodyDisturbs(loop.children[3], guarded);
-};
+  return !bodyDisturbs(loop.children[3], guarded)
+}
 
-const absOf = (value: i32): i32 => value < 0 ? -value : value;
+const absOf = (value: i32): i32 => (value < 0 ? -value : value)
 
 const isName = (expr: Node, name: string): boolean => {
-  const e = unwrapParens(expr);
-  return e.kind === N_IDENT && e.text === name;
-};
+  const e = unwrapParens(expr)
+  return e.kind === N_IDENT && e.text === name
+}
 
 /** Signed step of `i++`, `++i`, `i--`, `--i`, `i += c`, `i -= c`; 0 for anything else. */
 export const stepOf = (expr: Node, name: string): i32 => {
   if (expr.kind === N_UNARY && isName(expr.children[0], name)) {
     if (expr.text === "++") {
-      return 1;
+      return 1
     }
     if (expr.text === "--") {
-      return -1;
+      return -1
     }
-    return 0;
+    return 0
   }
   if (expr.kind === N_BINARY && isName(expr.children[0], name)) {
-    const rhs = unwrapParens(expr.children[1]);
+    const rhs = unwrapParens(expr.children[1])
     if (rhs.kind !== N_NUMBER) {
-      return 0;
+      return 0
     }
     if (expr.text === "+=") {
-      return toI32(Number(rhs.text));
+      return toI32(Number(rhs.text))
     }
     if (expr.text === "-=") {
-      return -toI32(Number(rhs.text));
+      return -toI32(Number(rhs.text))
     }
   }
-  return 0;
-};
+  return 0
+}
 
 /**
  * `for (const x of a)` re-reads `a.length` every iteration, so it is bounded
@@ -2354,31 +2380,36 @@ export const stepOf = (expr: Node, name: string): i32 => {
  * asks, since the fixpoint has not run. With it the question is the one that
  * was always meant: does anything this body reaches actually move a `len`?
  */
-const bodyMayExtend = (unit: AnalysisUnit, table: TypeTable, body: Node, known: FactsTable | null): boolean => {
+const bodyMayExtend = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  body: Node,
+  known: FactsTable | null
+): boolean => {
   if (body.kind === N_THROW || isResizeCall(unit.program, table, body)) {
-    return true;
+    return true
   }
   if (body.kind === N_CALL) {
-    const callee = unit.program.nodeCallees[body.id];
+    const callee = unit.program.nodeCallees[body.id]
     // An unresolved callee is a builtin, and no builtin but `push`/`pop`
     // reaches a user array's header; those two are above.
     if (callee !== null) {
       if (known === null) {
-        return true;
+        return true
       }
-      const calleeFacts = known.get(callee.name);
+      const calleeFacts = known.get(callee.name)
       if (calleeFacts === null || calleeFacts.resizesArray) {
-        return true;
+        return true
       }
     }
   }
   for (const child of body.children) {
     if (bodyMayExtend(unit, table, child, known)) {
-      return true;
+      return true
     }
   }
-  return false;
-};
+  return false
+}
 
 /**
  * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
@@ -2386,14 +2417,14 @@ const bodyMayExtend = (unit: AnalysisUnit, table: TypeTable, body: Node, known: 
  * (`indexOf`, `join`) or builds something new.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
-  const method = arrayMethodName(program, table, node);
-  return method === "push" || method === "pop";
-};
+  const method = arrayMethodName(program, table, node)
+  return method === "push" || method === "pop"
+}
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
 const bodyDisturbs = (body: Node, names: string[]): boolean => {
   if (body.kind === N_THROW) {
-    return true;
+    return true
   }
   if (
     body.kind === N_BINARY &&
@@ -2401,7 +2432,7 @@ const bodyDisturbs = (body: Node, names: string[]): boolean => {
     body.children[0].kind === N_IDENT &&
     names.indexOf(body.children[0].text) >= 0
   ) {
-    return true;
+    return true
   }
   if (
     body.kind === N_UNARY &&
@@ -2409,31 +2440,31 @@ const bodyDisturbs = (body: Node, names: string[]): boolean => {
     body.children[0].kind === N_IDENT &&
     names.indexOf(body.children[0].text) >= 0
   ) {
-    return true;
+    return true
   }
   for (const child of body.children) {
     if (bodyDisturbs(child, names)) {
-      return true;
+      return true
     }
   }
-  return false;
-};
+  return false
+}
 
 // ---- Attribute rendering --------------------------------------------------------------------
 
 export const functionAttributes = (f: FunctionFacts): string[] => {
-  const attrs: string[] = [];
-  attrs.push("nounwind");
+  const attrs: string[] = []
+  attrs.push("nounwind")
   if (f.willReturn) {
-    attrs.push("willreturn");
+    attrs.push("willreturn")
   }
   if (f.effect === EFFECT_NONE) {
-    attrs.push("readnone");
+    attrs.push("readnone")
   } else if (f.effect === EFFECT_READ) {
-    attrs.push("readonly");
+    attrs.push("readonly")
   }
-  return attrs;
-};
+  return attrs
+}
 
 export const paramAttributes = (
   table: TypeTable,
@@ -2442,103 +2473,103 @@ export const paramAttributes = (
   f: FunctionFacts,
   privateAbi: boolean
 ): string[] => {
-  const attrs: string[] = [];
+  const attrs: string[] = []
   // `noundef` on everything except a by-value `Result` under the private ABI
   // (WP15 §7b), whose dead arm's slot is deliberately `undef` — and `noundef`
   // on an aggregate is about every element of it, not just the live one.
   if (!privateAbi || !table.resultByValue(type)) {
-    attrs.push("noundef");
+    attrs.push("noundef")
   }
   // See the header comment: every pointer fact here is proved by `collectFacts`
   // plus the `pointerParams` fixpoint in `analyzeFunctions`.
-  const pointer = f.pointerParam(name);
-  const kind = table.kindOf(type);
+  const pointer = f.pointerParam(name)
+  const kind = table.kindOf(type)
   if (type === T_BOOL) {
-    attrs.push("zeroext"); // `boolean` is i1; the C ABI wants it zero-extended
-    return attrs;
+    attrs.push("zeroext") // `boolean` is i1; the C ABI wants it zero-extended
+    return attrs
   }
   if (type === T_STRING) {
-    attrs.push("nonnull");
-    attrs.push("noalias");
-    attrs.push("readonly");
-    attrs.push("align 8");
+    attrs.push("nonnull")
+    attrs.push("noalias")
+    attrs.push("readonly")
+    attrs.push("align 8")
     if (!f.escaping.has(name)) {
-      attrs.push("nocapture");
+      attrs.push("nocapture")
     }
-    return attrs;
+    return attrs
   }
   if (kind === K_ARRAY) {
     // dereferenceable(24): every array value points at a full header (len,
     // cap, data), allocated by the arena or built by a literal; there is no
     // null and no partial header.
-    attrs.push("nonnull");
-    attrs.push("align 8");
-    attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`);
+    attrs.push("nonnull")
+    attrs.push("align 8")
+    attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`)
     if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
-      attrs.push("readonly");
+      attrs.push("readonly")
     }
     if (pointer !== null && !pointer.captured) {
-      attrs.push("nocapture");
+      attrs.push("nocapture")
     }
-    return attrs;
+    return attrs
   }
   if (kind === K_STRUCT) {
-    attrs.push("nonnull");
+    attrs.push("nonnull")
     if (name === "this" && f.freshThis) {
-      attrs.push("noalias");
+      attrs.push("noalias")
     }
     if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
-      attrs.push("readonly");
+      attrs.push("readonly")
     }
     // Not always 8: a record that is an array element sits at `i * sizeof(P)`
     // into the block, so its own alignment is all that can be promised.
-    attrs.push(`align ${pointer === null ? 8 : pointer.align}`);
+    attrs.push(`align ${pointer === null ? 8 : pointer.align}`)
     if (pointer !== null && pointer.size > 0) {
-      attrs.push(`dereferenceable(${pointer.size})`);
+      attrs.push(`dereferenceable(${pointer.size})`)
     }
     if (pointer !== null && !pointer.captured) {
-      attrs.push("nocapture");
+      attrs.push("nocapture")
     }
-    return attrs;
+    return attrs
   }
   if (kind === K_RESULT && table.resultByValue(type)) {
     // WP17: a small `Result` arrives packed in an `i64`, so none of the
     // pointer facts are about it; `noundef` alone, as for any scalar — or
     // nothing at all under the private ABI, as above.
-    return attrs;
+    return attrs
   }
   if (kind === K_RESULT) {
     // WP16: every `Result` comes from `Ok(...)` / `Err(...)`, so the object is
     // whole and never null, and nothing in the language can store through one.
-    attrs.push("nonnull");
-    attrs.push("align 8");
+    attrs.push("nonnull")
+    attrs.push("align 8")
     if (pointer !== null && pointer.size > 0) {
-      attrs.push(`dereferenceable(${pointer.size})`);
+      attrs.push(`dereferenceable(${pointer.size})`)
     }
     if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
-      attrs.push("readonly");
+      attrs.push("readonly")
     }
     if (pointer !== null && !pointer.captured) {
-      attrs.push("nocapture");
+      attrs.push("nocapture")
     }
-    return attrs;
+    return attrs
   }
   if (kind === K_NULLABLE) {
     // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind.
     if (table.refOf(type) === T_STRING) {
-      attrs.push("noalias");
-      attrs.push("readonly");
+      attrs.push("noalias")
+      attrs.push("readonly")
     } else if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
-      attrs.push("readonly");
+      attrs.push("readonly")
     }
-    attrs.push(`align ${pointer === null ? 8 : pointer.align}`);
-    const uncaptured = pointer !== null ? !pointer.captured : !f.escaping.has(name);
+    attrs.push(`align ${pointer === null ? 8 : pointer.align}`)
+    const uncaptured = pointer !== null ? !pointer.captured : !f.escaping.has(name)
     if (uncaptured) {
-      attrs.push("nocapture");
+      attrs.push("nocapture")
     }
   }
-  return attrs;
-};
+  return attrs
+}
 
 /**
  * `deref` is the struct size for struct-returning functions, 0 otherwise;
@@ -2552,51 +2583,51 @@ export const returnAttributes = (
   privateAbi: boolean,
   align: i32
 ): string[] => {
-  const attrs: string[] = [];
-  const kind = table.kindOf(type);
+  const attrs: string[] = []
+  const kind = table.kindOf(type)
   if (type === T_VOID) {
-    return attrs;
+    return attrs
   }
   // The private ABI's arms are the one shape in the language that is not
   // fully defined: the arm that is not live is `undef` by construction, so
   // they carry no `noundef` at all (WP15 §7b).
   if (privateAbi && table.resultByValue(type)) {
-    return attrs;
+    return attrs
   }
-  attrs.push("noundef");
+  attrs.push("noundef")
   if (type === T_BOOL) {
-    attrs.push("zeroext");
-    return attrs;
+    attrs.push("zeroext")
+    return attrs
   }
   if (type === T_STRING) {
-    attrs.push("nonnull");
-    attrs.push("align 8");
-    return attrs;
+    attrs.push("nonnull")
+    attrs.push("align 8")
+    return attrs
   }
   if (kind === K_ARRAY) {
-    attrs.push("nonnull");
-    attrs.push("align 8");
-    attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`);
-    return attrs;
+    attrs.push("nonnull")
+    attrs.push("align 8")
+    attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`)
+    return attrs
   }
   if (kind === K_RESULT && table.resultByValue(type)) {
     // WP17: a small `Result` comes back packed in an `i64`, so none of the
     // pointer facts are about it; the word is always fully defined, because
     // the dead arm is discarded by a `select` before it is shifted in.
-    return attrs;
+    return attrs
   }
   if (kind === K_STRUCT || kind === K_RESULT) {
     // WP16: a `Result` is a whole, never-null object, exactly like a struct.
     // `align` is the record alignment for a record type, 8 otherwise.
-    attrs.push("nonnull");
-    attrs.push(`align ${align}`);
+    attrs.push("nonnull")
+    attrs.push(`align ${align}`)
     if (deref > 0) {
-      attrs.push(`dereferenceable(${deref})`);
+      attrs.push(`dereferenceable(${deref})`)
     }
-    return attrs;
+    return attrs
   }
   if (kind === K_NULLABLE) {
-    attrs.push(`align ${align}`); // WP6: may be null
+    attrs.push(`align ${align}`) // WP6: may be null
   }
-  return attrs;
-};
+  return attrs
+}

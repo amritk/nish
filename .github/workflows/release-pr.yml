@@ -180,8 +180,8 @@ jobs:
             // turns CI red on the release PR itself.
             const b="self/branding.ts";
             fs.writeFileSync(b, fs.readFileSync(b,"utf8").replace(
-              /export const VERSION: string = "[^"]*";/,
-              `export const VERSION: string = "${v}";`));
+              /export const VERSION: string = "[^"]*"/,
+              `export const VERSION: string = "${v}"`));
           ' "$next"
 
       - name: Open or refresh the Release pull request

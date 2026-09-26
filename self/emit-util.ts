@@ -11,27 +11,18 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { CheckedProgram, inlineElementStruct } from "./program";
-import {
-  N_BINARY,
-  N_CALL,
-  N_IDENT,
-  N_MEMBER,
-  N_PAREN,
-  N_TEMPLATE,
-  N_TEMPLATE_TEXT,
-  Node,
-} from "./nodes";
-import { T_STRING, TypeTable } from "./types";
+import { CheckedProgram, inlineElementStruct } from "./program"
+import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_PAREN, N_TEMPLATE, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { T_STRING, TypeTable } from "./types"
 
 /** Through `(e)`, which is transparent to every rule here. */
 export const unwrapParens = (expr: Node): Node => {
-  let inner = expr;
+  let inner = expr
   while (inner.kind === N_PAREN) {
-    inner = inner.children[0];
+    inner = inner.children[0]
   }
-  return inner;
-};
+  return inner
+}
 
 /**
  * `console.log` for a member access on a plain identifier, and the empty
@@ -41,10 +32,10 @@ export const unwrapParens = (expr: Node): Node => {
  */
 export const dottedName = (expr: Node): string => {
   if (expr.kind !== N_MEMBER || expr.children[0].kind !== N_IDENT) {
-    return "";
+    return ""
   }
-  return `${expr.children[0].text}.${expr.text}`;
-};
+  return `${expr.children[0].text}.${expr.text}`
+}
 
 /**
  * Whether `receiver` is a value rather than a builtin namespace. The checker
@@ -52,7 +43,8 @@ export const dottedName = (expr: Node): string => {
  * `Math`, so the recorded type *is* the answer — the same test as
  * `program.types.has(receiver)` in stage0's `src/`.
  */
-export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolean => program.nodeTypes[receiver.id] >= 0;
+export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolean =>
+  program.nodeTypes[receiver.id] >= 0
 
 /**
  * The type an expression produces *before* the coercion recorded on it
@@ -60,37 +52,37 @@ export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolea
  * type, but `new C(...)` still allocates and constructs a `C`.
  */
 export const intrinsicType = (program: CheckedProgram, expr: Node): i32 => {
-  const coerced = program.nodeCoercions[expr.id];
-  return coerced >= 0 ? coerced : program.nodeTypes[expr.id];
-};
+  const coerced = program.nodeCoercions[expr.id]
+  return coerced >= 0 ? coerced : program.nodeTypes[expr.id]
+}
 
 /** Whether an operator writes its left operand: `=` and every `op=`. */
 export const isAssignmentOperator = (op: string): boolean => {
   if (op === "=") {
-    return true;
+    return true
   }
   if (op.length < 2 || !op.endsWith("=")) {
-    return false;
+    return false
   }
   // `===`, `!==`, `<=`, `>=` end in `=` and write nothing.
-  return op !== "===" && op !== "!==" && op !== "==" && op !== "!=" && op !== "<=" && op !== ">=";
-};
+  return op !== "===" && op !== "!==" && op !== "==" && op !== "!=" && op !== "<=" && op !== ">="
+}
 
 /** `expr` is the left operand of an assignment, so the value it names is written. */
 export const isAssignmentTarget = (parent: Node | null, node: Node): boolean => {
   if (parent === null) {
-    return false;
+    return false
   }
-  return parent.kind === N_BINARY && parent.children[0] === node && isAssignmentOperator(parent.text);
-};
+  return parent.kind === N_BINARY && parent.children[0] === node && isAssignmentOperator(parent.text)
+}
 
 /** The receiver of `recv.m(...)`, or `null` when `call` is not a method call. */
 export const methodReceiver = (call: Node): Node | null => {
   if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER) {
-    return null;
+    return null
   }
-  return call.children[0].children[0];
-};
+  return call.children[0].children[0]
+}
 
 /**
  * The array method `call` invokes (`push`, `pop`, `indexOf`, `join`), or the
@@ -98,16 +90,17 @@ export const methodReceiver = (call: Node): Node | null => {
  * is not one of these.
  */
 export const arrayMethodName = (program: CheckedProgram, table: TypeTable, call: Node): string => {
-  const receiver = methodReceiver(call);
+  const receiver = methodReceiver(call)
   if (receiver === null) {
-    return "";
+    return ""
   }
-  const type = program.nodeTypes[receiver.id];
-  return type >= 0 && table.isArray(type) ? call.children[0].text : "";
-};
+  const type = program.nodeTypes[receiver.id]
+  return type >= 0 && table.isArray(type) ? call.children[0].text : ""
+}
 
 /** `recv.push(v)` on an array receiver. */
-export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => arrayMethodName(program, table, node) === "push";
+export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean =>
+  arrayMethodName(program, table, node) === "push"
 
 /**
  * WP15 §2a: `expr` is an array whose slots hold their elements *inline*, so a
@@ -117,49 +110,49 @@ export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node
  * object built only to be stored into such an array does not escape its frame.
  */
 export const storesInlineElements = (program: CheckedProgram, table: TypeTable, expr: Node): boolean => {
-  const type = program.nodeTypes[expr.id];
+  const type = program.nodeTypes[expr.id]
   if (type < 0 || !table.isArray(type)) {
-    return false;
+    return false
   }
-  return inlineElementStruct(program, table, table.refOf(type)) !== null;
-};
+  return inlineElementStruct(program, table, table.refOf(type)) !== null
+}
 
 /** `parts.join(sep)` bumps one string out of the arena, so it is an allocation site. */
-export const isJoinCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => arrayMethodName(program, table, node) === "join";
+export const isJoinCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean =>
+  arrayMethodName(program, table, node) === "join"
 
 /** The byte methods that lower inline on a string receiver (WP14 A2). */
-export const isStringMethod = (name: string): boolean => (
-    name === "charCodeAt" ||
-    name === "substring" ||
-    name === "slice" ||
-    name === "indexOf" ||
-    name === "startsWith" ||
-    name === "endsWith"
-  );
+export const isStringMethod = (name: string): boolean =>
+  name === "charCodeAt" ||
+  name === "substring" ||
+  name === "slice" ||
+  name === "indexOf" ||
+  name === "startsWith" ||
+  name === "endsWith"
 
 /** `call` invokes one of the byte methods on a string receiver. */
 export const isStringMethodCall = (program: CheckedProgram, call: Node): boolean => {
-  const receiver = methodReceiver(call);
+  const receiver = methodReceiver(call)
   if (receiver === null || !isStringMethod(call.children[0].text)) {
-    return false;
+    return false
   }
-  return program.nodeTypes[receiver.id] === T_STRING;
-};
+  return program.nodeTypes[receiver.id] === T_STRING
+}
 
 /** `call` allocates a string: `s.substring(...)`, `s.slice(...)` or `String.fromCharCode(c)`. */
 export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean => {
   if (call.kind !== N_CALL) {
-    return false;
+    return false
   }
-  const callee = call.children[0];
+  const callee = call.children[0]
   if (dottedName(callee) === "String.fromCharCode" && !receiverIsValue(program, callee.children[0])) {
-    return true;
+    return true
   }
   if (!isStringMethodCall(program, call)) {
-    return false;
+    return false
   }
-  return callee.text === "substring" || callee.text === "slice";
-};
+  return callee.text === "substring" || callee.text === "slice"
+}
 
 /**
  * A `N_TEMPLATE` with at least one hole. A template with none is a plain
@@ -168,22 +161,23 @@ export const isStringAllocCall = (program: CheckedProgram, call: Node): boolean 
  * is neither an allocation site nor a concatenation, and this is the test that
  * keeps the two trees answering the same way.
  */
-export const isTemplateExpression = (node: Node): boolean => node.kind === N_TEMPLATE && node.children.length > 1;
+export const isTemplateExpression = (node: Node): boolean =>
+  node.kind === N_TEMPLATE && node.children.length > 1
 
 /** Head, holes and middles/tail in order, with the empty text parts dropped. */
 export const templateParts = (node: Node): Node[] => {
-  const parts: Node[] = [];
+  const parts: Node[] = []
   for (const child of node.children) {
     if (child.kind === N_TEMPLATE_TEXT) {
       if (child.text.length > 0) {
-        parts.push(child);
+        parts.push(child)
       }
     } else {
-      parts.push(child);
+      parts.push(child)
     }
   }
-  return parts;
-};
+  return parts
+}
 
 /**
  * A template whose only part is a string-typed hole lowers to that hole's
@@ -191,23 +185,23 @@ export const templateParts = (node: Node): Node[] => {
  * parentheses), or `` return `${s}` `` would wrongly keep `nocapture` on `s`.
  */
 export const unwrapStringPassthrough = (program: CheckedProgram, expr: Node): Node => {
-  let inner = expr;
+  let inner = expr
   for (;;) {
     if (inner.kind === N_PAREN) {
-      inner = inner.children[0];
-      continue;
+      inner = inner.children[0]
+      continue
     }
     if (isTemplateExpression(inner)) {
-      const parts = templateParts(inner);
+      const parts = templateParts(inner)
       if (
         parts.length === 1 &&
         parts[0].kind !== N_TEMPLATE_TEXT &&
         program.nodeTypes[parts[0].id] === T_STRING
       ) {
-        inner = parts[0];
-        continue;
+        inner = parts[0]
+        continue
       }
     }
-    return inner;
+    return inner
   }
-};
+}

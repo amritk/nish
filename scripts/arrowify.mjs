@@ -50,8 +50,8 @@
  * what found both bugs in WP22 §8a. Rewrite, verify, *then* collapse and verify
  * again — so that a difference has one cause rather than two.
  */
-import fs from "node:fs";
-import ts from "typescript";
+import fs from "node:fs"
+import ts from "typescript"
 
 /** Why one declaration was left alone, for `--check` and the verifier's report. */
 const SKIP_REASONS = {
@@ -63,7 +63,7 @@ const SKIP_REASONS = {
   generator: "`function*` has no arrow spelling (WP22 §9)",
   header: "a comment sits between `function` and the parameter list",
   trivia: "a comment sits between the signature and the body",
-};
+}
 
 /**
  * The forms with no arrow spelling at all, each identified by the syntax that
@@ -85,14 +85,24 @@ const SKIP_REASONS = {
  * is reading the program it was handed.
  */
 const unspellable = (decl) => {
-  const mods = decl.modifiers ?? [];
-  if (mods.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) { return "ambient"; }
-  if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) { return "default"; }
-  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) { return "async"; }
-  if (decl.asteriskToken !== undefined) { return "generator"; }
-  if (decl.name === undefined) { return "anonymous"; }
-  return undefined;
-};
+  const mods = decl.modifiers ?? []
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
+    return "ambient"
+  }
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) {
+    return "default"
+  }
+  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+    return "async"
+  }
+  if (decl.asteriskToken !== undefined) {
+    return "generator"
+  }
+  if (decl.name === undefined) {
+    return "anonymous"
+  }
+  return undefined
+}
 
 /**
  * One of a declaration's own child tokens, by kind.
@@ -109,7 +119,7 @@ const unspellable = (decl) => {
  * search for `//`, in the place where getting it wrong costs source rather
  * than a lint error.
  */
-const childToken = (sf, decl, kind) => decl.getChildren(sf).find((child) => child.kind === kind);
+const childToken = (sf, decl, kind) => decl.getChildren(sf).find((child) => child.kind === kind)
 
 /**
  * Where the callable's *signature* begins once the keyword and the name are
@@ -122,15 +132,17 @@ const signatureStart = (sf, decl) => {
   const open =
     decl.typeParameters !== undefined
       ? childToken(sf, decl, ts.SyntaxKind.LessThanToken)
-      : childToken(sf, decl, ts.SyntaxKind.OpenParenToken);
-  return open.getStart(sf);
-};
+      : childToken(sf, decl, ts.SyntaxKind.OpenParenToken)
+  return open.getStart(sf)
+}
 
 /** Where it ends: after the return type, or after the `)` when there is none. */
 const signatureEnd = (sf, decl) => {
-  if (decl.type !== undefined) { return decl.type.getEnd(); }
-  return childToken(sf, decl, ts.SyntaxKind.CloseParenToken).getEnd();
-};
+  if (decl.type !== undefined) {
+    return decl.type.getEnd()
+  }
+  return childToken(sf, decl, ts.SyntaxKind.CloseParenToken).getEnd()
+}
 
 /**
  * A block that means exactly one `return expr;` and nothing else, so `--concise`
@@ -141,14 +153,22 @@ const signatureEnd = (sf, decl) => {
  * collapse that is perfectly fine.
  */
 const singleReturn = (text, sf, block) => {
-  if (block.statements.length !== 1) { return undefined; }
-  const stmt = block.statements[0];
-  if (!ts.isReturnStatement(stmt) || stmt.expression === undefined) { return undefined; }
-  const blank = /^\s*$/;
-  if (!blank.test(text.slice(block.getStart(sf) + 1, stmt.getStart(sf)))) { return undefined; }
-  if (!blank.test(text.slice(stmt.getEnd(), block.getEnd() - 1))) { return undefined; }
-  return stmt.expression;
-};
+  if (block.statements.length !== 1) {
+    return undefined
+  }
+  const stmt = block.statements[0]
+  if (!ts.isReturnStatement(stmt) || stmt.expression === undefined) {
+    return undefined
+  }
+  const blank = /^\s*$/
+  if (!blank.test(text.slice(block.getStart(sf) + 1, stmt.getStart(sf)))) {
+    return undefined
+  }
+  if (!blank.test(text.slice(stmt.getEnd(), block.getEnd() - 1))) {
+    return undefined
+  }
+  return stmt.expression
+}
 
 /**
  * The concise body of an arrow, parenthesised when the grammar requires it.
@@ -164,15 +184,17 @@ const singleReturn = (text, sf, block) => {
  * `declare` rule, made one node deeper: an object literal is what usually
  * starts an expression that starts with `{`, not what makes it one.
  */
-const conciseBody = (expr) => (expr.startsWith("{") ? `(${expr})` : expr);
+const conciseBody = (expr) => (expr.startsWith("{") ? `(${expr})` : expr)
 
 /**
  * One declaration's replacement text, or `null` with a reason when it is one of
  * the forms this tool leaves alone.
  */
 const replacement = (text, sf, decl, concise) => {
-  const unspellableAs = unspellable(decl);
-  if (unspellableAs !== undefined) { return { skip: unspellableAs }; }
+  const unspellableAs = unspellable(decl)
+  if (unspellableAs !== undefined) {
+    return { skip: unspellableAs }
+  }
   // Anything else without a body is an overload signature, which the language
   // does not have; leave it for the checker to refuse in its own words. It is
   // *not* the ambient case and may not be reported as one: `declare` is what
@@ -180,15 +202,17 @@ const replacement = (text, sf, decl, concise) => {
   // `function ambient(): void;` is "`declare function` staying legal" names a
   // rule the checker is about to refuse the line under
   // (`tests/wordings/nl2204_function_without_body.ts`).
-  if (decl.body === undefined) { return { skip: "bodiless" }; }
+  if (decl.body === undefined) {
+    return { skip: "bodiless" }
+  }
 
-  const start = decl.getStart(sf);
-  const keyword = childToken(sf, decl, ts.SyntaxKind.FunctionKeyword);
-  const prefix = text.slice(start, keyword.getStart(sf));
-  const sigStart = signatureStart(sf, decl);
-  const sigEnd = signatureEnd(sf, decl);
-  const signature = text.slice(sigStart, sigEnd);
-  const blank = /^\s*$/;
+  const start = decl.getStart(sf)
+  const keyword = childToken(sf, decl, ts.SyntaxKind.FunctionKeyword)
+  const prefix = text.slice(start, keyword.getStart(sf))
+  const sigStart = signatureStart(sf, decl)
+  const sigEnd = signatureEnd(sf, decl)
+  const signature = text.slice(sigStart, sigEnd)
+  const blank = /^\s*$/
   // The header is the one region the splice throws away: the keyword, the name
   // and the space around them all become `const NAME = `. Anything else in
   // there is a comment that would have nowhere to go, so refuse the
@@ -198,21 +222,23 @@ const replacement = (text, sf, decl, concise) => {
     !blank.test(text.slice(keyword.getEnd(), decl.name.getStart(sf))) ||
     !blank.test(text.slice(decl.name.getEnd(), sigStart))
   ) {
-    return { skip: "header" };
+    return { skip: "header" }
   }
   // Whatever sits between the return type and the `{`. Normally one space; a
   // comment there would have to be rewritten rather than moved, so refuse it
   // instead of silently dropping it.
-  const gap = text.slice(sigEnd, decl.body.getStart(sf));
-  if (!blank.test(gap)) { return { skip: "trivia" }; }
+  const gap = text.slice(sigEnd, decl.body.getStart(sf))
+  if (!blank.test(gap)) {
+    return { skip: "trivia" }
+  }
 
-  const returned = concise ? singleReturn(text, sf, decl.body) : undefined;
+  const returned = concise ? singleReturn(text, sf, decl.body) : undefined
   const body =
     returned === undefined
       ? text.slice(decl.body.getStart(sf), decl.body.getEnd())
-      : conciseBody(text.slice(returned.getStart(sf), returned.getEnd()));
-  return { start, end: decl.getEnd(), text: `${prefix}const ${decl.name.text} = ${signature} => ${body};` };
-};
+      : conciseBody(text.slice(returned.getStart(sf), returned.getEnd()))
+  return { start, end: decl.getEnd(), text: `${prefix}const ${decl.name.text} = ${signature} => ${body};` }
+}
 
 /**
  * An arrow declaration that is already an arrow but still carries a block for
@@ -222,18 +248,24 @@ const replacement = (text, sf, decl, concise) => {
  * form does not merely read worse — it fails the lint.
  */
 const conciseArrow = (text, sf, stmt) => {
-  const decls = stmt.declarationList.declarations;
-  if (decls.length !== 1) { return undefined; }
-  const init = decls[0].initializer;
-  if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) { return undefined; }
-  const returned = singleReturn(text, sf, init.body);
-  if (returned === undefined) { return undefined; }
+  const decls = stmt.declarationList.declarations
+  if (decls.length !== 1) {
+    return undefined
+  }
+  const init = decls[0].initializer
+  if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) {
+    return undefined
+  }
+  const returned = singleReturn(text, sf, init.body)
+  if (returned === undefined) {
+    return undefined
+  }
   return {
     start: init.body.getStart(sf),
     end: init.body.getEnd(),
     text: conciseBody(text.slice(returned.getStart(sf), returned.getEnd())),
-  };
-};
+  }
+}
 
 /**
  * Rewrite every top-level `function` declaration of one file.
@@ -244,38 +276,44 @@ const conciseArrow = (text, sf, stmt) => {
  * another edit's offsets.
  */
 export const rewrite = (text, fileName, { concise = false } = {}) => {
-  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
-  const edits = [];
-  const skipped = [];
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
+  const edits = []
+  const skipped = []
   for (const stmt of sf.statements) {
     if (ts.isVariableStatement(stmt)) {
       if (concise) {
-        const collapse = conciseArrow(text, sf, stmt);
-        if (collapse !== undefined) { edits.push(collapse); }
+        const collapse = conciseArrow(text, sf, stmt)
+        if (collapse !== undefined) {
+          edits.push(collapse)
+        }
       }
-      continue;
+      continue
     }
-    if (!ts.isFunctionDeclaration(stmt)) { continue; }
-    const edit = replacement(text, sf, stmt, concise);
+    if (!ts.isFunctionDeclaration(stmt)) {
+      continue
+    }
+    const edit = replacement(text, sf, stmt, concise)
     if (edit.skip !== undefined) {
-      const name = stmt.name?.text ?? "<anonymous>";
-      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart(sf));
-      skipped.push({ name, line: line + 1, reason: SKIP_REASONS[edit.skip] });
-      continue;
+      const name = stmt.name?.text ?? "<anonymous>"
+      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart(sf))
+      skipped.push({ name, line: line + 1, reason: SKIP_REASONS[edit.skip] })
+      continue
     }
-    edits.push(edit);
+    edits.push(edit)
   }
-  let out = text;
-  for (const edit of edits.reverse()) { out = out.slice(0, edit.start) + edit.text + out.slice(edit.end); }
-  return { text: out, changed: edits.length, skipped };
-};
+  let out = text
+  for (const edit of edits.reverse()) {
+    out = out.slice(0, edit.start) + edit.text + out.slice(edit.end)
+  }
+  return { text: out, changed: edits.length, skipped }
+}
 
 const usage = `usage: node scripts/arrowify.mjs [--check|--stdout] [--concise] <file.ts>...
 
   --check    report what would change and what was skipped; exit 1 if anything would
   --stdout   print the rewrite of a single file instead of writing it (one file only)
   --concise  also collapse a body that is one \`return expr;\` into \`=> expr\`
-`;
+`
 
 /**
  * The flags this tool has. A misspelling is refused rather than ignored: the
@@ -284,26 +322,26 @@ const usage = `usage: node scripts/arrowify.mjs [--check|--stdout] [--concise] <
  * silently dropped is a pass that did not happen and a verification that
  * blamed the wrong one.
  */
-const FLAGS = new Set(["--check", "--stdout", "--concise"]);
+const FLAGS = new Set(["--check", "--stdout", "--concise"])
 
 const main = (argv) => {
-  const flags = new Set(argv.filter((a) => a.startsWith("--")));
-  const files = argv.filter((a) => !a.startsWith("--"));
-  const unknown = [...flags].filter((flag) => !FLAGS.has(flag));
+  const flags = new Set(argv.filter((a) => a.startsWith("--")))
+  const files = argv.filter((a) => !a.startsWith("--"))
+  const unknown = [...flags].filter((flag) => !FLAGS.has(flag))
   if (unknown.length > 0) {
-    process.stderr.write(`arrowify: unknown flag ${unknown.join(", ")}\n${usage}`);
-    return 2;
+    process.stderr.write(`arrowify: unknown flag ${unknown.join(", ")}\n${usage}`)
+    return 2
   }
   // `--check` answers with an exit code and `--stdout` answers with a file, so
   // asking for both leaves no honest answer: the exit code used to come back 0
   // with the rewrites still pending.
   if (flags.has("--check") && flags.has("--stdout")) {
-    process.stderr.write(`arrowify: --check answers with an exit code and --stdout with a file\n${usage}`);
-    return 2;
+    process.stderr.write(`arrowify: --check answers with an exit code and --stdout with a file\n${usage}`)
+    return 2
   }
   if (files.length === 0) {
-    process.stderr.write(usage);
-    return 2;
+    process.stderr.write(usage)
+    return 2
   }
   // `--stdout` is one file's rewrite on one stream. Handed several it used to
   // concatenate them — a thousand lines of two modules run together, exit 0 —
@@ -311,39 +349,48 @@ const main = (argv) => {
   // one by accident, the mistake `--stdout` was widened to avoid in the first
   // place.
   if (flags.has("--stdout") && files.length > 1) {
-    process.stderr.write(`arrowify: --stdout prints one file; ${files.length} were named\n${usage}`);
-    return 2;
+    process.stderr.write(`arrowify: --stdout prints one file; ${files.length} were named\n${usage}`)
+    return 2
   }
-  const concise = flags.has("--concise");
-  let changed = 0;
-  let pending = 0;
+  const concise = flags.has("--concise")
+  let changed = 0
+  let pending = 0
   for (const file of files) {
-    const text = fs.readFileSync(file, "utf8");
-    const result = rewrite(text, file, { concise });
+    const text = fs.readFileSync(file, "utf8")
+    const result = rewrite(text, file, { concise })
     for (const skip of result.skipped) {
-      process.stderr.write(`${file}:${skip.line}: left \`${skip.name}\` alone: ${skip.reason}\n`);
+      process.stderr.write(`${file}:${skip.line}: left \`${skip.name}\` alone: ${skip.reason}\n`)
     }
     // `--stdout` answers with the file whether or not anything changed: a
     // codemod that prints nothing for an unchanged file is a way to truncate
     // one by accident, which is a thing that has happened.
     if (flags.has("--stdout")) {
-      process.stdout.write(result.text);
-      continue;
+      process.stdout.write(result.text)
+      continue
     }
-    if (result.changed === 0) { continue; }
-    if (flags.has("--check")) { pending += result.changed; }
-    else { fs.writeFileSync(file, result.text); }
-    changed += result.changed;
-    process.stdout.write(`${flags.has("--check") ? "would rewrite" : "rewrote"} ${file}: ${result.changed}\n`);
+    if (result.changed === 0) {
+      continue
+    }
+    if (flags.has("--check")) {
+      pending += result.changed
+    } else {
+      fs.writeFileSync(file, result.text)
+    }
+    changed += result.changed
+    process.stdout.write(`${flags.has("--check") ? "would rewrite" : "rewrote"} ${file}: ${result.changed}\n`)
   }
   if (flags.has("--check")) {
-    process.stdout.write(`${pending} declaration(s) left to rewrite\n`);
-    return pending > 0 ? 1 : 0;
+    process.stdout.write(`${pending} declaration(s) left to rewrite\n`)
+    return pending > 0 ? 1 : 0
   }
   // `--stdout` answers with the file and nothing else, so a summary there would
   // land in whatever the caller redirected it into.
-  if (!flags.has("--stdout")) { process.stdout.write(`${changed} declaration(s) rewritten\n`); }
-  return 0;
-};
+  if (!flags.has("--stdout")) {
+    process.stdout.write(`${changed} declaration(s) rewritten\n`)
+  }
+  return 0
+}
 
-if (process.argv[1] === import.meta.filename) { process.exit(main(process.argv.slice(2))); }
+if (process.argv[1] === import.meta.filename) {
+  process.exit(main(process.argv.slice(2)))
+}

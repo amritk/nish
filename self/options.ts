@@ -10,44 +10,44 @@
 // `numberMode` is the `NUMBER_MODE_*` of `self/context.ts`, so one value
 // serves the checker and the emitter.
 
-import { NUMBER_MODE_I32 } from "./context";
+import { NUMBER_MODE_I32 } from "./context"
 
 export class Options {
   /** How the `number` keyword is lowered: `NUMBER_MODE_I32` or `NUMBER_MODE_F64`. */
-  numberMode: i32;
+  numberMode: i32
   /**
    * Emit the LLVM performance attributes (nounwind, readnone, noalias, ...)
    * and explicit alignment on memory operations. Off is `--plain`, the bare
    * Phase 1 output.
    */
-  optimizeAttributes: boolean;
+  optimizeAttributes: boolean
   /** Always emit the runtime ABI prelude, even when nothing in the module uses it. */
-  runtimeDecls: boolean;
+  runtimeDecls: boolean
   /** Lower allocations that provably do not outlive their function to allocas (WP6). */
-  stackAlloc: boolean;
+  stackAlloc: boolean
   /**
    * Give non-exported functions `internal` linkage so LLVM may inline or drop
    * them. Off is `--no-strict-exports`, which keeps every function a C-ABI
    * symbol. Default: on (WP15 §3).
    */
-  strictExports: boolean;
+  strictExports: boolean
   /** Drop the bounds check on `a[i]`. Unsafe; for benchmarks only. */
-  uncheckedIndexing: boolean;
+  uncheckedIndexing: boolean
   /** A triple for `--target`, or the empty string to keep the IR target-neutral. */
-  target: string;
+  target: string
   /**
    * Emit `nsw` on signed user-level integer `add`/`sub`/`mul` (WP9). Off is
    * `--wrapping`, which restores two's-complement wrapping. Unsigned
    * arithmetic is defined as wrapping and never carries a flag either way.
    * Default: on (WP15 §3).
    */
-  nsw: boolean;
+  nsw: boolean
   /**
    * Emit DWARF debug metadata (`-g`, WP10): a compile unit, a `DISubprogram`
    * per function, a `!dbg` location per instruction and the local variables
    * (`self/debug.ts`). Off leaves the IR byte for byte what it was.
    */
-  debugInfo: boolean;
+  debugInfo: boolean
   /**
    * Give every thread its own arena (`--threads`, WP20 T0). The one thing it
    * changes in the IR is the storage class of `@nish_arena`, which the inlined
@@ -57,7 +57,7 @@ export class Options {
    * in the language makes a second thread, so no program can tell. Off leaves
    * the IR byte for byte what it was.
    */
-  threads: boolean;
+  threads: boolean
   /**
    * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
    * `--emit-napi` was given, or the empty string when it was not passed.
@@ -68,24 +68,24 @@ export class Options {
    * program after it — so they live here only because this is where a flag
    * that reaches the driver's second half is kept.
    */
-  emitHeader: string;
-  emitDts: string;
-  emitNapi: string;
+  emitHeader: string
+  emitDts: string
+  emitNapi: string
   /**
    * WP24 A1: the same shim with the asynchronous exports added. A separate
    * output rather than a modifier on `emitNapi`, so that one build can write
    * both and a host can diff them -- and so the flag has nothing to say when
    * it is absent, which is what keeps an existing shim byte-identical.
    */
-  emitNapiAsync: string;
+  emitNapiAsync: string
   /**
    * `--link`: the executable this invocation writes, or the empty string when
    * it writes IR alone; and `--profile`, the recipe `scripts/build.sh` links it
    * with. The IR reads both only through `hostVisible` (`self/visibility.ts`):
    * a build that is its own final link sees every call its exports receive.
    */
-  link: string;
-  profile: string;
+  link: string
+  profile: string
   /**
    * The directory holding `scripts/`, `runtime/` and `std/`, as the driver
    * worked it out from `argv[0]`. It is here rather than derived where it is
@@ -95,7 +95,7 @@ export class Options {
    * driver could not find one, which makes `nish/x` resolve to nothing and
    * report itself as a module the library does not have.
    */
-  packageRoot: string;
+  packageRoot: string
   /**
    * `--json`: every diagnostic is one object on stdout. Kept here, beside the
    * flags that change the IR, for one reader rather than for the IR: a broken
@@ -104,7 +104,7 @@ export class Options {
    * be an object too -- the language has no exceptions to carry it back to
    * the driver that parsed the flag.
    */
-  json: boolean;
+  json: boolean
   /**
    * `--range-reference`: run the call-site ranges pass (`self/ranges.ts`) by
    * the rule it narrowed and without the shortcuts it takes, so that
@@ -112,27 +112,27 @@ export class Options {
    * proofs. A test hook, not a mode: it is not in the usage, and it changes
    * the time a compile takes and nothing it writes.
    */
-  rangeReference: boolean;
+  rangeReference: boolean
 
   constructor() {
-    this.numberMode = NUMBER_MODE_I32;
-    this.optimizeAttributes = true;
-    this.runtimeDecls = false;
-    this.stackAlloc = true;
-    this.strictExports = true;
-    this.uncheckedIndexing = false;
-    this.target = "";
-    this.nsw = true;
-    this.debugInfo = false;
-    this.threads = false;
-    this.emitHeader = "";
-    this.emitDts = "";
-    this.emitNapi = "";
-    this.emitNapiAsync = "";
-    this.link = "";
-    this.profile = "speed";
-    this.packageRoot = "";
-    this.json = false;
-    this.rangeReference = false;
+    this.numberMode = NUMBER_MODE_I32
+    this.optimizeAttributes = true
+    this.runtimeDecls = false
+    this.stackAlloc = true
+    this.strictExports = true
+    this.uncheckedIndexing = false
+    this.target = ""
+    this.nsw = true
+    this.debugInfo = false
+    this.threads = false
+    this.emitHeader = ""
+    this.emitDts = ""
+    this.emitNapi = ""
+    this.emitNapiAsync = ""
+    this.link = ""
+    this.profile = "speed"
+    this.packageRoot = ""
+    this.json = false
+    this.rangeReference = false
   }
 }

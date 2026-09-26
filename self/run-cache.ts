@@ -16,9 +16,9 @@
 // file is written last, after the binary is in place, which is what makes its
 // presence mean "the binary here is complete".
 
-import { CLI, RUNTIME_HEADER, VERSION } from "./branding";
-import { EmittedModule } from "./compilation";
-import { hexDigitLower, StringBuilder } from "./strings";
+import { CLI, RUNTIME_HEADER, VERSION } from "./branding"
+import { EmittedModule } from "./compilation"
+import { hexDigitLower, StringBuilder } from "./strings"
 
 /**
  * The directory every entry lives under: `$XDG_CACHE_HOME/nish/run`, or
@@ -28,16 +28,16 @@ import { hexDigitLower, StringBuilder } from "./strings";
  * is a directory someone else can put a binary in for this one to execute.
  */
 export const runCacheRoot = (): string => {
-  const xdg = getenv("XDG_CACHE_HOME");
+  const xdg = getenv("XDG_CACHE_HOME")
   if (xdg !== null && xdg.length > 0) {
-    return `${xdg}/${CLI}/run`;
+    return `${xdg}/${CLI}/run`
   }
-  const home = getenv("HOME");
+  const home = getenv("HOME")
   if (home !== null && home.length > 0) {
-    return `${home}/.cache/${CLI}/run`;
+    return `${home}/.cache/${CLI}/run`
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * FNV-1a, 64-bit, over the bytes of `text`, as sixteen lowercase hex digits.
@@ -47,26 +47,26 @@ export const runCacheRoot = (): string => {
  * built from its two halves. FNV and its constants are public domain.
  */
 export const fnv1a64Hex = (text: string): string => {
-  const high: u64 = 0xcbf29ce4;
-  const low: u64 = 0x84222325;
-  const prime: u64 = 1099511628211;
-  const thirtyTwo: u64 = 32;
-  let hash: u64 = (high << thirtyTwo) | low;
-  const n = text.length;
-  let i = 0;
+  const high: u64 = 0xcbf29ce4
+  const low: u64 = 0x84222325
+  const prime: u64 = 1099511628211
+  const thirtyTwo: u64 = 32
+  let hash: u64 = (high << thirtyTwo) | low
+  const n = text.length
+  let i = 0
   while (i < n) {
-    hash = hash ^ toU64(text.charCodeAt(i));
-    hash = hash * prime;
-    i = i + 1;
+    hash = hash ^ toU64(text.charCodeAt(i))
+    hash = hash * prime
+    i = i + 1
   }
-  const out = new StringBuilder();
-  let shift = 60;
+  const out = new StringBuilder()
+  let shift = 60
   while (shift >= 0) {
-    out.add(hexDigitLower(toI32((hash >> toU64(shift)) & toU64(15))));
-    shift = shift - 4;
+    out.add(hexDigitLower(toI32((hash >> toU64(shift)) & toU64(15))))
+    shift = shift - 4
   }
-  return out.toText();
-};
+  return out.toText()
+}
 
 /**
  * The fingerprint of one file the link reads, or `-` when it cannot be read.
@@ -75,9 +75,9 @@ export const fnv1a64Hex = (text: string): string => {
  * is carried whole.
  */
 const fileFingerprint = (path: string): string => {
-  const text = readFileSyncOrNull(path);
-  return text === null ? "-" : fnv1a64Hex(text);
-};
+  const text = readFileSyncOrNull(path)
+  return text === null ? "-" : fnv1a64Hex(text)
+}
 
 /**
  * Everything a link's result depends on, as one text: a header line per
@@ -94,18 +94,18 @@ export const runCacheKey = (
   threads: boolean,
   cc: string
 ): string => {
-  const key = new StringBuilder();
-  key.add(`${CLI} ${VERSION}\n`);
-  key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`);
-  key.add(`cc ${cc}\n`);
-  key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`);
-  key.add(`runtime.c ${fileFingerprint(`${root}/runtime/runtime.c`)}\n`);
-  key.add(`runtime-os.c ${fileFingerprint(`${root}/runtime/runtime-os.c`)}\n`);
-  key.add(`runtime-parallel.c ${fileFingerprint(`${root}/runtime/runtime-parallel.c`)}\n`);
-  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`);
+  const key = new StringBuilder()
+  key.add(`${CLI} ${VERSION}\n`)
+  key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
+  key.add(`cc ${cc}\n`)
+  key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
+  key.add(`runtime.c ${fileFingerprint(`${root}/runtime/runtime.c`)}\n`)
+  key.add(`runtime-os.c ${fileFingerprint(`${root}/runtime/runtime-os.c`)}\n`)
+  key.add(`runtime-parallel.c ${fileFingerprint(`${root}/runtime/runtime-parallel.c`)}\n`)
+  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
   for (const module of modules) {
-    key.add(`module ${module.stem} ${module.ir.length}\n`);
-    key.add(module.ir);
+    key.add(`module ${module.stem} ${module.ir.length}\n`)
+    key.add(module.ir)
   }
-  return key.toText();
-};
+  return key.toText()
+}

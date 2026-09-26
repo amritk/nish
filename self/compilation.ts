@@ -45,27 +45,27 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `self/compile.ts` writes them. There is no `mkdir` here (D4).
 
-import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes";
-import { arenaLoopFindings } from "./escape";
-import { Checker } from "./checker";
-import { DiagnosticSink, SourceFile } from "./diagnostics";
-import { emitProgram } from "./emit";
-import { StringMap, StringSet } from "./map";
-import { isNishSpecifier } from "./nish-modules";
-import { N_CONSTRUCTOR, Node } from "./nodes";
-import { Options } from "./options";
-import { layoutInlineArrays } from "./inline-arrays";
-import { proveCallSiteRanges } from "./ranges";
+import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
+import { arenaLoopFindings } from "./escape"
+import { Checker } from "./checker"
+import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { emitProgram } from "./emit"
+import { StringMap, StringSet } from "./map"
+import { isNishSpecifier } from "./nish-modules"
+import { N_CONSTRUCTOR, Node } from "./nodes"
+import { Options } from "./options"
+import { layoutInlineArrays } from "./inline-arrays"
+import { proveCallSiteRanges } from "./ranges"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
   packageNameOf,
   parseBareSpecifier,
   ROOT_PACKAGE,
-} from "./packages";
-import { ParentTable } from "./parents";
-import { Parser } from "./parser";
-import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry, StructTemplateInfo } from "./program";
+} from "./packages"
+import { ParentTable } from "./parents"
+import { Parser } from "./parser"
+import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry, StructTemplateInfo } from "./program"
 import {
   basename,
   basenameWithout,
@@ -75,8 +75,8 @@ import {
   relativePath,
   resolveModule,
   resolvePath,
-} from "./paths";
-import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX, VERSION } from "./branding";
+} from "./paths"
+import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX, VERSION } from "./branding"
 import {
   ENGINE_TOO_OLD,
   ENGINE_UNREADABLE,
@@ -88,8 +88,14 @@ import {
   manifestMalformedAt,
   manifestVersion,
   nishExportEntry,
-} from "./manifest";
-import { COLLECTIONS_SPECIFIER, isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std-modules";
+} from "./manifest"
+import {
+  COLLECTIONS_SPECIFIER,
+  isStdModuleName,
+  stdModuleName,
+  stdModuleNames,
+  stdModulePath,
+} from "./std-modules"
 import {
   allocationWarning,
   arenaMessage,
@@ -100,16 +106,16 @@ import {
   resultMessage,
   sharedWriteMessage,
   threadsModuleName,
-} from "./parallel";
-import { RuntimeTable } from "./runtime";
-import { splitByte } from "./strings";
-import { TypeTable } from "./types";
-import { columnOf, lineOf } from "./lexer";
-import { validate } from "./validator";
-import { buildModeOf } from "./visibility";
-import { CheckContext, NUMBER_MODE_F64 } from "./context";
+} from "./parallel"
+import { RuntimeTable } from "./runtime"
+import { splitByte } from "./strings"
+import { TypeTable } from "./types"
+import { columnOf, lineOf } from "./lexer"
+import { validate } from "./validator"
+import { buildModeOf } from "./visibility"
+import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
-const SLASH: i32 = 47;
+const SLASH: i32 = 47
 
 /**
  * How many directories the `node_modules` walk visits before it gives up
@@ -125,7 +131,7 @@ const SLASH: i32 = 47;
  * left outside it is a package above a directory 256 deep, which needs the
  * `cwd` builtin WP19 §A3 keeps out rather than a bigger number.
  */
-const PACKAGE_WALK_LIMIT: i32 = 256;
+const PACKAGE_WALK_LIMIT: i32 = 256
 
 /**
  * What resolving one specifier answers: the file, the name that file carries,
@@ -141,10 +147,10 @@ const PACKAGE_WALK_LIMIT: i32 = 256;
  * has no exceptions and the caller has a sink to report into either way.
  */
 export interface ResolvedModule {
-  path: string;
-  name: string;
-  packageName: string;
-  error: string;
+  path: string
+  name: string
+  packageName: string
+  error: string
 }
 
 /**
@@ -153,19 +159,19 @@ export interface ResolvedModule {
  * and the manifest's version, which is what a reader tells two copies apart by.
  */
 export class PackageCopy {
-  name: string;
-  dir: string;
-  realDir: string;
+  name: string
+  dir: string
+  realDir: string
   /** The directory its modules are named under: `dir`, or `realDir` spelled like it when a link is in the way. */
-  namedDir: string;
-  version: string;
+  namedDir: string
+  version: string
 
   constructor(name: string, dir: string, realDir: string, namedDir: string, version: string) {
-    this.name = name;
-    this.dir = dir;
-    this.realDir = realDir;
-    this.namedDir = namedDir;
-    this.version = version;
+    this.name = name
+    this.dir = dir
+    this.realDir = realDir
+    this.namedDir = namedDir
+    this.version = version
   }
 }
 
@@ -177,7 +183,7 @@ export class ModuleUnit {
    * `identityOf`. It is the name as well for every module
    * reached by a path — which is all of them but a package's.
    */
-  path: string;
+  path: string
   /**
    * The name in the IR header, the `DIFile`, the diagnostics and the output
    * path when there is no `-o`: `path` for an ordinary module, and the module's
@@ -185,12 +191,12 @@ export class ModuleUnit {
    * (`std/text.ts`). `source.path` is this string, which is how it reaches
    * every one of those (WP19 §A7).
    */
-  name: string;
-  source: SourceFile;
-  file: Node;
-  nodeCount: i32;
+  name: string
+  source: SourceFile
+  file: Node
+  nodeCount: i32
   /** The entry module; the only one allowed to declare `export function main`. */
-  isEntry: boolean;
+  isEntry: boolean
   /**
    * The package this module belongs to (WP21 S1, `self/packages.ts`); `""` for
    * the root package, which is where every module of a single-package program
@@ -199,11 +205,11 @@ export class ModuleUnit {
    * and a package specifier states it outright anyway, which is every module
    * whose name is not its path.
    */
-  packageName: string;
-  checker: Checker;
-  parents: ParentTable;
+  packageName: string
+  checker: Checker
+  parents: ParentTable
   /** Specifier text -> index into `Compilation.modules`, for this importer. */
-  resolved: StringMap;
+  resolved: StringMap
 
   constructor(
     path: string,
@@ -215,50 +221,50 @@ export class ModuleUnit {
     checker: Checker,
     packageName: string
   ) {
-    this.path = path;
-    this.name = name;
-    this.source = source;
-    this.file = file;
-    this.nodeCount = nodeCount;
-    this.isEntry = isEntry;
-    this.packageName = packageName;
-    this.checker = checker;
-    this.parents = new ParentTable(file, nodeCount);
-    this.resolved = new StringMap();
+    this.path = path
+    this.name = name
+    this.source = source
+    this.file = file
+    this.nodeCount = nodeCount
+    this.isEntry = isEntry
+    this.packageName = packageName
+    this.checker = checker
+    this.parents = new ParentTable(file, nodeCount)
+    this.resolved = new StringMap()
   }
 }
 
 /** One module's IR, with the stem its `.ll` file should be named after and the module's name. */
 export class EmittedModule {
-  stem: string;
-  ir: string;
+  stem: string
+  ir: string
   /** `ModuleUnit.name`: what `-o <file.ll>` lists when there is more than one. */
-  name: string;
+  name: string
 
   constructor(stem: string, ir: string, name: string) {
-    this.stem = stem;
-    this.ir = ir;
-    this.name = name;
+    this.stem = stem
+    this.ir = ir
+    this.name = name
   }
 }
 
 export class Compilation {
-  opts: Options;
+  opts: Options
   /** Shared by every module, so a type id means one thing across the program. */
-  table: TypeTable;
-  sink: DiagnosticSink;
-  runtime: RuntimeTable;
+  table: TypeTable
+  sink: DiagnosticSink
+  runtime: RuntimeTable
   /** Load order: entry first, then imports depth-first. */
-  modules: ModuleUnit[];
+  modules: ModuleUnit[]
   /** `identityOf` a module's resolved path -> index into `modules`. */
-  byPath: StringMap;
+  byPath: StringMap
   /**
    * Package name -> index into `packageCopies`: the one directory each package
    * of the program is compiled from, so a second directory for a name already
    * seen is refused rather than compiled as a second copy (#198).
    */
-  packageIndex: StringMap;
-  packageCopies: PackageCopy[];
+  packageIndex: StringMap
+  packageCopies: PackageCopy[]
   /**
    * The working directory as an absolute path, or `""` when it cannot be
    * resolved. It is read for two things: `identityOf`'s fallback, and
@@ -273,62 +279,62 @@ export class Compilation {
    * this is `""` as well the key is the spelling normalised, which still
    * makes `./types.ts` and `types.ts` meet.
    */
-  workingDir: string;
+  workingDir: string
   /**
    * The root file `load` could not read, or `""`. A root has no importer to
    * point at, so the failure is not a diagnostic with a span; the driver owns
    * the wording and the stream, which is how it can answer `--json` with the
    * object stage0 answers with (`self/compile.ts`).
    */
-  unreadableRoot: string;
+  unreadableRoot: string
   /**
    * The whole-program attribute fixpoint, once it has been computed.
    * `analyze()` memoises it here for the reason stage0's `src/compilation.ts` memoises
    * its own: the emitter needs it and so does the `--emit-checked` dump, and
    * the fixpoint is the most expensive thing either of them asks for.
    */
-  facts: FactsTable | null;
+  facts: FactsTable | null
   /** How many diagnostics Phase 0 reported, over every module loaded so far. */
-  validationErrors: i32;
+  validationErrors: i32
   /**
    * `--emit-ast` is answered from the parsed and validated modules, and stage0
    * reaches its dump before it looks at anything pass 1 recorded — so a pass 1
    * refusal must not stop the load here either. Phase 0 still does: stage0's
    * validator throws, and a program it refuses prints no tree on either side.
    */
-  dumpOnly: boolean;
+  dumpOnly: boolean
   /** The analysis units the fixpoint ran over, in `modules` order. */
-  analysisUnits: AnalysisUnit[];
+  analysisUnits: AnalysisUnit[]
   /**
    * The package directory the entry lives in, and so the one that *is* the
    * root package (WP21 S1). A module sharing it is the program's own code and
    * carries no symbol prefix; a module under some other `node_modules/<name>`
    * is a dependency and carries that package's.
    */
-  rootPackageDir: string;
+  rootPackageDir: string
 
   constructor(opts: Options) {
-    this.opts = opts;
-    this.table = new TypeTable();
-    this.table.json = opts.json;
-    this.sink = new DiagnosticSink();
-    this.runtime = new RuntimeTable();
-    this.modules = [];
-    this.byPath = new StringMap();
-    this.packageIndex = new StringMap();
-    this.packageCopies = [];
-    const cwd = realpathSync(".");
-    this.workingDir = cwd === null ? "" : cwd;
-    this.unreadableRoot = "";
-    this.facts = null;
-    this.analysisUnits = [];
-    this.rootPackageDir = "";
-    this.validationErrors = 0;
-    this.dumpOnly = false;
+    this.opts = opts
+    this.table = new TypeTable()
+    this.table.json = opts.json
+    this.sink = new DiagnosticSink()
+    this.runtime = new RuntimeTable()
+    this.modules = []
+    this.byPath = new StringMap()
+    this.packageIndex = new StringMap()
+    this.packageCopies = []
+    const cwd = realpathSync(".")
+    this.workingDir = cwd === null ? "" : cwd
+    this.unreadableRoot = ""
+    this.facts = null
+    this.analysisUnits = []
+    this.rootPackageDir = ""
+    this.validationErrors = 0
+    this.dumpOnly = false
   }
 
   entry(): ModuleUnit {
-    return this.modules[0];
+    return this.modules[0]
   }
 
   /**
@@ -350,19 +356,19 @@ export class Compilation {
    * imports joined the root package and clashed with it.
    */
   packageOf(modulePath: string): string {
-    const dir = packageDirOf(modulePath);
+    const dir = packageDirOf(modulePath)
     if (dir.length > 0) {
-      return dir === this.rootPackageDir ? ROOT_PACKAGE : packageNameOf(modulePath);
+      return dir === this.rootPackageDir ? ROOT_PACKAGE : packageNameOf(modulePath)
     }
-    let found = ROOT_PACKAGE;
-    let depth = 0;
+    let found = ROOT_PACKAGE
+    let depth = 0
     for (const copy of this.packageCopies) {
       if (copy.namedDir.length > depth && modulePath.startsWith(`${copy.namedDir}/`)) {
-        found = copy.name;
-        depth = copy.namedDir.length;
+        found = copy.name
+        depth = copy.namedDir.length
       }
     }
-    return found;
+    return found
   }
 
   /**
@@ -383,8 +389,8 @@ export class Compilation {
    * whose load fails whatever it is keyed on, so it keeps the lexical key.
    */
   identityOf(path: string): string {
-    const real = realpathSync(path);
-    return real === null ? resolvePath(this.workingDir, path) : real;
+    const real = realpathSync(path)
+    return real === null ? resolvePath(this.workingDir, path) : real
   }
 
   /**
@@ -410,23 +416,23 @@ export class Compilation {
    * the clash `packages.ts` exists to prevent.
    */
   load(path: string, name: string, packageOverride: string): boolean {
-    const identity = this.identityOf(path);
-    const at = this.byPath.get(identity, -1);
+    const identity = this.identityOf(path)
+    const at = this.byPath.get(identity, -1)
     if (at >= 0) {
-      return true;
+      return true
     }
-    const text = readFileSyncOrNull(path);
+    const text = readFileSyncOrNull(path)
     if (text === null) {
       // A root has no importer to point at, so this is not a diagnostic with a
       // span. Record it and let the driver report it in whichever shape was
       // asked for; an *import* that cannot be read is reported below, against
       // the specifier that named it.
-      this.unreadableRoot = path;
-      return false;
+      this.unreadableRoot = path
+      return false
     }
-    const source = new SourceFile(name, text);
-    const parser = new Parser(source);
-    const file = parser.parseSourceFile();
+    const source = new SourceFile(name, text)
+    const parser = new Parser(source)
+    const file = parser.parseSourceFile()
     // Recorded rather than printed, because the stream and the shape are the
     // driver's to choose. Printed here, a parser refusal was the human report
     // whatever the command line said, so `--json` answered a program stage1's
@@ -434,16 +440,16 @@ export class Compilation {
     // stream the contract says is empty — the one thing `docs/LANGUAGE.md`
     // promises `--json` never does.
     for (const diagnostic of parser.diagnostics) {
-      this.sink.add(diagnostic);
+      this.sink.add(diagnostic)
     }
     if (parser.diagnostics.length > 0) {
-      return false;
+      return false
     }
-    const isEntry = this.modules.length === 0;
+    const isEntry = this.modules.length === 0
     if (isEntry) {
-      this.rootPackageDir = packageDirOf(name);
+      this.rootPackageDir = packageDirOf(name)
     }
-    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name);
+    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
     const checker = new Checker(
       this.table,
       source,
@@ -456,8 +462,8 @@ export class Compilation {
       this.opts.uncheckedIndexing,
       this.opts.strictExports,
       packageName
-    );
-    const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName);
+    )
+    const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of
     // its own. It is a soundness requirement rather than a default: the rules
@@ -465,10 +471,10 @@ export class Compilation {
     // because the arena is thread-local. A program that does not import it is
     // compiled exactly as it was.
     if (packageName === CLI && name === threadsModuleName()) {
-      this.opts.threads = true;
+      this.opts.threads = true
     }
-    this.byPath.set(identity, this.modules.length);
-    this.modules.push(unit);
+    this.byPath.set(identity, this.modules.length)
+    this.modules.push(unit)
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
     // the checker can report it as merely unsupported. The count around it is
@@ -476,20 +482,20 @@ export class Compilation {
     // *validated* modules and never checks anything, so a Phase 0 refusal
     // stops the dump there and a pass 1 diagnostic — which stage0 has not
     // reached — does not (`self/compile.ts`, WP19 §A3).
-    const beforeValidation = this.sink.count();
-    validate(checker.ctx, file);
-    const failedValidation = this.sink.count() > beforeValidation;
-    this.validationErrors = this.validationErrors + (this.sink.count() - beforeValidation);
+    const beforeValidation = this.sink.count()
+    validate(checker.ctx, file)
+    const failedValidation = this.sink.count() > beforeValidation
+    this.validationErrors = this.validationErrors + (this.sink.count() - beforeValidation)
     if (failedValidation) {
       // Phase 0 refused the file, and that ends the compilation rather than
       // going on to pass 1: stage0's validator `throw`s out of `load` and the
       // driver reports the one diagnostic (stage0's `src/validator.ts`, `fail`). Going
       // on meant the checker refused `any` a second time, from the annotation
       // resolver, for one `any` in the source (WP19 §A3).
-      return false;
+      return false
     }
-    const beforeSignatures = this.sink.count();
-    checker.collectSignatures(); // pass 1, which also validates the import syntax
+    const beforeSignatures = this.sink.count()
+    checker.collectSignatures() // pass 1, which also validates the import syntax
     // Pass 1 refused something in this module. Its specifiers are still
     // *resolved* — a missing module is reported either way — but the modules
     // that do exist are not loaded, so nothing they would have said is
@@ -499,48 +505,48 @@ export class Compilation {
     // for the half that still reports). `--emit-ast` is exempt: it prints the
     // tree of every module it managed to read, and stage0 reaches that dump
     // before it looks at anything pass 1 recorded.
-    const signaturesFailed = this.sink.count() > beforeSignatures && !this.dumpOnly;
-    const dir = dirname(path);
-    let ok = true;
+    const signaturesFailed = this.sink.count() > beforeSignatures && !this.dumpOnly
+    const dir = dirname(path)
+    let ok = true
     for (const imp of checker.program.imports) {
       // A builtin module has no file behind it; pass 1b binds it instead.
       if (isNishSpecifier(imp.specifier)) {
-        continue;
+        continue
       }
       if (unit.resolved.has(imp.specifier)) {
-        continue;
+        continue
       }
-      const found = this.resolveSpecifier(dir, imp.specifier);
+      const found = this.resolveSpecifier(dir, imp.specifier)
       if (found.error.length > 0) {
         // At the module specifier, where stage0 points
         // (`imp.node.moduleSpecifier` in stage0's `src/compilation.ts`).
-        checker.ctx.errorAtSpecifier(imp.decl, found.error);
-        checker.ctx.errored = false;
-        continue;
+        checker.ctx.errorAtSpecifier(imp.decl, found.error)
+        checker.ctx.errored = false
+        continue
       }
-      const target = found.path;
+      const target = found.path
       if (readFileSyncOrNull(target) === null) {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
             ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames()})`
             : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
-        );
-        checker.ctx.errored = false;
-        continue;
+        )
+        checker.ctx.errored = false
+        continue
       }
       if (signaturesFailed) {
-        continue; // resolved, and deliberately not loaded: see above
+        continue // resolved, and deliberately not loaded: see above
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
       if (!this.load(target, found.name, found.packageName)) {
-        ok = false;
+        ok = false
       } else {
-        unit.resolved.set(imp.specifier, this.byPath.get(this.identityOf(target), -1));
+        unit.resolved.set(imp.specifier, this.byPath.get(this.identityOf(target), -1))
       }
     }
-    return ok;
+    return ok
   }
 
   /**
@@ -554,7 +560,7 @@ export class Compilation {
    */
   resolveSpecifier(dir: string, specifier: string): ResolvedModule {
     if (specifier.startsWith(STD_PREFIX)) {
-      const name = specifier.substring(STD_PREFIX.length);
+      const name = specifier.substring(STD_PREFIX.length)
       if (name.length > 0 && !isStdModuleName(name)) {
         // Refused before it is resolved, because what is wrong with it is the
         // name rather than the file: a specifier that climbs out of the package
@@ -565,8 +571,8 @@ export class Compilation {
           name: "",
           packageName: "",
           error: `Module \`${specifier}\` climbs out of the standard library; a \`${STD_PREFIX}\` specifier names a module inside it, so no segment may be empty or begin with a \`.\``,
-        };
-        return escaped;
+        }
+        return escaped
       }
       // Two strings, deliberately: the path says where the file is on *this*
       // install and the name says where the module is in the package, and only
@@ -577,26 +583,26 @@ export class Compilation {
       // answered from the working directory, which is the last place
       // `compile.ts` looks too. Without it `/std/<name>.ts` was asked for, and
       // a corpus program importing the library could not be dumped at all.
-      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : ".";
+      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
       const std: ResolvedModule = {
         path: stdModulePath(root, specifier),
         name: stdModuleName(specifier),
         packageName: CLI,
         error: "",
-      };
-      return std;
+      }
+      return std
     }
     if (specifier.startsWith("./") || specifier.startsWith("../")) {
-      const resolvedPath = resolveModule(dir, specifier);
+      const resolvedPath = resolveModule(dir, specifier)
       const relative: ResolvedModule = {
         path: resolvedPath,
         name: resolvedPath,
         packageName: "",
         error: "",
-      };
-      return relative;
+      }
+      return relative
     }
-    return this.resolveBareSpecifier(dir, specifier);
+    return this.resolveBareSpecifier(dir, specifier)
   }
 
   /**
@@ -615,20 +621,20 @@ export class Compilation {
    * which package the file is in.
    */
   resolveBareSpecifier(dir: string, specifier: string): ResolvedModule {
-    const failed: ResolvedModule = { path: "", name: "", packageName: "", error: "" };
-    const parsed = parseBareSpecifier(specifier);
+    const failed: ResolvedModule = { path: "", name: "", packageName: "", error: "" }
+    const parsed = parseBareSpecifier(specifier)
     if (parsed === null) {
       // Pass 1 refuses a specifier that is neither relative nor a package name,
       // so reaching here with one is a broken invariant rather than a user
       // error. The sink is not the place for it and neither is a panic in a
       // resolver, so it answers the same "cannot find" the caller reports.
-      failed.error = `Cannot find package \`${specifier}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
-      return failed;
+      failed.error = `Cannot find package \`${specifier}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`
+      return failed
     }
-    const foundDir = this.findPackageDir(dir, parsed.name);
+    const foundDir = this.findPackageDir(dir, parsed.name)
     if (foundDir === null) {
-      failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`;
-      return failed;
+      failed.error = `Cannot find package \`${parsed.name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`
+      return failed
     }
     // A package is its real directory, as it is to Node's resolver, so one
     // package reached through links (pnpm's layout) is one package, and its
@@ -637,46 +643,46 @@ export class Compilation {
     // links names every module as before; through a link the real directory
     // is spelled the way the walk was, relative to the working directory when
     // that was relative, so a name never carries where the checkout sits.
-    const identity = this.identityOf(foundDir);
-    let packageDir = foundDir;
+    const identity = this.identityOf(foundDir)
+    let packageDir = foundDir
     if (this.workingDir.length > 0 && identity !== resolvePath(this.workingDir, foundDir)) {
-      packageDir = foundDir.startsWith("/") ? identity : relativePath(this.workingDir, identity);
+      packageDir = foundDir.startsWith("/") ? identity : relativePath(this.workingDir, identity)
     }
-    const manifestPath = joinPath([packageDir, "package.json"]);
-    const manifest = readFileSyncOrNull(manifestPath);
-    const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32";
-    const otherMode = mode === "f64" ? "i32" : "f64";
+    const manifestPath = joinPath([packageDir, "package.json"])
+    const manifest = readFileSyncOrNull(manifestPath)
+    const mode = this.opts.numberMode === NUMBER_MODE_F64 ? "f64" : "i32"
+    const otherMode = mode === "f64" ? "i32" : "f64"
     // `findPackageDir` only answers a directory whose manifest it could read, so
     // the null here is a file that vanished between the two reads. It takes the
     // same route as a manifest with nothing in it for us, which is the honest
     // answer: this compiler found no Nish entry point in that package.
-    const text = manifest === null ? "" : manifest;
+    const text = manifest === null ? "" : manifest
     // One package name at two real directories is two copies of it (npm's
     // duplicates, or §7's diamond), and a program compiles one copy of a
     // package: refused in words, where it used to be refused by accident as a
     // symbol clash between the copies.
-    const version = manifestVersion(text);
-    const seen = this.packageIndex.get(parsed.name, -1);
+    const version = manifestVersion(text)
+    const seen = this.packageIndex.get(parsed.name, -1)
     if (seen < 0) {
-      this.packageIndex.set(parsed.name, this.packageCopies.length);
-      this.packageCopies.push(new PackageCopy(parsed.name, foundDir, identity, packageDir, version));
+      this.packageIndex.set(parsed.name, this.packageCopies.length)
+      this.packageCopies.push(new PackageCopy(parsed.name, foundDir, identity, packageDir, version))
     } else if (this.packageCopies[seen].realDir !== identity) {
-      const first = this.packageCopies[seen];
-      failed.error = `Package \`${parsed.name}\` is at two places, ${first.dir} (${describeVersion(first.version)}) and ${foundDir} (${describeVersion(version)}): ${LANGUAGE} compiles one copy of a package per program, so every import of it has to reach the same directory`;
-      return failed;
+      const first = this.packageCopies[seen]
+      failed.error = `Package \`${parsed.name}\` is at two places, ${first.dir} (${describeVersion(first.version)}) and ${foundDir} (${describeVersion(version)}): ${LANGUAGE} compiles one copy of a package per program, so every import of it has to reach the same directory`
+      return failed
     }
     // The floor is checked before the entry point, and whether or not there is
     // one: a package that names a newer compiler has said this one should not
     // be trusted with its source, and a file that happens to resolve does not
     // change that (`docs/wp21-packages.md` §6).
-    const engine = manifestEngineCheck(text, PACKAGE_CONDITION, VERSION);
+    const engine = manifestEngineCheck(text, PACKAGE_CONDITION, VERSION)
     if (engine === ENGINE_TOO_OLD) {
-      failed.error = `Package \`${parsed.name}\` needs a newer compiler: its \`engines.${PACKAGE_CONDITION}\` asks for \`${manifestEngineRange(text, PACKAGE_CONDITION)}\` and this is ${CLI} ${VERSION}`;
-      return failed;
+      failed.error = `Package \`${parsed.name}\` needs a newer compiler: its \`engines.${PACKAGE_CONDITION}\` asks for \`${manifestEngineRange(text, PACKAGE_CONDITION)}\` and this is ${CLI} ${VERSION}`
+      return failed
     }
     if (engine === ENGINE_UNREADABLE) {
-      failed.error = `Package \`${parsed.name}\` declares \`engines.${PACKAGE_CONDITION}\` as \`${manifestEngineRange(text, PACKAGE_CONDITION)}\`, which is not a range this compiler reads: the one it accepts is a floor, \`>=X.Y.Z\` or \`>=X.Y\``;
-      return failed;
+      failed.error = `Package \`${parsed.name}\` declares \`engines.${PACKAGE_CONDITION}\` as \`${manifestEngineRange(text, PACKAGE_CONDITION)}\`, which is not a range this compiler reads: the one it accepts is a floor, \`>=X.Y.Z\` or \`>=X.Y\``
+      return failed
     }
     const entry = nishExportEntry(
       text,
@@ -684,7 +690,7 @@ export class Compilation {
       packageConditionFor(mode),
       PACKAGE_CONDITION,
       packageConditionFor(otherMode)
-    );
+    )
     if (entry.status !== MANIFEST_FOUND) {
       // Each cause is named in its own words and carries its own code, which is
       // §6's point: a bare import that fails at the package boundary should say
@@ -697,21 +703,21 @@ export class Compilation {
       // scan got a file out of compiles, as it did under S2. A manifest that
       // vanished between the two reads is not malformed, only gone, and takes
       // the general answer at the bottom.
-      const brokenAt = manifest === null ? -1 : manifestMalformedAt(text);
+      const brokenAt = manifest === null ? -1 : manifestMalformedAt(text)
       if (brokenAt >= 0) {
-        failed.error = `Package \`${parsed.name}\` has a malformed manifest: ${manifestPath}:${lineOf(text, brokenAt)}:${columnOf(text, brokenAt)} is not well-formed JSON, so this compiler could not read an entry point out of it`;
-        return failed;
+        failed.error = `Package \`${parsed.name}\` has a malformed manifest: ${manifestPath}:${lineOf(text, brokenAt)}:${columnOf(text, brokenAt)} is not well-formed JSON, so this compiler could not read an entry point out of it`
+        return failed
       }
       if (entry.status === MANIFEST_OTHER_MODE) {
-        failed.error = `Package \`${parsed.name}\` supports ${LANGUAGE} in ${otherMode} mode only: its \`exports\` offers \`${packageConditionFor(otherMode)}\` for \`${parsed.subpath}\` and neither \`${packageConditionFor(mode)}\` nor \`${PACKAGE_CONDITION}\`, and this program is compiling in ${mode} (\`--number-mode ${mode}\`)`;
-        return failed;
+        failed.error = `Package \`${parsed.name}\` supports ${LANGUAGE} in ${otherMode} mode only: its \`exports\` offers \`${packageConditionFor(otherMode)}\` for \`${parsed.subpath}\` and neither \`${packageConditionFor(mode)}\` nor \`${PACKAGE_CONDITION}\`, and this program is compiling in ${mode} (\`--number-mode ${mode}\`)`
+        return failed
       }
       // The second clause keeps S2's sentence and adds the cause, so the
       // message a reader of S2 learned still matches: it says what this
       // compiler came away with, then why.
       if (entry.status === MANIFEST_NOT_NISH) {
-        failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\`, because that entry declares none of the conditions this compiler compiles source from (\`${PACKAGE_CONDITION}\`, \`${packageConditionFor(mode)}\`, \`${packageConditionFor(otherMode)}\`)`;
-        return failed;
+        failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\`, because that entry declares none of the conditions this compiler compiles source from (\`${PACKAGE_CONDITION}\`, \`${packageConditionFor(mode)}\`, \`${packageConditionFor(otherMode)}\`)`
+        return failed
       }
       // What is left: no `exports` at all, no key for this subpath, or a value
       // `manifest.ts` does not follow. The second clause says what this
@@ -720,10 +726,10 @@ export class Compilation {
       // whose `nish-i32` names something that is not a file never reaches its
       // perfectly good `nish` row, and a sentence about what the `exports`
       // declares would send its author to a line that is correct.
-      failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``;
-      return failed;
+      failed.error = `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` gave this compiler no file to compile for \`${parsed.subpath}\``
+      return failed
     }
-    const target = entry.target;
+    const target = entry.target
     // The manifest may name a file that is not there, which is the package's
     // own mistake and not the consumer's — but it is still a module that could
     // not be found, so the caller reports it as one.
@@ -735,14 +741,14 @@ export class Compilation {
     // (§A7's third bullet is about the compiler's package root, and this walk
     // does not use it). Through a link it is under the real directory, spelled
     // as above.
-    const resolvedPath = joinPath([packageDir, target]);
+    const resolvedPath = joinPath([packageDir, target])
     const resolved: ResolvedModule = {
       path: resolvedPath,
       name: resolvedPath,
       packageName: parsed.name,
       error: "",
-    };
-    return resolved;
+    }
+    return resolved
   }
 
   /**
@@ -765,25 +771,25 @@ export class Compilation {
   findPackageDir(from: string, name: string): string | null {
     // Normalised first so that the `..` segments a relative walk produces are
     // the only ones in the path, which is what `parentDirectory` reads.
-    let dir = normalizePath(from);
-    let steps = 0;
-    let searching = true;
+    let dir = normalizePath(from)
+    let steps = 0
+    let searching = true
     while (searching) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
-        const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name]);
+        const candidate = joinPath([dir, PACKAGE_ROOT_SEGMENT, name])
         if (readFileSyncOrNull(joinPath([candidate, "package.json"])) !== null) {
-          return candidate;
+          return candidate
         }
       }
-      const parent = parentDirectory(dir);
+      const parent = parentDirectory(dir)
       if (parent.length === 0 || steps >= PACKAGE_WALK_LIMIT) {
-        searching = false;
+        searching = false
       } else {
-        dir = parent;
-        steps = steps + 1;
+        dir = parent
+        steps = steps + 1
       }
     }
-    return null;
+    return null
   }
 
   /**
@@ -793,58 +799,58 @@ export class Compilation {
    */
   check(): boolean {
     if (this.sink.hasErrors()) {
-      return false; // pass 1 and module resolution ran during load
+      return false // pass 1 and module resolution ran during load
     }
-    this.rejectCollectionsClash();
+    this.rejectCollectionsClash()
     if (this.sink.hasErrors()) {
-      return false;
+      return false
     }
     for (const unit of this.modules) {
-      const targets: CheckedProgram[] = [];
+      const targets: CheckedProgram[] = []
       for (const imp of unit.checker.program.imports) {
         // A builtin module has no file behind it, so there is nothing to look
         // up; the entry keeps the array the same length as `imports` and
         // `bindImport` routes on the specifier before it reads one.
-        const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1);
-        targets.push(index < 0 ? unit.checker.program : this.modules[index].checker.program);
+        const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+        targets.push(index < 0 ? unit.checker.program : this.modules[index].checker.program)
       }
-      unit.checker.bindImports(targets);
+      unit.checker.bindImports(targets)
     }
     // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
     // Pass 1 could only write the request down — it runs as each module is
     // parsed, long before any import is bound — and it is made here, once every
     // module can answer one and can resolve its own imports while doing so.
     for (const unit of this.modules) {
-      unit.checker.makeDeferredInstantiations();
+      unit.checker.makeDeferredInstantiations()
     }
     // After every module is bound, so a struct reached through a chain of
     // modules does not depend on the order they were bound in.
-    const clashed = new StringSet();
-    const declared = this.declaredStructs(clashed);
+    const clashed = new StringSet()
+    const declared = this.declaredStructs(clashed)
     for (const unit of this.modules) {
-      unit.checker.closeReachableStructs(declared);
+      unit.checker.closeReachableStructs(declared)
     }
-    this.rejectSymbolClashes(clashed);
+    this.rejectSymbolClashes(clashed)
     if (this.sink.hasErrors()) {
-      return false;
+      return false
     }
     // `process.argv` is legal anywhere in a program that has an entry point, so
     // every module needs to know whether the entry declares `main` before its
     // bodies are checked.
-    const hasMain = this.entry().checker.program.entryMain !== null;
+    const hasMain = this.entry().checker.program.entryMain !== null
     for (const unit of this.modules) {
-      unit.checker.ctx.entryHasMain = hasMain;
+      unit.checker.ctx.entryHasMain = hasMain
     }
     // Constants fold once every module has its signatures, because an
     // initialiser may name a constant imported from a module checked later.
     for (const unit of this.modules) {
-      unit.checker.foldConstants();
+      unit.checker.foldConstants()
     }
     for (const unit of this.modules) {
-      unit.checker.checkBodies();
+      unit.checker.checkBodies()
     }
     if (this.sink.hasErrors()) {
-      return false;
+      return false
     }
     // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
     // point. Per module in load order, because an instantiation is checked by
@@ -856,38 +862,38 @@ export class Compilation {
     // sweep, and those bodies ask in turn. It ends because the set of
     // (template, tuple) pairs only grows and the caps in `self/generics.ts`
     // bound it.
-    let working = true;
+    let working = true
     while (working) {
-      working = false;
+      working = false
       for (const unit of this.modules) {
         if (unit.checker.drainInstantiations()) {
-          working = true;
+          working = true
         }
       }
     }
-    this.rejectInstantiatedStructClashes();
+    this.rejectInstantiatedStructClashes()
     if (this.sink.hasErrors()) {
-      return false;
+      return false
     }
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.
     // Which of them a host may also call is the build's to say (`hostVisible`).
-    const contexts: CheckContext[] = [];
-    const programs: CheckedProgram[] = [];
+    const contexts: CheckContext[] = []
+    const programs: CheckedProgram[] = []
     for (const unit of this.modules) {
-      contexts.push(unit.checker.ctx);
-      programs.push(unit.checker.program);
+      contexts.push(unit.checker.ctx)
+      programs.push(unit.checker.program)
     }
-    const mode = buildModeOf(this.opts, programs);
+    const mode = buildModeOf(this.opts, programs)
     // Which array fields live inside their objects (`self/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
-    layoutInlineArrays(contexts, mode);
-    proveCallSiteRanges(contexts, mode, this.opts.rangeReference);
-    this.reportArenaLoops();
-    this.checkParallel();
-    return !this.sink.hasErrors();
+    layoutInlineArrays(contexts, mode)
+    proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
+    this.reportArenaLoops()
+    this.checkParallel()
+    return !this.sink.hasErrors()
   }
 
   /**
@@ -903,33 +909,33 @@ export class Compilation {
   rejectCollectionsClash(): void {
     for (const unit of this.modules) {
       if (!unit.checker.program.isCollections()) {
-        this.reportCollectionClash(unit, "Map");
-        this.reportCollectionClash(unit, "Set");
+        this.reportCollectionClash(unit, "Map")
+        this.reportCollectionClash(unit, "Set")
       }
     }
   }
 
   /** The refusal for one name, when `unit` declares it and another module uses the global. */
   reportCollectionClash(unit: ModuleUnit, name: string): void {
-    const at = declarationNameOf(unit.checker.program, name);
+    const at = declarationNameOf(unit.checker.program, name)
     if (at === null) {
-      return;
+      return
     }
-    let user: ModuleUnit | null = null;
+    let user: ModuleUnit | null = null
     for (const other of this.modules) {
       if (user === null && other !== unit && importsCollection(other.checker.program, name)) {
-        user = other;
+        user = other
       }
     }
     if (user === null) {
-      return;
+      return
     }
     this.sink.report(
       unit.source,
       at.start,
       at.end,
       `\`${name}\` is declared here and ${user.name} uses the global \`${name}\`; a class or interface name is program-wide, so one program cannot have both (rename this one)`
-    );
+    )
   }
 
   /**
@@ -941,40 +947,42 @@ export class Compilation {
    * whose body allocates gets NL9012 there instead (`allocationWarning`).
    */
   checkParallel(): void {
-    const facts = this.analyze();
+    const facts = this.analyze()
     for (const unit of this.modules) {
-      const program = unit.checker.program;
+      const program = unit.checker.program
       for (const call of program.parallelCalls) {
-        const sig = call.sig;
-        const instance = sig.instance;
-        const fn = parallelBodyOf(sig);
+        const sig = call.sig
+        const instance = sig.instance
+        const fn = parallelBodyOf(sig)
         if (instance === null || fn === null) {
-          continue;
+          continue
         }
         // `U` for a map, `T` for a reduce: the last type argument either way.
-        const result = instance.typeArgs[instance.typeArgs.length - 1];
-        const args = call.node.children[1].children;
-        const identity = args.length > 2 ? args[2] : call.node;
-        const messages: string[] = [];
-        messages.push(resultMessage(this.table, sig, fn, result));
-        messages.push(reachesDstMessage(this.table, program, sig, fn));
-        messages.push(sharedWriteMessage(sig, fn, facts));
-        messages.push(arenaMessage(sig, fn, facts));
-        messages.push(escapeMessage(sig, fn, facts));
-        messages.push(reduceMessage(sig, fn, identity, program.source.text.substring(identity.start, identity.end)));
-        let refused = false;
+        const result = instance.typeArgs[instance.typeArgs.length - 1]
+        const args = call.node.children[1].children
+        const identity = args.length > 2 ? args[2] : call.node
+        const messages: string[] = []
+        messages.push(resultMessage(this.table, sig, fn, result))
+        messages.push(reachesDstMessage(this.table, program, sig, fn))
+        messages.push(sharedWriteMessage(sig, fn, facts))
+        messages.push(arenaMessage(sig, fn, facts))
+        messages.push(escapeMessage(sig, fn, facts))
+        messages.push(
+          reduceMessage(sig, fn, identity, program.source.text.substring(identity.start, identity.end))
+        )
+        let refused = false
         for (const message of messages) {
           if (message.length > 0) {
-            this.sink.report(program.source, call.node.start, call.node.end, message);
-            refused = true;
+            this.sink.report(program.source, call.node.start, call.node.end, message)
+            refused = true
           }
         }
         // A body the rules admit may still allocate, recycled per element
         // (`scopeParallelBodies`); that costs every element, and it is said once
         // the call is known to compile.
-        const warning = allocationWarning(this.table, sig, fn, result, facts);
+        const warning = allocationWarning(this.table, sig, fn, result, facts)
         if (!refused && warning.length > 0) {
-          this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning);
+          this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
         }
       }
     }
@@ -989,10 +997,15 @@ export class Compilation {
    * the one `emit` runs, memoised by `analyze`, so it is not paid twice.
    */
   reportArenaLoops(): void {
-    const facts = this.analyze();
+    const facts = this.analyze()
     for (const unit of this.analysisUnits) {
       for (const finding of arenaLoopFindings(unit, facts)) {
-        this.sink.reportPerformance(unit.program.source, finding.node.start, finding.node.end, finding.message);
+        this.sink.reportPerformance(
+          unit.program.source,
+          finding.node.start,
+          finding.node.end,
+          finding.message
+        )
       }
     }
   }
@@ -1030,60 +1043,60 @@ export class Compilation {
    * one mistake, not two.
    */
   rejectInstantiatedStructClashes(): void {
-    const owners = new StringMap();
-    const ownerPackages: string[] = [];
+    const owners = new StringMap()
+    const ownerPackages: string[] = []
     // `<package> <name>` -> the path of the first module of that package to
     // own the instantiation, as in `declaredStructs`.
-    const packageOwners = new StringMap();
-    const packageOwnerPaths: string[] = [];
-    const reported = new StringSet();
+    const packageOwners = new StringMap()
+    const packageOwnerPaths: string[] = []
+    const reported = new StringSet()
     for (const unit of this.modules) {
       for (const instance of unit.checker.program.structInstantiationList) {
         // The module that declares the template owns every instantiation of
         // it, whoever the annotation was written by.
         if (instance.template.origin !== unit.source) {
-          continue;
+          continue
         }
-        const name = instance.info.name;
+        const name = instance.info.name
         // A template is one declaration in one module, so its module's path and
         // its own name name it uniquely -- which is the object identity stage0
         // keys this set on.
-        const templateKey = `${unit.path}#${instance.template.sourceName}`;
-        const key = `${unit.packageName} ${name}`;
-        const inPackage = packageOwners.get(key, -1);
+        const templateKey = `${unit.path}#${instance.template.sourceName}`
+        const key = `${unit.packageName} ${name}`
+        const inPackage = packageOwners.get(key, -1)
         if (inPackage < 0) {
-          packageOwners.set(key, packageOwnerPaths.length);
-          packageOwnerPaths.push(unit.name);
+          packageOwners.set(key, packageOwnerPaths.length)
+          packageOwnerPaths.push(unit.name)
         } else if (inPackage < packageOwnerPaths.length) {
           // Its own package's first owner before anybody's, so that a clash
           // inside one package is named as one even when another package
           // owned the name before either module.
-          const first = packageOwnerPaths[inPackage];
+          const first = packageOwnerPaths[inPackage]
           if (reported.add(templateKey)) {
-            this.reportTemplateClash(unit, instance.template, first);
+            this.reportTemplateClash(unit, instance.template, first)
           }
-          continue;
+          continue
         }
-        const seen = owners.get(name, -1);
+        const seen = owners.get(name, -1)
         if (seen < 0) {
-          owners.set(name, ownerPackages.length);
-          ownerPackages.push(unit.packageName);
-          continue;
+          owners.set(name, ownerPackages.length)
+          ownerPackages.push(unit.packageName)
+          continue
         }
         // Not this package's first, which was compared above, so another's.
         if (!reported.add(templateKey)) {
-          continue;
+          continue
         }
-        const at = instance.template.decl.children[0];
-        const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface";
-        const here = describePackage(unit.packageName);
-        const there = describePackage(ownerPackages[seen]);
+        const at = instance.template.decl.children[0]
+        const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface"
+        const here = describePackage(unit.packageName)
+        const there = describePackage(ownerPackages[seen])
         this.sink.report(
           unit.source,
           at.start,
           at.end,
           `${what} \`${this.table.typeName(instance.info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
-        );
+        )
       }
     }
   }
@@ -1118,70 +1131,70 @@ export class Compilation {
    * instantiation's.
    */
   declaredStructs(clashed: StringSet): StructRegistry {
-    const declared = new StructRegistry();
-    const owners = new StringMap();
-    const ownerPackages: string[] = [];
-    const ownerPaths: string[] = [];
+    const declared = new StructRegistry()
+    const owners = new StringMap()
+    const ownerPackages: string[] = []
+    const ownerPaths: string[] = []
     // `<package> <name>` -> the path of the first module of that package to
     // declare the name. A space cannot occur in either half.
-    const packageOwners = new StringMap();
-    const packageOwnerPaths: string[] = [];
-    const reportedTemplates = new StringSet();
+    const packageOwners = new StringMap()
+    const packageOwnerPaths: string[] = []
+    const reportedTemplates = new StringSet()
     for (const unit of this.modules) {
       for (const info of unit.checker.program.structList) {
         if (info.origin !== unit.source) {
-          continue;
+          continue
         }
-        declared.add(info);
+        declared.add(info)
         // Already refused where it was declared, for its `$`; compared here it
         // would clash with the instantiation it is spelled like, in words
         // that name the instantiation rather than what was written.
         if (info.instance === null && isInstantiationName(info.name)) {
-          continue;
+          continue
         }
-        const what = info.kind === STRUCT_CLASS ? "Class" : "Interface";
-        const at = info.decl.children[0];
-        const key = `${unit.packageName} ${info.name}`;
-        const inPackage = packageOwners.get(key, -1);
+        const what = info.kind === STRUCT_CLASS ? "Class" : "Interface"
+        const at = info.decl.children[0]
+        const key = `${unit.packageName} ${info.name}`
+        const inPackage = packageOwners.get(key, -1)
         if (inPackage < 0) {
-          packageOwners.set(key, packageOwnerPaths.length);
-          packageOwnerPaths.push(unit.name);
+          packageOwners.set(key, packageOwnerPaths.length)
+          packageOwnerPaths.push(unit.name)
         } else if (inPackage < packageOwnerPaths.length) {
           // The range test, and reading the path before any call, let the
           // prover drop the check.
-          const first = packageOwnerPaths[inPackage];
-          const instance = info.instance;
+          const first = packageOwnerPaths[inPackage]
+          const instance = info.instance
           if (instance === null) {
             this.sink.report(
               unit.source,
               at.start,
               at.end,
               `${what} \`${this.table.typeName(info.type)}\` is also declared in ${first}; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone`
-            );
+            )
           } else if (reportedTemplates.add(`${unit.path}#${instance.template.sourceName}`)) {
-            this.reportTemplateClash(unit, instance.template, first);
+            this.reportTemplateClash(unit, instance.template, first)
           }
-          clashed.add(info.name);
-          continue;
+          clashed.add(info.name)
+          continue
         }
-        const seen = owners.get(info.name, -1);
+        const seen = owners.get(info.name, -1)
         if (seen < 0) {
-          owners.set(info.name, ownerPackages.length);
-          ownerPackages.push(unit.packageName);
-          ownerPaths.push(unit.name);
+          owners.set(info.name, ownerPackages.length)
+          ownerPackages.push(unit.packageName)
+          ownerPaths.push(unit.name)
         } else if (ownerPackages[seen] !== unit.packageName) {
-          const here = describePackage(unit.packageName);
-          const there = describePackage(ownerPackages[seen]);
+          const here = describePackage(unit.packageName)
+          const there = describePackage(ownerPackages[seen])
           this.sink.report(
             unit.source,
             at.start,
             at.end,
             `${what} \`${this.table.typeName(info.type)}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
-          );
+          )
         }
       }
     }
-    return declared;
+    return declared
   }
 
   /**
@@ -1191,14 +1204,14 @@ export class Compilation {
    * changed: the same rule one level up.
    */
   reportTemplateClash(unit: ModuleUnit, template: StructTemplateInfo, first: string): void {
-    const at = template.decl.children[0];
-    const kindWord = template.kind === STRUCT_CLASS ? "class" : "interface";
+    const at = template.decl.children[0]
+    const kindWord = template.kind === STRUCT_CLASS ? "class" : "interface"
     this.sink.report(
       unit.source,
       at.start,
       at.end,
       `Generic ${kindWord} \`${template.sourceName}\` is also declared in ${first}; a class or interface name must be unique across the program, and an instantiation is named after its template`
-    );
+    )
   }
 
   /**
@@ -1224,14 +1237,14 @@ export class Compilation {
    * only two classes of one package can share one.
    */
   rejectSymbolClashes(clashed: StringSet): void {
-    const owners = new StringMap();
-    const ownerSigs: (FunctionSig | null)[] = [];
-    const ownerModules: ModuleUnit[] = [];
-    const entry = this.entry();
+    const owners = new StringMap()
+    const ownerSigs: (FunctionSig | null)[] = []
+    const ownerModules: ModuleUnit[] = []
+    const entry = this.entry()
     if (entry.checker.program.entryMain !== null) {
-      owners.set("main", ownerSigs.length);
-      ownerSigs.push(null);
-      ownerModules.push(entry);
+      owners.set("main", ownerSigs.length)
+      ownerSigs.push(null)
+      ownerModules.push(entry)
     }
     for (const unit of this.modules) {
       // A template's instantiations are named after it (`identity$i32`), so two
@@ -1249,15 +1262,15 @@ export class Compilation {
         // (WP18 G7) — the same guard the loop below applies to an imported
         // signature.
         if (template.origin !== unit.source) {
-          continue;
+          continue
         }
-        const symbol = unit.checker.program.symbolPrefix + template.sourceName;
-        const at = owners.get(symbol, -1);
+        const symbol = unit.checker.program.symbolPrefix + template.sourceName
+        const at = owners.get(symbol, -1)
         if (at < 0) {
-          owners.set(symbol, ownerSigs.length);
-          ownerSigs.push(null);
-          ownerModules.push(unit);
-          continue;
+          owners.set(symbol, ownerSigs.length)
+          ownerSigs.push(null)
+          ownerModules.push(unit)
+          continue
         }
         // One template literal rather than a concatenation: the code generator
         // keys a rule on the longest literal run of its message, and split at
@@ -1268,34 +1281,41 @@ export class Compilation {
           template.decl.children[0].start,
           template.decl.children[0].end,
           `Generic function \`${template.sourceName}\` is also defined in ${ownerModules[at].name}; a function name must be unique across the program, and an instantiation is named after its template`
-        );
+        )
       }
       for (const sig of unit.checker.program.functions) {
         if (!sig.definedIn(unit.source)) {
-          continue; // an imported signature is the exporter's symbol, not a second one
+          continue // an imported signature is the exporter's symbol, not a second one
         }
-        const owner = sig.owner;
+        const owner = sig.owner
         if (owner !== null && clashed.has(owner.name)) {
-          continue;
+          continue
         }
-        const at = owners.get(sig.name, -1);
+        const at = owners.get(sig.name, -1)
         if (at < 0) {
-          owners.set(sig.name, ownerSigs.length);
-          ownerSigs.push(sig);
-          ownerModules.push(unit);
-          continue;
+          owners.set(sig.name, ownerSigs.length)
+          ownerSigs.push(sig)
+          ownerModules.push(unit)
+          continue
         }
-        const previousSig = ownerSigs[at];
-        const previousModule = ownerModules[at];
-        let message = "";
+        const previousSig = ownerSigs[at]
+        const previousModule = ownerModules[at]
+        let message = ""
         if (previousSig === null) {
-          message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`;
+          message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`
         } else {
-          message = clashMessage(this.table, sig, previousSig, previousModule.name, unit.name, unit.packageName);
+          message = clashMessage(
+            this.table,
+            sig,
+            previousSig,
+            previousModule.name,
+            unit.name,
+            unit.packageName
+          )
         }
         // Reported, not thrown: every clash is listed.
-        const at2 = nameNode(sig);
-        this.sink.report(unit.source, at2.start, at2.end, message);
+        const at2 = nameNode(sig)
+        this.sink.report(unit.source, at2.start, at2.end, message)
       }
     }
   }
@@ -1307,24 +1327,24 @@ export class Compilation {
    * twice would be the most expensive thing this class does twice.
    */
   analyze(): FactsTable {
-    const done = this.facts;
+    const done = this.facts
     if (done !== null) {
-      return done;
+      return done
     }
-    const units: AnalysisUnit[] = [];
+    const units: AnalysisUnit[] = []
     for (const unit of this.modules) {
-      units.push(new AnalysisUnit(unit.checker.program, unit.parents));
+      units.push(new AnalysisUnit(unit.checker.program, unit.parents))
     }
     // The entry wrapper initialises `process.argv` when any module reads it.
     for (const unit of this.modules) {
       if (unit.checker.program.usesArgv) {
-        this.entry().checker.program.usesArgv = true;
+        this.entry().checker.program.usesArgv = true
       }
     }
-    const facts = analyzeFunctions(units, this.table, this.opts, this.runtime);
-    this.analysisUnits = units;
-    this.facts = facts;
-    return facts;
+    const facts = analyzeFunctions(units, this.table, this.opts, this.runtime)
+    this.analysisUnits = units
+    this.facts = facts
+    return facts
   }
 
   /**
@@ -1333,44 +1353,50 @@ export class Compilation {
    * what a module uses of it is emitted into that module (docs/wp32-map.md §4.1).
    */
   libraryIndex(): i32 {
-    let i = 0;
+    let i = 0
     while (i < this.modules.length) {
       if (this.modules[i].checker.program.isCollections()) {
-        return i;
+        return i
       }
-      i = i + 1;
+      i = i + 1
     }
-    return -1;
+    return -1
   }
 
   /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts` and `std/map.ts`. */
   writesOutput(unit: ModuleUnit): boolean {
-    return !unit.checker.program.writesNoOutput();
+    return !unit.checker.program.writesNoOutput()
   }
 
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
-    const facts = this.analyze();
-    const units = this.analysisUnits;
-    const stems = this.outputStems();
-    const library = this.libraryIndex();
-    let copies: AnalysisUnit | null = null;
+    const facts = this.analyze()
+    const units = this.analysisUnits
+    const stems = this.outputStems()
+    const library = this.libraryIndex()
+    let copies: AnalysisUnit | null = null
     if (library >= 0 && library < units.length) {
-      copies = units[library];
+      copies = units[library]
     }
-    const out: EmittedModule[] = [];
-    let i = 0;
+    const out: EmittedModule[] = []
+    let i = 0
     while (i < this.modules.length && i < units.length && i < stems.length) {
       // Read before the calls, which end the length facts.
-      const unit = this.modules[i];
-      const analysed = units[i];
-      const stem = stems[i];
+      const unit = this.modules[i]
+      const analysed = units[i]
+      const stem = stems[i]
       if (this.writesOutput(unit)) {
-        out.push(new EmittedModule(stem, emitProgram(analysed, this.table, this.opts, this.runtime, facts, copies), unit.name));
+        out.push(
+          new EmittedModule(
+            stem,
+            emitProgram(analysed, this.table, this.opts, this.runtime, facts, copies),
+            unit.name
+          )
+        )
       }
-      i = i + 1;
+      i = i + 1
     }
-    return out;
+    return out
   }
 
   /**
@@ -1392,35 +1418,35 @@ export class Compilation {
    * first silently (`docs/wp19-stage0-retirement.md` §5a item 5, #198).
    */
   outputStems(): string[] {
-    const counts = new StringMap();
+    const counts = new StringMap()
     for (const unit of this.modules) {
       if (!this.writesOutput(unit)) {
-        continue;
+        continue
       }
-      const base = basenameWithout(unit.path, ".ts");
-      counts.set(base, counts.get(base, 0) + 1);
+      const base = basenameWithout(unit.path, ".ts")
+      counts.set(base, counts.get(base, 0) + 1)
     }
-    const root = dirname(this.entry().path);
-    const taken = new StringSet();
-    const stems: string[] = [];
+    const root = dirname(this.entry().path)
+    const taken = new StringSet()
+    const stems: string[] = []
     for (const unit of this.modules) {
       // One entry per module, `""` for one that writes no `.ll` (WP32).
       if (!this.writesOutput(unit)) {
-        stems.push("");
-        continue;
+        stems.push("")
+        continue
       }
-      const base = basenameWithout(unit.path, ".ts");
-      const stem = counts.get(base, 0) === 1 ? base : pathStem(root, unit.path);
-      let free = stem;
-      let n = 2;
+      const base = basenameWithout(unit.path, ".ts")
+      const stem = counts.get(base, 0) === 1 ? base : pathStem(root, unit.path)
+      let free = stem
+      let n = 2
       while (taken.has(free)) {
-        free = `${stem}_${n}`;
-        n = n + 1;
+        free = `${stem}_${n}`
+        n = n + 1
       }
-      taken.add(free);
-      stems.push(free);
+      taken.add(free)
+      stems.push(free)
     }
-    return stems;
+    return stems
   }
 }
 
@@ -1428,29 +1454,29 @@ export class Compilation {
 const importsCollection = (program: CheckedProgram, name: string): boolean => {
   for (const imp of program.imports) {
     if (imp.importedName === name && imp.specifier === COLLECTIONS_SPECIFIER) {
-      return true;
+      return true
     }
   }
-  return false;
-};
+  return false
+}
 
 /** The name node of `program`'s own declaration of the type `name`, or `null` (WP32). */
 const declarationNameOf = (program: CheckedProgram, name: string): Node | null => {
-  const struct = program.struct(name);
+  const struct = program.struct(name)
   if (struct !== null && struct.origin === program.source) {
-    return struct.decl.children[0];
+    return struct.decl.children[0]
   }
-  const template = program.structTemplate(name);
+  const template = program.structTemplate(name)
   if (template !== null && template.origin === program.source) {
-    return template.decl.children[0];
+    return template.decl.children[0]
   }
-  const alias = program.alias(name);
+  const alias = program.alias(name)
   if (alias !== null) {
-    return alias.decl.children[0];
+    return alias.decl.children[0]
   }
-  const declared = program.enumNamed(name);
-  return declared === null ? null : declared.decl.children[0];
-};
+  const declared = program.enumNamed(name)
+  return declared === null ? null : declared.decl.children[0]
+}
 
 /**
  * `path` relative to `root`, with every `.` and `..` segment dropped and the
@@ -1458,15 +1484,15 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
  * shares (`Compilation.outputStems`).
  */
 const pathStem = (root: string, path: string): string => {
-  const parts: string[] = [];
+  const parts: string[] = []
   for (const segment of splitByte(relativePath(root, path), SLASH)) {
     if (segment !== "." && segment !== "..") {
-      parts.push(segment);
+      parts.push(segment)
     }
   }
-  const joined = parts.join("_");
-  return joined.endsWith(".ts") ? joined.substring(0, joined.length - 3) : joined;
-};
+  const joined = parts.join("_")
+  return joined.endsWith(".ts") ? joined.substring(0, joined.length - 3) : joined
+}
 
 /**
  * The directory above `dir`, or `""` when there is none left to visit — and the
@@ -1490,31 +1516,33 @@ const pathStem = (root: string, path: string): string => {
  */
 const parentDirectory = (dir: string): string => {
   if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {
-    const parent = dirname(dir);
-    return parent === dir ? "" : parent; // `/` is the top of an absolute walk
+    const parent = dirname(dir)
+    return parent === dir ? "" : parent // `/` is the top of an absolute walk
   }
   if (dir === ".") {
-    return "..";
+    return ".."
   }
   // In a normalised relative path every `..` leads, so a trailing one means
   // the path is nothing but parent steps and the next level is one more.
   if (dir === ".." || dir.endsWith("/..")) {
-    return `${dir}/..`;
+    return `${dir}/..`
   }
-  return dirname(dir);
-};
+  return dirname(dir)
+}
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
-const nameNode = (sig: FunctionSig): Node => sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
+const nameNode = (sig: FunctionSig): Node =>
+  sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
 
 /** Whether a struct name is spelled like an instantiation's (`Box$i32`). */
-const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0;
+const isInstantiationName = (name: string): boolean => name.indexOf("$") >= 0
 
 /** How a diagnostic names a package copy's version: a manifest may declare none. */
-const describeVersion = (version: string): string => version.length > 0 ? version : "no version";
+const describeVersion = (version: string): string => (version.length > 0 ? version : "no version")
 
 /** How a diagnostic names a package: the program's own has no name to give. */
-const describePackage = (packageName: string): string => packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
+const describePackage = (packageName: string): string =>
+  packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``
 
 /**
  * The wording of a duplicate-symbol rejection (WP21 S1).
@@ -1545,26 +1573,27 @@ const clashMessage = (
   file: string,
   packageName: string
 ): string => {
-  const owner = sig.owner;
+  const owner = sig.owner
   if (owner !== null) {
-    const member = sig.decl.kind === N_CONSTRUCTOR
-      ? "is declared with a constructor"
-      : `declares method \`${sig.decl.children[0].text}\``;
-    const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`;
+    const member =
+      sig.decl.kind === N_CONSTRUCTOR
+        ? "is declared with a constructor"
+        : `declares method \`${sig.decl.children[0].text}\``
+    const both = `Class \`${table.typeName(owner.type)}\` ${member} in both ${previousFile} and ${file}`
     if (packageName === ROOT_PACKAGE) {
-      return `${both}; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes`;
+      return `${both}; a constructor or method is named after its class, so two classes that share a name anywhere in the program cannot both declare it, whether or not either is exported; rename one of the classes`
     }
-    return `${both}; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes`;
+    return `${both}; a constructor or method is named after its class, so two classes that share a name within one package cannot both declare it, whether or not either is exported; rename one of the classes`
   }
-  const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`;
+  const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`
   if (sig.exported && previous.exported) {
     if (packageName === ROOT_PACKAGE) {
-      return `Exported function ${where}; exported names must be unique across the program`;
+      return `Exported function ${where}; exported names must be unique across the program`
     }
-    return `Exported function ${where}; exported names must be unique within the package that declares them`;
+    return `Exported function ${where}; exported names must be unique within the package that declares them`
   }
   if (packageName === ROOT_PACKAGE) {
-    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
+    return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
   }
-  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`;
-};
+  return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+}

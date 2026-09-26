@@ -24,15 +24,15 @@
  * compiler. `--compiler` names one, and without it `compilerFor` answers the
  * seed, which is the whole of what this check needs to outlive stage0's `src/`.
  */
-import { spawnSync } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { compilerFor } from "./lib.js";
+import { spawnSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { compilerFor } from "./lib.js"
 
-const root = path.resolve(import.meta.dirname, "..", "..");
-const prelude = path.join(root, "runtime", "nish.mjs");
-const work = path.join(root, "build", "test", "unmodified");
+const root = path.resolve(import.meta.dirname, "..", "..")
+const prelude = path.join(root, "runtime", "nish.mjs")
+const work = path.join(root, "build", "test", "unmodified")
 
 /**
  * Programs whose native and unmodified-Node runs differ on purpose. Each one is
@@ -46,41 +46,55 @@ const KNOWN = new Map([
   ["f64_minmax_nan", "llvm.minnum/maxnum answer the non-NaN operand; Math.min/max answer NaN"],
   ["f64_round_negzero", "Math.round(-0.3) is +0 natively and -0 in JS, and x/0 differs on the integer side"],
   ["f64_i32_mixed", "explicit `i32` locals wrap natively; unmodified Node has only doubles"],
-]);
+])
 
 /** Every f64-mode program with an entry point, from the cases and the corpus. */
 const programs = () => {
-  const dirs = [path.join(root, "tests", "cases"), path.join(root, "tests", "differential", "corpus")];
-  const found = [];
+  const dirs = [path.join(root, "tests", "cases"), path.join(root, "tests", "differential", "corpus")]
+  const found = []
   for (const dir of dirs) {
-    if (!fs.existsSync(dir)) { continue; }
+    if (!fs.existsSync(dir)) {
+      continue
+    }
     for (const file of fs.readdirSync(dir).sort()) {
-      if (!file.endsWith(".args")) { continue; }
-      if (!fs.readFileSync(path.join(dir, file), "utf8").includes("--number-mode f64")) { continue; }
-      const source = path.join(dir, `${file.slice(0, -".args".length)}.ts`);
-      const name = path.basename(source, ".ts");
-      if (name.startsWith("reject_")) { continue; }
-      if (!fs.existsSync(source)) { continue; }
+      if (!file.endsWith(".args")) {
+        continue
+      }
+      if (!fs.readFileSync(path.join(dir, file), "utf8").includes("--number-mode f64")) {
+        continue
+      }
+      const source = path.join(dir, `${file.slice(0, -".args".length)}.ts`)
+      const name = path.basename(source, ".ts")
+      if (name.startsWith("reject_")) {
+        continue
+      }
+      if (!fs.existsSync(source)) {
+        continue
+      }
       // Either spelling declares the entry (WP22).
-      const text = fs.readFileSync(source, "utf8");
-      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) { continue; }
-      found.push({ name, source });
+      const text = fs.readFileSync(source, "utf8")
+      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) {
+        continue
+      }
+      found.push({ name, source })
     }
   }
-  return found;
-};
+  return found
+}
 
 /** Compile and link with `--number-mode f64`, then run the binary. */
 const native = ({ name, source }, compiler) => {
-  const exe = path.join(work, name);
+  const exe = path.join(work, name)
   const built = spawnSync(compiler.cmd, [...compiler.prefix, source, "--number-mode", "f64", "--link", exe], {
     cwd: root,
     encoding: "utf8",
-  });
-  if (built.status !== 0) { return { failed: `compile: ${built.stderr}` }; }
-  const ran = spawnSync(exe, [], { cwd: root, encoding: "utf8" });
-  return { stdout: ran.stdout, status: ran.status };
-};
+  })
+  if (built.status !== 0) {
+    return { failed: `compile: ${built.stderr}` }
+  }
+  const ran = spawnSync(exe, [], { cwd: root, encoding: "utf8" })
+  return { stdout: ran.stdout, status: ran.status }
+}
 
 /**
  * Run the same source under Node with nothing rewritten — in place, from the
@@ -90,44 +104,53 @@ const native = ({ name, source }, compiler) => {
  * `export function main` a syntax error before type stripping ever ran.)
  */
 const unmodified = ({ source }) => {
-  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(m.main());`;
+  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(m.main());`
   const ran = spawnSync(
     "node",
     ["--experimental-strip-types", "--no-warnings", "--import", prelude, "-e", entry],
     { cwd: root, encoding: "utf8" }
-  );
-  return { stdout: ran.stdout, status: ran.status };
-};
+  )
+  return { stdout: ran.stdout, status: ran.status }
+}
 
 const runUnmodified = ({ verbose = false, compiler: spec } = {}) => {
-  const compiler = compilerFor(spec);
-  if (compiler.error !== undefined) { return { ok: false, summary: compiler.error, detail: "" }; }
-  fs.mkdirSync(work, { recursive: true });
-  const rows = [];
+  const compiler = compilerFor(spec)
+  if (compiler.error !== undefined) {
+    return { ok: false, summary: compiler.error, detail: "" }
+  }
+  fs.mkdirSync(work, { recursive: true })
+  const rows = []
   for (const program of programs()) {
-    const a = native(program, compiler);
+    const a = native(program, compiler)
     if (a.failed) {
-      rows.push({ ...program, outcome: "ERROR", detail: a.failed });
-      continue;
+      rows.push({ ...program, outcome: "ERROR", detail: a.failed })
+      continue
     }
-    const b = unmodified(program);
-    const agrees = a.stdout === b.stdout && a.status === b.status;
-    const known = KNOWN.has(program.name);
-    let outcome = "AGREE";
-    if (!agrees && known) { outcome = "KNOWN"; }
-    else if (!agrees) { outcome = "DIFFER"; }
-    else if (known) { outcome = "XPASS"; // listed as divergent but agrees: the list is stale
-}
+    const b = unmodified(program)
+    const agrees = a.stdout === b.stdout && a.status === b.status
+    const known = KNOWN.has(program.name)
+    let outcome = "AGREE"
+    if (!agrees && known) {
+      outcome = "KNOWN"
+    } else if (!agrees) {
+      outcome = "DIFFER"
+    } else if (known) {
+      outcome = "XPASS" // listed as divergent but agrees: the list is stale
+    }
     rows.push({
       ...program,
       outcome,
-      detail: agrees ? "" : `native ${JSON.stringify(a.stdout)} (${a.status}) vs node ${JSON.stringify(b.stdout)} (${b.status})`,
-    });
+      detail: agrees
+        ? ""
+        : `native ${JSON.stringify(a.stdout)} (${a.status}) vs node ${JSON.stringify(b.stdout)} (${b.status})`,
+    })
   }
-  const count = (o) => rows.filter((r) => r.outcome === o).length;
-  const bad = rows.filter((r) => r.outcome === "DIFFER" || r.outcome === "ERROR" || r.outcome === "XPASS");
+  const count = (o) => rows.filter((r) => r.outcome === o).length
+  const bad = rows.filter((r) => r.outcome === "DIFFER" || r.outcome === "ERROR" || r.outcome === "XPASS")
   if (verbose) {
-    for (const r of rows) { console.log(`${r.outcome.padEnd(6)} ${r.name}${r.detail ? `\n       ${r.detail}` : ""}`); }
+    for (const r of rows) {
+      console.log(`${r.outcome.padEnd(6)} ${r.name}${r.detail ? `\n       ${r.detail}` : ""}`)
+    }
   }
   return {
     ok: bad.length === 0,
@@ -135,18 +158,20 @@ const runUnmodified = ({ verbose = false, compiler: spec } = {}) => {
       `${count("AGREE")}/${rows.length} f64 programs agree with unmodified Node ` +
       `(${count("KNOWN")} known divergences); ${bad.length} unexpected`,
     detail: bad.map((r) => `${r.outcome} ${r.name}: ${r.detail}`).join("\n"),
-  };
-};
+  }
+}
 
-export { runUnmodified };
+export { runUnmodified }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const at = process.argv.indexOf("--compiler");
+  const at = process.argv.indexOf("--compiler")
   const result = runUnmodified({
     verbose: process.argv.includes("--verbose"),
     compiler: at >= 0 ? process.argv[at + 1] : undefined,
-  });
-  console.log(result.summary);
-  if (!result.ok) { console.error(result.detail); }
-  process.exit(result.ok ? 0 : 1);
+  })
+  console.log(result.summary)
+  if (!result.ok) {
+    console.error(result.detail)
+  }
+  process.exit(result.ok ? 0 : 1)
 }

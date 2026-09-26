@@ -17,23 +17,23 @@
 // class — is a reference to the object rather than an index, because an index
 // would be into the wrong module's list. Everything local is an index.
 
-import { CheckContext } from "./context";
-import { SourceFile } from "./diagnostics";
-import { BuiltinExport } from "./nish-modules";
-import { StringMap, StringSet } from "./map";
-import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
-import { packageSymbolPrefix } from "./packages";
-import { isCollectionsModule, isMapExtrasModule } from "./std-modules";
-import { Local } from "./symbols";
-import { TypeTable } from "./types";
+import { CheckContext } from "./context"
+import { SourceFile } from "./diagnostics"
+import { BuiltinExport } from "./nish-modules"
+import { StringMap, StringSet } from "./map"
+import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
+import { packageSymbolPrefix } from "./packages"
+import { isCollectionsModule, isMapExtrasModule } from "./std-modules"
+import { Local } from "./symbols"
+import { TypeTable } from "./types"
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
-export const ROLE_FUNCTION: i32 = 0;
-export const ROLE_METHOD: i32 = 1;
-export const ROLE_CONSTRUCTOR: i32 = 2;
+export const ROLE_FUNCTION: i32 = 0
+export const ROLE_METHOD: i32 = 1
+export const ROLE_CONSTRUCTOR: i32 = 2
 
-export const STRUCT_CLASS: i32 = 0;
-export const STRUCT_INTERFACE: i32 = 1;
+export const STRUCT_CLASS: i32 = 0
+export const STRUCT_INTERFACE: i32 = 1
 
 /**
  * One function, method or constructor.
@@ -51,28 +51,28 @@ export class FunctionSig {
    * program. `Owner.method` for a member, and `main` in the entry module is
    * `@nish_main`.
    */
-  name: string;
+  name: string
   /** The identifier as written; for a method it reads `Owner.method`. */
-  sourceName: string;
-  paramNames: string[];
-  paramTypes: i32[];
-  returnType: i32;
-  decl: Node;
+  sourceName: string
+  paramNames: string[]
+  paramTypes: i32[]
+  returnType: i32
+  decl: Node
   /** The module that declares it, so pass 2 skips the ones it only imported. */
-  origin: SourceFile | null;
-  exported: boolean;
-  role: i32;
+  origin: SourceFile | null
+  exported: boolean
+  role: i32
   /** The class this is a member of, or `null` for a free function. */
-  owner: StructInfo | null;
+  owner: StructInfo | null
   /** A statement of the body was rejected: no IR is emitted for this program. */
-  poisoned: boolean;
+  poisoned: boolean
   /**
    * WP18: set when this signature is one instantiation of a generic template
    * rather than a declared function. It carries the side tables the template's
    * body was checked into for *this* type-argument tuple, which every pass that
    * walks the body installs before it starts (`CheckedProgram.enterInstance`).
    */
-  instance: Instantiation | null;
+  instance: Instantiation | null
   /**
    * WP29: which parameters are compile-time function parameters, parallel to
    * `paramNames` — or empty, which is every signature that has none. Such a
@@ -83,7 +83,7 @@ export class FunctionSig {
    * only reader, and the emitter's `emitCall` and `emitFunction` are what
    * skip the position (docs/wp23-language-surface.md §6).
    */
-  compileTime: boolean[];
+  compileTime: boolean[]
   /**
    * WP29: this function is called by an instantiation another module defines
    * — a private function or an arrow passed to an imported template — so it
@@ -91,19 +91,19 @@ export class FunctionSig {
    * linkage rather than an exported one, and takes the public `Result` ABI,
    * because the `declare` the other module writes is the public one.
    */
-  hidden: boolean;
+  hidden: boolean
   /**
    * WP29: an arrow written as a function argument and lifted into a function
    * of its own. Its body was checked where the arrow was written, into the
    * enclosing function's side tables, so pass 2 skips it.
    */
-  lifted: boolean;
+  lifted: boolean
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
-  arrowCount: i32;
+  arrowCount: i32
 
   /** Whether parameter `index` is a compile-time function parameter (WP29). */
   isCompileTime(index: i32): boolean {
-    return index < this.compileTime.length && this.compileTime[index];
+    return index < this.compileTime.length && this.compileTime[index]
   }
 
   /**
@@ -114,7 +114,7 @@ export class FunctionSig {
    * all, so the interop sidecars describe neither.
    */
   compileTimeOnly(): boolean {
-    return this.lifted || this.compileTime.length > 0;
+    return this.lifted || this.compileTime.length > 0
   }
 
   /**
@@ -122,7 +122,7 @@ export class FunctionSig {
    * exported, or `hidden` (WP29). The `Result` ABI and the linkage follow it.
    */
   visibleOutside(): boolean {
-    return this.exported || this.hidden;
+    return this.exported || this.hidden
   }
 
   /**
@@ -133,8 +133,8 @@ export class FunctionSig {
    * that only walk the tree take either.
    */
   body(): Node | null {
-    const node = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3];
-    return node.kind === N_EMPTY ? null : node;
+    const node = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3]
+    return node.kind === N_EMPTY ? null : node
   }
 
   /**
@@ -147,7 +147,7 @@ export class FunctionSig {
    * apart from the other reason a body can be missing.
    */
   foreign(): boolean {
-    return (this.decl.flags & FLAG_FOREIGN) !== 0;
+    return (this.decl.flags & FLAG_FOREIGN) !== 0
   }
 
   /**
@@ -157,27 +157,27 @@ export class FunctionSig {
    * `origin` is nullable until pass 1 fills it in.
    */
   definedIn(source: SourceFile): boolean {
-    const origin = this.origin;
-    return origin !== null && origin === source;
+    const origin = this.origin
+    return origin !== null && origin === source
   }
 
   constructor(name: string, sourceName: string, decl: Node) {
-    this.name = name;
-    this.sourceName = sourceName;
-    this.paramNames = [];
-    this.paramTypes = [];
-    this.returnType = 0;
-    this.decl = decl;
-    this.origin = null;
-    this.exported = false;
-    this.role = ROLE_FUNCTION;
-    this.owner = null;
-    this.poisoned = false;
-    this.instance = null;
-    this.compileTime = [];
-    this.hidden = false;
-    this.lifted = false;
-    this.arrowCount = 0;
+    this.name = name
+    this.sourceName = sourceName
+    this.paramNames = []
+    this.paramTypes = []
+    this.returnType = 0
+    this.decl = decl
+    this.origin = null
+    this.exported = false
+    this.role = ROLE_FUNCTION
+    this.owner = null
+    this.poisoned = false
+    this.instance = null
+    this.compileTime = []
+    this.hidden = false
+    this.lifted = false
+    this.arrowCount = 0
   }
 }
 
@@ -185,46 +185,46 @@ export class FunctionSig {
 // (`self/parallel.ts` decides, `self/emit-parallel.ts` reads).
 
 /** An ordinary instantiation, lowered as its body is written. */
-export const PAR_NONE: i32 = 0;
+export const PAR_NONE: i32 = 0
 /** `parallelMapInto` from `nish/threads`: its call to `mapRange` becomes a region. */
-export const PAR_MAP: i32 = 1;
+export const PAR_MAP: i32 = 1
 /** `parallelReduce` from `nish/threads`: its call to `reduceBlocks` becomes a region. */
-export const PAR_REDUCE: i32 = 2;
+export const PAR_REDUCE: i32 = 2
 /** `mapRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
-export const PAR_CHUNK: i32 = 3;
+export const PAR_CHUNK: i32 = 3
 
 // WP32: what an instantiation is to the emitter's `Map` lowering
 // (`mapIntrinsicRole` in `self/generics.ts` decides, `self/emit-map.ts` reads).
 
 /** An ordinary instantiation. */
-export const MAP_NONE: i32 = 0;
+export const MAP_NONE: i32 = 0
 /** `hashKey<K>` from `std/collections.ts`: every call is the key's hash, lowered in place. */
-export const MAP_HASH_KEY: i32 = 1;
+export const MAP_HASH_KEY: i32 = 1
 /** `sameKey<K>`: every call is SameValueZero on two keys, lowered in place. */
-export const MAP_SAME_KEY: i32 = 2;
+export const MAP_SAME_KEY: i32 = 2
 /** `reserve` from `nish/map`: every call is the table's `reserveSlots`. */
-export const MAP_RESERVE: i32 = 3;
+export const MAP_RESERVE: i32 = 3
 /** `getOrInsert` from `nish/map`: every call is one `probe` and a write or a read through its answer. */
-export const MAP_GET_OR_INSERT: i32 = 4;
+export const MAP_GET_OR_INSERT: i32 = 4
 /** `storedKey<K>` from `std/collections.ts`: every call is the key an entry stores, lowered in place. */
-export const MAP_STORED_KEY: i32 = 5;
+export const MAP_STORED_KEY: i32 = 5
 
 // WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
 // checker decides (`self/fusion.ts`), and the attribute pass and the emitter
 // read (`fusedCalleesOf` and `emitFusedCall` in `self/emit-map.ts`).
 
 /** An ordinary call. */
-export const FUSE_NONE: i32 = 0;
+export const FUSE_NONE: i32 = 0
 /** `m.has(k)`, the condition of a guarded write: the probe, whose answer the write reuses. */
-export const FUSE_PROBE: i32 = 1;
+export const FUSE_PROBE: i32 = 1
 /** `m.get(k)` or `m.has(k)` inside an update's value: read from the update's probe, not a probe of its own. */
-export const FUSE_USE: i32 = 2;
+export const FUSE_USE: i32 = 2
 /** `m.set(k, E)` whose `E` reads `k`: the probe, then `E`, then a write through the probe's answer. */
-export const FUSE_UPDATE: i32 = 3;
+export const FUSE_UPDATE: i32 = 3
 /** `m.set(k, E)` first in `if (m.has(k))`: the key is there, so it is `setValueAt`. */
-export const FUSE_WRITE_FOUND: i32 = 4;
+export const FUSE_WRITE_FOUND: i32 = 4
 /** `m.set(k, E)` first in `if (!m.has(k))`, or `s.add(x)` first in `if (!s.has(x))`: it is not, so it is `insertAt`. */
-export const FUSE_WRITE_ABSENT: i32 = 5;
+export const FUSE_WRITE_ABSENT: i32 = 5
 
 /**
  * The fused calls of one body, by node id: each one's `FUSE_*` role, and the
@@ -234,46 +234,46 @@ export const FUSE_WRITE_ABSENT: i32 = 5;
  * at most, and most have none, which costs nothing to ask.
  */
 export class FusionTable {
-  ids: i32[];
-  roles: i32[];
-  partners: i32[];
+  ids: i32[]
+  roles: i32[]
+  partners: i32[]
 
   constructor() {
-    this.ids = [];
-    this.roles = [];
-    this.partners = [];
+    this.ids = []
+    this.roles = []
+    this.partners = []
   }
 
   /** Where `id` is in the lists, or -1. */
   find(id: i32): i32 {
     for (let i = 0; i < this.ids.length; i++) {
       if (this.ids[i] === id) {
-        return i;
+        return i
       }
     }
-    return -1;
+    return -1
   }
 
   record(id: i32, role: i32, partner: i32): void {
-    const at = this.find(id);
+    const at = this.find(id)
     if (at >= 0 && at < this.roles.length && at < this.partners.length) {
-      this.roles[at] = role;
-      this.partners[at] = partner;
-      return;
+      this.roles[at] = role
+      this.partners[at] = partner
+      return
     }
-    this.ids.push(id);
-    this.roles.push(role);
-    this.partners.push(partner);
+    this.ids.push(id)
+    this.roles.push(role)
+    this.partners.push(partner)
   }
 
   roleOf(id: i32): i32 {
-    const at = this.find(id);
-    return at >= 0 && at < this.roles.length ? this.roles[at] : FUSE_NONE;
+    const at = this.find(id)
+    return at >= 0 && at < this.roles.length ? this.roles[at] : FUSE_NONE
   }
 
   partnerOf(id: i32): i32 {
-    const at = this.find(id);
-    return at >= 0 && at < this.partners.length ? this.partners[at] : -1;
+    const at = this.find(id)
+    return at >= 0 && at < this.partners.length ? this.partners[at] : -1
   }
 }
 
@@ -284,13 +284,13 @@ export class FusionTable {
  */
 export class ParallelCall {
   /** The `N_CALL`, in the module whose `parallelCalls` holds this. */
-  node: Node;
+  node: Node
   /** The instantiation it calls, whose `functionArgs[0]` is the body. */
-  sig: FunctionSig;
+  sig: FunctionSig
 
   constructor(node: Node, sig: FunctionSig) {
-    this.node = node;
-    this.sig = sig;
+    this.node = node
+    this.sig = sig
   }
 }
 
@@ -302,29 +302,29 @@ export class ParallelCall {
  * `square` in `apply<i32, square>`.
  */
 export class FunctionBindings {
-  names: string[];
-  sigs: FunctionSig[];
+  names: string[]
+  sigs: FunctionSig[]
 
   constructor() {
-    this.names = [];
-    this.sigs = [];
+    this.names = []
+    this.sigs = []
   }
 
   add(name: string, sig: FunctionSig): void {
-    this.names.push(name);
-    this.sigs.push(sig);
+    this.names.push(name)
+    this.sigs.push(sig)
   }
 
   /** The function bound to `name`, or `null` when `name` is not a function parameter here. */
   get(name: string): FunctionSig | null {
-    let i = 0;
+    let i = 0
     while (i < this.names.length) {
       if (this.names[i] === name) {
-        return this.sigs[i];
+        return this.sigs[i]
       }
-      i = i + 1;
+      i = i + 1
     }
-    return null;
+    return null
   }
 }
 
@@ -338,20 +338,20 @@ export class FunctionBindings {
  * template however many instantiations there are.
  */
 export class ConstraintList {
-  types: i32[];
-  resolved: boolean;
+  types: i32[]
+  resolved: boolean
   /** Set while the list is being resolved, so a constraint that names its own template does not loop. */
-  resolving: boolean;
+  resolving: boolean
 
   constructor() {
-    this.types = [];
-    this.resolved = false;
-    this.resolving = false;
+    this.types = []
+    this.resolved = false
+    this.resolving = false
   }
 
   /** The constraint of parameter `index`, or -1 when it has none (or is not resolved yet). */
   at(index: i32): i32 {
-    return index >= 0 && index < this.types.length ? this.types[index] : -1;
+    return index >= 0 && index < this.types.length ? this.types[index] : -1
   }
 }
 
@@ -374,24 +374,24 @@ export class TemplateInfo {
    * spells it (`Box<i32>.pick`), so its instantiations display as
    * `Box<i32>.pick<string>` (WP18 G8).
    */
-  sourceName: string;
+  sourceName: string
   /**
    * The receiver of a generic method (WP18 G8), or `null` for a function. A
    * method template is minted per receiver struct — once for a declared class,
    * once per instantiation of a generic one — so one template is one
    * (receiver × method) and its instantiations are keyed by the method tuple.
    */
-  owner: StructInfo | null;
+  owner: StructInfo | null
   /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
-  typeParams: string[];
+  typeParams: string[]
   /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
-  constraints: ConstraintList;
+  constraints: ConstraintList
   /** The `N_FUNCTION` node, in either spelling. */
-  decl: Node;
-  origin: SourceFile;
-  exported: boolean;
+  decl: Node
+  origin: SourceFile
+  exported: boolean
   /** How many instantiations it has produced, for the per-template cap. */
-  count: i32;
+  count: i32
   /**
    * The module that declares it, which is where every instantiation of it is
    * made (WP18 G7).
@@ -401,18 +401,18 @@ export class TemplateInfo {
    * imports, and its symbols belong to that module's package. A request from
    * another module is forwarded here rather than answered where it was written.
    */
-  home: CheckContext;
+  home: CheckContext
 
   constructor(sourceName: string, decl: Node, origin: SourceFile, home: CheckContext) {
-    this.sourceName = sourceName;
-    this.owner = null;
-    this.typeParams = [];
-    this.constraints = new ConstraintList();
-    this.decl = decl;
-    this.origin = origin;
-    this.exported = false;
-    this.count = 0;
-    this.home = home;
+    this.sourceName = sourceName
+    this.owner = null
+    this.typeParams = []
+    this.constraints = new ConstraintList()
+    this.decl = decl
+    this.origin = origin
+    this.exported = false
+    this.count = 0
+    this.home = home
   }
 }
 
@@ -424,32 +424,32 @@ export class TemplateInfo {
  */
 export class StructTemplateInfo {
   /** The identifier as written; what every diagnostic about the template names. */
-  sourceName: string;
+  sourceName: string
   /** `STRUCT_CLASS` or `STRUCT_INTERFACE`; an instantiation inherits it. */
-  kind: i32;
+  kind: i32
   /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
-  typeParams: string[];
+  typeParams: string[]
   /** Each parameter's constraint (WP18 G6); see `ConstraintList`. */
-  constraints: ConstraintList;
+  constraints: ConstraintList
   /** The `N_CLASS` or `N_INTERFACE` node. */
-  decl: Node;
-  origin: SourceFile;
-  exported: boolean;
+  decl: Node
+  origin: SourceFile
+  exported: boolean
   /** How many instantiations it has produced, for the per-template cap. */
-  count: i32;
+  count: i32
   /** The module that declares it; `TemplateInfo.home` one level up (WP18 G7). */
-  home: CheckContext;
+  home: CheckContext
 
   constructor(sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext) {
-    this.sourceName = sourceName;
-    this.kind = kind;
-    this.typeParams = [];
-    this.constraints = new ConstraintList();
-    this.decl = decl;
-    this.origin = origin;
-    this.exported = false;
-    this.count = 0;
-    this.home = home;
+    this.sourceName = sourceName
+    this.kind = kind
+    this.typeParams = []
+    this.constraints = new ConstraintList()
+    this.decl = decl
+    this.origin = origin
+    this.exported = false
+    this.count = 0
+    this.home = home
   }
 }
 
@@ -464,25 +464,25 @@ export class StructTemplateInfo {
  * inference read back because the struct type itself carries none.
  */
 export class StructInstantiation {
-  template: StructTemplateInfo;
+  template: StructTemplateInfo
   /** One concrete type id per entry of `template.typeParams`, in that order. */
-  typeArgs: i32[];
-  info: StructInfo;
+  typeArgs: i32[]
+  info: StructInfo
   /** Type parameter name -> the type id it stands for. */
-  bindings: StringMap;
+  bindings: StringMap
   /**
    * The struct instantiation whose members or whose method body asked for this
    * one, or `null` for one named by ordinary code. The chain is what the
    * termination rule walks and what its diagnostic quotes.
    */
-  from: StructInstantiation | null;
+  from: StructInstantiation | null
 
   constructor(template: StructTemplateInfo, typeArgs: i32[], info: StructInfo, bindings: StringMap) {
-    this.template = template;
-    this.typeArgs = typeArgs;
-    this.info = info;
-    this.bindings = bindings;
-    this.from = null;
+    this.template = template
+    this.typeArgs = typeArgs
+    this.info = info
+    this.bindings = bindings
+    this.from = null
   }
 }
 
@@ -505,25 +505,25 @@ export class Instantiation {
    * generic method of a generic class has both this and `owner`: its own type
    * parameters come from the template, its class's from the owner (WP18 G8).
    */
-  template: TemplateInfo | null;
+  template: TemplateInfo | null
   /**
    * The instantiated class whose parameters are bound in this body: the class
    * a collected member belongs to, or the receiver of a generic method (WP18
    * G8), set alongside `template` when that method is itself generic. `null`
    * for a free function and for a generic method of a declared class.
    */
-  owner: StructInstantiation | null;
+  owner: StructInstantiation | null
   /** One concrete type id per entry of `template.typeParams`, in that order. */
-  typeArgs: i32[];
-  sig: FunctionSig;
+  typeArgs: i32[]
+  sig: FunctionSig
   /** Type parameter name -> the type id it stands for. */
-  bindings: StringMap;
-  nodeTypes: i32[];
-  nodeLocals: (Local | null)[];
-  nodeConstants: (ConstInfo | null)[];
-  nodeCallees: (FunctionSig | null)[];
-  nodeCoercions: i32[];
-  nodeCaseValues: i64[];
+  bindings: StringMap
+  nodeTypes: i32[]
+  nodeLocals: (Local | null)[]
+  nodeConstants: (ConstInfo | null)[]
+  nodeCallees: (FunctionSig | null)[]
+  nodeCoercions: i32[]
+  nodeCaseValues: i64[]
   /**
    * The bounds proofs over this body (`self/bounds.ts`), kept per
    * instantiation like every table above: `rs[0] = x` stores a pointer when
@@ -531,55 +531,61 @@ export class Instantiation {
    * template node can be proven in `walk$Box` and not in `walk$Rec`. A table
    * shared by the template's node ids would let either verdict decide both.
    */
-  nodeProvenIndex: boolean[];
-  nodeProvenClamp: boolean[];
+  nodeProvenIndex: boolean[]
+  nodeProvenClamp: boolean[]
   /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
-  fusion: FusionTable;
+  fusion: FusionTable
   /**
    * The instantiation whose body asked for this one, or `null` for one
    * requested from ordinary code. The chain is what the termination rule walks
    * and what its diagnostic quotes.
    */
-  from: Instantiation | null;
+  from: Instantiation | null
   /**
    * WP29: the function each compile-time function parameter was given, in
    * parameter order — the third component of the instantiation key, after the
    * template and the type arguments, and mangled into the symbol beside them
    * (`instanceSymbol`). Empty for a template that takes no function.
    */
-  functionArgs: FunctionSig[];
+  functionArgs: FunctionSig[]
   /** WP29: the same, by parameter name, as the body sees them. */
-  functionBindings: FunctionBindings;
+  functionBindings: FunctionBindings
   /** WP29 P1: one of the `PAR_*` roles; `PAR_NONE` for everything but `nish/threads`'s four templates. */
-  parallel: i32;
+  parallel: i32
   /** WP32: one of the `MAP_*` roles; `MAP_NONE` for everything but `std/collections.ts`'s two intrinsics. */
-  mapIntrinsic: i32;
+  mapIntrinsic: i32
 
-  constructor(template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
-    this.template = template;
-    this.owner = null;
-    this.functionArgs = [];
-    this.functionBindings = new FunctionBindings();
-    this.parallel = PAR_NONE;
-    this.mapIntrinsic = MAP_NONE;
-    this.typeArgs = typeArgs;
-    this.sig = sig;
-    this.bindings = bindings;
-    this.nodeTypes = new Array<i32>(nodeCount);
-    this.nodeLocals = new Array<Local | null>(nodeCount);
-    this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
-    this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
-    this.nodeCoercions = new Array<i32>(nodeCount);
-    this.nodeCaseValues = new Array<i64>(nodeCount);
-    this.nodeProvenIndex = new Array<boolean>(nodeCount);
-    this.nodeProvenClamp = new Array<boolean>(nodeCount);
-    this.fusion = new FusionTable();
-    this.from = null;
-    let i = 0;
+  constructor(
+    template: TemplateInfo | null,
+    typeArgs: i32[],
+    sig: FunctionSig,
+    bindings: StringMap,
+    nodeCount: i32
+  ) {
+    this.template = template
+    this.owner = null
+    this.functionArgs = []
+    this.functionBindings = new FunctionBindings()
+    this.parallel = PAR_NONE
+    this.mapIntrinsic = MAP_NONE
+    this.typeArgs = typeArgs
+    this.sig = sig
+    this.bindings = bindings
+    this.nodeTypes = new Array<i32>(nodeCount)
+    this.nodeLocals = new Array<Local | null>(nodeCount)
+    this.nodeConstants = new Array<ConstInfo | null>(nodeCount)
+    this.nodeCallees = new Array<FunctionSig | null>(nodeCount)
+    this.nodeCoercions = new Array<i32>(nodeCount)
+    this.nodeCaseValues = new Array<i64>(nodeCount)
+    this.nodeProvenIndex = new Array<boolean>(nodeCount)
+    this.nodeProvenClamp = new Array<boolean>(nodeCount)
+    this.fusion = new FusionTable()
+    this.from = null
+    let i = 0
     while (i < nodeCount) {
-      this.nodeTypes[i] = -1;
-      this.nodeCoercions[i] = -1;
-      i = i + 1;
+      this.nodeTypes[i] = -1
+      this.nodeCoercions[i] = -1
+      i = i + 1
     }
   }
 
@@ -592,31 +598,31 @@ export class Instantiation {
    * is never a second answer for the tables to hold.
    */
   shareTablesOf(outer: Instantiation): void {
-    this.nodeTypes = outer.nodeTypes;
-    this.nodeLocals = outer.nodeLocals;
-    this.nodeConstants = outer.nodeConstants;
-    this.nodeCallees = outer.nodeCallees;
-    this.nodeCoercions = outer.nodeCoercions;
-    this.nodeCaseValues = outer.nodeCaseValues;
-    this.nodeProvenIndex = outer.nodeProvenIndex;
-    this.nodeProvenClamp = outer.nodeProvenClamp;
-    this.fusion = outer.fusion;
+    this.nodeTypes = outer.nodeTypes
+    this.nodeLocals = outer.nodeLocals
+    this.nodeConstants = outer.nodeConstants
+    this.nodeCallees = outer.nodeCallees
+    this.nodeCoercions = outer.nodeCoercions
+    this.nodeCaseValues = outer.nodeCaseValues
+    this.nodeProvenIndex = outer.nodeProvenIndex
+    this.nodeProvenClamp = outer.nodeProvenClamp
+    this.fusion = outer.fusion
   }
 }
 
 /** A field of a class or interface, with its computed layout slot. */
 export class FieldInfo {
-  name: string;
-  type: i32;
+  name: string
+  type: i32
   /** Position in the LLVM struct body (`getelementptr ... i32 0, i32 <index>`). */
-  index: i32;
+  index: i32
   /** Byte offset, laid out exactly as clang lays out the equivalent C struct. */
-  offset: i32;
+  offset: i32
   /** `readonly` fields may only be assigned through `this` in the constructor. */
-  readonly: boolean;
+  readonly: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
-  initializer: Node | null;
-  decl: Node;
+  initializer: Node | null
+  decl: Node
   /**
    * The number of element slots an array field holds inside its object, or -1
    * for a field laid out as it always was. Decided once the whole program is
@@ -624,71 +630,71 @@ export class FieldInfo {
    * `inlineCapacity` slots, one LLVM member `{ %struct.nish_array, [K x T] }`,
    * so `index` does not move and `offset` is recomputed.
    */
-  inlineCapacity: i32;
+  inlineCapacity: i32
 
   constructor(name: string, type: i32, decl: Node) {
-    this.name = name;
-    this.type = type;
-    this.index = 0;
-    this.offset = 0;
-    this.readonly = false;
-    this.initializer = null;
-    this.decl = decl;
-    this.inlineCapacity = -1;
+    this.name = name
+    this.type = type
+    this.index = 0
+    this.offset = 0
+    this.readonly = false
+    this.initializer = null
+    this.decl = decl
+    this.inlineCapacity = -1
   }
 
   /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
   inline(): boolean {
-    return this.inlineCapacity >= 0;
+    return this.inlineCapacity >= 0
   }
 }
 
 /** A class or interface: one `%struct.<name>` LLVM type with fixed fields. */
 export class StructInfo {
-  name: string;
-  kind: i32;
+  name: string
+  kind: i32
   /** The `TypeTable` id of `%struct.<name>*`. */
-  type: i32;
-  fields: FieldInfo[];
+  type: i32
+  fields: FieldInfo[]
   /** Field name -> index into `fields`. */
-  fieldIndex: StringMap;
+  fieldIndex: StringMap
   /** `sizeof` in bytes, including trailing padding to `align`. */
-  size: i32;
+  size: i32
   /** Maximum field alignment; 1 when there are no fields. */
-  align: i32;
+  align: i32
   /** Method source name -> index into `methodSigs`, in declaration order. */
-  methodIndex: StringMap;
-  methodSigs: FunctionSig[];
+  methodIndex: StringMap
+  methodSigs: FunctionSig[]
   /**
    * Generic methods (WP18 G8), by source name -> index into `methodTemplateList`.
    * A generic method has no signature until a call picks its type arguments, so
    * it is a template here rather than an entry of `methodSigs`.
    */
-  methodTemplates: StringMap;
-  methodTemplateList: TemplateInfo[];
+  methodTemplates: StringMap
+  methodTemplateList: TemplateInfo[]
   /** The explicit constructor; without one, `new` stores the field initializers inline. */
-  ctor: FunctionSig | null;
+  ctor: FunctionSig | null
   /**
    * Interfaces named in `implements`. Each one's fields are the *first* fields
    * of this struct — same order, same types, same offsets — so a
    * `%struct.<name>*` may be `bitcast` to the interface's with no adjustment.
    */
-  implementsNames: string[];
+  implementsNames: string[]
   /**
    * WP15 section 2a: some class in the program `implements` this interface, so
    * it is a *view* rather than a record and an `I[]` keeps one pointer per
    * slot. Set in `checkImplements` (pass 1c), which runs for every module
    * before any body is checked, and read by `inlineElementStruct`.
    */
-  implemented: boolean;
-  decl: Node;
+  implemented: boolean
+  decl: Node
   /** The module that declares it, so an importer can tell it from a re-export. */
-  origin: SourceFile;
-  exported: boolean;
+  origin: SourceFile
+  exported: boolean
   /** A member or heritage clause was rejected: the layout is incomplete. */
-  poisoned: boolean;
+  poisoned: boolean
   /** Pass 1b progress, so a struct is collected once. */
-  collected: boolean;
+  collected: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -700,41 +706,41 @@ export class StructInfo {
    * necessarily the module asking. `FunctionSig.instance` is the same field one
    * level down, for the same reason.
    */
-  instance: StructInstantiation | null;
+  instance: StructInstantiation | null
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
-    this.name = name;
-    this.kind = kind;
-    this.origin = origin;
-    this.type = type;
-    this.instance = null;
-    this.fields = [];
-    this.fieldIndex = new StringMap();
-    this.size = 0;
-    this.align = 1;
-    this.methodIndex = new StringMap();
-    this.methodSigs = [];
-    this.methodTemplates = new StringMap();
-    this.methodTemplateList = [];
-    this.ctor = null;
-    this.implementsNames = [];
-    this.implemented = false;
-    this.decl = decl;
-    this.exported = false;
-    this.poisoned = false;
-    this.collected = false;
+    this.name = name
+    this.kind = kind
+    this.origin = origin
+    this.type = type
+    this.instance = null
+    this.fields = []
+    this.fieldIndex = new StringMap()
+    this.size = 0
+    this.align = 1
+    this.methodIndex = new StringMap()
+    this.methodSigs = []
+    this.methodTemplates = new StringMap()
+    this.methodTemplateList = []
+    this.ctor = null
+    this.implementsNames = []
+    this.implemented = false
+    this.decl = decl
+    this.exported = false
+    this.poisoned = false
+    this.collected = false
   }
 
   /** The field called `name` on this struct, or `null`. */
   field(name: string): FieldInfo | null {
-    const at = this.fieldIndex.get(name, -1);
-    return at < 0 ? null : this.fields[at];
+    const at = this.fieldIndex.get(name, -1)
+    return at < 0 ? null : this.fields[at]
   }
 
   /** The method called `name`, or `null` when there is none. */
   method(name: string): FunctionSig | null {
-    const at = this.methodIndex.get(name, -1);
-    return at < 0 ? null : this.methodSigs[at];
+    const at = this.methodIndex.get(name, -1)
+    return at < 0 ? null : this.methodSigs[at]
   }
 
   /**
@@ -743,15 +749,14 @@ export class StructInfo {
    * cannot be left out of one of them (WP18 G8 added the third).
    */
   hasMember(name: string): boolean {
-    return this.fieldIndex.has(name) || this.methodIndex.has(name) || this.methodTemplates.has(name);
+    return this.fieldIndex.has(name) || this.methodIndex.has(name) || this.methodTemplates.has(name)
   }
 
   /** The generic method called `name` (WP18 G8), or `null` when there is none. */
   methodTemplate(name: string): TemplateInfo | null {
-    const at = this.methodTemplates.get(name, -1);
-    return at < 0 ? null : this.methodTemplateList[at];
+    const at = this.methodTemplates.get(name, -1)
+    return at < 0 ? null : this.methodTemplateList[at]
   }
-
 }
 
 /**
@@ -761,37 +766,37 @@ export class StructInfo {
  * `floatValue` for `f32` and `f64`, `textValue` for `string`.
  */
 export class ConstInfo {
-  name: string;
-  type: i32;
-  intValue: i64;
-  floatValue: f64;
-  textValue: string;
-  exported: boolean;
-  decl: Node;
+  name: string
+  type: i32
+  intValue: i64
+  floatValue: f64
+  textValue: string
+  exported: boolean
+  decl: Node
   /** The module that declares it, so a dump can list it under its own module. */
-  origin: SourceFile;
+  origin: SourceFile
   /**
    * The constants visible where this one was declared, so an initialiser can
    * name an earlier constant of the same module or one it imported. Set once
    * the declaring module has collected its signatures.
    */
-  scope: CheckedProgram | null;
+  scope: CheckedProgram | null
   /** Memoised fold, and the in-progress mark that catches a cycle. */
-  folded: boolean;
-  folding: boolean;
+  folded: boolean
+  folding: boolean
 
   constructor(name: string, type: i32, decl: Node, origin: SourceFile) {
-    this.name = name;
-    this.type = type;
-    this.intValue = toI64(0);
-    this.floatValue = 0.0;
-    this.textValue = "";
-    this.exported = false;
-    this.decl = decl;
-    this.origin = origin;
-    this.scope = null;
-    this.folded = false;
-    this.folding = false;
+    this.name = name
+    this.type = type
+    this.intValue = toI64(0)
+    this.floatValue = 0.0
+    this.textValue = ""
+    this.exported = false
+    this.decl = decl
+    this.origin = origin
+    this.scope = null
+    this.folded = false
+    this.folding = false
   }
 }
 
@@ -805,21 +810,21 @@ export class ConstInfo {
  * one that names itself has to be caught rather than followed forever.
  */
 export class AliasInfo {
-  name: string;
-  decl: Node;
+  name: string
+  decl: Node
   /** The module that declares it; an alias never leaves the one that wrote it. */
-  origin: SourceFile;
+  origin: SourceFile
   /** The resolved type id, or -1 while it is still a name. */
-  type: i32;
+  type: i32
   /** In progress, which is how a cycle is caught. */
-  resolving: boolean;
+  resolving: boolean
 
   constructor(name: string, decl: Node, origin: SourceFile) {
-    this.name = name;
-    this.decl = decl;
-    this.origin = origin;
-    this.type = -1;
-    this.resolving = false;
+    this.name = name
+    this.decl = decl
+    this.origin = origin
+    this.type = -1
+    this.resolving = false
   }
 }
 
@@ -831,40 +836,40 @@ export class AliasInfo {
  * literal the checker wrote into `nodeEnumValues` (stage0's `src/checker/enums.ts`).
  */
 export class EnumInfo {
-  name: string;
-  decl: Node;
+  name: string
+  decl: Node
   /** The module that declares it; an enum never leaves the one that wrote it. */
-  origin: SourceFile;
+  origin: SourceFile
   /** The distinct type id, shared by every annotation that names it. */
-  type: i32;
+  type: i32
   /** Member name -> index into `memberValues`; iteration order is declaration order. */
-  members: StringMap;
-  memberNames: string[];
-  memberValues: i32[];
+  members: StringMap
+  memberNames: string[]
+  memberValues: i32[]
 
   constructor(name: string, decl: Node, origin: SourceFile, type: i32) {
-    this.name = name;
-    this.decl = decl;
-    this.origin = origin;
-    this.type = type;
-    this.members = new StringMap();
-    this.memberNames = [];
-    this.memberValues = [];
+    this.name = name
+    this.decl = decl
+    this.origin = origin
+    this.type = type
+    this.members = new StringMap()
+    this.memberNames = []
+    this.memberValues = []
   }
 
   addMember(name: string, value: i32): void {
-    this.members.set(name, this.memberValues.length);
-    this.memberNames.push(name);
-    this.memberValues.push(value);
+    this.members.set(name, this.memberValues.length)
+    this.memberNames.push(name)
+    this.memberValues.push(value)
   }
 
   hasMember(name: string): boolean {
-    return this.members.has(name);
+    return this.members.has(name)
   }
 
   /** The integer `name` stands for; the caller has already asked `hasMember`. */
   memberValue(name: string): i32 {
-    return this.memberValues[this.members.get(name, 0)];
+    return this.memberValues[this.members.get(name, 0)]
   }
 }
 
@@ -881,14 +886,14 @@ export class EnumInfo {
  * to be and the request itself is made as soon as every module has bound.
  */
 export class DeferredInstance {
-  imp: ImportBinding;
-  args: i32[];
-  at: Node;
+  imp: ImportBinding
+  args: i32[]
+  at: Node
 
   constructor(imp: ImportBinding, args: i32[], at: Node) {
-    this.imp = imp;
-    this.args = args;
-    this.at = at;
+    this.imp = imp
+    this.args = args
+    this.at = at
   }
 }
 
@@ -901,43 +906,43 @@ export class DeferredInstance {
  * every declaration-level request is, and the check runs in pass 1b.
  */
 export class DeferredConstraint {
-  template: StructTemplateInfo;
-  args: i32[];
-  at: Node;
+  template: StructTemplateInfo
+  args: i32[]
+  at: Node
 
   constructor(template: StructTemplateInfo, args: i32[], at: Node) {
-    this.template = template;
-    this.args = args;
-    this.at = at;
+    this.template = template
+    this.args = args
+    this.at = at
   }
 }
 
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
   /** Module specifier text: a relative path (`./math`) or a builtin module (`nish:fs`). */
-  specifier: string;
+  specifier: string
   /** Name inside the exporting module. */
-  importedName: string;
+  importedName: string
   /** Name inside this module; differs only with `as`. */
-  localName: string;
+  localName: string
   /** The specifier element, for error spans. */
-  node: Node;
+  node: Node
   /**
    * The `import` statement it came from. A diagnostic about the *module* —
    * "cannot find" — points at the module specifier, which stage0 has as a node
    * and this tree keeps as text on this one (`CheckContext.errorAtSpecifier`).
    */
-  decl: Node;
+  decl: Node
   /** Exactly one of these is set in pass 1b, or none if the import failed. */
-  sig: FunctionSig | null;
-  struct: StructInfo | null;
-  constant: ConstInfo | null;
+  sig: FunctionSig | null
+  struct: StructInfo | null
+  constant: ConstInfo | null
   /**
    * Set instead of the three above when the specifier is a `nish:` module: the
    * import names a builtin, so there is no signature to bind and no symbol to
    * declare, only the canonical spelling the builtin checkers are keyed by.
    */
-  builtin: BuiltinExport | null;
+  builtin: BuiltinExport | null
   /**
    * Set instead of the four above when the imported name is an exported generic
    * function (WP18 G7). There is no one signature to bind: the import names a
@@ -945,22 +950,22 @@ export class ImportBinding {
    * symbol of its own, defined by the module that declares it and listed in
    * `externalInstances`.
    */
-  template: TemplateInfo | null;
+  template: TemplateInfo | null
   /** The same, one level up: an exported generic class or interface (WP18 G7). */
-  structTemplate: StructTemplateInfo | null;
+  structTemplate: StructTemplateInfo | null
 
   constructor(specifier: string, importedName: string, localName: string, node: Node, decl: Node) {
-    this.specifier = specifier;
-    this.importedName = importedName;
-    this.localName = localName;
-    this.node = node;
-    this.decl = decl;
-    this.sig = null;
-    this.struct = null;
-    this.constant = null;
-    this.builtin = null;
-    this.template = null;
-    this.structTemplate = null;
+    this.specifier = specifier
+    this.importedName = importedName
+    this.localName = localName
+    this.node = node
+    this.decl = decl
+    this.sig = null
+    this.struct = null
+    this.constant = null
+    this.builtin = null
+    this.template = null
+    this.structTemplate = null
   }
 }
 
@@ -972,24 +977,24 @@ export class ImportBinding {
  * first declaration wins here, as it does in stage0's `src/compilation.ts`.
  */
 export class StructRegistry {
-  index: StringMap;
-  list: StructInfo[];
+  index: StringMap
+  list: StructInfo[]
 
   constructor() {
-    this.index = new StringMap();
-    this.list = [];
+    this.index = new StringMap()
+    this.list = []
   }
 
   add(info: StructInfo): void {
     if (!this.index.has(info.name)) {
-      this.index.set(info.name, this.list.length);
-      this.list.push(info);
+      this.index.set(info.name, this.list.length)
+      this.list.push(info)
     }
   }
 
   get(name: string): StructInfo | null {
-    const at = this.index.get(name, -1);
-    return at < 0 ? null : this.list[at];
+    const at = this.index.get(name, -1)
+    return at < 0 ? null : this.list[at]
   }
 }
 
@@ -1002,16 +1007,16 @@ export class StructRegistry {
  * hottest path.
  */
 export class CheckedProgram {
-  source: SourceFile;
+  source: SourceFile
   /** The `N_SOURCE_FILE` this module parsed to. */
-  file: Node;
-  isEntry: boolean;
+  file: Node
+  isEntry: boolean
   /**
    * The package this module belongs to (WP21 S1, `self/packages.ts`). `""` is
    * the root package — the program being compiled — which is where every
    * module of a single-package build lives.
    */
-  packageName: string;
+  packageName: string
   /**
    * The prefix every symbol declared in this module carries; `""` for the root
    * package. `FunctionSig.name` already has it applied, so nothing downstream
@@ -1019,23 +1024,23 @@ export class CheckedProgram {
    * the package a clash is inside and `--emit-checked` can say which package a
    * module came from.
    */
-  symbolPrefix: string;
+  symbolPrefix: string
 
   /** Functions defined in this module, in source order. */
-  functions: FunctionSig[];
+  functions: FunctionSig[]
   /** Source name -> index into `functions`, for every `export function`. */
-  exports: StringMap;
-  imports: ImportBinding[];
+  exports: StringMap
+  imports: ImportBinding[]
 
   /**
    * Name -> index into `structList`, for every class and interface whose
    * *layout* is known here: the ones this module declares, the ones it
    * imports, and the ones an imported class dragged in through its members.
    */
-  structs: StringMap;
-  structList: StructInfo[];
+  structs: StringMap
+  structList: StructInfo[]
   /** Indices into `structList` that this module never named; see stage0's `src/checker/index.ts`. */
-  reachableStructs: i32[];
+  reachableStructs: i32[]
   /**
    * Instantiations this module *calls* but does not define: WP18 G7's half of
    * an import. A generic is monomorphised once, in the module that declares the
@@ -1044,35 +1049,35 @@ export class CheckedProgram {
    * through `imports`, and what a template has no `ImportBinding` to hang on
    * because one import can become any number of symbols.
    */
-  externalInstances: FunctionSig[];
+  externalInstances: FunctionSig[]
   /** The symbols already in `externalInstances`, so each is declared once. */
-  externalInstanceNames: StringSet;
+  externalInstanceNames: StringSet
   /** Requests pass 1 could only write down; `Checker.makeDeferredInstantiations` makes them. */
-  deferredInstances: DeferredInstance[];
+  deferredInstances: DeferredInstance[]
   /**
    * The struct names this module may *write* as a type: what it declares and
    * what it imports. Narrower than `structs`, which also holds the reachable
    * layouts, and resolving an annotation against the wider map would make a
    * name legal in a module that never imported it.
    */
-  typeNames: StringSet;
+  typeNames: StringSet
   /**
    * Imported names used in type position before pass 1b could say what they
    * are. They resolve provisionally to `%struct.<name>`, and binding rejects
    * the ones that turn out to be functions or constants.
    */
-  importsUsedAsTypes: StringSet;
+  importsUsedAsTypes: StringSet
 
   /** Name -> index into `constantList`, for the constants visible here. */
-  constants: StringMap;
-  constantList: ConstInfo[];
+  constants: StringMap
+  constantList: ConstInfo[]
   /** Local name -> index into `builtinImportList`, for the `nish:` imports. */
-  builtinImports: StringMap;
-  builtinImportList: BuiltinExport[];
+  builtinImports: StringMap
+  builtinImportList: BuiltinExport[]
 
   /** Name -> index into `aliasList`, for the `type` aliases this module declares. */
-  aliases: StringMap;
-  aliasList: AliasInfo[];
+  aliases: StringMap
+  aliasList: AliasInfo[]
 
   /**
    * Generic templates this module declares, by source name, and the ones it has
@@ -1080,84 +1085,84 @@ export class CheckedProgram {
    * discovery order, which is the order it is checked, emitted and dumped in —
    * so the two compilers can be compared before any IR is.
    */
-  templates: StringMap;
-  templateList: TemplateInfo[];
-  instantiations: StringMap;
-  instantiationList: Instantiation[];
+  templates: StringMap
+  templateList: TemplateInfo[]
+  instantiations: StringMap
+  instantiationList: Instantiation[]
   /**
    * Generic classes and interfaces this module declares, by source name, and
    * the ones it has instantiated, by mangled name (WP18 G5). A struct template
    * is not in `structs` for the reason a function template is not in
    * `functions`: it has no layout until an instantiation binds its parameters.
    */
-  structTemplates: StringMap;
-  structTemplateList: StructTemplateInfo[];
-  structInstantiations: StringMap;
-  structInstantiationList: StructInstantiation[];
+  structTemplates: StringMap
+  structTemplateList: StructTemplateInfo[]
+  structInstantiations: StringMap
+  structInstantiationList: StructInstantiation[]
   /**
    * Every generic-method template this module minted (WP18 G8), one per
    * (receiver struct, method), in the order they were collected. The sidecars
    * read it for message 9: a method nothing instantiates has no symbol.
    */
-  methodTemplateList: TemplateInfo[];
+  methodTemplateList: TemplateInfo[]
   /**
    * One constraint list per generic method *declaration*, by the method node's
    * id -> index into `methodConstraintLists` (WP18 G8). Shared by every
    * receiver the method is minted for, so a constraint is resolved, and a bad
    * one reported, once per declaration rather than once per instantiated class.
    */
-  methodConstraints: StringMap;
-  methodConstraintLists: ConstraintList[];
+  methodConstraints: StringMap
+  methodConstraintLists: ConstraintList[]
   /** Non-null while an instantiation's side tables are installed. */
-  activeInstance: Instantiation | null;
+  activeInstance: Instantiation | null
   /** The module's own tables, held aside while `activeInstance` is installed. */
-  savedNodeTypes: i32[];
-  savedNodeLocals: (Local | null)[];
-  savedNodeConstants: (ConstInfo | null)[];
-  savedNodeCallees: (FunctionSig | null)[];
-  savedNodeCoercions: i32[];
-  savedNodeCaseValues: i64[];
-  savedNodeProvenIndex: boolean[];
-  savedNodeProvenClamp: boolean[];
-  savedFusion: FusionTable;
+  savedNodeTypes: i32[]
+  savedNodeLocals: (Local | null)[]
+  savedNodeConstants: (ConstInfo | null)[]
+  savedNodeCallees: (FunctionSig | null)[]
+  savedNodeCoercions: i32[]
+  savedNodeCaseValues: i64[]
+  savedNodeProvenIndex: boolean[]
+  savedNodeProvenClamp: boolean[]
+  savedFusion: FusionTable
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
-  enums: StringMap;
-  enumList: EnumInfo[];
+  enums: StringMap
+  enumList: EnumInfo[]
 
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
-  entryMain: FunctionSig | null;
+  entryMain: FunctionSig | null
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
-  usesArgv: boolean;
+  usesArgv: boolean
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
-  parallelCalls: ParallelCall[];
+  parallelCalls: ParallelCall[]
   /**
    * Every `x.f = e;` in this module's bodies whose field is stored inline, with
    * the length `e` is known to have (`self/inline-arrays.ts`). Parallel lists
    * rather than a table by node id: there are a handful per program, and a
    * per-node array would cost every module a slot per node for them.
    */
-  inlineAssignNodes: Node[];
-  inlineAssignLengths: i32[];
+  inlineAssignNodes: Node[]
+  inlineAssignLengths: i32[]
   /**
    * WP32: `const m: Map<string, i32> = new Map()` takes the `new`'s type
    * arguments from the annotation (docs/wp32-map.md §7). The node id of such a
    * `new`, as text -> index into `newTypeArguments`, the annotation's list.
    */
-  newTypeArgumentIds: StringMap;
-  newTypeArguments: Node[];
+  newTypeArgumentIds: StringMap
+  newTypeArguments: Node[]
   /** `isCollections()`, decided once: the package and the path never change. */
-  collectionsLibrary: boolean;
+  collectionsLibrary: boolean
   /** `isMapExtras()`, decided once, as `collectionsLibrary` is. */
-  mapExtrasLibrary: boolean;
+  mapExtrasLibrary: boolean
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
-  nodeTypes: i32[];
+  nodeTypes: i32[]
   /** Identifier node id -> the variable it refers to. */
-  nodeLocals: (Local | null)[];
+  nodeLocals: (Local | null)[]
   /** Identifier node id -> the module constant it names, when it is not a variable. */
-  nodeConstants: (ConstInfo | null)[];
+  nodeConstants: (ConstInfo | null)[]
   /** Call node id -> the callee, free functions and methods alike. */
-  nodeCallees: (FunctionSig | null)[];
+  nodeCallees: (FunctionSig | null)[]
   /**
    * Call or identifier node id -> the canonical builtin it resolved to, for
    * the names a `nish:` import brought in, and `""` for every other node. The
@@ -1165,16 +1170,16 @@ export class CheckedProgram {
    * import is the local name and may be an `as` rename, so the checker records
    * the spelling the emitter is keyed by rather than leaving it to be derived.
    */
-  nodeBuiltins: string[];
+  nodeBuiltins: string[]
   /**
    * Node id -> the type a coerced expression *was*, when a class value stands
    * where a base class or an implemented interface is expected. `nodeTypes`
    * records the target; this is the source, and the emitter turns the pair
    * into one `bitcast`.
    */
-  nodeCoercions: i32[];
+  nodeCoercions: i32[]
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
-  nodeCaseValues: i64[];
+  nodeCaseValues: i64[]
   /**
    * `N_MEMBER` node id -> the integer an enum member stands for (WP23). There
    * is no presence flag beside it and none is needed: a member's value may be
@@ -1183,7 +1188,7 @@ export class CheckedProgram {
    * recorded (`isEnumMember`). stage0's `src/` uses a `WeakMap`, where presence is the
    * key's own answer.
    */
-  nodeEnumValues: i32[];
+  nodeEnumValues: i32[]
   /**
    * `N_INDEX` and `charCodeAt` node id -> the bounds analysis proved the index
    * in range (WP15 §2.1/§2.2, `self/bounds.ts`). The emitter writes the address
@@ -1196,7 +1201,7 @@ export class CheckedProgram {
    * `enterInstance` installs, and so is `nodeProvenClamp`: one type argument's
    * proof says nothing about another's.
    */
-  nodeProvenIndex: boolean[];
+  nodeProvenIndex: boolean[]
   /**
    * A `substring` bound node id -> the same analysis placed it in
    * `[0, s.length]`. Keyed by the bound rather than by the call, because one
@@ -1212,88 +1217,88 @@ export class CheckedProgram {
    * commonest spelling there is — `s.substring(0, n)` — loses two of its six
    * intrinsic calls without a guard being written anywhere.
    */
-  nodeProvenClamp: boolean[];
+  nodeProvenClamp: boolean[]
   /**
    * WP32 S5: the calls of this module's bodies that are one fused lookup
    * (docs/wp32-map.md §9.1). Inside a generic's body it is the
    * instantiation's own, which `enterInstance` installs.
    */
-  fusion: FusionTable;
+  fusion: FusionTable
 
   constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
-    this.source = source;
-    this.file = file;
-    this.isEntry = isEntry;
-    this.packageName = packageName;
-    this.symbolPrefix = packageSymbolPrefix(packageName);
-    this.functions = [];
-    this.exports = new StringMap();
-    this.imports = [];
-    this.structs = new StringMap();
-    this.structList = [];
-    this.reachableStructs = [];
-    this.externalInstances = [];
-    this.externalInstanceNames = new StringSet();
-    this.deferredInstances = [];
-    this.typeNames = new StringSet();
-    this.importsUsedAsTypes = new StringSet();
-    this.constants = new StringMap();
-    this.constantList = [];
-    this.aliases = new StringMap();
-    this.aliasList = [];
-    this.templates = new StringMap();
-    this.templateList = [];
-    this.instantiations = new StringMap();
-    this.instantiationList = [];
-    this.structTemplates = new StringMap();
-    this.structTemplateList = [];
-    this.structInstantiations = new StringMap();
-    this.structInstantiationList = [];
-    this.methodTemplateList = [];
-    this.methodConstraints = new StringMap();
-    this.methodConstraintLists = [];
-    this.activeInstance = null;
-    this.savedNodeTypes = [];
-    this.savedNodeLocals = [];
-    this.savedNodeConstants = [];
-    this.savedNodeCallees = [];
-    this.savedNodeCoercions = [];
-    this.savedNodeCaseValues = [];
-    this.savedNodeProvenIndex = [];
-    this.savedNodeProvenClamp = [];
-    this.fusion = new FusionTable();
-    this.savedFusion = this.fusion;
-    this.enums = new StringMap();
-    this.enumList = [];
-    this.entryMain = null;
-    this.parallelCalls = [];
-    this.inlineAssignNodes = [];
-    this.inlineAssignLengths = [];
-    this.newTypeArgumentIds = new StringMap();
-    this.newTypeArguments = [];
-    this.collectionsLibrary = isCollectionsModule(packageName, source.path);
-    this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path);
-    this.usesArgv = false;
-    this.nodeTypes = new Array<i32>(nodeCount);
-    this.nodeLocals = new Array<Local | null>(nodeCount);
-    this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
-    this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
-    this.nodeBuiltins = [];
-    this.builtinImports = new StringMap();
-    this.builtinImportList = [];
-    this.nodeCoercions = new Array<i32>(nodeCount);
-    this.nodeCaseValues = new Array<i64>(nodeCount);
-    this.nodeEnumValues = new Array<i32>(nodeCount);
-    this.nodeProvenIndex = new Array<boolean>(nodeCount);
-    this.nodeProvenClamp = new Array<boolean>(nodeCount);
-    let i = 0;
+    this.source = source
+    this.file = file
+    this.isEntry = isEntry
+    this.packageName = packageName
+    this.symbolPrefix = packageSymbolPrefix(packageName)
+    this.functions = []
+    this.exports = new StringMap()
+    this.imports = []
+    this.structs = new StringMap()
+    this.structList = []
+    this.reachableStructs = []
+    this.externalInstances = []
+    this.externalInstanceNames = new StringSet()
+    this.deferredInstances = []
+    this.typeNames = new StringSet()
+    this.importsUsedAsTypes = new StringSet()
+    this.constants = new StringMap()
+    this.constantList = []
+    this.aliases = new StringMap()
+    this.aliasList = []
+    this.templates = new StringMap()
+    this.templateList = []
+    this.instantiations = new StringMap()
+    this.instantiationList = []
+    this.structTemplates = new StringMap()
+    this.structTemplateList = []
+    this.structInstantiations = new StringMap()
+    this.structInstantiationList = []
+    this.methodTemplateList = []
+    this.methodConstraints = new StringMap()
+    this.methodConstraintLists = []
+    this.activeInstance = null
+    this.savedNodeTypes = []
+    this.savedNodeLocals = []
+    this.savedNodeConstants = []
+    this.savedNodeCallees = []
+    this.savedNodeCoercions = []
+    this.savedNodeCaseValues = []
+    this.savedNodeProvenIndex = []
+    this.savedNodeProvenClamp = []
+    this.fusion = new FusionTable()
+    this.savedFusion = this.fusion
+    this.enums = new StringMap()
+    this.enumList = []
+    this.entryMain = null
+    this.parallelCalls = []
+    this.inlineAssignNodes = []
+    this.inlineAssignLengths = []
+    this.newTypeArgumentIds = new StringMap()
+    this.newTypeArguments = []
+    this.collectionsLibrary = isCollectionsModule(packageName, source.path)
+    this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
+    this.usesArgv = false
+    this.nodeTypes = new Array<i32>(nodeCount)
+    this.nodeLocals = new Array<Local | null>(nodeCount)
+    this.nodeConstants = new Array<ConstInfo | null>(nodeCount)
+    this.nodeCallees = new Array<FunctionSig | null>(nodeCount)
+    this.nodeBuiltins = []
+    this.builtinImports = new StringMap()
+    this.builtinImportList = []
+    this.nodeCoercions = new Array<i32>(nodeCount)
+    this.nodeCaseValues = new Array<i64>(nodeCount)
+    this.nodeEnumValues = new Array<i32>(nodeCount)
+    this.nodeProvenIndex = new Array<boolean>(nodeCount)
+    this.nodeProvenClamp = new Array<boolean>(nodeCount)
+    let i = 0
     while (i < nodeCount) {
-      this.nodeTypes[i] = -1;
-      this.nodeCoercions[i] = -1;
+      this.nodeTypes[i] = -1
+      this.nodeCoercions[i] = -1
       // `new Array<string>(n)` is refused — it would zero-fill with null
       // strings — so the empty name every node starts at is pushed instead.
-      this.nodeBuiltins.push("");
-      i = i + 1;
+      this.nodeBuiltins.push("")
+      i = i + 1
     }
   }
 
@@ -1302,18 +1307,18 @@ export class CheckedProgram {
    * annotation of the declaration it initialises, or `null` (WP32).
    */
   newTypeArgumentsOf(expr: Node): Node | null {
-    const at = this.newTypeArgumentIds.get(`${expr.id}`, -1);
-    return at < 0 || at >= this.newTypeArguments.length ? null : this.newTypeArguments[at];
+    const at = this.newTypeArgumentIds.get(`${expr.id}`, -1)
+    return at < 0 || at >= this.newTypeArguments.length ? null : this.newTypeArguments[at]
   }
 
   /** Whether this module is the standard library's `std/collections.ts` (WP32). */
   isCollections(): boolean {
-    return this.collectionsLibrary;
+    return this.collectionsLibrary
   }
 
   /** Whether this module is the standard library's `std/map.ts`, `nish/map` (WP32 S5). */
   isMapExtras(): boolean {
-    return this.mapExtrasLibrary;
+    return this.mapExtrasLibrary
   }
 
   /**
@@ -1322,65 +1327,65 @@ export class CheckedProgram {
    * call is lowered in place at the call (docs/wp32-map.md §4.1, §9.2).
    */
   writesNoOutput(): boolean {
-    return this.collectionsLibrary || this.mapExtrasLibrary;
+    return this.collectionsLibrary || this.mapExtrasLibrary
   }
 
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */
   methodConstraintList(decl: Node): ConstraintList {
-    const key = `${decl.id}`;
-    const at = this.methodConstraints.get(key, -1);
+    const key = `${decl.id}`
+    const at = this.methodConstraints.get(key, -1)
     if (at >= 0) {
-      return this.methodConstraintLists[at];
+      return this.methodConstraintLists[at]
     }
-    const list = new ConstraintList();
-    this.methodConstraints.set(key, this.methodConstraintLists.length);
-    this.methodConstraintLists.push(list);
-    return list;
+    const list = new ConstraintList()
+    this.methodConstraints.set(key, this.methodConstraintLists.length)
+    this.methodConstraintLists.push(list)
+    return list
   }
 
   /** The length the fresh array `assignment` stores into an inline field has, or -1 when it is not one. */
   inlineAssignLength(assignment: Node): i32 {
-    let i = 0;
+    let i = 0
     while (i < this.inlineAssignNodes.length) {
       if (this.inlineAssignNodes[i] === assignment) {
-        return this.inlineAssignLengths[i];
+        return this.inlineAssignLengths[i]
       }
-      i = i + 1;
+      i = i + 1
     }
-    return -1;
+    return -1
   }
 
   /** The struct called `name` in this module, or `null`. */
   struct(name: string): StructInfo | null {
-    const at = this.structs.get(name, -1);
-    return at < 0 ? null : this.structList[at];
+    const at = this.structs.get(name, -1)
+    return at < 0 ? null : this.structList[at]
   }
 
   /** Register `info` under `name`; the caller has already checked for a clash. */
   addStruct(name: string, info: StructInfo): void {
-    this.structs.set(name, this.structList.length);
-    this.structList.push(info);
+    this.structs.set(name, this.structList.length)
+    this.structList.push(info)
   }
 
   constant(name: string): ConstInfo | null {
-    const at = this.constants.get(name, -1);
-    return at < 0 ? null : this.constantList[at];
+    const at = this.constants.get(name, -1)
+    return at < 0 ? null : this.constantList[at]
   }
 
   addConstant(info: ConstInfo): void {
-    this.constants.set(info.name, this.constantList.length);
-    this.constantList.push(info);
+    this.constants.set(info.name, this.constantList.length)
+    this.constantList.push(info)
   }
 
   /** The `type` alias called `name` in this module, or `null`. */
   alias(name: string): AliasInfo | null {
-    const at = this.aliases.get(name, -1);
-    return at < 0 ? null : this.aliasList[at];
+    const at = this.aliases.get(name, -1)
+    return at < 0 ? null : this.aliasList[at]
   }
 
   addAlias(info: AliasInfo): void {
-    this.aliases.set(info.name, this.aliasList.length);
-    this.aliasList.push(info);
+    this.aliases.set(info.name, this.aliasList.length)
+    this.aliasList.push(info)
   }
 
   /**
@@ -1390,24 +1395,24 @@ export class CheckedProgram {
    * silent replacement of the builtin.
    */
   builtinImport(name: string): BuiltinExport | null {
-    const at = this.builtinImports.get(name, -1);
-    return at < 0 ? null : this.builtinImportList[at];
+    const at = this.builtinImports.get(name, -1)
+    return at < 0 ? null : this.builtinImportList[at]
   }
 
   /** Register `info` under the name it is used by; the caller has checked for a clash. */
   addBuiltinImport(name: string, info: BuiltinExport): void {
-    this.builtinImports.set(name, this.builtinImportList.length);
-    this.builtinImportList.push(info);
+    this.builtinImports.set(name, this.builtinImportList.length)
+    this.builtinImportList.push(info)
   }
 
   /** The generic template called `name` in this module, or `null` (WP18). */
   template(name: string): TemplateInfo | null {
-    const at = this.templates.get(name, -1);
-    return at < 0 ? null : this.templateList[at];
+    const at = this.templates.get(name, -1)
+    return at < 0 ? null : this.templateList[at]
   }
 
   addTemplate(info: TemplateInfo): void {
-    this.addTemplateAs(info.sourceName, info);
+    this.addTemplateAs(info.sourceName, info)
   }
 
   /**
@@ -1420,19 +1425,19 @@ export class CheckedProgram {
    * and for an imported `FunctionSig`.
    */
   addTemplateAs(name: string, info: TemplateInfo): void {
-    this.templates.set(name, this.templateList.length);
-    this.templateList.push(info);
+    this.templates.set(name, this.templateList.length)
+    this.templateList.push(info)
   }
 
   /** The instantiation emitted under `symbol`, or `null` when there is none yet. */
   instantiation(symbol: string): Instantiation | null {
-    const at = this.instantiations.get(symbol, -1);
-    return at < 0 ? null : this.instantiationList[at];
+    const at = this.instantiations.get(symbol, -1)
+    return at < 0 ? null : this.instantiationList[at]
   }
 
   addInstantiation(symbol: string, info: Instantiation): void {
-    this.instantiations.set(symbol, this.instantiationList.length);
-    this.instantiationList.push(info);
+    this.instantiations.set(symbol, this.instantiationList.length)
+    this.instantiationList.push(info)
   }
 
   /** The generic class or interface called `name` in this module, or `null` (WP18 G5). */
@@ -1440,25 +1445,25 @@ export class CheckedProgram {
   importNamed(localName: string): ImportBinding | null {
     for (const imp of this.imports) {
       if (imp.localName === localName) {
-        return imp;
+        return imp
       }
     }
-    return null;
+    return null
   }
 
   structTemplate(name: string): StructTemplateInfo | null {
-    const at = this.structTemplates.get(name, -1);
-    return at < 0 ? null : this.structTemplateList[at];
+    const at = this.structTemplates.get(name, -1)
+    return at < 0 ? null : this.structTemplateList[at]
   }
 
   addStructTemplate(info: StructTemplateInfo): void {
-    this.addStructTemplateAs(info.sourceName, info);
+    this.addStructTemplateAs(info.sourceName, info)
   }
 
   /** The same, under a name this module chose on import (WP18 G7). */
   addStructTemplateAs(name: string, info: StructTemplateInfo): void {
-    this.structTemplates.set(name, this.structTemplateList.length);
-    this.structTemplateList.push(info);
+    this.structTemplates.set(name, this.structTemplateList.length)
+    this.structTemplateList.push(info)
   }
 
   /**
@@ -1472,8 +1477,8 @@ export class CheckedProgram {
    * other question, and the two are deliberately not one method.
    */
   structInstance(name: string): StructInstantiation | null {
-    const at = this.structInstantiations.get(name, -1);
-    return at < 0 ? null : this.structInstantiationList[at];
+    const at = this.structInstantiations.get(name, -1)
+    return at < 0 ? null : this.structInstantiationList[at]
   }
 
   /**
@@ -1488,13 +1493,13 @@ export class CheckedProgram {
    * registered one?" is what tells two modules declaring one template apart.
    */
   structArguments(name: string): StructInstantiation | null {
-    const info = this.struct(name);
-    return info === null ? null : info.instance;
+    const info = this.struct(name)
+    return info === null ? null : info.instance
   }
 
   addStructInstance(name: string, info: StructInstantiation): void {
-    this.structInstantiations.set(name, this.structInstantiationList.length);
-    this.structInstantiationList.push(info);
+    this.structInstantiations.set(name, this.structInstantiationList.length)
+    this.structInstantiationList.push(info)
   }
 
   /**
@@ -1506,39 +1511,39 @@ export class CheckedProgram {
    * drained in a loop and every other caller walks one function at a time.
    */
   enterInstance(info: Instantiation): void {
-    this.savedNodeTypes = this.nodeTypes;
-    this.savedNodeLocals = this.nodeLocals;
-    this.savedNodeConstants = this.nodeConstants;
-    this.savedNodeCallees = this.nodeCallees;
-    this.savedNodeCoercions = this.nodeCoercions;
-    this.savedNodeCaseValues = this.nodeCaseValues;
-    this.savedNodeProvenIndex = this.nodeProvenIndex;
-    this.savedNodeProvenClamp = this.nodeProvenClamp;
-    this.savedFusion = this.fusion;
-    this.nodeTypes = info.nodeTypes;
-    this.nodeLocals = info.nodeLocals;
-    this.nodeConstants = info.nodeConstants;
-    this.nodeCallees = info.nodeCallees;
-    this.nodeCoercions = info.nodeCoercions;
-    this.nodeCaseValues = info.nodeCaseValues;
-    this.nodeProvenIndex = info.nodeProvenIndex;
-    this.nodeProvenClamp = info.nodeProvenClamp;
-    this.fusion = info.fusion;
-    this.activeInstance = info;
+    this.savedNodeTypes = this.nodeTypes
+    this.savedNodeLocals = this.nodeLocals
+    this.savedNodeConstants = this.nodeConstants
+    this.savedNodeCallees = this.nodeCallees
+    this.savedNodeCoercions = this.nodeCoercions
+    this.savedNodeCaseValues = this.nodeCaseValues
+    this.savedNodeProvenIndex = this.nodeProvenIndex
+    this.savedNodeProvenClamp = this.nodeProvenClamp
+    this.savedFusion = this.fusion
+    this.nodeTypes = info.nodeTypes
+    this.nodeLocals = info.nodeLocals
+    this.nodeConstants = info.nodeConstants
+    this.nodeCallees = info.nodeCallees
+    this.nodeCoercions = info.nodeCoercions
+    this.nodeCaseValues = info.nodeCaseValues
+    this.nodeProvenIndex = info.nodeProvenIndex
+    this.nodeProvenClamp = info.nodeProvenClamp
+    this.fusion = info.fusion
+    this.activeInstance = info
   }
 
   /** Put the module's own tables back. */
   leaveInstance(): void {
-    this.nodeTypes = this.savedNodeTypes;
-    this.nodeLocals = this.savedNodeLocals;
-    this.nodeConstants = this.savedNodeConstants;
-    this.nodeCallees = this.savedNodeCallees;
-    this.nodeCoercions = this.savedNodeCoercions;
-    this.nodeCaseValues = this.savedNodeCaseValues;
-    this.nodeProvenIndex = this.savedNodeProvenIndex;
-    this.nodeProvenClamp = this.savedNodeProvenClamp;
-    this.fusion = this.savedFusion;
-    this.activeInstance = null;
+    this.nodeTypes = this.savedNodeTypes
+    this.nodeLocals = this.savedNodeLocals
+    this.nodeConstants = this.savedNodeConstants
+    this.nodeCallees = this.savedNodeCallees
+    this.nodeCoercions = this.savedNodeCoercions
+    this.nodeCaseValues = this.savedNodeCaseValues
+    this.nodeProvenIndex = this.savedNodeProvenIndex
+    this.nodeProvenClamp = this.savedNodeProvenClamp
+    this.fusion = this.savedFusion
+    this.activeInstance = null
   }
 
   /**
@@ -1550,25 +1555,26 @@ export class CheckedProgram {
    */
   isEnumMember(table: TypeTable, node: Node): boolean {
     if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
-      return false;
+      return false
     }
-    return table.isEnum(this.nodeTypes[node.id]);
+    return table.isEnum(this.nodeTypes[node.id])
   }
 
   /** The numeric `enum` called `name` in this module, or `null` (WP23). */
   enumNamed(name: string): EnumInfo | null {
-    const at = this.enums.get(name, -1);
-    return at < 0 ? null : this.enumList[at];
+    const at = this.enums.get(name, -1)
+    return at < 0 ? null : this.enumList[at]
   }
 
   addEnum(info: EnumInfo): void {
-    this.enums.set(info.name, this.enumList.length);
-    this.enumList.push(info);  }
+    this.enums.set(info.name, this.enumList.length)
+    this.enumList.push(info)
+  }
 
   /** The exported function called `name`, or `null`. */
   exported(name: string): FunctionSig | null {
-    const at = this.exports.get(name, -1);
-    return at < 0 ? null : this.functions[at];
+    const at = this.exports.get(name, -1)
+    return at < 0 ? null : this.functions[at]
   }
 }
 
@@ -1597,31 +1603,35 @@ export class CheckedProgram {
  * the syntax tree becoming storage — is in stage0's `src/checker/program.ts` and in
  * §2a of `docs/wp15-performance.md`.
  */
-export const inlineElementStruct = (program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null => {
+export const inlineElementStruct = (
+  program: CheckedProgram,
+  table: TypeTable,
+  elem: i32
+): StructInfo | null => {
   if (!table.isStruct(elem)) {
-    return null;
+    return null
   }
-  const info = program.struct(table.nameOf(elem));
+  const info = program.struct(table.nameOf(elem))
   if (info === null || info.kind !== STRUCT_INTERFACE || info.implemented) {
-    return null;
+    return null
   }
-  return info;
-};
+  return info
+}
 
 /** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
 export const elementStride = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
-  const info = inlineElementStruct(program, table, elem);
-  return info === null ? table.alignOf(elem) : info.size;
-};
+  const info = inlineElementStruct(program, table, elem)
+  return info === null ? table.alignOf(elem) : info.size
+}
 
 /** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
 export const elementAlignOf = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
-  const info = inlineElementStruct(program, table, elem);
-  return info === null ? table.alignOf(elem) : info.align;
-};
+  const info = inlineElementStruct(program, table, elem)
+  return info === null ? table.alignOf(elem) : info.align
+}
 
 /** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
 export const elementLLVMType = (program: CheckedProgram, table: TypeTable, elem: i32): string => {
-  const info = inlineElementStruct(program, table, elem);
-  return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
-};
+  const info = inlineElementStruct(program, table, elem)
+  return info === null ? table.llvmType(elem) : `%struct.${info.name}`
+}

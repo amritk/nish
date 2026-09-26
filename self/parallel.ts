@@ -42,10 +42,10 @@
 // from a static estimate of what one element costs (`mapGrain`), so a region
 // is only divided once each thread's share is worth a thread.
 
-import { FactsTable, FunctionFacts, stepOf } from "./attributes";
-import { CLI, STD_PREFIX } from "./branding";
-import { isScalarArgument } from "./escape";
-import { isTemplateExpression, unwrapParens } from "./emit-util";
+import { FactsTable, FunctionFacts, stepOf } from "./attributes"
+import { CLI, STD_PREFIX } from "./branding"
+import { isScalarArgument } from "./escape"
+import { isTemplateExpression, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
@@ -66,7 +66,7 @@ import {
   N_VAR,
   N_WHILE,
   Node,
-} from "./nodes";
+} from "./nodes"
 import {
   CheckedProgram,
   FunctionSig,
@@ -76,13 +76,13 @@ import {
   PAR_REDUCE,
   ParallelCall,
   TemplateInfo,
-} from "./program";
-import { stdModuleName } from "./std-modules";
-import { StringSet } from "./map";
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types";
+} from "./program"
+import { stdModuleName } from "./std-modules"
+import { StringSet } from "./map"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
-export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`);
+export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
 
 /**
  * Whether `program` is the standard library's `std/threads.ts`. The package is
@@ -90,43 +90,43 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
  * is an ordinary module, and its templates run as they are written.
  */
 export const isThreadsModule = (program: CheckedProgram): boolean =>
-  program.packageName === CLI && program.source.path === threadsModuleName();
+  program.packageName === CLI && program.source.path === threadsModuleName()
 
 /** The `PAR_*` role of an instantiation of `template`. */
 export const parallelRole = (template: TemplateInfo): i32 => {
   if (template.owner !== null || !isThreadsModule(template.home.program)) {
-    return PAR_NONE;
+    return PAR_NONE
   }
-  const name = template.sourceName;
+  const name = template.sourceName
   if (name === "parallelMapInto") {
-    return PAR_MAP;
+    return PAR_MAP
   }
   if (name === "parallelReduce") {
-    return PAR_REDUCE;
+    return PAR_REDUCE
   }
   if (name === "mapRange" || name === "reduceBlocks") {
-    return PAR_CHUNK;
+    return PAR_CHUNK
   }
-  return PAR_NONE;
-};
+  return PAR_NONE
+}
 
 /** The role of the function `sig` is, or `PAR_NONE` when it is not an instantiation. */
 export const parallelRoleOf = (sig: FunctionSig): i32 => {
-  const instance = sig.instance;
-  return instance === null ? PAR_NONE : instance.parallel;
-};
+  const instance = sig.instance
+  return instance === null ? PAR_NONE : instance.parallel
+}
 
 /** The body a `parallelMapInto` or `parallelReduce` instance runs per element: its one function argument. */
 export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
-  const instance = sig.instance;
-  return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0];
-};
+  const instance = sig.instance
+  return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0]
+}
 
 /** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
 export const isParallelEntry = (sig: FunctionSig): boolean => {
-  const role = parallelRoleOf(sig);
-  return role === PAR_MAP || role === PAR_REDUCE;
-};
+  const role = parallelRoleOf(sig)
+  return role === PAR_MAP || role === PAR_REDUCE
+}
 
 /**
  * Remember a call of `sig` for `Compilation.checkParallel`, once. A body that
@@ -135,27 +135,27 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
  */
 export const recordParallelCall = (program: CheckedProgram, node: Node, sig: FunctionSig): void => {
   if (!isParallelEntry(sig)) {
-    return;
+    return
   }
   for (const call of program.parallelCalls) {
     if (call.node === node && call.sig === sig) {
-      return;
+      return
     }
   }
-  program.parallelCalls.push(new ParallelCall(node, sig));
-};
+  program.parallelCalls.push(new ParallelCall(node, sig))
+}
 
 // ---- The rules ---------------------------------------------------------------------------
 
 /** Where a diagnostic about `f` can say `node` is: `file:line:col` in `f`'s module, or "" without one. */
 const positionIn = (fn: FunctionSig, node: Node): string => {
-  const origin = fn.origin;
-  return origin === null ? "" : `${origin.path}:${origin.lineOf(node.start)}:${origin.columnOf(node.start)}`;
-};
+  const origin = fn.origin
+  return origin === null ? "" : `${origin.path}:${origin.lineOf(node.start)}:${origin.columnOf(node.start)}`
+}
 
 /** What the template is called in a diagnostic: its source name, without the instance's type arguments. */
 const intrinsicName = (sig: FunctionSig): string =>
-  parallelRoleOf(sig) === PAR_MAP ? "parallelMapInto" : "parallelReduce";
+  parallelRoleOf(sig) === PAR_MAP ? "parallelMapInto" : "parallelReduce"
 
 /**
  * The body writes memory its caller could observe, which two threads running
@@ -163,26 +163,26 @@ const intrinsicName = (sig: FunctionSig): string =>
  * found: the node, or the callee that carries it.
  */
 export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
-  const own = facts.get(fn.name);
+  const own = facts.get(fn.name)
   if (own === null || !own.sharedWrite) {
-    return "";
+    return ""
   }
-  let where = "";
-  const site = own.writeSite;
+  let where = ""
+  const site = own.writeSite
   if (site !== null) {
-    const at = positionIn(fn, site);
-    where = at.length > 0 ? ` at ${at}` : "";
+    const at = positionIn(fn, site)
+    where = at.length > 0 ? ` at ${at}` : ""
   } else if (own.writeVia.length > 0) {
     // A user function by the name it was written with; a runtime symbol, which
     // is what a builtin such as `console.log` lowers to, by its C name.
-    const via = facts.get(own.writeVia);
-    where = via === null ? ` in the runtime's \`${own.writeVia}\`` : ` through \`${via.sourceName}\``;
+    const via = facts.get(own.writeVia)
+    where = via === null ? ` in the runtime's \`${own.writeVia}\`` : ` through \`${via.sourceName}\``
   }
   return (
     `\`${fn.sourceName}\` writes memory its caller can see${where}, and \`${intrinsicName(sig)}\` runs it on several ` +
     "threads at once: a parallel body may read what its caller owns and write nothing but its result"
-  );
-};
+  )
+}
 
 /**
  * Whether the allocations of a body with facts `f` can be given back after
@@ -199,7 +199,7 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
  *     answer would depend on which thread's arena the element ran in.
  */
 export const recyclesPerElement = (f: FunctionFacts): boolean =>
-  f.contained && f.returnsScalar && !f.usesArenaControl && !f.readsArenaState;
+  f.contained && f.returnsScalar && !f.usesArenaControl && !f.readsArenaState
 
 /**
  * The body reads or moves the arena. Every thread has an arena of its own, so
@@ -208,15 +208,15 @@ export const recyclesPerElement = (f: FunctionFacts): boolean =>
  * element scope is about to release.
  */
 export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
-  const own: FunctionFacts | null = facts.get(fn.name);
+  const own: FunctionFacts | null = facts.get(fn.name)
   if (own === null || (!own.readsArenaState && !own.usesArenaControl)) {
-    return "";
+    return ""
   }
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
     "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`"
-  );
-};
+  )
+}
 
 /**
  * The body allocates and the escape analysis cannot see every allocation die
@@ -226,22 +226,22 @@ export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTabl
  * site is named when the function's own allocation is the one that escapes.
  */
 export const escapeMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
-  const own: FunctionFacts | null = facts.get(fn.name);
+  const own: FunctionFacts | null = facts.get(fn.name)
   if (own === null || !own.allocates || own.contained) {
-    return "";
+    return ""
   }
-  let where = "";
-  const site = own.escapeSite;
+  let where = ""
+  const site = own.escapeSite
   if (site !== null) {
-    const at = positionIn(fn, site);
-    where = at.length > 0 ? ` at ${at}` : "";
+    const at = positionIn(fn, site)
+    where = at.length > 0 ? ` at ${at}` : ""
   }
   return (
     `\`${fn.sourceName}\` allocates${where} and stores the allocation into memory, and \`${intrinsicName(sig)}\` ` +
     "releases what a body allocates after every element: a parallel body may allocate only temporaries it drops " +
     "before it returns, and this analysis stops following a value once it is stored"
-  );
-};
+  )
+}
 
 /**
  * NL9012, wp29 §8a: a legal body that allocates. Each element pays for its
@@ -256,27 +256,27 @@ export const allocationWarning = (
   type: i32,
   facts: FactsTable
 ): string => {
-  const own: FunctionFacts | null = facts.get(fn.name);
+  const own: FunctionFacts | null = facts.get(fn.name)
   if (own === null || !own.allocates) {
-    return "";
+    return ""
   }
   return (
     `the body of this \`${intrinsicName(sig)}\` allocates per element: \`${fn.sourceName}\` answers ` +
     `\`${table.typeName(type)}\` but allocates on every call, so each thread marks and releases its arena around ` +
     "every element. Compute the answer without building a string, an array or an object to save both"
-  );
-};
+  )
+}
 
 /** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
 export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string => {
   if (isScalarArgument(table, type)) {
-    return "";
+    return ""
   }
   return (
     `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsicName(sig)}\` hands back only a ` +
     "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory"
-  );
-};
+  )
+}
 
 /**
  * The field path from an element of `src` to an array whose element type is
@@ -291,46 +291,46 @@ const reachingPath = (
   root: string,
   seen: StringSet
 ): string => {
-  const kind = table.kindOf(type);
+  const kind = table.kindOf(type)
   if (kind === K_NULLABLE) {
-    return reachingPath(table, program, table.refOf(type), element, root, seen);
+    return reachingPath(table, program, table.refOf(type), element, root, seen)
   }
   if (kind === K_ARRAY) {
-    const inner = table.refOf(type);
+    const inner = table.refOf(type)
     if (inner === element) {
-      return root;
+      return root
     }
-    return reachingPath(table, program, inner, element, `${root}[i]`, seen);
+    return reachingPath(table, program, inner, element, `${root}[i]`, seen)
   }
   if (kind === K_RESULT) {
-    const ok = reachingPath(table, program, table.okOf(type), element, `${root}.value`, seen);
+    const ok = reachingPath(table, program, table.okOf(type), element, `${root}.value`, seen)
     return ok.length > 0
       ? ok
-      : reachingPath(table, program, table.errOf(type), element, `${root}.error`, seen);
+      : reachingPath(table, program, table.errOf(type), element, `${root}.error`, seen)
   }
   if (kind !== K_STRUCT) {
-    return "";
+    return ""
   }
-  const name = table.nameOf(type);
+  const name = table.nameOf(type)
   if (seen.has(name)) {
-    return "";
+    return ""
   }
-  seen.add(name);
-  const info = program.struct(name);
+  seen.add(name)
+  const info = program.struct(name)
   if (info === null) {
     // Every layout a module can hold a value of is in its table
     // (`closeReachableStructs`), so this is not expected; a layout the rule
     // cannot see is refused rather than trusted.
-    return root;
+    return root
   }
   for (const field of info.fields) {
-    const path = reachingPath(table, program, field.type, element, `${root}.${field.name}`, seen);
+    const path = reachingPath(table, program, field.type, element, `${root}.${field.name}`, seen)
     if (path.length > 0) {
-      return path;
+      return path
     }
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * `dst` could be read by the body through its argument while another thread
@@ -344,22 +344,22 @@ export const reachesDstMessage = (
   sig: FunctionSig,
   fn: FunctionSig
 ): string => {
-  const instance = sig.instance;
+  const instance = sig.instance
   if (instance === null || instance.parallel !== PAR_MAP || instance.typeArgs.length < 2) {
-    return "";
+    return ""
   }
-  const element = instance.typeArgs[0];
-  const target = instance.typeArgs[1];
-  const root = fn.paramNames.length > 0 ? fn.paramNames[0] : "x";
-  const path = reachingPath(table, program, element, target, root, new StringSet());
+  const element = instance.typeArgs[0]
+  const target = instance.typeArgs[1]
+  const root = fn.paramNames.length > 0 ? fn.paramNames[0] : "x"
+  const path = reachingPath(table, program, element, target, root, new StringSet())
   if (path.length === 0) {
-    return "";
+    return ""
   }
   return (
     `\`${fn.sourceName}\` can reach a \`${table.typeName(target)}[]\` through \`${path}\`, which could be ` +
     "the array `parallelMapInto` is writing: another thread would be writing it while this one reads, so `dst` may not be reachable from an element of `src`"
-  );
-};
+  )
+}
 
 /**
  * The operator an arrow's whole body applies to its two parameters, in either
@@ -368,52 +368,52 @@ export const reachesDstMessage = (
  */
 const combiningOperator = (fn: FunctionSig): string => {
   if (!fn.lifted || fn.paramNames.length !== 2) {
-    return "";
+    return ""
   }
-  let body = fn.decl.children[3];
+  let body = fn.decl.children[3]
   if (body.kind === N_BLOCK) {
     if (body.children.length !== 1 || body.children[0].kind !== N_RETURN) {
-      return "";
+      return ""
     }
-    body = body.children[0].children[0];
+    body = body.children[0].children[0]
   }
-  body = unwrapParens(body);
+  body = unwrapParens(body)
   if (body.kind !== N_BINARY) {
-    return "";
+    return ""
   }
-  const left = unwrapParens(body.children[0]);
-  const right = unwrapParens(body.children[1]);
+  const left = unwrapParens(body.children[0])
+  const right = unwrapParens(body.children[1])
   if (left.kind !== N_IDENT || right.kind !== N_IDENT) {
-    return "";
+    return ""
   }
-  const a = fn.paramNames[0];
-  const b = fn.paramNames[1];
+  const a = fn.paramNames[0]
+  const b = fn.paramNames[1]
   if ((left.text === a && right.text === b) || (left.text === b && right.text === a)) {
-    return body.text;
+    return body.text
   }
-  return "";
-};
+  return ""
+}
 
 /** An operator whose result depends on how its operands are grouped. */
 const isNonAssociative = (op: string): boolean =>
-  op === "-" || op === "/" || op === "%" || op === "**" || op === "<<" || op === ">>" || op === ">>>";
+  op === "-" || op === "/" || op === "%" || op === "**" || op === "<<" || op === ">>" || op === ">>>"
 
 /** The identity an associative operator folds from, as written, or "" for one it has no single literal for. */
 const identityOf = (op: string): string => {
   if (op === "+" || op === "|" || op === "^") {
-    return "0";
+    return "0"
   }
   if (op === "*") {
-    return "1";
+    return "1"
   }
   if (op === "&&") {
-    return "true";
+    return "true"
   }
   if (op === "||") {
-    return "false";
+    return "false"
   }
-  return "";
-};
+  return ""
+}
 
 /**
  * Whether `node` is the literal `want` spells: a number of the same value in
@@ -422,19 +422,19 @@ const identityOf = (op: string): string => {
  * checker cannot see is one it cannot hold to the rule.
  */
 const isLiteral = (node: Node, want: string): boolean => {
-  const e = unwrapParens(node);
+  const e = unwrapParens(node)
   if (want === "true") {
-    return e.kind === N_TRUE;
+    return e.kind === N_TRUE
   }
   if (want === "false") {
-    return e.kind === N_FALSE;
+    return e.kind === N_FALSE
   }
   if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
-    const operand = unwrapParens(e.children[0]);
-    return operand.kind === N_NUMBER && want === "0" && Number(operand.text) === 0;
+    const operand = unwrapParens(e.children[0])
+    return operand.kind === N_NUMBER && want === "0" && Number(operand.text) === 0
   }
-  return e.kind === N_NUMBER && Number(e.text) === Number(want);
-};
+  return e.kind === N_NUMBER && Number(e.text) === Number(want)
+}
 
 /**
  * A reduce's two obligations, where they can be read off the call: an arrow
@@ -448,27 +448,27 @@ export const reduceMessage = (
   identityText: string
 ): string => {
   if (parallelRoleOf(sig) !== PAR_REDUCE) {
-    return "";
+    return ""
   }
-  const op = combiningOperator(fn);
+  const op = combiningOperator(fn)
   if (op.length === 0) {
-    return "";
+    return ""
   }
   if (isNonAssociative(op)) {
     return (
       `\`${fn.sourceName}\` combines with \`${op}\`, which is not associative: \`parallelReduce\` folds each block ` +
       "from the identity and then combines the blocks, which is a left fold only for an associative operator"
-    );
+    )
   }
-  const want = identityOf(op);
+  const want = identityOf(op)
   if (want.length === 0 || isLiteral(identity, want)) {
-    return "";
+    return ""
   }
   return (
     `\`parallelReduce\` folds every block from its identity, and the identity of \`${op}\` is \`${want}\`, not ` +
     `\`${identityText}\`: any other value would be counted once per block`
-  );
-};
+  )
+}
 
 // ---- The grain ---------------------------------------------------------------------------
 //
@@ -497,27 +497,27 @@ export const reduceMessage = (
  * what the cheapest body, `(x) => x * 3 + 1`, needs at two chunks to beat the
  * loop it replaces (2^20 lost to it by 12%; 2^22 wins by 1.54x).
  */
-const REGION_COST: i32 = 4194304;
+const REGION_COST: i32 = 4194304
 
 /** One call: the jump, the frame and the return, beyond the arguments. */
-const CALL_COST: i32 = 4;
+const CALL_COST: i32 = 4
 
 /** One arena allocation: the bump and its initialisation, or formatting a number into a string. */
-const ALLOC_COST: i32 = 32;
+const ALLOC_COST: i32 = 32
 
 /** The iterations a loop is assumed to run when its bound is not a literal. */
-const DEFAULT_TRIPS: i32 = 64;
+const DEFAULT_TRIPS: i32 = 64
 
 /** `a * b`, saturated at `REGION_COST`: nothing above it changes the grain. */
 const scaled = (a: i32, b: i32): i32 => {
   if (a <= 0 || b <= 0) {
-    return 0;
+    return 0
   }
-  return a >= REGION_COST / b ? REGION_COST : a * b;
-};
+  return a >= REGION_COST / b ? REGION_COST : a * b
+}
 
 /** `a + b`, saturated at `REGION_COST`. */
-const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a + b);
+const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a + b)
 
 /**
  * How many times the loop `node` runs its body, when its header says so
@@ -527,56 +527,61 @@ const summed = (a: i32, b: i32): i32 => (a >= REGION_COST - b ? REGION_COST : a 
  */
 const tripsOf = (node: Node): i32 => {
   if (node.kind !== N_FOR || node.children.length < 3 || node.children[0].kind !== N_VAR) {
-    return DEFAULT_TRIPS;
+    return DEFAULT_TRIPS
   }
-  const decls = node.children[0].children[0];
+  const decls = node.children[0].children[0]
   if (decls.children.length !== 1 || decls.children[0].children.length < 3) {
-    return DEFAULT_TRIPS;
+    return DEFAULT_TRIPS
   }
-  const name = decls.children[0].children[0].text;
-  const first = unwrapParens(decls.children[0].children[2]);
-  const cond = unwrapParens(node.children[1]);
+  const name = decls.children[0].children[0].text
+  const first = unwrapParens(decls.children[0].children[2])
+  const cond = unwrapParens(node.children[1])
   if (first.kind !== N_NUMBER || cond.kind !== N_BINARY || cond.children.length < 2) {
-    return DEFAULT_TRIPS;
+    return DEFAULT_TRIPS
   }
-  const iv = unwrapParens(cond.children[0]);
-  const bound = unwrapParens(cond.children[1]);
-  const step = stepOf(unwrapParens(node.children[2]), name);
+  const iv = unwrapParens(cond.children[0])
+  const bound = unwrapParens(cond.children[1])
+  const step = stepOf(unwrapParens(node.children[2]), name)
   if (iv.kind !== N_IDENT || iv.text !== name || bound.kind !== N_NUMBER || step <= 0) {
-    return DEFAULT_TRIPS;
+    return DEFAULT_TRIPS
   }
   if (cond.text !== "<" && cond.text !== "<=") {
-    return DEFAULT_TRIPS;
+    return DEFAULT_TRIPS
   }
-  const span = Number(bound.text) - Number(first.text) + (cond.text === "<=" ? 1.0 : 0.0);
-  const trips = Math.ceil(span / toF64(step));
+  const span = Number(bound.text) - Number(first.text) + (cond.text === "<=" ? 1.0 : 0.0)
+  const trips = Math.ceil(span / toF64(step))
   if (trips < 1.0) {
-    return 1;
+    return 1
   }
-  return trips >= toF64(REGION_COST) ? REGION_COST : toI32(trips);
-};
+  return trips >= toF64(REGION_COST) ? REGION_COST : toI32(trips)
+}
 
 /** The estimate for `node` and everything under it. */
 const costOf = (node: Node): i32 => {
   // A nested arrow is lifted into a function of its own and runs only when called.
   if (node.kind === N_ARROW) {
-    return 0;
+    return 0
   }
-  let own = 1;
+  let own = 1
   if (node.kind === N_CALL) {
-    own = CALL_COST;
-  } else if (node.kind === N_NEW || node.kind === N_OBJECT || node.kind === N_ARRAY || isTemplateExpression(node)) {
-    own = ALLOC_COST;
+    own = CALL_COST
+  } else if (
+    node.kind === N_NEW ||
+    node.kind === N_OBJECT ||
+    node.kind === N_ARRAY ||
+    isTemplateExpression(node)
+  ) {
+    own = ALLOC_COST
   }
-  let inner = 0;
+  let inner = 0
   for (const child of node.children) {
-    inner = summed(inner, costOf(child));
+    inner = summed(inner, costOf(child))
   }
   if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
-    inner = scaled(inner, tripsOf(node));
+    inner = scaled(inner, tripsOf(node))
   }
-  return summed(own, inner);
-};
+  return summed(own, inner)
+}
 
 /**
  * The grain of a map whose body is `fn`: `REGION_COST` over its estimate. The
@@ -584,6 +589,6 @@ const costOf = (node: Node): i32 => {
  * `[1, REGION_COST]` without a clamp of its own.
  */
 export const mapGrain = (fn: FunctionSig): i32 => {
-  const body = fn.body();
-  return body === null ? REGION_COST : REGION_COST / costOf(body);
-};
+  const body = fn.body()
+  return body === null ? REGION_COST : REGION_COST / costOf(body)
+}

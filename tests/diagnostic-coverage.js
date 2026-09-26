@@ -72,27 +72,27 @@
  * `--require-coverage`, so both registers and `unreachable.txt` have to match
  * what stage1 does exactly: they can shrink, and they cannot grow by accident.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { jobsFrom, pool, run } from "./pool.js";
-import { readCodesRegistry } from "../scripts/codes-registry.js";
-import { extraArgs, linkPrograms, root } from "./self/corpus.js";
-import { defaultSeedSpec } from "./self/seed.js";
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { jobsFrom, pool, run } from "./pool.js"
+import { readCodesRegistry } from "../scripts/codes-registry.js"
+import { extraArgs, linkPrograms, root } from "./self/corpus.js"
+import { defaultSeedSpec } from "./self/seed.js"
 
-const WORDINGS = path.join(root, "tests", "wordings");
-const CASES = path.join(root, "tests", "cases");
-const REGISTRY = path.join(root, "self", "codes.ts");
-const UNREACHABLE = path.join(WORDINGS, "unreachable.txt");
-const REFUSALS = path.join(WORDINGS, "parser_refusals.txt");
-const DIVERGENCE = path.join(WORDINGS, "stage1_divergence.txt");
-const BUILD = path.join(root, "build", "test", "wordings");
+const WORDINGS = path.join(root, "tests", "wordings")
+const CASES = path.join(root, "tests", "cases")
+const REGISTRY = path.join(root, "self", "codes.ts")
+const UNREACHABLE = path.join(WORDINGS, "unreachable.txt")
+const REFUSALS = path.join(WORDINGS, "parser_refusals.txt")
+const DIVERGENCE = path.join(WORDINGS, "stage1_divergence.txt")
+const BUILD = path.join(root, "build", "test", "wordings")
 
 /** `.js` / `.mjs` / `.cjs` is a Node entry point; anything else a native binary. */
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
 
 /** A wordings case is named for the code it pins, so the directory is the coverage map. */
-const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/;
+const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/
 
 /**
  * The registry as the compilers hold it: fragment first, code second, flat,
@@ -112,7 +112,7 @@ const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/;
  * drifting apart is what issue #96 is about; this one keys the result by code,
  * because what it asks of the registry is which rule a `--json` object names.
  */
-const registry = () => new Map(readCodesRegistry(REGISTRY).map(({ fragment, code }) => [code, fragment]));
+const registry = () => new Map(readCodesRegistry(REGISTRY).map(({ fragment, code }) => [code, fragment]))
 
 /**
  * A `CODE  reason` list, `#` for a comment. Several of these exist and all are
@@ -120,40 +120,49 @@ const registry = () => new Map(readCodesRegistry(REGISTRY).map(({ fragment, code
  * somebody wrote down, and the run says when one has gone stale.
  */
 const readList = (file) => {
-  const rows = new Map();
-  if (!fs.existsSync(file)) { return rows; }
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const text = line.replace(/^\s*#.*$/, "").trim();
-    if (text.length === 0) { continue; }
-    const at = text.search(/\s/);
-    if (at < 0) { rows.set(text, ""); }
-    else { rows.set(text.slice(0, at), text.slice(at).trim()); }
+  const rows = new Map()
+  if (!fs.existsSync(file)) {
+    return rows
   }
-  return rows;
-};
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.replace(/^\s*#.*$/, "").trim()
+    if (text.length === 0) {
+      continue
+    }
+    const at = text.search(/\s/)
+    if (at < 0) {
+      rows.set(text, "")
+    } else {
+      rows.set(text.slice(0, at), text.slice(at).trim())
+    }
+  }
+  return rows
+}
 
 /** The flags a case is compiled with, from the `.args` sidecar the rest of the suite uses. */
-const argsOf = (file) => extraArgs(file);
+const argsOf = (file) => extraArgs(file)
 
 /** `tests/wordings/nl2200_empty_import_list.ts`: the code it pins and the wording it expects. */
 const wordingCases = () => {
-  const cases = [];
+  const cases = []
   for (const name of fs.readdirSync(WORDINGS).sort()) {
-    const named = CASE_NAME.exec(name);
-    if (named === null) { continue; }
-    const file = path.join(WORDINGS, name);
-    const err = file.replace(/\.ts$/, ".err");
-    const stem = path.basename(name, ".ts");
+    const named = CASE_NAME.exec(name)
+    if (named === null) {
+      continue
+    }
+    const file = path.join(WORDINGS, name)
+    const err = file.replace(/\.ts$/, ".err")
+    const stem = path.basename(name, ".ts")
     cases.push({
       stem,
       file,
       args: argsOf(file),
       code: named[1].toUpperCase(),
       expected: fs.existsSync(err) ? fs.readFileSync(err, "utf8").trim() : null,
-    });
+    })
   }
-  return cases;
-};
+  return cases
+}
 
 /**
  * Everything else that provokes a diagnostic and outlives stage0: the
@@ -164,40 +173,49 @@ const wordingCases = () => {
  * second case here for no reason.
  */
 const corpusPrograms = () => {
-  const programs = [];
+  const programs = []
   for (const name of fs.readdirSync(CASES).sort()) {
-    if (!name.endsWith(".ts")) { continue; }
-    const negative =
-      name.startsWith("reject_") && fs.existsSync(path.join(CASES, `${name.slice(0, -3)}.err`));
-    if (!negative && !name.startsWith("perf_")) { continue; }
-    const file = path.join(CASES, name);
-    programs.push({ stem: path.basename(name, ".ts"), file, args: argsOf(file) });
+    if (!name.endsWith(".ts")) {
+      continue
+    }
+    const negative = name.startsWith("reject_") && fs.existsSync(path.join(CASES, `${name.slice(0, -3)}.err`))
+    if (!negative && !name.startsWith("perf_")) {
+      continue
+    }
+    const file = path.join(CASES, name)
+    programs.push({ stem: path.basename(name, ".ts"), file, args: argsOf(file) })
   }
   for (const program of linkPrograms()) {
-    if (program.expectedErr === null) { continue; }
-    programs.push({ stem: `link/${program.name}`, file: program.main, args: argsOf(program.main) });
+    if (program.expectedErr === null) {
+      continue
+    }
+    programs.push({ stem: `link/${program.name}`, file: program.main, args: argsOf(program.main) })
   }
-  return programs;
-};
+  return programs
+}
 
 /** A compiler as something spawnable, the way `tests/nish-cmp.js` spells one. */
 const resolveCompiler = (spec) => {
-  const file = path.resolve(root, spec);
-  const refuse = (why) => ({ error: `compiler ${spec} ${why}` });
-  if (!fs.existsSync(file)) { return refuse("does not exist"); }
-  if (!fs.statSync(file).isFile()) { return refuse("is not a file"); }
+  const file = path.resolve(root, spec)
+  const refuse = (why) => ({ error: `compiler ${spec} ${why}` })
+  if (!fs.existsSync(file)) {
+    return refuse("does not exist")
+  }
+  if (!fs.statSync(file).isFile()) {
+    return refuse("is not a file")
+  }
   const compiler = NODE_ENTRY.test(file)
     ? { label: spec, cmd: process.execPath, prefix: [file] }
-    : { label: spec, cmd: file, prefix: [] };
+    : { label: spec, cmd: file, prefix: [] }
   if (compiler.prefix.length === 0) {
     try {
-      fs.accessSync(file, fs.constants.X_OK);
+      fs.accessSync(file, fs.constants.X_OK)
     } catch {
-      return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
+      return refuse("is not executable (only .js/.mjs/.cjs are run under node)")
     }
   }
-  return compiler;
-};
+  return compiler
+}
 
 /**
  * Whether a run's `--json` objects are the parser turning the file down rather
@@ -205,7 +223,7 @@ const resolveCompiler = (spec) => {
  * `self/codes.ts`), which is the field to key on: the prose is two different
  * parsers' and is allowed to improve.
  */
-const refusedByParser = (result) => result.objects.some((o) => o.code === "NL0001");
+const refusedByParser = (result) => result.objects.some((o) => o.code === "NL0001")
 
 /**
  * One program through the compiler, with every `--json` object it printed.
@@ -217,20 +235,22 @@ const refusedByParser = (result) => result.objects.some((o) => o.code === "NL000
  * `tests/link/` program as happily as a single file.
  */
 const compile = async (compiler, program) => {
-  const named = path.relative(root, program.file).split(path.sep).join("/");
-  const out = path.join(BUILD, program.stem.replace(/[^\w.-]+/g, "_"));
-  fs.mkdirSync(out, { recursive: true });
+  const named = path.relative(root, program.file).split(path.sep).join("/")
+  const out = path.join(BUILD, program.stem.replace(/[^\w.-]+/g, "_"))
+  fs.mkdirSync(out, { recursive: true })
   const result = await run(
     compiler.cmd,
     [...compiler.prefix, named, "--json", "-o", `${out}${path.sep}`, ...program.args],
     { cwd: root, encoding: "utf8" }
-  );
-  const objects = [];
+  )
+  const objects = []
   for (const line of result.stdout.split("\n")) {
-    if (line.startsWith("{")) { objects.push(JSON.parse(line)); }
+    if (line.startsWith("{")) {
+      objects.push(JSON.parse(line))
+    }
   }
-  return { ...result, objects };
-};
+  return { ...result, objects }
+}
 
 /** `--jobs N`, `--compiler <spec>` and the flags; everything else is a case name filter. */
 const parse = (argv) => {
@@ -241,76 +261,87 @@ const parse = (argv) => {
     strict: false,
     coverage: false,
     names: [],
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--compiler") { options.compiler = argv[++i]; }
-    else if (arg === "--report") { options.report = true; }
-    else if (arg === "--update") { options.update = true; }
-    else if (arg === "--strict-refusals") { options.strict = true; }
-    else if (arg === "--require-coverage") { options.coverage = true; }
-    else if (arg === "--jobs") {
-      i++; // read by `jobsFrom`
-    }
-    else if (!arg.startsWith("--")) { options.names.push(arg); }
   }
-  return options;
-};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === "--compiler") {
+      options.compiler = argv[++i]
+    } else if (arg === "--report") {
+      options.report = true
+    } else if (arg === "--update") {
+      options.update = true
+    } else if (arg === "--strict-refusals") {
+      options.strict = true
+    } else if (arg === "--require-coverage") {
+      options.coverage = true
+    } else if (arg === "--jobs") {
+      i++ // read by `jobsFrom`
+    } else if (!arg.startsWith("--")) {
+      options.names.push(arg)
+    }
+  }
+  return options
+}
 
 const main = async (argv) => {
-  const options = parse(argv);
+  const options = parse(argv)
   // Nobody named one: the seed order, `NISH_BOOTSTRAP` then `build/nish`.
   // There used to be a third answer, stage0's `dist/index.js`; R6 deletes it.
-  const spec = options.compiler ?? defaultSeedSpec();
+  const spec = options.compiler ?? defaultSeedSpec()
   if (spec === null) {
     process.stderr.write(
       "no compiler: pass --compiler <nish>, set NISH_BOOTSTRAP, or run `npm run bootstrap`\n"
-    );
-    return 2;
+    )
+    return 2
   }
-  const compiler = resolveCompiler(spec);
+  const compiler = resolveCompiler(spec)
   if (compiler.error !== undefined) {
-    process.stderr.write(`${compiler.error}\n`);
-    return 2;
+    process.stderr.write(`${compiler.error}\n`)
+    return 2
   }
 
-  const codes = registry();
-  const unreachable = readList(UNREACHABLE);
-  const refusals = readList(REFUSALS);
-  const divergence = readList(DIVERGENCE);
-  const filter = (stem) => options.names.length === 0 || options.names.some((n) => stem.includes(n));
+  const codes = registry()
+  const unreachable = readList(UNREACHABLE)
+  const refusals = readList(REFUSALS)
+  const divergence = readList(DIVERGENCE)
+  const filter = (stem) => options.names.length === 0 || options.names.some((n) => stem.includes(n))
 
-  const cases = wordingCases().filter((c) => filter(c.stem));
-  const others = options.names.length > 0 ? [] : corpusPrograms();
-  const jobs = jobsFrom(argv);
-  const caseRuns = await pool(cases, jobs, (c) => compile(compiler, c));
-  const otherRuns = await pool(others, jobs, (p) => compile(compiler, p));
+  const cases = wordingCases().filter((c) => filter(c.stem))
+  const others = options.names.length > 0 ? [] : corpusPrograms()
+  const jobs = jobsFrom(argv)
+  const caseRuns = await pool(cases, jobs, (c) => compile(compiler, c))
+  const otherRuns = await pool(others, jobs, (p) => compile(compiler, p))
 
   // Which codes the whole corpus reached, and where. The report names the first
   // program, and corpus order is stable, so two runs of this tool name the same
   // file; a reachable code in `unreachable.txt` names them all.
-  const reached = new Map();
-  const uncoded = new Map();
+  const reached = new Map()
+  const uncoded = new Map()
   const note = (stem, objects) => {
     for (const object of objects) {
-      const where = reached.get(object.code);
-      if (where === undefined) { reached.set(object.code, [stem]); }
-      else if (!where.includes(stem)) { where.push(stem); }
-      if (object.code === "NL0000" && !uncoded.has(object.message)) { uncoded.set(object.message, stem); }
+      const where = reached.get(object.code)
+      if (where === undefined) {
+        reached.set(object.code, [stem])
+      } else if (!where.includes(stem)) {
+        where.push(stem)
+      }
+      if (object.code === "NL0000" && !uncoded.has(object.message)) {
+        uncoded.set(object.message, stem)
+      }
     }
-  };
+  }
   others.forEach((program, i) => {
-    note(program.stem, otherRuns[i].objects);
-  });
+    note(program.stem, otherRuns[i].objects)
+  })
 
-  const failed = [];
-  const refused = [];
-  const diverged = [];
-  let pinned = 0;
+  const failed = []
+  const refused = []
+  const diverged = []
+  let pinned = 0
   cases.forEach((c, i) => {
-    const result = caseRuns[i];
-    note(c.stem, result.objects);
-    const hit = result.objects.find((o) => o.code === c.code);
+    const result = caseRuns[i]
+    note(c.stem, result.objects)
+    const hit = result.objects.find((o) => o.code === c.code)
     if (hit === undefined) {
       // stage1's parser refuses forbidden syntax by name before the phase that
       // owns the rule can state it (§A3's declared class), and stage1 answers
@@ -329,99 +360,113 @@ const main = async (argv) => {
         // instead: the parser's first sentence. It is what a user sees for
         // this program, and pinning it is what notices the parser rewording
         // or refusing somewhere else.
-        const said = result.objects.find((o) => o.code === "NL0001").message;
-        if (options.update) { fs.writeFileSync(c.file.replace(/\.ts$/, ".err"), `${said}\n`); }
-        else if (c.expected !== said) {
-          failed.push(`${c.stem}: pinned ${JSON.stringify(c.expected)}, the parser says ${JSON.stringify(said)}`);
-          return;
+        const said = result.objects.find((o) => o.code === "NL0001").message
+        if (options.update) {
+          fs.writeFileSync(c.file.replace(/\.ts$/, ".err"), `${said}\n`)
+        } else if (c.expected !== said) {
+          failed.push(
+            `${c.stem}: pinned ${JSON.stringify(c.expected)}, the parser says ${JSON.stringify(said)}`
+          )
+          return
         }
-        refused.push(c.stem);
-        return;
+        refused.push(c.stem)
+        return
       }
       if (divergence.has(c.stem)) {
-        diverged.push(c.stem);
-        return;
+        diverged.push(c.stem)
+        return
       }
-      const saw = result.objects.map((o) => `${o.code} ${o.message}`).join(" | ") || "(no diagnostic)";
-      failed.push(`${c.stem}: expected ${c.code}, got ${saw}`);
-      return;
+      const saw = result.objects.map((o) => `${o.code} ${o.message}`).join(" | ") || "(no diagnostic)"
+      failed.push(`${c.stem}: expected ${c.code}, got ${saw}`)
+      return
     }
     if ((refusals.has(c.stem) || divergence.has(c.stem)) && options.strict) {
-      const list = refusals.has(c.stem) ? REFUSALS : DIVERGENCE;
-      failed.push(`${c.stem}: agrees now — remove it from ${path.relative(root, list)}`);
-      return;
+      const list = refusals.has(c.stem) ? REFUSALS : DIVERGENCE
+      failed.push(`${c.stem}: agrees now — remove it from ${path.relative(root, list)}`)
+      return
     }
     if (options.update) {
-      fs.writeFileSync(c.file.replace(/\.ts$/, ".err"), `${hit.message}\n`);
-      pinned++;
-      return;
+      fs.writeFileSync(c.file.replace(/\.ts$/, ".err"), `${hit.message}\n`)
+      pinned++
+      return
     }
     if (c.expected === null) {
-      failed.push(`${c.stem}: no .err beside it (run with --update to write one)`);
-      return;
+      failed.push(`${c.stem}: no .err beside it (run with --update to write one)`)
+      return
     }
     if (c.expected !== hit.message) {
-      failed.push(`${c.stem}: pinned ${JSON.stringify(c.expected)}, got ${JSON.stringify(hit.message)}`);
-      return;
+      failed.push(`${c.stem}: pinned ${JSON.stringify(c.expected)}, got ${JSON.stringify(hit.message)}`)
+      return
     }
     // The `.err` is the whole message; the registry fragment is the run of it
     // the code is keyed on. Both have to hold, because a reword that kept the
     // fragment would still be a reword, and one that kept the message while
     // the registry moved would mean the code had been renumbered by hand.
-    const fragment = codes.get(c.code);
+    const fragment = codes.get(c.code)
     if (fragment !== undefined && !hit.message.includes(fragment)) {
-      failed.push(`${c.stem}: message does not contain ${c.code}'s registry fragment`);
-      return;
+      failed.push(`${c.stem}: message does not contain ${c.code}'s registry fragment`)
+      return
     }
-    pinned++;
-  });
+    pinned++
+  })
 
   // Coverage. A code is covered when some program in the corpus provoked it,
   // and explained when `unreachable.txt` says why no program can.
-  const covered = [...codes.keys()].filter((code) => reached.has(code));
+  const covered = [...codes.keys()].filter((code) => reached.has(code))
 
   if (options.coverage && options.names.length === 0) {
     for (const code of codes.keys()) {
-      if (reached.has(code) || unreachable.has(code)) { continue; }
+      if (reached.has(code) || unreachable.has(code)) {
+        continue
+      }
       failed.push(
         `${code} is provoked by nothing: add a case to tests/wordings/ or a reason to ${path.relative(root, UNREACHABLE)}`
-      );
+      )
     }
     for (const code of unreachable.keys()) {
-      if (!reached.has(code)) { continue; }
+      if (!reached.has(code)) {
+        continue
+      }
       failed.push(
         `${code} is reachable after all (${reached.get(code).join(", ")}) — remove it from ${path.relative(root, UNREACHABLE)}`
-      );
+      )
     }
   }
 
   if (options.report) {
     for (const code of [...codes.keys()].sort()) {
-      const where = reached.get(code);
-      const why = unreachable.get(code);
-      const state = where !== undefined ? `covered by ${where[0]}` : `unreachable: ${why ?? "(no reason on file)"}`;
-      process.stdout.write(`  ${code} ${state}\n`);
+      const where = reached.get(code)
+      const why = unreachable.get(code)
+      const state =
+        where !== undefined ? `covered by ${where[0]}` : `unreachable: ${why ?? "(no reason on file)"}`
+      process.stdout.write(`  ${code} ${state}\n`)
     }
   }
-  for (const line of failed) { process.stdout.write(`  FAIL ${line}\n`); }
+  for (const line of failed) {
+    process.stdout.write(`  FAIL ${line}\n`)
+  }
 
   // The uncoded remainder: a diagnostic whose message has no literal run long
   // enough to key a rule on. `tests/run.js` pins the count; every one of them
   // is named here, because this is the run that has every message in front of
   // it and the fix is to give that message words of its own.
-  for (const [message, stem] of uncoded) { process.stdout.write(`  uncoded: ${message} (${stem})\n`); }
+  for (const [message, stem] of uncoded) {
+    process.stdout.write(`  uncoded: ${message} (${stem})\n`)
+  }
   const aside =
     refused.length + diverged.length > 0
       ? ` (${refused.length} refused by the parser, ${diverged.length} answered differently)`
-      : "";
+      : ""
   process.stdout.write(
     `wordings: ${pinned}/${cases.length} cases pin their code${aside}, ` +
       `coverage ${covered.length}/${codes.size} codes, ${unreachable.size} unreachable, ` +
       `uncoded=${uncoded.size} (compiler ${compiler.label})\n`
-  );
-  return failed.length === 0 ? 0 : 1;
-};
+  )
+  return failed.length === 0 ? 0 : 1
+}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(await main(process.argv.slice(2))); }
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(await main(process.argv.slice(2)))
+}
 
-export { corpusPrograms, registry, wordingCases };
+export { corpusPrograms, registry, wordingCases }

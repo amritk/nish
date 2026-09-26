@@ -40,7 +40,7 @@
 const ARCH_BY_CPU = {
   x64: "x86_64",
   arm64: "aarch64",
-};
+}
 
 /**
  * The operating-system half. It is an identity map today, because node's
@@ -52,7 +52,7 @@ const ARCH_BY_CPU = {
 const OS_BY_PLATFORM = {
   linux: "linux",
   darwin: "darwin",
-};
+}
 
 /**
  * Every asset a release actually attaches, sorted, in `seed-targets.json`'s
@@ -68,7 +68,7 @@ const OS_BY_PLATFORM = {
  * compares the two, so a literal is exactly as gated as a derivation and says
  * only what is true.
  */
-export const SUPPORTED_ASSETS = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"];
+export const SUPPORTED_ASSETS = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
 
 /**
  * The `asset` for a node platform/arch pair, or `null` when this project
@@ -81,23 +81,29 @@ export const SUPPORTED_ASSETS = ["aarch64-darwin", "aarch64-linux", "x86_64-darw
  * exits non-zero (`docs/wp12-release.md`, "Which compiler the package ships").
  */
 export const assetFor = (platform, arch) => {
-  const os = OS_BY_PLATFORM[platform];
-  const cpu = ARCH_BY_CPU[arch];
-  if (os === undefined || cpu === undefined) { return null; }
-  return `${cpu}-${os}`;
-};
+  const os = OS_BY_PLATFORM[platform]
+  const cpu = ARCH_BY_CPU[arch]
+  if (os === undefined || cpu === undefined) {
+    return null
+  }
+  return `${cpu}-${os}`
+}
 
 /** The inverse, for the generator and the tests: an `asset` back to npm's pair. */
 export const targetForAsset = (asset) => {
-  const dash = asset.indexOf("-");
-  if (dash < 0) { return null; }
-  const arch = asset.slice(0, dash);
-  const os = asset.slice(dash + 1);
-  const cpu = Object.keys(ARCH_BY_CPU).find((key) => ARCH_BY_CPU[key] === arch);
-  const platform = Object.keys(OS_BY_PLATFORM).find((key) => OS_BY_PLATFORM[key] === os);
-  if (cpu === undefined || platform === undefined) { return null; }
-  return { asset, os: platform, cpu };
-};
+  const dash = asset.indexOf("-")
+  if (dash < 0) {
+    return null
+  }
+  const arch = asset.slice(0, dash)
+  const os = asset.slice(dash + 1)
+  const cpu = Object.keys(ARCH_BY_CPU).find((key) => ARCH_BY_CPU[key] === arch)
+  const platform = Object.keys(OS_BY_PLATFORM).find((key) => OS_BY_PLATFORM[key] === os)
+  if (cpu === undefined || platform === undefined) {
+    return null
+  }
+  return { asset, os: platform, cpu }
+}
 
 /**
  * The package holding the binary for one asset, derived from the main
@@ -108,7 +114,7 @@ export const targetForAsset = (asset) => {
  * is scoped -- docs/wp12-release.md "The npm name"), and a list of five literal
  * names would be five places to edit if it ever moves again.
  */
-export const platformPackageName = (packageName, asset) => `${packageName}-${asset}`;
+export const platformPackageName = (packageName, asset) => `${packageName}-${asset}`
 
 /**
  * The diagnostic code every refusal here carries: `NL0002`, the toolchain code.
@@ -123,7 +129,7 @@ export const platformPackageName = (packageName, asset) => `${packageName}-${ass
  * never print, and `tests/diagnostic-coverage.js` would then want a case
  * provoking a rule that does not exist.
  */
-export const NO_COMPILER_CODE = "NL0002";
+export const NO_COMPILER_CODE = "NL0002"
 
 /**
  * Why there is no compiler to run, and what to do about it: the one-line
@@ -160,13 +166,13 @@ export const NO_COMPILER_CODE = "NL0002";
  * refused wants to know whether the list is the whole list. It is.
  */
 export const noCompilerMessage = ({ platform, arch, packageName, unstartable = null }) => {
-  const asset = assetFor(platform, arch);
-  const published = SUPPORTED_ASSETS.join("  ");
+  const asset = assetFor(platform, arch)
+  const published = SUPPORTED_ASSETS.join("  ")
   const preamble =
     "  This package installs a prebuilt native compiler. One is published for:\n" +
     `    ${published}\n\n` +
     "  There is no compiler inside the package to fall back to, and nothing is\n" +
-    "  compiled on your machine on any path.\n";
+    "  compiled on your machine on any path.\n"
   if (asset === null) {
     return {
       code: NO_COMPILER_CODE,
@@ -182,7 +188,7 @@ export const noCompilerMessage = ({ platform, arch, packageName, unstartable = n
         "    NISH_BOOTSTRAP=<a released nish that runs here> scripts/bootstrap.sh\n" +
         "  docs/INSTALL.md has the detail, including what to do when no released\n" +
         "  binary runs on this platform at all.\n",
-    };
+    }
   }
   if (unstartable !== null) {
     return {
@@ -195,14 +201,14 @@ export const noCompilerMessage = ({ platform, arch, packageName, unstartable = n
         `nish: ${unstartable.binary} could not be started (${unstartable.reason})\n\n${preamble}\n` +
         "  That is a broken or partly written install rather than an unsupported\n" +
         "  platform. Reinstall the package, or run `npm rebuild` if the tree moved.\n",
-    };
+    }
   }
   // A `packageName` of `null` means this package's own `package.json` could not
   // be read, which is a broken install and not the moment to guess: naming the
   // wrong package sends the user to install something that does not exist, so
   // the sentence loses the name instead of inventing one.
-  const named = packageName === null ? null : platformPackageName(packageName, asset);
-  const pkg = named === null ? `the platform package for ${asset}` : named;
+  const named = packageName === null ? null : platformPackageName(packageName, asset)
+  const pkg = named === null ? `the platform package for ${asset}` : named
   return {
     code: NO_COMPILER_CODE,
     summary:
@@ -216,5 +222,5 @@ export const noCompilerMessage = ({ platform, arch, packageName, unstartable = n
       "  `--no-optional`, a lockfile without the platform packages, or a registry that\n" +
       "  does not carry them yet. Reinstall the package, or install the pair by hand as\n" +
       "  docs/INSTALL.md shows.\n",
-  };
-};
+  }
+}
