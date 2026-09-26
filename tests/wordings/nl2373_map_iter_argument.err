@@ -1,0 +1,1 @@
+`values()` of `Map<string, i32>` cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`

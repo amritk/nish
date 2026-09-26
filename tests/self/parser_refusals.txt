@@ -134,6 +134,8 @@ reject_instanceof	expected `;`, found `IDENT`
 reject_labeled_statement	expected `;`, found `:`
 reject_loose_equality	expected `;`, found `==`
 reject_loose_inequality	expected `;`, found `!=`
+reject_map_iter_for_in	expected `;`, found `IDENT`
+reject_map_iter_spread	expected an expression, found `...`
 reject_missing_return_type	a return type annotation is required
 reject_multi_decl	a type annotation is required
 reject_multi_forbidden	expected `;`, found `IDENT`

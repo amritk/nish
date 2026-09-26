@@ -24,18 +24,27 @@ import {
 import { assignInto, checkExpression } from "./expressions";
 import {
   N_ARRAY,
+  N_ARROW,
+  N_BINARY,
+  N_CALL,
   N_CONDITIONAL,
+  N_FUNCTION,
   N_IDENT,
   N_INDEX,
+  N_LIST,
   N_MEMBER,
+  N_NEW,
   N_NUMBER,
   N_PAREN,
   N_PROPERTY,
+  N_RETURN,
   N_SUPER,
   N_THIS,
   N_UNARY,
+  N_VAR_DECL,
   Node,
 } from "./nodes";
+import { ParentTable } from "./parents";
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
 import { Scope } from "./symbols";
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
@@ -192,6 +201,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (info === null) {
     return T_ERROR;
   }
+  if (isWalkIterable(ctx, info, expr, access)) {
+    return checkWalkIterable(ctx, expr, info, access, args, scope);
+  }
   if (refuseCollectionMember(ctx, info, access, true)) {
     return T_ERROR; // WP32: only the JavaScript members of a `Map` or `Set`
   }
@@ -235,6 +247,66 @@ const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   checkMethodArguments(ctx, expr, probe, args, `${ctx.table.typeName(info.type)}.get`, scope, false);
   ctx.program.nodeCallees[expr.id] = probe;
   return ctx.table.maybeOf(read.returnType);
+};
+
+/**
+ * WP32: whether `call`, `recv.keys()` or `recv.values()` on the global `Map`
+ * or `Set`, is the iterable of the `for...of` being checked, parentheses
+ * aside: the one place an iterator may stand (docs/wp32-map.md §6.2).
+ */
+const isWalkIterable = (ctx: CheckContext, info: StructInfo, call: Node, access: Node): boolean => {
+  const loop = ctx.forOfWalk;
+  if (loop === null || !isCollectionStruct(info) || ctx.program.isCollections()) {
+    return false;
+  }
+  if (access.text !== "keys" && access.text !== "values") {
+    return false;
+  }
+  return withoutParens(loop.children[1]) === call;
+};
+
+/** `expr` with any parentheses around it taken off. */
+export const withoutParens = (expr: Node): Node => {
+  let node = expr;
+  while (node.kind === N_PAREN && node.children.length > 0) {
+    node = node.children[0];
+  }
+  return node;
+};
+
+/**
+ * WP32: the method a walk of the global `Map` or `Set` reads its loop
+ * variable with: `valueAt` for a `Map`'s `values()`, and `keyAt` for its
+ * `keys()` and for every walk of a `Set`, whose `keys` *is* `values` in
+ * JavaScript (docs/wp32-map.md §6.3).
+ */
+export const walkReaderOf = (ctx: CheckContext, info: StructInfo, name: string): FunctionSig => {
+  const instance = info.instance;
+  const isMap = instance !== null && instance.template.sourceName === "Map";
+  const read = info.method(isMap && name === "values" ? "valueAt" : "keyAt");
+  if (read === null || info.method("walkOpen") === null) {
+    process.exit(internalErrorFor("checker: the global `Map` or `Set` has no walk", ctx.table.json));
+  }
+  return read;
+};
+
+/**
+ * WP32: `for (const k of m.keys())`, and `values()`, and a `Set`'s two. The
+ * call is checked, and recorded, as a call of the table's `walkOpen`, which
+ * is what the loop does where it is entered, and the loop records the reader
+ * its variable is read with (`walkReaderOf`), which is what gives the variable
+ * its type. The call itself answers nothing: an iterator is not a value.
+ */
+const checkWalkIterable = (ctx: CheckContext, call: Node, info: StructInfo, access: Node, args: Node, scope: Scope): i32 => {
+  const loop = ctx.forOfWalk;
+  const open = info.method("walkOpen");
+  if (loop === null || open === null) {
+    process.exit(internalErrorFor("checker: a walk with no `for...of` or no `walkOpen`", ctx.table.json));
+  }
+  checkMethodArguments(ctx, call, open, args, `${ctx.table.typeName(info.type)}.${access.text}`, scope, false);
+  ctx.program.nodeCallees[call.id] = open;
+  ctx.program.nodeCallees[loop.id] = walkReaderOf(ctx, info, access.text);
+  return T_VOID;
 };
 
 /**
@@ -513,9 +585,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
  * WP32: a member of the global `Map` or `Set` that a program may not name, in
  * a module other than `std/collections.ts` (docs/wp32-map.md §4.2, §7).
  * Answers true when it reported one. What a program sees is JavaScript's
- * surface less what this version defers: `keys()` and `values()` wait for
- * `for...of`, and `entries` and `forEach` for destructuring and function
- * values. A call of `get` is not a method of the class at all (`checkMapGet`). Every other member is the table's own and
+ * surface less what this version defers: `keys()` and `values()` are
+ * iterators, legal only as the iterable of a `for...of` (`checkWalkIterable`),
+ * and `entries` and `forEach` wait for destructuring and function values. A call of `get` is not a method of the class at all (`checkMapGet`). Every other member is the table's own and
  * is refused as if it did not exist, which under `tsc` it does not.
  */
 const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean => {
@@ -542,10 +614,7 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   }
   if (name === "keys" || name === "values") {
     const spelled = call ? `${name}()` : name;
-    ctx.errorAtProperty(
-      at,
-      `\`${spelled}\` of \`${shown}\` can only be the iterable of a \`for...of\`: an iterator is not a value in this version, and iterating a \`Map\` or \`Set\` is not lowered yet`
-    );
+    ctx.errorAtProperty(at, `\`${spelled}\` of \`${shown}\`${iteratorPlaceReason(ctx, at, call)}`);
     return true;
   }
   if (name === "entries" || name === "forEach") {
@@ -561,6 +630,85 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
   );
   return true;
 };
+
+/**
+ * What an iterator refusal says after `keys()` or `values()` of the type:
+ * where the call stands, parentheses aside, and what to write instead. The
+ * checker keeps no parent links, so they are built here, on a program that is
+ * already refused, as `refuseMaybe` in `self/expressions.ts` builds them. An
+ * uncalled `m.keys` stands nowhere an iterator could, and gets the general
+ * reason.
+ */
+const iteratorPlaceReason = (ctx: CheckContext, access: Node, call: boolean): string => {
+  if (!call) {
+    return ITERATOR_ELSEWHERE;
+  }
+  const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length);
+  const callNode = parentIn(parents, access);
+  if (callNode === null) {
+    return ITERATOR_ELSEWHERE;
+  }
+  let node: Node = callNode;
+  let parent = parentIn(parents, node);
+  while (parent !== null && parent.kind === N_PAREN) {
+    node = parent;
+    parent = parentIn(parents, node);
+  }
+  if (parent === null) {
+    return ITERATOR_ELSEWHERE;
+  }
+  if (parent.kind === N_VAR_DECL && parent.children[2] === node) {
+    return ITERATOR_STORED;
+  }
+  if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === node) {
+    return ITERATOR_STORED;
+  }
+  if (parent.kind === N_LIST) {
+    const owner = parentIn(parents, parent);
+    const isArguments =
+      owner !== null &&
+      ((owner.kind === N_CALL && owner.children[1] === parent) || (owner.kind === N_NEW && owner.children[2] === parent));
+    return isArguments ? ITERATOR_ARGUMENT : ITERATOR_ELSEWHERE;
+  }
+  if (parent.kind === N_RETURN) {
+    return ITERATOR_RETURNED;
+  }
+  if ((parent.kind === N_ARROW || parent.kind === N_FUNCTION) && parent.children[3] === node) {
+    return ITERATOR_RETURNED; // a concise body is its `return`
+  }
+  return ITERATOR_ELSEWHERE;
+};
+
+/**
+ * `node`'s parent when the table really holds it, or `null`: a body checked
+ * for an instantiation can belong to another module's tree, whose ids are not
+ * this table's.
+ */
+const parentIn = (parents: ParentTable, node: Node): Node | null => {
+  if (node.id < 0 || node.id >= parents.parents.length) {
+    return null;
+  }
+  const parent = parents.parentOf(node);
+  if (parent === null) {
+    return null;
+  }
+  for (const child of parent.children) {
+    if (child === node) {
+      return parent;
+    }
+  }
+  return null;
+};
+
+// The reasons, one per place and one diagnostic code each (NL2358, NL2372-NL2374).
+const ITERATOR_STORED: string =
+  " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`";
+const ITERATOR_ARGUMENT: string =
+  " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`";
+const ITERATOR_RETURNED: string =
+  " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used";
+const ITERATOR_ELSEWHERE: string =
+  " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version";
 
 /**
  * A `readonly` field may only be assigned by the constructor of the class that

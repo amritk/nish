@@ -137,7 +137,7 @@ rejects. This table is the highest-value part of the page.
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
-| `for (const k of m.keys())`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete` and `clear` only — see [Map and Set](#map-and-set) |
+| `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
 
@@ -1077,9 +1077,8 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 order, SameValueZero keys (`-0` is `+0`, `NaN` finds `NaN`). What they have is
 exactly `size` (a read-only `number`), `get(k)`, `set(k, v)` / `add(x)` (both
 answer the receiver, so they chain), `has(k)`, `delete(k)` (answers whether it
-was there) and `clear()`. **There is no iteration yet**: `keys()`, `values()`,
-`entries` and `forEach` are refused by name, so keep the keys you will walk in
-an array beside the map.
+was there) and `clear()`, and `keys()` / `values()` as the iterable of a
+`for...of` and nowhere else. `entries` and `forEach` are refused by name.
 
 ```ts nish:ok-body
 const seen = new Set<string>();
@@ -1126,6 +1125,38 @@ if (a !== undefined) {
 ```ts nish:err-body NL2361
 const m = new Map<string, i32>();
 let v = m.get("a");
+```
+
+Walk a map with `for (const k of m.keys())` or `for (const v of m.values())`,
+and a set with `for (const x of s)`: insertion order, deleted keys skipped. You
+may `set`, `delete` or `clear` the table inside the walk and get exactly what
+JavaScript gives (a new key is visited later in the same walk; a key deleted
+before it is reached is not).
+
+```ts nish:ok-body
+const ages = new Map<string, i32>();
+ages.set("ada", 36).set("alan", 41);
+ages.delete("alan");
+ages.set("grace", 85);
+let total = 0;
+for (const name of ages.keys()) {
+  console.log(name);                     // ada, then grace
+}
+for (const age of ages.values()) {
+  total += age;
+}
+console.log(`${total}`);                 // 121
+```
+
+- An iterator is not a value: `keys()` / `values()` stored, passed, returned or
+  spread are refused. Pass the map itself and walk it where it is used.
+- `for (const e of m)` over a `Map` itself is refused, because it would need
+  `[key, value]` destructuring: walk `m.keys()` and call `m.get(k)`.
+
+```ts nish:err-body NL2375
+const m = new Map<string, i32>();
+for (const e of m) {
+}
 ```
 
 ## Memory

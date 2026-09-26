@@ -1,0 +1,1 @@
+`for...of` over `Map<string, i32>` needs `entries()`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of m.keys())`

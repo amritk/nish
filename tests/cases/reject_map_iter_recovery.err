@@ -1,0 +1,3 @@
+`for...of` over `Map<string, i32>` needs `entries()`
+Cannot initialize string variable `bad` with i32
+2 errors

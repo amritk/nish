@@ -2211,7 +2211,9 @@ The condition must be `boolean`: there is no truthiness
 ### `for (const x of a)`
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
-  `tests/cases/reject_arr_forof_non_array`); `x` gets the element type and
+  `tests/cases/reject_arr_forof_non_array`), or a walk of the global `Map` or
+  `Set`: `m.keys()`, `m.values()`, a `Set` itself, `s.keys()` or `s.values()`
+  ([`Map` and `Set`](#map-and-set)); `x` gets the element type and
   must not be annotated
   (`` The `for...of` variable takes the element type; remove the annotation ``,
   `tests/cases/reject_arr_forof_annotation`) or initialised
@@ -3275,12 +3277,11 @@ export const main = (): i32 => {
   (`tests/cases/map_key_str`, `set_str`). `size` is a read-only `number`:
   `` `size` of `Map<string, i32>` is read-only `` (`reject_map_size_assign`).
   `get` answers `V | undefined`, which has rules of its own, below.
-  `keys()` and `values()` are only ever a `for...of`
-  iterable, and iterating is not lowered yet:
-  `` `keys()` of `Map<string, i32>` can only be the iterable of a `for...of` ``
-  (`reject_map_keys`, `reject_map_values_for_of`). There is no `entries` or
+  `keys()` and `values()` are iterators, and an iterator is only ever the
+  iterable of a `for...of`, below. There is no `entries` or
   `forEach`, because there is no destructuring and a method cannot take a
-  function (`reject_map_entries`, `reject_map_foreach`). Everything else in the
+  function (`reject_map_entries`, `reject_map_foreach`,
+  `reject_map_iter_entries_call`). Everything else in the
   class is the table's own and is refused as if it did not exist:
   `` Unknown member `mask` on `Map<string, i32>` `` (`reject_map_internal_field`,
   `reject_map_internal_method`, `reject_set_set`).
@@ -3437,6 +3438,86 @@ export const main = (): i32 => {
     Under `-g` a `const` bound to `get` is described by `llvm.dbg.value` of
     its payload, since it has no slot (`dbg_map_get`). The `number`-mode cases print under Node's own
     `Map` what they print compiled (`tests/differential/unmodified.js`).
+- **`for...of` walks a table in insertion order**: `for (const k of m.keys())`,
+  `for (const v of m.values())`, and for a `Set`, `for (const x of s)`,
+  `s.keys()` and `s.values()`, which are one walk, as JavaScript's
+  `Set.prototype.keys` *is* `values` ([wp32-map.md](wp32-map.md) §6.2, §6.3;
+  `tests/cases/map_iter_keys`, `map_iter_values`, `set_iter`, `set_iter_keys`,
+  `set_iter_values`). The variable takes `K` or `V`, and a deleted key is not
+  visited.
+
+  ```typescript
+  export const main = (): i32 => {
+    const ages = new Map<string, i32>();
+    ages.set("ada", 36).set("alan", 41).set("grace", 85);
+    ages.delete("alan");
+    let total: i32 = 0;
+    for (const name of ages.keys()) {
+      console.log(name);                  // ada, then grace
+    }
+    for (const age of ages.values()) {
+      total += age;
+    }
+    return total === 121 ? 0 : 1;
+  };
+  ```
+
+  - **The table may change during the walk, with JavaScript's effect**, because
+    the walk re-reads the entry count every pass and no entry moves while a
+    loop walks the table. Each row is a golden whose output Node's own `Map`
+    prints too (`tests/differential/unmodified.js`):
+
+    | During the walk | Effect | Case |
+    | --- | --- | --- |
+    | `set` of a new key | visited later in the same walk | `map_iter_set_new`, `set_iter_values` |
+    | `set` of a key already there | the new value is seen if the walk has not reached the key yet, and the key keeps its place | `map_iter_set_existing` |
+    | `delete` of a key not yet visited | it is skipped | `map_iter_delete_ahead` |
+    | `delete`, then `set`, of one key | it is visited again, at the end | `map_iter_delete_reset` |
+    | `clear` | nothing more is visited, then whatever is set after it is | `map_iter_clear` |
+    | enough inserts to grow the table | invisible: the buckets move, the entries do not | `map_iter_growth` |
+
+  - **A walk defers compaction.** Compacting is the one thing that moves
+    entries, so each table counts the loops walking it: the count goes up where
+    a loop is entered and down on every edge that leaves it — the
+    fall-through, `break`, a `return` or an `orReturn()` out of any number of
+    walks around it — and not on `continue`. A rebuild while it is above zero
+    doubles the table instead, and the first rebuild after the walk compacts.
+    Churn during a walk moves nothing under it (`map_iter_compaction_deferred`),
+    and churn after a walk left by each kind of edge allocates nothing once
+    warm, which is a compacting table (`map_iter_break`, `map_iter_return`,
+    `map_iter_or_return`). Walks are lexical loops, so nested walks of one
+    table and a walk in a function called from a walk are counted exactly
+    (`map_iter_nested`, `map_iter_callee`). It costs two stores a loop and
+    none an entry. A walk never counts as a bounded loop: a body that sets a
+    new key every pass never ends, as in JavaScript. An insert that would pass
+    the 2^24 - 1 entry cap while a loop walks the table panics rather than
+    compacting.
+  - **The walk is four calls of the table's own code**: `walkOpen` where the
+    loop is entered, `walkNext` for the first live entry and after each pass,
+    `keyAt` or `valueAt` for the variable, and `walkClose` on each edge out,
+    all emitted `internal` into the module like the rest of the table
+    ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). Under `-g` the
+    variable is described in its slot like any `for...of` variable
+    (`dbg_map_iter`).
+  - **An iterator is not a value**, so `keys()` and `values()` anywhere but as
+    the iterable of a `for...of` are refused, naming the place:
+
+    | Place | Message after `` `keys()` of `Map<string, i32>` `` | Case |
+    | --- | --- | --- |
+    | a `const`, a `let`, or an assignment | ` cannot be stored` | `reject_map_iter_const`, `reject_map_iter_assign`, `reject_map_keys` (NL2372) |
+    | an argument | ` cannot be passed as an argument` | `reject_map_iter_argument` (NL2373) |
+    | a `return`, or a concise arrow body | ` cannot be returned` | `reject_map_iter_returned` (NL2374) |
+    | anywhere else, a dropped result or an uncalled `m.keys` included | `` can only be the iterable of a `for...of` `` | `reject_map_iter_statement`, `reject_map_iter_uncalled`, `reject_map_values` (NL2358) |
+
+    `for (const e of m)` over a `Map` itself would walk `entries()`, whose
+    `[key, value]` pairs need destructuring:
+    `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
+    rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
+    It reports once: the variable is an error that its body reads without a
+    second report (`reject_map_iter_recovery`). A spread and `for...in` do not
+    parse (`reject_map_iter_spread`, `reject_map_iter_for_in`), `keys()` takes
+    no argument (`reject_map_iter_arity`), and the variable has the type it
+    walks (`reject_map_iter_variable_type`).
 - **A module's own `Map` or `Set` wins in that module.** A module that
   declares or imports a class, interface, alias or enum of either name gets no
   implicit import, as the declaration shadows the global under `tsc`

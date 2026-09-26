@@ -1,0 +1,1 @@
+`keys()` of `Set<string>` cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used

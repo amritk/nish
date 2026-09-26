@@ -79,6 +79,7 @@ import {
   emitLibraryCopies,
   emitMapIntrinsic,
   emitMaybeLocal,
+  emitWalkExits,
   libraryReach,
   mapIntrinsicOf,
   maybeLocalIndex,
@@ -163,6 +164,12 @@ export class LoopTarget {
    */
   markBuf: string;
   markOff: string;
+  /**
+   * WP32: for a walk of the global `Map` or `Set`, the call that ends it,
+   * which a `return` out of the loop emits too (`emitWalkExits`); `""`
+   * otherwise.
+   */
+  walkClose: string;
 
   constructor(breakBlock: IRBlock, continueBlock: IRBlock | null) {
     this.breakBlock = breakBlock;
@@ -170,6 +177,7 @@ export class LoopTarget {
     this.hasBreak = false;
     this.markBuf = "";
     this.markOff = "";
+    this.walkClose = "";
   }
 
   scopesPass(): boolean {
@@ -529,6 +537,7 @@ export class Emitter {
    * everything bumped since, the inner passes' memory included.
    */
   emitScopeExit(): void {
+    emitWalkExits(this); // WP32: a `return` leaves every walk around it
     if (this.current.arenaScope) {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
       return;

@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 475;
+export const RULE_COUNT: i32 = 479;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -105,24 +105,32 @@ export const diagnosticRules = (): string[] => [
   "NL2324",
   "` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`",
   "NL2351",
+  " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
+  "NL2373",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
   "NL2354",
+  " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used",
+  "NL2374",
   "` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory",
   "NL2348",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
+  "`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of ",
+  "NL2375",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
   "NL2346",
-  "` can only be the iterable of a `for...of`: an iterator is not a value in this version, and iterating a `Map` or `Set` is not lowered yet",
-  "NL2358",
+  " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
+  "NL2372",
   " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
   "NL1001",
   "`: a `Map` or `Set` in this version has no `entries` or `forEach`, because there is no destructuring and a method cannot take a function",
   "NL2356",
   "` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's",
   "NL2327",
+  " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version",
+  "NL2358",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",

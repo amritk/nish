@@ -71,6 +71,7 @@ cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
 cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
+cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/fnarg_arrow added after R6: no rewriter to freeze it with
 cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
@@ -95,6 +96,20 @@ cases/map_get_value_i32 added after R6: no rewriter to freeze it with
 cases/map_get_value_string added after R6: no rewriter to freeze it with
 cases/map_get_value_widths added after R6: no rewriter to freeze it with
 cases/map_growth added after R6: no rewriter to freeze it with
+cases/map_iter_break added after R6: no rewriter to freeze it with
+cases/map_iter_callee added after R6: no rewriter to freeze it with
+cases/map_iter_clear added after R6: no rewriter to freeze it with
+cases/map_iter_compaction_deferred added after R6: no rewriter to freeze it with
+cases/map_iter_delete_ahead added after R6: no rewriter to freeze it with
+cases/map_iter_delete_reset added after R6: no rewriter to freeze it with
+cases/map_iter_growth added after R6: no rewriter to freeze it with
+cases/map_iter_keys added after R6: no rewriter to freeze it with
+cases/map_iter_nested added after R6: no rewriter to freeze it with
+cases/map_iter_or_return added after R6: no rewriter to freeze it with
+cases/map_iter_return added after R6: no rewriter to freeze it with
+cases/map_iter_set_existing added after R6: no rewriter to freeze it with
+cases/map_iter_set_new added after R6: no rewriter to freeze it with
+cases/map_iter_values added after R6: no rewriter to freeze it with
 cases/map_key_bool added after R6: no rewriter to freeze it with
 cases/map_key_class added after R6: no rewriter to freeze it with
 cases/map_key_enum added after R6: no rewriter to freeze it with
@@ -128,4 +143,7 @@ cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
+cases/set_iter added after R6: no rewriter to freeze it with
+cases/set_iter_keys added after R6: no rewriter to freeze it with
+cases/set_iter_values added after R6: no rewriter to freeze it with
 cases/set_str added after R6: no rewriter to freeze it with
