@@ -1,5 +1,5 @@
 // The internal-error report for stage1 (`reportInternalError` in
-// `src/index.ts`; docs/wp14-selfhost.md §7a).
+// stage0's `src/index.ts`; docs/wp14-selfhost.md §7a).
 //
 // A broken invariant is not the program's fault, so it does not go through the
 // diagnostic sink and it does not end the process the way a rejected program

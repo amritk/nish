@@ -10,8 +10,8 @@
  * with one line broken to show that each rule below is really enforced.
  *
  * **The registry is kept by hand now.** It used to be generated: this script
- * scanned `src/` for every diagnostic message, cut each at its interpolations,
- * and wrote the same table into `src/codes.ts` and `self/codes.ts`. That scan
+ * scanned stage0's `src/` for every diagnostic message, cut each at its interpolations,
+ * and wrote the same table into stage0's `src/codes.ts` and `self/codes.ts`. That scan
  * read stage0's source, and stage0 is deleted (wp19 §5 R6), so the generator
  * was frozen with the table it last wrote and `self/codes.ts` became the
  * registry. A new diagnostic gets its code by hand: append a fragment and the

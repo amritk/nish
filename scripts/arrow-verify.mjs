@@ -11,7 +11,7 @@
  *
  * WP22 §2 is the reason this is the right check rather than a proxy for one:
  * the emitter reads `FunctionSig`s and there is no `isFunctionDeclaration`
- * anywhere in `src/codegen/`, so an arrow-declared function must produce the
+ * anywhere in stage0's `src/codegen/`, so an arrow-declared function must produce the
  * same `define`, the same attributes and the same body. **A byte of difference
  * is a bug in the rewrite until proven otherwise.** §8 says the docs half of
  * stage C worked because `regen.sh` made that diff one command; this is the

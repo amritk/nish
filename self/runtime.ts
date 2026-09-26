@@ -1,10 +1,10 @@
 // The runtime ABI as seen from LLVM IR, for stage1
-// (`src/codegen/runtime.ts`, docs/wp14-selfhost.md milestone S4).
+// (stage0's `src/codegen/runtime.ts`, docs/wp14-selfhost.md milestone S4).
 //
 // `runtime/runtime.c` implements these symbols. Everything here is a
 // *contract*: the struct layouts and signatures must match the C side exactly,
 // and the order of `RuntimeTable.functions` is the order the prelude declares
-// them in, so it is the order `src/codegen/runtime.ts` lists them in and not a
+// them in, so it is the order stage0's `src/codegen/runtime.ts` lists them in and not a
 // convenient one.
 //
 // The arena bump allocation fast path is not a call into C at all: it is
@@ -17,7 +17,7 @@
 // not in `runtime.c`. `--threads` answers it by declaring `@nish_arena`
 // thread-local (`ARENA_GLOBAL_TLS`); the allocator body does not change.
 //
-// `src/` keeps the table as an array of object literals and a `Map` beside it.
+// stage0's `src/` keeps the table as an array of object literals and a `Map` beside it.
 // Here it is a class built once per compilation: the same array, with a
 // `StringMap` from symbol to index so the attribute fixpoint can ask about a
 // callee by name.
@@ -181,7 +181,7 @@ export class RuntimeTable {
     return at < 0 ? null : this.functions[at];
   }
 
-  /** One `llvm.<op>.<type>` family member per type, in the order `src/` builds them. */
+  /** One `llvm.<op>.<type>` family member per type, in the order stage0's `src/` builds them. */
   addIntrinsic(name: string, ret: string, params: string): void {
     this.add(intrinsic(name, ret, params));
   }

@@ -38,7 +38,7 @@ ported or adapted from elsewhere keeps its upstream notice and is listed in
 `THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
 
 **There is one compiler, and a construct is written once, in `self/`.** The
-TypeScript implementation that used to sit beside it in `src/` was deleted in
+TypeScript implementation that used to sit beside it in stage0's `src/` was deleted in
 WP19 R6 (`docs/wp19-stage0-retirement.md`). `self/` is built by the last
 released `nish` — the seed, which `scripts/fetch-seed.sh` puts in `build/seed/`
 — so `self/` may not *use* a new construct in its own source until the next

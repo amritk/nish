@@ -15,10 +15,10 @@ cases listed at the end.
 
 | Piece | Checker | Emitter |
 | --- | --- | --- |
-| Shared plumbing (`dottedName`, arity checks, `BuiltinCall` shape) | `src/checker/builtins.ts` | `src/codegen/emit/builtins.ts` |
-| `Math.*`, `toI32/toI64/toF64`, `parseInt/parseFloat/Number`, literal typing | `src/checker/math.ts` | `src/codegen/emit/math.ts` |
-| `process.exit`, `process.argv`, `readFileSync`, `writeFileSync`, `appendFileSync` | `src/checker/io.ts` | `src/codegen/emit/io.ts` |
-| The `@main` wrapper (`nish_argv_init` call), `@nish_argv` in the `--runtime-decls` prelude | `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | `src/codegen/emitter.ts` |
+| Shared plumbing (`dottedName`, arity checks, `BuiltinCall` shape) | stage0's `src/checker/builtins.ts` | stage0's `src/codegen/emit/builtins.ts` |
+| `Math.*`, `toI32/toI64/toF64`, `parseInt/parseFloat/Number`, literal typing | stage0's `src/checker/math.ts` | stage0's `src/codegen/emit/math.ts` |
+| `process.exit`, `process.argv`, `readFileSync`, `writeFileSync`, `appendFileSync` | stage0's `src/checker/io.ts` | stage0's `src/codegen/emit/io.ts` |
+| The `@main` wrapper (`nish_argv_init` call), `@nish_argv` in the `--runtime-decls` prelude | stage0's `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | stage0's `src/codegen/emitter.ts` |
 | The `wasi` profile and the runtime's `__wasi__` guards | `scripts/build.sh` | `runtime/runtime.c` |
 
 Dotted callees (`Math.sqrt`, `process.exit`) are spread into the existing
@@ -27,14 +27,14 @@ identifier callees (`toI32`, `readFileSync`) go through a second pair of
 tables, `builtinFunctions` (checker) and `builtinFunctionEmitters` (emitter),
 consulted only when no user function of that name is in scope, so a user
 `function toI32(...)` shadows the builtin. Declarations of runtime symbols
-and intrinsics come from `src/codegen/runtime.ts`; a module declares exactly
+and intrinsics come from stage0's `src/codegen/runtime.ts`; a module declares exactly
 the ones it uses (intrinsics are never part of the `--runtime-decls` prelude,
 which documents the C ABI).
 
 ## Builtins
 
 Effects are the `MemoryEffect` fed to the purity fixpoint in
-`src/codegen/attributes.ts`: `none` keeps the caller `readnone`, `read` makes
+stage0's `src/codegen/attributes.ts`: `none` keeps the caller `readnone`, `read` makes
 it at most `readonly`, `write` clears both.
 
 ### Math (f64 only)
@@ -200,7 +200,7 @@ argument, then each string as its own `{ len, bytes, 0 }` block, so
 convention shifted by one, since there is no interpreter in front); the
 differential shim maps it to `process.argv.slice(1)` for the same shape.
 
-Three rules, all in `checkProcessArgv` (`src/checker/io.ts`):
+Three rules, all in `checkProcessArgv` (stage0's `src/checker/io.ts`):
 
 - **It needs an entry point.** Only the `@main` wrapper has `argc`/`argv`,
   so a program without `export function main` (a wasm or N-API library, a
@@ -325,7 +325,7 @@ attributes #0 = { nounwind willreturn readnone }
 A numeric literal has the mode's default type (`i32`, or `f64` under
 `--number-mode f64`) *unless its immediate context demands another numeric
 type*, in which case it takes that type. The contexts, in
-`contextualLiteralType` (`src/checker/math.ts`):
+`contextualLiteralType` (stage0's `src/checker/math.ts`):
 
 | Context | Example | Literal type |
 | --- | --- | --- |
@@ -718,7 +718,7 @@ does not show above the noise (±4 ms between repetitions of either binary).
 
 **Where the link lines are.** `scripts/build.sh` compiles `runtime_os.c` beside
 any `runtime.c` it is handed, so every caller that names the runtime through it
-is already correct: `nish --link` (`src/index.ts`), stage1's `--link`
+is already correct: `nish --link` (stage0's `src/index.ts`), stage1's `--link`
 (`self/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
 profile builds in `tests/run.js`, `tests/differential/lib.js` (through
 `--link`), and every `--profile` recipe in these documents and in the README. A

@@ -25,7 +25,7 @@ hold it: the date, the machine, the toolchain versions, and the compiler's own
 `--version` line and commit. The checked-in report therefore reads
 `nish 0.0.0 (commit c72a68f)` — it was measured before the first release moved
 `package.json` off `0.0.0`, and the commit it names is the working commit of
-that run. The numbers are still the current compiler's: nothing in `src/`,
+that run. The numbers are still the current compiler's: nothing in stage0's `src/`,
 `self/`, `runtime/` or `bench/` has changed since that run, only the release
 plumbing and the version string. Do not correct the header by hand;
 `docs/BENCHMARKS.md` is generated, and a header edited to say something the run

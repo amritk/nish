@@ -48,7 +48,7 @@ import { square, cube as pow3 } from "./math";
 
 ### Whole-program compilation
 
-`src/compilation.ts` owns the program:
+stage0's `src/compilation.ts` owns the program:
 
 1. **Load.** The root file(s) are parsed; every `import` is resolved and the
    target is loaded recursively. Each file is parsed exactly once (keyed by

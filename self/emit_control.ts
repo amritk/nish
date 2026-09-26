@@ -1,9 +1,9 @@
-// Control-flow lowering for stage1 (`src/codegen/emit/control-flow.ts`,
+// Control-flow lowering for stage1 (stage0's `src/codegen/emit/control-flow.ts`,
 // docs/wp14-selfhost.md milestone S4): `if`, the loops, `switch`,
 // `break`/`continue`, `throw`, the ternary and the short-circuit operators,
 // compound assignment on a local and `++`/`--`.
 //
-// Block layout follows clang, and the labels are the ones `src/` reserves:
+// Block layout follows clang, and the labels are the ones stage0's `src/` reserves:
 // `if.then`, `if.else`, `if.end`, suffixed `.N` on reuse, with the blocks
 // placed in control-flow order. Every placed block ends in a terminator — a
 // block that cannot fall through is left alone, and the exit block of an

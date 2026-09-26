@@ -18,11 +18,11 @@ two agree: `IR(stage0, p) == IR(stage1, p)` byte for byte over all six
 `res_*` cases and the `result_import` link test, and every one of the ten
 `reject_result_*` messages matching character for character.
 
-Files, stage0: `src/types.ts` (the type and its mangling),
-`src/checker/result.ts` (the rules), `src/checker/narrowing.ts` (the engine
-`T | null` and `Result` now share), `src/codegen/emit/result.ts` (the
-lowering), `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
-pointer facts), `src/validator.ts` (Phase 0 refuses `throw`).
+Files, stage0: stage0's `src/types.ts` (the type and its mangling),
+stage0's `src/checker/result.ts` (the rules), stage0's `src/checker/narrowing.ts` (the engine
+`T | null` and `Result` now share), stage0's `src/codegen/emit/result.ts` (the
+lowering), stage0's `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
+pointer facts), stage0's `src/validator.ts` (Phase 0 refuses `throw`).
 Stage1, mirroring each: `self/types.ts`, `self/annotations.ts`,
 `self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit_result.ts`,
 `self/escape.ts`, `self/attributes.ts`, `self/validator.ts`.
@@ -108,7 +108,7 @@ WP18 added them later ([wp18-generics.md](wp18-generics.md) §15).
 a `{ kind: "result", ok, err, state }`.
 
 Each distinct pair gets one LLVM struct, named by a prefix-coded mangling of
-the two payload types (`src/types.ts`, `mangleType`): `Result<i32, string>` is
+the two payload types (stage0's `src/types.ts`, `mangleType`): `Result<i32, string>` is
 `%struct.nish_result.i32.str`, `Result<i32, IoError>` is
 `%struct.nish_result.i32.$IoError`. Writing each constructor's tag before its
 operands makes the encoding unambiguous without separators of its own —
@@ -117,7 +117,7 @@ cannot appear in a TypeScript identifier, so a class called `res` cannot
 collide with the `Result` constructor.
 
 The layout is **derived, never declared** (`resultLayout` in
-`src/checker/result.ts`): both the checker and the emitter compute it from the
+stage0's `src/checker/result.ts`): both the checker and the emitter compute it from the
 type, so there is no registry entry to keep in sync and an imported signature
 that mentions a `Result` needs nothing brought across but the layouts of its
 payloads (`tests/link/result_import`).
@@ -144,7 +144,7 @@ spellings that reach a payload, there is no way to write the success path
 before the failure path has been decided.
 
 The narrowing is not new machinery. WP6 already had a flow engine for
-`T | null`, and this package extracted it into `src/checker/narrowing.ts` with
+`T | null`, and this package extracted it into stage0's `src/checker/narrowing.ts` with
 a small registry: `nullable.ts` contributes the rule that recognises a null
 test, `result.ts` the one that recognises a discriminant test, and the engine
 owns the boolean algebra (`!`, `&&`, `||`, parentheses) and the scope

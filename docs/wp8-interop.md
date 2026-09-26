@@ -55,7 +55,7 @@ proof that gives the IR parameter `readonly`, and `nish_array *` otherwise.
 
 `runtime/nish.h` also declares `struct nish_arena` with its global
 (the compiled fast path bumps it directly, so the layout is ABI) and every
-runtime function from `src/codegen/runtime.ts`; `tests/run.js` fails if the
+runtime function from stage0's `src/codegen/runtime.ts`; `tests/run.js` fails if the
 two drift apart. The header is C11 and C++ clean under `-Wall -Wextra
 -Werror -pedantic`.
 
@@ -175,7 +175,7 @@ export function load(bytes: BufferSource): Promise<Exports>;
 ```
 
 The declarations and the loader are generated from **one** predicate,
-`wasmSkipReason` in `src/interop/wasm.ts`: a function is declared exactly when
+`wasmSkipReason` in stage0's `src/interop/wasm.ts`: a function is declared exactly when
 the loader has an entry for it, so neither file can describe a function the
 other omits. They used to be two predicates and they drifted — the declarations
 grew the unsigned widths while the loader's crossing test did not, so
@@ -192,7 +192,7 @@ shim accepts):
   // spell(n: number): string  -- not exported to JS: the result is `string`, which needs the Nish runtime the freestanding wasm profile does not include
 ```
 
-The loader (`src/interop/wasm.ts`) instantiates the module and returns the
+The loader (stage0's `src/interop/wasm.ts`) instantiates the module and returns the
 raw exports with every array-taking function wrapped. A scalar-only export is
 passed through untouched unless one of its types is narrower or wider than the
 wasm value type carrying it. A wrapped call, `scale(xs, 2)`:
@@ -636,9 +636,9 @@ real pass over the buffer on top of the crossing.
 | --- | --- |
 | `runtime/nish.h` | Public C header: `nish_str`, `nish_array`, `struct nish_arena`, runtime prototypes (`nish_alloc_array` included), `NISH_SYMBOL`. |
 | `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
-| `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
-| `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
-| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
+| stage0's `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
+| stage0's `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
+| stage0's `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
 | `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same four flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all five generated files compared byte for byte — the asynchronous shim among them. |
 | `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |

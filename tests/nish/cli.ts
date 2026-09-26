@@ -324,7 +324,7 @@ const toolName = (manifest: string): string | null => {
  *
  * Taking them from the manifest rather than writing them here is what stops this
  * file from being the thing that goes red at a release: the version moves in
- * `package.json`, the compiler bakes it in (`src/branding.ts`,
+ * `package.json`, the compiler bakes it in (stage0's `src/branding.ts`,
  * `self/branding.ts`), and the expectation follows both.
  */
 const checkIdentity = (t: Suite, cli: Cli): string => {
@@ -398,7 +398,7 @@ const checkUsageErrors = (t: Suite, cli: Cli): void => {
  *
  * Where the `wrote <file>` line goes is the half of the contract that decides
  * whether `--json` can be read at all: it is progress and not output, so it is on
- * stderr (`src/index.ts` writes it with `console.error`), which leaves stdout to
+ * stderr (stage0's `src/index.ts` writes it with `console.error`), which leaves stdout to
  * `--help`, the dump flags and the objects. A consumer can therefore read stdout
  * whole, and the `{`-line filter that `tests/run.js` and this file both apply is
  * belt and braces rather than the mechanism.

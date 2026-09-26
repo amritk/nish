@@ -129,10 +129,10 @@ when you touch the code next to them:
 - **Runtime ABI comments live on both sides.** A layout described in
   `self/runtime.ts` is described the same way in `runtime/nish.h`;
   a change to one without the other is what `tests/run.js` exists to catch.
-- **A citation of `src/` in `self/` is history, not a pointer.** Most `self/`
+- **A citation of stage0's `src/` in `self/` is history, not a pointer.** Most `self/`
   module headers name the TypeScript module they were ported from
-  (`src/validator.ts`, "the stage0 twin"). That compiler was deleted in WP19
+  (stage0's `src/validator.ts`, "the stage0 twin"). That compiler was deleted in WP19
   R6, so the file named is not there to read; where a header says a rule is
-  "not restated" because `src/` has it, the rule now lives only in the code
+  "not restated" because stage0's `src/` has it, the rule now lives only in the code
   beside the comment and in `docs/`. Re-state such a header in the present
   tense when you touch its module.

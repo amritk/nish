@@ -59,7 +59,7 @@ path	/a/b.ts	../lib/util.ts
 path	x	.ts
 path	/a	.ts
 
-# WP21 S2: `self/manifest.ts` against `src/manifest.ts`, which is the only
+# WP21 S2: `self/manifest.ts` against stage0's `src/manifest.ts`, which is the only
 # implementation either of them has to agree with — the rule is this project's,
 # not Node's, so there is no third opinion to appeal to. Tab separated:
 # `pkg <subpath> <primary condition> <fallback condition> <package.json>`.

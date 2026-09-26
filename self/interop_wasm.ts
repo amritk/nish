@@ -1,4 +1,4 @@
-// The companion of `--emit-dts` (`src/interop/wasm.ts`, WP8): a small ES
+// The companion of `--emit-dts` (stage0's `src/interop/wasm.ts`, WP8): a small ES
 // module, `<stem>.mjs` next to the `.d.ts`, whose `load(bytes)` instantiates
 // the wasm build and wraps every export that takes or returns an array.
 //

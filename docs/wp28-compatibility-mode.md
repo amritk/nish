@@ -38,7 +38,7 @@ language.** Five rules, and every later section is one of them worked out:
 3. **Every compatibility construct prints its bill.** Each one costs a proof
    the whole-program fixpoint was making, and the compiler says which, where,
    and what the rewrite is. The diagnostic class for this **already exists** —
-   `performance`, WP15 item 2, `PerformanceWarning` in `src/diagnostics.ts`,
+   `performance`, WP15 item 2, `PerformanceWarning` in stage0's `src/diagnostics.ts`,
    the `NL9xxx` band, `--json`, `--no-warn-performance`. No new class is
    needed, and that is the single cheapest thing on this page.
 4. **The ratchet is one list, not one flag per feature.** `--compat=<features>`
@@ -439,7 +439,7 @@ of `g`, and Node would interleave them at their `await` points.
 Unless neither call can tell. If the whole-program fixpoint proves `f` and `g`
 do not interfere — `readnone` or `readonly`, or writes through provably
 disjoint pointers — then no interleaving is observable, and both orders are
-the same program. `src/codegen/attributes.ts` computes this today for other
+the same program. stage0's `src/codegen/attributes.ts` computes this today for other
 reasons.
 
 Two things fall out, and the second is the best technical result on this page:

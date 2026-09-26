@@ -1,4 +1,4 @@
-// Classes and interfaces for stage1 (`src/checker/classes.ts` pass 1,
+// Classes and interfaces for stage1 (stage0's `src/checker/classes.ts` pass 1,
 // docs/wp14-selfhost.md milestone S3): names, fields and their layout,
 // methods, the constructor and `implements`.
 //
@@ -447,7 +447,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   // The order is stage0's and is load-bearing: a field carries the name's
   // marker and its modifiers at once, and `static x?: i32` has to get the same
   // one of the three sentences from both compilers. stage0 reads the marker
-  // first for a field (`src/checker/classes.ts`, collectField) and the
+  // first for a field (stage0's `src/checker/classes.ts`, collectField) and the
   // modifiers first for a method (rejectMethodModifiers), so the two lists
   // below are deliberately not in the same order as each other.
   //
@@ -509,7 +509,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
  * The modifiers a method or a constructor may not carry, in stage0's order.
  *
  * stage0 walks the modifier list in source order and reports the first one the
- * member cannot have (`rejectMethodModifiers` in `src/checker/classes.ts`);
+ * member cannot have (`rejectMethodModifiers` in stage0's `src/checker/classes.ts`);
  * both `static` and `readonly` are, so which of the two was written first
  * decides the sentence. The parser hands that over as `FLAG_STATIC_FIRST`
  * rather than as a list, because it is the only ordering anything asks about.

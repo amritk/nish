@@ -489,7 +489,7 @@ jobs:
   #
   # This is the check that replaced `tests/self/ir_oracle.js` and
   # `tests/self/interop_oracle.js`, the two largest of the six oracles R6
-  # deleted with `src/`. What they proved -- the IR of every module of every
+  # deleted with stage0's `src/`. What they proved -- the IR of every module of every
   # corpus program, and the four WP8 sidecars derived from the same checked
   # program -- they proved by comparing two implementations. There is only one
   # now, so the comparison changed axis: not stage0 against stage1, but the

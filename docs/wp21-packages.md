@@ -73,7 +73,7 @@ says why those two are the one pair this compiler ranks itself rather than
 leaving to the order the manifest wrote them in.
 
 `"nish"` is what it ended up being, and it is a spelling of the project's name,
-so it lives in `src/branding.ts` and `self/branding.ts` with the rest of them
+so it lives in stage0's `src/branding.ts` and `self/branding.ts` with the rest of them
 (orientation rule 5) as `PACKAGE_CONDITION` — where both compilers read it, which
 is what makes them agree about which file a package offers.
 
@@ -414,7 +414,7 @@ function are untouched. A prefix appears only where a second package does,
 which is a program that did not compile at all until now.
 
 The qualification happens in one place per compiler, at the end of pass 1
-(`Checker.qualifySymbols` in `src/checker/index.ts` and `self/checker.ts`),
+(`Checker.qualifySymbols` in stage0's `src/checker/index.ts` and `self/checker.ts`),
 after every signature exists — so a free function, a method and a constructor
 are scoped by the same line of code and nothing added later can forget to be.
 
@@ -568,7 +568,7 @@ outcome this project will not ship.
 
 It was closed by driving **both** walks from the importing module's *name* —
 the string both compilers hold for it (WP19 §A3) — rather than one of them from
-the working directory. `src/compilation.ts` grew the same `parentDirectory` and
+the working directory. stage0's `src/compilation.ts` grew the same `parentDirectory` and
 the same 256-level limit, and the two now visit the same directories in the same
 order because they are given the same input and take the same steps, which is a
 stronger statement than "they agree about the tests". What it gives up is Node's
@@ -584,7 +584,7 @@ answer from each (§10e).
 
 ### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
 
-`src/manifest.ts` and `self/manifest.ts` are the same narrow scan rather than a
+stage0's `src/manifest.ts` and `self/manifest.ts` are the same narrow scan rather than a
 parser and a hand-rolled twin. That is the one design decision in this stage
 worth arguing about, so it is written down: stage1 has no `JSON.parse`, the two
 compilers must select the *same file* for the same manifest, and a program that
@@ -708,7 +708,7 @@ disappeared and `packages.ts` says so.
   reach a host is a re-export from the root package — `export { f } from "pkg"`,
   which the language does not have and which `docs/LANGUAGE.md` rejects by name.
   It waits on that construct rather than on a stage here, and
-  `src/interop/abi.ts` and `self/interop_abi.ts` say so at the line that
+  stage0's `src/interop/abi.ts` and `self/interop_abi.ts` say so at the line that
   skips a dependency's module.
 
 ### 10e. What proves it
@@ -729,8 +729,8 @@ because the compiler ranks the two conditions itself (§10a). A fixture in the
 order that already worked is what let the wrong rule survive a round of review,
 so both orders are pinned now.
 
-`tests/link/package_above/` is the walk: the manifest beside `src/` rather than
-inside it, compiled as `nish main.ts` from `src/`, which is the ordinary npm
+`tests/link/package_above/` is the walk: the manifest beside stage0's `src/` rather than
+inside it, compiled as `nish main.ts` from stage0's `src/`, which is the ordinary npm
 layout compiled the ordinary way and the case that tells a walk that stops at
 the working directory from one that climbs past it. `tests/run.js` compiles it
 with **both** compilers from that subdirectory and compares every byte of every

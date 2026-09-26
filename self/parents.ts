@@ -5,14 +5,14 @@
 // which is a better fit for a single pass and is why `self/nodes.ts` carries
 // no `parent` field. The emitter's escape analysis is the one place that
 // genuinely reads upwards — "what does the enclosing construct do with this
-// value?" is a question about the consumer, and `src/codegen/escape.ts` and
+// value?" is a question about the consumer, and stage0's `src/codegen/escape.ts` and
 // `attributes.ts` both answer it by walking `node.parent`.
 //
 // So the links are built here, once, as a side table indexed by `Node.id`,
 // which is the same shape every other side table in stage1 has
 // (`self/program.ts`). The AST still holds syntax only.
 //
-// One thing to know when reading a walk against `src/`: an argument list is
+// One thing to know when reading a walk against stage0's `src/`: an argument list is
 // an `N_LIST` node in this tree and is not in the `typescript` one, so the
 // parent of an argument is the list and the construct that consumes it is the
 // node above that. Every upward walk in `self/escape.ts` handles that step

@@ -2,6 +2,8 @@
 
 # Nish
 
+**Native Instruction Static Host AKA Turbo Typescript. A fast subset of typescript without the encumbrance of javascript.**
+
 **An ahead-of-time compiler for a strictly static subset of TypeScript — LLVM IR in the middle, native binaries at the end. No interpreter, no garbage collector, nothing to ship beside the executable.**
 
 ![status](https://img.shields.io/badge/status-pre--alpha-ef4444?style=flat-square)
@@ -490,7 +492,7 @@ Because the seed is the last release, `self/` may only *use* in its own
 source what that release compiles. A new construct is implemented in `self/`
 and becomes usable inside `self/` from the next release on — the rolling
 freeze CI's `bootstrap` job checks. Until R6 there was a second compiler, the
-TypeScript one in `src/`, which seeded every bootstrap and served as the
+TypeScript one in stage0's `src/`, which seeded every bootstrap and served as the
 oracle each `self/` phase was compared against; it was deleted once the
 self-hosted compiler did everything it did
 ([wp19](docs/wp19-stage0-retirement.md)).

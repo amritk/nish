@@ -1,9 +1,9 @@
 // Function and parameter attribute analysis for stage1
-// (`src/codegen/attributes.ts`, docs/wp14-selfhost.md milestone S4).
+// (stage0's `src/codegen/attributes.ts`, docs/wp14-selfhost.md milestone S4).
 //
 // Everything emitted here must be a *guarantee*, never a hope: a wrong
 // attribute is undefined behaviour, not a missed optimisation. The proofs are
-// the ones `src/codegen/attributes.ts` states at length and they are not
+// the ones stage0's `src/codegen/attributes.ts` states at length and they are not
 // repeated here; what follows is only what is different about this
 // implementation, because the rules themselves must not drift.
 //
@@ -21,7 +21,7 @@
 //
 // Three shape changes, all forced and none visible in the output:
 //
-//   - **The fact collectors live here**, not beside the lowerings. `src/`
+//   - **The fact collectors live here**, not beside the lowerings. stage0's `src/`
 //     registers them into a `factCollectors` array from each `emit/*.ts`,
 //     which needs function values; D2 already took the central `switch` for
 //     the same reason. The invariant that mattered — a collector says exactly
@@ -239,7 +239,7 @@ export class LoopScope {
  * It lives here rather than in `emit_arrays.ts` because `FunctionFacts` is the
  * per-function record the emitter already carries (`Emitter.current`), and the
  * language has no module-level mutable state for a scope stack to live in --
- * which is how `src/codegen/emit/arrays.ts` holds the same thing.
+ * which is how stage0's `src/codegen/emit/arrays.ts` holds the same thing.
  */
 export class HoistedHeader {
   /** The binding the path is rooted at; identity, not name, is what matches. */
@@ -2232,7 +2232,7 @@ const INT32_MAX: f64 = 2147483647.0;
  * True for `for (let i = <init>; i CMP bound; STEP) body` over i32 when the
  * trip count is finite by construction, which is what lets the enclosing
  * function keep `willreturn`. The rules, and the reasoning behind each, are in
- * `src/codegen/attributes.ts`; this is the same predicate over this tree.
+ * stage0's `src/codegen/attributes.ts`; this is the same predicate over this tree.
  *
  * A `for...of` over an array is counted unless its body may extend the array.
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
@@ -2296,7 +2296,7 @@ export const isCountedLoop = (
       return false;
     }
   } else if (upward) {
-    // In `f64`, as `src/` computes it: a bound past the i32 range must still
+    // In `f64`, as stage0's `src/` computes it: a bound past the i32 range must still
     // compare as out of range rather than wrapping into it.
     const written: f64 = Number(bound.text);
     const last: f64 = inclusive ? written : written - 1.0;

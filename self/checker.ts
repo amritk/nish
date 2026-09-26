@@ -1,4 +1,4 @@
-// The checker's first pass for stage1 (`src/checker/index.ts`,
+// The checker's first pass for stage1 (stage0's `src/checker/index.ts`,
 // docs/wp14-selfhost.md milestone S3): signatures, so that functions can call
 // each other in any order and an annotation anywhere can name any class.
 //
@@ -8,7 +8,7 @@
 // (`implements`). Recovery is per declaration — a rejected class, import or
 // signature is reported and the next declaration is collected — which is
 // WP10's multi-error guarantee, and here it is D1's status returns rather
-// than the six `try`/`catch` sites `src/` uses.
+// than the six `try`/`catch` sites stage0's `src/` uses.
 
 import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations";
 import { checkElementReferences } from "./arrays";
@@ -190,7 +190,7 @@ export class Checker {
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
       // rejected class or constant costs its own diagnostic and no more
-      // (`collectSignatures` in `src/checker/index.ts`).
+      // (`collectSignatures` in stage0's `src/checker/index.ts`).
       this.ctx.errored = false;
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
         const info = this.program.struct(stmt.children[0].text);
@@ -1186,7 +1186,7 @@ const nameOf = (sig: FunctionSig): Node =>
 
 // ---- WP15 §8: the `performance` diagnostic class --------------------------------
 //
-// The stage1 half of `src/checker/performance.ts`; every rule, every guard and
+// The stage1 half of stage0's `src/checker/performance.ts`; every rule, every guard and
 // every word of both messages is that file's, because `tests/run.js` and the
 // stage1 oracles compare the two compilers byte for byte.
 //
@@ -1835,7 +1835,7 @@ const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
 
 // ---- Memory that is allocated and then never released ----------------------------
 //
-// The stage1 half of the same rule in `src/checker/performance.ts`, where the
+// The stage1 half of the same rule in stage0's `src/checker/performance.ts`, where the
 // measurement and the reasoning are written out. In short: WP6 releases a
 // function's arena temporaries on the way out only when it can prove they all
 // die with the frame, and assigning an allocation to a local takes that proof
@@ -2003,7 +2003,7 @@ const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
 
 // ---- Arithmetic that provably goes wrong (the overflow rules) --------------------
 //
-// The stage1 half of the same three rules in `src/checker/performance.ts`. The
+// The stage1 half of the same three rules in stage0's `src/checker/performance.ts`. The
 // reasoning for each one is written out there; what matters here is that every
 // guard and every word of every message is that file's, because the oracles
 // compare the two compilers byte for byte.

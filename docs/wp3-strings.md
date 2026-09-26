@@ -15,13 +15,13 @@ A `string` is an `i8*` that points at a header:
 ```
 
 `runtime/runtime.c` (`nish_str`) and every `nish_str_*` declaration in
-`src/codegen/runtime.ts` expect the pointer to the *header*, never to the
+stage0's `src/codegen/runtime.ts` expect the pointer to the *header*, never to the
 data. The trailing NUL keeps strings passable to C. Literals are module
 constants with this exact layout; strings built at run time come from the
 arena. Because strings are immutable, a pointer can be shared freely and no
 copy is ever made.
 
-Attribute consequences (see `src/codegen/attributes.ts`): string parameters
+Attribute consequences (see stage0's `src/codegen/attributes.ts`): string parameters
 are `nonnull noalias readonly align 8`, plus `nocapture` when they are never
 returned and never passed to a *user* function (every runtime string
 function is declared `nocapture`, so passing a parameter to `nish_print` or
@@ -296,8 +296,8 @@ entry:
 `nish_print` is one `write(2)` of the bytes plus one of `"\n"`; no stdio.
 
 Calls whose callee is a dotted name (`console.log`, later `Math.sqrt`) are
-dispatched through the `builtinCalls` table in `src/checker/strings.ts` and
-`builtinCallEmitters` in `src/codegen/emit/strings.ts`, keyed by the dotted
+dispatched through the `builtinCalls` table in stage0's `src/checker/strings.ts` and
+`builtinCallEmitters` in stage0's `src/codegen/emit/strings.ts`, keyed by the dotted
 name. Adding a builtin means adding one entry to each.
 
 ## Rejected forms
@@ -314,7 +314,7 @@ name. Adding a builtin means adding one entry to each.
 
 ## Purity facts
 
-`collectStringFacts` in `src/codegen/emit/strings.ts` tells the attribute
+`collectStringFacts` in stage0's `src/codegen/emit/strings.ts` tells the attribute
 analysis exactly which runtime symbols a construct lowers to, so the effect
 fixpoint in `attributes.ts` sees them through `RUNTIME_BY_NAME`:
 

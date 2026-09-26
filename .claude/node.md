@@ -76,9 +76,9 @@ Two artefacts have a `--check` mode and both are gates: `docs/IR_COOKBOOK.md`,
 and the diagnostic-code registry.
 
 **The registry, `self/codes.ts`, is kept by hand.** Until WP19 R6
-`scripts/gen-diagnostic-codes.mjs` wrote it — and a copy in `src/` — from a scan
+`scripts/gen-diagnostic-codes.mjs` wrote it — and a copy in stage0's `src/` — from a scan
 of the TypeScript compiler's sources; that scan had nothing left to read once
-`src/` was deleted, so the generator is frozen and only checks. Adding a
+stage0's `src/` was deleted, so the generator is frozen and only checks. Adding a
 diagnostic means adding its fragment to `self/codes.ts` with the next free
 number in its band. **A number is never moved, reused or handed out twice**: a
 retired message keeps its entry, and `--check` fails on a duplicate code or an

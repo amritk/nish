@@ -1,5 +1,5 @@
 // The standard library, as the resolver sees it: where it lives and what is in
-// it (`src/std-modules.ts` is the stage0 twin).
+// it (stage0's `src/std-modules.ts` is the stage0 twin).
 //
 // This is the counterpart of `nish_modules.ts`, and the contrast is the point.
 // A `nish:` module is a builtin — no file, no code, nothing linked. A `nish/`
@@ -19,7 +19,7 @@ export const STD_DIR: string = "std";
 
 /**
  * `nish/text` -> `std/text.ts`: the name a standard-library module carries in
- * its IR header, its `DIFile` and its diagnostics (`src/std-modules.ts` answers
+ * its IR header, its `DIFile` and its diagnostics (stage0's `src/std-modules.ts` answers
  * the same string).
  *
  * Package-relative and nothing else, which is the half of a module's identity
@@ -46,7 +46,7 @@ export const stdModulePath = (root: string, specifier: string): string =>
 
 /**
  * Whether `nish/<name>` names a module *inside* the library
- * (`isStdModuleName` in `src/std-modules.ts` is the same rule).
+ * (`isStdModuleName` in stage0's `src/std-modules.ts` is the same rule).
  *
  * `parseBareSpecifier`'s rule, one package along: no segment may be empty or
  * begin with a `.`, which rules out a `..` climbing out of the package and a

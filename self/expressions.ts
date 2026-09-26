@@ -1,8 +1,8 @@
-// Expression checking for stage1 (`src/checker/expressions.ts`,
+// Expression checking for stage1 (stage0's `src/checker/expressions.ts`,
 // docs/wp14-selfhost.md milestone S3, pass 2).
 //
 // **One central `switch`, not a dispatch table.** That is decision D2 of §3a,
-// taken with its cost known: `src/checker/arrays.ts` adds `for...of` by
+// taken with its cost known: stage0's `src/checker/arrays.ts` adds `for...of` by
 // writing one line into a table and touching no other file, and here
 // `checkExpression` must name every construct. The reasons it still wins are
 // that a `switch` on a node kind lowers to an LLVM `switch` and therefore a
@@ -387,7 +387,7 @@ const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
     // spell `INT_MIN` rather than overflowing the positive half.
     // `at` is the whole `-1`: stage0 hands the literal's *parent* to the
     // refusal so the caret covers the sign (`contextualLiteralType` in
-    // `src/checker/math.ts`), and the digits alone start a column late.
+    // stage0's `src/checker/math.ts`), and the digits alone start a column late.
     const type = checkNumericLiteral(ctx, operand, want, true, expr);
     ctx.program.nodeTypes[operand.id] = type;
     return type;
@@ -412,7 +412,7 @@ const checkUnary = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
     if (!isInteger(type)) {
       // With the same hint the binary operators carry: an `f64` here is
       // usually the mode's `number` rather than a deliberate annotation
-      // (`checkBitwiseNot` in `src/checker/bitwise.ts`).
+      // (`checkBitwiseNot` in stage0's `src/checker/bitwise.ts`).
       return ctx.errorType(
         expr,
         `Operator \`~\` requires an integer operand, got ${ctx.table.typeName(type)}${f64Hint(ctx, type, type)}`
@@ -607,7 +607,7 @@ const pathStruct = (ctx: CheckContext, path: Node, scope: Scope): StructInfo | n
  *
  * stage0 has no `want` to thread down here at all — `contextualLiteralType`
  * reaches a literal's binary parent and asks `peekType` about the sibling, and
- * nothing above the operator is consulted (`src/checker/math.ts`). So in f64
+ * nothing above the operator is consulted (stage0's `src/checker/math.ts`). So in f64
  * mode `toF64((ij * (ij + 1)) / 2 + i + 1)` types the `1` from `ij: i32` and
  * stays integer arithmetic, where taking the `f64` the call wants would make
  * every `+` in it mix widths (bench/spectral.ts).
@@ -628,7 +628,7 @@ const literalHint = (other: i32, fallback: i32): i32 => isNumeric(other) ? other
  *
  * Only unary minus and parentheses unwrap, which is the same list `peekable`
  * walks and the same list stage0's `contextType` climbs out of
- * (`src/checker/math.ts`): `!1` and `~1` are operators applied to a literal
+ * (stage0's `src/checker/math.ts`): `!1` and `~1` are operators applied to a literal
  * rather than spellings of one.
  */
 const literalOperand = (node: Node): boolean => {
@@ -684,7 +684,7 @@ const checkOperator = (
   // `docs/LANGUAGE.md` says so in as many words ("only the literal's
   // immediate context counts"), and stage0 enforces it by reading the sibling
   // rather than the annotation (`contextType`'s binary branch in
-  // `src/checker/math.ts`). Threading `want` in made stage1 compile
+  // stage0's `src/checker/math.ts`). Threading `want` in made stage1 compile
   // `const b: u8 = 1 + 2`, which is a sum of two `i32` literals no annotation
   // reaches (`reject_bin_operand_context`). The sibling still propagates:
   // whichever side is checked first is what the other is checked against.
@@ -1275,7 +1275,7 @@ export const assignInto = (
   // A compound arithmetic assignment has a rule of its own rather than the
   // binary operator's: the target must be numeric and the value must be
   // exactly the target's type, and the refusal names the token that was
-  // written (`checkCompoundAssignment` in `src/checker/control-flow.ts`, and
+  // written (`checkCompoundAssignment` in stage0's `src/checker/control-flow.ts`, and
   // the field and element paths beside it, all say the same sentence). Routing
   // it through `checkOperator` gave stage1 `+`'s wording for `+=` and `/`'s
   // for `/=`, and let `s += "b"` and `b += 1` through as well, because `+`

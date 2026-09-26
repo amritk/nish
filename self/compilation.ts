@@ -1,4 +1,4 @@
-// Whole-program compilation for stage1 (`src/compilation.ts`,
+// Whole-program compilation for stage1 (stage0's `src/compilation.ts`,
 // docs/wp14-selfhost.md milestone S5).
 //
 // A `Compilation` owns every module of one program:
@@ -283,7 +283,7 @@ export class Compilation {
   unreadableRoot: string;
   /**
    * The whole-program attribute fixpoint, once it has been computed.
-   * `analyze()` memoises it here for the reason `src/compilation.ts` memoises
+   * `analyze()` memoises it here for the reason stage0's `src/compilation.ts` memoises
    * its own: the emitter needs it and so does the `--emit-checked` dump, and
    * the fixpoint is the most expensive thing either of them asks for.
    */
@@ -483,7 +483,7 @@ export class Compilation {
     if (failedValidation) {
       // Phase 0 refused the file, and that ends the compilation rather than
       // going on to pass 1: stage0's validator `throw`s out of `load` and the
-      // driver reports the one diagnostic (`src/validator.ts`, `fail`). Going
+      // driver reports the one diagnostic (stage0's `src/validator.ts`, `fail`). Going
       // on meant the checker refused `any` a second time, from the annotation
       // resolver, for one `any` in the source (WP19 §A3).
       return false;
@@ -513,7 +513,7 @@ export class Compilation {
       const found = this.resolveSpecifier(dir, imp.specifier);
       if (found.error.length > 0) {
         // At the module specifier, where stage0 points
-        // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
+        // (`imp.node.moduleSpecifier` in stage0's `src/compilation.ts`).
         checker.ctx.errorAtSpecifier(imp.decl, found.error);
         checker.ctx.errored = false;
         continue;
@@ -1303,7 +1303,7 @@ export class Compilation {
   /**
    * The whole-program attribute fixpoint, computed once per compilation.
    * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
-   * facts of every function the way `src/dump.ts` prints them; running it
+   * facts of every function the way stage0's `src/dump.ts` prints them; running it
    * twice would be the most expensive thing this class does twice.
    */
   analyze(): FactsTable {
@@ -1470,7 +1470,7 @@ const pathStem = (root: string, path: string): string => {
 
 /**
  * The directory above `dir`, or `""` when there is none left to visit — and the
- * twin of `parentDirectory` in `src/compilation.ts`, step for step, because the
+ * twin of `parentDirectory` in stage0's `src/compilation.ts`, step for step, because the
  * two compilers have to visit the same directories in the same order.
  *
  * `dirname` answers this for an absolute path and stops at `/`. For a relative

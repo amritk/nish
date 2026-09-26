@@ -42,25 +42,25 @@ Three things recommend this spelling over inventing one:
 
 - **It is already valid TypeScript, and it already means this.** `declare`
   in TypeScript means "this exists, somewhere I cannot show you". The parser
-  this compiler uses accepts it today; `src/validator.ts` is what refuses it.
+  this compiler uses accepts it today; stage0's `src/validator.ts` is what refuses it.
 - **It needs no name mangling.** The symbol is the identifier, which is the
   same promise `--emit-header` makes in the other direction: "there is no
   hidden context argument, no return-slot pointer, no name mangling".
-- **The type mapping is already written down.** `src/interop/abi.ts` pins the
+- **The type mapping is already written down.** stage0's `src/interop/abi.ts` pins the
   C ABI of every Nish type for `--emit-header`. Inbound FFI is that table read
   right to left, so there is one ABI in this compiler rather than two.
 
 ## 2. Why this is not merely plumbing
 
 The machinery to emit a foreign call already exists and runs on every compile:
-`src/codegen/runtime.ts` holds a `declare` line per runtime symbol and
+stage0's `src/codegen/runtime.ts` holds a `declare` line per runtime symbol and
 `ctx.useRuntime(name)` emits it. Mechanically, S1 exposes that to user code.
 
 What does *not* already exist is an answer to this:
 
 > The performance thesis of this compiler is that it sees all of the code.
 
-`src/codegen/attributes.ts` runs a whole-program fixpoint over purity, escape
+stage0's `src/codegen/attributes.ts` runs a whole-program fixpoint over purity, escape
 and loop facts, and only emits an attribute the fixpoint justifies. Escape
 analysis is what grants a function an automatic arena scope — the memory model
 in `docs/LANGUAGE.md` is built on it. A foreign function is a hole in that
@@ -83,7 +83,7 @@ The declaration therefore carries **no attributes at all**. That is the rule
 mood.
 
 `nounwind` on the *caller* is the one row that cannot be settled by being
-conservative, because `src/codegen/attributes.ts` puts `nounwind` on every
+conservative, because stage0's `src/codegen/attributes.ts` puts `nounwind` on every
 function unconditionally, justified by "the language has no exceptions". A
 foreign callee could unwind through that frame, so the justification stops being
 a proof the moment FFI exists. Dropping the attribute from every caller of a
@@ -159,7 +159,7 @@ Following the nine-step checklist in `docs/ARCHITECTURE.md`:
   escapes.
 - **`self/`.** The same in `self/validator.ts`, `self/parser.ts`,
   `self/nodes.ts`, `self/checker.ts` and `self/emit.ts`, because a construct
-  enters `src/` and `self/` together — `#54` touched 23 files under `self/`.
+  enters stage0's `src/` and `self/` together — `#54` touched 23 files under `self/`.
 - **Tests.** A golden `.ll`, an `llvm-as` pass, a native round trip that
   actually calls libc, and `reject_*` cases for each refusal above.
 - **Docs.** A `docs/LANGUAGE.md` rule citing the case, a cookbook entry, and
@@ -331,7 +331,7 @@ neither of them changed the oracle:
 - The `.err` fragments for `reject_ffi_pointer_array` and
   `reject_ffi_pointer_type_argument_fn` include the excerpt's caret run, which
   fixes the **start** column in whichever compiler the oracle is pointed at and
-  outlives `src/`. It cannot fix the end column, because the match is a
+  outlives stage0's `src/`. It cannot fix the end column, because the match is a
   substring and `^~~~~~` contains `^~~~` — which is exactly the direction stage0
   was wrong in, so this half is necessary and not sufficient.
 - `tests/run.js` compares those two cases' `--json` objects between the two
@@ -365,7 +365,7 @@ because §7a's placement rule keeps a `CPtr` out of every field, element and
 `Result` arm.
 
 Neither compiler said that before `tests/cases/dbg_cptr`, and each was wrong in
-its own way, which is the thing to take from it. `src/codegen/debug.ts` looked
+its own way, which is the thing to take from it. stage0's `src/codegen/debug.ts` looked
 the type up in an allow-list table and wrote the miss out as `!N = undefined`,
 invalid IR that `llvm-as` rejects; `self/debug.ts` ran the same lookup through a
 `switch` whose `default` is an internal error, so it exited 70. Both are the

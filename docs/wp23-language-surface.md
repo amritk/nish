@@ -59,8 +59,8 @@ Phase 1 (found TypeAliasDeclaration)
 ```
 
 Phase 0 lets a `type` alias through — `checkGenericDeclaration` in
-`src/validator.ts` rejects only a type *parameter* on one — and the checker's
-`collectFunction` fallback (`src/checker/index.ts:226`) refuses it as a
+stage0's `src/validator.ts` rejects only a type *parameter* on one — and the checker's
+`collectFunction` fallback (stage0's `src/checker/index.ts:226`) refuses it as a
 top-level declaration it has no case for. That is the "not implemented yet"
 bucket, not the "can never compile" one
 ([`.claude/typescript.md`](../.claude/typescript.md) says which is which).
@@ -69,7 +69,7 @@ bucket, not the "can never compile" one
 precedent is already normative and already tested: LANGUAGE.md's type table
 says of `Int32Array` and its three siblings that they are "aliases, not
 distinct types (`sameType` holds)", and `TYPED_ARRAY_ALIASES`
-(`src/types.ts:191`) is a four-entry name-to-`StaticType` map that
+(stage0's `src/types.ts:191`) is a four-entry name-to-`StaticType` map that
 `resolveType` consults. A user alias is the same map with user entries in it.
 
 Consequences worth stating because they follow from the decision rather than
@@ -101,7 +101,7 @@ Which of the two is chosen is a LANGUAGE.md rule and is not this note's.
 
 Today `enum Kind { If = 1, While = 2 }` fails identically, with
 `(found EnumDeclaration)`. Phase 0 has an opinion about enums already and it is
-narrow: `checkEnum` (`src/validator.ts:232`) refuses only a member whose
+narrow: `checkEnum` (stage0's `src/validator.ts:232`) refuses only a member whose
 initialiser is not a numeric literal, with `Enum members must be numeric
 literals in Nish (enums lower to plain integers)`. MASTER_PLAN §3.2
 forbids "enums with computed values", not enums.
@@ -155,7 +155,7 @@ detail, and because two of them are places the sibling work has to choose:
    `|` cannot express the existing code, and one that allows it admits values
    that are no declared member. This note does not decide it (§10).
 3. **`biome.json` has `noEnum: "error"`** repo-wide, mirroring what the
-   validator refuses. It lints `examples/**` as well as `src/`, so an example
+   validator refuses. It lints `examples/**` as well as stage0's `src/`, so an example
    or cookbook entry that uses an enum needs the rule relaxed for the
    Nish-program half. Mechanical, but it is a file the sibling work
    touches and this note is where it is written down.
@@ -184,7 +184,7 @@ which way each open decision went.
 3. **`biome.json` turns `noEnum` off for the Nish-program half** — the
    override that already exempts `examples/**`, `docs/cookbook/**`, `bench/**`,
    `self/**`, `std/**` and `tests/self/**` from the two house-style rules — and
-   leaves it an error over `src/`, where an enum in the compiler's own
+   leaves it an error over stage0's `src/`, where an enum in the compiler's own
    TypeScript is still a mistake.
 
 Two decisions the note did not list, both settled the way the `type` alias
@@ -266,7 +266,7 @@ modules today (`self/emit.ts` 11, `self/emit_classes.ts` 9, `self/emit_ops.ts`
 and the comment have drifted by one.
 
 *`process.argv` is out of reach for a narrower reason than "library module".*
-`hasEntryMain` is a **program-wide** fact — `src/checker/context.ts:36` says
+`hasEntryMain` is a **program-wide** fact — stage0's `src/checker/context.ts:36` says
 "the program's entry module declares `export function main`", and it is set on
 every module before any body is checked. So `self/ice.ts` compiled as part of
 the real compiler, whose entry is `self/compile.ts`, could read `process.argv`
@@ -320,7 +320,7 @@ should be defended as the first thing and not the second.
 
 ### 4.3 What it does to escape analysis, and why restriction 2 is not optional
 
-`src/codegen/escape.ts` classifies every allocation site's flow as `local`,
+stage0's `src/codegen/escape.ts` classifies every allocation site's flow as `local`,
 `returned` or `leaks`, and `leaks` is "anything else: stored into a field,
 element, array or object literal, pushed, assigned to another variable, passed
 to a capturing callee". A store into a module-level global is squarely in that
@@ -345,7 +345,7 @@ one.
 ### 4.4 What it does to the attribute fixpoint
 
 Rule 3 of the orientation is that no attribute is emitted without a proof, and
-`src/codegen/attributes.ts` is where the proofs live. The memory-effect lattice
+stage0's `src/codegen/attributes.ts` is where the proofs live. The memory-effect lattice
 is `none < read < write` (`EFFECT_RANK`, line 202), propagated over the call
 graph to a fixpoint (line 268); `none` becomes `readnone` and `read` becomes
 `readonly` (lines 811-812). A read of a global is memory the function does not
@@ -366,7 +366,7 @@ like `swapped` below is `readnone`").
 **For the `--json` case specifically the cost is zero, and it is worth saying
 why rather than being relieved about it.** `internalError` calls
 `console.error`, whose runtime entry `nish_print` is `effect: "write"`
-(`src/codegen/runtime.ts`), and every one of the 38 call sites is
+(stage0's `src/codegen/runtime.ts`), and every one of the 38 call sites is
 `process.exit(internalError(...))`. So `internalError` and every caller of it
 is already `write` and already unattributed. The flag poisons nothing because
 everything it touches was already poisoned. That is a fact about this one use
@@ -534,7 +534,7 @@ The sentence is true, and 342 rules make 684 flat entries. But `self/codes.ts`
 **is generated** — `scripts/gen-diagnostic-codes.mjs` writes it and `npm test`
 fails while it is stale (orientation rule 7) — so nobody reads or maintains
 those pairs by hand, and a `Pair<string, string>[]` would save exactly nobody
-any effort. Worse for the argument: `src/codes.ts:44` is written the *same*
+any effort. Worse for the argument: stage0's `src/codes.ts:44` is written the *same*
 flat way in TypeScript-on-Node, where tuples are available, and says why —
 "flat rather than tuples so the stage1 twin can hold it too". That flatness is
 a mirroring decision, not a language limit.
@@ -593,7 +593,7 @@ host built for any of the six, and a register pair would end that.
 What WP17 §1 actually proves is narrower and better: **a small two-scalar value
 travels packed into a single `i64`**, returned *and* passed, because `i64` is
 the only width all six targets agree about. The threshold is a fact about the
-targets rather than a tuning knob, and `resultByValue` in `src/types.ts` is the
+targets rather than a tuning knob, and `resultByValue` in stage0's `src/types.ts` is the
 one place that decides it: `void`, `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`.
 
 For a `Pair` this is very good news and it needs one adjustment. A `Result`
@@ -697,9 +697,9 @@ Five comments in `self/` name the absence of function values:
 | --- | --- |
 | `self/emit.ts:23` | "`Emitter` is `EmitContext` and `Emitter` at once, because the language has no function values to separate them with." |
 | `self/expressions.ts:9` | "a table of function values needs function pointers, which the language does not have" |
-| `self/attributes.ts:26` | `src/` "registers them into a `factCollectors` array from each `emit/*.ts`, which needs function values" |
+| `self/attributes.ts:26` | stage0's `src/` "registers them into a `factCollectors` array from each `emit/*.ts`, which needs function values" |
 | `self/emit_classes.ts:19` | "the language has no function values to register" |
-| `self/interop_napi.ts:42` | `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
+| `self/interop_napi.ts:42` | stage0's `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
 
 **Four of the five are dispatch tables, and a compile-time function parameter
 solves none of them.** A dispatch table exists precisely to choose a callee the
@@ -716,8 +716,8 @@ dispatch tables are, not closer.
 
 ### 6.3 The evidence that does count
 
-Sorting, and it is small and clean. `src/` calls `Array.prototype.sort` exactly
-twice (`src/diagnostics.ts:250`, `src/dump.ts:98`). `self/` has to write both
+Sorting, and it is small and clean. stage0's `src/` calls `Array.prototype.sort` exactly
+twice (stage0's `src/diagnostics.ts:250`, stage0's `src/dump.ts:98`). `self/` has to write both
 by hand, with two different algorithms over two different element types:
 
 - `DiagnosticSink.sorted()` (`self/diagnostics.ts:288`), a 35-line bottom-up
@@ -818,7 +818,7 @@ Already declined in LANGUAGE.md, with an argument this note agrees with:
 > clothes, and `if`/`else` says that honestly.
 
 `self/target.ts:13` is the decision being lived with rather than complained
-about: two `Record<string, Target>` tables in `src/` are two `if` chains there,
+about: two `Record<string, Target>` tables in stage0's `src/` are two `if` chains there,
 and the comment says why it is fine — "there are six triples and ten aliases
 and the lookup happens once per compilation, so the chain is the honest shape."
 
@@ -889,7 +889,7 @@ One narrower version *is* expressible and is worth naming so that the decline
 is honest: in **statement position** the result is discarded, so
 `debug?.beginFunction(...)` as a statement needs no value for the null case at
 all. That would cover four of the five sites above. It is still refused, and on
-the ground `.claude/typescript.md` gives for `src/` — "prefer `!== null` when
+the ground `.claude/typescript.md` gives for stage0's `src/` — "prefer `!== null` when
 the null case is a real branch with its own meaning" — plus a stronger one: an
 operator that is legal as a statement and illegal as an expression is a rule
 readers get wrong, and it would save ten lines across the largest program in
@@ -993,7 +993,7 @@ reviewed before more code is written.
   `scripts/gen-diagnostic-codes.mjs`, which appends and never renumbers. There
   is nothing to design here and inventing numbers in a design note would only
   make them wrong.
-- **The two-implementation multiplier.** Every rule here lands twice, in `src/`
+- **The two-implementation multiplier.** Every rule here lands twice, in stage0's `src/`
   and in `self/`, with the bootstrap having to close afterwards.
   [wp20-threads.md](wp20-threads.md) §3.6 states it once for the whole project
   and this note does not restate it per item — but it is the largest multiplier

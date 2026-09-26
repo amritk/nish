@@ -1,18 +1,18 @@
-// Phase C for stage1: LLVM IR emission (`src/codegen/emitter.ts`,
+// Phase C for stage1: LLVM IR emission (stage0's `src/codegen/emitter.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
 // Lowers a *checked* program into LLVM IR text. The checker already resolved
 // every type and binding, so nothing here handles user mistakes: any node the
 // emitter sees is known to be valid, and an unexpected one is an internal
 // error — `panic`, which is WP14 D1's replacement for the `throw` that
-// `src/codegen/emitter.ts` uses to reach the CLI's exit 70.
+// stage0's `src/codegen/emitter.ts` uses to reach the CLI's exit 70.
 //
-// The lowering rules are `src/codegen/emitter.ts`'s and are not restated:
+// The lowering rules are stage0's `src/codegen/emitter.ts`'s and are not restated:
 // parameters are SSA values, `let`/`const` locals get an entry-block `alloca`,
 // every expression lowers to a single LLVM value, each source file becomes one
 // module, and the entry module's `main` is wrapped by the C-ABI `@main`.
 //
-// What differs from `src/`:
+// What differs from stage0's `src/`:
 //
 //   - **One central `switch` per syntactic category** instead of the
 //     `ts.SyntaxKind` tables, which is D2's decision carried from the checker.
@@ -826,7 +826,7 @@ export class Emitter {
   /**
    * Lower one statement, under its own `-g` location. The dispatch is split out
    * so the location is restored on every path: the `switch` below returns from
-   * each arm, and `src/` gets the same shape for free from its handler table.
+   * each arm, and stage0's `src/` gets the same shape for free from its handler table.
    */
   emitStatement(stmt: Node): void {
     const saved = this.enterLocation(stmt);

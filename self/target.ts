@@ -1,15 +1,15 @@
-// Target triples and their LLVM data layouts for stage1 (`src/codegen/target.ts`,
+// Target triples and their LLVM data layouts for stage1 (stage0's `src/codegen/target.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
 // The emitted IR is target-neutral by default. With `--target` the module
 // carries the layout string clang 18 itself emits for that triple, so
 // `opt -O2 -S module.ll` needs no `-mtriple`. The strings below are copied
-// verbatim from `src/codegen/target.ts`, which copied them from
+// verbatim from stage0's `src/codegen/target.ts`, which copied them from
 // `clang --target=<triple> -S -emit-llvm`; a layout that disagrees with the
 // one clang later applies is a hard error at build time, never a silent
 // miscompilation.
 //
-// `src/` keeps two `Record<string, Target>` tables. Here they are two `if`
+// stage0's `src/` keeps two `Record<string, Target>` tables. Here they are two `if`
 // chains: `switch` is integer-only in the language, deliberately, because a string
 // switch would be a chain of `nish_str_eq` calls wearing a `switch`'s clothes
 // (docs/wp14-selfhost.md §5). There are six triples and ten aliases and the
@@ -20,7 +20,7 @@
 // it is and nothing in the language did; `process.platform` and `process.arch`
 // are two builtins and eight bytes of runtime `.text`, and `hostTriple` below
 // composes the triple from them exactly as `hostTriple` in
-// `src/codegen/target.ts` composes it from Node's two strings of the same
+// stage0's `src/codegen/target.ts` composes it from Node's two strings of the same
 // names. A machine neither of them has a triple for is still refused, with the
 // list — the answer is "this compiler has no triple for you", not a guess.
 
@@ -102,7 +102,7 @@ const aliasOf = (spec: string): string => {
  * same refusal an unknown triple gets.
  *
  * The two spellings are Node's, which is what `runtime.c` answers with, so
- * this is the same mapping `hostTriple` makes in `src/codegen/target.ts` and
+ * this is the same mapping `hostTriple` makes in stage0's `src/codegen/target.ts` and
  * the two compilers resolve `--target host` to the same triple on the same
  * machine (`tests/run.js`, the WP14 block).
  */

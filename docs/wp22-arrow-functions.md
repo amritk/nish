@@ -43,7 +43,7 @@ the output of a single program.
 **The IR is identical, and that is structural rather than lucky.** The emitter
 never sees the declaration form: `codegen/emitter.ts` iterates
 `program.functions` — the checked `FunctionSig`s — and there is no
-`isFunctionDeclaration` anywhere in `src/codegen/`. Everything that shapes the
+`isFunctionDeclaration` anywhere in stage0's `src/codegen/`. Everything that shapes the
 output comes from the signature (name, params, return type, `exported`) and
 from the attribute facts. An arrow-declared function produces the same
 `define`, the same attributes, the same body.
@@ -76,7 +76,7 @@ prohibition is doing the work; the spelling is doing none.
 - **Class methods stay methods.** `m(): void { ... }` inside a class body is
   not an arrow and will not become one. So the "one way to declare a callable"
   goal has exactly one permanent exception: a callable is a top-level arrow
-  `const`, or a method. That is the same split `src/` already lives with
+  `const`, or a method. That is the same split stage0's `src/` already lives with
   (`.claude/typescript.md`), and for the same reason — a method is not a value
   either.
 - **Function values stay forbidden.** This note does not relax `Function`, and
@@ -151,7 +151,7 @@ are not stage D's to take (§9).
 | `docs/cookbook/` | 3 | 137 | `decl_ffi` (done in stage C) and `fn_add_function`, which exists *to be* the `function` spelling |
 | `examples/`, `std/`, `tests/nish/` | 0 | 76 | done |
 | `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | — | the real cost centre; IR blocks beside them stay as they are. Done |
-| `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
+| stage0's `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
 | `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
 | `self/parser.ts` | arrow parsing | — | done in stage B |
 
@@ -213,17 +213,17 @@ twice over, because two kinds of pass decide what a `return` is by looking at
 the *parent node* rather than by being told:
 
 1. **Contextual typing.** Three walks climb the parent chain to ask what the
-   enclosing construct expects — `contextualType` in `src/checker/classes.ts`
+   enclosing construct expects — `contextualType` in stage0's `src/checker/classes.ts`
    (object literals, and a class value where an interface is wanted),
-   `contextualType` in `src/checker/arrays.ts` (the element type of `[]`), and
-   `contextType` in `src/checker/math.ts` (the width of a numeric literal).
+   `contextualType` in stage0's `src/checker/arrays.ts` (the element type of `[]`), and
+   `contextType` in stage0's `src/checker/math.ts` (the width of a numeric literal).
    Each stopped at `ts.isReturnStatement(parent)`, and a concise body's parent
    is the arrow. So `const swap = (p: Pair): Pair => ({ first: p.second,
    second: p.first })` was `Object literal needs a contextual class or
    interface type` and `const asPair = (o: Ordered): Pair => o` was `Return
    type mismatch`, while both block-bodied twins compiled.
 
-2. **The call-site reclaim.** `flowTarget` in `src/codegen/escape.ts` and its
+2. **The call-site reclaim.** `flowTarget` in stage0's `src/codegen/escape.ts` and its
    twin in `self/escape.ts` decided where a freshly allocated value goes by the
    same test, so a concise body that returns an allocation was read as
    producing a *local*. That made `allocates` false for the callee, and WP9's
@@ -233,7 +233,7 @@ the *parent node* rather than by being told:
    mattered.
 
 Both are one predicate on this side, `isFunctionResult` in
-`src/checker/declarations.ts`: the operand of a `return`, or the body an arrow
+stage0's `src/checker/declarations.ts`: the operand of a `return`, or the body an arrow
 *is*.
 
 **Stage1 had exactly one of the two**, and which one is the useful part.
@@ -530,7 +530,7 @@ arrow-verify: rewrote 1765 declaration(s)
 arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left alone
 ```
 
-— which is every `function` definition in the repository outside `src/`,
+— which is every `function` definition in the repository outside stage0's `src/`,
 `self/`'s (then) 721 included, turned into an arrow and compiled to the same 1,678
 modules, byte for byte. That is the evidence for the `self/` migration, and it
 exists before the migration rather than after it. The same sweep under `-g`
@@ -773,7 +773,7 @@ rule exactly where it is.
 
 **Where the rule goes, which settles the first two rows without a special
 case.** `collectFunctionSignature` and `collectFunctionTemplate`
-(`src/checker/declarations.ts`) are the two places a `function` declaration
+(stage0's `src/checker/declarations.ts`) are the two places a `function` declaration
 becomes a signature, and both already refuse an unnamed one and a bodiless one
 before anything else. Putting §6's rejection *after* those two checks and under
 `if (!foreign)` gives, for free:
@@ -800,7 +800,7 @@ main` ``. `scripts/gen-diagnostic-codes.mjs` keys a code on the words, so
 rewording either retires its number and issues a new one — which is why they
 are stage D's to change, alongside the rejection that makes the spelling they
 name wrong. Nothing else the compiler *prints* names the spelling: every other
-occurrence of the phrase across `src/` and `self/` is a comment or a piece of
+occurrence of the phrase across stage0's `src/` and `self/` is a comment or a piece of
 JSDoc, which costs nothing to reword and carries no code.
 
 ## 10. Open
@@ -817,7 +817,7 @@ JSDoc, which costs nothing to reword and carries no code.
   C and D are 1,401 rewrites for zero expressiveness. Shipping A and B, letting
   new code use arrows and converting a file when it is opened for another
   reason — the migration policy `.claude/typescript.md` already applies to
-  `src/` — reaches the same place without a flag day, and leaves D as a
+  stage0's `src/` — reaches the same place without a flag day, and leaves D as a
   decision to take when the count is small rather than now. D withdraws an
   accepted construct: on 0.x that is a breaking minor, and after 1.0 it would
   need a major ([LANGUAGE.md](LANGUAGE.md)'s head), so it is cheaper while the

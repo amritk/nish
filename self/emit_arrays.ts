@@ -1,4 +1,4 @@
-// Array lowering for stage1 (`src/codegen/emit/arrays.ts`,
+// Array lowering for stage1 (stage0's `src/codegen/emit/arrays.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
 // Layout (ABI, shared with `runtime/runtime.c`'s `struct nish_array`): an array
@@ -16,7 +16,7 @@
 // slot is an `llvm.memcpy` of the object. `inlineElementStruct` in
 // `self/program.ts` carries the rule.
 //
-// The lowerings are `src/codegen/emit/arrays.ts`'s: literals
+// The lowerings are stage0's `src/codegen/emit/arrays.ts`'s: literals
 // and `new Array` allocate a header and a block (or two entry-block allocas
 // when the escape analysis proved the array does not outlive the function),
 // `a[i]` bounds-checks and indexes, and `indexOf` and `join` are emitted
@@ -91,7 +91,7 @@ const slotType = (emitter: Emitter, elem: i32): string => elementLLVMType(emitte
  * it, `a[i] = v` might land on some array's `len` or `data`, so the header is
  * reloaded every iteration and neither LICM nor the vectoriser can run.
  * Measured at 1.6x on an element loop; the proof and the four allocation
- * shapes it covers are written out in `src/codegen/emit/arrays.ts`.
+ * shapes it covers are written out in stage0's `src/codegen/emit/arrays.ts`.
  */
 const scopePair = (emitter: Emitter, wantHeader: boolean): string => {
   const domain = emitter.metadata(`!{!"nish array"}`);
@@ -930,7 +930,7 @@ const emitHeader = (emitter: Emitter, n: string, site: Node): string => {
  * The non-negative integer a literal length denotes, or -1 for anything else.
  * It lives here rather than in `escape.ts`, which is the phase that *asks* it
  * whether a `new Array` site can be a stack slot, so that the module graph
- * reads the way stage0's does (`src/codegen/emit/arrays.ts`, where the reverse
+ * reads the way stage0's does (stage0's `src/codegen/emit/arrays.ts`, where the reverse
  * import would close an ESM cycle). Both callers have to agree: the analysis
  * decides the site is stackable from the literal and the emitter types the
  * slot `[n x T]` from it.

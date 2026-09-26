@@ -31,7 +31,7 @@ The type is `%struct.nish_array*` in every signature, alloca, and load, so
 `User[]` all use the same header; only the element size and the `T*` cast
 differ. `T[]` and `Array<T>` are the same type.
 
-Three runtime functions belong to arrays (`src/codegen/runtime.ts`,
+Three runtime functions belong to arrays (stage0's `src/codegen/runtime.ts`,
 `runtime/runtime.c`, and the freestanding `runtime/runtime_wasm.c`):
 
 | Symbol | Purpose | Attributes |
@@ -51,7 +51,7 @@ Header and element storage come from the compiler's inline
 `Int32Array`, `Float64Array` and `BigInt64Array` are accepted as type
 annotations and as `new Int32Array(n)` / `new Float64Array(n)` /
 `new BigInt64Array(n)`. They resolve to the *same* `StaticType` as `i32[]`,
-`f64[]` and `i64[]` (`TYPED_ARRAY_ALIASES` in `src/types.ts`; the `new`
+`f64[]` and `i64[]` (`TYPED_ARRAY_ALIASES` in stage0's `src/types.ts`; the `new`
 forms share `newCheckers.Array` / `newEmitters.Array`), so there is no
 second layout, no view semantics, and no conversion: a `Float64Array`
 parameter accepts an `f64[]` argument and vice versa, `push` works, and the
@@ -455,7 +455,7 @@ duplicate `%i.addr`).
 
 ## Attributes
 
-`src/codegen/attributes.ts` extends the fact analysis; every rule is a
+stage0's `src/codegen/attributes.ts` extends the fact analysis; every rule is a
 guarantee the checker or the emitter proves.
 
 | Attribute | Where | Rule |

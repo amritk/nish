@@ -1,4 +1,4 @@
-// Shared ground for stage1's interop generators (`src/interop/abi.ts`, WP8):
+// Shared ground for stage1's interop generators (stage0's `src/interop/abi.ts`, WP8):
 // which functions a host can call, and how a type is spelled in C, N-API and
 // TypeScript.
 //
@@ -7,13 +7,13 @@
 // Three shapes change and nothing else does:
 //
 //   - **A type is an `i32`** (`self/types.ts`), so the `kindOf(t)` string
-//     switch of `src/` is a switch over the `T_*` / `K_*` ids.
+//     switch of stage0's `src/` is a switch over the `T_*` / `K_*` ids.
 //   - **The empty string stands in for `undefined`.** `cType` answers `""`
-//     where `src/` answers `undefined`, and no C type is spelled `""`, so the
+//     where stage0's `src/` answers `undefined`, and no C type is spelled `""`, so the
 //     two readings cannot be confused. `typedView` answers `null` instead,
 //     because a `TypedView` is an object and `T | null` is the language's
 //     spelling of "or nothing".
-//   - **The whole-program fixpoint runs once.** Each generator in `src/`
+//   - **The whole-program fixpoint runs once.** Each generator in stage0's `src/`
 //     calls `externalFunctions` for itself, which re-runs the attribute
 //     analysis three or four times over one program; here `self/compile.ts`
 //     runs it once and threads the list, because stage1's arena is never
@@ -70,7 +70,7 @@ const CHAR_LOWER_Z: i32 = 122;
 /** `a` - `A`: the one bit that separates the two ASCII cases. */
 const CASE_SHIFT: i32 = 32;
 
-/** Append every element of `src` to `dst`; the loop `src/` writes as a spread. */
+/** Append every element of `src` to `dst`; the loop stage0's `src/` writes as a spread. */
 export const pushAll = (dst: string[], src: string[]): void => {
   for (const line of src) {
     dst.push(line);
@@ -103,7 +103,7 @@ export class ExternalFunction {
  * dependency package's exports are excluded too -- see the comment in the loop.
  *
  * An imported signature is skipped as well. Pass 1b appends it to the
- * importer's `functions` (`self/program.ts`), where `src/` leaves that list
+ * importer's `functions` (`self/program.ts`), where stage0's `src/` leaves that list
  * holding only what the module declares, so `definedIn` is what keeps an
  * imported symbol from being declared once per importer.
  */
@@ -448,7 +448,7 @@ export const resultTypesUsed = (table: TypeTable, fns: ExternalFunction[], field
   return uses;
 };
 
-/** Record every `Result` inside `t`, in first-seen order; `src/` writes this as a closure. */
+/** Record every `Result` inside `t`, in first-seen order; stage0's `src/` writes this as a closure. */
 const noteResultTypes = (
   table: TypeTable,
   uses: ResultUse[],
@@ -531,7 +531,7 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
  * A colliding name gets a trailing underscore; the C ABI does not care about
  * parameter names, only the header reader does.
  *
- * `src/` holds these in a `Set`. A chain of comparisons is what the language
+ * stage0's `src/` holds these in a `Set`. A chain of comparisons is what the language
  * has, and it costs about what hashing the name would have cost anyway.
  */
 export const isCReserved = (name: string): boolean => (
@@ -893,7 +893,7 @@ export const guardStem = (outFile: string): string => {
 
 /**
  * The one trailing `.h` / `.hpp` / `.d.ts` / `.c`, case-insensitively, that
- * `src/` strips with a regular expression. `.d.ts` is tested first because
+ * stage0's `src/` strips with a regular expression. `.d.ts` is tested first because
  * that alternation is anchored at the leftmost `.` from which some arm
  * reaches the end of the string, which for `add.d.ts` is the `.d`.
  */

@@ -1,4 +1,4 @@
-// The `nish:` modules for stage1 (`src/checker/nish-modules.ts`): the builtins
+// The `nish:` modules for stage1 (stage0's `src/checker/nish-modules.ts`): the builtins
 // a program may import by name instead of reaching for them as globals.
 //
 // A `nish:` specifier resolves to nothing on disk. There is no file to load,

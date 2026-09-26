@@ -1,5 +1,5 @@
 // The `--emit-checked` dump: the side tables stage1's checker filled in, in
-// exactly the format `nish --emit-checked` prints them (`src/dump.ts`).
+// exactly the format `nish --emit-checked` prints them (stage0's `src/dump.ts`).
 //
 // It lives apart from the two programs that print it because both do: the
 // `self/compile.ts` driver writes it for `--emit-checked`, and
@@ -68,7 +68,7 @@ const sortedStrings = (set: StringSet): string[] => {
 };
 
 /**
- * The attribute pass's facts for one function, in `src/dump.ts`'s `factsText`
+ * The attribute pass's facts for one function, in stage0's `src/dump.ts`'s `factsText`
  * format and order. Every field is printed the way stage0 prints it, including
  * the two lists it sorts and the `returnDeref` it omits for a function that
  * does not return a struct, because `checked_oracle.js` compares these lines
@@ -102,7 +102,7 @@ const factsText = (
   ];
   // stage0 leaves the field undefined unless the return type has a size to
   // dereference, which is a struct or a `Result` (`structSize` in
-  // `src/codegen/attributes.ts`); stage1 stores 0 for the same thing, so the
+  // stage0's `src/codegen/attributes.ts`); stage1 stores 0 for the same thing, so the
   // condition is the type and not the number.
   const returns = sig.returnType;
   if (table.isStruct(returns) || table.isResult(returns)) {
@@ -151,7 +151,7 @@ const factsText = (
   out.push(`  stackSites=${sites} stackLocals=${facts.stackLocals.length}`);
 };
 
-/** `name(a: i32, b: string): void`, the signature as `src/dump.ts` writes it. */
+/** `name(a: i32, b: string): void`, the signature as stage0's `src/dump.ts` writes it. */
 const signatureText = (table: TypeTable, sig: FunctionSig): string => {
   const params: string[] = [];
   let i = 0;
@@ -217,7 +217,7 @@ const constantSyntax = (table: TypeTable, info: ConstInfo): string => {
 };
 
 /**
- * `line:col`, as `src/dump.ts` writes a position — in UTF-16 code units,
+ * `line:col`, as stage0's `src/dump.ts` writes a position — in UTF-16 code units,
  * because that is what its `getLineAndCharacterOfPosition` counts. The two
  * counts only differ on a line with a non-ASCII character before the position,
  * which is why `checked_oracle.js` never saw this one.
@@ -284,7 +284,7 @@ const walkBody = (
 };
 
 /**
- * One module of a checked program, in the order `src/dump.ts` writes it: the
+ * One module of a checked program, in the order stage0's `src/dump.ts` writes it: the
  * module line, what each import bound to, then the constants, structs and
  * functions *this* module declares. An imported constant, struct or signature
  * belongs to the section of the module that defines it, which is why each list
@@ -381,13 +381,13 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
 
 /**
  * The `--emit-checked` dump of a whole checked program: every module in load
- * order, in the format `src/dump.ts` writes it. `self/compile.ts` prints this
+ * order, in the format stage0's `src/dump.ts` writes it. `self/compile.ts` prints this
  * for `--emit-checked` and this file's `main` prints it for the oracle, so the
  * two can never drift into two spellings of the same dump.
  */
 export const checkedText = (compilation: Compilation): string => {
   // The dump prints the attribute pass's facts, so the fixpoint has to have
-  // run: `dumpChecked` in `src/dump.ts` opens with the same call, and it is
+  // run: `dumpChecked` in stage0's `src/dump.ts` opens with the same call, and it is
   // memoised there and here so a compile that also emits does not pay twice.
   const facts = compilation.analyze();
   const out: string[] = [];

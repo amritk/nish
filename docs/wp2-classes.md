@@ -14,13 +14,13 @@ inheritance (`extends`, `super`, static dispatch; WP2b, see
 struct pointers. Every IR listing is the exact text of a golden in
 `tests/cases/cls_*.ll` (module header omitted).
 
-Code: `src/checker/classes.ts` (declarations, layout, rules) and
-`src/codegen/emit/classes.ts` (lowering, memory facts). Both register into
+Code: stage0's `src/checker/classes.ts` (declarations, layout, rules) and
+stage0's `src/codegen/emit/classes.ts` (lowering, memory facts). Both register into
 the existing dispatch tables: `propertyCheckers.struct`,
 `methodCallCheckers.struct`, `newCheckers["*"]`, the new
 `assignmentTargetCheckers` table in `checker/members.ts` (keyed by the kind
 of the assignment *target*, so `a[i] = v` can register next to `p.x = v`),
-and their emitter mirrors. `src/codegen/attributes.ts` owns the pointer
+and their emitter mirrors. stage0's `src/codegen/attributes.ts` owns the pointer
 parameter analysis described at the end.
 
 ## Layout
@@ -549,7 +549,7 @@ same-named functions do (their method symbols collide) unless
 
 ## Attribute rules for struct pointers
 
-Every attribute is a guarantee proved in `src/codegen/attributes.ts`:
+Every attribute is a guarantee proved in stage0's `src/codegen/attributes.ts`:
 
 | Attribute | On | When |
 | --- | --- | --- |
@@ -584,7 +584,7 @@ and the string `label` into fields, so all three lose `nocapture`;
 lists `B`'s fields first, then `D`'s own, at the same natural alignment, so
 a `%struct.D*` is a valid `%struct.B*` after one `bitcast`. The checker
 copies the base's `FieldInfo`s (indices and offsets included) into the
-derived class (`inheritFields`, `src/checker/classes.ts`), runs the ordinary
+derived class (`inheritFields`, stage0's `src/checker/classes.ts`), runs the ordinary
 layout over the flattened list, and everything downstream (field access,
 `implements`, object literals, the C header, `dereferenceable`) sees one
 flat struct. A derived field may land in the base's tail padding

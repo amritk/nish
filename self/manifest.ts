@@ -1,5 +1,5 @@
 // The one part of a `package.json` stage1 reads: which file a package offers an
-// Nish consumer (WP21 S2, `src/manifest.ts` is the stage0 twin,
+// Nish consumer (WP21 S2, stage0's `src/manifest.ts` is the stage0 twin,
 // `docs/wp21-packages.md` §2 and §6).
 //
 // A package says it is Nish by declaring the `nish` condition in its `exports`

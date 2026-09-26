@@ -38,7 +38,7 @@ fails a change that uses a construct too early.
 | S3 | the checker: types, scopes, side tables | **done** — proved against stage0 by `checked_oracle.js` until R6, by `tests/self/goldens/` since |
 | S4 | the emitter: IR text | **done** — proved against stage0 by `ir_oracle.js` and `interop_oracle.js` until R6, by the `.ll` goldens and `tests/nish-cmp.js` since |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
-| R1–R6 | stage0 retired | **done** — R6 deleted `src/`, the `typescript` runtime dependency, the six stage0 oracles, `--parity` and the stage1-only register. The gates, the order and the measurements are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md) §3 and §5 |
+| R1–R6 | stage0 retired | **done** — R6 deleted stage0's `src/`, the `typescript` runtime dependency, the six stage0 oracles, `--parity` and the stage1-only register. The gates, the order and the measurements are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md) §3 and §5 |
 
 ## Building it for use
 

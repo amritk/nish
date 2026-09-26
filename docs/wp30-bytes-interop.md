@@ -14,7 +14,7 @@ together.
 A host that wants to hand a Nish module a document — JSON, UTF-8 text, a frame,
 anything that is a run of bytes — has no way to do it. Every other array shape
 crosses: `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` each have
-a row in `src/interop/abi.ts` and a generated loader entry. Bytes do not, so the
+a row in stage0's `src/interop/abi.ts` and a generated loader entry. Bytes do not, so the
 one payload shape a network or a file actually delivers is the one shape the
 boundary refuses.
 
@@ -71,7 +71,7 @@ builds to a 1,463-byte module under `--profile wasm` with
 *This section describes the state B1 changed; it is kept because the reasoning
 is what sized the package.*
 
-`typedView` in `src/interop/abi.ts` had four cases and none of them was `u8`,
+`typedView` in stage0's `src/interop/abi.ts` had four cases and none of them was `u8`,
 so `wasmSkipReason` declined the function and `--emit-dts` wrote a comment
 instead of a declaration, and no loader entry:
 
@@ -85,7 +85,7 @@ than a separate tidy-up. A `u8[]` parameter needs nothing the freestanding
 profile lacks — the sentence is the one `string` earns, reused for a type that
 does not earn it. A reader who believes it concludes that bytes need a WASI
 build, which is the opposite of true. The predicate is shared between the
-declarations and the loader (`src/interop/wasm.ts`, the one-predicate rule this
+declarations and the loader (stage0's `src/interop/wasm.ts`, the one-predicate rule this
 package must not break), so the row and the reason move together.
 
 `elemSize` is typed `4 | 8` and becomes `1 | 2 | 4 | 8`. That is the only
@@ -103,7 +103,7 @@ cookbook, because it reads like an omission otherwise.
 
 | | |
 | --- | --- |
-| B1 | **done** — the four unsigned rows in `typedView`, `elemSize` widened to `1 \| 2 \| 4 \| 8`; `src/` and `self/` both, byte-identical through `tests/self/interop_oracle.js` (17/17 programs, 85 sidecars) |
+| B1 | **done** — the four unsigned rows in `typedView`, `elemSize` widened to `1 \| 2 \| 4 \| 8`; stage0's `src/` and `self/` both, byte-identical through `tests/self/interop_oracle.js` (17/17 programs, 85 sidecars) |
 | B2 | **done** — `tests/self/interop_unsigned_arrays.ts` in the oracle corpus; `tests/cases/arr_u8` with its golden `.ll`, `llvm-as`, `opt -passes=verify` and a native round trip against `.out`; and the negative half, `boolean[]` and `string[]` still declined and named, asserted absent from the loader as well as commented in the declarations |
 | B3 | **done** — the `docs/LANGUAGE.md` rule (the type table and the typed-array bullet) and the `arr_u8_elements` cookbook entry, whose IR `docs/cookbook/regen.sh --check` keeps honest |
 
@@ -200,8 +200,8 @@ times the payload, which changes what is being measured.
 
 | File | Role |
 | --- | --- |
-| `src/interop/abi.ts` | `typedView`, `elemSize`, the rows this package adds |
-| `src/interop/wasm.ts` | `wasmSkipReason` and the loader it generates from the same predicate |
+| stage0's `src/interop/abi.ts` | `typedView`, `elemSize`, the rows this package adds |
+| stage0's `src/interop/wasm.ts` | `wasmSkipReason` and the loader it generates from the same predicate |
 | `self/interop_abi.ts`, `self/interop_wasm.ts` | the same two in Nish; the oracle compares the output byte for byte |
 | `bench/scan.ts` | a `u8[]`-taking scanner: the shape this package unblocks |
 | `tests/self/interop_unsigned_arrays.ts` | the oracle corpus case: every unsigned width as an array, and the positions where a mask would be wrong |

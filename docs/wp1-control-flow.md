@@ -6,9 +6,9 @@ compile to, and the rules the checker enforces around them. Every IR listing
 below is the exact text of a golden in `tests/cases/` (module header
 omitted), so this file doubles as the cookbook for these constructs.
 
-Code lives in `src/checker/control-flow.ts` (rules, termination analysis)
-and `src/codegen/emit/control-flow.ts` (lowering); both register into the
-existing dispatch tables with a spread. `src/codegen/attributes.ts` owns the
+Code lives in stage0's `src/checker/control-flow.ts` (rules, termination analysis)
+and stage0's `src/codegen/emit/control-flow.ts` (lowering); both register into the
+existing dispatch tables with a spread. stage0's `src/codegen/attributes.ts` owns the
 `willreturn` analysis described at the end.
 
 ## Rules
@@ -621,7 +621,7 @@ the new one (`%3`). On `f64` the step is `fadd double %v, 0x3FF0000000000000`
 
 `willreturn` is emitted only when the checker can prove the function cannot
 fail to return. A function keeps it when all of the following hold
-(`src/codegen/attributes.ts`):
+(stage0's `src/codegen/attributes.ts`):
 
 1. **Every loop in the body is a counted loop.** A counted loop is
    `for (let i = <init>; i CMP bound; STEP) body` over `i32` where

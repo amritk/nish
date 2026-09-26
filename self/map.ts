@@ -1,5 +1,5 @@
 // `StringMap` and `StringSet`: the name lookup every phase of a compiler is
-// made of (docs/wp14-selfhost.md §2.2). `src/` reached for `Map` and `Set` at
+// made of (docs/wp14-selfhost.md §2.2). stage0's `src/` reached for `Map` and `Set` at
 // about 200 sites, and Nish-0 has neither, so this is library code over the
 // arrays and the bitwise operators the language already has.
 //

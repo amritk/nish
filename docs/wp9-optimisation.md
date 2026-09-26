@@ -114,7 +114,7 @@ the loop, and nothing vectorised.
 
 `!tbaa` answers the question the pointers cannot. A `double` at offset 48 of a
 `Body` is not the `double` at offset 24 of a `Body`, whoever points at it.
-With the tags emitted (`src/codegen/emit/tbaa.ts`), `bj.mass` is loaded once,
+With the tags emitted (stage0's `src/codegen/emit/tbaa.ts`), `bj.mass` is loaded once,
 `bi.mass` and `bi.x`/`.y`/`.z` are hoisted out of the loop, and the count is
 **80,014,745** — the lowest of the four — and the row goes from **1.23x to
 0.96x** against Rust `-O3`. The checksum is unchanged, bit for bit.
@@ -161,7 +161,7 @@ table above holds.
 
 ### `--target <triple>` and `--target host`
 
-`src/codegen/target.ts` maps a triple to the data layout string that clang 18
+stage0's `src/codegen/target.ts` maps a triple to the data layout string that clang 18
 emits for it, and the emitter writes both lines after `source_filename`:
 
 ```llvm
@@ -205,7 +205,7 @@ Every user-level integer `add`, `sub` and `mul` on `i32` and `i64` carries the
 locals, fields and array elements, and `++`/`--`. Division and remainder have
 no `nsw` form, and the compiler's own `i64` index, length and allocator
 arithmetic is never flagged (`opt_nsw.ll` is checked for both facts). One
-helper, `intOpcode` in `src/codegen/emit/context.ts`, is the only place the
+helper, `intOpcode` in stage0's `src/codegen/emit/context.ts`, is the only place the
 decision is made.
 
 Semantics: signed overflow becomes undefined behaviour, exactly as in C (Rust
@@ -613,7 +613,7 @@ At a call `f(a…)`, the emitter emits
 ```
 
 and uses `%kept` everywhere `%t` would have been used, when all of the
-following hold (`reclaimsReturnedString`, `src/codegen/escape.ts`):
+following hold (`reclaimsReturnedString`, stage0's `src/codegen/escape.ts`):
 
 1. **`f` returns a plain `string`.** Only a string may be relocated, because
    only a string is one flat block with no interior pointers: moving its bytes

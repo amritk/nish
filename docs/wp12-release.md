@@ -37,7 +37,7 @@ staged directory the release tarball is made from, so installing is a download
 and an unpack. A machine with no prebuilt binary — musl, FreeBSD, a 32-bit
 anything — gets a diagnostic naming the four platforms that have one and exit
 3. It used to get `dist/index.js`, the Node compiler that shipped in the same
-package; that compiler was `src/`, which R6 deleted, so there is nothing left to
+package; that compiler was stage0's `src/`, which R6 deleted, so there is nothing left to
 fall back to (see "Which compiler the package ships", amended 2026-09-22, and
 [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly) for
 what it costs whom).
@@ -171,7 +171,7 @@ its own package, so `npm ci` here installs this package's own
 `optionalDependencies`, and once those are published the first `npm ci` would
 otherwise overwrite the tracked `bin/nish` with a binary and leave the working
 tree dirty. The guard is the presence of `self/compile.ts` — it was
-`src/launcher.ts` until the launcher moved into `bin/` and started shipping,
+stage0's `src/launcher.ts` until the launcher moved into `bin/` and started shipping,
 which made it useless as a landmark — and it is now literally the same check
 `scripts/bootstrap.sh` makes rather than the same shape of one.
 
@@ -560,7 +560,7 @@ comparison forbids it. The seeded run reports the difference and carries on.
 Until R6 the one seed that comparison was asserted for was stage0, where it was
 two independent implementations of one revision agreeing rather than one
 implementation at two dates (G3, "What the seeded run proves, and what it does
-not"); with `src/` gone every seed is a release, and the line is always a
+not"); with stage0's `src/` gone every seed is a release, and the line is always a
 report.
 
 There is no seed but a release. `scripts/fetch-seed.sh` downloads the last
@@ -594,9 +594,9 @@ language emitting identical IR for every module of `self/`, which is the second
 half of diverse double-compiling. G6 writes down how to re-verify it from the
 tag: check the tag out, `npm ci`, `npm run build`,
 `node tests/self/bootstrap.js` — commands that mean what they meant at that
-commit, where `src/` still exists.
+commit, where stage0's `src/` still exists.
 
-R6 deleted `src/`, so there is no second implementation left to disagree with
+R6 deleted stage0's `src/`, so there is no second implementation left to disagree with
 and nothing for a new tag to record. The `ddc` job and `.github/ddc-tag.sh` went
 with it, and releases from then on cut no `ddc-*` tag. The tags already cut are
 the only commits the property can ever be demonstrated at again, which is why
@@ -606,7 +606,7 @@ the publish.
 
 ## The npm name
 
-> The analysis below was written while `src/` existed and names its files in
+> The analysis below was written while stage0's `src/` existed and names its files in
 > the present tense; R6 deleted it, and `self/branding.ts` is now the one file
 > the compiler reads its name from.
 
@@ -678,13 +678,13 @@ curl -s https://registry.npmjs.org/nish | node -p \
 `package.json#name`, `bin.nish`, every install line in `README.md` and
 [INSTALL.md](INSTALL.md), the `Publish to npm` step at the end of
 `release.yml`, and — if the decision changes the *binary's* name rather than
-only the package's — `src/branding.ts` and `self/branding.ts`, the two files
+only the package's — stage0's `src/branding.ts` and `self/branding.ts`, the two files
 the whole compiler reads its name from. The options, and what each costs:
 
 | | What it means | What it costs |
 | --- | --- | --- |
 | **(a) a scope**, such as `@amritk/nish` | `package.json#name` becomes the scoped name and `bin.nish` is untouched, so the command a user types is still `nish` | available immediately, uncontestable afterwards, and no rename reaches the compiler. But `npm publish` needs `--access public` on every publish, because a scoped package is private by default and a private publish on a free account fails at the registry rather than in the workflow. The name in the install line and the name on the command line stop being one string, which is one more thing every README has to explain |
-| **(b) a different bare name** | a free name on the registry, and the project renames with it if the binary is to match | one search and it is settled, with no scope to explain and no dispute to wait on. The cost is where the name lives: `src/branding.ts` and `self/branding.ts` spell it for every diagnostic, the runtime's `nish_*` C symbols are ABI and a rename deliberately does not follow them ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-name-lives)), and `NISH_DEBUG`, `NISH_BOOTSTRAP`, the release asset names and the goldens that record the `--version` line all carry it. Renaming the *package* is cheap; renaming the *project* is not |
+| **(b) a different bare name** | a free name on the registry, and the project renames with it if the binary is to match | one search and it is settled, with no scope to explain and no dispute to wait on. The cost is where the name lives: stage0's `src/branding.ts` and `self/branding.ts` spell it for every diagnostic, the runtime's `nish_*` C symbols are ABI and a rename deliberately does not follow them ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-name-lives)), and `NISH_DEBUG`, `NISH_BOOTSTRAP`, the release asset names and the goldens that record the `--version` line all carry it. Renaming the *package* is cheap; renaming the *project* is not |
 | **(c) npm's dispute process** | npm's package-name dispute policy covers this shape exactly — a name held by a package nobody maintains — and it begins by contacting the owner | slow, and its outcome is npm's to decide rather than ours: it is the only option here that can still fail after the waiting. The courteous first move is the same one it starts with anyway, which is to ask the author directly. Worth opening *in parallel* with (a), never instead of it |
 
 (a) is reversible into (b) or (c) and neither of the others is reversible into
@@ -702,7 +702,7 @@ written out, so the scope is still spelled in a single place.
 > **Superseded in part by R6.** This section records the 2026-09-19 decision
 > and its amendments as they were written. Where it says `dist/` stays in the
 > package, or that stage0 is the seed and the oracle, that stopped being true
-> when R6 deleted `src/`: the package ships no compiler for Node, and the seed
+> when R6 deleted stage0's `src/`: the package ships no compiler for Node, and the seed
 > is the previous release.
 
 **Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
@@ -722,7 +722,7 @@ prebuilt binary gets a diagnostic naming the four that have one, and exit 3.
 The reason is not a re-pricing — the 2026-09-20 amendment below is arithmetic
 and it is still correct — it is that the thing it priced stopped existing.
 `dist/` was the cheap fallback because it was *already in the package for its
-own reasons*: the bootstrap seed and the differential oracle. R6 deleted `src/`
+own reasons*: the bootstrap seed and the differential oracle. R6 deleted stage0's `src/`
 ([wp19](wp19-stage0-retirement.md)), so `dist/` had no other reasons, and
 keeping it for the fallback alone would have meant shipping — and therefore
 maintaining, and therefore keeping buildable — a second implementation of the
@@ -824,7 +824,7 @@ What (b) honestly costs, now that its blocker is built:
 **The rule, as it stood until R6: `bin.nish` is the native binary, `dist/` is
 the seed and the oracle, and a cost in the table below is re-measured before it
 is cited again.** The first clause still holds and so does the last; the middle
-one ended with `src/`, and the seed is now the previous release ("The bootstrap
+one ended with stage0's `src/`, and the seed is now the previous release ("The bootstrap
 seed" above).
 
 **Implemented on 2026-09-20**, which is what the first amendment above came out

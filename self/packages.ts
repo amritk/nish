@@ -1,4 +1,4 @@
-// Package-scoped symbols for stage1 (`src/packages.ts`, WP21 S1,
+// Package-scoped symbols for stage1 (stage0's `src/packages.ts`, WP21 S1,
 // docs/wp21-packages.md §5a).
 //
 // The whole-program fact fixpoint in `self/attributes.ts` is keyed by the

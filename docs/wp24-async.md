@@ -38,7 +38,7 @@ Three findings, in the order they changed the answer:
    built.** LLVM 18 splits a hand-written coroutine that arrives as textual IR
    and elides the frame entirely — allocation, layout, resume and destroy
    functions, all of it — when the handle does not escape its caller, which is
-   the condition `src/codegen/escape.ts` already computes (§3a). And rustc
+   the condition stage0's `src/codegen/escape.ts` already computes (§3a). And rustc
    does not use those intrinsics at all: it builds a 20-byte struct with a
    one-byte state discriminant and a `switch`, allocates nothing, and that is
    the shape to copy if this is ever built (§3b). Both measured, not
@@ -256,7 +256,7 @@ source. The same is available here, and more cheaply: `await` would always
 apply to a known call site, so the checker knows statically which state machine
 it is resuming and the type never has to be spelled in a program at all. That
 is a compiler-generated struct per async function, which is what
-`src/checker/classes.ts` already builds for every class — not a generic, and
+stage0's `src/checker/classes.ts` already builds for every class — not a generic, and
 not a third built-in family beside `Array<T>` and `Result<T, E>`
 ([wp18-generics.md](wp18-generics.md) §6.1).
 
@@ -273,7 +273,7 @@ prerequisite and becomes A4, an enhancement. §6's table is corrected to match.
 ### 4.2 The colour propagates to `main`, and there is no callback to stop it
 
 `Function` is forbidden in Phase 0 as "no dynamic function values", for the
-reason LANGUAGE.md gives and `src/codegen/attributes.ts` depends on: the
+reason LANGUAGE.md gives and stage0's `src/codegen/attributes.ts` depends on: the
 whole-program fixpoint cannot prove purity, termination or escape through an
 unknown callee. So there is no `.then(cb)`, and the only way to consume a
 promise is `await` — which colours the caller, and its caller, up to
@@ -291,7 +291,7 @@ here:
 - **`willreturn` dies at a suspend.** Nothing in the type system promises a
   resume; a coroutine that is never resumed has not returned. The fixpoint
   propagates that to every caller, and `willreturn` is the attribute
-  `src/codegen/attributes.ts` earns from counted loops and pays for everywhere
+  stage0's `src/codegen/attributes.ts` earns from counted loops and pays for everywhere
   else.
 - **`readnone` / `readonly` die at the frame spill.** A live local crossing a
   suspend is a store into the frame. A coroutine that reads nothing and writes
@@ -345,7 +345,7 @@ the Phase 0 rejection keeps that question closed, and that is worth something.
 
 ### 4.8 Everything lands twice, and the bootstrap has to close
 
-`src/` and `self/` mirror each other construct for construct and stage1 must
+stage0's `src/` and `self/` mirror each other construct for construct and stage1 must
 still compile itself to a byte-identical fixed point
 ([selfhost.md](../.claude/selfhost.md)). A new statement form, a new type
 family, a new escape flow and a new diagnostic family are each two
@@ -355,14 +355,14 @@ estimate, and it applies here unchanged.
 ### 4.9 An aside: where the meaning would be decided
 
 `async` is refused twice in stage0 today. Phase 0 refuses it by name for all
-four function-like kinds (`src/validator.ts:196-211`, registered for
+four function-like kinds (stage0's `src/validator.ts:196-211`, registered for
 `FunctionDeclaration`, `FunctionExpression`, `ArrowFunction` and
 `MethodDeclaration`), and the checker refuses it again in three —
-`src/checker/declarations.ts:37` and `:125` for a declaration and an arrow, and
-`src/checker/classes.ts:439` for a method — with generators refused twice more
+stage0's `src/checker/declarations.ts:37` and `:125` for a declaration and an arrow, and
+stage0's `src/checker/classes.ts:439` for a method — with generators refused twice more
 beside them (`declarations.ts:35`, `classes.ts:468`) and `for await` at
-`src/checker/arrays.ts:408`. Phase 0 runs first for every program
-(`src/compilation.ts:62`), so the checker's copies are unreachable for anything
+stage0's `src/checker/arrays.ts:408`. Phase 0 runs first for every program
+(stage0's `src/compilation.ts:62`), so the checker's copies are unreachable for anything
 that gets that far.
 
 They are not dead weight and should not be deleted: they are the sites that
@@ -381,7 +381,7 @@ its parser, where a different wording is allowed by design
 changes and nothing else does.
 
 Today `--emit-napi` writes a shim that reads the arguments, calls the Nish
-function and boxes the result (`src/interop/napi.ts`), all on the thread N-API
+function and boxes the result (stage0's `src/interop/napi.ts`), all on the thread N-API
 handed it — which for an ordinary `require()`d addon is Node's main thread. A
 Nish function that runs for 200 ms blocks Node's event loop for 200 ms.
 That is a real defect against MASTER_PLAN §1's fourth vision bullet ("Nish
@@ -472,11 +472,11 @@ asynchrony is entirely in generated C.
   because it calls the synchronous export, and a program compiled without the
   flag emits a byte-identical shim — checked over the whole interop corpus, IR
   included, against the generator as it stood before the change.
-- **It landed twice, like everything else** (§4.8): `src/interop/napi.ts` and
+- **It landed twice, like everything else** (§4.8): stage0's `src/interop/napi.ts` and
   `self/interop_napi.ts`, with `tests/self/interop_oracle.js` diffing the
   `.napi.c` of both compilers byte for byte over the corpus, the asynchronous
   sidecar now among them. The stage1 half is where the closure-free shape shows:
-  `src/` passes each wrapper a `fail` closure and `self/` passes a mode, and the
+  stage0's `src/` passes each wrapper a `fail` closure and `self/` passes a mode, and the
   three modes — throw, release the arena and throw, reject the promise — spell
   the same three failing returns.
 - **Sound under ThreadSanitizer.** The addon built with `-fsanitize=thread` and
@@ -544,7 +544,7 @@ worth more than one that only says yes.
   and zero GC is MASTER_PLAN §1's first bullet. It is not a smaller ask here
   than it was there.
 - **`for await`** — there is no async iterator to iterate; the rule stays where
-  it is (`src/checker/arrays.ts:408`, LANGUAGE.md "`for (const x of a)`").
+  it is (stage0's `src/checker/arrays.ts:408`, LANGUAGE.md "`for (const x of a)`").
 - **Matching Node's microtask semantics** — §4.7. Not declined on the merits;
   declined as a thing to sign up for before there is an implementation to hold
   to it.

@@ -1,10 +1,10 @@
-// What every checker pass is given (`src/checker/context.ts`), for stage1
+// What every checker pass is given (stage0's `src/checker/context.ts`), for stage1
 // (docs/wp14-selfhost.md, milestone S3).
 //
 // One object rather than the four arguments the passes would otherwise
 // thread, and it is where D1's error-value threading lives: `error` reports
 // and returns, it never throws, so a caller decides whether to carry on with
-// a sentinel or stop. `src/` throws a `CompileError` from 292 sites and
+// a sentinel or stop. stage0's `src/` throws a `CompileError` from 292 sites and
 // catches it in six; every one of those catches becomes a status test here.
 
 import { DiagnosticSink, SourceFile } from "./diagnostics";
@@ -260,7 +260,7 @@ export class CheckContext {
    * access. stage0 hands `expr.name` to the error and stage1's tree has no node
    * for the name — it is `text` on the member itself — so the span is the tail
    * of the access, which is exactly what `expr.name` covers there
-   * (`propertyCheckers.nullable` in `src/checker/nullable.ts`). Without this the
+   * (`propertyCheckers.nullable` in stage0's `src/checker/nullable.ts`). Without this the
    * caret sits under `g` where stage0 puts it under `paramNames`.
    */
   errorAtProperty(member: Node, message: string): void {
@@ -270,7 +270,7 @@ export class CheckContext {
   /**
    * Report against the *key* of an object-literal property rather than the
    * whole `key: value`, which is where stage0 puts it (`prop.name` in
-   * `src/validator.ts`). The key is the property's own first `text.length`
+   * stage0's `src/validator.ts`). The key is the property's own first `text.length`
    * bytes, because `parseObjectLiteral` accepts only a plain identifier there.
    *
    * It and `errorAtProperty` are mirror images — the head of a node's `text`

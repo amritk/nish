@@ -1,4 +1,4 @@
-// DWARF debug info for stage1 (`src/codegen/debug.ts`, WP10 `-g`), for
+// DWARF debug info for stage1 (stage0's `src/codegen/debug.ts`, WP10 `-g`), for
 // docs/wp14-selfhost.md milestone S4.
 //
 // Builds the metadata a debugger needs and hands the emitter the `!dbg`
@@ -17,11 +17,11 @@
 //   - `DILocalVariable`s: `llvm.dbg.value` for parameters (SSA values) and
 //     `llvm.dbg.declare` for `let`/`const` slots (entry-block allocas).
 //
-// The type mapping is stage0's and is not restated here; `src/codegen/debug.ts`
+// The type mapping is stage0's and is not restated here; stage0's `src/codegen/debug.ts`
 // has it, and `tests/self/ir_oracle.js` compares the two byte for byte over
 // every `-g` case in the corpus, metadata numbering included.
 //
-// **Two things differ from `src/`, and neither is visible in the output:**
+// **Two things differ from stage0's `src/`, and neither is visible in the output:**
 //
 //   - The type cache is keyed by `TypeTable.mangle`, not by the type id. Two
 //     ids can name one type — a `Result` carries the checker's proof about the
@@ -145,7 +145,7 @@ const bitsOf = (type: i32): i32 => {
 const bitsOfIn = (table: TypeTable, type: i32): i32 => table.isEnum(type) ? 32 : bitsOf(type);
 
 /**
- * A metadata string literal: backslash and double quote escaped, as `src/`
+ * A metadata string literal: backslash and double quote escaped, as stage0's `src/`
  * does it with two `String.replace` calls. Nothing else needs escaping — the
  * only strings that reach here are file paths and source identifiers.
  */

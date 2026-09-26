@@ -1,4 +1,4 @@
-// `Result<T, E>` lowering for stage1 (`src/codegen/emit/result.ts`, WP16),
+// `Result<T, E>` lowering for stage1 (stage0's `src/codegen/emit/result.ts`, WP16),
 // checked by `self/result.ts`.
 //
 // Layout: `%struct.nish_result.<T>.<E> = type { i1, <T>, <E> }`, one
@@ -379,7 +379,7 @@ const slotToPayload = (emitter: Emitter, type: i32, slot: string): string => {
  * single payload half to put the payload in; this has two, and leaves the one
  * the arm does not use `undef`. That `undef` is the whole optimisation:
  * `phi(undef, x)` is `x`, so where two arms meet the live slot carries the
- * live arm's expression and nothing else. `RESULT_ARMS` in `src/types.ts` has
+ * live arm's expression and nothing else. `RESULT_ARMS` in stage0's `src/types.ts` has
  * the measurement.
  */
 const armsForArm = (

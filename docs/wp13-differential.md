@@ -447,7 +447,7 @@ The comparison needs no second *compiler* — it holds a binary against the same
 program under Node — but the JavaScript it holds it against is produced by
 `rewrite.js`, and `rewrite.js` asks stage0's `Compilation` for the type of
 every expression, because `i32`, `u8`, `f32` and `i64` are all just `number`
-to `tsc`'s own checker. Delete `src/` and the reference generator goes with it.
+to `tsc`'s own checker. Delete stage0's `src/` and the reference generator goes with it.
 
 So the reference is written down while stage0 exists:
 
@@ -601,8 +601,8 @@ project of its own.
 - **stderr comparison.** The panic and I/O messages match today, but stderr
   is not part of the language, so it is not compared.
 - **A rewrite of `a[k++]`.** Not needed: the validator rejects it.
-- **Fixing the three discrepancies.** They were in `src/codegen/emit/math.ts`
-  (`pow`) and `src/codegen/emit/expressions.ts` (`sdiv`/`srem`), owned by
+- **Fixing the three discrepancies.** They were in stage0's `src/codegen/emit/math.ts`
+  (`pow`) and stage0's `src/codegen/emit/expressions.ts` (`sdiv`/`srem`), owned by
   other packages; all three were addressed afterwards (see the note under
   "Discrepancies found"), with `emit/arithmetic.ts` now holding the checked
   division.
