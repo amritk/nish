@@ -952,6 +952,11 @@ export const main = (): i32 => {
   annotation must match **exactly**. `const` freezes the binding, not the
   contents: `xs[0] = 1` and `xs.push(1)` on a `const xs` are fine.
 - `var` is forbidden. Destructuring is not supported.
+- **Semicolons are optional**, where TypeScript would insert one: at a line
+  break, before `}` and at the end of the file. It is TypeScript's rule, so a
+  line starting with `(` or `[` continues the one before it, and `return`
+  followed by a line break returns nothing. Here, the value left on the next
+  line is an unreachable-code error rather than a silent bug.
 - `for (init; cond; update)` with every clause optional, and
   `for (const x of xs)` over an **array** only — `x` gets the element type and
   must not be annotated. The array's `length` is re-read each iteration, so a
