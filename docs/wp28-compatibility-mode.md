@@ -238,9 +238,9 @@ M4 is not waiting on this note and this note is not waiting on M4. Compat's
 own reference is a separate document with its own version line and an explicit
 statement that it may churn: it is a migration surface, not a language.
 
-### 4.4 It is not for `self/`
+### 4.4 It is not for `src/`
 
-`self/` may never use a compatibility construct, for the same reason the
+`src/` may never use a compatibility construct, for the same reason the
 rolling freeze exists: stage1 must be compilable by the previous release's
 seed ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) G4). CI's
 `bootstrap` job already checks the shape of this; the compat ceiling of the
@@ -667,7 +667,7 @@ its closures is the measurement C2 has to take before it ships.
   worth making before there is an implementation to hold to it.
 - **An M:N scheduler behind `--async-model`** — wp20 §1, unchanged: a growable
   stack needs relocation, relocation needs a precise GC.
-- **Compat constructs in `self/`** — §4.4.
+- **Compat constructs in `src/`** — §4.4.
 - **A flag per feature** — §5.2. Twelve booleans is not a ratchet; it is a
   matrix nobody can test and nobody can review.
 
@@ -676,12 +676,12 @@ its closures is the measurement C2 has to take before it ships.
 ## 9. Risks
 
 - **It is the largest package ever proposed here**, and everything lands twice
-  (wp24 §4.8) against a `self/` that keeps growing. C0 and C1 are small; C2
+  (wp24 §4.8) against a `src/` that keeps growing. C0 and C1 are small; C2
   onward is not, and the staging exists so that stopping after any stage leaves
   something coherent.
 - **Two dialects and nobody writes strict.** Mitigations, all cheap: strict is
   the default, compat prints its bill on every build, the benchmark table is
-  strict-only, `self/` may not use it, and the compat reference is explicitly a
+  strict-only, `src/` may not use it, and the compat reference is explicitly a
   migration document rather than a language.
 - **The ratchet is never pulled.** A team ports, ships, and leaves the list
   full. That is their call and the mode still did its job — but it is the

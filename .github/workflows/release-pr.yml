@@ -175,10 +175,10 @@ jobs:
               }
               fs.writeFileSync(f, JSON.stringify(j,null,2)+"\n");
             }
-            // self/branding.ts carries the version too, and tests/run.js fails
+            // src/branding.ts carries the version too, and tests/run.js fails
             // when the two disagree -- a bump that touches only package.json
             // turns CI red on the release PR itself.
-            const b="self/branding.ts";
+            const b="src/branding.ts";
             fs.writeFileSync(b, fs.readFileSync(b,"utf8").replace(
               /export const VERSION: string = "[^"]*"/,
               `export const VERSION: string = "${v}"`));

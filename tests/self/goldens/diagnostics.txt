@@ -1,4 +1,4 @@
-# `self/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut.
+# `src/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut.
 # Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
 # WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
 pos 0 1 1

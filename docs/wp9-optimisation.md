@@ -1012,7 +1012,7 @@ Two steps, in the order they pay:
    the runtime, whose accesses carry C's own TBAA root, and accesses under
    different roots are never proven disjoint. It must hold for arrays of
    inline records, for `--threads` builds, and for the stack arrays of the
-   memory model (`docs/LANGUAGE.md`, item 1), whose header is an `alloca`. `self/tbaa.ts` and `self/emit-arrays.ts` own it, and the
+   memory model (`docs/LANGUAGE.md`, item 1), whose header is an `alloca`. `src/tbaa.ts` and `src/emit-arrays.ts` own it, and the
    `arr_field_reload` guard in `tests/run.js` is where a structural check
    for it belongs.
 2. **Fixed-length array fields inline in the object**, for a field that is
@@ -1021,7 +1021,7 @@ Two steps, in the order they pay:
    elements, the data pointer points into the object, and `this.freeMaxs[i]`
    is `this + offset + i`, the same zero-hop address C++'s `std::array` gets
    and one hop fewer than C++'s Queens. This changes a class's layout, so it
-   is the two-sided change `self/runtime.ts` and the C header describe and
+   is the two-sided change `src/runtime.ts` and the C header describe and
    needs its own design (what `this.freeRows = filledBooleans(8)` compiles to
    when the callee allocates the array, and what a `push` on such a field
    means). It is the fix the plan names, and it is the only one that closes

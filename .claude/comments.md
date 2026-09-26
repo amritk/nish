@@ -119,18 +119,18 @@ export interface LocalVar {
 Some comments here are load-bearing rather than decorative. Keep them accurate
 when you touch the code next to them:
 
-- **Every LLVM attribute cites its proof.** `self/attributes.ts` writes
+- **Every LLVM attribute cites its proof.** `src/attributes.ts` writes
   the reason an attribute is sound beside the code that emits it. An attribute
   with no reason is removed, not kept on faith.
-- **Module headers explain the phase.** `self/validator.ts`, `self/checker.ts`
-  and `self/emit.ts` open with what the phase decides, what it may
+- **Module headers explain the phase.** `src/validator.ts`, `src/checker.ts`
+  and `src/emit.ts` open with what the phase decides, what it may
   not look at, and which document holds the full rule list. A new phase or
   family module gets the same.
 - **Runtime ABI comments live on both sides.** A layout described in
-  `self/runtime.ts` is described the same way in `runtime/nish.h`;
+  `src/runtime.ts` is described the same way in `runtime/nish.h`;
   a change to one without the other is what `tests/run.js` exists to catch.
-- **A citation of stage0's `src/` in `self/` is history, not a pointer.** Most `self/`
-  module headers name the TypeScript module they were ported from
+- **A citation of stage0's `src/` in the compiler's source is history, not a
+  pointer.** Most module headers in `src/` name the TypeScript module they were ported from
   (stage0's `src/validator.ts`, "the stage0 twin"). That compiler was deleted in WP19
   R6, so the file named is not there to read; where a header says a rule is
   "not restated" because stage0's `src/` has it, the rule now lives only in the code

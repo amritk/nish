@@ -52,7 +52,7 @@
  * fail rather than one an earlier run has already satisfied.
  */
 import { jsonField } from "../../std/json";
-import { VERSION } from "../../self/branding";
+import { VERSION } from "../../src/branding";
 import { Suite } from "../../std/testing";
 import { contains, splitLines, trim } from "../../std/text";
 
@@ -325,7 +325,7 @@ const toolName = (manifest: string): string | null => {
  * Taking them from the manifest rather than writing them here is what stops this
  * file from being the thing that goes red at a release: the version moves in
  * `package.json`, the compiler bakes it in (stage0's `src/branding.ts`,
- * `self/branding.ts`), and the expectation follows both.
+ * `src/branding.ts`), and the expectation follows both.
  */
 const checkIdentity = (t: Suite, cli: Cli): string => {
   const manifest = readFileSyncOrNull("package.json");
@@ -562,7 +562,7 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
   const run = cli.run("ice", ["NISH_SIMULATE_ICE=1"], [source, "-o", `${WORK}/ice.ll`]);
   if (run.status === 0) {
     // Not a gap: a compiler without the hook still answers 70 with the same
-    // report when it really breaks (`self/ice.ts`); it has nothing to provoke one with.
+    // report when it really breaks (`src/ice.ts`); it has nothing to provoke one with.
     t.skip(
       "an internal compiler error",
       `${cli.label} has no NISH_SIMULATE_ICE hook: it compiled ${FIXTURE_OK} with the variable set`
@@ -588,7 +588,7 @@ const checkInternalError = (t: Suite, cli: Cli, env: boolean): void => {
   t.eqI32("with NISH_DEBUG=1 it is still 70", debug.status, 70);
   // A native compiler has no exceptions, so there is no stack to print: what
   // the variable owes the reader is the report saying so, rather than a line
-  // promising a trace a rerun would not produce (`self/ice.ts`).
+  // promising a trace a rerun would not produce (`src/ice.ts`).
   t.contains(
     "and the report says there is no stack behind it",
     debug.stderr,
@@ -775,7 +775,7 @@ const writeEnginesFixture = (name: string, range: string): string => {
  * The `engines.nish` boundary, at this compiler's own version (WP21 S3): a
  * floor equal to it is met and compiles, one patch above it is refused as
  * NL3018, and every refusal names the version that was compared. Both are
- * derived from `VERSION` in `self/branding.ts`, the constant `--version`
+ * derived from `VERSION` in `src/branding.ts`, the constant `--version`
  * prints, so they test the boundary after a release as well as before it.
  */
 const checkEnginesBoundary = (t: Suite, cli: Cli): void => {

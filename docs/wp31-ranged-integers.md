@@ -26,9 +26,9 @@ number. §4 is that difference.
 | 3 | Representation | Always `i32`, in both number modes, whatever the bounds. Bounds must lie in `i32`. No relation to `u8`/`u16`/`u32` beyond an explicit conversion (§5). | The smallest width that fits, or `u32` above `INT_MAX`. |
 | 4 | Entering the range | A checked entry: an unproven value is compared once and the program panics outside the range. The check is not emitted where the literal, the source type or the §2 facts prove it. An out-of-range literal is a compile error (§6). | A compile error for every unproven value, and an explicit conversion builtin. |
 | 5 | Leaving the range | Every operator reads a ranged value as `i32`, so arithmetic is `i32`. The range survives copies, `const` inference, reads of ranged fields and elements, returns, and type arguments. Nothing computes a range (§7). | Interval arithmetic in the types. |
-| 6 | Feeding `self/bounds.ts` | A ranged local's type answers `nonNegative` and `maxIndex` directly, the way `isUnsigned` answers `nonNegative` today, and needs no invalidation rule. The same facts decide which entry checks are elided (§8). | Recording the range as ordinary facts, which assignments would then forget. |
+| 6 | Feeding `src/bounds.ts` | A ranged local's type answers `nonNegative` and `maxIndex` directly, the way `isUnsigned` answers `nonNegative` today, and needs no invalidation rule. The same facts decide which entry checks are elided (§8). | Recording the range as ordinary facts, which assignments would then forget. |
 | 7 | Interop and `-g` | `int32_t` in C, `number` in `.d.ts`, the range in the comment above both, and a `RangeError` at the N-API and wasm bridges. A ranged type argument goes through G8's `nish_gen_` names. DWARF gets a `DW_TAG_typedef` named with the display spelling (§9). | `DW_TAG_subrange_type`, which LLVM 18 cannot write, and a new naming scheme. |
-| 8 | Stages | The name `integer` was reserved in 0.10.0 (§3), so the feature breaks nothing; it is next after the data-parallel call. W1 adds the type and always checks entry. W2 adds the proofs, W3 the bridges, and W4 the acceptance measurement. `self/` may write it from the release after W1. The item 3 cursor must not regress, and `getByte` is judged by the IR the frontend writes (§10). | One change, and a promise of speed that has not been measured. |
+| 8 | Stages | The name `integer` was reserved in 0.10.0 (§3), so the feature breaks nothing; it is next after the data-parallel call. W1 adds the type and always checks entry. W2 adds the proofs, W3 the bridges, and W4 the acceptance measurement. `src/` may write it from the release after W1. The item 3 cursor must not regress, and `getByte` is judged by the IR the frontend writes (§10). | One change, and a promise of speed that has not been measured. |
 
 ---
 
@@ -43,16 +43,16 @@ export const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
 
 fails with ``1:47: syntax error: expected a type name, found `NUMBER` ``
 at the `0`, followed by 17 cascading syntax errors. `parsePrimaryType` in
-`self/parser.ts` accepts only `(`, `null` and an identifier. `Box<3>` fails
+`src/parser.ts` accepts only `(`, `null` and an identifier. `Box<3>` fails
 the same way.
 
-**The language already has one declared range**, and `self/bounds.ts` reads
+**The language already has one declared range**, and `src/bounds.ts` reads
 it. `knownNonNegative` answers `true` for any `u8`/`u16`/`u32`/`u64` before it
 looks at a single fact, because an unsigned type "cannot hold a negative value,
 so their lower bound is read off the declaration". A declared `integer<Lo, Hi>`
 generalises that one line to both ends (§8).
 
-**What a range can prove, and what it cannot.** `proves` in `self/bounds.ts`
+**What a range can prove, and what it cannot.** `proves` in `src/bounds.ts`
 needs `0 <= i` and `i < holder.length`. A range gives the first half, and it
 gives `i < Hi + 1`, which becomes `i < holder.length` only through
 `knownMinLength(holder, Hi + 1)`. A range therefore proves an index into a
@@ -107,7 +107,7 @@ for the reason that file gives: a brand would break `let x: i32 = 5`. So
 (TypeScript 5.9.3) matches `(type|interface|declare var|declare const|class)
 integer`, so the global cannot collide with a lib type at any `lib` setting.
 When this note was written it was not a builtin name in the compiler either:
-`scalarNamed` and `builtinTypeName` in `self/annotations.ts` did not know it,
+`scalarNamed` and `builtinTypeName` in `src/annotations.ts` did not know it,
 and `type integer = i32;` and `class integer { … }` both compiled (checked
 with `build/nish`). Taking the name would have broken any program that
 declared something called `integer`, which would have made W1
@@ -152,7 +152,7 @@ an `i32`, and arithmetic on it. It also has the four things `tsc` accepts and
 still exits 0, because an unused type parameter of a type alias is not
 reported. The same copy of the declaration file, put in place of
 `runtime/nish.d.ts` in the repository's own `tsconfig.json` (an `extends` of it
-over `self/`, `std/` and `tests/nish/`), also exits 0. The line can therefore
+over `src/`, `std/` and `tests/nish/`), also exits 0. The line can therefore
 land in W1 without disturbing `npm run check`.
 
 ---
@@ -163,7 +163,7 @@ WP18's type arguments are all types ([wp18-generics.md](wp18-generics.md#2-the-s
 §2). A bound is a value. The decision is to make it a value in exactly one
 place.
 
-**`self/parser.ts`.** `parsePrimaryType` gains one shape: a `TOK_NUMBER`, or a
+**`src/parser.ts`.** `parsePrimaryType` gains one shape: a `TOK_NUMBER`, or a
 `-` followed by one, becomes `N_TYPE_LITERAL`. That is the next node kind,
 `61`, and `N_COUNT` moves to `62`, because kinds are appended and never moved.
 Its `text` is the literal as written (`-5`, `0xFF`). It is parsed wherever a
@@ -178,7 +178,7 @@ one-token parser that forbids type arguments at a call site
 ([wp18-generics.md](wp18-generics.md#2a-inference-and-why-there-are-no-type-arguments-at-a-call-site)
 §2a) is untouched, and so is `expectTypeArgumentEnd`.
 
-**The checker.** `resolveReference` in `self/annotations.ts` answers
+**The checker.** `resolveReference` in `src/annotations.ts` answers
 `integer` beside `Result` and `Array`, before any declared name and before
 `structTemplate`. It resolves to `ctx.table.rangedOf(lo, hi)`. Each refusal
 below gets a code in the NL2xxx band, allocated when W1 is built:
@@ -205,7 +205,7 @@ canonical decimal value. The encoding is prefix-coded like the rest of
 `TypeTable.mangle`: `rng.` is a tag no other constructor starts with, a class
 called `rng` mangles as `$rng`, and a run of digits ends at the first
 non-digit. `cStructName`'s
-escape in `self/interop-abi.ts` is injective because "a digit can never follow
+escape in `src/interop-abi.ts` is injective because "a digit can never follow
 one of the mangling's separators", so a `_0` in a C name is always the `_` the
 user wrote. `rng.0.255` would break that argument, and `rng.p0.p255` keeps it.
 So `Box<integer<0, 255>>` is `%struct.Box$rng.p0.p255`,
@@ -252,7 +252,7 @@ a two-sided change for every class in the header. The narrow widths already
 exist for anyone who wants the bytes. **Rejected: a `u32` base when
 `Hi > 2147483647`.** Moving `Hi` by one would flip the arithmetic from
 signed `nsw` to unsigned wrapping. An index cannot use the upper half anyway,
-because `maxIndex` is an `i32` fact and `self/bounds.ts` carries nothing past
+because `maxIndex` is an `i32` fact and `src/bounds.ts` carries nothing past
 `I32_MAX`. Values above `INT_MAX` are what `u32` is for.
 
 ---
@@ -284,8 +284,8 @@ ordinary type error. The entry then compiles to one of three things:
    and a range that is all of `i32` needs no check at all. The blocks are
    `rng.ok` and `rng.fail`. The failure path is `panic`'s: W1 factors the
    `nish_write` + `nish_exit` + `unreachable` tail that `emitPanic`
-   (`self/emit-builtins.ts`) and `emitExpect` (`self/emit-result.ts`) each
-   spell out into one helper, and `self/attributes.ts` records the same two
+   (`src/emit-builtins.ts`) and `emitExpect` (`src/emit-result.ts`) each
+   spell out into one helper, and `src/attributes.ts` records the same two
    callees for it that it records for `expect`. No runtime symbol is added,
    so `runtime.c`'s budget, 3,515 of 3,584 bytes per
    `.claude/architecture.md`, does not move.
@@ -314,7 +314,7 @@ entry *is* the conversion, written where the program already says which range
 it wants.
 
 **The check survives `--unchecked-indexing`**, which removes index checks
-only. Like the `substring` clamp (header of `self/bounds.ts`), the range check
+only. Like the `substring` clamp (header of `src/bounds.ts`), the range check
 is the type's semantics, and the clamp fold reads the facts a range feeds, so
 an unchecked entry could fold away a clamp that JavaScript requires.
 
@@ -407,12 +407,12 @@ to, without types.
 
 ---
 
-## 8. One more fact source for `self/bounds.ts`
+## 8. One more fact source for `src/bounds.ts`
 
 **Decision: the type answers, the state does not store.** One query in
-`self/types.ts`, `declaredRange(type)`, answers `[Lo, Hi]` for a ranged type,
+`src/types.ts`, `declaredRange(type)`, answers `[Lo, Hi]` for a ranged type,
 `[0, 255]` and `[0, 65535]` for `u8` and `u16`, `[0, …]` for `u32` and `u64`,
-and nothing otherwise. Two queries in `self/bounds.ts` ask it, and neither
+and nothing otherwise. Two queries in `src/bounds.ts` ask it, and neither
 gains a fact that can be forgotten:
 
 - `knownNonNegative(state, v)` answers `true` when the declared `Lo >= 0`,
@@ -453,7 +453,7 @@ lower bound is: the type cannot hold anything else.
 **A check that survives inside a loop warns**, as a new code in the §8
 `performance` class next to `NL9007`, naming the guard that would prove it.
 The gate in `tests/run.js` keeps `std/` and `examples/` at zero warnings of
-it. `self/` is ratcheted in `tests/perf-baseline.json` like every other code.
+it. `src/` is ratcheted in `tests/perf-baseline.json` like every other code.
 
 The property-path facts of #106, being built in parallel, key *length* facts
 by path. They compose with this and neither depends on the other.
@@ -476,9 +476,9 @@ Every spelling here is one G8 already chose, as
 
 **Where the check lives at an ABI boundary: the linkage condition.** A caller
 can prove an entry only if every caller is visible, which is exactly
-`privateResultAbi` in `self/emit-result.ts` (`strictExports && !exported`,
+`privateResultAbi` in `src/emit-result.ts` (`strictExports && !exported`,
 wp15 §7b). W3 renames it `privateAbi`, since it now decides more than the
-`Result` ABI, and the inline copy of the test in `self/interop-abi.ts` calls
+`Result` ABI, and the inline copy of the test in `src/interop-abi.ts` calls
 it too. Where it holds, ranged parameters are checked at each call site,
 where the facts are. Anywhere else the callee checks them in its prologue and
 its callers skip theirs. The two bridges check again before the
@@ -492,7 +492,7 @@ is in range. `RangeError` is also what JavaScript throws for
 host writes, and nothing checks it on entry. Such a function gets the
 existing header line, "not declared; no C spelling for one of its types", and
 the matching omission in the other sidecars. That is a skip already in
-`self/interop-header.ts`, so no new refusal is needed. **A `declare function`
+`src/interop-header.ts`, so no new refusal is needed. **A `declare function`
 may not mention a ranged type** at all. The range would be a promise the C
 side never made, which is [wp27-ffi.md](wp27-ffi.md)'s objection to every
 attribute on a foreign callee. W1 refuses it.
@@ -531,12 +531,12 @@ which with `instanceDisplayName` spells `Box<integer<0, 255>>`, and
 | **W3** | `feat(interop): ranged parameters at the host boundary (WP31)` | §9: the prologue check under the linkage condition, the N-API and wasm `RangeError`, and the comments in the header and `.d.ts`. | `interop_rng_*`: the header under `clang -std=c11 -Wall -Wextra -Werror -pedantic`, the `.d.ts` under `tsc --noEmit`, and a Node call that must throw |
 | **W4** | `docs(wp31): record the ranged-integer measurements` | the acceptance program below, committed to `bench/`, and its numbers written into this note and into wp15 item 6 | the programs themselves, and their checksums in `bench/run.mjs` if they join the suite |
 
-**The rolling freeze.** `self/` is built by the last release. It cannot write
+**The rolling freeze.** `src/` is built by the last release. It cannot write
 `integer<…>` in its own source until the release after W1 lands, because the
 seed's parser has no `N_TYPE_LITERAL`. The `nish.d.ts` line is harmless before
-that (§3a). Adopting ranges in `self/` is a change of its own, measured
+that (§3a). Adopting ranges in `src/` is a change of its own, measured
 against `tests/perf-baseline.json`, and the prediction is modest. wp15 §2.4
-counts seventeen checks that survive inside loops in `self/`: two arrays the
+counts seventeen checks that survive inside loops in `src/`: two arrays the
 program keeps the same length, a `min(a.length, b.length)` cursor, a merge
 sort's three indices into two buffers. None is an index into a table of known
 size, which is the only thing a range proves.

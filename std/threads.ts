@@ -39,7 +39,7 @@
  * (docs/wp20-threads.md §8e). It decides the blocking, and so the answer's
  * bits: an array this short is one block, folded as the loop it would have
  * been. It is independent of the map's grain (`mapGrain` in
- * `self/parallel.ts`), which decides only how a map is divided and may
+ * `src/parallel.ts`), which decides only how a map is divided and may
  * change without changing any result; this one may not.
  */
 const BLOCK: i32 = 1048576

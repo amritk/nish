@@ -119,13 +119,13 @@ export const platformPackageName = (packageName, asset) => `${packageName}-${ass
 /**
  * The diagnostic code every refusal here carries: `NL0002`, the toolchain code.
  *
- * Not a new code, and that is the point. `self/codes.ts` defines `NL0002` as
+ * Not a new code, and that is the point. `src/codes.ts` defines `NL0002` as
  * "the toolchain `--link` needs could not be used (exit 3)", and a prebuilt
  * compiler that is absent or will not start is the same class of failure seen
  * one step earlier: no source position, nothing wrong with the program, and the
  * thing that could not be run is a binary rather than the input. Reusing it
  * keeps the launcher out of the diagnostic registry entirely -- a code minted
- * here would be one `self/codes.ts` mirrors for a message the compiler can
+ * here would be one `src/codes.ts` mirrors for a message the compiler can
  * never print, and `tests/diagnostic-coverage.js` would then want a case
  * provoking a rule that does not exist.
  */

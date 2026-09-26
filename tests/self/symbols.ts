@@ -1,4 +1,4 @@
-// The driver for `self/symbols.ts` (docs/wp14-selfhost.md, milestone S3),
+// The driver for `src/symbols.ts` (docs/wp14-selfhost.md, milestone S3),
 // checked against stage0 until R6; `tests/self/goldens/symbols.txt` is its output.
 //
 // The script below is one every Nish program with a nullable exercises:
@@ -8,8 +8,8 @@
 // pointer the checker promised was not null, so the two implementations are
 // driven through it step for step and their answers diffed.
 
-import { Local, Scope, STORAGE_LOCAL, STORAGE_PARAM } from "../../self/symbols"
-import { T_F64, T_I32, T_STRING, TypeTable } from "../../self/types"
+import { Local, Scope, STORAGE_LOCAL, STORAGE_PARAM } from "../../src/symbols"
+import { T_F64, T_I32, T_STRING, TypeTable } from "../../src/types"
 
 /** `name -> declared type -> what it reads as here`, or that it is not in scope. */
 const report = (out: string[], table: TypeTable, scope: Scope, where: string, name: string): void => {

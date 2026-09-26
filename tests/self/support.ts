@@ -1,12 +1,12 @@
 // The driver for the Wave C support library (docs/wp14-selfhost.md §3): it
-// prints what `self/strings.ts`, `self/map.ts` and `self/paths.ts` compute for
+// prints what `src/strings.ts`, `src/map.ts` and `src/paths.ts` compute for
 // every case in `tests/self/cases.txt` plus the ranges generated below, and
 // `tests/self/support-oracle.js` prints the same thing from Node — from
 // its golden for the answers recorded from stage0, from `node:path` for
 // the path functions, and from `JSON.stringify`, `Buffer.compare` and `Map`
 // for the rest — and diffs.
 //
-// Rule 3 of §6 is why this exists: nothing in `self/` is checked against a
+// Rule 3 of §6 is why this exists: nothing in `src/` is checked against a
 // golden somebody typed. Every line below has an implementation on the other
 // side that was written first and is already trusted.
 
@@ -20,10 +20,10 @@ import {
   repeatString,
   splitByte,
   StringBuilder,
-} from "../../self/strings"
-import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../self/map"
-import { nishExportTarget } from "../../self/manifest"
-import { parseBareSpecifier } from "../../self/packages"
+} from "../../src/strings"
+import { entryOf, fingerprint, hashString, home, slotOf, StringMap, StringSet } from "../../src/map"
+import { nishExportTarget } from "../../src/manifest"
+import { parseBareSpecifier } from "../../src/packages"
 import {
   basename,
   basenameWithout,
@@ -33,7 +33,7 @@ import {
   relativePath,
   resolveModule,
   resolvePath,
-} from "../../self/paths"
+} from "../../src/paths"
 
 const TAB: i32 = 9
 const NEWLINE: i32 = 10
@@ -75,7 +75,7 @@ const reportRelative = (out: string[], from: string, to: string): void => {
 }
 
 /**
- * `self/manifest.ts` and `self/packages.ts`, over one `pkg` or `spec` case
+ * `src/manifest.ts` and `src/packages.ts`, over one `pkg` or `spec` case
  * (WP21 S2). These are the two halves of resolving a bare specifier, and they
  * are here because both are hand-written scanners with a stage0 twin that has
  * to select the *same file for the same manifest*: a package that resolved
@@ -107,7 +107,7 @@ const reportSpecifier = (out: string[], specifier: string): void => {
  * The map, against the same cases: insert in order, look every key up, then
  * overwrite. The oracle drives a JavaScript `Map` through the same script, so
  * what is compared is the iteration order too — the reason for the dense
- * entry list in `self/map.ts`.
+ * entry list in `src/map.ts`.
  */
 const reportMap = (out: string[], keys: string[]): void => {
   const map = new StringMap()

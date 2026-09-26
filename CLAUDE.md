@@ -2,7 +2,7 @@
 
 **New session? Read [`.claude/orientation.md`](.claude/orientation.md) first** —
 it is the ninety-second map of the repository, the compiler, the seed that
-builds it, and the commands. If the work touches the compiler — `self/` —
+builds it, and the commands. If the work touches the compiler — `src/` —
 read [`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
 
 Writing a *program* in Nish rather than working on the compiler? That is
@@ -12,7 +12,7 @@ example compiled by `npm test`.
 Developer guidelines live in the `.claude/` directory:
 
 - **orientation.md** — start here: what the repo is, where the code is, what to run
-- **selfhost.md** — the `self/` compiler: Nish-0, the seed, the module map, how it is tested
+- **selfhost.md** — the compiler in `src/`: Nish-0, the seed, the module map, how it is tested
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
 - **linting.md** — What the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, knip and the format hook
 - **typescript.md** — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
@@ -27,7 +27,7 @@ Developer guidelines live in the `.claude/` directory:
 
 ## Definition of done
 
-`npm run check` (an ambient `tsc --noEmit` over `self/`, `std/` and
+`npm run check` (an ambient `tsc --noEmit` over `src/`, `std/` and
 `tests/nish/` against `runtime/nish.d.ts`) and an undegraded `npm test` green.
 A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
@@ -37,13 +37,13 @@ exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
 ported or adapted from elsewhere keeps its upstream notice and is listed in
 `THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
 
-**There is one compiler, and a construct is written once, in `self/`.** The
-TypeScript implementation that used to sit beside it in stage0's `src/` was deleted in
-WP19 R6 (`docs/wp19-stage0-retirement.md`). `self/` is built by the last
+**There is one compiler, and a construct is written once, in `src/`.** The
+TypeScript implementation that used to sit beside it, stage0, was deleted in
+WP19 R6 (`docs/wp19-stage0-retirement.md`). `src/` is built by the last
 released `nish` — the seed, which `scripts/fetch-seed.sh` puts in `build/seed/`
-— so `self/` may not *use* a new construct in its own source until the next
+— so `src/` may not *use* a new construct in its own source until the next
 release: the rolling freeze, which CI's `bootstrap` job checks by building
-`self/` with that release.
+`src/` with that release.
 
 ## Git & PR Guidelines
 

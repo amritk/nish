@@ -6,7 +6,7 @@ spellings emit byte-identical IR, and `tests/cases/fn_arrow` carries the golden,
 the `llvm-as` pass and the native round trip (§8 has what each stage cost). C's
 docs half landed first — `README.md`, `docs/LANGUAGE.md`, every
 `docs/cookbook/` snippet, `examples/`, the playground and the `.claude/` rules —
-and §8a records the two concise-body bugs that rewrite found. **`self/` is
+and §8a records the two concise-body bugs that rewrite found. **`src/` is
 arrows now too**: all 739 of its declarations, in the two passes §8b prescribes,
 with `arrow-verify --applied` comparing 1,407 emitted files byte for byte across
 each of them and the bootstrap reproducing stage1 from the rewritten source.
@@ -142,7 +142,7 @@ are not stage D's to take (§9).
 
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
-| `self/` | **0** | 755 | **Done.** 739 declarations were rewritten in two passes and `arrowify --check self/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran, 736 once WP21's package resolution had been merged in, and 739 after `CPtr` |
+| `src/` | **0** | 755 | **Done.** 739 declarations were rewritten in two passes and `arrowify --check src/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran, 736 once WP21's package resolution had been merged in, and 739 after `CPtr` |
 | `tests/cases/` | **693** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates. Derived the same way: `arrowify --check tests/cases/*.ts` answers 689, and four more carry a body while having no arrow spelling — two `export default`, one `async`, one `function*` — which this column counts and the seven `declare function` lines it does not |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
@@ -152,30 +152,30 @@ are not stage D's to take (§9).
 | `examples/`, `std/`, `tests/nish/` | 0 | 76 | done |
 | `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | — | the real cost centre; IR blocks beside them stay as they are. Done |
 | stage0's `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
-| `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
-| `self/parser.ts` | arrow parsing | — | done in stage B |
+| `src/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`src/lexer.ts:772`) |
+| `src/parser.ts` | arrow parsing | — | done in stage B |
 
 **1,664 definitions**, against 78 when stage C's docs half was finished. The
 number matters to one decision and no other: §10 argues stage D on the size of
 what is left, and the honest figure for that argument is this one rather than
 the 798 the row above used to carry. It was 1,647 when the row was taken and
-1,664 three releases of `self/` later — and five of that difference is not drift
+1,664 three releases of `src/` later — and five of that difference is not drift
 at all but a row that had been counting the rewritable declarations rather than
 the definitions its own column names. Both numbers are re-derivable from the
 commands beside them, which is the only property worth having here.
 
 ## 8. The order, and why it is forced
 
-The bootstrap is the constraint. `self/` is Nish compiled by stage0, and
+The bootstrap is the constraint. `src/` is Nish compiled by stage0, and
 stage1 compiles itself. So `function` cannot be removed from the language
-before `self/` is arrows, and `self/` cannot *be* arrows before stage1 parses
+before `src/` is arrows, and `src/` cannot *be* arrows before stage1 parses
 them. That forces four stages, and no two of them can be merged:
 
 | Stage | What lands | Done when |
 | --- | --- | --- |
 | **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
-| **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `self/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
-| **C** | The migration: the docs and `examples/` first (done), then `self/` (done), then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
+| **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `src/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
+| **C** | The migration: the docs and `examples/` first (done), then `src/` (done), then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
 | **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any Nish source |
 
 **A cannot carry its own positive golden, and that is the plan's one real
@@ -190,7 +190,7 @@ trip lands in B. The identity of the two spellings is still proven in A, by
 compiling one program written both ways and diffing the IR; it just cannot live
 in the corpus yet.
 
-Stage C is where the risk is, and it is worth doing `self/` in one commit of
+Stage C is where the risk is, and it is worth doing `src/` in one commit of
 its own: the bootstrap comparing stage1's output against itself is the only
 check that the 603 rewrites were all meaning-preserving.
 
@@ -199,10 +199,10 @@ for a reason worth keeping: the docs and `examples/` were done first *because*
 they are the cheap surface to verify. Every `docs/cookbook/*.ts` is compiled by
 `regen.sh`, so rewriting all 68 of them and diffing the emitted `.ll` against
 the previous run is one command — and that diff is what found both bugs in §8a.
-Doing `self/` first would have put 603 rewrites and two latent stage0 bugs in
+Doing `src/` first would have put 603 rewrites and two latent stage0 bugs in
 the same commit.
 
-`self/` has that property now too, and §8b is the tooling that gives it to
+`src/` has that property now too, and §8b is the tooling that gives it to
 every other surface as well.
 
 ### 8a. What C's first half cost: two concise-body bugs
@@ -224,7 +224,7 @@ the *parent node* rather than by being told:
    type mismatch`, while both block-bodied twins compiled.
 
 2. **The call-site reclaim.** `flowTarget` in stage0's `src/codegen/escape.ts` and its
-   twin in `self/escape.ts` decided where a freshly allocated value goes by the
+   twin in `src/escape.ts` decided where a freshly allocated value goes by the
    same test, so a concise body that returns an allocation was read as
    producing a *local*. That made `allocates` false for the callee, and WP9's
    `nish_arena_mark` / `nish_arena_keep` bracket disappeared from every call to
@@ -238,9 +238,9 @@ stage0's `src/checker/declarations.ts`: the operand of a `return`, or the body a
 
 **Stage1 had exactly one of the two**, and which one is the useful part.
 Its checker threads the wanted type down as `want` (`checkReturnValue` in
-`self/statements.ts`) rather than climbing to a parent, so bug 1 was never
+`src/statements.ts`) rather than climbing to a parent, so bug 1 was never
 reachable there — for a while the two compilers silently disagreed about
-programs no test had written. Its `flowTarget` (`self/escape.ts`) *does* climb,
+programs no test had written. Its `flowTarget` (`src/escape.ts`) *does* climb,
 so it had bug 2, and `tests/self/ir_oracle.js` caught it the moment
 `docs/cookbook/mem-reclaim.ts` became an arrow: stage0 emitted the bracket,
 stage1 did not.
@@ -255,7 +255,7 @@ only the IR diff and the type errors will.
 
 Stage1's parser needed one piece of genuine work and the rest fell out. The
 piece: the parenthesis that opens a parameter list also opens a parenthesised
-expression, and `self/parser.ts` keeps one token of lookahead, which cannot
+expression, and `src/parser.ts` keeps one token of lookahead, which cannot
 tell `const x = (a + b) * c` from `const f = (a: i32): i32 => a`. A scratch
 `Lexer` over the same source runs ahead from the `const`, counts to the
 parenthesis that closes this one and looks at what follows — `=>`, or the `:`
@@ -278,7 +278,7 @@ answers the expression rather than `null`, the checker calls
 tested for a block. The analyses that only walk the tree took the expression
 unchanged.
 
-The oracles caught one thing the branches missed: `self/dump.ts` guarded its
+The oracles caught one thing the branches missed: `src/dump.ts` guarded its
 body walk on `N_BLOCK`, so a call inside a concise body never reached
 `--emit-checked`, and `tests/self/checked_oracle.js` said so. The emitted IR was
 never affected — `walkBody` prints the callee table, it does not build it — but
@@ -298,17 +298,17 @@ tooling around it that reads Nish with a regex.
 The reason the docs half went first is the reason the rest of C can now go at
 all: `regen.sh` made "did this rewrite change anything?" a single command, and
 a question you can ask in one command is a question you ask on every file
-rather than on the ones you are worried about. `self/` had no such command —
+rather than on the ones you are worried about. `src/` had no such command —
 its 733 declarations are a program whose output is checked by the bootstrap,
 which is the slowest check in the repository — so stage C's expensive half
 starts by building one.
 
 ```bash
-node scripts/arrowify.mjs self/lexer.ts          # rewrite, in place
-node scripts/arrowify.mjs --check self/*.ts      # what is left, and why
+node scripts/arrowify.mjs src/lexer.ts          # rewrite, in place
+node scripts/arrowify.mjs --check src/*.ts      # what is left, and why
 node scripts/arrow-verify.mjs                    # the whole corpus, before and after
-node scripts/arrow-verify.mjs --debug self       # the same, under `-g`
-node scripts/arrow-verify.mjs --applied self     # the rewrite the tree already carries
+node scripts/arrow-verify.mjs --debug src/       # the same, under `-g`
+node scripts/arrow-verify.mjs --applied src/     # the rewrite the tree already carries
 ```
 
 **`scripts/arrowify.mjs` is textual, driven by the parse tree.** `typescript`
@@ -410,7 +410,7 @@ move a line and a column without moving a byte of anybody's IR" — and did not
 deliver: the `--json` read was asked only where the status was non-zero, so a
 `performance:` warning could move, change or disappear under a rewrite and the
 sweep answered `0 difference(s)`. 76 corpus programs warn on a successful
-compile, most of `self/` among them, and `--concise` moves every warning below a
+compile, most of `src/` among them, and `--concise` moves every warning below a
 collapsed declaration, so the silence was pointed straight at the migration.
 Every subject that says anything is now read on both sides by the rule the
 refusals use: the words may not change, a position may, and the summary prints
@@ -452,24 +452,24 @@ not a flourish, and finding out why is what this preparation was for.** Biome's
 `useConsistentArrowReturn` is an **error** in `biome.json`, not a warning — so a
 block-bodied arrow whose body is one `return` fails `npm run lint` in every
 directory Biome reads, which is every Nish surface except the test fixtures.
-A block-only rewrite of `self/` would land **119 lint errors**, one per
+A block-only rewrite of `src/` would land **119 lint errors**, one per
 single-return declaration of its 733 at the time it was counted, and `npm run lint` may not get worse than
 `main`. The rewrite is therefore two passes and not one, and the order is the
 point:
 
 ```bash
-node scripts/arrow-verify.mjs self                      # the question, before touching anything
-node scripts/arrowify.mjs self/*.ts                     # block bodies; lines and columns hold
-node scripts/arrow-verify.mjs --applied self            # 0 differences, or stop
-node scripts/arrowify.mjs --concise self/*.ts           # the 119, for the lint
-node scripts/arrow-verify.mjs --applied self            # 0 differences again, collapse included
+node scripts/arrow-verify.mjs src/                      # the question, before touching anything
+node scripts/arrowify.mjs src/*.ts                     # block bodies; lines and columns hold
+node scripts/arrow-verify.mjs --applied src/            # 0 differences, or stop
+node scripts/arrowify.mjs --concise src/*.ts           # the 119, for the lint
+node scripts/arrow-verify.mjs --applied src/            # 0 differences again, collapse included
 ```
 
 **The verification steps are `--applied` and they have to be.** The rewrite is
 in the tree by then, so a derived sweep would rewrite nothing, compile the same
 source twice and answer with a zero that means only that it did nothing — which
 is how the collapse pass, the half with §8a's whole history, could have gone to
-`self/` never having been IR-checked at all. `--applied` compares the text that
+`src/` never having been IR-checked at all. `--applied` compares the text that
 is actually there against `HEAD`, so the second run checks the collapse and the
 first checks the block-bodied pass, each on its own.
 
@@ -531,27 +531,29 @@ arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left a
 ```
 
 — which is every `function` definition in the repository outside stage0's `src/`,
-`self/`'s (then) 721 included, turned into an arrow and compiled to the same 1,678
-modules, byte for byte. That is the evidence for the `self/` migration, and it
+the self-hosted compiler's 721 (then in `self/`) included, turned into an arrow and
+compiled to the same 1,678 modules, byte for byte. That is the evidence for the
+compiler's migration, and it
 exists before the migration rather than after it. The same sweep under `-g`
 comes back with one difference in 373 programs, and it is a *position* rather
 than a lowering — the subsection below is what it was and why the corpus has 77
-of it and `self/` none.
+of it and `src/` none.
 
 **By reading: also none.** A search that finds nothing is only worth what the
 search was, so here is the search, reproducible in four commands:
 
 ```bash
+# stage0's src/ (deleted in R6): the typescript-API side
 grep -rn "isReturnStatement" src/ --include=*.ts      # 5 hits
 grep -rn "\.parent" src/ --include=*.ts               # 47, of which 19 bind it to a name
 grep -rn "decl\.body\|sig\.body" src/ --include=*.ts  # the body walkers
-grep -n  "parentOf\|N_RETURN" self/*.ts               # the stage1 side: 11 and 10
+grep -n  "parentOf\|N_RETURN" src/*.ts               # the stage1 side: 11 and 10
 ```
 
 The first two are the class's signature — a pass that names a `return` by its
 kind, or climbs to a parent to find out what a value is for. The third is the
 other way in, because a pass that reaches a body and expects a `Block` has the
-same problem from the other end (`self/dump.ts` had exactly that, §8's "What B
+same problem from the other end (`src/dump.ts` had exactly that, §8's "What B
 cost"). The fourth runs the same two searches against the self-hosted compiler,
 which has no `node.parent` and a `parents.ts` table instead, so the query is
 spelled differently and the class is identical.
@@ -586,7 +588,7 @@ normalised `sig.body` — the same node today, and named here because the field
 
 One gap exists and is unreachable, in both compilers, identically:
 `capturesLocal` in `checker/performance.ts` and `isLocalRef` in
-`self/checker.ts` both treat a `return` as a capture of the value it hands back
+`src/checker.ts` both treat a `return` as a capture of the value it hands back
 and have no arm for the expression an arrow *is*. Neither can be reached — the
 scan they belong to looks for captures that happen *before* an assignment in
 the same body, and a concise body has no statement for an assignment to be in.
@@ -631,7 +633,7 @@ rule is keyed on the `declare` modifier now, and the other two on the `default`
 modifier and the asterisk — the syntax that *makes* each form, rather than
 something that usually accompanies it.
 
-**None of the three can appear in `self/`**, so the rewrite that the whole
+**None of the three can appear in `src/`**, so the rewrite that the whole
 package is pointed at would never have found them; all three are in
 `tests/cases`, which stage C still has to convert. A codemod that turns a
 refused program into a compiling one is the worst thing one can do, because
@@ -688,7 +690,7 @@ So the whole rule, and it is short enough to check a file against:
 > columns left, and — only where a body is written on the same line as its
 > declaration — everything inside that body three columns right.
 
-Both are enumerable rather than discoverable. **`self/` has no single-line body
+Both are enumerable rather than discoverable. **`src/` has no single-line body
 at all**, so the second cannot reach the migration that matters; the corpus has
 77, and 76 of them are `reject_*` cases, where a column is precisely what the
 diagnostic carries. No gate sees that shift today — the `.err` sidecars pin
@@ -800,7 +802,7 @@ main` ``. `scripts/gen-diagnostic-codes.mjs` keys a code on the words, so
 rewording either retires its number and issues a new one — which is why they
 are stage D's to change, alongside the rejection that makes the spelling they
 name wrong. Nothing else the compiler *prints* names the spelling: every other
-occurrence of the phrase across stage0's `src/` and `self/` is a comment or a piece of
+occurrence of the phrase across stage0's `src/` and `src/` is a comment or a piece of
 JSDoc, which costs nothing to reword and carries no code.
 
 ## 10. Open

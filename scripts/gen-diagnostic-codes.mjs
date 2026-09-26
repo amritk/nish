@@ -11,9 +11,10 @@
  *
  * **The registry is kept by hand now.** It used to be generated: this script
  * scanned stage0's `src/` for every diagnostic message, cut each at its interpolations,
- * and wrote the same table into stage0's `src/codes.ts` and `self/codes.ts`. That scan
+ * and wrote the same table into stage0's `src/codes.ts` and this compiler's `self/codes.ts`
+ * (now `src/codes.ts`). That scan
  * read stage0's source, and stage0 is deleted (wp19 §5 R6), so the generator
- * was frozen with the table it last wrote and `self/codes.ts` became the
+ * was frozen with the table it last wrote and `src/codes.ts` became the
  * registry. A new diagnostic gets its code by hand: append a fragment and the
  * next free number in its band (the second mode above prints those), at the
  * position the ordering rule below puts it. `tests/diagnostic-coverage.js`
@@ -39,7 +40,7 @@
  *   - **No fragment too short to identify a rule** (ten characters, trimmed),
  *     which would match half the suite.
  *   - **Every string in a table is half of a pair.** `codeFor` in
- *     `self/codes.ts` reads each table as one flat array and steps through it
+ *     `src/codes.ts` reads each table as one flat array and steps through it
  *     by two, so a fragment added without its code line -- or a code without
  *     its fragment -- shifts every pairing after it, and from there on
  *     messages get their neighbour's code. The pair reader cannot see that:
@@ -64,7 +65,7 @@ import { parseCodesRegistry, STRING_LITERAL } from "./codes-registry.js"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const REGISTRY =
-  process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "self", "codes.ts")
+  process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "src", "codes.ts")
 
 /** The bands a table entry may use. Band 0 is constants, never a table row. */
 const BANDS = new Set(["1", "2", "3", "4", "9"])
@@ -73,7 +74,7 @@ const BANDS = new Set(["1", "2", "3", "4", "9"])
 const MIN_FRAGMENT = 10
 
 /**
- * The text of one table in `self/codes.ts`: from its `name = (): string[] => [`
+ * The text of one table in `src/codes.ts`: from its `name = (): string[] => [`
  * to the `];` that closes it. Parsed per table, because the table a fragment
  * sits in is part of what it means -- a performance rule is matched only
  * against a performance message.
@@ -99,7 +100,7 @@ const literalCount = (body) => body.slice(body.indexOf("\n")).match(STRING_LITER
 /** The order the compilers rely on: longest fragment first, then `localeCompare`. */
 const inOrder = (a, b) => b.fragment.length - a.fragment.length || a.fragment.localeCompare(b.fragment)
 
-/** Every rule of `self/codes.ts` it breaks, as a line each; empty when it holds. */
+/** Every rule of `src/codes.ts` it breaks, as a line each; empty when it holds. */
 const problems = (text) => {
   const found = []
   const tables = []
@@ -109,11 +110,11 @@ const problems = (text) => {
   ]) {
     const body = tableText(text, name)
     if (body === null) {
-      found.push(`self/codes.ts has no \`${name}\` table`)
+      found.push(`src/codes.ts has no \`${name}\` table`)
       continue
     }
     try {
-      const pairs = parseCodesRegistry(body, `self/codes.ts ${name}`)
+      const pairs = parseCodesRegistry(body, `src/codes.ts ${name}`)
       const literals = literalCount(body)
       if (literals !== 2 * pairs.length) {
         found.push(
@@ -133,12 +134,12 @@ const problems = (text) => {
   // `tests/diagnostic-coverage.js` never asks about.
   let whole = []
   try {
-    whole = parseCodesRegistry(text, "self/codes.ts")
+    whole = parseCodesRegistry(text, "src/codes.ts")
   } catch (err) {
     found.push(err.message)
   }
   if (whole.length !== all.length) {
-    found.push(`self/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the two tables`)
+    found.push(`src/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the two tables`)
   }
 
   for (const { name, perf, pairs } of tables) {
@@ -187,7 +188,7 @@ const problems = (text) => {
 
   const count = /export const RULE_COUNT: i32 = (\d+);?$/m.exec(text)
   if (count === null) {
-    found.push("self/codes.ts has no `RULE_COUNT`")
+    found.push("src/codes.ts has no `RULE_COUNT`")
   } else if (Number(count[1]) !== all.length) {
     found.push(`RULE_COUNT is ${count[1]} and the tables hold ${all.length} rules`)
   }
@@ -210,6 +211,6 @@ for (const problem of found) {
   console.error(`error: ${problem}`)
 }
 if (found.length === 0 && !process.argv.includes("--check")) {
-  console.log(`self/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`)
+  console.log(`src/codes.ts: ${all.length} rules, well-formed; next free: ${nextFree(all).join(" ")}`)
 }
 process.exit(found.length > 0 ? 1 : 0)

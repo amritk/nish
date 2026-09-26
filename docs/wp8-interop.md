@@ -12,7 +12,7 @@ nish x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
 ```
 
 Both compilers write them. The self-hosted compiler carries its own port of
-the generators (`self/interop-*.ts`, WP14 §7) and answers the same four flags
+the generators (`src/interop-*.ts`, WP14 §7) and answers the same four flags
 with the same bytes; `tests/self/interop_oracle.js` is what says so.
 
 ## The C ABI
@@ -639,7 +639,7 @@ real pass over the buffer on top of the crossing.
 | stage0's `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | stage0's `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
 | stage0's `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
-| `self/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same four flags and writes the same files. |
+| `src/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `src/compile.ts` takes the same four flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all five generated files compared byte for byte — the asynchronous shim among them. |
 | `tests/self/interop-payloads.ts`, `tests/self/interop-widths.ts`, `tests/self/interop-unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |

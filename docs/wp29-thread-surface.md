@@ -206,7 +206,7 @@ decided, beyond what is written above:
   types — and the compiler recognises the two templates by module and name.
   It replaces one call in each instance, the chunk loop over the whole range,
   with a context block and a call to `nish_parallel_range`
-  (`self/emit-parallel.ts`), so the length check and its message, the reduce's
+  (`src/emit-parallel.ts`), so the length check and its message, the reduce's
   blocking and its combine are the module's code, and the chunk loop keeps its
   bounds proofs and TBAA. There is no `declare global`, no `Disposable` and no
   `using` in P1.
@@ -222,13 +222,13 @@ decided, beyond what is written above:
   refused, naming the path.
 - **A body may allocate, and gives it back per element.** The result is a
   scalar, per §7. A body that allocates gets an arena scope of its own
-  (`scopeParallelBodies` in `self/attributes.ts`) when the escape analysis
+  (`scopeParallelBodies` in `src/attributes.ts`) when the escape analysis
   sees every allocation die and the body leaves `Arena` alone, and is refused
   otherwise (NL2352, NL2351). The arena is thread-local, so each element marks
   and releases the arena of the thread it runs on. It compiles with §8a's
   warning, NL9012 — not NL9011, which the arena-loop rule had taken by then.
 - **The grain is sized from the body.** `2^22` over the estimated cost of `f`, in
-  `[1, 2^22]` (`mapGrain` in `self/parallel.ts`): a static estimate of one
+  `[1, 2^22]` (`mapGrain` in `src/parallel.ts`): a static estimate of one
   element, so a cheap body is divided only past about a million elements and
   one with a loop far sooner. Up to the grain the map calls its chunk loop
   directly, which inlines, instead of going through the partitioner. §8a has

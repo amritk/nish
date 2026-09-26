@@ -77,7 +77,8 @@ $ grep -rn "setTimeout\|setInterval\|sleep\|nanosleep\|poll\|epoll\|kqueue\|sock
 $
 ```
 
-No timer, no sleep, no poller, no socket, in either compiler or either
+(`src/` was stage0's tree and `self/` the self-hosted compiler's, as they were
+named then.) No timer, no sleep, no poller, no socket, in either compiler or either
 runtime. A language with no way to be *waiting on something that has not
 happened yet* has no use for a construct whose entire job is to give that wait
 back to a scheduler.
@@ -90,7 +91,7 @@ sequencing decision rather than a taste one:
   timers, and the runtime budget conversation that comes with them (§4.5).
   That is a larger package than the syntax by a wide margin, and it is a
   package nobody has asked for: there is no Nish server and no Nish HTTP
-  client, and the largest programs in the tree — `self/`, the benchmark suite,
+  client, and the largest programs in the tree — `src/`, the benchmark suite,
   the examples — are batch jobs that read a file, compute, and exit.
 - **`spawnSync` is the one honest candidate, and its answer is threads.**
   Waiting on four children at once is `waitpid` on four threads, needs no new
@@ -345,7 +346,7 @@ the Phase 0 rejection keeps that question closed, and that is worth something.
 
 ### 4.8 Everything lands twice, and the bootstrap has to close
 
-stage0's `src/` and `self/` mirror each other construct for construct and stage1 must
+stage0's `src/` and `src/` mirror each other construct for construct and stage1 must
 still compile itself to a byte-identical fixed point
 ([selfhost.md](../.claude/selfhost.md)). A new statement form, a new type
 family, a new escape flow and a new diagnostic family are each two
@@ -473,10 +474,10 @@ asynchrony is entirely in generated C.
   flag emits a byte-identical shim — checked over the whole interop corpus, IR
   included, against the generator as it stood before the change.
 - **It landed twice, like everything else** (§4.8): stage0's `src/interop/napi.ts` and
-  `self/interop-napi.ts`, with `tests/self/interop_oracle.js` diffing the
+  `src/interop-napi.ts`, with `tests/self/interop_oracle.js` diffing the
   `.napi.c` of both compilers byte for byte over the corpus, the asynchronous
   sidecar now among them. The stage1 half is where the closure-free shape shows:
-  stage0's `src/` passes each wrapper a `fail` closure and `self/` passes a mode, and the
+  stage0's `src/` passes each wrapper a `fail` closure and `src/` passes a mode, and the
   three modes — throw, release the arena and throw, reject the promise — spell
   the same three failing returns.
 - **Sound under ThreadSanitizer.** The addon built with `-fsanitize=thread` and
@@ -620,7 +621,7 @@ knows what drifted:
 - **The fourth escape flow may get built narrowly.** §10 already carries this:
   if WP20 T1 lands "escapes to another thread" rather than the general
   "outlives its creator", async re-derives it.
-- **Everything lands twice, and `self/` keeps growing.** §4.8's multiplier is
+- **Everything lands twice, and `src/` keeps growing.** §4.8's multiplier is
   applied to whatever the language is on the day the work starts, not to what
   it is today.
 

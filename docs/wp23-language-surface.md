@@ -24,9 +24,9 @@ holding once a value outlives every frame.
 
 ## 1. Where these came from, and the rule they are judged by
 
-Six of the eight items below were found the same way: by reading `self/` for
+Six of the eight items below were found the same way: by reading `src/` for
 comments that say *the language has no X*, and then asking what X would cost.
-`self/` is the largest Nish program in existence (25,706 lines, 54
+`src/` is the largest Nish program in existence (25,706 lines, 54
 modules) and it is written by people who also write the compiler, so where it
 works around a gap it usually says so in a sentence. Those sentences are the
 evidence sections below cite, and they are quoted rather than paraphrased.
@@ -116,14 +116,14 @@ it is not spelled as.
 
 ### What it is worth, counted
 
-`self/` declares its three principal discriminants as module constants, because
+`src/` declares its three principal discriminants as module constants, because
 that is the only spelling it has:
 
 | Family | File | Members |
 | --- | --- | ---: |
-| `N_*` node kinds | `self/nodes.ts` | 59 |
-| `TOK_*` token kinds | `self/tokens.ts` | 99 |
-| `T_*` type kinds | `self/types.ts` | 13 |
+| `N_*` node kinds | `src/nodes.ts` | 59 |
+| `TOK_*` token kinds | `src/tokens.ts` | 99 |
+| `T_*` type kinds | `src/types.ts` | 13 |
 | | **total** | **171** |
 
 Every one is `i32`, so nothing in the type system stops `checkNode(T_I32)`
@@ -132,8 +132,8 @@ type, in a compiler that dispatches on all three. A distinct type per family is
 exactly the check that is missing.
 
 *(A correction to how this was first counted: 64/99/13 = 176 mixes a file total
-with a family total. `self/nodes.ts` holds 64 module-level `i32` constants, of
-which 59 are `N_*` node kinds and 5 are `FLAG_*` bits; `self/types.ts` holds 21,
+with a family total. `src/nodes.ts` holds 64 module-level `i32` constants, of
+which 59 are `N_*` node kinds and 5 are `FLAG_*` bits; `src/types.ts` holds 21,
 of which 13 are `T_*`, 4 are `K_*` derived-type kinds and 3 are `R_*` `Result`
 states. Counted by family the three principal enums are 171 members, and there
 are 184 module-level `i32` constants across the three files in seven families.
@@ -147,9 +147,9 @@ detail, and because two of them are places the sibling work has to choose:
 1. **`switch` has to accept an enum discriminant and enum case labels.**
    LANGUAGE.md today requires an integer discriminant and requires every `case`
    label to be "an integer literal or a module constant". A `switch` over a
-   node kind is the single most common statement in `self/`, so an enum that
+   node kind is the single most common statement in `src/`, so an enum that
    cannot be switched on is worth nothing.
-2. **Bit flags are a separate question.** `self/nodes.ts`'s five `FLAG_*`
+2. **Bit flags are a separate question.** `src/nodes.ts`'s five `FLAG_*`
    constants are combined with `|` and tested with `&`. TypeScript allows both
    on a numeric enum and gives back the enum type; a distinct type that refuses
    `|` cannot express the existing code, and one that allows it admits values
@@ -160,7 +160,7 @@ detail, and because two of them are places the sibling work has to choose:
    Nish-program half. Mechanical, but it is a file the sibling work
    touches and this note is where it is written down.
 
-`self/` itself does not adopt enums when they land: Nish-0 excludes them
+`src/` itself does not adopt enums when they land: Nish-0 excludes them
 by name ([wp14-selfhost.md](wp14-selfhost.md) §2), and converting 171 constants
 would rewrite the discriminant of every dispatch in the compiler while the
 bootstrap is the only thing checking the rewrite. That is the same posture
@@ -177,13 +177,13 @@ which way each open decision went.
    `` `case` label is i32 but the discriminant is Kind `` — because the integer
    a member stands for is not the member.
 2. **Bit flags stay `i32` module constants**, which is the second of the three
-   answers §10 question 1 offers and the one `self/nodes.ts` already lives by.
+   answers §10 question 1 offers and the one `src/nodes.ts` already lives by.
    `|`, `&`, `^` and `~` on an enum are refused by the existing integer rule
    (`tests/cases/reject_enum_bitwise`). It is the answer that can be widened
    later without invalidating a program, which the other two are not.
 3. **`biome.json` turns `noEnum` off for the Nish-program half** — the
    override that already exempts `examples/**`, `docs/cookbook/**`, `bench/**`,
-   `self/**`, `std/**` and `tests/self/**` from the two house-style rules — and
+   `src/**`, `std/**` and `tests/self/**` from the two house-style rules — and
    leaves it an error over stage0's `src/`, where an enum in the compiler's own
    TypeScript is still a mistake.
 
@@ -214,12 +214,12 @@ language whose *absence* of them is load-bearing in another package's safety
 argument.
 
 **The revisit trigger is concrete**, in the shape [wp18-generics.md](wp18-generics.md)
-§14 uses: two more places in `self/` wanting module state for a reason that is
+§14 uses: two more places in `src/` wanting module state for a reason that is
 **not** "a CLI flag a driver already parsed" brings this back with its own
 cases. One more of the same shape does not.
 
 **The divergence §4.6 names is still open, and deciding this row did not close
-it.** `self/ice.ts`'s `internalError` prints the human report and not the
+it.** `src/ice.ts`'s `internalError` prints the human report and not the
 `NL0003` object stage0 prints, so orientation rule 7 — every failure, internal
 errors included, is one `--json` object — is a stated contract that is not true
 of stage1. The comment beside it gives module state as one of its three
@@ -244,9 +244,9 @@ consumer:
 
 stage0 honours it: `NISH_SIMULATE_ICE=1` plus `--json` produces an `NL0003`
 object on stdout with exit 70, and `tests/run.js` checks the object field by
-field. **stage1 does not.** `self/ice.ts`'s `internalError` prints the human
+field. **stage1 does not.** `src/ice.ts`'s `internalError` prints the human
 report and nothing else, and says so in a comment on the line that would have
-printed the object (`self/ice.ts:68-74`):
+printed the object (`src/ice.ts:68-74`):
 
 > It cannot: `process.argv` needs an `export function main` and this is a
 > library module, the language has no mutable module state to stash the flag
@@ -260,20 +260,20 @@ is byte-identical between the two compilers.
 **Two corrections to that sentence, both of which matter to the design.**
 
 *The count is 38, not 39.* `internalError` has 38 call sites across nine
-modules today (`self/emit.ts` 11, `self/emit-classes.ts` 9, `self/emit-ops.ts`
-4, `self/interop-napi.ts` 4, `self/emit-builtins.ts` 3, `self/debug.ts` 2,
-`self/emit-arrays.ts` 2, `self/emit-result.ts` 2, `self/types.ts` 1). The note
+modules today (`src/emit.ts` 11, `src/emit-classes.ts` 9, `src/emit-ops.ts`
+4, `src/interop-napi.ts` 4, `src/emit-builtins.ts` 3, `src/debug.ts` 2,
+`src/emit-arrays.ts` 2, `src/emit-result.ts` 2, `src/types.ts` 1). The note
 and the comment have drifted by one.
 
 *`process.argv` is out of reach for a narrower reason than "library module".*
 `hasEntryMain` is a **program-wide** fact — stage0's `src/checker/context.ts:36` says
 "the program's entry module declares `export function main`", and it is set on
-every module before any body is checked. So `self/ice.ts` compiled as part of
-the real compiler, whose entry is `self/compile.ts`, could read `process.argv`
-perfectly well. What stops it is that **`self` is a corpus directory**
-(`tests/self/corpus.js:27`), so every module of `self/` is also compiled
+every module before any body is checked. So `src/ice.ts` compiled as part of
+the real compiler, whose entry is `src/compile.ts`, could read `process.argv`
+perfectly well. What stops it is that **`src` is a corpus directory**
+(`tests/self/corpus.js:42`), so every module of `src/` is also compiled
 standalone as its own whole program by the IR and checked-dump oracles — and
-standalone, `self/ice.ts` has no entry `main`. The blocker is a testing
+standalone, `src/ice.ts` has no entry `main`. The blocker is a testing
 invariant, and a good one: it is what makes each module its own oracle case.
 It is not a language rule, and the note should not have said it was.
 
@@ -302,7 +302,7 @@ proof back:
 4. **Thread-local by construction**, from the day it lands — not from the day
    WP20 does. §4.5.
 
-The `--json` case fits inside all four. `self/ice.ts` gains
+The `--json` case fits inside all four. `src/ice.ts` gains
 
 ```ts
 let jsonMode: boolean = false;
@@ -311,7 +311,7 @@ export const setJsonMode = (on: boolean): void => {
 };
 ```
 
-and `main` in `self/compile.ts` calls the setter after parsing the flag. Note
+and `main` in `src/compile.ts` calls the setter after parsing the flag. Note
 what this exposes about restriction 1: **module-private stops the *symbol*
 crossing, not the *value*.** A two-line exported setter puts the value across
 any boundary you like. The restriction buys ABI and linkage cleanliness, which
@@ -354,7 +354,7 @@ merges each callee's effect into its callers, both climb the whole call tree.
 
 What is at stake, measured rather than asserted. Over the 173 golden `.ll`
 files in `tests/cases/`, 65 of the 470 function-attribute groups carry
-`readnone` and 30 carry `readonly`. Over `self/` compiled by stage0 — 54
+`readnone` and 30 carry `readonly`. Over `src/` compiled by stage0 — 54
 modules, 1,046 `define`s — 30 functions are `readnone` and 73 are `readonly`,
 so about one function in ten of the largest Nish program in existence
 carries an effect attribute that a badly-placed global would withdraw. WP6 §1
@@ -418,7 +418,7 @@ and it is cheaper than it was made to sound. Of the 38, about 30 sit inside a
 function that already holds an `Emitter`, a `CheckContext` or an `Options` — so
 the flag rides on a record those sites already have, and `Options` is where a
 CLI flag belongs anyway (twelve flags live there already, `numberMode`,
-`strictExports` and `nsw` among them, and `self/compile.ts` already threads a
+`strictExports` and `nsw` among them, and `src/compile.ts` already threads a
 plain `json: boolean` parameter through five of its own report functions). The
 remaining seven are in small leaf helpers — `basicType`, `integerOpcode`,
 `floatOpcode`, `napiReaderLines`, `napiBoxerCall` — and those are the sites the
@@ -436,7 +436,7 @@ lands, and a withdrawn row from WP20 §2's asset table.
 
 **Recommendation: thread the parameter, and keep §4 as the design for when a
 second use case turns up.** The revisit trigger should be concrete, in the shape
-wp18 §14 uses: if two more places in `self/` want module state for a reason that
+wp18 §14 uses: if two more places in `src/` want module state for a reason that
 is not "a CLI flag a driver already parsed", it comes back with its own cases.
 One case, whose whole content is a boolean that a driver could pass, is not
 enough to add the first mutable global to a language whose absence of them is a
@@ -462,8 +462,8 @@ class field and an array — and run natively. The two refusals a
 caller meets are the checker's existing ones, with no new code:
 `reject_std_pair_swapped` (a `Pair<i32, string>` returned where a
 `Pair<string, i32>` is declared, NL2236) and `reject_std_pair_missing` (an
-object literal without `second`, NL2078). `self/lexer.ts`'s `scanEscape` still
-keeps its out-parameter field: `self/` may not import `nish/pair` until the
+object literal without `second`, NL2078). `src/lexer.ts`'s `scanEscape` still
+keeps its out-parameter field: `src/` may not import `nish/pair` until the
 release after this one carries it (the rolling freeze).
 
 The account below is the decision as it stood before the build, kept as it was
@@ -508,10 +508,10 @@ a build rather than a decision.
 
 ### 5.1 The evidence, and what is not evidence
 
-Three sites in `self/` say the language has no tuple. They are not equally
+Three sites in `src/` say the language has no tuple. They are not equally
 good and the difference decides the design.
 
-**The strong one** is `self/lexer.ts:311`. `scanEscape` has to answer two
+**The strong one** is `src/lexer.ts:311`. `scanEscape` has to answer two
 things — where the escape ended, and whether it was malformed — and the second
 lives in a field on the `Lexer` class:
 
@@ -523,14 +523,14 @@ That is a genuine out-parameter: hand-written, hand-maintained, eight write
 sites and two read sites, and a piece of a function's *result* living on the
 object rather than in the return.
 
-**The weak one is `self/codes.ts:46`**, and the review that led with it was
+**The weak one is `src/codes.ts:46`**, and the review that led with it was
 wrong to:
 
 > Fragment, code, fragment, code -- flat because the language has no tuple, and
 > a function rather than a module constant because a constant's initialiser
 > must be a literal.
 
-The sentence is true, and 342 rules make 684 flat entries. But `self/codes.ts`
+The sentence is true, and 342 rules make 684 flat entries. But `src/codes.ts`
 **is generated** — `scripts/gen-diagnostic-codes.mjs` writes it and `npm test`
 fails while it is stale (orientation rule 7) — so nobody reads or maintains
 those pairs by hand, and a `Pair<string, string>[]` would save exactly nobody
@@ -539,15 +539,15 @@ flat way in TypeScript-on-Node, where tuples are available, and says why —
 "flat rather than tuples so the stage1 twin can hold it too". That flatness is
 a mirroring decision, not a language limit.
 
-**And `self/target.ts` is not evidence at all.** The claim that it "holds its
+**And `src/target.ts` is not evidence at all.** The claim that it "holds its
 table the same way" misreads the parenthesis in `codes.ts`: what `target.ts`
 shares is being *a function rather than a module constant* (because a
-constant's initialiser must be a literal), not being flat. `self/target.ts`
+constant's initialiser must be a literal), not being flat. `src/target.ts`
 holds a `Target` class with two named string fields and looks it up with an
 `if` chain. It is the counter-example, not the example.
 
 One more counter-example is worth naming because it is the strongest argument
-*against* this whole item. `self/program.ts:36`:
+*against* this whole item. `src/program.ts:36`:
 
 > Parameters are parallel arrays rather than a `Param[]`: a signature is read
 > far more often than it is built, and this is one allocation instead of one
@@ -569,7 +569,7 @@ compilers. `Pair<A, B>` is `interface Pair<A, B> { first: A; second: B; }`,
 which is [wp18-generics.md](wp18-generics.md) §2's second worked example
 verbatim, and it needs **no grammar at all**: `Pair<i32, string>` in a type
 annotation already parses (wp18 §2a: "`<` after a type name is already a
-type-argument list in `self/parser.ts`"), and `new Pair<i32, string>(...)`
+type-argument list in `src/parser.ts`"), and `new Pair<i32, string>(...)`
 already parses too, because `new Array<T>(n)` needs it.
 
 So the ask is one library type after WP18 lands, and one fewer type
@@ -614,7 +614,7 @@ one.
 
 `Pair` is strictly after WP18, which is WP15 item 8 and the largest item on
 that list. It buys, on today's evidence, one out-parameter field in
-`self/lexer.ts` and whatever the next lexer-shaped function wants. That is a
+`src/lexer.ts` and whatever the next lexer-shaped function wants. That is a
 thin return for waiting on the largest package in the plan — but the waiting is
 free, because nothing about `Pair` is on WP18's critical path and it costs one
 interface declaration on the day WP18 is green.
@@ -691,15 +691,15 @@ array.
 
 ### 6.2 The evidence, and the large part of it that does not count
 
-Five comments in `self/` name the absence of function values:
+Five comments in `src/` name the absence of function values:
 
 | Site | What it says |
 | --- | --- |
-| `self/emit.ts:23` | "`Emitter` is `EmitContext` and `Emitter` at once, because the language has no function values to separate them with." |
-| `self/expressions.ts:9` | "a table of function values needs function pointers, which the language does not have" |
-| `self/attributes.ts:26` | stage0's `src/` "registers them into a `factCollectors` array from each `emit/*.ts`, which needs function values" |
-| `self/emit-classes.ts:19` | "the language has no function values to register" |
-| `self/interop-napi.ts:42` | stage0's `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
+| `src/emit.ts:23` | "`Emitter` is `EmitContext` and `Emitter` at once, because the language has no function values to separate them with." |
+| `src/expressions.ts:9` | "a table of function values needs function pointers, which the language does not have" |
+| `src/attributes.ts:26` | stage0's `src/` "registers them into a `factCollectors` array from each `emit/*.ts`, which needs function values" |
+| `src/emit-classes.ts:19` | "the language has no function values to register" |
+| `src/interop-napi.ts:42` | stage0's `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
 
 **Four of the five are dispatch tables, and a compile-time function parameter
 solves none of them.** A dispatch table exists precisely to choose a callee the
@@ -710,21 +710,21 @@ with a reason that survives this proposal intact: a `switch` on a node kind
 lowers to an LLVM `switch` and therefore a jump table, which is the fast shape.
 They are not evidence for anything here and the review was wrong to count them.
 
-The `self/emit.ts` one is real but is about *closures* — a record of functions
+The `src/emit.ts` one is real but is about *closures* — a record of functions
 each capturing a context — which is further from this proposal than the
 dispatch tables are, not closer.
 
 ### 6.3 The evidence that does count
 
 Sorting, and it is small and clean. stage0's `src/` calls `Array.prototype.sort` exactly
-twice (stage0's `src/diagnostics.ts:250`, stage0's `src/dump.ts:98`). `self/` has to write both
+twice (stage0's `src/diagnostics.ts:250`, stage0's `src/dump.ts:98`). `src/` has to write both
 by hand, with two different algorithms over two different element types:
 
-- `DiagnosticSink.sorted()` (`self/diagnostics.ts:288`), a 35-line bottom-up
+- `DiagnosticSink.sorted()` (`src/diagnostics.ts:288`), a 35-line bottom-up
   merge sort, stable "because the comparison never falls back to the message
   text: two errors at one position keep the order the phases produced them in,
   which is what makes a multi-error golden reproducible";
-- `sortedStrings()` (`self/dump.ts:49`), a 12-line insertion sort over
+- `sortedStrings()` (`src/dump.ts:49`), a 12-line insertion sort over
   `compareStrings`, chosen because "these are a function's parameter names and
   its callees, so the lists are short and the constant matters more than the
   exponent".
@@ -802,7 +802,7 @@ while (i < s.length) {
 ```
 
 Zero allocations, one `load i8` per byte, and it is what every loop in
-`self/lexer.ts` is. The sugar would be three lines shorter, would be a
+`src/lexer.ts` is. The sugar would be three lines shorter, would be a
 different program under `tsc`, and would allocate.
 
 **Declined.**
@@ -817,7 +817,7 @@ Already declined in LANGUAGE.md, with an argument this note agrees with:
 > switch would have been a chain of `nish_str_eq` calls wearing a switch's
 > clothes, and `if`/`else` says that honestly.
 
-`self/target.ts:13` is the decision being lived with rather than complained
+`src/target.ts:13` is the decision being lived with rather than complained
 about: two `Record<string, Target>` tables in stage0's `src/` are two `if` chains there,
 and the comment says why it is fine — "there are six triples and ten aliases
 and the lookup happens once per compilation, so the chain is the honest shape."
@@ -832,8 +832,8 @@ what a hand-written lexer does.
 It is not worth it today, for two reasons that are about this compiler rather
 than about the technique. First, the language already has the fast shape for
 the case that matters: a keyword recogniser interns its strings into `i32`
-kinds once and switches on those, which is what `self/tokens.ts` and
-`self/lexer.ts` do with 99 `TOK_*` constants — a string switch would be
+kinds once and switches on those, which is what `src/tokens.ts` and
+`src/lexer.ts` do with 99 `TOK_*` constants — a string switch would be
 *slower* than what the corpus already writes. Second, a string `switch` that is
 secretly a hash table is a construct whose IR does not read like its source,
 and LANGUAGE.md's whole argument for the current rule is that the lowering
@@ -853,14 +853,14 @@ unavailable. None exists in the corpus.
 The cost of its absence is real but it is smaller than it looks, and the
 blocker is exact.
 
-`self/emit.ts:25` names the pattern:
+`src/emit.ts:25` names the pattern:
 
 > **Debug info is a field, not a table of hooks.** `-g` builds the DWARF
-> metadata in `self/debug.ts`, which stage0 reaches through an optional
+> metadata in `src/debug.ts`, which stage0 reaches through an optional
 > `DebugInfo` and this emitter through a `DebugInfo | null` that every call
 > site narrows with `!== null`, because the language has no `?.`.
 
-Measured rather than estimated: that is **four sites in `self/emit.ts` and one
+Measured rather than estimated: that is **four sites in `src/emit.ts` and one
 elsewhere**, each of the form
 
 ```ts
@@ -880,7 +880,7 @@ null, and `undefined` is forbidden in this language by name — as a type
 (`` `undefined` is forbidden in Nish; use `null` with a `T | null`
 type ``, `reject_undefined_value`), as a value, and as the reason `void expr`
 is refused. It is also why `a.pop()` on an empty array panics rather than
-answering anything (`self/emit-arrays.ts:415`: "there is no `undefined` to
+answering anything (`src/emit-arrays.ts:415`: "there is no `undefined` to
 return and no second return type to widen to"), and why nullish coalescing is
 refused beside it. Optional chaining without `undefined` is not a smaller
 version of optional chaining; it is a different operator.
@@ -912,13 +912,13 @@ Recorded as questions rather than answered, in the shape
 [wp18-generics.md](wp18-generics.md) §14 uses, because this note is meant to be
 reviewed before more code is written.
 
-1. **Bit flags on an enum** (§3) — **answered, conservatively**. `self/nodes.ts`
+1. **Bit flags on an enum** (§3) — **answered, conservatively**. `src/nodes.ts`
    combines `FLAG_EXPORTED | FLAG_CONST` and tests with `&`. TypeScript allows
    both on a numeric enum and gives back the enum type — which admits values
    that are no declared member, in a language whose whole enum argument is that
    a value has one identical type. Three answers were defensible: allow
    `| & ~ ^` on an enum and accept non-member values; refuse them and leave bit
-   flags as `i32` module constants (which is what `self/` has today and what it
+   flags as `i32` module constants (which is what `src/` has today and what it
    would keep); or add a separate `flags` form. **The second shipped**
    (`tests/cases/reject_enum_bitwise`), because it is the only one of the three
    that can be widened later without invalidating a program that was already
@@ -926,12 +926,12 @@ reviewed before more code is written.
    direction of widening.
 
 2. **Whether an enum is `i32` or takes a width.** `i32` is proposed and matches
-   every discriminant in `self/`. `u8` for a small enum would matter inside a
+   every discriminant in `src/`. `u8` for a small enum would matter inside a
    struct once WP15 item 7 makes struct arrays contiguous, and choosing later
    is a layout change. Choosing now on no evidence is guessing.
 
 3. ~~**The revisit trigger for module state** (§4.6).~~ **Answered by taking
-   the count.** §4 is decided *no* with "two more places in `self/` that are
+   the count.** §4 is decided *no* with "two more places in `src/` that are
    not a CLI flag a driver already parsed" as the trigger, because a count is
    falsifiable by reading the corpus and a WP20 stage is not: restriction 4
    settles the feature's *meaning* against the threading model, which is a
@@ -983,8 +983,8 @@ reviewed before more code is written.
   `std/README.md` and not LANGUAGE.md. The honest default is still the one
   [wp20-threads.md](wp20-threads.md) §7 takes — after the WP15 list, and now
   next — but it is now a decision rather than a deferral.
-- **Anything about `self/` adopting §2 or §3.** Nish-0 excludes both by
-  name and a construct enters the language before it enters `self/`
+- **Anything about `src/` adopting §2 or §3.** Nish-0 excludes both by
+  name and a construct enters the language before it enters `src/`
   ([`.claude/selfhost.md`](../.claude/selfhost.md), rule 1). Converting 171
   module constants to enums is a package with its own bootstrap risk, and it is
   the same shape as wp18 §14 question 8.
@@ -994,7 +994,7 @@ reviewed before more code is written.
   is nothing to design here and inventing numbers in a design note would only
   make them wrong.
 - **The two-implementation multiplier.** Every rule here lands twice, in stage0's `src/`
-  and in `self/`, with the bootstrap having to close afterwards.
+  and in `src/`, with the bootstrap having to close afterwards.
   [wp20-threads.md](wp20-threads.md) §3.6 states it once for the whole project
   and this note does not restate it per item — but it is the largest multiplier
   on every estimate above, and §2 and §3 are cheap *because* they are checker-

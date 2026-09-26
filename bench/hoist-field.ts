@@ -8,8 +8,8 @@
 //
 //   paramScan    takes it as a parameter, so the loop reads `src.length`.
 //   fieldScan    reads it out of a class field, so the loop reads
-//                `h.xs.length`. This is the shape `self/` is written in:
-//                `knownAtMost` in `self/bounds.ts` is it verbatim, a `while`
+//                `h.xs.length`. This is the shape `src/` is written in:
+//                `knownAtMost` in `src/bounds.ts` is it verbatim, a `while`
 //                over `state.atMostIndex.length` reading `state.atMostIndex[k]`
 //                and `state.atMostHolder[k]`, and §2c counted 24 functions in
 //                that one module carrying a header load inside a loop.

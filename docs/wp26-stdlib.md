@@ -41,7 +41,7 @@ compilation is what makes §1 true rather than aspirational.
 
 **A `std/` module is an ordinary Nish source file that is compiled into the
 program importing it.** There is no library artifact, no link step, and nothing
-the compiler knows about the directory: stage0's `src/` and `self/` contain no reference
+the compiler knows about the directory: stage0's `src/` and `src/` contain no reference
 to `std/` at all, and a program reaches a module by relative specifier because
 that is the only import form the language has.
 
@@ -392,19 +392,19 @@ preference:
 A third thing every module gets, for the same money: `tests/run.js` type-checks
 `std/` and the programs written on it against
 [`runtime/nish.d.ts`](../runtime/nish.d.ts) under `tsc --strict`, beside the
-corpus and `self/`. The claim those declarations make is that a program nish
+corpus and `src/`. The claim those declarations make is that a program nish
 accepts is never one `tsc` refuses, and `std/` is the code a user *imports* —
 an editor open on `std/testing.ts` is how most people will meet the claim.
 
 Stated as the rule a contributor needs: **a `std/` module with no importer in
 `tests/link/` is compiled by neither compiler on any run.** It is not in
 `tests/cases`, so the golden harness never sees it; it is not in `CORPUS_DIRS`,
-so the oracles never see it; and it is not imported by stage0's `src/` or `self/`, so no
+so the oracles never see it; and it is not imported by stage0's `src/` or `src/`, so no
 build touches it. It would be a file that type-checks in an editor and nothing
 else.
 
 **`std/` is deliberately not in `CORPUS_DIRS`** (`tests/self/corpus.js`:
-`tests/cases`, `examples`, `self`, `docs/cookbook`, `bench`, `tests/parser`).
+`tests/cases`, `examples`, `src`, `docs/cookbook`, `bench`, `tests/parser`).
 Adding it would be the easy way to get the oracles to read it, and it is the
 wrong shape: every entry in that list is compiled *standalone, as its own whole
 program*, and a library alone is a shape no user ever produces. The comparison
@@ -550,12 +550,12 @@ Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surfa
    than one program in the repository would otherwise write the same loop**, and
    the word doing the work is *program*. The two obvious candidates fail that
    test in an interesting way: `StringBuilder`, `splitByte`, `repeatString` and
-   `compareStrings` are already written in `self/strings.ts`, and `dirname`,
-   `basename`, `joinPath`, `normalizePath` and `relativePath` in `self/paths.ts`
+   `compareStrings` are already written in `src/strings.ts`, and `dirname`,
+   `basename`, `joinPath`, `normalizePath` and `relativePath` in `src/paths.ts`
    — so a `std/strings` and a `std/path` look overdue until you notice that
-   `self/` must not import `std/`, and their only other importer would be the
-   runner. `self/` is excluded on purpose: the compiler is what has to build
-   before the library means anything, `self/` is written in Nish-0
+   `src/` must not import `std/`, and their only other importer would be the
+   runner. `src/` is excluded on purpose: the compiler is what has to build
+   before the library means anything, `src/` is written in Nish-0
    ([`.claude/selfhost.md`](../.claude/selfhost.md)), and a `std/` edit that
    moved the bootstrap fixpoint would be a library change breaking the compiler
    that compiles it. The candidate that arrives with its own reason is **`sort`**
@@ -641,7 +641,7 @@ Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surfa
 
 ## 8. What this note does not decide
 
-- **Whether `self/` ever imports `std/`.** It does not today and question 3
+- **Whether `src/` ever imports `std/`.** It does not today and question 3
   gives the reason. Changing it is a [wp19-stage0-retirement.md](wp19-stage0-retirement.md)-shaped
   decision about what the compiler's source is allowed to be, not a library
   decision, and it would put every `std/` edit on the bootstrap's critical path.

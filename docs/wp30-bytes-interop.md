@@ -103,7 +103,7 @@ cookbook, because it reads like an omission otherwise.
 
 | | |
 | --- | --- |
-| B1 | **done** — the four unsigned rows in `typedView`, `elemSize` widened to `1 \| 2 \| 4 \| 8`; stage0's `src/` and `self/` both, byte-identical through `tests/self/interop_oracle.js` (17/17 programs, 85 sidecars) |
+| B1 | **done** — the four unsigned rows in `typedView`, `elemSize` widened to `1 \| 2 \| 4 \| 8`; stage0's `src/` and `src/` both, byte-identical through `tests/self/interop_oracle.js` (17/17 programs, 85 sidecars) |
 | B2 | **done** — `tests/self/interop-unsigned-arrays.ts` in the oracle corpus; `tests/cases/arr_u8` with its golden `.ll`, `llvm-as`, `opt -passes=verify` and a native round trip against `.out`; and the negative half, `boolean[]` and `string[]` still declined and named, asserted absent from the loader as well as commented in the declarations |
 | B3 | **done** — the `docs/LANGUAGE.md` rule (the type table and the typed-array bullet) and the `arr-u8-elements` cookbook entry, whose IR `docs/cookbook/regen.sh --check` keeps honest |
 
@@ -202,7 +202,7 @@ times the payload, which changes what is being measured.
 | --- | --- |
 | stage0's `src/interop/abi.ts` | `typedView`, `elemSize`, the rows this package adds |
 | stage0's `src/interop/wasm.ts` | `wasmSkipReason` and the loader it generates from the same predicate |
-| `self/interop-abi.ts`, `self/interop-wasm.ts` | the same two in Nish; the oracle compares the output byte for byte |
+| `src/interop-abi.ts`, `src/interop-wasm.ts` | the same two in Nish; the oracle compares the output byte for byte |
 | `bench/scan.ts` | a `u8[]`-taking scanner: the shape this package unblocks |
 | `tests/self/interop-unsigned-arrays.ts` | the oracle corpus case: every unsigned width as an array, and the positions where a mask would be wrong |
 | `tests/cases/arr_u8` | the native round trip: a byte array allocated, written, read back, and wrapped at 255 |

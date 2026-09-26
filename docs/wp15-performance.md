@@ -90,7 +90,7 @@ That spelling needs a generic type parameter, which Phase 0 refuses and which
 §9 item 8 owns, so item 6 could not have built it without building item 8's
 prerequisite first — the sequencing rules it out, and this note had not
 noticed. What shipped instead is the *range analysis* the declared form would
-have fed: stage0's `src/checker/bounds.ts` and `self/bounds.ts` infer the range of every
+have fed: stage0's `src/checker/bounds.ts` and `src/bounds.ts` infer the range of every
 integer local from the guards, loop conditions and initialisers already in the
 program, and from the one ranged type the language does have — `u8`/`u16`/
 `u32`/`u64`, whose lower bound is the declaration rather than a proof. A
@@ -131,7 +131,7 @@ intersection is empty. Recognising `c ? a.length : b.length` where `c` is
 `a.length < b.length` would be sound and would close it, and it is deliberately
 not done: a peephole inside a soundness-critical analysis is how a wrong
 elision gets in, and nothing has measured this shape yet. It is what
-`std/text.ts`'s `firstDifference` and `self/strings.ts`'s `compareStrings`
+`std/text.ts`'s `firstDifference` and `src/strings.ts`'s `compareStrings`
 report, and it is four of the surviving warnings in the whole tree.
 
 **What it measured.** On the lexer-shaped scan of §2.3 below — a cursor the
@@ -164,7 +164,7 @@ else it buys code size and `willreturn`.
 
 **2′. A passed check is a fact — shipped.** A check that has run is as good
 a proof as a guard: `a[i]` either branches to `nish_panic_index`, which is
-`noreturn`, or continues with `0 <= i < a.length`. So `self/bounds.ts`
+`noreturn`, or continues with `0 <= i < a.length`. So `src/bounds.ts`
 records `nonNegative(i)` and `below(i, a)` on the path past every checked
 `a[i]` and `s.charCodeAt(i)` (and `a.length >= n + 1` past a literal `a[n]`),
 and a repeat of the same index on the same holder is proven. The facts are
@@ -196,8 +196,8 @@ the whole AWFY run of `Permute 1000`, one iteration under
 309.5 M (-8.9%)**, 44.0 M branches against 33.9 M, and 4.85 M simulated
 mispredicts against 4.29 M; `--unchecked-indexing` is 187.8 M. The other six
 AWFY programs move by at most 14 instructions, because they have no repeated
-access in a hot path. Over `self/`, four NL9007 warnings went with it
-(`self/generics.ts` three, `self/manifest.ts` one).
+access in a hot path. Over `src/`, four NL9007 warnings went with it
+(`src/generics.ts` three, `src/manifest.ts` one).
 
 **Wall time did not follow, and that is recorded rather than smoothed over.**
 On the 4-core cloud container this was measured on, Permute's
@@ -261,7 +261,7 @@ nested `while (i < s.length && isAlpha(s.charCodeAt(i))) { i = i + 1; }` scans,
 unchecked** (best of 7 runs each), **1.094x**, and 216 bytes of code (6,664
 against 6,448). That is the ceiling for eliminating bounds checks on real lexer
 code, and it is the acceptance number for ranged types and length narrowing
-(§9 item 6), not for this mechanism. It is also what `self/lexer.ts` is made
+(§9 item 6), not for this mechanism. It is also what `src/lexer.ts` is made
 of: its scanning loops are all `while (... < this.source.length)` with a cursor
 the body advances by variable amounts. WP23 §7 makes the same observation about
 the lexer from the language side; this is the measured version of it.
@@ -276,7 +276,7 @@ behind that.** A scoped `trusted` region was considered and deferred: it is the
 escape hatch, and every check mechanisms 1-3 eliminate is one nobody needs to
 escape. Build the proofs first, measure how many checks actually survive them,
 and only then decide whether an opt-out earns its keep. Item 6 has landed and
-the count is in: over the whole of `self/` — sixty modules, about fifty
+the count is in: over the whole of `src/` — sixty modules, about fifty
 thousand lines, the most index-heavy program this repository has — **seventeen
 checks survive inside a loop** in a shape the analysis could have proved, and
 every one of them is an invariant the program has and the compiler cannot see:
@@ -291,8 +291,8 @@ candidates.)
 **5. Call-site ranges — shipped, and what it does and does not prove about
 AWFY Permute.** Round 1 of the Are We Fast Yet work (#207) left `Permute.swap`
 with two checks that only an interprocedural fact could remove (#215).
-`self/ranges.ts` is that fact, run once every body is checked, and it feeds
-the same walk: `self/bounds.ts` takes a table of what the whole program knows
+`src/ranges.ts` is that fact, run once every body is checked, and it feeds
+the same walk: `src/bounds.ts` takes a table of what the whole program knows
 and an entry state.
 
 *What crosses a call.* Two things, and both are stated so that pass 2's rules
@@ -319,7 +319,7 @@ still end them.
     `u32` is not below anything.
 
 *Who takes entry facts.* Only a function every call to which the pass can
-see, which `hostVisible` in `self/visibility.ts` decides from the build: not
+see, which `hostVisible` in `src/visibility.ts` decides from the build: not
 the entry point, which the runtime calls; not an exported function or a method
 of an exported class *unless the build is closed* — `--link`, a native profile
 and triple, no sidecar and no `declare function`, so that the executable is
@@ -338,7 +338,7 @@ walks every reached body under its current entry, joining the facts each
 function's call sites prove: the weaker floor, the higher bound, the shorter
 length, a relation only where every site states it. An entry only weakens once
 set — a new caller adds a site, a weaker entry proves less at each site below
-it — so the rounds end; `self/` settles in six, under a limit of 64 past which
+it — so the rounds end; `src/` settles in six, under a limit of 64 past which
 the pass keeps no entry fact at all. A walk records no proof until the entries
 have settled, and a body's last walk was the one under its settled entry, so
 those proofs are kept rather than walked for again.
@@ -371,30 +371,30 @@ mode).
 fewer (cachegrind, one pass at 50 inner iterations); the other five AWFY
 programs and all of `bench/`'s compile to the IR they did. Sixteen of the
 compiler's own warned checks (`tests/perf-baseline.json`) are proven away. As
-first shipped it cost `self/`'s compile 2.6% more instructions and 1.4% more
+first shipped it cost `src/`'s compile 2.6% more instructions and 1.4% more
 peak RSS, and once exported functions were candidates in a closed world, 4.7%
 more instructions under `--link` (the next paragraph).
 
 *What it cost, and what took the cost back (#217, range-narrow).* A closed
-`--link` build makes every exported function a candidate, and `self/` exports
+`--link` build makes every exported function a candidate, and `src/` exports
 nearly everything: 1,180 candidates and 1,057 walked bodies in 14 rounds,
-against 352, 295 and 7 in an IR-only build. Compiling `self/` with `--link`
+against 352, 295 and 7 in an IR-only build. Compiling `src/` with `--link`
 cost 4.7% more instructions than before the pass and the AWFY harness 6.8%,
 over the plan's 3%. Measured first, the obvious cut was the wrong one: a finer
 candidate test — only an access reading a parameter, only a caller whose
 arguments carry one — dropped 117 of 1,193 candidates and cost more to decide
-than it saved, because nearly every function in `self/` passes `this`, a
+than it saved, because nearly every function in `src/` passes `this`, a
 context or a walk straight on. The walks were one per body already; what cost
 was everything around them and the walk machinery itself. What shipped, none
 of it at the price of a proof (docs/ARCHITECTURE.md, the call-site ranges row,
-has the argument, and `tests/run.js`'s `range_reference` compiles `self/` and
+has the argument, and `tests/run.js`'s `range_reference` compiles `src/` and
 AWFY both ways and requires byte-identical IR and warnings):
 
   - a candidate needs an access *some* walk could prove: an index that is a
     literal or a bare integer local, on a local or a plain struct path
     (`isOpenAccess`); `program.nodeLocals[e.id]` never is;
   - a round joins again only the entries its walks can have moved, and never
-    an empty one — 38,892 joins in `self/`'s rounds were each a fresh
+    an empty one — 38,892 joins in `src/`'s rounds were each a fresh
     `EntryFacts` and a name lookup;
   - an entry that is empty stays empty, so a site for such a callee is not
     worked out, a caller whose candidate callees are all entered with nothing
@@ -407,23 +407,23 @@ AWFY both ways and requires byte-identical IR and warnings):
     later-argument effects collected only when a later argument can write,
     the summaries swept callees first.
 
-Measured with cachegrind over one input — main's `self/` and
+Measured with cachegrind over one input — main's `src/` and
 `bench/awfy/main.ts` at `7d40e07`, compiled by each compiler — against
 `f2c2cfa`, main just before the pass. `#222` is main with the pass
 (`67bc669`); the next column is this stage on top of it and nothing else, the
 like-for-like number; main (`7d40e07`) and this stage on it also carry #229 and
-#230, whose own analyses cost the same 30.8 M instructions of `self/`'s
+#230, whose own analyses cost the same 30.8 M instructions of `src/`'s
 `--link` compile on either side:
 
 | Compile, instructions | `f2c2cfa` | #222 | #222 + this stage | main | main + this stage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `self/`, `--link` | 1,263,591,465 | +4.71% | **+1.52%** | +7.14% | +3.96% (−2.97% vs main) |
-| `self/`, IR only | 1,263,551,862 | +2.60% | **+1.06%** | +4.80% | +3.25% (−1.48%) |
+| `src/`, `--link` | 1,263,591,465 | +4.71% | **+1.52%** | +7.14% | +3.96% (−2.97% vs main) |
+| `src/`, IR only | 1,263,551,862 | +2.60% | **+1.06%** | +4.80% | +3.25% (−1.48%) |
 | `bench/awfy`, `--link` | 10,674,647 | +6.78% | **+2.81%** | +6.94% | +2.96% (−3.72%) |
 | `bench/awfy`, IR only | 10,660,692 | +1.92% | **−0.50%** | +4.32% | +1.89% (−2.33%) |
 
 CPU time, the median of 100 runs pinned to one core and alternated between the
-compilers, moves with the instructions: `self/` under `--link` +7.8% for #222
+compilers, moves with the instructions: `src/` under `--link` +7.8% for #222
 and +2.3% with this stage, IR only +2.4% and +1.3%; peak RSS, +4.3% under
 `--link` for #222, is 0.5% below `f2c2cfa` with this stage. A single batch of 20
 moves by ±2.5% on the machine it was measured on, which is why the pooled
@@ -469,12 +469,12 @@ means:
   nothing else in the language works that way.
 
 That is not a conservative guess; it was measured on the largest Nish program
-there is. `self/` keeps one `FunctionSig` in `program.functions`, in
+there is. `src/` keeps one `FunctionSig` in `program.functions`, in
 `StructInfo.methodSigs` and in `StructInfo.ctor` at the same time and then
 writes `sig.poisoned` through one of them; `declareStruct` registers a
 `StructInfo` and goes on filling in the object the registry now holds. With
 value slots those are separate objects and every such write is lost. A stage1
-built with class arrays as values rejects `self/` with 41 errors of the form
+built with class arrays as values rejects `src/` with 41 errors of the form
 "`Field ctor of class StructInfo` has no initializer and no constructor assigns
 it" — the registry handing back a copy whose constructor never ran. Every
 registry in that compiler is built the same way. That was first read as a
@@ -520,7 +520,7 @@ names the fix.
 The analysis is `codegen/escape.ts`'s, run in the phase that is allowed to
 report — a source-order walk of one body, references followed from the
 declaration that binds them through every identifier that names them, blocks
-popped when they end. It lives in `checker/arrays.ts` and `self/arrays.ts`
+popped when they end. It lives in `checker/arrays.ts` and `src/arrays.ts`
 beside the array family it belongs to, hung off `checkFunctionBody` next to the
 §8 performance warnings, because the emitter reports no user errors at all.
 
@@ -553,12 +553,12 @@ these functions exactly as before: the missing half was never the layout, it is
 that JS has no typed array of a struct, so a host would need a per-field unpack
 loop and a JS object per element — marshalling rather than a view.
 
-### Class elements: measured against `self/`, and closed rather than deferred
+### Class elements: measured against `src/`, and closed rather than deferred
 
 §2a left class elements out and called the migration "the work, not the
 layout". The migration was then looked at properly, against the program that
-has to survive it, and it is not a migration of `self/`: it is a change to what
-`T[]` *means* for every class `T`, and `self/` is only the largest program that
+has to survive it, and it is not a migration of `src/`: it is a change to what
+`T[]` *means* for every class `T`, and `src/` is only the largest program that
 would be caught by it. Three things were checked, in rising order of how hard
 they are to route around.
 
@@ -567,12 +567,12 @@ they are to route around.
 ```ts
 owner.methodIndex.set(name, owner.methodSigs.length);
 owner.methodSigs.push(sig);
-ctx.program.functions.push(sig);          // self/structs.ts
+ctx.program.functions.push(sig);          // src/structs.ts
 ```
 
 and `collectConstructor` the same with `owner.ctor = sig`. Pass 2 reaches the
 signature through `program.functions` and writes `sig.poisoned = true`
-(`self/checker.ts`); the emitter reaches it through `methodSigs`. With value
+(`src/checker.ts`); the emitter reaches it through `methodSigs`. With value
 slots those are two copies and a pointer, the write lands on one of them, and
 the emitter emits a body the checker rejected. `declareStruct` has the same
 shape one level up: it calls `addStruct`, which does
@@ -585,7 +585,7 @@ should not copy.
 
 **Fifty-four comparisons ask whether an element of such an array *is* a given
 object.** Not equal — the same object. The count is a walk of every file in
-`self/` with the TypeScript compiler API rather than a grep, and the rule is
+`src/` with the TypeScript compiler API rather than a grep, and the rule is
 worth stating because the obvious grep is what got this wrong the first time:
 a `===` or `!==` whose **two operands are both class-typed**, where at least
 one of them is an element read out of a **class-typed array** — either `a[i]`
@@ -594,20 +594,20 @@ directly or the binding of a `for (const x of a)`. That is **54 operators on
 
 | module | operators | lines |
 | --- | ---: | ---: |
-| `self/bounds.ts` | 20 | 16 |
-| `self/attributes.ts` | 13 | 13 |
-| `self/escape.ts` | 11 | 11 |
-| `self/checker.ts` | 4 | 4 |
+| `src/bounds.ts` | 20 | 16 |
+| `src/attributes.ts` | 13 | 13 |
+| `src/escape.ts` | 11 | 11 |
+| `src/checker.ts` | 4 | 4 |
 | `emit.ts`, `emit-util.ts`, `assignment.ts`, `symbols.ts`, `dump.ts`, `interop-abi.ts` | 1 each | 1 each |
 
 ```ts
-if (state.belowIndex[k] === i && state.belowHolder[k] === w) { ... }  // self/bounds.ts
-for (const x of list) { if (x === v) { return true; } }              // self/bounds.ts, contains()
-if (this.declared[i] === local) { ... }                              // self/checker.ts, the §8 walk
-if (this.slotLocals[i] === local) { ... }                            // self/emit.ts
-if (this.refLocals[i] === local) { ... }                             // self/escape.ts
-if (this.narrowedVars[i] === variable) { ... }                       // self/symbols.ts
-if (list.children[i] === node) { ... }                               // self/attributes.ts
+if (state.belowIndex[k] === i && state.belowHolder[k] === w) { ... }  // src/bounds.ts
+for (const x of list) { if (x === v) { return true; } }              // src/bounds.ts, contains()
+if (this.declared[i] === local) { ... }                              // src/checker.ts, the §8 walk
+if (this.slotLocals[i] === local) { ... }                            // src/emit.ts
+if (this.refLocals[i] === local) { ... }                             // src/escape.ts
+if (this.narrowedVars[i] === variable) { ... }                       // src/symbols.ts
+if (list.children[i] === node) { ... }                               // src/attributes.ts
 ```
 
 The `contains()` line is the one a grep for `x[i] === y` cannot see and the
@@ -616,10 +616,10 @@ one the `nonNegative` family is built on, and a grep for `===` cannot see the
 of those arrays is `Local[]` or `Node[]`, and `Local` and `Node` are classes. A
 value slot makes each comparison weigh an interior pointer against the
 original, which is never equal. (Widen the rule to *every* class-typed identity
-comparison in `self/`, element-sourced or not, and it is 80 across 19 modules;
+comparison in `src/`, element-sourced or not, and it is 80 across 19 modules;
 that is the ceiling on what the change could alter the meaning of.)
 
-**In `self/bounds.ts` the failure mode is a miscompile, not a slow program.**
+**In `src/bounds.ts` the failure mode is a miscompile, not a slow program.**
 Twenty of the 54 are there, in the module whose seven `Local[]` fact arrays are
 the WP15 §2 proof itself, and they split in two. The *lookups* —
 `knownBelow`, `knownAtMost`, `maxIndexOf`, `knownMinLength` — answering "not
@@ -627,7 +627,7 @@ found" only loses proofs, and a check that survives is indeed a slower program.
 The *invalidation* is the other half, and this module's own header calls it
 "the whole soundness argument": `forget` and `forgetUpperBounds` keep a fact by
 testing `!==` against the variable being clobbered, nine operators on the seven
-lines `self/bounds.ts:333`, `:345`, `:357`, `:374`, `:383`, `:395` and `:408`.
+lines `src/bounds.ts:333`, `:345`, `:357`, `:374`, `:383`, `:395` and `:408`.
 An identity test that never matches makes every one of those guards always
 true, so no fact is ever forgotten and the analysis proves things that stopped
 being true:
@@ -665,7 +665,7 @@ and the two surviving `NL9007` warnings are at lines 20 and 28, not line 12.
 That is the *fewer checks* direction the snippet above turns into a bad read,
 and the shape that detects it is a literal-length array plus a bound surviving
 an increment — not the downward cursor of the third case, which keeps its check
-either way. And for a regression that would be `self/`'s alone,
+either way. And for a regression that would be `src/`'s alone,
 `tests/self/ir_oracle.js` compares `IR(stage0, p)` with `IR(stage1, p)` byte for
 byte over the whole corpus. The hazard is loud. What it is not is benign.
 
@@ -675,12 +675,12 @@ class carrying the union of every kind's fields — the Nish-0 design
 Under value elements `parser.finish` pushes a child into `node.children` and
 its caller pushes the returned `node` into *its* parent's children, so every
 node is copied once per level of nesting it ends up under, and the deepest
-expressions in a real program pay that most. `self/attributes.ts` already asks
+expressions in a real program pay that most. `src/attributes.ts` already asks
 `list.children[i] === node`, which stops being answerable at all. A syntax
 tree is the one structure in a compiler that is all identity and no traversal
 locality, which makes it the worst candidate there is for the layout §2a
 shipped — and `Local[]` and `Node[]`, the two arrays this section keeps coming
-back to, are the two most common class-typed arrays in `self/`. The same walk
+back to, are the two most common class-typed arrays in `src/`. The same walk
 counts the *declarations* of such a slot, under a rule worth stating as
 precisely as the one above: every syntactic position that declares a slot and
 carries an explicit type annotation — a property declaration or interface
@@ -706,7 +706,7 @@ So this is **closed by decision rather than deferred**: an array of classes is
 one pointer per slot, permanently, and the contiguous shape is spelled
 `interface`. `docs/LANGUAGE.md` already states the rule that way, and
 `inlineElementStruct` is where the decision lives in the code — in
-stage0's `src/checker/program.ts`, which carries the argument, and in `self/program.ts`,
+stage0's `src/checker/program.ts`, which carries the argument, and in `src/program.ts`,
 which carries the rule and points at it. The first of those read "a separate
 change with a migration of its own" until this section was written, and the
 second sent the reader to it for the full argument; both say "a decision and
@@ -773,8 +773,8 @@ answers point in opposite directions.
 - On a loop over two array **parameters** — the shape §2b measured — the win is
   banked already: main is where §2b said only an invariant header could put it,
   and marking every header load moves the time by 2 ms.
-- On the same loop with the array in a **class field** — the shape `self/` is
-  written in, and `self/bounds.ts` is made of — nothing is banked. **2.48x** is
+- On the same loop with the array in a **class field** — the shape `src/` is
+  written in, and `src/bounds.ts` is made of — nothing is banked. **2.48x** is
   still on the table.
 
 So one of §2c's two candidates is finished and the other is not. **Candidate 1,
@@ -859,7 +859,7 @@ there is no time in it.
 
 ### The field shape: 2.48x is still on the table, and invariance is not how to take it
 
-The same loop with the source array held in a class field, which is how `self/`
+The same loop with the source array held in a class field, which is how `src/`
 is written — and the only change from the program above:
 
 ```ts
@@ -1038,7 +1038,7 @@ sound: the program is undefined either way, and the second spelling is the worse
 position to be in, because it is an entitlement LLVM has not cashed yet and no
 rule says when it will.
 
-The same experiment over the whole of `self/` is the scale of it. At this
+The same experiment over the whole of `src/` is the scale of it. At this
 branch's head, 60 modules and **7,068** header loads marked, where the unmarked
 build links at **988,296** bytes (the pair was 6,675 and 939,784 before
 `2861f8c` reached this branch through `main`, so quote it with a commit or
@@ -1046,7 +1046,7 @@ re-derive it). What comes out is not a slower compiler. The marked build links
 at **22,048 bytes — 2.2% of the unmarked compiler, measured twice and
 byte-identical between links — and it cannot parse its own argv**: handed a file
 to compile it answers ``compile: unknown flag `tiny.ts` `` and exits 2, where
-the unmarked build compiles the same file. `self/options.ts` is where argv
+the unmarked build compiles the same file. `src/options.ts` is where argv
 parsing lives, and LLVM had taken the contradiction and deleted almost the whole
 program around it.
 
@@ -1065,16 +1065,16 @@ binding.** Fixed-length arrays stay a language question for M4's reference
 freeze (`docs/LANGUAGE.md`, "Typed-array names are aliases"); what this
 measurement removes is the speed argument for opening it.
 
-### What is left is candidate 2, and `self/bounds.ts` is where it is waiting
+### What is left is candidate 2, and `src/bounds.ts` is where it is waiting
 
 The field shape is not a synthetic one. `knownAtMost` in
-[`self/bounds.ts`](../self/bounds.ts) is it, verbatim — a `while` over
+[`src/bounds.ts`](../src/bounds.ts) is it, verbatim — a `while` over
 `state.atMostIndex.length` reading `state.atMostIndex[k]` and
 `state.atMostHolder[k]` — and it is the ordinary way to write a loop in a
 compiler whose state is a class.
 
 ```bash
-node dist/index.js self/compile.ts -o build/selfir/ --profile speed
+node dist/index.js src/compile.ts -o build/selfir/ --profile speed
 opt -O2 -S -mtriple=x86_64-unknown-linux-gnu build/selfir/bounds.ll
 ```
 
@@ -1114,7 +1114,7 @@ proves it. It needs the whole-program "does not grow an array" fact that the
 `attributes.ts` fixpoint does not have yet — the same fact `checker/bounds.ts`
 wants, where *any* call drops every array length fact today for exactly this
 reason. Its acceptance is the field-shape program above, at the parameter
-shape's number: 756 ms to 305 ms, 2.48x, with the `self/bounds.ts` loops as the
+shape's number: 756 ms to 305 ms, 2.48x, with the `src/bounds.ts` loops as the
 real-code check that the fact fires where it matters.
 
 What this section no longer claims is a **3.35x** it used to attribute to LLVM's
@@ -1149,7 +1149,7 @@ wherever `FunctionFacts.resizesArray` says nothing the loop reaches can grow it,
 with one `len` feeding the condition and the bounds check. It did its job —
 three header reloads left `fieldScan`'s loop — and `bench/hoist-field.ts` did
 not move (755 ms against 753 ms with loop alignment pinned). What was left was
-a second *compare*: `self/bounds.ts` kept its length facts by variable only, so
+a second *compare*: `src/bounds.ts` kept its length facts by variable only, so
 `const xs = h.xs` proved `xs[i]` and `h.xs.length` proved nothing about
 `h.xs[i]`. §2c's criterion was necessary and not sufficient.
 
@@ -1197,7 +1197,7 @@ all of it is gone. The three shapes are now within noise of one another. The
 linked binary carries 39 packed-double instructions against the before
 build's 32. Without the alignment pin, `field` is 247–249 ms against 588–595 ms.
 
-**The real-code check.** This is `self/` as of the base commit, compiled by
+**The real-code check.** This is `src/` as of the base commit, compiled by
 the compiler before and after with `--profile speed`, then `opt -O2` on
 `bounds.ll`:
 
@@ -1211,14 +1211,14 @@ the compiler before and after with `--profile speed`, then `opt -O2` on
 `knownAtMost` is the shape §2c named. After `-O2` it now reads no header in
 its loop, and it has one check where it had two. The `atMostIndex[k]` read is
 proven by the loop condition. `atMostHolder[k]` keeps its check, because the
-condition says nothing about that path. Across the whole of `self/`, 15
+condition says nothing about that path. Across the whole of `src/`, 15
 functions change their recorded facts in `tests/self/goldens/checked-self.txt`:
 a function whose last check was proven loses its `nish_panic_index` callee,
 and so gains `willreturn` or `readonly` wherever nothing else stood in the way.
 
 One finding came out of the soundness tests and is not fixed here. #104's
 hoist has the same gap as the whole-record rule above. `storedFields` in
-`self/emit-arrays.ts` does not count `rs[0] = other` over an array of records.
+`src/emit-arrays.ts` does not count `rs[0] = other` over an array of records.
 So a loop over `r.xs`, where `r` is a `const` bound to `rs[0]`, reads the
 replaced array after the store: it prints `1 2 3` where `--plain` panics.
 `arr_path_record_store` binds `r` with `let` so that it tests the proof
@@ -1286,9 +1286,9 @@ obvious from the flag names:
    divisor failures already had: what traps at run time is refused at compile
    time once the operands are known. `-2147483648` is unaffected — its result
    fits.
-3. **`self/` had two places that relied on wrapping**, and both were fixed
-   rather than exempted: the FNV-1a round in `self/map.ts`, which now
-   accumulates in `u32`, and `parseIntegerLiteral` in `self/constants.ts`,
+3. **`src/` had two places that relied on wrapping**, and both were fixed
+   rather than exempted: the FNV-1a round in `src/map.ts`, which now
+   accumulates in `u32`, and `parseIntegerLiteral` in `src/constants.ts`,
    which now multiplies through `u64`. The folder's own overflow detection is
    written the same way, so the compiler never overflows a signed value of its
    own in order to describe one.
@@ -1300,7 +1300,7 @@ obvious from the flag names:
    `FunctionSig.name`, so two functions sharing a name share one set of facts
    and each is emitted with the other's attributes. Making the flag the default
    turned a rare hazard into a common one — the bootstrap found it within the
-   hour, as an out-of-bounds inside stage1 after two modules of `self/` both
+   hour, as an out-of-bounds inside stage1 after two modules of `src/` both
    declared a `narrow` — so the check no longer consults the flag
    (`tests/link/duplicate_internal`). `internal` linkage buys inlining,
    specialisation and dead-stripping; it does not buy a second namespace.
@@ -1737,7 +1737,7 @@ measurement closed says so and says why.
    marking: `readonly` constrains the holder rather than the array, so a
    caller's `push` between two calls makes the marking undefined behaviour and
    not a lost hoist — a twenty-line program that must print `6 10` prints `6 6`
-   with every header load in its module marked — and the whole of `self/` marked
+   with every header load in its module marked — and the whole of `src/` marked
    that way (60 modules, 7,068 header loads, 988,296 bytes unmarked) comes out
    as a **22,048-byte** compiler — 2.2% of the unmarked one — that answers
    ``compile: unknown flag `tiny.ts` `` where the unmarked build compiles the
@@ -1747,14 +1747,14 @@ measurement closed says so and says why.
    array *parameters* it is banked — 305 ms against the 1208 ms that stripping
    the alias domains reproduces, and an invariant header moves that by 2 ms —
    but on the same loop with the array in a **class field**, which is how
-   `self/` is written, main is at 756 ms: **2.48x** still on the table,
+   `src/` is written, main is at 756 ms: **2.48x** still on the table,
    recovered in full by writing `const xs = h.xs` by hand in the source. That
    hand hoist is candidate 2 — the emitter hoisting the header in the preheader
    where nothing in the loop can grow the array — and the field-shape program of
    §2c is its acceptance program at 2.48x. Its criterion is **one length value
    feeding the loop condition and the bounds check both**: §2c's probe reaches
    zero header loads in the loop by hand and measures 761 ms, because two
-   lengths leave the second loop exit that stops the vectoriser. `self/bounds.ts`
+   lengths leave the second loop exit that stops the vectoriser. `src/bounds.ts`
    is the source shape verbatim — `knownAtMost` over `state.atMostIndex.length`,
    and 24 functions in that one module carry a header-domain load inside a loop.
    The item's prerequisite is the whole-program "does not grow an array" fact
@@ -1779,7 +1779,7 @@ measurement closed says so and says why.
 2. **`performance` diagnostics** (§8) — **done**. The framework plus the two
    warnings that need no new analysis: quadratic string building and allocation
    in a loop. `--no-warn-performance` is in stage0's `src/index.ts` and
-   `self/compile.ts`, `PerformanceWarning` is in stage0's `src/diagnostics.ts`, both
+   `src/compile.ts`, `PerformanceWarning` is in stage0's `src/diagnostics.ts`, both
    warnings are specified in `docs/LANGUAGE.md`, and
    `tests/cases/perf_str_concat_loop`, `perf_str_concat_quiet`,
    `perf_alloc_loop` and `perf_alloc_quiet` pin them.
@@ -1816,9 +1816,9 @@ measurement closed says so and says why.
      A literal `0` is proven for every string, which is why `s.substring(0, n)`
      — the commonest spelling there is — loses two of its six intrinsic calls
      with nothing rewritten: the cookbook's `head` went from six to four. Over
-     `self/` the fold takes **218 `llvm.smin`/`llvm.smax` calls to 190**
+     `src/` the fold takes **218 `llvm.smin`/`llvm.smax` calls to 190**
      (12.8%), with three bounds it could not prove left warning — one in
-     `self/strings.ts` and two on one line of `self/manifest.ts`.
+     `src/strings.ts` and two on one line of `src/manifest.ts`.
 
      **What the fold is worth in time is `bench/substr.ts`**, which is
      committed so that the figure can be re-derived: two scans of a 40 KB
@@ -1909,7 +1909,7 @@ measurement closed says so and says why.
      which makes the floor both *reachable* and a *lower bound on every order*.
      A struct whose size already equals its floor cannot be improved by any
      permutation, and most structs are one of those — 72 of the 83 `class` and
-     `interface` declarations in `self/` — so the common path is one add per
+     `interface` declarations in `src/` — so the common path is one add per
      field and one comparison. The firing path is not cheap and does not need
      to be: `widestFirst` scans the field list once per power of two from the
      struct's alignment down to 1, `layoutSize` scans again, and the quoted
@@ -1923,8 +1923,8 @@ measurement closed says so and says why.
      declared size is a proof that this rewrite wins rather than a guess that
      it might. `widestFirst` is a stable bucket pass down the powers of two
      rather than a sort, because the message *quotes* the order and the two
-     compilers have to agree on it to the byte — and `self/` has no
-     `Array.sort`, so stage0's `src/` computes it the way `self/` has to.
+     compilers have to agree on it to the byte — and `src/` has no
+     `Array.sort`, so stage0's `src/` computes it the way `src/` has to.
 
      **The report was the real blocker, it was closed first in its own change,
      and the premise this row used to give for it was already false.** The old
@@ -1996,7 +1996,7 @@ measurement closed says so and says why.
      is harmless where nothing implements the interface, and the difference
      between advice and a broken build where something does.
 
-     Measured at `c656ee3` over the sixty modules of `self/` that declare no
+     Measured at `c656ee3` over the sixty modules of `src/` that declare no
      `main`: **eleven structs**, ten of them spending 8 bytes a value and one —
      `ConstInfo`, 80 bytes where 64 would do — spending 16, out of 81
      performance warnings in all. `tests/cases/perf_padding`, `perf_padding_quiet`,
@@ -2028,7 +2028,7 @@ measurement closed says so and says why.
    `tests/differential/corpus/str_slice` pin it.
 6. **Ranged types and length narrowing** (§2.1, §2.2) — **done, and smaller
    than it was written**. The flow-sensitive analysis shipped
-   (stage0's `src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
+   (stage0's `src/checker/bounds.ts`, `src/bounds.ts`), and with it the §8 warning for
    a check that survives, which is what proves it worked. What did *not* ship
    is the declared surface: `integer<0, 255>` waited on the generics of item 8,
    and is now next after the data-parallel call in [wp31-ranged-integers.md](wp31-ranged-integers.md),
@@ -2047,13 +2047,13 @@ measurement closed says so and says why.
    that re-scoped the item. The layout, the escape rule (`NL2290`/`NL2291`)
    that makes the dangling interior pointer a compile error, and the C header
    and layout test that move with the ABI, in both compilers. **Class elements
-   are not a deferred half any more.** The migration was costed against `self/`
-   and it is not a migration of `self/`: it changes what `T[]` means for every
+   are not a deferred half any more.** The migration was costed against `src/`
+   and it is not a migration of `src/`: it changes what `T[]` means for every
    class `T`. One `FunctionSig` is held in `program.functions`, in
    `StructInfo.methodSigs` and in `StructInfo.ctor` at once and written through
    whichever is to hand; **54 comparisons on 50 lines in 10 modules** ask
    whether an element of a `Local[]` or a `Node[]` *is* a given object, 20 of
-   them inside `self/bounds.ts` — nine on the seven lines of `forget` and
+   them inside `src/bounds.ts` — nine on the seven lines of `forget` and
    `forgetUpperBounds`, where an identity test that never matches means a fact
    is never retracted and the compiler emits no check where one is needed, a
    miscompile rather than a slow program, and one `perf_bounds_loop` fails on:
@@ -2069,7 +2069,7 @@ measurement closed says so and says why.
 
 An explicit bounds-check opt-out (§2.4) was deferred until 6 had landed and the
 surviving checks had been counted. Both have happened, and the count closed the
-item rather than opening it: the checks that survive across the whole of `self/`
+item rather than opening it: the checks that survive across the whole of `src/`
 are each an invariant the program has and the compiler cannot see, and each has
 a rewrite `NL9007` already names — not a language feature's worth of them, so
 the opt-out stays unbuilt. **§2.4 is where that count lives**, with the shapes

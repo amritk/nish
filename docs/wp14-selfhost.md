@@ -17,21 +17,21 @@ Two compilers exist by the end, and only the second one is self-hosted.
 
 | | Source | Written in | Built by |
 | --- | --- | --- | --- |
-| **stage0** | stage0's `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` |
-| **stage1** | `self/` | Nish | stage0 |
-| **stage2** | `self/` | Nish | stage1 |
-| **stage3** | `self/` | Nish | stage2 |
+| **stage0** | the TypeScript tree (then `src/`; deleted in R6) | TypeScript on Node, parsing with the `typescript` package | `tsc` |
+| **stage1** | `src/` | Nish | stage0 |
+| **stage2** | `src/` | Nish | stage1 |
+| **stage3** | `src/` | Nish | stage2 |
 
 stage0 is not going away. It is the bootstrap seed, it is what `npm install
 -g nish` ships today, and it stays the reference implementation: a
 program that stage0 and stage1 disagree about is a bug in one of them, and
 saying which is a diff.
 
-stage1, stage2 and stage3 are *the same program* — `self/`. They differ only
+stage1, stage2 and stage3 are *the same program* — `src/`. They differ only
 in which compiler built the binary. So:
 
 ```
-IR(stage1, self/)  ==  IR(stage2, self/)      byte for byte
+IR(stage1, src/)  ==  IR(stage2, src/)      byte for byte
 ```
 
 is the self-hosting proof. If the compiler stage0 built and the compiler
@@ -44,12 +44,12 @@ There is a second, stronger equality worth aiming at but not worth blocking
 on:
 
 ```
-IR(stage0, self/)  ==  IR(stage1, self/)
+IR(stage0, src/)  ==  IR(stage1, src/)
 ```
 
 That says the TypeScript implementation and the Nish implementation agree
 on the IR for the self-hosted compiler's own source. It only holds while
-`self/` uses no construct the two lower differently, so it was a check to
+`src/` uses no construct the two lower differently, so it was a check to
 enable per file as the port landed rather than a milestone. **It holds for
 every file**, and `tests/self/bootstrap.js` asserts it alongside the proof
 itself.
@@ -59,26 +59,26 @@ itself.
 The WP14 section of `tests/run.js` runs the stages and compares. It is
 skipped, not failed, without LLVM, the same as every other toolchain-dependent
 check (`.claude/testing.md`). It began as a compile gate — stage0 must compile
-every module of `self/` cleanly — and grew one oracle at a time until
+every module of `src/` cleanly — and grew one oracle at a time until
 `tests/self/bootstrap.js` closed it: build stage1 with stage0, stage2 with
 stage1, stage3 with stage2, and compare. That gate is not a formality:
-it fails the moment `self/` reaches for something the language does not have,
+it fails the moment `src/` reaches for something the language does not have,
 which is rule 1 of §5 enforced by the suite rather than by good intentions.
 
 ---
 
-## 2. Nish-0: the subset `self/` is written in
+## 2. Nish-0: the subset `src/` is written in
 
 The trap in every bootstrap is writing the compiler in more language than the
 compiler implements. **Nish-0** is the fixed, deliberately small subset
-that `self/` may use, and the closure condition is that Nish-0 is a subset
-of what `self/` compiles. Every line of `self/` is checked against that.
+that `src/` may use, and the closure condition is that Nish-0 is a subset
+of what `src/` compiles. Every line of `src/` is checked against that.
 
-Nish-0 is today's language plus §3, minus everything `self/` does not need.
-Notably `self/` is written **without**:
+Nish-0 is today's language plus §3, minus everything `src/` does not need.
+Notably `src/` is written **without**:
 
 - generics, closures, nested functions, function values (a top-level `const`
-  bound to an arrow is a declaration rather than a value, and is how `self/`
+  bound to an arrow is a declaration rather than a value, and is how `src/`
   declares a function since WP22 stage C);
 - `type` aliases, `enum`, `namespace`, `static` members, getters/setters;
 - `try`/`catch` — diagnostics are collected into an array and a failed parse
@@ -92,7 +92,7 @@ Nish has single inheritance (WP2b) but no downcast, and adding one would
 mean a runtime tag check, a `T | null` result, and a new rule in the checker
 for a cast that can fail. A bootstrap compiler does not need any of that.
 
-`self/` uses **one `Node` class** with a `kind: i32` discriminant and the union
+`src/` uses **one `Node` class** with a `kind: i32` discriminant and the union
 of the fields any node needs — children in a `Node[]`, a `text: string`, a
 couple of numeric payloads. Field access is unchecked by the type system and
 guarded by `kind` instead, exactly as `switch (node.kind)` already reads. It
@@ -104,7 +104,7 @@ each with a `kind`.
 
 ### 2.2 No hash-map builtin
 
-Name lookup is a `StringMap`: a class in `self/` over parallel `string[]` and
+Name lookup is a `StringMap`: a class in `src/` over parallel `string[]` and
 `i32[]` arrays with FNV-1a hashing and linear probing. Beyond the bitwise
 operators of A5 it needs no language feature that is not already listed here,
 so it is library code, not compiler work. Resist the urge to add `Map<K, V>` to the language for it — that would
@@ -112,7 +112,7 @@ drag in generics, which is a work package of its own and is not on the path.
 
 ### 2.3 String building
 
-The emitter produces text, and `s = s + t` in a loop is quadratic. `self/`
+The emitter produces text, and `s = s + t` in a loop is quadratic. `src/`
 builds output through a `StringBuilder` over a `string[]` plus one `join` at
 the end. `join` is therefore a language requirement (§3), not a convenience.
 
@@ -133,7 +133,7 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 **Every row below is now done**, and so is the `panic(msg)` of D1. The
 language gap is closed, and wave C below has landed too, so what remains
 between here and S5 is the port itself and the four decisions of §3a, which
-are about how `self/` is written rather than about what Nish can
+are about how `src/` is written rather than about what Nish can
 express.
 
 ### Wave A — the front end cannot be written without these
@@ -141,7 +141,7 @@ express.
 | # | Construct | Evidence |
 | --- | --- | --- |
 | A1 | `switch` / `case` / `default` **Done.** | Every phase is a dispatch on a node kind. stage0's `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
-| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` **Done.** | A lexer is `charCodeAt` in a loop and `substring` at the end. stage0's `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for stage0's `src/`. |
+| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` **Done.** | A lexer is `charCodeAt` in a loop and `substring` at the end. stage0's `src/` itself never lexes (the `typescript` package does), so this set is sized for `src/`'s lexer, not for stage0's `src/`. |
 | A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
 | A4 | `pop`, `indexOf`, `join` on arrays **Done.** | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
 | A5 | `& \| ^ ~ << >> >>>` and their compound forms **Done.** | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
@@ -162,7 +162,7 @@ one allocation, one `memcpy` per part.
 | B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
-### Wave C — library code in `self/`, no language change
+### Wave C — library code in `src/`, no language change
 
 Written once in Nish and then just there. Listed so nobody mistakes them
 for language work: `StringMap` / `StringSet` (~200 `Map`/`Set` sites),
@@ -173,10 +173,10 @@ formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
 Node does — see D3.
 
 **Landed**, in 598 lines and with no language change, which is the claim this
-wave was making: `self/strings.ts` (`StringBuilder`, `compareStrings`,
+wave was making: `src/strings.ts` (`StringBuilder`, `compareStrings`,
 `jsonQuote`, the LLVM `c"..."` escape, `f64Hex` / `f32Hex` over B1's
-`f64ToBits`, `splitByte`), `self/map.ts` (`StringMap`, `StringSet`) and
-`self/paths.ts` (`normalizePath`, `resolvePath`, `resolveModule`, `dirname`,
+`f64ToBits`, `splitByte`), `src/map.ts` (`StringMap`, `StringSet`) and
+`src/paths.ts` (`normalizePath`, `resolvePath`, `resolveModule`, `dirname`,
 `basename`). The stable sort landed with the diagnostics it orders
 (`DiagnosticSink.sorted`, a bottom-up merge sort), so the wave is complete.
 
@@ -189,7 +189,7 @@ Two shape decisions are worth carrying forward:
   output depend on the table size — and `""` is an ordinary key rather than a
   sentinel to get wrong. There is no `delete`; scopes are popped whole, so the
   probe loop needs no tombstones.
-- **`self/paths.ts` matches `node:path` exactly, quirks included**, because
+- **`src/paths.ts` matches `node:path` exactly, quirks included**, because
   D3's failure mode is a `..` that normalises differently, and "differently"
   has no small version. `dirname("/a//b")` is therefore `"/a/"`, not `"/a"`.
   The one function that is deliberately *not* Node's is `basenameWithout`:
@@ -264,14 +264,14 @@ lines of `bash`. What it was measuring was the wrong thing at the end: the
 cost of the two builtins is 249 bytes of runtime, and what they buy is the last
 sentence of §1. A compiler that cannot produce an executable without a shell
 script beside it is self-hosting in the IR and not in the artifact, and
-"`self/` compiles `self/`" then means a `.ll` a third program has to finish.
-It now means `nish self/compile.ts --link nish`. The two builtins are
+"`src/` compiles `src/`" then means a `.ll` a third program has to finish.
+It now means `nish src/compile.ts --link nish`. The two builtins are
 `mkdirSync` and `spawnSync`, exactly the two D4 named, and they are ordinary
 language now rather than compiler plumbing: rule 1 of §6 applies to them like
 anything else, with their goldens, their negatives, their `docs/LANGUAGE.md`
 rules and their cookbook entries.
 
-**D5. Measure peak memory before S5, not after.** `self/` allocates every node,
+**D5. Measure peak memory before S5, not after.** `src/` allocates every node,
 type, string and array from the bump arena and never releases it — an
 `Arena.reset` is unsafe while the AST lives. Add to that `IRModule.toString()`
 building the whole module text in memory before one write. Peak is roughly AST +
@@ -286,11 +286,11 @@ this size.*
 
 | | Deliverable | Proof |
 | --- | --- | --- |
-| **S1 Lexer** | `self/lexer.ts` tokenises Nish-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
-| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that Nish-0's grammar covers |
-| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
-| **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
-| **S5 Bootstrap** | `self/` compiles `self/` **Done.** | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
+| **S1 Lexer** | `src/lexer.ts` tokenises Nish-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
+| **S2 Parser** | `src/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that Nish-0's grammar covers |
+| **S3 Checker** | `src/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
+| **S4 Emitter** | `src/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
+| **S5 Bootstrap** | `src/` compiles `src/` **Done.** | `IR(stage1, src/) == IR(stage2, src/)`, and stage3 is byte-identical to stage2 |
 
 S1–S4 are each useful on their own and each testable against stage0, which is
 what keeps this from being a single unlandable change. S5 is the day the
@@ -299,16 +299,16 @@ compiler compiles itself.
 ### The bootstrap, and what it says
 
 `tests/self/bootstrap.js` runs the stages and compares them. All three
-equalities hold over the whole of `self/` — 54 modules, 6,977,900 bytes of IR
+equalities hold over the whole of `src/` — 54 modules, 6,977,900 bytes of IR
 (41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
 on DWARF, the interop sidecars, its own link step and WP19 R1's parity work).
-Fewer than the files in `self/`, because `dump-tokens.ts`, `dump-ast.ts` and
+Fewer than the files in `src/`, because `dump-tokens.ts`, `dump-ast.ts` and
 `dump-checked.ts` are the oracles' own entry points and reach the same
 modules from their own roots:
 
 ```
-IR(stage0, self/) == IR(stage1, self/)     the two implementations agree
-IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
+IR(stage0, src/) == IR(stage1, src/)     the two implementations agree
+IR(stage1, src/) == IR(stage2, src/)     the fixed point: self-hosted
 stage3            == stage2                byte for byte, as files
 ```
 
@@ -319,7 +319,7 @@ not merely two compilers that agree about the tests. The third compares the
 binaries rather than the text.
 
 **S5 needed one addition to Nish-0, and it was grammar rather than
-semantics: the parenthesised type.** `self/program.ts` writes
+semantics: the parenthesised type.** `src/program.ts` writes
 `(Local | null)[]`, and it has to, because `Local | null[]` groups the other
 way. stage0 has always accepted it (`ParenthesizedType` in stage0's `src/types.ts`);
 the S2 parser had no rule for it and the parser oracle recorded the gap as a
@@ -327,24 +327,24 @@ skip, which is exactly what that skip count is for. It is now `N_TYPE_PAREN`,
 transparent in `resolveType` as it is in stage0, with
 `tests/cases/cls_parenthesized_type`, `reject_paren_union_type`, a
 `docs/LANGUAGE.md` rule and a cookbook entry — rule 1 of §6, which says a
-construct enters the language before it enters `self/`.
+construct enters the language before it enters `src/`.
 
-**D5, measured rather than guessed.** Compiling the whole of `self/` — 41
+**D5, measured rather than guessed.** Compiling the whole of `src/` — 41
 modules, 16,700 lines, 4 MB of IR out — costs stage1 **86 MB of peak RSS and
 91 ms**. stage0 needs 178 MB and 786 ms for the same input, so self-hosting
 bought a factor of 8.6 in time and half the memory, which is §5's northern star
 pointing at the compiler itself. The arena never being released was the worry;
 at this size it does not matter.
 
-That number is the measurement S5 closed with, over the 41 modules `self/` had
+That number is the measurement S5 closed with, over the 41 modules `src/` had
 then. Today's tree is the 51 modules above, and stage1 costs **128.9 MB of
 peak RSS and about 214 ms** for it, against stage0's 204 MB and 2.1 s: the
 factor in time has gone *up* rather than down as the port grew. The peak RSS
 is the figure to compare across machines; the times were taken on a shared one
 and are indicative.
 
-**§2.3 caught `self/` breaking its own rule, and the compiler is what caught
-it.** The `performance` diagnostic class (WP15 §8) warned about `self/lexer.ts`
+**§2.3 caught `src/` breaking its own rule, and the compiler is what caught
+it.** The `performance` diagnostic class (WP15 §8) warned about `src/lexer.ts`
 itself: `scanString` and `scanTemplate` appended `text = text + <one byte>`
 inside their scan loop, so every byte of every literal copied the whole
 accumulator — the quadratic §2.3 exists to forbid, in the loop that reads every
@@ -360,7 +360,7 @@ text cost 408 MB and 392 ms to lex, and now cost 2.4 MB and 10 ms.
 
 **D3's hazard did not fire.** A module's *name* is the specifier resolved against
 the name the importer was given, so it stays relative and needs no working
-directory (`self/paths.ts`'s `resolveModule`, and `relativePath` for the output
+directory (`src/paths.ts`'s `resolveModule`, and `relativePath` for the output
 stems, both checked against `node:path` by the support oracle). stage0 resolves
 against `process.cwd()` and prints a cwd-relative name; for an entry named
 relatively the two agree string for string, which is why the module headers
@@ -393,10 +393,10 @@ All three now measure what they say they measure:
 
 What changed:
 
-- `self/dump-checked.ts` drives `self/compilation.ts` instead of one `Checker`,
+- `src/dump-checked.ts` drives `src/compilation.ts` instead of one `Checker`,
   so `--emit-checked` is compared over **whole programs**: every module in load
   order, what pass 1b bound each import to, and each module's own constants,
-  structs and functions. The 42 modules of `self/` are compared against stage0
+  structs and functions. The 42 modules of `src/` are compared against stage0
   by the dump as well as by their IR.
 - `reject-oracle.js` reads the `tests/link/` negatives too, because a rejection
   that needs more than one module — a name imported twice, `main` outside the
@@ -439,7 +439,7 @@ compilers have been compared on input neither of them was written against.
 
 ### What S4 cost
 
-`self/` is 16,496 lines of Nish, and the emitter half of it — the IR
+`src/` is 16,496 lines of Nish, and the emitter half of it — the IR
 builder, the runtime ABI table, the targets, the escape analysis, the
 attribute fixpoint, the six construct families, the module assembly and the
 driver — is 6,761 of them, against the 5,686 lines of stage0's `src/codegen/` it
@@ -460,16 +460,16 @@ Four things are worth carrying into S5:
 
 1. **Nish-0 held for the fourth time.** Nothing was added to the language
    for the emitter either. The one place the subset genuinely pushed back was
-   stage0's `src/`'s `factCollectors` array — a list of *functions* each `emit/*.ts`
-   registers into — which became one collector class in `self/attributes.ts`.
+   the `factCollectors` array in stage0's `src/` — a list of *functions* each `emit/*.ts`
+   registers into — which became one collector class in `src/attributes.ts`.
    D2 predicted exactly that, and predicted the cost: the `BuiltinCall
    { emit, callees }` pairing is no longer enforced by locality, so the two
-   halves sit side by side in `self/emit-builtins.ts` and the IR oracle is
+   halves sit side by side in `src/emit-builtins.ts` and the IR oracle is
    what keeps them honest.
 2. **The escape analysis wanted parent links, and got a side table.** S3's "no
    parent pointers" is a statement about the checker, which threads the
    contextual type down. `classifyUse` genuinely reads upwards — "what does the
-   enclosing construct do with this value?" — so `self/parents.ts` builds the
+   enclosing construct do with this value?" — so `src/parents.ts` builds the
    links once, as an array indexed by `Node.id`, which is the shape every other
    side table already has. The AST still carries syntax only.
 3. **The oracle paid for itself again, and this time in soundness.** Three
@@ -490,7 +490,7 @@ Four things are worth carrying into S5:
 
 ### What S3 cost
 
-`self/` is 9,702 lines of Nish, and the checker half of it — types,
+`src/` is 9,702 lines of Nish, and the checker half of it — types,
 diagnostics, scopes, the side tables, annotations, declarations, structs,
 constants, expressions, statements, members, arrays, builtins, definite
 assignment and Phase 0 — is about 5,000 of them, against the ~5,100 lines of
@@ -532,7 +532,7 @@ Three decisions are worth carrying into S4:
 
 ### What S1 cost, and what it says
 
-`self/tokens.ts`, `self/lexer.ts` and `self/dump-tokens.ts` are **1,222 lines
+`src/tokens.ts`, `src/lexer.ts` and `src/dump-tokens.ts` are **1,222 lines
 of Nish**, and the four numbers the gate wants are already forming:
 
 - **Nish-0 held.** The lexer needed no language addition beyond the ones
@@ -541,7 +541,7 @@ of Nish**, and the four numbers the gate wants are already forming:
   with wave A, which is the first evidence that the census measured the right
   thing.
 - **It agrees with the oracle exactly.** `tests/lexer-oracle.js` runs the
-  `typescript` scanner over `tests/cases/`, `examples/`, `self/`,
+  `typescript` scanner over `tests/cases/`, `examples/`, `src/`,
   `docs/cookbook/`, the differential corpus and `tests/lexer/`, prints the
   token stream in `dump_tokens`' format and diffs it: **482 of 482 files,
   50,968 tokens, no disagreement.** That includes every `reject_*` case, whose
@@ -566,7 +566,7 @@ of Nish**, and the four numbers the gate wants are already forming:
 
 ### What S2 cost, and the gate's four numbers
 
-`self/nodes.ts`, `self/parser.ts` and `self/dump-ast.ts` bring `self/` to
+`src/nodes.ts`, `src/parser.ts` and `src/dump-ast.ts` bring `src/` to
 **2,817 lines of Nish**. `tests/parser-oracle.js` is the lexer oracle one
 level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
 diffs, so what is compared is not "did it parse" but "is it the same tree, out
@@ -574,7 +574,7 @@ of the same pieces, with the same spans".
 
 **447 of 447 files agree, 53,673 nodes, 43 skipped — and every one of the 43
 is a `reject_*` case.** Every positive program in `tests/cases/`, `examples/`,
-`self/`, `docs/cookbook/`, `bench/`, the differential corpus and the new
+`src/`, `docs/cookbook/`, `bench/`, the differential corpus and the new
 `tests/parser/` fixtures parses to exactly the tree TypeScript builds.
 
 So the gate's questions have answers:
@@ -600,7 +600,7 @@ So the gate's questions have answers:
    contextual, which `tests/cases/cls_nested.ts` catches with a field called
    `from`. None of them needed a redesign. That is the strongest evidence for
    S3: the oracle habit works, and it is cheap.
-4. **How fast is it?** Over 84 KB of `self/`'s own source the native binary
+4. **How fast is it?** Over 84 KB of `src/`'s own source the native binary
    reads, lexes, parses and writes a 30,000-line tree dump in **7 ms**; the
    `typescript` parser alone, warm, takes 14.5 ms for the same input — before
    the 258 ms it costs to load.
@@ -617,7 +617,7 @@ regex literals (1), spread (1), computed keys (1), `export default` (1),
 `?.`/`??`/`==`/`!=` in expression position (4), and top-level statements (2).
 That is a bounded list — roughly 25 constructs, each a few lines of
 read-and-refuse — not an open-ended one, which is the answer the gate needed
-about how much of TypeScript `self/` ends up parsing.
+about how much of TypeScript `src/` ends up parsing.
 
 ### The gate at S2
 
@@ -653,7 +653,7 @@ the compiler's own speed, not §5's northern star, and that maintaining two
 implementations doubles the cost of every construct added afterwards. The
 answer to the second half is that stage0 is **frozen** at S5 rather than
 retired: it stays buildable as the bootstrap seed and as the differential
-oracle, but new constructs land in `self/` only, so the doubling is bounded by
+oracle, but new constructs land in `src/` only, so the doubling is bounded by
 the language as it stands on that day. Deciding that now is what makes the
 tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
 *kept up to date*.
@@ -670,7 +670,7 @@ list, so that the decision when it comes is a decision and not a discovery.
 
 **What the first construct after the freeze actually cost.**
 `Result<T, E>` (WP16) is that construct, and it landed in *both* compilers
-rather than in `self/` alone, because stage0 is still what `dist/` ships and
+rather than in `src/` alone, because stage0 is still what `dist/` ships and
 what every golden in `tests/cases/` is compiled by: a construct stage0 cannot
 compile has no goldens, no differential coverage and no released
 implementation. So the doubling was paid in full — a type model entry, a
@@ -691,7 +691,7 @@ rather than a construct, and that turned out to be the cheaper kind to
 mirror. It touched the same five files on each side (`types.ts`,
 `result.ts`/`emit-result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
 `attributes.ts`), added nothing to Nish-0 — rule 5 of §6 did not fire, and
-`self/` is written in exactly the subset it was written in before — and the
+`src/` is written in exactly the subset it was written in before — and the
 IR oracle caught the divergences the same way: the two sides have to agree on
 every SSA number of the pack and the unpack, so a shift emitted in a
 different order is a byte diff rather than a latent difference of opinion.
@@ -710,12 +710,12 @@ DWARF, are two-sided changes like every other.
 
 ### `-g` on both sides
 
-`self/debug.ts` is the port of stage0's `src/codegen/debug.ts`: the same compile unit,
+`src/debug.ts` is the port of stage0's `src/codegen/debug.ts`: the same compile unit,
 the same `DISubprogram` per function, the same `DILocation` on every
 instruction, the same `llvm.dbg.value` / `llvm.dbg.declare`, and the same type
 mapping down to the packed `Result` word a call boundary carries (WP17).
-`self/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
-`self/compile.ts` — which hands it to `scripts/build.sh` as well, so the DWARF
+`src/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
+`src/compile.ts` — which hands it to `scripts/build.sh` as well, so the DWARF
 survives the link — and `tests/cases/dbg_locals` and `tests/cases/dbg_result`
 are compared by `tests/self/ir_oracle.js` byte for byte, metadata numbering
 included, rather than skipped.
@@ -738,7 +738,7 @@ now describe a struct against the file that declares it, which is why a program
 with imports has more than one `DIFile`.
 
 The two disagreed on one more thing, and it was stage1's: `IRBlock.terminated`
-spelled stage0's `src/`'s `^(ret|br|switch|unreachable)\b` as "the word, then a space or
+spelled stage0's `^(ret|br|switch|unreachable)\b` as "the word, then a space or
 the end", which is not `\b`. With `-g` an `unreachable` is written
 `unreachable, !dbg !9`, the test said "not a terminator", and the emitter added
 a second one. It is a word-boundary test now.
@@ -747,7 +747,7 @@ All three came out of the same one-off experiment, which is worth recording
 because the suite does not run it: the oracle's own corpus compiled by both
 compilers with `-g` **forced on every file**, rather than only on the two cases
 whose `.args` ask for it. That is 278 programs — the corpus as it stood that
-day — and `self/` itself, and it is
+day — and `src/` itself, and it is
 what turned "the two `-g` goldens match" into "the two compilers agree about
 DWARF". The suite compares the two cases that ask for `-g`, because forcing the
 flag over the whole corpus would double the oracle's four minutes for a
@@ -793,32 +793,32 @@ an opinion.
 
 These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 
-1. **A construct enters the language before it enters `self/`.** Wanting it
+1. **A construct enters the language before it enters `src/`.** Wanting it
    for the port is not a reason to skip its `reject_*` case or its cookbook
-   entry. `self/` is the customer, not the exception.
+   entry. `src/` is the customer, not the exception.
 
    **Amended by [wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6).**
    What the rule meant in practice was "a construct is implemented twice,
    stage0's `src/` first", and that is no longer required: a construct may be
-   implemented in `self/` alone, with its case in
+   implemented in `src/` alone, with its case in
    `tests/self/stage1_only.txt`, which is what makes it stage1's golden and a
    declared row in the oracles rather than a silent skip. Two halves of the
    rule survive it and are the reason it is amended rather than deleted: the
    construct still ships with everything a construct ships with — a golden, an
    `llvm-as` pass, a native round trip, a negative case, a `LANGUAGE.md` rule
-   and a cookbook entry — and `self/` still may not *use* it until the seed
+   and a cookbook entry — and `src/` still may not *use* it until the seed
    compiles it, which is the next release (wp19 G4). The port is finished;
    what is left is a language that is still moving, and paying for a second
    implementation of every new construct is a choice rather than a
    consequence.
-2. **`self/` is an Nish program.** It follows `docs/LANGUAGE.md` and the
+2. **`src/` is an Nish program.** It follows `docs/LANGUAGE.md` and the
    Nish half of `.claude/typescript.md` — since WP22 stage C that means a
    function is a `const` bound to an arrow, as it is in stage0's `src/`, with
    `interface` for structs and no `type` aliases. Stage0's `src/` rules that do not
    reach it are the ones the language cannot express, and `biome.json` exempts
    it from those the way it exempts `examples/` and `bench/`; the arrow rule is
-   no longer among them, because `self/` now keeps it.
-3. **stage0 is the oracle.** Every `self/` phase is tested by comparing it
+   no longer among them, because `src/` now keeps it.
+3. **stage0 is the oracle.** Every `src/` phase is tested by comparing it
    with the corresponding stage0 output over `tests/cases/`, not by a golden
    written by hand. A disagreement is triaged before the next phase starts.
 4. **The runtime budget still holds.** Self-hosting is not a licence to grow
@@ -885,7 +885,7 @@ up not carrying the thing it asked for.
 
 **The interop sidecars are stage1's too.** `--emit-header`, `--emit-dts` (which
 writes its companion `.mjs` loader beside the declarations) and `--emit-napi`
-are ~1,900 lines of `self/` ported from stage0's `src/interop/`, module for module, and
+are ~1,900 lines of `src/` ported from stage0's `src/interop/`, module for module, and
 they cost the runtime nothing: a sidecar is derived from the checked program
 after the IR and written with the `writeFileSync` stage1 already had, to the
 path it was given. D4 is untouched — stage1 still makes no directory, spawns
@@ -907,7 +907,7 @@ and `tests/parser-oracle.js` translates TypeScript *into* that vocabulary
 rather than the reverse. Matching stage0's dump would mean carrying a mirror of
 `ts.SyntaxKind` inside the self-hosted compiler to imitate an implementation
 detail of the seed — the opposite of what §1 means by the two being the same
-compiler. `self/dump-ast.ts` keeps the shape its own oracle compares.
+compiler. `src/dump-ast.ts` keeps the shape its own oracle compares.
 `--emit-checked` is the other way about, and that is why it *is* stage1's: the
 dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
 proves stage1 writes them byte for byte as stage0 does over 279 whole
@@ -929,11 +929,11 @@ and this one would only pay for the same two links again.
 
 **stage0 stays the published package.** `npm install -g nish` still ships
 `dist/`, and it has to: it is the seed every bootstrap starts from and the
-oracle every `self/` phase is compared against. What it is no longer is the
+oracle every `src/` phase is compared against. What it is no longer is the
 only one that emits DWARF or the interop sidecars; what is still only stage0's
 is the AST dump, and the `--json` object for an *internal compiler error*
 (`NL0003`). The second is a language limit rather than a decision to skip work:
-`self/ice.ts` is a library module, so `process.argv` is out of reach there —
+`src/ice.ts` is a library module, so `process.argv` is out of reach there —
 it needs an `export function main` — and Nish has no mutable module
 state to stash the flag in, so the only way to get it to `internalError` is a
 parameter on all 39 of its callers, which are broken invariants scattered
@@ -951,27 +951,27 @@ programs about eight times faster (§4, D5).
 
 `scripts/nish.sh` is deleted. `mkdirSync` and `spawnSync` — the two builtins
 §3a D4 named as the reason not to do this — are in the language, and with them
-`self/compile.ts` plans its output, makes every directory in the way and runs
+`src/compile.ts` plans its output, makes every directory in the way and runs
 `bash scripts/build.sh` for `--link`, which is the same script stage0's `src/index.ts`
 spawns and has always been.
 
 ```bash
 npm run bootstrap                       # build/nish, stage2, no wrapper after it
-build/nish self/compile.ts --link nish
+build/nish src/compile.ts --link nish
 cmp nish build/nish                 # the fixed point, reached by the artifact
 ```
 
 **What D4 got right, and what it was measuring.** Dropping the link step was
 the correct order of work: the proof of §1 compares IR and never needed a
 linker, and 195 lines of `bash` carried the deployment path from S5 through
-four landings for nothing. What it costed wrongly was the end state. "`self/`
-compiles `self/`" with a wrapper in the way means the compiler produces a `.ll`
+four landings for nothing. What it costed wrongly was the end state. "`src/`
+compiles `src/`" with a wrapper in the way means the compiler produces a `.ll`
 that a third program has to finish — self-hosting in the IR and not in the
 artifact. The bill for closing that is 257 bytes of `.text`.
 
 **The two builtins are language, not plumbing.** Rule 1 of §6 applies: each
 entered stage0's `src/` first with a golden, a native round trip, two negatives, a
-`docs/LANGUAGE.md` rule and a cookbook entry, and only then `self/`.
+`docs/LANGUAGE.md` rule and a cookbook entry, and only then `src/`.
 
 | | Answer | Why a value and not an exit |
 | --- | --- | --- |
@@ -1039,15 +1039,15 @@ which is not the same thing:
 | | Why | What it cost |
 | --- | --- | --- |
 | `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. **Closed by WP19 R1** — not by mirroring the names, which stays refused, but by answering the flag with stage1's own tree and a golden of its own | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
-| `--target host` | it asked the machine what it is, and nothing in the language did. **Done** | `process.platform` and `process.arch` as builtins, **8 bytes of `.text` each** as costed; `self/target.ts` composes the triple exactly as stage0's `src/codegen/target.ts` does |
-| exit **70** for an internal error, and `NISH_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `self/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
+| `--target host` | it asked the machine what it is, and nothing in the language did. **Done** | `process.platform` and `process.arch` as builtins, **8 bytes of `.text` each** as costed; `src/target.ts` composes the triple exactly as stage0's `src/codegen/target.ts` does |
+| exit **70** for an internal error, and `NISH_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `src/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
 | `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash was the only spelling here. **Done** | `isDirectorySync(path)`, the smallest `stat` that answers the question, and one byte of `.text` net once `nish_mkdir` was rewritten to call it |
 
 ### The three builtins, and the runtime they cost
 
 Rule 1 of §6 applies to all three: each entered the language and stage0's `src/` first,
 with a golden, a native round trip, negatives, a `docs/LANGUAGE.md` rule and a
-cookbook entry, and only then `self/`.
+cookbook entry, and only then `src/`.
 
 | | Answer | Why a value and not an exit, or a call and not a constant |
 | --- | --- | --- |
@@ -1091,8 +1091,8 @@ decides it, and by a wide margin:
 - A second panic would have to bake this compiler's *reporting policy* — the
   version line, the issue tracker, the word "internal" — into the language that
   compiles it, or else print a bare message and lose the report.
-- The cost of the other side of the trade is 28 statements in `self/`, and they
-  are `self/`'s own. `self/ice.ts` holds the report and answers the status, so
+- The cost of the other side of the trade is 28 statements in `src/`, and they
+  are `src/`'s own. `src/ice.ts` holds the report and answers the status, so
   every site is the single statement `process.exit(internalError("..."))`
   rather than a report call followed by an exit: the pair could be
   half-written, and this cannot, because `process.exit(...)` is what the
@@ -1105,8 +1105,8 @@ and the exception carries a stack, and prints both — the stack only under
 `NISH_DEBUG=1`. stage1 has neither, for one reason: with no exceptions the
 report is made *at the site* instead of at the top. There is no stack to
 unwind, and no `process.argv` to read either, because that builtin requires an
-entry `main` and the modules that report internal errors (`self/types.ts`,
-`self/emit.ts`, ...) are compiled on their own as well, as whole programs of
+entry `main` and the modules that report internal errors (`src/types.ts`,
+`src/emit.ts`, ...) are compiled on their own as well, as whole programs of
 the corpus. So the report names the compiler and its version, the invariant
 that broke, and `NISH_DEBUG` — saying there is nothing behind it here rather
 than promising a stack a rerun would not produce — and then asks, in stage0's
@@ -1114,8 +1114,8 @@ own words, for the input file and the command line, which is the half stage0
 was echoing anyway. `tests/self/ice.ts` and the WP14 block of `tests/run.js`
 pin the lines and the 70.
 
-Seven sites still call `panic` and still exit 1: the four in `self/emit-ops.ts`
-and the three in `self/interop-napi.ts`. The conversion there is the same one
+Seven sites still call `panic` and still exit 1: the four in `src/emit-ops.ts`
+and the three in `src/interop-napi.ts`. The conversion there is the same one
 line for one line, and it is the only thing between this and every internal
 error in stage1 answering 70.
 

@@ -1,13 +1,13 @@
 # nish in a browser worker
 
-The compiler compiled to WebAssembly, driven from a Web Worker. `self/` is an
+The compiler compiled to WebAssembly, driven from a Web Worker. `src/` is an
 Nish program, so the compiler compiles it and the `wasi` profile links it
 against wasi-libc; the result is a 480 KB module (about 140 KB gzipped) that
 lexes, checks and emits LLVM IR with no server involved.
 
 ```bash
 npm run build
-build/nish self/compile.ts --link web/nish.wasm --profile wasi
+build/nish src/compile.ts --link web/nish.wasm --profile wasi
 ```
 
 That needs a WASI sysroot and `wasm-ld` ([../docs/INSTALL.md](../docs/INSTALL.md), the WASI section). The module
@@ -20,7 +20,7 @@ Without a browser, through `node:worker_threads`:
 ```bash
 node web/compile.mjs web/nish.wasm examples/add.ts
 node web/compile.mjs web/nish.wasm examples/nbody.ts --number-mode f64
-node web/compile.mjs web/nish.wasm self/compile.ts | head   # the compiler, compiled by itself, in wasm
+node web/compile.mjs web/nish.wasm src/compile.ts | head   # the compiler, compiled by itself, in wasm
 ```
 
 `compile.mjs` reads the entry and every module it imports, hands them over as
@@ -68,10 +68,10 @@ integration would read ([../AGENTS.md](../AGENTS.md)).
   which WASI answers with `-1`; the compiler reports that as a toolchain
   failure and exits 3, the same as a machine with no `bash`.
 - **No `--target host`.** `process.platform` and `process.arch` are `unknown`
-  under WASI, so the compiler refuses to guess a triple (`self/target.ts`).
+  under WASI, so the compiler refuses to guess a triple (`src/target.ts`).
   Name a triple instead: `--target wasm32-wasi`.
 - **One instance per compile.** The arena only grows and `proc_exit` ends the
   instance that ran it, so each request is instantiated fresh. The module is
   compiled once, so this costs about a millisecond; compiling all 54 modules
-  of `self/` peaks around 140 MiB of linear memory, and a single-file program
+  of `src/` peaks around 140 MiB of linear memory, and a single-file program
   is far below that.

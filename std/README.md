@@ -4,7 +4,7 @@ Nish modules written in Nish, for Nish programs to import. There is no magic
 here and — with three exceptions, `threads.ts`, `collections.ts` and `map.ts` —
 nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
 whatever program imports it, and subject to the same rules as `examples/` or
-`self/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
+`src/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
 | Module | What it is |
 | --- | --- |
@@ -130,7 +130,7 @@ that are *not* this package.
   stdout. `tests/link/std_text_f64` is the same corpus under
   `--number-mode f64`, which is where a module that spelled its widths and forgot
   a `toI32` is caught.
-- **`std/` is not on the compiler's dependency list.** Nothing in `self/`
+- **`std/` is not on the compiler's dependency list.** Nothing in `src/`
   imports it, and nothing should: the compiler is the thing that has to
   build before the library means anything.
 

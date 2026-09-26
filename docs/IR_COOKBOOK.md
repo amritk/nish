@@ -1141,7 +1141,7 @@ code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
-never called: they are intrinsics `self/emit-map.ts` lowers per key type. So is
+never called: they are intrinsics `src/emit-map.ts` lowers per key type. So is
 `storedKey`, where `insertAt` pushes the key: a float key is pushed as
 `fadd <key>, 0.0`, which stores a -0 as +0 as JavaScript does, and every other
 key is pushed as it is, with no instruction added
@@ -8545,7 +8545,7 @@ attributes #1 = { nounwind noreturn cold }
 
 The same lowering with no compare, no branch and no panic block, and with the
 safety unchanged — the checker proved the index in range rather than being told
-to trust it (WP15 §2.1/§2.2, `self/bounds.ts`). The loop condition
+to trust it (WP15 §2.1/§2.2, `src/bounds.ts`). The loop condition
 proves `i`; the length guard proves the constant `0`. Neither function names
 `nish_panic_index`, so both keep `willreturn`.
 
@@ -8932,7 +8932,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 Under `--number-mode f64` a `.length` is an `f64`, so the hoist a loop can
 compare an `i32` cursor against is `const n: i32 = toI32(s.length)`. The
 checker reads the builtin `toI32` of a length as that length (WP15 §2,
-`self/bounds.ts` `lengthOfLocal`): the `sitofp` of the header and the
+`src/bounds.ts` `lengthOfLocal`): the `sitofp` of the header and the
 saturating `llvm.fptosi.sat.i32.f64` answer the length, or less for a string
 past `2^31 - 1` bytes, and never a negative. So `i < n` proves
 `s.charCodeAt(i)` as it does in i32 mode, and the read is a plain load with
@@ -9023,7 +9023,7 @@ load, and the §2b alias domains do not reach it: the second read sits in a
 bounds-checked block, where LLVM may not speculate it out. So the emitter does
 the hoist itself, wherever the whole-program fact
 `FunctionFacts.resizesArray` proves that nothing the loop reaches can `push`
-or `pop` (WP15 §2c candidate 2, `self/attributes.ts`). The field load,
+or `pop` (WP15 §2c candidate 2, `src/attributes.ts`). The field load,
 `len` and `data` are read once in the loop's preheader:
 
 ```llvm
@@ -9062,7 +9062,7 @@ Four things refuse the hoist, and each is the whole of a proof:
   or through a nullable link that a guard *inside* the loop narrows.
 - a store of a whole element into an array of inline records, which rewrites
   a record in place with no field name written (`recordStoreType` in
-  `self/bounds.ts`, `arr_header_hoist_record_store`) — for a path with a link
+  `src/bounds.ts`, `arr_header_hoist_record_store`) — for a path with a link
   read off a holder declared as that record type, because nothing else can
   point into the slot (`recordReaches`, the rule the bounds proof shares). An
   array of classes holds pointers: `this.nodes[i] = this.spare` is a
@@ -9076,7 +9076,7 @@ The lowering is pinned by `tests/cases/arr_header_hoist.ts` and the checks
 
 **What this does not buy, and where that lives.** The loop above still carries
 *two* bounds checks where the same loop written `const xs = h.xs` carries one,
-because `self/bounds.ts` keys its length facts by variable and never by
+because `src/bounds.ts` keys its length facts by variable and never by
 a property path — a local cannot be written through an alias, a field can. So
 `h.xs.length` proves nothing about `h.xs[i]`. That second check is a second
 loop exit and it is what keeps the vectoriser away; closing it is that file's
@@ -12402,7 +12402,7 @@ from them alone stays pure and two reads of one property fold into one.
 `isDirectorySync` is the `stat` beside them: the question `-o <dir>` asks, as a
 `boolean`, which is why the snippet below can ask it before it asks for the
 directory to be made. `--target host` maps the same pair of strings to a triple
-(`hostTriple` in `self/target.ts`).
+(`hostTriple` in `src/target.ts`).
 
 <!-- cookbook:begin builtin-host -->
 ```ts

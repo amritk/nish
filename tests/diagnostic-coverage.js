@@ -10,7 +10,7 @@
  *   node tests/diagnostic-coverage.js --require-coverage every code provoked or explained
  *   node tests/diagnostic-coverage.js --strict-refusals  the registers must describe this compiler exactly
  *
- * **What this answers.** `self/codes.ts` is the registry of stable diagnostic
+ * **What this answers.** `src/codes.ts` is the registry of stable diagnostic
  * codes, and a code is a promise about a rule. The prose behind it is not
  * promised — until stage0 was deleted it was *proved*, by two implementations
  * printing the same sentence, and since R6 it is proved by the pins in this
@@ -19,7 +19,7 @@
  *
  * It asks it the only way that survives stage0's `src/` being deleted: by compiling
  * programs and reading `--json`, never by matching the compiler's source
- * against a table copied out of it. The registry it reads is `self/codes.ts`,
+ * against a table copied out of it. The registry it reads is `src/codes.ts`,
  * and the compiler it runs is a parameter.
  *
  * **What it checks.**
@@ -82,7 +82,7 @@ import { defaultSeedSpec } from "./self/seed.js"
 
 const WORDINGS = path.join(root, "tests", "wordings")
 const CASES = path.join(root, "tests", "cases")
-const REGISTRY = path.join(root, "self", "codes.ts")
+const REGISTRY = path.join(root, "src", "codes.ts")
 const UNREACHABLE = path.join(WORDINGS, "unreachable.txt")
 const REFUSALS = path.join(WORDINGS, "parser_refusals.txt")
 const DIVERGENCE = path.join(WORDINGS, "stage1_divergence.txt")
@@ -96,10 +96,10 @@ const CASE_NAME = /^(nl\d{4})_[a-z0-9_]+\.ts$/
 
 /**
  * The registry as the compilers hold it: fragment first, code second, flat,
- * longest fragment first, as `self/codes.ts` holds it.
+ * longest fragment first, as `src/codes.ts` holds it.
  *
  * The indentation is not part of the contract, and reading it as though it were
- * is what turned this tool's coverage half off. `self/codes.ts`'s tables lost a
+ * is what turned this tool's coverage half off. `src/codes.ts`'s tables lost a
  * level when WP22 stage C rewrote them as arrows with concise bodies, and a
  * pattern keyed on four literal spaces then parsed **0 of 408** codes rather
  * than failing: `--require-coverage` iterated an empty map, the per-case
@@ -220,7 +220,7 @@ const resolveCompiler = (spec) => {
 /**
  * Whether a run's `--json` objects are the parser turning the file down rather
  * than a phase naming a rule. Every syntax error carries one code (`SYNTAX` in
- * `self/codes.ts`), which is the field to key on: the prose is two different
+ * `src/codes.ts`), which is the field to key on: the prose is two different
  * parsers' and is allowed to improve.
  */
 const refusedByParser = (result) => result.objects.some((o) => o.code === "NL0001")

@@ -7,7 +7,7 @@ the end state.
 
 This package writes down what has to be true before the freeze becomes a
 deletion — before stage0's `src/`, the `typescript` dependency and Node leave the
-*compiler*, and `self/` becomes the only implementation of Nish. It is a
+*compiler*, and `src/` becomes the only implementation of Nish. It is a
 checklist, not a schedule. Nothing here says when; everything here says what.
 
 > **R6 has landed: stage0's `src/` is deleted, and this document is now the record of
@@ -36,13 +36,13 @@ We have a fifth arrangement that none of them has: a seed that is a *second,
 independently written implementation*, kept alive and compared against
 per phase. It bought six stage0 bugs during S3 and S4 that a golden `.ll` would
 not have caught (§4 of `wp14-selfhost.md`), and it buys the stronger equality
-`IR(stage0, self/) == IR(stage1, self/)`, which no project in the table above
+`IR(stage0, src/) == IR(stage1, src/)`, which no project in the table above
 asserts — it is the second half of Wheeler's *diverse double-compiling*, and it
 is why a Thompson-style backdoor cannot presently hide in either compiler.
 
 It also costs a full second implementation of every construct, forever.
 
-**The target shape is Rust's and Go's**: `self/` is the compiler, and the seed
+**The target shape is Rust's and Go's**: `src/` is the compiler, and the seed
 is the previous released `nish` binary. This document is the price list.
 
 ### 1a. The doubling ends before R6
@@ -51,7 +51,7 @@ The gates below are about *deleting* stage0's `src/`. They are not what stops th
 implementation costing a second implementation, and reading them as though they
 were is what kept the doubling in place after the port had finished: every
 construct since S5 has been written twice, and the last three were 125/112,
-354/487 and 371/415 lines of stage0's `src/` against `self/`. Half of every compiler
+354/487 and 371/415 lines of stage0's `src/` against `src/`. Half of every compiler
 change is the second implementation.
 
 **None of that is required by the gates.** Work out what actually forces a
@@ -63,22 +63,22 @@ construct into stage0's `src/` and there are two things, both of them mechanical
 2. **The oracles compare stage0 with stage1 over the corpus**, so a case stage0
    refuses is recorded as `stage0 rejects it` and *skipped* — and a skip in an
    oracle is a fact about how far the port has got (`.claude/selfhost.md`),
-   printed only under `--verbose`. A construct landing in `self/` alone would
+   printed only under `--verbose`. A construct landing in `src/` alone would
    quietly shrink the comparison rather than declare that it had.
 
 Neither is about the seed, which is the thing people reach for first. The seed
-compiles `self/`'s *source*, and `self/`'s source does not use a construct the
+compiles `src/`'s *source*, and `src/`'s source does not use a construct the
 day it lands — G4's rolling freeze already says it may not until the next
 release. stage0 can go on being the local seed exactly as long as it can
-compile `self/`, and nothing here changes that.
+compile `src/`, and nothing here changes that.
 
 So the answer is a register. `tests/self/stage1_only.txt` names the cases
-whose implementation is `self/`'s alone, and every tool that would otherwise
+whose implementation is `src/`'s alone, and every tool that would otherwise
 have been silent reads it:
 
 | Tool | What a registered case does |
 | --- | --- |
-| `tests/run.js` | compiles it with a **stage1** binary built from `self/` by the seed; its golden, `llvm-as` pass and native round trip are stage1's |
+| `tests/run.js` | compiles it with a **stage1** binary built from `src/` by the seed; its golden, `llvm-as` pass and native round trip are stage1's |
 | `ir_oracle.js`, `checked_oracle.js` | counts as `stage1-only` in the summary, apart from the skips: no stage0 answer exists, by decision |
 | `interop_oracle.js` | skipped with the register as the named reason, on the `--all` path — the only one of its two corpora that can reach a `tests/cases` program |
 | `parity.js` | one declaration, the only one keyed on the program rather than the surface, matched *after* the others so an ordinary difference is still attributed to its own reason |
@@ -88,7 +88,7 @@ have been silent reads it:
 **What it costs is one line of the ledger and no more.** Diverse double
 compiling stops growing: the construct is proved by a golden and by
 `nish-cmp.js` rather than by two implementations agreeing. Everything already
-in the corpus is still compiled by both and compared byte for byte, `self/`'s
+in the corpus is still compiled by both and compared byte for byte, `src/`'s
 own 56 modules included, so §2D's property holds over what it always held
 over. That is the trade §6 prices, taken one construct at a time and reversibly
 — writing stage0's `src/` half later removes the line — instead of all at once at
@@ -117,12 +117,12 @@ in the tree is written by anyone else. Porting the harness is a separate
 question and this package does not open it.
 
 **It is not "Nish-0 dissolves."** The subset does not disappear when
-stage0 does — its *reference point* moves. Today `self/` may only use what
-stage0 compiles, permanently. After retirement `self/` may only use what **the
+stage0 does — its *reference point* moves. Today `src/` may only use what
+stage0 compiles, permanently. After retirement `src/` may only use what **the
 last released `nish`** compiles, which is rustc's `#[cfg(bootstrap)]` window
 with a longer period. The freeze stops being permanent and starts rolling, and
 that — not the deleted code — is the actual prize: a construct added in 0.N
-becomes available to `self/` in 0.(N+1) instead of never.
+becomes available to `src/` in 0.(N+1) instead of never.
 
 ---
 
@@ -148,13 +148,13 @@ R1. They are left in the table so the count stays honest.
 
 | | State today | What closing it needs |
 | --- | --- | --- |
-| `--emit-ast` | **closed** | stage1's own dump over `self/nodes.ts`'s vocabulary, with a checked-in golden (`tests/self/dump-ast.golden`). **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and what shipped is a different dump, not the same one: both compilers answer the flag, each about its own tree, and the printer is `self/ast-text.ts`, shared with `self/dump-ast.ts` so the flag and the parser oracle cannot drift |
+| `--emit-ast` | **closed** | stage1's own dump over `src/nodes.ts`'s vocabulary, with a checked-in golden (`tests/self/dump-ast.golden`). **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and what shipped is a different dump, not the same one: both compilers answer the flag, each about its own tree, and the printer is `src/ast-text.ts`, shared with `src/dump-ast.ts` so the flag and the parser oracle cannot drift |
 | `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as stage0's `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
-| exit **70** on an internal error, and `NISH_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
+| exit **70** on an internal error, and `NISH_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `src/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
-| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/nish` compiled a quadratic string loop in silence where `nish` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
+| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `src/checker.ts`, the second list in the sink, the report in `src/diagnostics.ts` — and its driver never printed a word of it, so `build/nish` compiled a quadratic string loop in silence where `nish` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
 | `--out-dir` | **closed, by removal** | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had, kept because three oracles passed it. They pass `-o <dir>/` to both compilers now and the flag is gone — parity without the frozen compiler growing anything |
-| `--emit-checked`'s later-phase lines | **closed** | it was the port this row predicted: `self/compilation.ts` grew stage0's memoised `analyze()`, `self/dump.ts` grew `factsText` in stage0's format, and `checked_oracle.js`'s `LATER_PHASES` filter is deleted — 314 programs agree over 297,074 dump lines with nothing filtered out. It earned its keep immediately, catching a lost `nish_panic_div` fact that the compound-assignment fix below had just introduced |
+| `--emit-checked`'s later-phase lines | **closed** | it was the port this row predicted: `src/compilation.ts` grew stage0's memoised `analyze()`, `src/dump.ts` grew `factsText` in stage0's format, and `checked_oracle.js`'s `LATER_PHASES` filter is deleted — 314 programs agree over 297,074 dump lines with nothing filtered out. It earned its keep immediately, catching a lost `nish_panic_div` fact that the compound-assignment fix below had just introduced |
 
 ### A2. What `--parity` found on its first run
 
@@ -210,7 +210,7 @@ miscompile that eleven oracles and 1,161 checks had not.
 ### A3. What `--parity` says over the whole corpus
 
 §A2 was `tests/cases` — 172 programs, 2,408 runs. The mode's own default is the
-whole corpus that `tests/self/corpus.js` enumerates: `self/`, `examples/`,
+whole corpus that `tests/self/corpus.js` enumerates: `src/`, `examples/`,
 `docs/cookbook/`, `bench/`, `tests/parser/` and `tests/link/` as well. That is
 **593 programs and 8,302 runs, and it reports 13,800 undeclared differences**
 after everything above is fixed. The number is not a surprise waiting to
@@ -221,7 +221,7 @@ down is what turns "R1 is nearly done" into a list:
 | --- | --- | --- | --- |
 | 12,209 | **a path inside the IR** | `; ModuleID = '...'` and `-g`'s `!DIFile(filename: ...)`. Handed the same absolute path, stage0 rewrote it cwd-relative (`displayName`) and stage1 printed what it was given. The oracles never saw it because they pass relative paths to both compilers | **stage0 changed.** An imported module is named by the specifier resolved against the name the *importer* was given (`importedName`), which is stage1's rule and needs no working directory. Named relatively no golden moves; named absolutely the two now write the same bytes. It also takes the cwd out of the emitted IR, which is what makes a build reproducible. `runtime.c` had eight bytes left of its 4 KB budget then, so a `cwd` builtin was never available to buy the other direction (the live ceilings, one per translation unit, are in `docs/wp7-runtime.md` §"Runtime additions and budget") |
 | 602 | **the parser refuses before Phase 0 does** | `var x = 1` is `` syntax error: expected `;` `` from stage1 and `` `var` is forbidden; use `let` or `const` `` from stage0. By design (`.claude/selfhost.md`: lex and parse what is written, refuse in the phase that owns the rule) — `reject-oracle.js` counts these apart | **declared.** The narrow form: it applies only when stage1's first diagnostic is a syntax error *and* stage0 refuses the same file, and it covers stderr only — exit status, stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure rather than this. Closing it in code means grammar for 43 constructs the language forbids, which is a parser rewrite, not a fix |
-| ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the statement and unwinds; stage1 threaded an error value and kept checking. Both refuse, with the same first diagnostic, and stage1 said more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said | **stage1 changed.** `errored` in `self/context.ts` is the throw in a language without one: set by `error`, cleared per statement, and consulted where the throw would have unwound. Measuring it turned up four more contextual-type differences and one message, all listed in `CHANGELOG.md` |
+| ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the statement and unwinds; stage1 threaded an error value and kept checking. Both refuse, with the same first diagnostic, and stage1 said more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said | **stage1 changed.** `errored` in `src/context.ts` is the throw in a language without one: set by `error`, cleared per statement, and consulted where the throw would have unwound. Measuring it turned up four more contextual-type differences and one message, all listed in `CHANGELOG.md` |
 | 40 | **`--emit-ast` on a program Phase 0 refuses** | stage0 validates before it dumps and exits 1; stage1 dumped the tree it parsed and exited 0 | **stage1 changed.** A dump flag does not turn a refused program into a compiling one (`tests/cases/dump_ast_reject`) |
 | 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and Nish has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 | **stage0 changed**, to the better sentence: it says *why* (`tests/cases/reject_unary_plus`) |
 
@@ -351,7 +351,7 @@ and all three still hold for whatever reopens it next:
    day somebody remembered to.
 3. **WP22 was moving the corpus underneath it.** Arrows are already the
    declaration form for every example, the README, the cookbook and
-   `docs/LANGUAGE.md`, and stage C converts `self/`'s ~603 declarations — so
+   `docs/LANGUAGE.md`, and stage C converts `src/`'s ~603 declarations — so
    the divergence was spreading by the file while the record said the
    difference set was empty. `tests/cases/dbg_enum` (WP23) was written in the
    `function` spelling *because of* this bug, which is the shape of a defect
@@ -368,14 +368,14 @@ still standing, and they were one root cause with nothing to do with arrows: a
 `!DILocation` column after a **non-ASCII character**.
 
 ```
-self/checker.ts  -g  checker.ll  line 9202:
+src/checker.ts  -g  checker.ll  line 9202:
   stage1 !2528 = !DILocation(line: 1305, column: 36, scope: !2476)
   stage0 !2528 = !DILocation(line: 1305, column: 34, scope: !2476)
 ```
 
-`self/checker.ts:1305` is a performance-warning string with an em dash in it —
+`src/checker.ts:1305` is a performance-warning string with an em dash in it —
 three UTF-8 bytes, one UTF-16 code unit, and the two columns differ by exactly
-two. stage1 counts bytes, because every offset in `self/` is a byte offset;
+two. stage1 counts bytes, because every offset in `src/` is a byte offset;
 stage0 counted the code units the `typescript` API hands it.
 
 **stage0 was wrong again, and clang settles it rather than taste.** Given a
@@ -386,11 +386,11 @@ stage1 had it. `locationOf` counts UTF-8 bytes now (`tests/cases/dbg_utf8`).
 stage0's *diagnostic* columns are deliberately untouched and stay code units:
 an editor is the consumer there, a debugger is the consumer here.
 
-The header of `self/debug.ts` had written this divergence down and then
+The header of `src/debug.ts` had written this divergence down and then
 dismissed it — "every line of every `-g` case is ASCII, where the two counts
 are equal". That was true of `tests/cases` and false of the corpus, which is
 §A4's mistake in miniature: **a caveat retired on the strength of the test
-directory, by a mode that compiles `self/` too.** Two defects, one shape —
+directory, by a mode that compiles `src/` too.** Two defects, one shape —
 a claim about the corpus quietly read as a claim about the language.
 
 **And this section settled only half of the split it was about, which §A8 then
@@ -400,14 +400,14 @@ column back against the file's bytes and `clang` settles it; **code units for a
 diagnostic**, because an editor is the consumer there. The paragraph above
 states the second half in one clause and nothing else in the repository
 repeated it — no rule in `docs/LANGUAGE.md`, no case, no golden. What carried it
-instead was a caveat in the header of `self/diagnostics.ts`, which then
+instead was a caveat in the header of `src/diagnostics.ts`, which then
 **retired it on the strength of the ASCII goldens** — the identical move
-`self/debug.ts` had made two paragraphs up, about the identical subject, and
+`src/debug.ts` had made two paragraphs up, about the identical subject, and
 this document had already recorded as wrong.
 
 That is **three instances of one pathology in this document's own history**:
-`self/debug.ts` on the debug column, `self/std-modules.ts` on the module header
-(§A7), and `self/diagnostics.ts` on the diagnostic column. Each wrote the true
+`src/debug.ts` on the debug column, `src/std-modules.ts` on the module header
+(§A7), and `src/diagnostics.ts` on the diagnostic column. Each wrote the true
 divergence down, each dismissed it against the corpus to hand, and each was
 right about that corpus and wrong about the language. The shape is stable enough
 to state as a rule: **a caveat in a comment is a claim nobody re-derives, and a
@@ -545,10 +545,10 @@ root — one construction rather than the two in two files that let the name and
 the identity drift apart in the first place.
 
 **The comment that asserted the bug was already in the tree.**
-`self/std-modules.ts` says, of its own normalisation, "the header would read
+`src/std-modules.ts` says, of its own normalisation, "the header would read
 `./build/../std/text.ts` where *stage0 writes `std/text.ts`*". That sentence was
 true of every call in this repository and false of the one the parity harness
-makes, which is §A5's `self/debug.ts` caveat exactly — *a claim about the corpus
+makes, which is §A5's `src/debug.ts` caveat exactly — *a claim about the corpus
 quietly read as a claim about the language* — in a second file, about a second
 subject, written down and then trusted.
 
@@ -622,7 +622,7 @@ like it has no consequences and it has three.
   is still the path it was opened at — a file has to be opened — and its
   **name** is its package-relative specifier, `std/text.ts`, which is what
   stage0 has written since this branch. `ModuleUnit.name` in
-  `self/compilation.ts` carries it, `SourceFile` is constructed with it, so the
+  `src/compilation.ts` carries it, `SourceFile` is constructed with it, so the
   `; ModuleID`, the `source_filename`, the `DIFile`, the diagnostics, the
   interop sidecars' `/* <module>: */` lines and the no-`-o` output path all read
   it. `tests/run.js` drives a staged install by an absolute `argv[0]`, by a
@@ -856,7 +856,7 @@ forgives, and its `DECLARED` list cannot express the exception between releases
 (it wants words in `CHANGELOG.md`, which is generated at release time with
 `[Unreleased]` empty), while `tests/self/stage1_only.txt` — which nish-cmp does
 read for exactly this reading — is keyed by `tests/cases` stems and means
-"implemented in `self/` alone", which a checker fix on a program both compilers
+"implemented in `src/` alone", which a checker fix on a program both compilers
 own is not. **The gap closes on its own here**, because `cmpSince` in
 `.github/seed-targets.json` is `0.6.0` as of WP30: the gate has no row until
 0.6.0 ships, and the 0.6.0 seed carries this fix, so there is no release in
@@ -926,7 +926,7 @@ decision and a leap:
 | `ir_oracle.js` | stage0's IR, 312 programs byte for byte | **dies** |
 | `interop_oracle.js` | stage0's sidecars, 60 of them | **dies** |
 | `fuzz.js --stage1` | `IR(stage0, p) == IR(stage1, p)` on generated programs | **dies in that form** |
-| `bootstrap.js`, first equality | `IR(stage0, self/) == IR(stage1, self/)` | **dies** |
+| `bootstrap.js`, first equality | `IR(stage0, src/) == IR(stage1, src/)` | **dies** |
 | `bootstrap.js`, second and third | the fixed point, stage3 == stage2 | **survive** — they never involved stage0's output |
 
 Six oracles and **both** fuzzer modes die, and the row above them is the one
@@ -951,13 +951,13 @@ one implementation's opinion:
 
 | Dying oracle | Covered | Recovered as | Size |
 | --- | --- | --- | --- |
-| `checked_oracle.js` | 319 programs, 303,096 dump lines of `--emit-checked` | `goldens/checked.txt` (262 programs outside `self/`, verbatim) and `goldens/checked-self.txt` (57 `self/` programs, stored by module) | 283 KB + 1,057 KB |
+| `checked_oracle.js` | 319 programs, 303,096 dump lines of `--emit-checked` | `goldens/checked.txt` (262 programs outside `src/`, verbatim) and `goldens/checked-self.txt` (57 `src/` programs, stored by module) | 283 KB + 1,057 KB |
 | `types_oracle.js` | 119 lines: every LLVM type, alignment, printed name, flag and assignable pair | `goldens/types.txt`, verbatim | 3.6 KB |
 | `diagnostics_oracle.js` | 570 lines: the line/column index over every offset, the excerpt rendering, the `--json` shape, the sink's order and its cut | `goldens/diagnostics.txt`, verbatim | 19 KB |
 | `symbols_oracle.js` | 25 lines: what a name resolves to, what it reads as, where a narrowing ends | `goldens/symbols.txt`, verbatim | 1.0 KB |
 | `rewrite.js`, the WP13 reference | 176 whole programs rewritten to JavaScript and run against Node: stdout, exit status and terminating signal, byte for byte | `tests/differential/goldens/rewrites.txt`, 358 modules stored by content | 235 KB |
 
-The `self/` dumps are 19.9 MB raw because a `self/` program is loaded whole and
+The `src/` dumps are 19.9 MB raw because a `src/` program is loaded whole and
 each of the 57 entries re-dumps every module it imports; the distinct content
 is 1.0 MB. **Storing it by module is a storage decision and not a coverage
 one**: the check still runs all 57 programs and compares every one of those
@@ -982,7 +982,7 @@ than by a number in a commit message:
 node tests/diagnostic-coverage.js --report      # every code, covered or not
 ```
 
-`tests/diagnostic-coverage.js` reads the registry out of `self/codes.ts` — the
+`tests/diagnostic-coverage.js` reads the registry out of `src/codes.ts` — the
 half that outlives stage0 — compiles the negatives, the `perf_*` positives and
 its own corpus, and reads the `code` field of every `--json` object. It never
 matches the compiler's source against a table copied out of it, which is the
@@ -1122,7 +1122,7 @@ about stage0 and all three stop being true on the day it goes.
 
 ### D. Provenance
 
-`IR(stage0, self/) == IR(stage1, self/)` is the diverse-double-compiling
+`IR(stage0, src/) == IR(stage1, src/)` is the diverse-double-compiling
 property. It holds today over all 54 modules and 6,977,900 bytes of IR. When
 stage0 goes, it goes, and it cannot be re-established later without writing a
 second compiler again.
@@ -1136,7 +1136,7 @@ fail is a wish.
 
 ### G1 — Parity: no program and no flag is stage0's
 
-`self/` compiles every program stage0 compiles, and answers every flag stage0
+`src/` compiles every program stage0 compiles, and answers every flag stage0
 answers, with the same output and the same exit code. Concretely, the four rows
 of §2A are closed and the "stage0 rejects it" / "stage1 rejects it" counters in
 every oracle read **zero**, with the three documented skips of
@@ -1367,7 +1367,7 @@ easy; noticing six months later that nothing checks the diagnostics is not.
 
 `scripts/bootstrap.sh` accepts a seed compiler — `NISH_BOOTSTRAP=<path>`,
 Go's `GOROOT_BOOTSTRAP` by another name — instead of assuming `dist/index.js`.
-CI builds `self/` with the **last released binary** on every run, on both
+CI builds `src/` with the **last released binary** on every run, on both
 operating systems, and that build is a required check.
 
 **Why it blocks.** The rolling freeze of §1 is enforced by this job and by
@@ -1379,7 +1379,7 @@ yet", and a discipline that CI does not check is a comment.
 honest, and the second operating system is short two things rather than one.**
 `scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, `ci.yml`'s `seeds` job asks the
 last release which seed binaries it attaches, and its `bootstrap` job builds
-`self/` with each one. A release attaches `x86_64-linux` and nothing else, so
+`src/` with each one. A release attaches `x86_64-linux` and nothing else, so
 that is one row, on Linux.
 
 The `test` row on macOS is **not** back, and for the first time the reason is a
@@ -1423,7 +1423,7 @@ and `bootstrap` is skipped:
 | `seeds` green, no row for a platform | the freeze was *not* checked there, and nothing is wrong: no release carries a seed for it yet. The `seeds` summary names every platform in both states |
 | `seeds` green, `bootstrap` **skipped** | the same for every platform at once: there is no release at all |
 | `seeds` **red** | a seed that should exist does not — a release missing an asset `release.yml` attaches |
-| a `bootstrap` row **red** | `self/` does not build with the last release: the rolling freeze broken, which is what the pair exists to catch |
+| a `bootstrap` row **red** | `src/` does not build with the last release: the rolling freeze broken, which is what the pair exists to catch |
 
 Which missing seed is which is decided by **platform**, because the two cases
 are genuinely different, and the decision is data rather than prose:
@@ -1495,7 +1495,7 @@ them:**
    Anywhere this document previously called the Mach-O difference *unmeasured*,
    or attributed it to ld64's debug map, is stale as of `acbca9f`. The script's
    own header now carries the mechanism and the confound, so the two cannot
-   drift apart the way §A7's `self/std-modules.ts` comment did.
+   drift apart the way §A7's `src/std-modules.ts` comment did.
 
 Neither is a line in `ci.yml`, and the second is not claimed here. The matrix
 is the release's answer rather than a list in the workflow, so the macOS row
@@ -1505,8 +1505,8 @@ is held past the next release rather than set to it.
 
 #### What the seeded run proves, and what it does not
 
-**It proves that the seed can build `self/`, and that is the whole of the
-freeze.** stage1 compiling and linking is the check: a `self/` that reaches for
+**It proves that the seed can build `src/`, and that is the whole of the
+freeze.** stage1 compiling and linking is the check: a `src/` that reaches for
 a construct the seed has never heard of does not compile, does not link, and
 the job fails on the spot naming the rule. Nothing later in the run is needed
 for that, which matters because everything later in the run is about something
@@ -1519,13 +1519,13 @@ byte for byte — and it is asserted, by `npm test` on every run
 (`tests/self/bootstrap.js`, which seeds with stage0 deliberately) and by
 `scripts/bootstrap.sh --verify`. With a **released binary** as the seed the
 same comparison silently becomes a different assertion: that the IR this
-working tree emits for `self/` is the IR the last release emitted for it. That
+working tree emits for `src/` is the IR the last release emitted for it. That
 is one implementation at two points in time. It is not a bootstrap property at
 all — it is a freeze on codegen between releases, and it forbids exactly the
 changes a release exists to carry.
 
 It broke the first time one landed. A flow-sensitive bounds analysis
-(`wp15/ranged-types`) proved 46 of `self/`'s 1,206 index checks redundant; 20
+(`wp15/ranged-types`) proved 46 of `src/`'s 1,206 index checks redundant; 20
 of 56 modules changed, 143,468 lines of IR became 143,008, and the seeded job
 reported a broken bootstrap because an optimisation had worked. The fixed point
 was untouched throughout: `IR(stage1) == IR(stage2)` held over all 56 modules
@@ -1552,8 +1552,8 @@ awkward release: **`nish` 0.N is built by the last patch release of
 it during a release.
 
 The consequence, stated where contributors will read it: a construct added in
-0.N cannot be used by `self/` until 0.(N+1). Rule 1 of `wp14-selfhost.md` §6
-("a construct enters the language before it enters `self/`") survives
+0.N cannot be used by `src/` until 0.(N+1). Rule 1 of `wp14-selfhost.md` §6
+("a construct enters the language before it enters `src/`") survives
 retirement unchanged — only its subject changes, from stage0 to the seed.
 
 **State: done, and this row's evidence is a file rather than a run** — read as
@@ -1710,14 +1710,14 @@ installer needed a registry name, and has one as of **2026-09-19**:
 `@amritk/nish`, with the command still `nish`
 ([wp12-release.md](wp12-release.md#the-npm-name)). What is left is the
 installer, which is work rather than a decision. `--version` already has a source that is
-not `package.json` — `VERSION` in `self/branding.ts`, which `tests/run.js` pins
+not `package.json` — `VERSION` in `src/branding.ts`, which `tests/run.js` pins
 against `package.json` — so that bullet is met by the binary the moment it is
 the product. This gate closes when the installer lands, and the installer
 waits on the name.
 
 ### G6 — The provenance is recorded before it is lost
 
-The last commit at which both `IR(stage0, self/) == IR(stage1, self/)` and the
+The last commit at which both `IR(stage0, src/) == IR(stage1, src/)` and the
 fixed point hold is **tagged** (`ddc-<version>`), and the procedure for
 re-verifying the property from that tag — check out, `npm ci`, `npm run build`,
 `node tests/self/bootstrap.js` — is written down in this file. Zero maintenance
@@ -1766,7 +1766,7 @@ IR(stage0)==IR(stage1)==IR(stage2), stage3 == stage2 (<N> bytes)` — or prints
 
 **A pass** re-establishes diverse double-compiling at that commit: two
 independently written implementations of Nish emit identical IR for every
-module of `self/`, and the compiler built from that IR reaches its fixed point.
+module of `src/`, and the compiler built from that IR reaches its fixed point.
 The property is demonstrated again rather than taken on trust from the tag,
 which is the only reason the tag is worth having.
 
@@ -1798,15 +1798,15 @@ All four have landed: three as WP14 §7a work rather than with WP18, and
 
 | Builtin | Signature | Gate | Where |
 | --- | --- | --- | --- |
-| host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as stage0's `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
+| host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `src/target.ts` composes the triple exactly as stage0's `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
 | directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **Landed (WP14 §7a).** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
-| environment | `getenv(name: string): string \| null` | G5 (`CC`) | **Landed (WP19 R1).** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and `null` is not `""`: an unset variable and one set to nothing are different answers and a driver acts on the difference. The `NISH_DEBUG` half of this row is struck: §2A's exit-70 work closed it by the other design, and `self/ice.ts` names the variable to say there is no stack behind it here rather than reading it (`tests/cases/io_getenv`) |
-| internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `self/ice.ts`; the cost was 35 statements, and they are `self/`'s own |
+| environment | `getenv(name: string): string \| null` | G5 (`CC`) | **Landed (WP19 R1).** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and `null` is not `""`: an unset variable and one set to nothing are different answers and a driver acts on the difference. The `NISH_DEBUG` half of this row is struck: §2A's exit-70 work closed it by the other design, and `src/ice.ts` names the variable to say there is no stack behind it here rather than reading it (`tests/cases/io_getenv`) |
+| internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `src/ice.ts`; the cost was 35 statements, and they are `src/`'s own |
 
-`--emit-ast` needed no builtin — it needed `self/dump-ast.ts` promoted from an
+`--emit-ast` needed no builtin — it needed `src/dump-ast.ts` promoted from an
 oracle entry point to a CLI flag, with its own goldens. That was the one item
 in §2A that was a deliverable rather than a lowering, and it landed as
-`self/ast-text.ts`: the printer moved out of the oracle entry point so that
+`src/ast-text.ts`: the printer moved out of the oracle entry point so that
 `compile.ts` and `dump-ast.ts` share it, the entry point kept its output byte
 for byte (the parser oracle compares against it), and the flag adds the module
 path on the root line the way stage0's `SourceFile <path>` header does.
@@ -1823,11 +1823,11 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **Green as of 2026-09-22 over the whole corpus, re-derived after §A9 widened it.** In the mode's own words: `parity: 15776 runs over 986 programs (2938.5 s); 0 undeclared difference(s), 2961 declared`, exit 0, from `node tests/run.js --parity` on **merged `main` at `1e95aac`**. It supersedes `14544 runs over 909 programs … 2808 declared` at `3927242`, which covered 909 of the 986 programs `CORPUS_DIRS` now enumerates and none of §A9's 71 — re-derived on the head R6 would land on rather than quoted from the 2026-09-19 run at `862c7cc`, whose `14432` / `902` / `2798` the new counts exceed by exactly the seven entry programs that arrived between them, sixteen variations each. #117's own figure was taken on `ae6b45b` with that branch on top and lands on the same counts; re-running it after the merge is what makes this row a statement about the tree anybody has rather than about somebody's branch, which is the distinction §A7 was written about. `862c7cc` also carries a green `npm test` ([CI run 553](https://github.com/amritk/nish/actions/runs/35454091607)), covering G1's flag-set half; the corpus half is not in `npm test` by design. **Read the next two sentences before quoting the first.** Five times now a number in this row has turned out to be false, or to mean less than it looked (§A5, §A6, §A7, §A8), and the reason has never twice been the same: the corpus grew (764 → 815 → 868 → 884 → 888 → 902 → 909 → 986 programs), a fix was compared against a cached binary, a caveat was retired against the test directory — and, most recently, **the cross product did not name the surface**. §A8 is that fifth way, and it is the one the first four could not have found: `--json`, the compiler's one machine-readable contract, was not in `VARIATIONS` and had never been compared on any program. It was worth **180 undeclared differences on an otherwise-green corpus**, 178 of them one defect — stage1 answering a syntax error with an empty stdout where stage0 printed the object — plus two narrowed spans, one on each side. No miscompile: every `.ll` was byte-identical under every variation, before and after. A fourth class reported **zero rows** and is the one to carry forward, because zero was a fact about the corpus rather than about the compilers: a diagnostic column counted bytes in stage1 where stage0 counts UTF-16 code units, in the default mode under no flag, invisible because no corpus program put a non-ASCII character in front of a caret (`tests/cases/reject_diag_utf8` now asks). What remains true from the earlier record: §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), §A3's five classes closed or declared, and §A7's two — the `CPtr` internal compiler error under `-g` and the cascading second diagnostic — closed by #90 and #91. The nightly `Parity` workflow opened #93 for the red run of 2026-09-18 and closed it on a green full run; `ci.yml`'s `parity-select` / `parity-changed` pair runs the corpus half over the programs each pull request touches, so the next time this row goes red it is red on the pull request that did it. **The standing qualification, which no green number retires**: the difference set is a lower bound over the corpus and the variation list, and both are things somebody wrote — #94 still reproduces on this tree and G1 cannot see it, because no corpus program has the shape |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS failed five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, attributed at the time to Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row needs two things and not one. The darwin **seed** has landed: `release.yml` builds one per target (G5). **The fixed point has now been measured on a mac and holds outright**, merged as `acbca9f` (#114). The failure was the harness's rather than the toolchain's: `bootstrap.sh` linked the two comparable stages at two different output paths, guaranteeing different `LC_UUID`s for compilers that agreed on every other byte. Both link at one path now and `stage3 == stage2` holds on Darwin as a raw `cmp`, with nothing relaxed and nothing masked — the narrowing in `scripts/verify-binaries.sh` is not what carries it. Stated exactly, because the distinction is the finding: the UUID is stable across two links to one path and differs on a link to another, which rules out a hash of the output's own content but does **not** separate path-identity from invocation-order, since the probe never returned to the first path. The output path is the leading explanation rather than a finding; the remedy holds either way, because run 4 measured the full `--verify` end to end. `-Wl,-no_uuid` is closed off with evidence — it links, then arm64 dyld refuses the image. All three unexercised seed rows were run on their own hardware and all three passed, so `attachedSince: 0.4.0` is proved rather than assumed and #92 can attach all three. What is left is a release that carries the assets, not work: until one does, the macOS `bootstrap` row does not appear, and the other failures in the `test` row keep `macos-latest` out of the test matrix regardless. Anywhere this document calls the Mach-O difference unmeasured, or attributes it to ld64's debug map, is stale as of `acbca9f`. **Checked on this tree on 2026-09-19 (`7ff7ce1`): `node tests/run.js seed` 38 passed, `node tests/run.js bootstrap` 12 passed, 0 failed either, both inside `npm test`** — which the acceptance run measured on this same merged tree at `2073 passed, 0 failed, 2 skipped`, no `DEGRADED:` banner, the two skips the environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset). The darwin half of this row is the exception and has no command on this tree by construction: it needs a mac, and its measurement is #114's, on its own hardware |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic-coverage.js`, and the number is 0. **That sentence was true and proved by nothing between WP22 stage C and 2026-09-18**, which is the same defect as R1's in a smaller frame: the tool reads the registry out of `self/codes.ts` with a pattern that was keyed on four literal spaces, stage C rewrote those tables as arrows with concise bodies and they lost an indentation level, and the tool therefore parsed **0 of 408** codes — `--require-coverage` iterated an empty map, the per-case registry-fragment cross-check found no fragment for any case, and the run printed `coverage 0/0 codes` and exited 0. An empty registry reads exactly like a covered one. Re-measured on 2026-09-18 with the parser reading any indentation and an empty registry made a failure rather than a pass: **344 of 408 codes provoked, 64 unreachable with a reason on file**. **Re-derived on 2026-09-19 on the merged tree at `7ff7ce1`, `node tests/diagnostic-coverage.js --report` answers `wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4`** — the registry grew by two and both went to the unreachable list. **That is a weaker thing than the defects this document collects, and the difference is the whole discipline**: the 2026-09-18 figure carried its date and was never false, it was *overtaken* — an accurate record of one day sitting in a table a reader takes for the tree's current state. §A5's pathology is a claim that was wrong; this is a claim that stopped being current. The remedy is the same and cheaper: re-derive rather than re-read, which is why both numbers here name the command. Nothing was provoked by nothing on either date, and the gate is demonstrably able to fail again — dropping one line of `tests/wordings/unreachable.txt` reports ``NL2001 is provoked by nothing`` and exits 1 (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject-oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `self/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **That caveat is closed, and the closure is the shape to copy.** It used to read: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line with no ceiling beside it, so the next rule that leaves the parser's reach migrates a case into the bucket silently — read the bucket's number before and after. Reading a number is a discipline, and this document's whole subject is that a discipline nothing checks is a comment. So the bucket has a ceiling now: [`tests/self/parser-refusals.txt`](../tests/self/parser-refusals.txt) names each case **and the sentence stage1 answers with**, 89 entries as of 2026-09-19, and `reject-oracle.js` compares the register against the run **in both directions** — a case in the bucket that the file does not name fails, and a case the file names that no longer lands in the bucket fails too. A rule leaving the parser's reach is now an edit to that file rather than a tally nobody re-read, and a rule *returning* to it cannot pass silently either. The comparison is itself exercised: a `selfCheck` inside the oracle drives the register logic over fabricated inputs on every run and its `<n>/<n>` count prints in the summary line, so the ceiling is not a check that has never been watched failing (#115). The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `src/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS failed five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, attributed at the time to Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row needs two things and not one. The darwin **seed** has landed: `release.yml` builds one per target (G5). **The fixed point has now been measured on a mac and holds outright**, merged as `acbca9f` (#114). The failure was the harness's rather than the toolchain's: `bootstrap.sh` linked the two comparable stages at two different output paths, guaranteeing different `LC_UUID`s for compilers that agreed on every other byte. Both link at one path now and `stage3 == stage2` holds on Darwin as a raw `cmp`, with nothing relaxed and nothing masked — the narrowing in `scripts/verify-binaries.sh` is not what carries it. Stated exactly, because the distinction is the finding: the UUID is stable across two links to one path and differs on a link to another, which rules out a hash of the output's own content but does **not** separate path-identity from invocation-order, since the probe never returned to the first path. The output path is the leading explanation rather than a finding; the remedy holds either way, because run 4 measured the full `--verify` end to end. `-Wl,-no_uuid` is closed off with evidence — it links, then arm64 dyld refuses the image. All three unexercised seed rows were run on their own hardware and all three passed, so `attachedSince: 0.4.0` is proved rather than assumed and #92 can attach all three. What is left is a release that carries the assets, not work: until one does, the macOS `bootstrap` row does not appear, and the other failures in the `test` row keep `macos-latest` out of the test matrix regardless. Anywhere this document calls the Mach-O difference unmeasured, or attributes it to ld64's debug map, is stale as of `acbca9f`. **Checked on this tree on 2026-09-19 (`7ff7ce1`): `node tests/run.js seed` 38 passed, `node tests/run.js bootstrap` 12 passed, 0 failed either, both inside `npm test`** — which the acceptance run measured on this same merged tree at `2073 passed, 0 failed, 2 skipped`, no `DEGRADED:` banner, the two skips the environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset). The darwin half of this row is the exception and has no command on this tree by construction: it needs a mac, and its measurement is #114's, on its own hardware |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic-coverage.js`, and the number is 0. **That sentence was true and proved by nothing between WP22 stage C and 2026-09-18**, which is the same defect as R1's in a smaller frame: the tool reads the registry out of `src/codes.ts` with a pattern that was keyed on four literal spaces, stage C rewrote those tables as arrows with concise bodies and they lost an indentation level, and the tool therefore parsed **0 of 408** codes — `--require-coverage` iterated an empty map, the per-case registry-fragment cross-check found no fragment for any case, and the run printed `coverage 0/0 codes` and exited 0. An empty registry reads exactly like a covered one. Re-measured on 2026-09-18 with the parser reading any indentation and an empty registry made a failure rather than a pass: **344 of 408 codes provoked, 64 unreachable with a reason on file**. **Re-derived on 2026-09-19 on the merged tree at `7ff7ce1`, `node tests/diagnostic-coverage.js --report` answers `wordings: 126/126 cases pin their code, coverage 344/410 codes, 66 unreachable, uncoded=4`** — the registry grew by two and both went to the unreachable list. **That is a weaker thing than the defects this document collects, and the difference is the whole discipline**: the 2026-09-18 figure carried its date and was never false, it was *overtaken* — an accurate record of one day sitting in a table a reader takes for the tree's current state. §A5's pathology is a claim that was wrong; this is a claim that stopped being current. The remedy is the same and cheaper: re-derive rather than re-read, which is why both numbers here name the command. Nothing was provoked by nothing on either date, and the gate is demonstrably able to fail again — dropping one line of `tests/wordings/unreachable.txt` reports ``NL2001 is provoked by nothing`` and exits 1 (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. **What the move costs is the limit worth stating rather than discovering: a rule the checker owns is a rule the member has to parse to reach.** Eight shapes do not reach it — `m?()` with no return type, `x? = 5` with no annotation, `static x;`, `static` alone, `static x: i32 = 0` with no `;` before the `}`, `static m(): i32;`, `static m() { }` and `static { }` — and each is a stage1 syntax error about the *other* defect where stage0 names the member and its rule. Those sentences moved out of stage1's reach rather than into it, which is §A3's declared class seen from the inside, counted by `reject-oracle.js` and declared by `--parity` (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`, `reject_cls_static_field_untyped`, `reject_cls_static_block`, and `src/parser.ts`'s `parseMemberModifiers` for the rest). Putting a copy of the rule back in the parser would restore an uncoded sentence in the phase that cannot name the member, which is the duplication the change removes; the shapes are named here and there instead. **That caveat is closed, and the closure is the shape to copy.** It used to read: the two lists are shrink-only under `--strict-refusals`, but the reject oracle's parser bucket is a count in a summary line with no ceiling beside it, so the next rule that leaves the parser's reach migrates a case into the bucket silently — read the bucket's number before and after. Reading a number is a discipline, and this document's whole subject is that a discipline nothing checks is a comment. So the bucket has a ceiling now: [`tests/self/parser-refusals.txt`](../tests/self/parser-refusals.txt) names each case **and the sentence stage1 answers with**, 89 entries as of 2026-09-19, and `reject-oracle.js` compares the register against the run **in both directions** — a case in the bucket that the file does not name fails, and a case the file names that no longer lands in the bucket fails too. A rule leaving the parser's reach is now an edit to that file rather than a tally nobody re-read, and a rule *returning* to it cannot pass silently either. The comparison is itself exercised: a `selfCheck` inside the oracle drives the register logic over fabricated inputs on every run and its `<n>/<n>` count prints in the summary line, so the ceiling is not a check that has never been watched failing (#115). The modifiers themselves now agree in full: `readonly` on a method or a constructor is ``unsupported modifier `readonly` `` from both compilers rather than accepted by stage1 (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`, `reject_cls_method_readonly_optional`), and because stage0 reports the first modifier in *source* order the parser records which of `static` and `readonly` came first, so `static readonly m()` and `readonly static m()` get different sentences and each gets the same one from both (`reject_cls_method_static_readonly`, `reject_cls_method_readonly_static`). An *interface* field takes the same modifiers, for the reason the checker takes one function for both: `readonly x: i32` compiles on both where stage1's parser used to refuse it, and `static x: i32` is ``Field `x` of interface `I`: `static` members are not supported`` on both. What is still one-sided and older than this work is `class C { constructor: i32 = 0; }`, which stage1 compiles and the `typescript` package calls a syntax error — the direction `stage1_divergence.txt` calls serious, recorded in `parseMember` because no corpus program has the shape and nothing measures it. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **2, from 13** — one of which stage1 compiles — and what is left is not more of the same: one is WP18's (`<T, T>`) and belongs to that package rather than to this one, and the other is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
 | **R4** | Distribution | **the workflow is done, the installer is done, and nothing has been published.** One native compiler per supported target is built and smoke-tested by `release.yml` — each on a runner of its own architecture, so nothing is cross-compiled and "built" and "smoke-tested" mean the same thing on every row — and `INSTALL.md` and `wp12-release.md` are rewritten around them; `--version` already has a source that is not `package.json`. Which targets a given release carries is `attachedSince` in `.github/seed-targets.json`, compared against that release's version by `.github/seed-due.sh`: `x86_64-linux` from 0.1.1 and the other three from 0.4.0 — v0.2.0 was published before this landed and a release already published cannot grow an asset, and the three new rows had never run. **All three have now been run, on their own hardware, and all three passed**, merged as `acbca9f` (#114). That closes the reason each was waiting: `attachedSince: 0.4.0` was an assumption about rows nobody had exercised and is now a proved claim, and #92 can attach all three. The darwin pair's second blocker is closed with them, the fixed point holding as a raw `cmp` once `bootstrap.sh` stops linking the two comparable stages at different paths (R2 above). What is left is a release that carries the assets, since a release already published cannot grow one. So G3's macOS row gets its seed on the first release at or after 0.4.0, not the next one. The package becoming an installer was the last piece of work here and **landed on 2026-09-20**: `bin.nish` is a launcher, the native compiler arrives as one `@amritk/nish-<asset>` `optionalDependencies` entry per platform, and `release.yml` packages each from the directory it already stages for that platform's tarball (G5). The registry name it waited on was settled on 2026-09-19 ([wp12-release.md](wp12-release.md#the-npm-name)). So what is outstanding in this row is **a person publishing**, twice over and for the same reason each time — a release that carries the three new seed assets, and a `npm publish` of the N+1 packages — neither of which is work. **Checked on this tree on 2026-09-20: `node tests/run.js seed` (38 passed) and `node tests/run.js wp12` (64 passed), 0 failed either — the `seed-targets.json` rows against the compiler's own target table and against `release.yml`'s text, and the pack-and-install round trip.** What that cannot check is which assets a *published* release carries, which is the decision in §5a rather than a state of the tree |
 | **R5** | Provenance | **done**, merged as `21a9381` (#116). §G6 has the four-command re-verification, unchanged. What was outstanding is that the tag was cut "at release time", meaning by whoever remembered: a provenance record whose only trigger is memory, for a property that cannot be re-established once lost (§2D). `release.yml` cuts it now — `.github/ddc-tag.sh` decides the tag, the `release` job `needs: ddc`, and it is cut after the jobs that prove the equalities and before `gh release create`, so the tag can never certify a commit the proof did not pass. 19 checks in the WP19 block of `tests/run.js` drive every arm of the script against a git stand-in rather than trusting shell nothing runs — **`node tests/run.js ddc-tag | grep -c "ddc tag:"`, 19 on 2026-09-19 on the merged tree at `7ff7ce1`**; the bare filter prints 31, because it selects the `verify-binaries:` checks too. A count derived rather than copied, #116's own description having said 18 by the time it merged. What is left is not work: the first release after this cuts the first `ddc-<version>` tag, and until one is cut the procedure in §G6 has no tag to check out |
-| **R6** | The deletion | **Done.** Landed after v0.6.0 as five pull requests under #144 — four that moved every consumer onto stage1 while stage0's `src/` still existed, then the deletion itself — so that `nish-cmp` had its rows against the 0.6.0 seed on `main` before anything it succeeds was removed (§5a, "Which release R6 can land in"). **Deleted:** stage0's `src/` and `dist/`; `typescript` as a runtime dependency (it stays a development dependency, for `npm run check` and the lexer and parser oracles); the six oracles `types_oracle.js`, `diagnostics_oracle.js`, `symbols_oracle.js`, `checked_oracle.js`, `ir_oracle.js` and `interop_oracle.js`; `tests/self/parity.js` and `--parity`, the nightly `parity.yml` and `ci.yml`'s `parity-select`, `parity-changed` and `batch-parity` jobs; the stage1-only register `tests/self/stage1_only.{js,txt}` (§1a), which has nothing to declare once every case is stage1's; the batched stage0 compile of the golden cases; the live WP13 rewriter and `arrow-parity.js`; the generator half of `scripts/gen-diagnostic-codes.mjs`; `.github/ddc-tag.sh` and the `ddc` job, since diverse double-compiling needs two implementations (§G6 is the record of what those tags certified); and every rule in `CLAUDE.md`, `AGENTS.md` and `.claude/` that told anyone to implement in stage0's `src/`. **What replaced each:** `types`, `diagnostics`, `symbols` and `checked` → `tests/self/goldens/` (§2B), compared by `tests/self/goldens.js`; `ir` and `interop` → `tests/nish-cmp.js`, the last release against HEAD over the corpus, IR and sidecars (G2.1), with the `tests/cases/*.ll` goldens; the stage0 answers `support-oracle.js` compared with → `tests/self/goldens/support.txt`; the golden harness's compiler → a stage1 built from the seed at the start of `npm test`; stage0 as the seed of `scripts/bootstrap.sh` and `release.yml` → the previous release, fetched by `scripts/fetch-seed.sh` (G3); `IR(stage0) == IR(stage1)` in `tests/self/bootstrap.js` → `IR(stage1) == IR(stage2)` and stage3 == stage2 from the seed; the generated code registry → `self/codes.ts`, kept by hand, `--check` validating format and uniqueness; `tests/wordings/stage0_only.txt` → folded into `unreachable.txt`; the 89 `.err` pins stage1's parser answered differently (`parser_refusals.txt`) → stage1's sentence; the WP13 rewrites → frozen in `tests/differential/goldens/rewrites.txt`, with a register naming the programs that have none; the ported guards — runtime declarations against `nish.h`, the allocating builtins, the seed targets and the exit-70 path through `NISH_SIMULATE_ICE` — → the same checks asked of stage1. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under stage0's `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `self/` to TypeScript: with the `@ts-expect-error` at `self/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
+| **R6** | The deletion | **Done.** Landed after v0.6.0 as five pull requests under #144 — four that moved every consumer onto stage1 while stage0's `src/` still existed, then the deletion itself — so that `nish-cmp` had its rows against the 0.6.0 seed on `main` before anything it succeeds was removed (§5a, "Which release R6 can land in"). **Deleted:** stage0's `src/` and `dist/`; `typescript` as a runtime dependency (it stays a development dependency, for `npm run check` and the lexer and parser oracles); the six oracles `types_oracle.js`, `diagnostics_oracle.js`, `symbols_oracle.js`, `checked_oracle.js`, `ir_oracle.js` and `interop_oracle.js`; `tests/self/parity.js` and `--parity`, the nightly `parity.yml` and `ci.yml`'s `parity-select`, `parity-changed` and `batch-parity` jobs; the stage1-only register `tests/self/stage1_only.{js,txt}` (§1a), which has nothing to declare once every case is stage1's; the batched stage0 compile of the golden cases; the live WP13 rewriter and `arrow-parity.js`; the generator half of `scripts/gen-diagnostic-codes.mjs`; `.github/ddc-tag.sh` and the `ddc` job, since diverse double-compiling needs two implementations (§G6 is the record of what those tags certified); and every rule in `CLAUDE.md`, `AGENTS.md` and `.claude/` that told anyone to implement in stage0's `src/`. **What replaced each:** `types`, `diagnostics`, `symbols` and `checked` → `tests/self/goldens/` (§2B), compared by `tests/self/goldens.js`; `ir` and `interop` → `tests/nish-cmp.js`, the last release against HEAD over the corpus, IR and sidecars (G2.1), with the `tests/cases/*.ll` goldens; the stage0 answers `support-oracle.js` compared with → `tests/self/goldens/support.txt`; the golden harness's compiler → a stage1 built from the seed at the start of `npm test`; stage0 as the seed of `scripts/bootstrap.sh` and `release.yml` → the previous release, fetched by `scripts/fetch-seed.sh` (G3); `IR(stage0) == IR(stage1)` in `tests/self/bootstrap.js` → `IR(stage1) == IR(stage2)` and stage3 == stage2 from the seed; the generated code registry → `src/codes.ts`, kept by hand, `--check` validating format and uniqueness; `tests/wordings/stage0_only.txt` → folded into `unreachable.txt`; the 89 `.err` pins stage1's parser answered differently (`parser_refusals.txt`) → stage1's sentence; the WP13 rewrites → frozen in `tests/differential/goldens/rewrites.txt`, with a register naming the programs that have none; the ported guards — runtime declarations against `nish.h`, the allocating builtins, the seed targets and the exit-70 path through `NISH_SIMULATE_ICE` — → the same checks asked of stage1. **Measured:** On 2026-09-23, on `main` at `ad02409`, `bash scripts/fetch-seed.sh && npm ci && npm run check && NISH_BOOTSTRAP=build/seed/bin/nish node tests/run.js` ended `2106 passed, 0 failed, 1 skipped.`, with no `DEGRADED:` line; the one skip is the `wasi` profile, which needs a WASI sysroot rather than LLVM. The published package is 35 files (`npm pack --dry-run`), none under stage0's `src/` or `dist/` and none importing `typescript`. `npm run check` still holds `src/` to TypeScript: with the `@ts-expect-error` at `src/checker.ts:774` removed it exits 2 (`TS2345`, `StructInfo | undefined`). The deletion, #150, removed 33,365 lines (`git show --shortstat f3c3439`). |
 
 ### 5a. What R6 is waiting on
 
@@ -2035,9 +2035,9 @@ None of these needs anybody's permission. They need somebody's afternoon.
 
    One of the two decisions behind it was amended by the work.
    [wp12-release.md](wp12-release.md#which-compiler-the-package-ships) had
-   recorded the fallback for a platform with no binary as (a) — ship `self/`
+   recorded the fallback for a platform with no binary as (a) — ship `src/`
    and bootstrap — and that turned out to cost a clang and two compilations of
-   `self/` on the user's machine, plus 944,676 bytes in every tarball on every
+   `src/` on the user's machine, plus 944,676 bytes in every tarball on every
    platform, to serve musl and FreeBSD. The fallback is `dist/` instead, the
    Node compiler already in the package. **Nothing is compiled on a user's
    machine on any path**, which is what this item was for and what its own
@@ -2172,7 +2172,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    OS-facing builtin would make; `nish_realpath` is 157 bytes of it.
 
    **What the call site is, and what it deliberately does not change.**
-   `packageRootCandidates()` in `self/compile.ts` adds the real path of whatever
+   `packageRootCandidates()` in `src/compile.ts` adds the real path of whatever
    `argv[0]` named — after the unresolved spelling, and only when the two differ.
    Order is the whole of the care in it: a compiler that is *not* reached through
    a link finds `scripts/build.sh` on the first candidate and therefore answers
@@ -2189,7 +2189,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    specifier, so the three spellings this item is about now write one
    `; ModuleID`, one `DIFile` and one output path.
 
-   **Measured 2026-09-21, and the seed is the point.** `self/` may only use what
+   **Measured 2026-09-21, and the seed is the point.** `src/` may only use what
    the last release compiles, so the check is the v0.5.0 seed compiling this call
    site: `NISH_BOOTSTRAP=<v0.5.0>/bin/nish scripts/bootstrap.sh --verify` gives
    `IR(stage1) == IR(stage2): 61 modules identical` and `stage3 == stage2:
@@ -2226,7 +2226,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    **Why the mechanism could not happen when this was measured, which is the
    part worth keeping — and what changed under it since.** A stage1 module's
    name *was* the path string it was opened at: `ModuleUnit.path` in
-   `self/compilation.ts` was declared as "the resolved path, which is the
+   `src/compilation.ts` was declared as "the resolved path, which is the
    module's identity and the name in its IR header", and `Compilation.byPath`
    is keyed on that same string, so the second arrival of a name returned
    early out of `load`. Two modules therefore never shared a name in stage1 —
@@ -2238,7 +2238,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    `; ModuleID`. That is also what every earlier construction ran into. The
    "collapsed into a single module" of the previous attempt was not the
    construction failing, it was this property — and it was written down one
-   file away the whole time, in `resolvePath`'s comment in `self/paths.ts`:
+   file away the whole time, in `resolvePath`'s comment in `src/paths.ts`:
    stage1 "keys module identity on the normalised path as written".
 
    **On 2026-09-21 stage1 grew the second field**, because naming a package
@@ -2349,7 +2349,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    keep the climb instead of filtering it, because a `..` segment carries the
    only information that tells the two modules apart. Three things make that
    somebody's afternoon rather than a line. The two `outputStems` are one
-   lowering in two files (stage0's `src/compilation.ts`, `self/compilation.ts`), so it
+   lowering in two files (stage0's `src/compilation.ts`, `src/compilation.ts`), so it
    is a two-sided change or it is a new parity difference where there is a
    shared bug today. It moves a stem that is live: every corpus program that
    reaches the standard library by `nish/<x>` reaches it through a climb, so
@@ -2413,7 +2413,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
    the fix this item describes, is still open: it would make the stems
    install-independent, which a counter does not. The "one more" above, two
    spellings of one file as two modules, is closed too: a module is keyed on
-   its real path (`self/compilation.ts`, `identityOf`).
+   its real path (`src/compilation.ts`, `identityOf`).
 6. **#94** — stage0's `Checker.error` throw removing the members after a failed
    one, so a later field is reported as unknown when it is not. **Reproduced
    again on 2026-09-20** on this tree: stage0 prints ``Unknown field `grown` ``
@@ -2428,7 +2428,7 @@ None of these needs anybody's permission. They need somebody's afternoon.
 
    What does survive is the mechanism #94 records on the stage1 side, and it is
    worth separating because the issue puts both in one place:
-   `self/context.ts`'s `error()` is a no-op once `errored` is set, and
+   `src/context.ts`'s `error()` is a no-op once `errored` is set, and
    `collectStructMembers` never resets it between fields, so an earlier
    member's error can silence a later member's refusal. Measured on
    2026-09-20: a class with two mistyped fields reports **one** diagnostic on
@@ -2511,7 +2511,7 @@ note there promised — no edit to `ci.yml`. **What the release did not settle i
 the thing the seeds are for**: the compiler those four assets contain ships no
 `std/` (work item 1 above), so the rolling freeze they check is a freeze on a
 compiler that cannot import its own standard library. That is not a reason to
-re-cut v0.4.0 — `bootstrap` builds `self/`, which imports nothing from `std/`,
+re-cut v0.4.0 — `bootstrap` builds `src/`, which imports nothing from `std/`,
 so the freeze it checks is real — but it is the reason `cmpSince` is 0.5.0, and
 it is worth recording here that a gate can be green on a seed that is broken in
 a way the gate does not ask about. The paragraph below is the record of what
@@ -2566,7 +2566,7 @@ decision's honest answer today is *not yet*.
 Three corrections this stage measured and may not make, because each is outside
 the three documents it owns. They are written here so they are not rediscovered:
 
-- **`self/parser.ts:787` still asserts the caveat R3 closed** — "That bucket
+- **`src/parser.ts:787` still asserts the caveat R3 closed** — "That bucket
   counts; it does not gate… Whoever moves the next rule should read the
   bucket's number before and after." `tests/self/parser-refusals.txt` is that
   ceiling as of #115, compared in both directions. The comment is stale and
@@ -2605,7 +2605,7 @@ is one commit that does nothing else.
    S4 — all of them wrong *attributes* rather than wrong instructions, the
    class a golden `.ll` is worst at catching. That mechanism stops.
 4. **One implementation is one bus factor**, and the language becomes whatever
-   `self/` does, with no second reading to appeal to.
+   `src/` does, with no second reading to appeal to.
 5. **musl, FreeBSD and every 32-bit platform lose their `npm install`.** This
    is the one cost on the list that is paid by somebody other than this
    repository, so it is worth being exact about who and what. `package.json`'s
@@ -2761,13 +2761,13 @@ is one commit that does nothing else.
    names `tests/differential/corpus` now, so the 71 are compiled by stage1 by
    `ir_oracle.js`, `checked_oracle.js`, `goldens.js` and `--parity` like
    everything else, and the defect they found is fixed in
-   `self/expressions.ts` — `docs/LANGUAGE.md` says "`-5` and `(5)` count as the
+   `src/expressions.ts` — `docs/LANGUAGE.md` says "`-5` and `(5)` count as the
    literal" and stage1 matched only the bare spelling on an operator's left.
    R6 inherits neither. What this paragraph found from the differential side
    and §A9 found from the corpus side is one defect reached by two routes, and
    the route that should have reached it first was the corpus.
 
-Against that: every construct is written once instead of twice, `self/` gets a
+Against that: every construct is written once instead of twice, `src/` gets a
 one-release lag instead of a permanent freeze, the compiler stops depending on
 Node and on someone else's parser, and the install stops being 134 files of
 JavaScript. WP14 §6 already priced the first half of that trade — "the
@@ -2793,5 +2793,5 @@ release cycle in which stage0 found nothing, changed nothing and shipped
 nothing except itself is not the cycle this was. §5a keeps that comparison next
 to the gate states, so the two are read together.
 
-Until then, `IR(stage0, self/) == IR(stage1, self/)` is the most valuable line
+Until then, `IR(stage0, src/) == IR(stage1, src/)` is the most valuable line
 in the test suite, and it is worth what it costs.

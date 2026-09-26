@@ -8,12 +8,12 @@
 #   nish-<version>-<asset>.tar.gz  the self-hosted compiler; needs nothing
 #
 # The binaries are also the seed: ci.yml's `bootstrap` job downloads the one
-# for its own host from the last release and builds self/ with it (WP19 G3), so
+# for its own host from the last release and builds src/ with it (WP19 G3), so
 # the name is a contract between the two workflows -- and neither workflow
 # spells it. Both read it from .github/seed-targets.json, because a contract
 # each side writes down separately is two strings that agree until one is
 # edited. That file carries all four of WP19 G5's platforms, the canonical
-# target triple each one is (self/target.ts), the runner label that
+# target triple each one is (src/target.ts), the runner label that
 # provides it, and the version from which a release attaches it; tests/run.js
 # checks all four of those against the compiler's own table, against the labels
 # this file can ask for, and against this file's own text.

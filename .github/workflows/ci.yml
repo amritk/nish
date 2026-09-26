@@ -206,7 +206,7 @@ jobs:
       # The seed: the last release's compiler for this runner's platform,
       # unpacked into build/seed by `scripts/fetch-seed.sh` (install.sh's
       # download, asset name and version check). Every compile `npm test`
-      # makes is stage1's, and stage1 is `self/` built by this binary -- the
+      # makes is stage1's, and stage1 is `src/` built by this binary -- the
       # rolling freeze (WP19 G3) asked on the platform the suite runs on.
       - name: Fetch the seed
         run: |
@@ -215,9 +215,9 @@ jobs:
 
       # `build/nish` is what the steps after the suite drive: stage1, one
       # directory below the repository root, which is where its package root is
-      # found from (`packageRoot` in self/compile.ts).
+      # found from (`packageRoot` in src/compile.ts).
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish self/compile.ts --link build/nish
+        run: build/seed/bin/nish src/compile.ts --link build/nish
 
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
@@ -265,7 +265,7 @@ jobs:
             cat build/size-report.md
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # WP19 G3: build self/ with the LAST RELEASED nish rather than with stage0.
+  # WP19 G3: build src/ with the LAST RELEASED nish rather than with stage0.
   #
   # Two jobs, because there are three answers and only two colours.
   #
@@ -293,7 +293,7 @@ jobs:
   #                                         The release is missing an asset
   #                                         release.yml attaches, and the
   #                                         annotation says how to get unstuck.
-  #   a bootstrap row RED                   self/ does not build with the last
+  #   a bootstrap row RED                   src/ does not build with the last
   #                                         release, which is the rolling
   #                                         freeze broken -- the failure this
   #                                         pair exists to catch.
@@ -325,7 +325,7 @@ jobs:
   #
   # This pair is what enforces the rolling freeze. Nish has no conditional
   # compilation and will not grow any -- there is no #[cfg(bootstrap)] to
-  # write -- so "a construct added in 0.N cannot be used by self/ until
+  # write -- so "a construct added in 0.N cannot be used by src/ until
   # 0.(N+1)" (docs/wp12-release.md, "The bootstrap seed") is a discipline, and
   # a discipline CI does not check is a comment. Using a construct too early
   # breaks here and in `test`, which builds its compiler with the same seed;
@@ -451,7 +451,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP"
           echo "path=$RUNNER_TEMP/${TARBALL%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
 
-      - name: Build self/ with the seed
+      - name: Build src/ with the seed
         env:
           SEED: ${{ steps.download.outputs.path }}
         run: |
@@ -481,8 +481,8 @@ jobs:
           ASSET: ${{ matrix.seed.asset }}
           TRIPLE: ${{ matrix.seed.triple }}
         run: |
-          echo "::notice::self/ built and verified with $TAG's $ASSET seed ($TRIPLE). That is the rolling freeze checked on this platform, and it says nothing about any other."
-          { echo "### The rolling freeze (WP19 G3)"; echo; echo "self/ built and verified with $TAG's \`$ASSET\` seed ($TRIPLE). That is this platform; the \`seeds\` job lists the platforms nothing checked."; } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::src/ built and verified with $TAG's $ASSET seed ($TRIPLE). That is the rolling freeze checked on this platform, and it says nothing about any other."
+          { echo "### The rolling freeze (WP19 G3)"; echo; echo "src/ built and verified with $TAG's \`$ASSET\` seed ($TRIPLE). That is this platform; the \`seeds\` job lists the platforms nothing checked."; } >> "$GITHUB_STEP_SUMMARY"
 
 
   # WP19 G2.1 -- one corpus, two compilers, byte for byte.
@@ -633,7 +633,7 @@ jobs:
         run: bash scripts/fetch-seed.sh
 
       - name: Build the compiler with the seed
-        run: build/seed/bin/nish self/compile.ts --link build/nish
+        run: build/seed/bin/nish src/compile.ts --link build/nish
 
       # The runner answers 1 when any check failed, so the step's own exit status
       # is the gate. Its last line is the summary, which is what a reader wants
@@ -694,7 +694,7 @@ jobs:
 
       # Unused files, exports and dependencies (knip.json). An export no other
       # module imports is one the compiler must keep external, so it is not
-      # free: this is what keeps self/'s internal functions internal.
+      # free: this is what keeps src/'s internal functions internal.
       - name: Dead code
         run: npm run lint:dead
 

@@ -2,7 +2,7 @@
 
 `nish` compiles a static subset of TypeScript to LLVM IR and, with
 `--link`, to a native binary. The compiler is itself a native binary, written
-in Nish (`self/`), and needs nothing to run; the `--link` step (and anything
+in Nish (`src/`), and needs nothing to run; the `--link` step (and anything
 else that turns `.ll` into machine code) needs an LLVM toolchain.
 
 ## 1. Prerequisites
@@ -142,7 +142,7 @@ The npm route installs the **native** compiler, and it is a download rather than
 build: nothing is compiled on your machine. The package declares one
 `nish-<os>-<arch>` package per supported platform as an `optionalDependencies`
 entry with `os` and `cpu` set, so npm fetches exactly the one that matches and
-skips the rest. Each of those carries the self-hosted compiler — `self/`
+skips the rest. Each of those carries the self-hosted compiler — `src/`
 compiled by itself — already built, `--verify`d and smoke-tested on a machine
 of its own architecture by the release workflow.
 
@@ -198,7 +198,7 @@ nish: no prebuilt compiler for freebsd/x64
 
 Until 0.6.0 it ran the TypeScript compiler that shipped in the same package
 instead — the same compiler by every test here, about eight times slower, and
-no C toolchain needed. That compiler was stage0's `src/`, which was deleted in R6
+no C toolchain needed. That compiler was stage0, which was deleted in R6
 ([wp19](wp19-stage0-retirement.md)), so there is nothing left in the package to
 fall back to. The cost is stated where the rest of that deletion's costs are,
 in [wp19 §6](wp19-stage0-retirement.md#6-what-retirement-costs-stated-plainly),
@@ -268,7 +268,7 @@ npm install -g ./amritk-nish-0.4.0.tgz ./amritk-nish-x86_64-linux-0.4.0.tgz
 ```
 
 As a native compiler, which needs no Node at all. A release also attaches the
-self-hosted compiler — the binary `self/` produces by compiling itself — one
+self-hosted compiler — the binary `src/` produces by compiling itself — one
 per supported platform, from the version named in the last column:
 
 | Asset | For | Attached from |
@@ -383,7 +383,7 @@ needs to name only the one.
 
 ## 2a. What `npm run build` does
 
-`self/` is the compiler, written in Nish, and it compiles itself
+`src/` is the compiler, written in Nish, and it compiles itself
 ([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
 `PATH`, `npm run build` runs `scripts/bootstrap.sh` with the seed from §2:
 
@@ -406,11 +406,11 @@ binary itself. It looks for `scripts/build.sh` and the two `runtime/*.c` files
 one level up from wherever it was invoked, then in the working directory, so
 it wants a checkout or an installed package around it the way `nish` does.
 
-Because the seed is the last release, `self/` may only *use* in its own
+Because the seed is the last release, `src/` may only *use* in its own
 source the constructs that release compiles. A new construct is implemented
-in `self/` and becomes usable inside `self/` from the next release on; CI's
+in `src/` and becomes usable inside `src/` from the next release on; CI's
 `bootstrap` job is what checks that the released seed still builds stage1.
-Until R6 the seed was a TypeScript compiler in stage0's `src/`, run under Node; it was
+Until R6 the seed was a TypeScript compiler, stage0, run under Node; it was
 deleted once the native one answered every flag it did
 ([wp19](wp19-stage0-retirement.md)).
 

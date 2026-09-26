@@ -28,7 +28,7 @@
  *
  * **The compiler resolves the link itself as of 0.6.0** -- the real path of
  * whatever `argv[0]` named is a candidate for the package root
- * ([wp19 §5a](../docs/wp19-stage0-retirement.md) item 4, in `self/`) -- so this
+ * ([wp19 §5a](../docs/wp19-stage0-retirement.md) item 4, in `src/`) -- so this
  * `exec` is no longer what makes a copy work, and the reason it is still here is
  * the 91 ms above rather than the defect. It also still carries whoever never
  * ran this script: a shim npm linked and nothing swapped now finds its own
@@ -57,10 +57,10 @@ const swap = async () => {
   // here installs this package's own optionalDependencies -- and without this
   // guard, the first `npm ci` after they are published would overwrite the
   // tracked `bin/nish` with a binary and leave the working tree dirty. The
-  // landmark is `self/compile.ts`, which is the check `scripts/bootstrap.sh`
+  // landmark is `src/compile.ts`, which is the check `scripts/bootstrap.sh`
   // makes and is not in `files`; it used to be stage0's `src/launcher.ts`, which stopped
   // being a landmark when the launcher moved into `bin/` and ships.
-  if (fs.existsSync(path.join(root, "self", "compile.ts"))) {
+  if (fs.existsSync(path.join(root, "src", "compile.ts"))) {
     return "a checkout, so the shim stays"
   }
 

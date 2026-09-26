@@ -10,11 +10,11 @@
  * Four compilers, two equalities:
  *
  *   seed    the last released `nish`, or whatever `tests/self/seed.js` resolves
- *   stage1  `self/`, built by the seed
- *   stage2  `self/`, built by stage1
- *   stage3  `self/`, built by stage2
+ *   stage1  `src/`, built by the seed
+ *   stage2  `src/`, built by stage1
+ *   stage3  `src/`, built by stage2
  *
- *   IR(stage1, self/) == IR(stage2, self/)   *the self-hosting proof*
+ *   IR(stage1, src/) == IR(stage2, src/)   *the self-hosting proof*
  *   stage3 == stage2                          byte for byte, as files
  *
  * The first is the one that matters: if the compiler the seed built and the
@@ -22,8 +22,8 @@
  * reached a fixed point and nothing about the seed leaks into the result any
  * more. The second exists so the binaries are compared as well as the IR.
  *
- * What is deliberately *not* asserted is `IR(seed, self/) == IR(stage1,
- * self/)`. While stage0 was the seed that equality said two independently
+ * What is deliberately *not* asserted is `IR(seed, src/) == IR(stage1,
+ * src/)`. While stage0 was the seed that equality said two independently
  * written implementations of this revision agree, which is diverse
  * double-compiling; with a released seed it asks whether codegen has changed
  * since that release, which forbids every improvement a release cycle exists to
@@ -43,8 +43,8 @@ const root = path.resolve(import.meta.dirname, "..", "..")
 const buildSh = path.join(root, "scripts", "build.sh")
 const runtimeC = path.join(root, "runtime", "runtime.c")
 
-/** The entry of `self/`: the driver, which imports every other module. */
-const ENTRY = path.join("self", "compile.ts")
+/** The entry of `src/`: the driver, which imports every other module. */
+const ENTRY = path.join("src", "compile.ts")
 
 const fresh = (dir) => {
   fs.rmSync(dir, { recursive: true, force: true })
@@ -52,7 +52,7 @@ const fresh = (dir) => {
   return dir
 }
 
-/** A stage1-or-later compiler compiles `self/` into `dir`. */
+/** A stage1-or-later compiler compiles `src/` into `dir`. */
 const compileWithStage = (binary, dir) => {
   const r = spawnSync(binary, [ENTRY, "-o", `${dir}/`], { cwd: root, encoding: "utf8" })
   return r.status === 0 ? null : `${path.basename(binary)}: ${r.stderr || r.stdout}`
@@ -127,8 +127,8 @@ const main = (argv) => {
     return 1
   }
 
-  // stage1: `self/` built by the seed. A seed that cannot build it is the
-  // rolling freeze broken -- `self/` using something the last release does
+  // stage1: `src/` built by the seed. A seed that cannot build it is the
+  // rolling freeze broken -- `src/` using something the last release does
   // not have -- and `linkWith` has already printed the seed's report.
   const seed = seedForOracle(argv)
   if (seed.error !== undefined) {

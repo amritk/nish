@@ -42,7 +42,7 @@
  *     only ever run stage1, so there is no run the register is not true of and
  *     no flag to put it behind;
  *   - the compiler compiles it and only the link step refuses it. What this
- *     oracle runs is `self/dump-checked.ts`, a dump entry point with no
+ *     oracle runs is `src/dump-checked.ts`, a dump entry point with no
  *     `--link` of its own, so a case whose refusal comes from the linker has
  *     no message here to compare.
  *
@@ -67,7 +67,7 @@ const REFUSALS = path.join(root, "tests", "self", "parser-refusals.txt")
 /** The register, as every message about it names it. */
 const REFUSALS_FILE = path.relative(root, REFUSALS)
 
-/** `--number-mode` is the only flag `self/dump-checked.ts` takes. */
+/** `--number-mode` is the only flag `src/dump-checked.ts` takes. */
 const SUPPORTED_FLAGS = new Set(["--number-mode"])
 
 /**
@@ -364,12 +364,12 @@ const corpus = () => {
 }
 
 /**
- * `self/dump-checked.ts`, linked by the seed. What this oracle compares
+ * `src/dump-checked.ts`, linked by the seed. What this oracle compares
  * against is each case's checked-in `.err` fragments, which outlive stage0's `src/`, so
  * the compiler that builds the binary must too (WP19 G2.3).
  */
 const build = (seed) =>
-  linkWith(seed, path.join("self", "dump-checked.ts"), path.join(root, "build", "self", "dump_checked"))
+  linkWith(seed, path.join("src", "dump-checked.ts"), path.join(root, "build", "self", "dump_checked"))
 
 const main = (argv) => {
   const verbose = argv.includes("--verbose")

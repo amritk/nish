@@ -1,15 +1,15 @@
 /**
- * The S1 oracle: `self/lexer.ts` against the `typescript` scanner
+ * The S1 oracle: `src/lexer.ts` against the `typescript` scanner
  * (docs/wp14-selfhost.md, milestone S1).
  *
- *   node tests/lexer-oracle.js              every tests/cases/*.ts, examples/, self/
+ *   node tests/lexer-oracle.js              every tests/cases/*.ts, examples/, src/
  *   node tests/lexer-oracle.js <file>...    just those files
  *   node tests/lexer-oracle.js --verbose    print the first differing line per file
  *
- * Rule 3 of the work package is that stage0 is the oracle for every `self/`
+ * Rule 3 of the work package is that stage0 is the oracle for every `src/`
  * phase, and for a lexer stage0's scanner is the `typescript` package's. This
  * script runs that scanner over a file, prints the token stream in the format
- * `self/dump-tokens.ts` prints, and diffs the two. Agreeing on every offset in
+ * `src/dump-tokens.ts` prints, and diffs the two. Agreeing on every offset in
  * ~700 files says more than any golden written by hand, and it is the only
  * test that would catch the lexer being subtly one byte out on a construct
  * nobody thought to write a case for.
@@ -182,7 +182,7 @@ const scanWithTypeScript = (source) => {
     }
     // The scanner hands back a bare `>` so that the parser can close nested
     // type arguments one at a time; it merges `>>` / `>=` / `>>>=` only when
-    // asked. `self/lexer.ts` always merges, because Nish-0 has no generic
+    // asked. `src/lexer.ts` always merges, because Nish-0 has no generic
     // type argument list to close, so ask here too.
     if (kind === ts.SyntaxKind.GreaterThanToken) {
       kind = scanner.reScanGreaterToken()
@@ -257,7 +257,7 @@ const compare = (binary, file) => {
 }
 
 const corpus = () => {
-  const dirs = [path.join(root, "tests", "cases"), path.join(root, "examples"), path.join(root, "self")]
+  const dirs = [path.join(root, "tests", "cases"), path.join(root, "examples"), path.join(root, "src")]
   const files = []
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
@@ -290,7 +290,7 @@ const corpus = () => {
 }
 
 /**
- * Build `self/dump-tokens.ts` natively with the seed; returns the binary path,
+ * Build `src/dump-tokens.ts` natively with the seed; returns the binary path,
  * or null without a toolchain.
  *
  * The seed rather than stage0 (WP19 G2.3): this oracle compares stage1 with
@@ -298,7 +298,7 @@ const corpus = () => {
  * subject must outlive stage0's `src/` too: `seedWithoutStage0` in `tests/self/goldens.js`.
  */
 const build = (seed) =>
-  linkWith(seed, path.join("self", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"))
+  linkWith(seed, path.join("src", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"))
 
 const main = (argv) => {
   const verbose = argv.includes("--verbose")

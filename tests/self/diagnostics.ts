@@ -1,4 +1,4 @@
-// The driver for `self/diagnostics.ts` (docs/wp14-selfhost.md, milestone S3),
+// The driver for `src/diagnostics.ts` (docs/wp14-selfhost.md, milestone S3),
 // checked against stage0 until R6; `tests/self/goldens/diagnostics.txt` is its output.
 //
 // What has to agree is not "an error is reported" but every byte of the text:
@@ -10,7 +10,7 @@
 // ones: an empty span, a span at end of file, and a span that runs past the
 // end of its line, which is where the caret has to stop.
 
-import { DiagnosticSink, MAX_REPORTED_ERRORS, SourceFile } from "../../self/diagnostics"
+import { DiagnosticSink, MAX_REPORTED_ERRORS, SourceFile } from "../../src/diagnostics"
 
 /**
  * The spans the oracle repeats: every 13th byte, nine bytes long and clamped

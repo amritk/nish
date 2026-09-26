@@ -207,7 +207,7 @@ spawns must keep paying nothing, and that is an acceptance test, not a hope.
 
 ### 3.6 Every rule lands twice
 
-stage0's `src/` and `self/` mirror each other construct for construct, and stage1 must
+stage0's `src/` and `src/` mirror each other construct for construct, and stage1 must
 still compile itself to a byte-identical fixed point
 ([selfhost.md](../.claude/selfhost.md), [wp14-selfhost.md](wp14-selfhost.md)).
 A new flow class in escape analysis, a new statement form and a new family of
@@ -433,7 +433,7 @@ the driver rather than the workload was the limiter.
 
 ## 5. Diagnostics
 
-Each stage adds a family, generated into stage0's `src/codes.ts` / `self/codes.ts` by
+Each stage adds a family, generated into stage0's `src/codes.ts` / `src/codes.ts` by
 `scripts/gen-diagnostic-codes.mjs` like every other. The shape, in the
 existing voice:
 
@@ -714,7 +714,7 @@ also why `parallelMapInto` over a short array has to come out as an ordinary
 loop rather than as four threads.
 P1 first picked **2^20 elements** per chunk of a map, one constant. Its
 follow-up sizes the grain per call instead, as `2^22` over a static estimate of
-what one element costs (`mapGrain` in `self/parallel.ts`), which puts a cheap
+what one element costs (`mapGrain` in `src/parallel.ts`), which puts a cheap
 body's grain past a million elements and a body with a loop's far lower;
 [wp29-thread-surface.md](wp29-thread-surface.md) §8a has the calibration. A map
 within its grain calls its loop directly, so it does not even take the 3 ns

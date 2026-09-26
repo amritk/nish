@@ -157,9 +157,9 @@ Following the nine-step checklist in `docs/ARCHITECTURE.md`:
 - **Attributes.** `factCollectors` learns that a foreign call has
   `effect: "write"`, defeats `willreturn`, and that every pointer argument
   escapes.
-- **`self/`.** The same in `self/validator.ts`, `self/parser.ts`,
-  `self/nodes.ts`, `self/checker.ts` and `self/emit.ts`, because a construct
-  enters stage0's `src/` and `self/` together — `#54` touched 23 files under `self/`.
+- **`src/`.** The same in `src/validator.ts`, `src/parser.ts`,
+  `src/nodes.ts`, `src/checker.ts` and `src/emit.ts`, because a construct
+  enters stage0's `src/` and `src/` together — `#54` touched 23 files under `src/`.
 - **Tests.** A golden `.ll`, an `llvm-as` pass, a native round trip that
   actually calls libc, and `reject_*` cases for each refusal above.
 - **Docs.** A `docs/LANGUAGE.md` rule citing the case, a cookbook entry, and
@@ -367,7 +367,7 @@ because §7a's placement rule keeps a `CPtr` out of every field, element and
 Neither compiler said that before `tests/cases/dbg_cptr`, and each was wrong in
 its own way, which is the thing to take from it. stage0's `src/codegen/debug.ts` looked
 the type up in an allow-list table and wrote the miss out as `!N = undefined`,
-invalid IR that `llvm-as` rejects; `self/debug.ts` ran the same lookup through a
+invalid IR that `llvm-as` rejects; `src/debug.ts` ran the same lookup through a
 `switch` whose `default` is an internal error, so it exited 70. Both are the
 allow-list shape §7b argues for and both are right to refuse a type they were
 not taught — the defect was that nobody taught this one, and nothing looked:

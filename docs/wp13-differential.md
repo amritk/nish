@@ -22,7 +22,7 @@ node tests/differential/run.js --frozen            # the comparison, from the st
 a fixed seed as two checks in the WP13 block of `tests/run.js` (about 10 s).
 The generator has a second customer in the WP14 block: `--stage1` compiles the
 same random programs with both compilers and compares the IR, which is a
-statement about `self/` rather than about Node ("The same programs, compiled by
+statement about `src/` rather than about Node ("The same programs, compiled by
 both compilers", below).
 
 ## Files
@@ -424,7 +424,7 @@ The mode reuses `ir_oracle.js`'s `build` and `compare` rather than repeating
 them, and links the stage1 binary once per run (about 15 s), after which each
 program costs about a third of a second. It is a separate mode, not a
 replacement: the default run still compares stage0 against Node and knows
-nothing about `self/`.
+nothing about `src/`.
 
 ```
 node tests/differential/fuzz.js --stage1 --count 300            # random seed, printed

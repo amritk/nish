@@ -10,7 +10,7 @@ The normative rules are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling);
 this note is the *why*.
 
 **Both compilers have it.** S5 froze stage0 as the bootstrap seed and the
-differential oracle, and said new constructs land in `self/` (§4 of
+differential oracle, and said new constructs land in `src/` (§4 of
 [wp14-selfhost.md](wp14-selfhost.md)); the IR oracle enforces that by
 requiring stage1 to compile every program in the corpus, with no exemption
 list. So this package is implemented twice, and the oracle is what says the
@@ -23,9 +23,9 @@ stage0's `src/checker/result.ts` (the rules), stage0's `src/checker/narrowing.ts
 `T | null` and `Result` now share), stage0's `src/codegen/emit/result.ts` (the
 lowering), stage0's `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
 pointer facts), stage0's `src/validator.ts` (Phase 0 refuses `throw`).
-Stage1, mirroring each: `self/types.ts`, `self/annotations.ts`,
-`self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit-result.ts`,
-`self/escape.ts`, `self/attributes.ts`, `self/validator.ts`.
+Stage1, mirroring each: `src/types.ts`, `src/annotations.ts`,
+`src/result.ts`, `src/expressions.ts` (`narrow`), `src/emit-result.ts`,
+`src/escape.ts`, `src/attributes.ts`, `src/validator.ts`.
 Shared: `runtime/nish.d.ts` (the ambient declarations),
 `runtime/shim.mjs` and `tests/differential/rewrite.js` (the Node twin).
 Tests: `tests/cases/res_*`, `tests/cases/reject_result_*`,
@@ -52,7 +52,7 @@ which has existed since WP14 D1 and keeps the message. So `throw` is a Phase 0
 rejection (`tests/cases/reject_throw`), with a message that names both
 replacements, and `try` keeps its own rejection for the same reason.
 
-Stage1 (`self/`) refuses it in Phase 0 too. Its parser still *reads* `throw`,
+Stage1 (`src/`) refuses it in Phase 0 too. Its parser still *reads* `throw`,
 which is deliberate: a rejection that can point at the whole statement beats a
 syntax error at the keyword.
 
@@ -217,7 +217,7 @@ reverse would be a bug in the declarations.
   build a `DW_TAG_structure_type`, so `-g` now describes `ok`, `value` and
   `error` at their offsets, and a return slot the ABI packs is described as the
   packed shape rather than as a pointer that is not there.
-- **Nothing, on the stage1 side.** `self/` implements the whole package, and
+- **Nothing, on the stage1 side.** `src/` implements the whole package, and
   the S3 and S4 oracles hold it to stage0's exact messages and exact IR. What
   the two do *not* share is the shape of the code: stage0 interns nothing and
   compares types structurally, stage1 interns every type into a table and

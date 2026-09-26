@@ -24,12 +24,12 @@ Nish parses source with its own lexer and parser, rejects everything dynamic
 (`any`, prototypes, `eval`, exceptions, a garbage collector), and emits
 textual LLVM IR (`.ll`). LLVM's own toolchain (`clang` / `llc`) then optimises
 and produces native binaries for x86_64, ARM64, or WebAssembly. The compiler
-is itself written in Nish, in `self/`, and ships as a native binary with no
+is itself written in Nish, in `src/`, and ships as a native binary with no
 runtime dependency.
 
 ```
 TypeScript source ──▶ AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
-              (self/parser.ts)  (self/checker.ts)      (self/emit*.ts)         + runtime/runtime.c + runtime-os.c
+              (src/parser.ts)  (src/checker.ts)      (src/emit*.ts)         + runtime/runtime.c + runtime-os.c
 ```
 
 If it compiles, every value has one fixed, known memory layout; binaries are
@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
 > `bash scripts/fetch-seed.sh`, `npm run build`, then `build/nish ...` wherever this README says `nish`.
 > The build is a bootstrap: the previous release's `nish` (the seed, fetched
 > by `scripts/fetch-seed.sh`, or named with `NISH_BOOTSTRAP=<path>`) compiles
-> `self/`, and that compiler compiles `self/` again into `build/nish`.
+> `src/`, and that compiler compiles `src/` again into `build/nish`.
 
 `hello.ts`:
 
@@ -212,7 +212,7 @@ dies with its frame, Rust refuses to compile it, Go falls back to the garbage
 collector, and Zig hands the question back to you and an allocator. Nish
 leaves the value in the arena, where it stays until `main` returns.
 
-So [`self/escape.ts`](self/escape.ts) and the whole-program fact
+So [`src/escape.ts`](src/escape.ts) and the whole-program fact
 fixpoint are optimisations and nothing else: a refusal costs memory and never
 correctness, and no program is rejected for a lifetime reason. The compiler
 says so out loud where the cost is real: assigning an allocation to a local
@@ -448,11 +448,11 @@ Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
 ## The compiler in a browser
 
-`self/` is an Nish program, so the compiler compiles itself to
+`src/` is an Nish program, so the compiler compiles itself to
 WebAssembly like any other one:
 
 ```bash
-nish self/compile.ts --link web/nish.wasm --profile wasi
+nish src/compile.ts --link web/nish.wasm --profile wasi
 node web/compile.mjs web/nish.wasm examples/add.ts     # the IR, from a Web Worker
 ```
 
@@ -466,17 +466,17 @@ refused there. [web/README.md](web/README.md) has the rest.
 
 ## Self-hosting
 
-`self/` is the compiler, and the only one: lexer, parser, checker and emitter,
+`src/` is the compiler, and the only one: lexer, parser, checker and emitter,
 written in Nish, with no `typescript` package underneath. It compiles its own
 source to a fixed point:
 
 ```
-IR(stage1, self/) == IR(stage2, self/)     byte for byte, and stage3 == stage2
+IR(stage1, src/) == IR(stage2, src/)     byte for byte, and stage3 == stage2
 ```
 
 The chain starts from a seed, the previous release's `nish` binary, the way
-Rust and Go build themselves: stage1 is `self/` built by the seed, stage2 is
-`self/` built by stage1 and is what gets installed, and stage3, built by
+Rust and Go build themselves: stage1 is `src/` built by the seed, stage2 is
+`src/` built by stage1 and is what gets installed, and stage3, built by
 stage2, has to reproduce stage2 file for file. `scripts/bootstrap.sh --verify`
 asserts both equalities, and `npm test` re-proves them on every run. Compiling
 the whole compiler costs it **91 ms and 86 MB**; the TypeScript compiler it
@@ -488,15 +488,15 @@ npm run build                       # seed -> stage1 -> stage2 = build/nish
 build/nish hello.ts --link hello    # -o, --link, --profile, its own directories
 ```
 
-Because the seed is the last release, `self/` may only *use* in its own
-source what that release compiles. A new construct is implemented in `self/`
-and becomes usable inside `self/` from the next release on — the rolling
+Because the seed is the last release, `src/` may only *use* in its own
+source what that release compiles. A new construct is implemented in `src/`
+and becomes usable inside `src/` from the next release on — the rolling
 freeze CI's `bootstrap` job checks. Until R6 there was a second compiler, the
-TypeScript one in stage0's `src/`, which seeded every bootstrap and served as the
-oracle each `self/` phase was compared against; it was deleted once the
+TypeScript one, stage0, which seeded every bootstrap and served as the
+oracle each phase of `src/` was compared against; it was deleted once the
 self-hosted compiler did everything it did
 ([wp19](docs/wp19-stage0-retirement.md)).
-Details, and the subset `self/` is written in, are in
+Details, and the subset `src/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 
 ---
@@ -513,7 +513,7 @@ and the IR any of them lowers to are all still free to change.
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
 | M4 "1.0" | frozen language reference, tagged release | next |
-| M5 "Self-hosting" | `self/`: the compiler, written in Nish, compiling itself | done |
+| M5 "Self-hosting" | `src/`: the compiler, written in Nish, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, and dynamic
@@ -544,7 +544,7 @@ node tests/run.js locals # only cases whose name contains "locals"
 npm run test:update      # write missing .ll goldens for new cases
 npm run test:diff        # every whole program natively and under Node (runtime/shim.mjs), compared byte for byte
 node tests/differential/fuzz.js --stage1 --count 200   # random integer programs, the released seed's IR against HEAD's; prints the seed
-npm run check            # tsc --noEmit: an ambient type-check of self/, std/ and tests/nish/
+npm run check            # tsc --noEmit: an ambient type-check of src/, std/ and tests/nish/
 npm run lint             # Biome style lint (advisory, never a compile gate)
 npm run smoke            # build and run every example with a main
 scripts/bootstrap.sh --verify   # the whole chain, with IR(stage1) == IR(stage2) and stage3 == stage2 asserted
@@ -557,7 +557,7 @@ the add-a-construct checklist, ABI guard tests) and the conventions in
 [docs/MASTER_PLAN.md §7](docs/MASTER_PLAN.md#7-conventions-for-every-agent):
 every construct ships with a golden `.ll`, an `llvm-as` pass, a native round
 trip, a negative test, and its LANGUAGE.md and cookbook entries; no attribute
-without a proof; layout changes touch `self/runtime.ts` and `runtime/runtime.c` together.
+without a proof; layout changes touch `src/runtime.ts` and `runtime/runtime.c` together.
 CI runs the suite on Ubuntu and macOS with LLVM 18
 ([docs/wp10-ci.md](docs/wp10-ci.md)). The documentation index is
 [docs/README.md](docs/README.md). Coding guidelines for contributors and

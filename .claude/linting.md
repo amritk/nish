@@ -13,9 +13,9 @@ shellcheck, and every rule is an `error`: a finding fails the pull request.
 
 | Tool | Reads | Config |
 | --- | --- | --- |
-| Biome (lint and format) | `self/`, `std/`, `bin/`, `tests/**/*.js`, `tests/self/**/*.ts`, `examples/`, `docs/cookbook/`, `docs/*.mjs`, `bench/`, `web/`, `scripts/`, `.claude/hooks/` | `biome.json` |
+| Biome (lint and format) | `src/`, `std/`, `bin/`, `tests/**/*.js`, `tests/self/**/*.ts`, `examples/`, `docs/cookbook/`, `docs/*.mjs`, `bench/`, `web/`, `scripts/`, `.claude/hooks/` | `biome.json` |
 | `scripts/check-filenames.mjs` | every path `git ls-files` prints | the constants at its top |
-| tsc (`npm run check`) | `self/`, `std/`, `tests/nish/` | `tsconfig.json` |
+| tsc (`npm run check`) | `src/`, `std/`, `tests/nish/` | `tsconfig.json` |
 | knip (`npm run lint:dead`) | the same files as Biome, from the entry points in its config | `knip.json` |
 | shellcheck (`-S warning`) | `scripts/*.sh`, `docs/cookbook/regen.sh`, `install.sh`, `.github/*.sh`, `.claude/hooks/*.sh` | the CI step |
 
@@ -97,7 +97,7 @@ they push code towards `?.` and `**`, which Nish refuses.
 - `noBarrelFile` and `noReExportAll`: no module exists only to re-export
   another. An import names the module that owns the symbol.
 - `useGuardForIn`.
-- `noRestrictedImports`, for `self/` and `std/`: both ship, so neither may
+- `noRestrictedImports`, for `src/` and `std/`: both ship, so neither may
   import from `tests/`, `scripts/`, `bench/` or `examples/`.
 
 - `noForEach`, `noUselessUndefinedInitialization`, `useCollapsedElseIf`,
@@ -109,19 +109,19 @@ they push code towards `?.` and `**`, which Nish refuses.
 `tsconfig.json` (`npm run check`) adds `noImplicitReturns`,
 `noFallthroughCasesInSwitch`, `allowUnreachableCode: false`, `noUnusedLocals`
 and `noUnusedParameters` to `strict`. Biome's unused-variable rules are off for
-Nish programs, so tsc is what catches an unused local in `self/`. A parameter a
+Nish programs, so tsc is what catches an unused local in `src/`. A parameter a
 signature needs but a body does not read, such as a `std/` function that is a
 builtin natively and a stub under Node, is spelled with a leading `_`.
 
 **Dead code** (knip, `knip.json`): no unused file, dependency or export. An
-export no other module imports matters in `self/`: the compiler keeps an
+export no other module imports matters in `src/`: the compiler keeps an
 exported function external, and an internal one can be inlined or dropped.
 Unexporting the 139 of those this found shrank the compiler by 880 bytes, and
 the self-compile time did not move measurably. A name kept for a reader rather
 than an importer, such as `RULE_COUNT`, which `scripts/gen-diagnostic-codes.mjs`
 checks, carries `@public` in its doc comment.
 
-**Off for Nish programs** (`self/`, `std/`, `examples/`, `docs/cookbook/`,
+**Off for Nish programs** (`src/`, `std/`, `examples/`, `docs/cookbook/`,
 `bench/*.ts`, `tests/self/*.ts`). Following these rules there would give code
 that the compiler refuses or compiles worse:
 
@@ -152,7 +152,7 @@ depends on, so it would stay noise however long the cleanup ran:
 | `noNegationElse`, `useSimplifiedLogicExpression` | 111 | Taste. They reorder branches and De Morgan guard conditions, which makes a guard harder to read, not easier. |
 | `noSubstr`, `useAtIndex` | 78 | They suggest methods that are not in the language's string and array surface. |
 | `useForOf` | 7 | Six of the seven hits were argument parsers that consume a flag's value with `argv[++i]`, which a `for...of` cannot do. The seventh was rewritten. |
-| `organizeImports` (assist) | 61 files | The reorder changes the order declarations reach the IR in: 36 of `self/`'s 69 modules came out different. The compiler's own IR stays byte-identical under a style change, so imports keep the order they are written in. |
+| `organizeImports` (assist) | 61 files | The reorder changes the order declarations reach the IR in: 36 of `src/`'s 69 modules came out different. The compiler's own IR stays byte-identical under a style change, so imports keep the order they are written in. |
 | `noInferrableTypes` | 8 | In Nish, `const n: i32 = 0` is not redundant. The annotation picks the width. |
 | tsc `noUncheckedIndexedAccess` | 2,574 | An out-of-range index in Nish panics instead of answering `undefined`, so `T` is the honest element type. |
 

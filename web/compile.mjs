@@ -2,7 +2,7 @@
 // `node:worker_threads` worker, so the browser path can be exercised (and
 // tested) without a browser.
 //
-//   build/nish self/compile.ts --link build/nish.wasm --profile wasi
+//   build/nish src/compile.ts --link build/nish.wasm --profile wasi
 //   node web/compile.mjs build/nish.wasm examples/add.ts
 //   node web/compile.mjs build/nish.wasm examples/nbody.ts --number-mode f64
 //
@@ -22,7 +22,7 @@ if (!wasmPath || !entry) {
 
 /**
  * Every module the entry reaches, keyed by the path the compiler will see.
- * The specifier rule is `resolveModule` in `self/paths.ts`: `./x` and `./x.js`
+ * The specifier rule is `resolveModule` in `src/paths.ts`: `./x` and `./x.js`
  * both mean `x.ts`. A specifier that is not relative is left to the compiler,
  * which refuses bare specifiers with a diagnostic of its own.
  *
@@ -67,7 +67,7 @@ const reply = (message) =>
   })
 
 // A program of one module writes one `.ll`; anything bigger needs `-o <dir>/`,
-// the same rule the CLI applies (`planOutputs` in self/compile.ts).
+// the same rule the CLI applies (`planOutputs` in src/compile.ts).
 const single = Object.keys(files).length === 1
 await reply({ id: "load", wasm: fs.readFileSync(wasmPath) })
 const result = await reply({

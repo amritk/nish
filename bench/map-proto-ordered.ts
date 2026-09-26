@@ -1,5 +1,5 @@
 // WP32 layout prototype 1 of 4: insertion-ordered, the shape of today's
-// StringMap in self/map.ts (docs/wp32-map.md §2). The bucket table holds entry
+// StringMap in src/map.ts (docs/wp32-map.md §2). The bucket table holds entry
 // indices plus one and nothing else, so every occupied bucket a probe passes
 // costs a load from the entry list and a full key compare, and growth hashes
 // every key again. It is the baseline the fingerprinted layouts are measured

@@ -13,7 +13,7 @@
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
- *     Every case is compiled by stage1 -- `self/` built by the seed into
+ *     Every case is compiled by stage1 -- `src/` built by the seed into
  *     `build/nish-test` once per run -- one process per case, `defaultJobs()` at
  *     a time (tests/pool.js). The link is against the runtime and the driver as
  *     object files, built once per run (`runtimeObjects`) rather than
@@ -56,10 +56,10 @@ const require = createRequire(import.meta.url)
 
 const root = path.resolve(import.meta.dirname, "..")
 /**
- * The compiler under test: stage1, `self/` linked by the seed once per run,
+ * The compiler under test: stage1, `src/` linked by the seed once per run,
  * and every compile in this file is a spawn of it.
  *
- * Where it lives is part of what it is. `self/compile.ts` finds its package
+ * Where it lives is part of what it is. `src/compile.ts` finds its package
  * root -- `scripts/build.sh` for `--link`, `std/` for a `nish/<module>` import
  * -- by climbing one directory from its own `argv[0]` (`packageRoot`), so the
  * binary has to sit one level below the repository root. Under `build/test/`
@@ -400,7 +400,7 @@ if (RETIRED.length > 0) {
 // (`seedForOracle` says which, and says so on stderr when it had to fall back).
 // Every check below spawns it, so without it nothing below can run: a machine
 // with no clang cannot link it and the run is a counted skip that the DEGRADED
-// banner explains, and a seed that cannot build `self/` is a failure, because
+// banner explains, and a seed that cannot build `src/` is a failure, because
 // that is the rolling freeze broken (WP19 G3).
 const seed = HAS_CLANG
   ? seedForOracle(process.argv)
@@ -418,8 +418,8 @@ if (seed.error !== undefined) {
 fs.rmSync(`${NISH}.modules`, { recursive: true, force: true })
 if (
   !check(
-    `the compiler under test: the seed (${seed.label}) builds self/compile.ts into build/nish-test`,
-    linkWith(seed, path.join("self", "compile.ts"), NISH) !== null,
+    `the compiler under test: the seed (${seed.label}) builds src/compile.ts into build/nish-test`,
+    linkWith(seed, path.join("src", "compile.ts"), NISH) !== null,
     "(the seed's report is on stderr above)"
   )
 ) {
@@ -733,7 +733,7 @@ if (!only || "diagnostics".includes(only)) {
 
   // ---- stable diagnostic codes ---------------------------------------------
   // `code` is what a tool keys on instead of the prose, so it has to mean the
-  // same rule next release. The registry is `self/codes.ts`, and the generator's
+  // same rule next release. The registry is `src/codes.ts`, and the generator's
   // `--check` is what says it is well formed.
   const codesGen = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check"], {
     cwd: root,
@@ -751,7 +751,7 @@ if (!only || "diagnostics".includes(only)) {
   // the pair reader, so it would pass for well-formed while every later rule
   // took its neighbour's code; a gap in NL9xxx is a performance rule that lost
   // its number.
-  const codesLive = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8")
+  const codesLive = fs.readFileSync(path.join(root, "src", "codes.ts"), "utf8")
   const codesStray = '  "a fragment that nobody gave a code to",\n'
   const codesMutations = [
     [
@@ -794,11 +794,11 @@ if (!only || "diagnostics".includes(only)) {
       return { pairs: [], error: err.message }
     }
   }
-  const registryText = fs.readFileSync(path.join(root, "self", "codes.ts"), "utf8")
-  const registryRead = registryOf(registryText, "self/codes.ts")
+  const registryText = fs.readFileSync(path.join(root, "src", "codes.ts"), "utf8")
+  const registryRead = registryOf(registryText, "src/codes.ts")
   const registryCodes = registryRead.pairs.map((p) => `${p.code} ${JSON.stringify(p.fragment)}`)
   check(
-    `codes: self/codes.ts reads as a registry (${registryCodes.length} rules)`,
+    `codes: src/codes.ts reads as a registry (${registryCodes.length} rules)`,
     registryRead.error === null && registryCodes.length > 0,
     registryRead.error ?? "an empty registry"
   )
@@ -814,7 +814,7 @@ if (!only || "diagnostics".includes(only)) {
   // data rather than against a fixture that can drift from it.
   const reindented = registryOf(
     registryText.replace(/^ {2}/gm, "    "),
-    "self/codes.ts reindented to four spaces"
+    "src/codes.ts reindented to four spaces"
   )
   check(
     "codes: the registry reader is indentation-agnostic",
@@ -825,7 +825,7 @@ if (!only || "diagnostics".includes(only)) {
 
   const flattened = registryOf(
     registryText.replace(/^[ \t]+/gm, ""),
-    "self/codes.ts with its indentation stripped"
+    "src/codes.ts with its indentation stripped"
   )
   check(
     "codes: a registry the reader cannot parse raises rather than reading as empty",
@@ -2031,7 +2031,7 @@ pinsModuleId(
 // from the importer was the same string under a relative entry and the whole
 // checkout path under an absolute one, which is why the corpus never saw it
 // and 37 rows of `--parity` did (WP19 §A3, and §A5 on why that gap keeps
-// happening). `self/std-modules.ts` writes the rule down for stage1 and its
+// happening). `src/std-modules.ts` writes the rule down for stage1 and its
 // comment asserts this one; this check is what keeps that sentence true.
 pinsModuleId(
   "link/std_bare_specifier: a `nish/` module is named package-relative, whatever the entry was called",
@@ -2491,7 +2491,7 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
   }
 }
 
-// WP15 §2.4, the build-mode rule (`hostVisible` in `self/visibility.ts`). A
+// WP15 §2.4, the build-mode rule (`hostVisible` in `src/visibility.ts`). A
 // `--link` build with no sidecar, no wasm and no C function declared is its own
 // final link, so an exported function takes the facts its call sites prove:
 // `tests/link/range_export` is AWFY Permute as an exported class, and its
@@ -2607,18 +2607,18 @@ if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
 }
 
 // The soundness pin of the call-site ranges pass's narrowing and shortcuts
-// (`self/ranges.ts`; docs/ARCHITECTURE.md, the call-site ranges row).
+// (`src/ranges.ts`; docs/ARCHITECTURE.md, the call-site ranges row).
 // `--range-reference` runs the pass by the rule #222 shipped — every access
 // pass 2 left checked opens a body, every round joins every entry again, every
 // reached caller is walked to its end — and the default must prove exactly
-// what it proves. `self/` is the largest program there is, and the closed world
+// what it proves. `src/` is the largest program there is, and the closed world
 // of `--link` is where the pass has the most candidates, so both are compiled
 // both ways and every module's IR and every warning must be byte-identical. The
 // executable is not the point: `CC=true` turns the link into a no-op after the
 // IR is written. AWFY, whose recursions walk the most rounds, goes the same way.
 if (!only || "range_reference".includes(only) || only.startsWith("range_reference")) {
   for (const [label, entry] of [
-    ["self/", path.join("self", "compile.ts")],
+    ["src/", path.join("src", "compile.ts")],
     ["bench/awfy", path.join("bench", "awfy", "main.ts")],
   ]) {
     for (const [mode, args] of [
@@ -2970,10 +2970,10 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   }
 
   // An element store cannot write the class field that holds the array, and the
-  // element's own `!tbaa` tag is what tells LLVM so (`elementTbaa`, self/tbaa.ts).
+  // element's own `!tbaa` tag is what tells LLVM so (`elementTbaa`, src/tbaa.ts).
   // Without it `opt -O3` reloads `this.v` and its `data` after `this.v[i] = ...` in
   // AWFY Permute's swap: two field loads (before the repeated checks were proven in
-  // `self/bounds.ts` it reloaded the length too and checked `j` a second time). With
+  // `src/bounds.ts` it reloaded the length too and checked `j` a second time). With
   // it the swap loads the field once and the length once. The two checks left are
   // `i`'s and `j`'s, and they must stay on: a swap with none passes nothing it
   // should. The field load is the one `load ptr` that carries `!tbaa` and no alias
@@ -3000,7 +3000,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   }
 
   // A class-field store cannot write an array header, and the header's own `!tbaa`
-  // subtree is what tells LLVM so (`headerTbaa`, self/tbaa.ts). Without it `opt -O3`
+  // subtree is what tells LLVM so (`headerTbaa`, src/tbaa.ts). Without it `opt -O3`
   // reloads `this.piles`'s `data` after `top.next = null` and again after
   // `disk.next = top` in AWFY Towers' inlined `moveTopDisk`, three loads of each of
   // `len` and `data` per move where one of each will do. The header's tags are read
@@ -3092,7 +3092,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   // The first is the hoist: no load in the *header* alias domain is left inside
   // `@fieldScale`'s loop. §2b's domains do not reach this shape on their own,
   // because the header load sits in a bounds-checked block where LLVM may not
-  // speculate it out — which is exactly what §2c found in `self/bounds.ts`.
+  // speculate it out — which is exactly what §2c found in `src/bounds.ts`.
   //
   // The second is §2c's criterion, and it is the one that matters: the `len` the
   // `while` condition compares against and the `len` the bounds check compares
@@ -3124,7 +3124,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     }
     // §2c's criterion — one length value feeding the loop condition and every
     // check that reads that array — is now met by there being *no* check on
-    // `h.xs` at all: `self/bounds.ts` keys length facts by property path too
+    // `h.xs` at all: `src/bounds.ts` keys length facts by property path too
     // (#106), so `h.xs.length` proves `h.xs[i]` the way `xs.length` proves
     // `xs[i]`. What is pinned is the strongest form of that: `@fieldScale`'s
     // loop *is* `@constScale`'s, instruction for instruction once the registers
@@ -3376,7 +3376,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 }
 
 // ---- WP6: every allocating builtin is an allocation site -----------------------------
-// `isAllocatingBuiltin` in self/escape.ts names the identifier builtins whose result is
+// `isAllocatingBuiltin` in src/escape.ts names the identifier builtins whose result is
 // fresh arena memory. A builtin that belongs there and is missing is not a lost
 // optimisation: the function that returns its result gets an automatic arena scope
 // whose `nish_arena_release` runs before the `ret`, rewinding the arena past the bytes
@@ -3393,8 +3393,8 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 //     non-allocators are not candidates: `nish_platform` hands back the same constant
 //     and is deliberately not `noalias`, and `process.argv` is `malloc`ed once by the
 //     entry wrapper (neither is an identifier builtin either). The builtins are the ones
-//     `isBuiltinFunction` in self/builtins.ts names, the callees of each are what
-//     `identifierBuiltinCalleesNamed` in self/emit-builtins.ts answers for it -- the
+//     `isBuiltinFunction` in src/builtins.ts names, the callees of each are what
+//     `identifierBuiltinCalleesNamed` in src/emit-builtins.ts answers for it -- the
 //     list the attribute pass itself reads, so this asks the emitter rather than a copy
 //     of the emitter -- and the table is the compiler's own, printed by
 //     `--runtime-decls`.
@@ -3411,7 +3411,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 // reads. The two source files are read as the compiler under test was built from them,
 // so the halves cannot be describing two different compilers.
 if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
-  const selfSource = (file) => fs.readFileSync(path.join(root, "self", file), "utf8")
+  const selfSource = (file) => fs.readFileSync(path.join(root, "src", file), "utf8")
   /** The text of `export const <name> = ...` or `const <name> = ...`, up to the next top-level `}` or `)`. */
   const declarationOf = (text, name) => {
     const at = text.search(new RegExp(`^(?:export )?const ${name}\\b`, "m"))
@@ -3451,7 +3451,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64"])
   const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b))
   check(
-    "self/builtins.ts and self/emit-builtins.ts still read as a builtin list and a callee table " +
+    "src/builtins.ts and src/emit-builtins.ts still read as a builtin list and a callee table " +
       `(${builtins.length} builtins, ${calleesOf.size} with callees)`,
     builtins.length > 0 && calleesOf.size > 0 && unread.length === 0,
     unread.length > 0
@@ -3513,14 +3513,14 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   check(
     `every identifier builtin declares runtime callees the table knows (${builtins.length} builtins)`,
     unknownSymbols.length === 0,
-    unknownSymbols.map((u) => `${u} is not in the runtime table (self/runtime.ts)`).join("\n")
+    unknownSymbols.map((u) => `${u} is not in the runtime table (src/runtime.ts)`).join("\n")
   )
 
   // The set is read out of the source because it is private to escape.ts, which is
   // where it belongs: nothing but the escape analysis has any business consulting it.
   const declared = new Set(namesTestedIn(declarationOf(selfSource("escape.ts"), "isAllocatingBuiltin")))
   check(
-    "self/escape.ts declares isAllocatingBuiltin as a test against a literal list of names",
+    "src/escape.ts declares isAllocatingBuiltin as a test against a literal list of names",
     declared.size > 0,
     "the declaration moved or changed shape; this check reads it by name, so point it at the new one"
   )
@@ -3535,7 +3535,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
         ([builtin, symbol]) =>
           `${builtin} allocates -- its lowering calls @${symbol}, whose declaration is a noalias pointer ` +
           "return, which in the runtime table means a fresh allocation per call -- but it is not in " +
-          `isAllocatingBuiltin in self/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
+          `isAllocatingBuiltin in src/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
           "gets an arena scope that releases the result before the ret. Add a tests/cases/mem_*_scope case for it " +
           "beside the other three while you are there."
       ),
@@ -3739,7 +3739,7 @@ if (!only || "layout".includes(only)) {
   // sidecar so `Rows` holds its arrays inside the object, against its C twin.
   // The twin mirrors each field as `struct { nish_array h; T slots[K]; }` from
   // nish.h, so the three places that state the header -- `ARRAY_TYPE` in
-  // self/runtime.ts, `INLINE_HEADER_BYTES` in self/structs.ts and nish.h's
+  // src/runtime.ts, `INLINE_HEADER_BYTES` in src/structs.ts and nish.h's
   // `nish_array` -- are read here and held to one 24-byte layout, and the
   // object's size is the `nish_alloc_struct` the IR asks for.
   {
@@ -3748,14 +3748,14 @@ if (!only || "layout".includes(only)) {
     const inlineLl = path.join(buildDir, "layout_inline_array.ll")
     const ic = spawnSync(NISH, [inlineTs, "-o", inlineLl], { cwd: root })
     check("layout: tests/layout/inline-array.ts compiles", ic.status === 0, String(ic.stderr))
-    const runtimeTs = fs.readFileSync(path.join(root, "self", "runtime.ts"), "utf8")
-    const structsTs = fs.readFileSync(path.join(root, "self", "structs.ts"), "utf8")
+    const runtimeTs = fs.readFileSync(path.join(root, "src", "runtime.ts"), "utf8")
+    const structsTs = fs.readFileSync(path.join(root, "src", "structs.ts"), "utf8")
     const nishH = fs.readFileSync(path.join(root, "runtime", "nish.h"), "utf8")
     const arrayType = runtimeTs.match(/ARRAY_TYPE: string = "%struct\.nish_array = type \{ ([^}]*) \}"/)
     const headerBytes = structsTs.match(/INLINE_HEADER_BYTES: i32 = (\d+)/)
     const cHeader = nishH.match(/typedef struct nish_array \{ ([^}]*) \} nish_array;/)
     check(
-      "layout: self/runtime.ts, self/structs.ts and nish.h state one array header (i64 len, i64 cap, i8* data; 24 bytes)",
+      "layout: src/runtime.ts, src/structs.ts and nish.h state one array header (i64 len, i64 cap, i8* data; 24 bytes)",
       arrayType !== null &&
         arrayType[1] === "i64, i64, i8*" &&
         headerBytes !== null &&
@@ -4241,11 +4241,11 @@ if (!only) {
     // compiler allocates from compiled code on every node it parses, so a wasm32
     // layout that disagrees with the IR traps here long before it prints anything.
     const compilerWasm = path.join(buildDir, "nish.wasm")
-    const linked = spawnSync(NISH, ["self/compile.ts", "--link", compilerWasm, "--profile", "wasi"], {
+    const linked = spawnSync(NISH, ["src/compile.ts", "--link", compilerWasm, "--profile", "wasi"], {
       cwd: root,
     })
     check(
-      "web: self/ links into one wasi module (the compiler as nish.wasm)",
+      "web: src/ links into one wasi module (the compiler as nish.wasm)",
       linked.status === 0,
       String(linked.stderr)
     )
@@ -4538,7 +4538,7 @@ if (!only || "interop".includes(only)) {
   const publicHeader = fs.readFileSync(path.join(runtimeDir, "nish.h"), "utf8")
   // The table is the compiler's own: `--runtime-decls` declares every runtime
   // function whether or not the module calls it, so its `declare` lines are
-  // `self/runtime.ts` as the compiler under test was built from it. An LLVM
+  // `src/runtime.ts` as the compiler under test was built from it. An LLVM
   // intrinsic is not the runtime's and is never declared there.
   const declsLl = path.join(interopDir, "runtime_decls.ll")
   const decls = spawnSync(NISH, [path.join(casesDir, "string_params.ts"), "--runtime-decls", "-o", declsLl], {
@@ -6447,21 +6447,21 @@ if (!only || "interop".includes(only)) {
 }
 
 // ---- WP14: self-hosting ---------------------------------------------------------------
-// `self/` is the compiler written in Nish (docs/wp14-selfhost.md), and the
+// `src/` is the compiler written in Nish (docs/wp14-selfhost.md), and the
 // compiler every other section of this file runs. It is checked here rather than
 // in tests/cases because it is a program, not a construct: the floor is that it
 // compiles every module of itself cleanly, and above that stand the oracles that
 // hold each phase to something outside it and the bootstrap's fixed point.
 if (!only || "selfhost".includes(only) || only.includes("self")) {
-  const selfDir = path.join(root, "self")
+  const selfDir = path.join(root, "src")
   const modules = fs.existsSync(selfDir)
     ? fs
         .readdirSync(selfDir)
         .filter((f) => f.endsWith(".ts"))
         .sort()
     : []
-  check("self/ has at least one module", modules.length > 0, `${modules.length} modules`)
-  // The property is "the compiler accepts every module of self/", and one root per
+  check("src/ has at least one module", modules.length > 0, `${modules.length} modules`)
+  // The property is "the compiler accepts every module of src/", and one root per
   // module proved it at the price of 58 process starts and 58 walks of the
   // module graph -- about a minute of every run. Named together they are one
   // walk and prove the same thing, so the batch is the fast path and the loop
@@ -6476,7 +6476,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // are legal (docs/wp22-arrow-functions.md).
   const out = path.join(buildDir, "self")
   fs.mkdirSync(out, { recursive: true })
-  // `self/compile.ts` is compiled under `--json`, which moves its report to
+  // `src/compile.ts` is compiled under `--json`, which moves its report to
   // stdout as one object per diagnostic: the performance ratchet below counts
   // that compile's warnings, so the count costs no compile of its own.
   const RATCHETED = "compile.ts"
@@ -6502,7 +6502,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // `batched` is the whole answer when it is true; when it is false one of
     // the groups failed and every module is compiled alone to find out which.
     const r = batched ? null : compileSelf([m])
-    check(`self/${m} compiles`, batched || r.status === 0, batched ? "" : `${r.stderr}${r.stdout}`)
+    check(`src/${m} compiles`, batched || r.status === 0, batched ? "" : `${r.stderr}${r.stdout}`)
   }
 
   // The performance ratchet. `std/` and `examples/` are held to zero warnings
@@ -6515,7 +6515,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // next warning in for free. Counted from `--json` by `code`, never from the
   // report, which stops printing at 20 (`.claude/testing.md`).
   if (ratchetedRun === null) {
-    check(`performance ratchet: self/${RATCHETED} was compiled, so its warnings can be counted`, false)
+    check(`performance ratchet: src/${RATCHETED} was compiled, so its warnings can be counted`, false)
   } else {
     const baselineFile = path.join(root, "tests", "perf-baseline.json")
     const baseline = JSON.parse(fs.readFileSync(baselineFile, "utf8")).counts
@@ -6558,23 +6558,23 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     }
     const total = warnings.length
     check(
-      `performance ratchet: self/${RATCHETED} has no performance warning past tests/perf-baseline.json (${total} today)`,
+      `performance ratchet: src/${RATCHETED} has no performance warning past tests/perf-baseline.json (${total} today)`,
       ratchetedRun.status === 0 && over.length === 0,
       ratchetedRun.status !== 0 ? `${ratchetedRun.stdout}${ratchetedRun.stderr}` : over.join("\n")
     )
     check(
-      `performance ratchet: tests/perf-baseline.json is lowered to self/${RATCHETED}'s count wherever the count fell`,
+      `performance ratchet: tests/perf-baseline.json is lowered to src/${RATCHETED}'s count wherever the count fell`,
       ratchetedRun.status === 0 && under.length === 0,
       `${under.join("\n")}\nA warning proven away is progress; the baseline comes down with it so it cannot come back.`
     )
   }
-  // Module constants are the reason `self/` can name its token kinds at all: if
+  // Module constants are the reason `src/` can name its token kinds at all: if
   // one ever became a global, every kind would cost a load on the lexer's hot path.
   const tokensLl = path.join(buildDir, "self", "tokens.ll")
   if (fs.existsSync(tokensLl)) {
     const ir = fs.readFileSync(tokensLl, "utf8")
     check(
-      "self/tokens.ts emits no global for its token kinds",
+      "src/tokens.ts emits no global for its token kinds",
       !/^@(?!\.str\.)/m.test(ir),
       ir
         .split("\n")
@@ -6584,15 +6584,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   }
 
   // The DWARF `producer` string is "nish <version>", and stage1 cannot read
-  // package.json to find the version, so it is a constant in `self/branding.ts`.
+  // package.json to find the version, so it is a constant in `src/branding.ts`.
   // This is what stops that constant going stale: a disagreement here is a
   // `--version` and a byte of every `-g` module that name the wrong release.
-  const brandingTs = path.join(root, "self", "branding.ts")
+  const brandingTs = path.join(root, "src", "branding.ts")
   if (fs.existsSync(brandingTs)) {
     const branding = fs.readFileSync(brandingTs, "utf8")
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
     check(
-      `self/branding.ts names the CLI and the version package.json does (nish ${pkg.version})`,
+      `src/branding.ts names the CLI and the version package.json does (nish ${pkg.version})`,
       branding.includes(`export const CLI: string = "nish"`) &&
         branding.includes(`export const VERSION: string = "${pkg.version}"`),
       branding
@@ -6602,9 +6602,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     )
   }
 
-  // stage1 cannot read `std/` to list it: `self/` has to compile under the last
+  // stage1 cannot read `std/` to list it: `src/` has to compile under the last
   // *released* compiler (the WP19 G2 gate), and `readdirSync` is newer than
-  // that release, so `self/std-modules.ts` carries the list as a literal while
+  // that release, so `src/std-modules.ts` carries the list as a literal while
   // stage0 reads the directory. This is what stops the literal going stale — a
   // disagreement is a diagnostic the two compilers word differently, which the
   // reject oracle would only catch if a case happened to trigger it.
@@ -6616,9 +6616,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       .map((f) => f.slice(0, -3))
       .sort()
       .join(", ")
-    const stage1 = fs.readFileSync(path.join(root, "self", "std-modules.ts"), "utf8")
+    const stage1 = fs.readFileSync(path.join(root, "src", "std-modules.ts"), "utf8")
     check(
-      `self/std-modules.ts lists the modules std/ actually has (${actual})`,
+      `src/std-modules.ts lists the modules std/ actually has (${actual})`,
       stage1.includes(`=> "${actual}"`),
       stage1
         .split("\n")
@@ -6631,7 +6631,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // and the gate that exists to catch exactly that listed seven paths and
     // none of them under `std/`. Naming the modules there fixes the case that
     // happened; deriving the list from the same directory the two above read
-    // is what stops the NEXT module shipping in `self/`'s literal and not in
+    // is what stops the NEXT module shipping in `src/`'s literal and not in
     // the tarball -- three lists that agree until one is edited is the defect
     // `.github/seed-targets.json` exists to prevent one level up.
     const releaseYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
@@ -6666,7 +6666,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   })
   const summary = oracle.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/lexer.ts agrees with the typescript scanner (${summary})`,
+    `src/lexer.ts agrees with the typescript scanner (${summary})`,
     oracle.status === 0,
     `${oracle.stdout}${oracle.stderr}`
   )
@@ -6679,12 +6679,12 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     cwd: root,
     encoding: "utf8",
   })
-  if (check("self/dump-tokens.ts links", built.status === 0, built.stderr)) {
+  if (check("src/dump-tokens.ts links", built.status === 0, built.stderr)) {
     const errorsTs = path.join(root, "tests", "lexer", "errors.ts")
     const run = spawnSync(dumper, [errorsTs], { cwd: root, encoding: "utf8" })
     const want = fs.readFileSync(path.join(root, "tests", "lexer", "errors.out"), "utf8")
     check(
-      "self/lexer.ts stops at a lexical error with its message and position",
+      "src/lexer.ts stops at a lexical error with its message and position",
       run.stdout === want && run.status === 1,
       `exit ${run.status}\n${run.stdout}`
     )
@@ -6700,7 +6700,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   })
   const parserSummary = parserOracle.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/parser.ts agrees with the typescript parser (${parserSummary})`,
+    `src/parser.ts agrees with the typescript parser (${parserSummary})`,
     parserOracle.status === 0,
     `${parserOracle.stdout}${parserOracle.stderr}`
   )
@@ -6713,14 +6713,14 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     cwd: root,
     encoding: "utf8",
   })
-  if (check("self/dump-ast.ts links", builtAst.status === 0, builtAst.stderr)) {
+  if (check("src/dump-ast.ts links", builtAst.status === 0, builtAst.stderr)) {
     // Relative, because the diagnostics quote the path they were given and
     // the golden cannot hold this machine's checkout directory.
     const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" })
     const wantOut = fs.readFileSync(path.join(root, "tests", "parser", "recovery.out"), "utf8")
     const wantErr = fs.readFileSync(path.join(root, "tests", "parser", "recovery.err"), "utf8")
     check(
-      "self/parser.ts reports a syntax error and keeps parsing what follows",
+      "src/parser.ts reports a syntax error and keeps parsing what follows",
       recovery.stdout === wantOut && recovery.stderr === wantErr && recovery.status === 1,
       `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
     )
@@ -6743,7 +6743,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   )
   const supportSummary = supportOracle.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/ support library agrees with node and stage0's recorded answers (${supportSummary})`,
+    `src/ support library agrees with node and stage0's recorded answers (${supportSummary})`,
     supportOracle.status === 0,
     `${supportOracle.stdout}${supportOracle.stderr}`
   )
@@ -6768,7 +6768,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   )
   const goldensSummary = goldens.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
+    `src/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
     goldens.status === 0,
     `${goldens.stdout}${goldens.stderr}`
   )
@@ -6776,7 +6776,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // The other half of milestone S3: refusing the programs it should, for the
   // reason each case names. A dump comparison cannot see that, so every
   // `reject_*` case and every `tests/link/` negative is run through
-  // `self/dump-checked.ts` and its own expected fragments are required of the
+  // `src/dump-checked.ts` and its own expected fragments are required of the
   // output -- the assertion section A makes of the driver, made of the checker
   // on its own.
   const rejectOracle = spawnSync(
@@ -6790,7 +6790,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   )
   const rejectSummary = rejectOracle.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/ refuses every negative case with the message it pins (${rejectSummary})`,
+    `src/ refuses every negative case with the message it pins (${rejectSummary})`,
     rejectOracle.status === 0,
     `${rejectOracle.stdout}${rejectOracle.stderr}`
   )
@@ -6934,9 +6934,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     }
   }
 
-  // S5, and the claim the work package exists for: `self/` compiles `self/`.
-  // stage1 is `self/` built by the seed, stage2 is `self/` built by stage1,
-  // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
+  // S5, and the claim the work package exists for: `src/` compiles `src/`.
+  // stage1 is `src/` built by the seed, stage2 is `src/` built by stage1,
+  // stage3 is `src/` built by stage2. `IR(stage1) == IR(stage2)` is the
   // fixed point -- nothing about the seed leaks into the result any more --
   // and stage3 must be byte-identical to stage2 so the binaries are compared
   // as well as the text. Three links, so it is the slowest check here.
@@ -6951,7 +6951,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   )
   const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? ""
   check(
-    `self/ compiles self/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
+    `src/ compiles src/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
     bootstrap.status === 0,
     `${bootstrap.stdout}${bootstrap.stderr}`
   )
@@ -6989,7 +6989,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
   // A seed guaranteed to differ: the seed this run was built with, wrapped so
   // that it emits `--unchecked-indexing`, which removes the bounds checks
-  // from the IR it writes for `self/` -- the
+  // from the IR it writes for `src/` -- the
   // same shape of difference a codegen improvement makes, and the shape that
   // broke this run when the first one landed. A released seed differs from
   // HEAD already, but by however much codegen moved since that release, which
@@ -7139,7 +7139,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
     )
 
-    // stage1 answers `--version` itself: `self/branding.ts` carries the
+    // stage1 answers `--version` itself: `src/branding.ts` carries the
     // version as a constant because stage1 cannot read `package.json`, so
     // this is what catches the two drifting apart at the next release bump.
     const ourVersion = spawnSync(compiler, ["--version"], { cwd: root, encoding: "utf8" })
@@ -7335,7 +7335,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
     // `--emit-checked` through the driver, rather than through the
     // `dump_checked` entry `tests/self/goldens.js` spawns: the same text has
-    // to come out of both, which is why one `self/dump.ts` writes it for
+    // to come out of both, which is why one `src/dump.ts` writes it for
     // both, and the entry's is the one the goldens hold. A whole program is
     // dumped module by module, the entry named as one.
     const dumpCase = path.join("examples", "multi", "main.ts")
@@ -7343,7 +7343,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     const dumpEntry = path.join(shipDir, "dump_checked")
     const dumpBuilt = spawnSync(
       compiler,
-      ["self/dump-checked.ts", "--link", dumpEntry, "--profile", "debug"],
+      ["src/dump-checked.ts", "--link", dumpEntry, "--profile", "debug"],
       {
         cwd: root,
         encoding: "utf8",
@@ -7355,7 +7355,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         : {
             status: dumpBuilt.status,
             stdout: "",
-            stderr: `could not link self/dump-checked.ts:\n${dumpBuilt.stderr}`,
+            stderr: `could not link src/dump-checked.ts:\n${dumpBuilt.stderr}`,
           }
     check(
       "the self-hosted compiler: --emit-checked dumps a whole program as the dump entry does",
@@ -7578,7 +7578,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     )
 
     // `--target host`: the machine answers, through `process.platform` and
-    // `process.arch`, and `self/target.ts` composes the triple from them. The
+    // `process.arch`, and `src/target.ts` composes the triple from them. The
     // module it writes has to be the one naming that triple outright writes --
     // the whole module rather than the triple line, which keeps the check
     // honest about the layout string too. A host with no triple of its own is
@@ -7612,7 +7612,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // `--emit-ast`, the last flag that was stage0's by name (WP19 R1, §2A).
     // What it prints is deliberately *not* stage0's output: stage0 dumps the
     // `typescript` package's node names and 1-based line:column spans, and
-    // this dumps the flattened vocabulary of `self/nodes.ts` with byte
+    // this dumps the flattened vocabulary of `src/nodes.ts` with byte
     // offsets, because that is the tree this compiler actually has. So there
     // is no oracle between the two — there is a golden per compiler, over
     // the same input file, and this is stage1's. The check is that the flag
@@ -7676,7 +7676,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // Node's `Map`, and the three `Map` measurements of docs/wp32-map.md §10 to print
 // what their Node twins print, lines of that same output. Those three are held
 // to the performance gate's zero warnings, and map-vs-stringmap's copy of
-// `StringMap` to being a verbatim part of self/map.ts. Also: `--target host` pins a module to a
+// `StringMap` to being a verbatim part of src/map.ts. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
@@ -7725,19 +7725,19 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     )
   }
   // map-vs-stringmap.ts cannot import the compiler, so it carries a copy of
-  // StringMap between two rules; the copy must still be self/map.ts's code.
+  // StringMap between two rules; the copy must still be src/map.ts's code.
   const vsSource = fs.readFileSync(path.join(root, "bench", "map-vs-stringmap.ts"), "utf8")
   const copied = vsSource.match(
-    /\/\/ ---- copy of self\/map\.ts ----\n([\s\S]*?)\/\/ ---- end of the copy of self\/map\.ts ----/
+    /\/\/ ---- copy of src\/map\.ts ----\n([\s\S]*?)\/\/ ---- end of the copy of src\/map\.ts ----/
   )
   check(
-    "bench: map-vs-stringmap.ts's copy of StringMap is a verbatim part of self/map.ts",
+    "bench: map-vs-stringmap.ts's copy of StringMap is a verbatim part of src/map.ts",
     copied !== null &&
       copied[1].includes("export class StringMap") &&
-      fs.readFileSync(path.join(root, "self", "map.ts"), "utf8").includes(copied[1]),
+      fs.readFileSync(path.join(root, "src", "map.ts"), "utf8").includes(copied[1]),
     copied === null
-      ? "the two `copy of self/map.ts` rules are missing"
-      : "copy the block from self/map.ts again"
+      ? "the two `copy of src/map.ts` rules are missing"
+      : "copy the block from src/map.ts again"
   )
   const targetLl = path.join(buildDir, "opt_target_triple.ll")
   if (has("opt") && fs.existsSync(targetLl)) {
@@ -7901,7 +7901,7 @@ if (!only || "instructions".includes(only)) {
 // ---- WP12: exit codes --------------------------------------------------------------
 // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
 // 70 internal compiler error. Each failure mode is driven from outside the compiler:
-// NISH_SIMULATE_ICE=1 is the test hook for the ICE path (`self/ice.ts`), an empty PATH stands in
+// NISH_SIMULATE_ICE=1 is the test hook for the ICE path (`src/ice.ts`), an empty PATH stands in
 // for a machine without clang, and CC=<stub> makes scripts/build.sh fail after the IR
 // was written.
 if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
@@ -8381,7 +8381,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     return { ok: r.status === 0, output: `${r.stdout}${r.stderr}` }
   }
 
-  const own = typeCheck("self", [])
+  const own = typeCheck("src", [])
   check("runtime/nish.d.ts type-checks under tsc --strict", own.ok, own.output)
 
   const resultCases = fs
@@ -8420,7 +8420,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     [
       "arr_struct_push_copy.ts",
       // The `pop` divergence the declarations already document (the note at
-      // runtime/nish.d.ts, and the `self/` check below, which expects the same
+      // runtime/nish.d.ts, and the `src/` check below, which expects the same
       // error): `a.pop()` is `T` here because an empty array panics, and
       // `T | undefined` in lib.es5, so reading a field of the popped element
       // is TS18048 and nothing this side can say changes that. The case reads
@@ -8443,7 +8443,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   )
 
   // And on the largest Nish program there is: the compiler itself.
-  const selfDir = path.join(root, "self")
+  const selfDir = path.join(root, "src")
   const selfModules = fs
     .readdirSync(selfDir)
     .filter((f) => f.endsWith(".ts"))
@@ -8451,12 +8451,12 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const selfCheck = typeCheck("stage1", selfModules)
   // `a.pop()` is `T` here and `T | undefined` in lib.es5 (the foot of
   // runtime/nish.d.ts says why it stays that way), so the one call in
-  // `self/checker.ts` that pops without a null check carries a
+  // `src/checker.ts` that pops without a null check carries a
   // `@ts-expect-error` -- which is also what `npm run check` holds it to: if
   // the error goes away, the unused directive is an error of its own. Anything
   // tsc reports here is a hole in the declarations.
   check(
-    `tsc accepts self/ against the ambient declarations, the documented \`pop\` divergence expected in place (${selfModules.length} modules)`,
+    `tsc accepts src/ against the ambient declarations, the documented \`pop\` divergence expected in place (${selfModules.length} modules)`,
     selfCheck.ok,
     selfCheck.output
   )
@@ -8936,7 +8936,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     )
 
     for (const f of [
-      "self/compile.ts",
+      "src/compile.ts",
       "tests/run.js",
       "examples/add.ts",
       ".github/workflows/ci.yml",
@@ -9018,7 +9018,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // broke that -- the refusal was prose on stderr on every path -- and it is
       // reachable on a fully supported platform, because this is the state
       // `--no-optional` or a lockfile without the optional entries installs into. The
-      // shape is `self/compile.ts`'s own for the same code: the object on stdout,
+      // shape is `src/compile.ts`'s own for the same code: the object on stdout,
       // nothing on stderr, so a tool reading stdout gets objects and nothing else.
       const refusedJson = spawnSync(bin, ["--json", "hello.ts"], { cwd: work, encoding: "utf8" })
       let refusedObj = null
@@ -9367,7 +9367,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 // ---- WP12: the release train's version bump ------------------------------------------
 // `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
 // package-lock.json's two copies of it, every platform package pinned in
-// optionalDependencies, and VERSION in self/branding.ts. Nothing ran it. It is a
+// optionalDependencies, and VERSION in src/branding.ts. Nothing ran it. It is a
 // workflow step, so it executes exactly once per merge to main, in a place where a
 // failure stops the release train rather than a pull request -- and the person who finds
 // out is whoever wanted to cut a release.
@@ -9398,11 +9398,11 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       .join("\n")
     const work = path.join(buildDir, "release-pr-bump")
     fs.rmSync(work, { recursive: true, force: true })
-    fs.mkdirSync(path.join(work, "self"), { recursive: true })
+    fs.mkdirSync(path.join(work, "src"), { recursive: true })
     for (const f of ["package.json", "package-lock.json"]) {
       fs.copyFileSync(path.join(root, f), path.join(work, f))
     }
-    fs.copyFileSync(path.join(root, "self", "branding.ts"), path.join(work, "self", "branding.ts"))
+    fs.copyFileSync(path.join(root, "src", "branding.ts"), path.join(work, "src", "branding.ts"))
     const next = "9.9.9"
     const ran = spawnSync("bash", ["-c", `set -e\nnext=${next}\n${bump}\n`], { cwd: work, encoding: "utf8" })
     check(
@@ -9448,9 +9448,9 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
           ? stale.join("\n")
           : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       )
-      const branding = fs.readFileSync(path.join(work, "self", "branding.ts"), "utf8")
+      const branding = fs.readFileSync(path.join(work, "src", "branding.ts"), "utf8")
       check(
-        "release-pr: the bump moves VERSION in self/branding.ts, which tests/run.js pins",
+        "release-pr: the bump moves VERSION in src/branding.ts, which tests/run.js pins",
         new RegExp(`VERSION: string = "${next}"`).test(branding),
         (branding.match(/VERSION: string = "[^"]*"/) ?? ["not found"])[0]
       )
@@ -9497,7 +9497,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   /**
    * The triple the compiler under test writes for `--target <spec>`, or null when
    * it refuses the spelling. Asked of the compiler rather than read out of
-   * `self/target.ts`, so an alias it resolves counts as the canonical triple it
+   * `src/target.ts`, so an alias it resolves counts as the canonical triple it
    * resolves to and nothing else does.
    */
   const resolveTarget = (spec) => {
@@ -9742,7 +9742,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       // that is not about `--link`: `std/` is resolved against the same root, so a
       // wrongly-resolved one fails before the link with ``Module `nish/text` is not part
       // of the standard library``. Both link checks were watched failing with the fix
-      // reverted out of `self/compile.ts` and stage1 rebuilt, and the released 0.5.0
+      // reverted out of `src/compile.ts` and stage1 rebuilt, and the released 0.5.0
       // compiler reproduces the same two failures by hand.
       const symlinkInstall = (dir, target) => {
         fs.rmSync(dir, { recursive: true, force: true })
@@ -11422,7 +11422,7 @@ if (!only || "differential".includes(only) || "goldens".includes(only)) {
 // would not notice, because every golden is written in one spelling or the other and each
 // would go on matching itself.
 //
-// The same pair pins `scripts/arrowify.mjs`, the codemod stage C's `self/` rewrite runs.
+// The same pair pins `scripts/arrowify.mjs`, the codemod stage C's `src/` rewrite runs.
 // `arrow.ts` is `declared.ts` written out by hand, so the codemod owes the two fixtures
 // the same relationship a reader sees between them: everything below the header comment,
 // character for character. That is a stronger statement about the tool than any IR
@@ -11497,7 +11497,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // and `export default const f`, which is not a sentence. A codemod that turns a
   // refused program into a compiling one is the worst thing one of these can do, because
   // every gate downstream reads the program it was handed and not the program somebody
-  // wrote. These three cases are the shapes that say so, and none of them is in `self/`,
+  // wrote. These three cases are the shapes that say so, and none of them is in `src/`,
   // which is why the rewrite that matters would never have found them.
   // The claim is about the one declaration, not about the whole file -- `reject_ffi_body`
   // also has an ordinary `main` the codemod is right to convert -- so each row names the
@@ -11629,7 +11629,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // resolves to, so following it while copying would compile a tree the repository
   // does not have. `copyFileSync` does not even get that far on a link to a
   // directory: it throws `EISDIR`, which took the whole sweep down the first time
-  // `self/` was verified against a tree that had one.
+  // `src/` was verified against a tree that had one.
   const linkRoot = path.join(root, "build", "test", "wp22-symlink")
   fs.rmSync(linkRoot, { recursive: true, force: true })
   fs.mkdirSync(path.join(linkRoot, "src", "pkg"), { recursive: true })
@@ -11720,7 +11720,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     `reported as: ${overload.skipped[0]?.reason ?? "nothing at all"}`
   )
 
-  // `scripts/arrow-verify.mjs` is what the 721-declaration rewrite of `self/` will be
+  // `scripts/arrow-verify.mjs` is what the 721-declaration rewrite of `src/` will be
   // done on the say-so of, so the two places it could report success over ground it did
   // not check are pinned here rather than left to the sweep that takes half an hour.
   //
@@ -11799,7 +11799,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
     // out of the copy for the before compile -- and reading it anyway ended the sweep in
     // a stack trace at the exact moment §8b's recipe needs a verdict, which is what
-    // Phase 2 splitting or adding a `self/` module looks like.
+    // Phase 2 splitting or adding a `src/` module looks like.
     [
       "a subject added since the revision",
       side({ absent: true, status: null }),
@@ -11819,7 +11819,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     // A compile that succeeded still has a diagnostic surface, and it was read on
     // neither side: a `performance:` warning could move, change or disappear under a
     // rewrite and the sweep reported `0 difference(s)`. 76 corpus programs warn, most of
-    // `self/` among them, and `--concise` moves every warning below a collapsed
+    // `src/` among them, and `--concise` moves every warning below a collapsed
     // declaration -- so the silence was pointed straight at the migration.
     [
       "a warning that only moved",
@@ -11854,7 +11854,7 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     "WP22: the verifier counts a program as evidence only when the change reached it",
     sitsOnChange("tests/link/std_testing/main.ts", new Set(["std/testing.ts"])) &&
       sitsOnChange("tests/link/std_testing/main.ts", new Set(["tests/link/std_testing/main.ts"])) &&
-      !sitsOnChange("tests/link/std_testing/main.ts", new Set(["self/lexer.ts"])),
+      !sitsOnChange("tests/link/std_testing/main.ts", new Set(["src/lexer.ts"])),
     "an imported module counts, an unrelated file does not"
   )
 

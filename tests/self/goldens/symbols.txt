@@ -1,4 +1,4 @@
-# `self/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops.
+# `src/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops.
 # Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
 # WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
 declare a 1

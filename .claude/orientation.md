@@ -9,7 +9,7 @@ One compiler, written in the language it compiles.
 
 | | Source | Written in | Built by | Role |
 | --- | --- | --- | --- | --- |
-| **the compiler** | `self/` | Nish (the Nish-0 subset of the language itself) | the **seed**: the last released `nish` | the only implementation; it compiles itself to a fixed point |
+| **the compiler** | `src/` | Nish (the Nish-0 subset of the language itself) | the **seed**: the last released `nish` | the only implementation; it compiles itself to a fixed point |
 
 `nish` compiles a strictly static subset of TypeScript to textual LLVM IR.
 The pipeline is lex → parse → validate (Phase 0) → check (signatures, then
@@ -19,26 +19,27 @@ The seed works the way rustc's and Go's do: the previous release builds
 stage1, stage1 builds stage2, and stage3 must be byte-identical to stage2.
 `scripts/fetch-seed.sh` downloads the last release into `build/seed/`, and
 `NISH_BOOTSTRAP=<path>` names another. Until WP19 R6 a second implementation in
-TypeScript (`src/`, "stage0", built by `tsc` into `dist/`) was the seed and the
+TypeScript ("stage0", built by `tsc` into `dist/`; it lived in its own `src/`
+while this compiler was in `self/`) was the seed and the
 oracle; it is deleted, and `docs/wp19-stage0-retirement.md` records what
 replaced each thing it did. Read [`selfhost.md`](./selfhost.md) next: every
-change to the compiler is a change to `self/`.
+change to the compiler is a change to `src/`.
 
 ## The seven things that are always true
 
 1. **The checker records, the emitter reads.** Side tables carry every fact the
    emitter needs; the emitter never re-derives a type and never reports a user
-   error (an unexpected node there is exit 70). `self/program.ts`.
+   error (an unexpected node there is exit 70). `src/program.ts`.
 2. **Dispatch, not `if` chains.** A central `switch` on the node kind in each
    layer (`docs/wp14-selfhost.md` §3a D2). A construct is an entry in each
    layer, mirrored.
-3. **No attribute without a proof.** `self/attributes.ts` may only emit an LLVM
+3. **No attribute without a proof.** `src/attributes.ts` may only emit an LLVM
    attribute the whole-program fixpoint justifies, with the reason written
    beside it.
 4. **Layout changes are two-sided.** A struct layout lives in
-   `self/runtime.ts` *and* `runtime/runtime.c` / `runtime/nish.h`; they change
+   `src/runtime.ts` *and* `runtime/runtime.c` / `runtime/nish.h`; they change
    together and `tests/run.js` fails when they disagree.
-5. **The name lives in one file.** `self/branding.ts` is the only source file
+5. **The name lives in one file.** `src/branding.ts` is the only source file
    that spells the project's name; every string the compiler prints builds it
    from `LANGUAGE` / `CLI` there. The `nish_` prefix on the runtime's C symbols
    is ABI, not branding: it is frozen and a rename does not follow it.
@@ -48,7 +49,7 @@ change to the compiler is a change to `self/`.
    with exit 0 (a usage *error* is stderr and exit 2); `--json` prints one flat
    object per diagnostic whose `code` is a stable rule identifier, and every
    failure — toolchain and internal errors included — is one of those objects.
-   The code registry `self/codes.ts` is kept by hand: a new code takes the next
+   The code registry `src/codes.ts` is kept by hand: a new code takes the next
    free number in its band and no number is ever moved or reused, and
    `node scripts/gen-diagnostic-codes.mjs --check` (run by `npm test`) checks
    its format and that every code is unique.
@@ -59,7 +60,7 @@ change to the compiler is a change to `self/`.
 ## Where the code is
 
 ```
-self/               the compiler, in Nish — see .claude/selfhost.md
+src/               the compiler, in Nish — see .claude/selfhost.md
   compile.ts        CLI: flags, output planning, exit codes, `nish run`
   run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
@@ -86,7 +87,7 @@ docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 npm ci                      # install (typescript and biome are dev dependencies)
 bash scripts/fetch-seed.sh  # the last release into build/seed/ (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
-npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
+npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
 npm test                    # the whole suite; builds its own stage1 from the seed
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
@@ -105,14 +106,14 @@ the tools it could not find. Read the skip count, not just the failure count.
 In a fresh container `.claude/hooks/session-start.sh` installs the toolchain and
 fetches the seed so this does not happen quietly.
 
-`npm run check` is `tsc --noEmit`: it type-checks `self/`, `std/` and
+`npm run check` is `tsc --noEmit`: it type-checks `src/`, `std/` and
 `tests/nish/` as TypeScript against `runtime/nish.d.ts`, the declarations of
 the language's builtins. That catches
 a type error in the compiler's source before the seed is asked to build it, but
 it is not Nish's checker — a construct TypeScript accepts and Nish refuses
-passes it. What clears a `self/` change is the compiler building itself:
+passes it. What clears a `src/` change is the compiler building itself:
 `npm test` builds stage1 with the seed, compiles every golden with it, and
-takes `self/` to the fixed point with `scripts/bootstrap.sh --verify`.
+takes `src/` to the fixed point with `scripts/bootstrap.sh --verify`.
 [`selfhost.md`](./selfhost.md) is the rest of that story.
 
 ## Definition of done
@@ -124,7 +125,7 @@ takes `self/` to the fixed point with `scripts/bootstrap.sh --verify`.
 
 | Question | Document |
 | --- | --- |
-| I am working on `self/` | [`selfhost.md`](./selfhost.md) |
+| I am working on `src/` | [`selfhost.md`](./selfhost.md) |
 | Where did stage0 go, and what replaced its oracles? | `docs/wp19-stage0-retirement.md` |
 | How do I add a construct? | `docs/ARCHITECTURE.md` → "How to add a construct" |
 | What does the language allow? | `docs/LANGUAGE.md` |

@@ -84,7 +84,7 @@ Those files are listed there rather than here, and the same check holds them.
 These are named here so that nobody has to audit them again. They need no
 notice, and each is marked public domain where its constants appear:
 
-- FNV-1a (`self/map.ts`, `self/emit-map.ts`, `std/collections.ts`).
-- MurmurHash3's `fmix32` and `fmix64` finalisers (`self/emit-map.ts`,
+- FNV-1a (`src/map.ts`, `src/emit-map.ts`, `std/collections.ts`).
+- MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
   `std/collections.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).

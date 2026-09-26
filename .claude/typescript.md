@@ -7,7 +7,7 @@ without over-engineering.
 Two kinds of code live in this repo, and the rules differ because what runs
 them differs:
 
-- **Nish programs** — the compiler itself (`self/`), `std/`, `tests/nish/`,
+- **Nish programs** — the compiler itself (`src/`), `std/`, `tests/nish/`,
   `examples/`, `tests/cases/`, `tests/link/`, `tests/layout/`,
   `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`, and every
   snippet in `docs/` and `README.md`. These are compiled by `nish`, and the
@@ -23,7 +23,7 @@ them differs:
   it tests and the dynamic corners are the ones a reader can point at.
 
 The compiler was once in the second group: until WP19 R6 a TypeScript
-implementation in stage0's `src/` ran under Node beside `self/`. It is deleted, and the
+implementation, stage0, ran under Node beside it. It is deleted, and the
 compiler is an Nish program like any other — held, on top of the rules below,
 to the smaller subset `.claude/selfhost.md` calls Nish-0.
 
@@ -113,22 +113,22 @@ comment at the top and put the expected fragment in the `.err` file; a
 `reject_*` case that also fails for a second, accidental reason is a weaker
 test than it looks.
 
-## Writing the compiler (`self/`)
+## Writing the compiler (`src/`)
 
-`self/` is an Nish program, so everything in the section above holds, and it is
+`src/` is an Nish program, so everything in the section above holds, and it is
 written in Nish-0 on top of that (`.claude/selfhost.md`): no closures, no `Map`,
 no `try`, one `Node` class, side tables as arrays indexed by `Node.id`. What the
 compiler adds as house rules:
 
 - **The checker records, the emitter reads.** The checker writes the side
-  tables in `self/program.ts`; the emitter reads them, never re-derives a type,
+  tables in `src/program.ts`; the emitter reads them, never re-derives a type,
   and never reports a user-facing error (an unexpected node there is an
   internal error, exit 70).
 - **Dispatch by a central `switch` on the node kind, not by `if` chains**
   across constructs. A new construct is a new case in each layer, mirrored.
 - **A module owns a construct family**, and the family's checker and emitter
   halves are named for each other (`arrays.ts` / `emit-arrays.ts`).
-- **The rolling freeze.** `self/` is built by the last release, so it may only
+- **The rolling freeze.** `src/` is built by the last release, so it may only
   use what that release compiles, however much the tree it sits in can.
 
 ## Writing the tooling (JavaScript)
@@ -178,7 +178,7 @@ linted. What still differs:
   that.
 - **`interface` stays** in an Nish program, because an Nish struct is a `class`
   or an `interface` and a `type` alias only renames a type that exists.
-- **A module owns a construct family, not one function.** `self/structs.ts`
+- **A module owns a construct family, not one function.** `src/structs.ts`
   holds the class and interface rules because they share the switch they are
   reached through and the side tables they write. Splitting them one per file
   would scatter a family across a directory.

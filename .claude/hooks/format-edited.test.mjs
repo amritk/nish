@@ -27,7 +27,7 @@ const check = (label, ok, detail = "") => {
 }
 
 const cases = [
-  ["a source file in the tree", edit(`${ROOT}/self/lexer.ts`), "self/lexer.ts"],
+  ["a source file in the tree", edit(`${ROOT}/src/lexer.ts`), "src/lexer.ts"],
   ["a relative path", edit("scripts/build.sh.mjs"), "scripts/build.sh.mjs"],
   ["JSON", edit(`${ROOT}/biome.json`), "biome.json"],
   ["Markdown, which Biome does not read", edit(`${ROOT}/README.md`), null],

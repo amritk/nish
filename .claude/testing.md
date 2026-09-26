@@ -8,7 +8,7 @@ typical use cases and edge cases.
 
 There is no unit-test framework here — no Vitest, no `bun test`, no Jest. The
 suite is `tests/run.js`, a plain Node script that `npm test` runs. It first
-builds the compiler under test from `self/` with the seed and links it at
+builds the compiler under test from `src/` with the seed and links it at
 `build/nish-test`, then prints one `PASS` / `FAIL` line per check. Almost every
 test is **data, not code**: a source file next to the output it must produce.
 
@@ -72,7 +72,7 @@ test is **data, not code**: a source file next to the output it must produce.
   input path is handed over exactly as written: `source_filename` records it
   and `-g` puts it in a `DIFile`, so resolving or relativising it would move
   every golden (`docs/wp19-stage0-retirement.md` §A3). The binary has to live
-  under the repository (`build/`), because `self/compile.ts` finds
+  under the repository (`build/`), because `src/compile.ts` finds
   `scripts/build.sh` and `std/` by climbing from its own path.
 - **The C a case links against is built once per run, not once per case.**
   `runtime/runtime.c`, `runtime/runtime-os.c` and `tests/driver.c` become object
@@ -117,12 +117,12 @@ PR adding a construct is not finished without all of them:
 4. `.args` for any flag the case depends on.
 5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry
    (`docs/cookbook/regen.sh`).
-6. One implementation, in `self/`. There is no second compiler to compare it
+6. One implementation, in `src/`. There is no second compiler to compare it
    with, so the golden and the native round trip are the proof, and
    `tests/nish-cmp.js` — the last release against this tree — reports every
    corpus program whose output the change moves, and fails unless its `DECLARED`
    list names the difference (the header of `tests/nish-cmp.js` says what an
-   entry carries). `self/` may not use the construct in its own source until the
+   entry carries). `src/` may not use the construct in its own source until the
    next release (the rolling freeze, `.claude/selfhost.md`).
 7. A case that *reaches* each new wording, not only a code for it.
    `tests/diagnostic-coverage.js` compiles the negatives, the `perf_*`
@@ -131,7 +131,7 @@ PR adding a construct is not finished without all of them:
    `tests/wordings/unreachable.txt` with a reason. A wording no case reaches is
    proved by nothing at all (`docs/wp19-stage0-retirement.md` §2B).
 8. A diagnostic code, if the construct can be refused: add the message's
-   fragment to `self/codes.ts` by hand with the next free number in its band.
+   fragment to `src/codes.ts` by hand with the next free number in its band.
    A number is never moved or reused, and `node scripts/gen-diagnostic-codes.mjs
    --check`, which `npm test` runs, fails on a duplicate or a malformed entry.
    A message built entirely out of interpolations gets `NL0000`; giving it a
@@ -147,7 +147,7 @@ of `clang -Oz -c runtime/runtime.c` summed, and the same for
 `runtime/runtime-os.c`, which is neither file's source size and neither is
 `size`'s text column; they are separate so that a new syscall wrapper cannot
 move the core's ceiling — the runtime symbol table agreeing across
-`self/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
+`src/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
 `cf_sum_loop`) pin properties that have been broken before. When one fails, the
 change is what is wrong, not the test. Never delete a guard, and never move a
 number to turn a red line green; a budget is raised only deliberately, by a
@@ -179,9 +179,9 @@ gated the day it lands, with no list to edit.
   `NL2008`). A refusal for any other code fails, and so does a listed program
   that starts compiling, until it comes off the list and the gate holds it.
 
-**`self/` is ratcheted rather than zeroed**, because the compiler's own source
+**`src/` is ratcheted rather than zeroed**, because the compiler's own source
 still carries warnings. The self-hosting section already compiles
-`self/compile.ts` alone with the compiler under test; it does so under
+`src/compile.ts` alone with the compiler under test; it does so under
 `--json`, and the ratchet counts that compile's warnings — no compile of its
 own — against `tests/perf-baseline.json`, which holds the allowed count per
 file and per code. Two checks read it:
@@ -306,8 +306,8 @@ and the version it expects from `--version` out of `package.json` with the same
 `jsonField`, so the expectation cannot drift from the release. Unlike the golden
 runner it runs in full on every `npm test`, because it spawns eighteen compilers
 rather than four hundred. The exit-70 checks drive the `NISH_SIMULATE_ICE` hook
-in `self/ice.ts`, which makes the compiler take the path a broken invariant
-takes and print [`self/ice.ts`](../self/ice.ts)'s report; they are counted
+in `src/ice.ts`, which makes the compiler take the path a broken invariant
+takes and print [`src/ice.ts`](../src/ice.ts)'s report; they are counted
 skips against a compiler that has no hook.
 
 ## Style & Best Practices
@@ -381,16 +381,16 @@ the run you intend to quote.
 
 **Count from the machine-readable form, or count the thing itself; never a line
 that mentions it.** The human-readable diagnostic report is capped:
-`DiagnosticSink.format` / `formatWarnings` in `self/diagnostics.ts` print at
-most 20, the cap `self/compile.ts` passes in, then `...and N more performance
+`DiagnosticSink.format` / `formatWarnings` in `src/diagnostics.ts` print at
+most 20, the cap `src/compile.ts` passes in, then `...and N more performance
 warnings`, then the total. The cap is the class's rule rather than an accident
 of the printer — `docs/LANGUAGE.md` states it for the warnings and
 `docs/wp10-ci.md` for the errors — and what follows from it is that a `grep -c`
 over the report answers 20 and keeps answering 20. Over the 60 modules of
-`self/` that do not declare `main`:
+`src/` that do not declare `main`:
 
 ```bash
-mods=$(for f in self/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)
+mods=$(for f in src/*.ts; do grep -qE '^export (function main\b|const main\s*=)' "$f" || echo "$f"; done)
 build/nish $mods -o build/probe/ 2>&1 | grep -c "performance:"    # 20, the cap
 build/nish $mods -o build/probe/ --json |
   grep -c '"severity":"performance"'                                      # 67, the answer
@@ -399,7 +399,7 @@ build/nish $mods -o build/probe/ --json |
 The report's last line says `67 performance warnings`, and `--json` breaks those
 67 down as NL9007 62, NL9002 3, NL9003 2. A count taken from the report is a
 count of the 20 lines it printed, and those 20 hold one of NL9002's three: a
-finding that the string-concatenation rule had stopped firing over `self/` came
+finding that the string-concatenation rule had stopped firing over `src/` came
 out of reading the 20 as the total, and was withdrawn.
 
 The same mistake in other clothes is counting IR intrinsics by the lines that
