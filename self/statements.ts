@@ -77,7 +77,7 @@ const terminatorName = (stmt: Node): string => {
 }
 
 /** A statement list in its own scope; true when the list terminates the path. */
-export const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean =>
+const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean =>
   checkStatements(ctx, block.children, scope.child())
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
@@ -118,7 +118,7 @@ export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope):
   return terminator !== null
 }
 
-export const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // This statement has been refused already: stage0's `throw` would have left
   // it by now and reported nothing further (`context.ts`, `errored`).
   // Answering "does not fall through" would invent a terminator, so this
@@ -198,7 +198,7 @@ export const checkReturnValue = (ctx: CheckContext, value: Node, scope: Scope): 
 }
 
 /** Each `let`/`const` of a list, declared in `scope`. Shared with a `for` initializer. */
-export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
+const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void => {
   const mutable = (list.flags & FLAG_CONST) === 0
   for (const decl of list.children[0].children) {
     const name = decl.children[0].text

@@ -98,7 +98,7 @@ export const intOpcode = (emitter: Emitter, opcode: string, type: i32): string =
  * means on a signed type. Anything absent (`add`, `sub`, `mul`, `icmp eq`,
  * `icmp ne`, the bitwise ops) is bit-identical for both signednesses.
  */
-export const signedOpcode = (opcode: string, type: i32): string => {
+const signedOpcode = (opcode: string, type: i32): string => {
   if (!isUnsigned(type)) {
     return opcode
   }
@@ -211,7 +211,7 @@ const integerOpcode = (op: string, json: boolean): string => {
 }
 
 /** The floating-point opcode for the same operator. */
-export const floatOpcode = (op: string, json: boolean): string => {
+const floatOpcode = (op: string, json: boolean): string => {
   if (op === "+") {
     return "fadd"
   }
@@ -491,7 +491,7 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
 }
 
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
-export const withoutEquals = (op: string): string => op.substring(0, op.length - 1)
+const withoutEquals = (op: string): string => op.substring(0, op.length - 1)
 
 /** The integer opcode of a compound arithmetic assignment, in its signed spelling. */
 export const compoundIntegerOpcode = (op: string, json: boolean): string =>

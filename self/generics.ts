@@ -137,11 +137,7 @@ export const isCollectionTemplate = (template: StructTemplateInfo): boolean =>
  * that needs one. A value is stored as it is, so it is anything but `void` and
  * an interface, whose record would be copied in rather than shared.
  */
-export const collectionArgumentRefusal = (
-  ctx: CheckContext,
-  template: StructTemplateInfo,
-  args: i32[]
-): string => {
+const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateInfo, args: i32[]): string => {
   if (args.length !== template.typeParams.length || args.length === 0) {
     return ""
   }
@@ -202,7 +198,7 @@ const isInterfaceType = (ctx: CheckContext, type: i32): boolean => {
  * `getOrInsert` in `std/map.ts`, are lowered in place by the emitter
  * (`self/emit-map.ts`), and every other template is what it says.
  */
-export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
+const mapIntrinsicRole = (template: TemplateInfo): i32 => {
   if (template.owner === null && template.home.program.isMapExtras()) {
     // WP32 S5: `nish/map`'s two, whose bodies are what Node runs (§9.2).
     if (template.sourceName === "reserve") {
@@ -239,11 +235,11 @@ export const isCollectionStruct = (info: StructInfo): boolean => {
  * asks for an absurd number of specialisations without tripping the termination
  * rule, not a statement about the language, and the diagnostic says so.
  */
-export const MAX_INSTANTIATIONS_PER_TEMPLATE: i32 = 256
-export const MAX_INSTANTIATIONS: i32 = 4096
+const MAX_INSTANTIATIONS_PER_TEMPLATE: i32 = 256
+const MAX_INSTANTIATIONS: i32 = 4096
 
 /** The ancestor a request grows out of, and which of its type arguments grew. */
-export class Expansion {
+class Expansion {
   ancestor: Instantiation
   index: i32
 
@@ -254,7 +250,7 @@ export class Expansion {
 }
 
 /** The same pair for the struct half of the rule (WP18 G5). */
-export class StructExpansion {
+class StructExpansion {
   ancestor: StructInstantiation
   index: i32
 
@@ -265,7 +261,7 @@ export class StructExpansion {
 }
 
 /** The type parameter list of an `N_FUNCTION`: its fifth child (WP18). */
-export const typeParameterList = (decl: Node): Node =>
+const typeParameterList = (decl: Node): Node =>
   decl.children.length > 4 ? decl.children[4] : decl.children[0]
 
 /**
@@ -275,7 +271,7 @@ export const typeParameterList = (decl: Node): Node =>
  * built before the list existed answers with something harmless rather than
  * reading past its own children.
  */
-export const structTypeParameterList = (decl: Node): Node => {
+const structTypeParameterList = (decl: Node): Node => {
   const at = decl.kind === N_CLASS ? 4 : 2
   return decl.children.length > at ? decl.children[at] : decl.children[0]
 }
@@ -310,7 +306,7 @@ export const isGenericFunction = (decl: Node): boolean => {
  * name splits again at the first `$` — which is why `$` may not appear in a
  * declared name.
  */
-export const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => {
+const instanceSymbol = (table: TypeTable, base: string, args: i32[]): string => {
   let out = base
   for (const arg of args) {
     out = `${out}$${table.mangle(arg)}`
@@ -319,7 +315,7 @@ export const instanceSymbol = (table: TypeTable, base: string, args: i32[]): str
 }
 
 /** `identity<i32>`: the source spelling, for diagnostics and the dump. */
-export const instanceDisplayName = (table: TypeTable, base: string, args: i32[]): string => {
+const instanceDisplayName = (table: TypeTable, base: string, args: i32[]): string => {
   let out = ""
   let i = 0
   while (i < args.length) {
@@ -335,7 +331,7 @@ export const instanceDisplayName = (table: TypeTable, base: string, args: i32[])
  * place that mints an instantiated struct id goes through here, so the id never
  * exists without its display name.
  */
-export const instanceStructType = (table: TypeTable, base: string, args: i32[]): i32 => {
+const instanceStructType = (table: TypeTable, base: string, args: i32[]): i32 => {
   const type = table.structOf(instanceSymbol(table, base, args))
   table.setDisplayName(type, instanceDisplayName(table, base, args))
   return type
@@ -346,7 +342,7 @@ export const instanceStructType = (table: TypeTable, base: string, args: i32[]):
  * arm is the same type as the un-narrowed one, and the mangling already ignores
  * the proof, so the tuple has to as well or two ids would ask for one symbol.
  */
-export const canonicalArgument = (table: TypeTable, type: i32): i32 =>
+const canonicalArgument = (table: TypeTable, type: i32): i32 =>
   table.isResult(type) ? table.withState(type, R_UNKNOWN) : type
 
 /**
@@ -355,7 +351,7 @@ export const canonicalArgument = (table: TypeTable, type: i32): i32 =>
  * with an argument that *contains* its own has put that argument under a type
  * constructor, and the chain it starts has no end.
  */
-export const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean => {
+const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean => {
   if (inner === outer) {
     return true
   }
@@ -389,7 +385,7 @@ export const containsType = (ctx: CheckContext, inner: i32, outer: i32): boolean
  * or -1 when none of them grew. Shared by the function and the struct halves of
  * the rule, because both say the same thing about the same tuples.
  */
-export const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 => {
+const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[]): i32 => {
   let i = 0
   while (i < args.length) {
     if (previous[i] !== args[i] && containsType(ctx, previous[i], args[i])) {
@@ -408,7 +404,7 @@ export const growingArgument = (ctx: CheckContext, previous: i32[], args: i32[])
  * mutual recursion: `f<T>` asking for `g<T>` asking for `f<T[]>` expands, and
  * neither of its two edges does so on its own.
  */
-export const expandingAncestor = (
+const expandingAncestor = (
   ctx: CheckContext,
   from: Instantiation | null,
   template: TemplateInfo,
@@ -445,7 +441,7 @@ export const expandingAncestor = (
  * receiver's type arguments followed by the method's (WP18 G8), because the
  * receiver is part of what an instantiation of a method is.
  */
-export const chainArguments = (template: TemplateInfo, args: i32[]): i32[] => {
+const chainArguments = (template: TemplateInfo, args: i32[]): i32[] => {
   const receiver = receiverOf(template)
   if (receiver === null) {
     return args
@@ -501,7 +497,7 @@ const chainParameters = (template: TemplateInfo): string[] => {
  * from a method *body* is an expression's and keeps the refusal's throw. §4a
  * of `docs/wp18-generics.md` is the argument for that and what it costs.
  */
-export const expandingStructAncestor = (
+const expandingStructAncestor = (
   ctx: CheckContext,
   from: StructInstantiation | null,
   template: StructTemplateInfo,
@@ -530,7 +526,7 @@ export const expandingStructAncestor = (
  * the ordinary argument check against the instantiated signature reports it,
  * naming both types the way every other argument mismatch does.
  */
-export const unifyAnnotation = (
+const unifyAnnotation = (
   ctx: CheckContext,
   annotation: Node,
   arg: i32,
@@ -608,7 +604,7 @@ export const unifyAnnotation = (
 }
 
 /** Whether an annotation mentions one of `names`, i.e. whether it needs an instantiation to resolve. */
-export const mentionsTypeParam = (annotation: Node, names: StringSet): boolean => {
+const mentionsTypeParam = (annotation: Node, names: StringSet): boolean => {
   if (annotation.kind === N_TYPE_REF) {
     const list = annotation.children[0]
     const argc = list.kind === N_LIST ? list.children.length : 0
@@ -626,7 +622,7 @@ export const mentionsTypeParam = (annotation: Node, names: StringSet): boolean =
 }
 
 /** The set of a template's type parameter names, for `unifyAnnotation` and `mentionsTypeParam`. */
-export const typeParamSet = (template: TemplateInfo): StringSet => {
+const typeParamSet = (template: TemplateInfo): StringSet => {
   const names = new StringSet()
   for (const name of template.typeParams) {
     names.add(name)
@@ -639,7 +635,7 @@ export const typeParamSet = (template: TemplateInfo): StringSet => {
  * argument that grew and the two shapes the rule accepts, never a number: a
  * user who sees it has to change the call, not raise a limit.
  */
-export const nonTerminatingMessage = (
+const nonTerminatingMessage = (
   table: TypeTable,
   template: TemplateInfo,
   ancestor: Instantiation,
@@ -669,7 +665,7 @@ export const nonTerminatingMessage = (
  * says "names" where the function half's says "asks for"; everything else about
  * it is the same, including that it quotes the concrete chain, never a depth.
  */
-export const nonTerminatingStructMessage = (
+const nonTerminatingStructMessage = (
   table: TypeTable,
   template: StructTemplateInfo,
   ancestor: StructInstantiation,
@@ -756,7 +752,7 @@ export const instantiateWritten = (
  * therefore travel with the request rather than being read off the answering
  * module, whose own cursors are about its own work.
  */
-export class RequestSite {
+class RequestSite {
   /** The module the request was written in; every refusal about it is reported there. */
   asker: CheckContext
   /** The instantiation whose body made the request, or `null` for ordinary code. */
@@ -798,7 +794,7 @@ const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolea
 }
 
 /** `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry. */
-export const registerForeignLayouts = (
+const registerForeignLayouts = (
   ctx: CheckContext,
   root: StructInfo,
   from: CheckContext,
@@ -841,7 +837,7 @@ export const registerForeignLayouts = (
  * that may never have heard of `Point`. The layout comes from the module that
  * made the request, which had to have it to write the request down.
  */
-export const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: RequestSite): void => {
+const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: RequestSite): void => {
   if (site.asker === ctx) {
     return
   }
@@ -864,7 +860,7 @@ export const adoptArgumentLayouts = (ctx: CheckContext, args: i32[], site: Reque
  * per symbol, in request order, so the `declare`s the emitter writes are in the
  * order the calls were checked in.
  */
-export const useExternalInstance = (ctx: CheckContext, sig: FunctionSig): void => {
+const useExternalInstance = (ctx: CheckContext, sig: FunctionSig): void => {
   if (ctx.program.externalInstanceNames.add(sig.name)) {
     ctx.program.externalInstances.push(sig)
   }
@@ -902,7 +898,7 @@ export const instantiateStruct = (
 }
 
 /** The answering half of `instantiateStruct`: this module declares `template`. */
-export const instantiateStructHere = (
+const instantiateStructHere = (
   ctx: CheckContext,
   template: StructTemplateInfo,
   args: i32[],
@@ -1018,7 +1014,7 @@ export const instantiateStructHere = (
  * type parameters bound — and one queued body per method and constructor, each
  * with side tables of its own.
  */
-export const collectInstanceMembers = (ctx: CheckContext, instance: StructInstantiation): void => {
+const collectInstanceMembers = (ctx: CheckContext, instance: StructInstantiation): void => {
   const savedBindings = ctx.typeBindings
   const savedStruct = ctx.currentStructInstance
   const savedInstance = ctx.currentInstance
@@ -1075,7 +1071,7 @@ export const collectInstanceMembers = (ctx: CheckContext, instance: StructInstan
  * is asked for — so a tuple seen twice is one `define`, and the FIFO queue
  * makes the enumeration order the discovery order in both compilers.
  */
-export const instantiate = (
+const instantiate = (
   ctx: CheckContext,
   template: TemplateInfo,
   args: i32[],
@@ -1098,7 +1094,7 @@ export const instantiate = (
  * is where the specialised signature is created and queued the first time a
  * tuple is asked for.
  */
-export const instantiateHere = (
+const instantiateHere = (
   ctx: CheckContext,
   template: TemplateInfo,
   args: i32[],
@@ -2187,7 +2183,7 @@ export const collectTypeParamNames = (decl: Node): string[] => {
  * statement that had already failed would never be reported at all — and the
  * list is only ever resolved once.
  */
-export const resolveConstraints = (
+const resolveConstraints = (
   home: CheckContext,
   constraints: ConstraintList,
   list: Node,
@@ -2290,12 +2286,7 @@ export const resolveStructTemplateConstraints = (template: StructTemplateInfo): 
  * declaration, shared by every module that imports or reaches it, so identity
  * is an object compare.
  */
-export const satisfiesConstraint = (
-  asker: CheckContext,
-  home: CheckContext,
-  arg: i32,
-  constraint: i32
-): boolean => {
+const satisfiesConstraint = (asker: CheckContext, home: CheckContext, arg: i32, constraint: i32): boolean => {
   if (!asker.table.isStruct(arg)) {
     return false
   }
@@ -2339,7 +2330,7 @@ export const implementsDeclaration = (cls: StructInfo, iface: StructInfo): boole
  * is where the user wrote or implied the argument (WP18 §6.5). `home` is the
  * template's module, which is where the constraint's own layout is known.
  */
-export const checkConstraints = (
+const checkConstraints = (
   asker: CheckContext,
   home: CheckContext,
   templateName: string,
@@ -2796,7 +2787,7 @@ const originOfArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope): Type
  * switch has not been taught about over-refuses in a test rather than letting
  * a member of `T` through in silence (`docs/wp18-generics.md` §15.6).
  */
-export const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
+const originOf = (ctx: CheckContext, expr: Node, scope: Scope): TypeOrigin | null => {
   switch (expr.kind) {
     case N_IDENT: {
       // A module constant or a builtin import is a scalar, a string or an

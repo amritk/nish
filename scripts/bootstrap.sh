@@ -296,7 +296,7 @@ link_stage() {
   local by="$1" name="$2"
   rm -rf "$work/stage" "$work/stage.modules"
   "$by" self/compile.ts --link "$work/stage" --profile "$profile" >/dev/null
-  rm -rf "$work/$name" "$work/$name.modules"
+  rm -rf "${work:?}/${name:?}" "${work:?}/${name:?}.modules"
   mv "$work/stage" "$work/$name"
   mv "$work/stage.modules" "$work/$name.modules"
 }

@@ -145,29 +145,23 @@ rules are turned *off* because they push code towards constructs Nish rejects:
 `noNonNullAssertion` are off as a matter of house style.
 
 A second group is house style rather than language mirroring: `type` over
-`interface`, and a function written as an arrow bound to a `const`. Three of
-them are clean today and are errors — `useArrowFunction` (a function
-*expression* becomes an arrow), `useShorthandFunctionType` and
-`useConsistentArrowReturn`. Three have a backlog and are therefore `warn`:
+`interface`, and a function written as an arrow bound to a `const`:
+`useArrowFunction` (a function *expression* becomes an arrow),
+`useShorthandFunctionType`, `useConsistentArrowReturn`,
 `useConsistentTypeDefinitions` (`type`, never `interface`),
 `useConsistentMethodSignatures` (a member holding a function is a property,
 which is also checked more strictly than method shorthand), and the
-`biome-plugins/no-function-declaration.grit` plugin.
+`biome-plugins/no-function-declaration.grit` plugin. All of them are errors.
 
 That last one is a plugin because Biome ships no built-in rule for it:
 `useArrowFunction` rewrites function *expressions* and says nothing about
-declarations. It is a GritQL pattern, scoped by an override to the compiler
-source and the JavaScript harness. Warnings do not fail `biome check`, so the
-gate stays green and the count measures the migration that is left;
-`npm run lint -- --diagnostic-level=error` hides it while looking for real
-errors.
+declarations. It is a GritQL pattern, scoped by an override to every file Biome
+reads, Nish programs included.
 
-Neither applies to an Nish program: the language has no arrow functions and
-no `type` aliases, so `function` and `interface` are the only spellings there,
-and both rules plus the plugin are turned off for those directories. That is a
-Phase 1 limitation rather than a Phase 0 rule — the validator lets an arrow and
-a `type` alias through, and the checker's `Unsupported ... in Phase 1` fallback
-is what refuses them.
+In a Nish program the arrow half applies as everywhere else, because the
+language has arrows (`docs/wp22-arrow-functions.md`). The `type` half does not:
+`useConsistentTypeDefinitions` and `useConsistentMethodSignatures` are off for
+those directories, because a struct is an `interface`.
 
 For the Nish program directories the unused-variable rules and the
 numeric-literal rules (`noPrecisionLoss`, `noApproximativeNumericConstant`)

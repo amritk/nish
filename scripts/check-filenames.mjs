@@ -26,9 +26,7 @@
 //   node scripts/check-filenames.mjs             exit 1 on any violation
 //   node scripts/check-filenames.mjs --advisory  print them, exit 0
 //
-// `--advisory` is what `npm run lint` passes until the kebab-case rename lands
-// (`.claude/linting.md`, "The cleanup pass"); the rename drops the flag and the
-// rule becomes a gate.
+// `npm run lint` runs it without `--advisory`, so a new snake_case path fails CI.
 // Not shipped in the npm package.
 import { execFileSync } from "node:child_process"
 

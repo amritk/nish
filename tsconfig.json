@@ -4,6 +4,8 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "allowUnreachableCode": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "target": "ES2022",
     "lib": ["ES2022"],

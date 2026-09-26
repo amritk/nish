@@ -1624,12 +1624,6 @@ export const elementStride = (program: CheckedProgram, table: TypeTable, elem: i
   return info === null ? table.alignOf(elem) : info.size
 }
 
-/** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
-export const elementAlignOf = (program: CheckedProgram, table: TypeTable, elem: i32): i32 => {
-  const info = inlineElementStruct(program, table, elem)
-  return info === null ? table.alignOf(elem) : info.align
-}
-
 /** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
 export const elementLLVMType = (program: CheckedProgram, table: TypeTable, elem: i32): string => {
   const info = inlineElementStruct(program, table, elem)

@@ -1332,7 +1332,7 @@ export const checkSignatureBody = (
   } else {
     // WP16: a `Result` local nobody reads is an unhandled failure. Reported
     // after the body so the diagnostic names a variable whose type is known.
-    checkResultLocalsHandled(ctx, sig, body)
+    checkResultLocalsHandled(ctx, body)
     // WP15 §2.1/§2.2: prove what indices are in range before the warnings
     // are reported, because one of the warnings is about the proofs that did
     // not come off, and it has to be reported by the same source-order walk
@@ -1371,12 +1371,7 @@ export const checkSignatureBody = (
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export const checkPerformance = (
-  ctx: CheckContext,
-  sig: FunctionSig,
-  body: Node,
-  unprovenIndices: Node[]
-): void => {
+const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void => {
   walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body)
 }
 

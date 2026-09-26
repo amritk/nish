@@ -41,7 +41,7 @@ import { FieldInfo, STRUCT_CLASS, StructInfo } from "./program"
  * path contributes nothing to what follows, which is what makes
  * `if (c) { this.x = 1; } else { return; }` leave `x` assigned.
  */
-export class Assigned {
+class Assigned {
   fields: StringSet
   terminated: boolean
 

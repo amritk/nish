@@ -17,7 +17,7 @@
 # link, or run with the expected status. Binaries and IR go to build/smoke/.
 # Needs clang on PATH.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 
 examples=${1:-examples}
 out=build/smoke

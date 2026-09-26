@@ -117,58 +117,41 @@ runs both.
 `biome.json` is the formatter and style linter for `self/`, `std/`, `bin/`,
 `tests/**/*.js`, `examples/**`, `scripts/` and the rest of the JavaScript
 tooling. It never influences compilation. **[`linting.md`](./linting.md) is the
-authority on the rule set**: what each rule is for, which are `warn` until the
-cleanup pass, the ones measured and left off, and the runbook for that pass.
-`npm run lint` first runs `scripts/check-filenames.mjs --advisory`, which checks
-that every tracked path is kebab-case, and then runs Biome with the formatter
-**disabled**. The formatter is off because not every file has been formatted to
-the shared style yet, and reformatting a file in a PR that is about something
-else is noise in the diff. So:
+authority on the rule set**: what each rule is for, and the ones measured and
+left off. `npm run lint` runs `scripts/check-filenames.mjs`, which checks that
+every tracked path is kebab-case, and then `biome check .` with the formatter
+on, so an unformatted file fails CI the way a lint error does. So:
 
-- Keep new code in Biome's style (double quotes, semicolons, 110 columns,
-  two-space indent) and run `npm run format` on the files you created.
-- Do not reformat a file you did not otherwise change.
+- Run `npm run format` (or `npm run lint:fix`, which also applies the safe lint
+  fixes) before you commit. An agent does not need to: the `PostToolUse` hook
+  in `.claude/settings.json` formats each file as it is edited.
 - The rule set is the recommended preset, plus the rules that mirror what the
   validator refuses (`noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
   `noVoid`, `noParameterAssign`, `useExplicitLengthCheck`,
   `useConsistentArrayType`), plus the house style in `linting.md`: kebab-case
-  file names, `useNamingConvention`, braces on every block, `noShadow` and the
-  rest. `useOptionalChain` and `useExponentiationOperator` are turned *off*
-  because they push code towards `?.` and `**`, which Nish rejects.
-  `useImportType`, `useTemplate` and `noNonNullAssertion` are off as house
-  style. The language-mirroring half is explained in `docs/wp0-validator.md`
-  ("Biome").
-- New code follows every rule, including the ones at `warn`. A warning is a
-  backlog for the cleanup pass to clear, and new code should not add to it.
-- Two house-style rules are `warn` rather than `error` because the source
-  predates them: `useConsistentTypeDefinitions` (`type`, never `interface`)
-  and the `biome-plugins/no-function-declaration.grit` plugin (an arrow bound
-  to a `const`, never a `function` declaration). Biome ships no built-in rule
-  for the second, which is why it is a GritQL plugin. Warnings do not fail
-  `biome check`, so `npm run lint` stays green and the count is the migration
-  backlog; `npm run lint -- --diagnostic-level=error` hides it while you look
-  for real errors.
+  file names, `useNamingConvention`, braces on every block, `noShadow`, an
+  arrow bound to a `const` rather than a `function` declaration (the
+  `biome-plugins/no-function-declaration.grit` plugin, because Biome ships no
+  built-in rule for it) and the rest. `useOptionalChain` and
+  `useExponentiationOperator` are turned *off* because they push code towards
+  `?.` and `**`, which Nish rejects. `useImportType`, `useTemplate` and
+  `noNonNullAssertion` are off as house style. The language-mirroring half is
+  explained in `docs/wp0-validator.md` ("Biome").
+- Every rule is an `error`, so `npm run lint` is either clean or red.
 - The Nish programs a reader learns from (`examples/`, `docs/cookbook/`,
-  `bench/*.ts`) are linted too, with the unused-variable and numeric-literal
-  rules off, and with both house-style rules off as well. **The reason for the
-  second half has changed and the setting has not yet.** It used to be that the
-  language had neither arrow functions nor `type` aliases, so `function` and
-  `interface` were the only spellings available there; it has both now
-  (`docs/wp22-arrow-functions.md`), and what the exemption buys today is only
-  that the 22 `function` declarations still in `bench/` do not shout until
-  their file is opened. New code in them is an arrow like everywhere else, and
-  the exemption comes off surface by surface as stage C migrates each one;
-  `self/` is under the plugin already. The test fixtures (`tests/cases`,
-  `tests/link`, `tests/differential/corpus`) are not linted at all, because a `reject_*` case
+  `bench/*.ts`) are linted like the compiler, with the unused-variable and
+  numeric-literal rules off. The test fixtures (`tests/cases`, `tests/link`,
+  `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
+- `npm run lint:dead` runs knip (`knip.json`): no unused file, dependency or
+  export. CI runs it, and shellcheck over the shell scripts, in the `lint` job.
 - The sibling repos' Biome configs use single quotes, no semicolons and
-  `trailingCommas: all`; those formatter settings are not carried over, for
-  different reasons:
-  - **Semicolons stay for now.** Nish accepts code without them, by
-    TypeScript's insertion rule (`docs/LANGUAGE.md`, "Lexical rules"). But
-    `self/` is built by the last release, and until a release accepts them
-    too, `semicolons: "asNeeded"` would format the compiler into code its
-    seed refuses. The switch is a step of the cleanup pass in `linting.md`.
+  `trailingCommas: all`; this one agrees on the semicolons and not on the rest:
+  - **No semicolons**, except where JavaScript's insertion rule needs one
+    (`semicolons: "asNeeded"`). Nish accepts code without them by that same
+    rule (`docs/LANGUAGE.md`, "Lexical rules"), and 0.12.0 is the first
+    release that does, so the seed builds `self/` written that way. The test
+    fixtures keep theirs, because the formatter does not read them.
   - **Quotes are only taste.** Nish accepts `'...'`. Double quotes are kept
     because every snippet in `docs/LANGUAGE.md`, `docs/AI.md` and the
     cookbook uses them, and so does the text a user copies out of those

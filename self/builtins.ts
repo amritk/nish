@@ -46,7 +46,7 @@ const isF64Unary = (name: string): boolean =>
   name === "log"
 
 /** Whether a bare identifier names a builtin namespace rather than a value. */
-export const isNamespace = (name: string): boolean =>
+const isNamespace = (name: string): boolean =>
   name === "console" || name === "Math" || name === "process" || name === "String" || name === "Arena"
 
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */

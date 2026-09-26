@@ -244,7 +244,7 @@ export const MANIFEST_FOUND: i32 = 0
  * for the subpath, or a value this reader does not follow (an array of
  * targets, a nested condition object, an escaped or climbing path).
  */
-export const MANIFEST_NO_FILE: i32 = 1
+const MANIFEST_NO_FILE: i32 = 1
 
 /** The subpath's conditions offer only the *other* number mode's condition. */
 export const MANIFEST_OTHER_MODE: i32 = 2
@@ -522,7 +522,7 @@ export const manifestMalformedAt = (manifest: string): i32 => {
 }
 
 /** `engines.<condition>` is absent, or a floor this compiler meets. */
-export const ENGINE_OK: i32 = 0
+const ENGINE_OK: i32 = 0
 
 /** `engines.<condition>` is a floor above this compiler's version. */
 export const ENGINE_TOO_OLD: i32 = 1

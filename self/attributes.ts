@@ -569,7 +569,7 @@ export class FactsTable {
 
 /** How the enclosing construct consumes a parameter reference. */
 export const USE_NONE: i32 = 0 // consumed on the spot
-export const USE_ESCAPE: i32 = 1 // retained: returned, stored, aliased, or not modelled
+const USE_ESCAPE: i32 = 1 // retained: returned, stored, aliased, or not modelled
 export const USE_ARGUMENT: i32 = 2 // passed to a user function
 export const USE_READ: i32 = 3 // receiver of a field, element, `.length` or `for...of` read
 export const USE_WRITE: i32 = 4 // receiver of a field store, element store or `push`
@@ -649,7 +649,7 @@ export const classifyUse = (unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
         interior = true
         continue
       }
-      return classifyElementUse(unit, table, parent)
+      return classifyElementUse(unit, parent)
     }
     if (parent.kind === N_MEMBER) {
       return classifyMemberUse(unit, table, parent)
@@ -948,7 +948,7 @@ const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
  * never be captured this way; but a store through the element counts as a
  * write through `p`, conservatively, as docs/wp4-arrays.md specifies.
  */
-const classifyElementUse = (unit: AnalysisUnit, table: TypeTable, access: Node): ParamUse => {
+const classifyElementUse = (unit: AnalysisUnit, access: Node): ParamUse => {
   const program = unit.program
   let node = access
   for (;;) {
@@ -1617,7 +1617,7 @@ class FactCollector {
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
  * which locals hold them, and carries the allocation facts into the result.
  */
-export const collectFacts = (
+const collectFacts = (
   unit: AnalysisUnit,
   table: TypeTable,
   opts: Options,
@@ -2001,7 +2001,7 @@ const settleScope = (facts: FactsTable, i: i32, state: i32[], before: boolean[])
 }
 
 /** Escape results by symbol, the second round's input. */
-export class EscapeSet {
+class EscapeSet {
   index: StringMap
   list: EscapeResult[]
 
@@ -2259,7 +2259,7 @@ const INT32_MAX: f64 = 2147483647.0
  * A `for...of` over an array is counted unless its body may extend the array.
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
  */
-export const isCountedLoop = (
+const isCountedLoop = (
   unit: AnalysisUnit,
   table: TypeTable,
   loop: Node,

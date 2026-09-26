@@ -382,7 +382,7 @@ export const valueReaderOf = (probe: FunctionSig): FunctionSig | null => {
  * not. A `get` is one call of the instance's `probe`, whose packed answer is
  * `>= 0` exactly when the key is there.
  */
-export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
+const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
   const expr = unwrapParens(maybe)
   const local = emitter.program.nodeLocals[expr.id]
   if (expr.kind === N_IDENT && local !== null) {
@@ -415,7 +415,7 @@ export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
  * `const`'s is already loaded, and a `get`'s is `valueAt` of the entry the
  * probe found, the index in the low half of its packed answer.
  */
-export const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
+const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
   const read = parts.read
   if (read === null) {
     return parts.value

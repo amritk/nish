@@ -90,7 +90,7 @@ import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, K_ENUM, T_BOOL, T_STRING, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
-export const STACK_ARRAY_BYTES: i32 = 4096
+const STACK_ARRAY_BYTES: i32 = 4096
 
 /** Where the value of an allocation site ends up. The order is the severity order. */
 export const FLOW_LOCAL: i32 = 0
@@ -1118,21 +1118,21 @@ export const analyzeEscapes = (
 // (`netAllocates`), or the bracket would be two runtime calls around nothing.
 
 /** Why a loop's passes are not scoped, for the arena-loop diagnostic. */
-export const LOOP_NOTHING: i32 = 0
+const LOOP_NOTHING: i32 = 0
 /** An allocation of the pass is stored into memory (`at`). */
-export const LOOP_STORED: i32 = 1
+const LOOP_STORED: i32 = 1
 /** A callee stores an allocation into memory (`name`). */
-export const LOOP_CALLEE_STORES: i32 = 2
+const LOOP_CALLEE_STORES: i32 = 2
 /** The pass keeps an allocation in a local declared outside the loop (`at`, `name`). */
-export const LOOP_OUTER_LOCAL: i32 = 3
+const LOOP_OUTER_LOCAL: i32 = 3
 /** The pass grows an array older than itself (`at`, `name`). */
-export const LOOP_OUTER_PUSH: i32 = 4
+const LOOP_OUTER_PUSH: i32 = 4
 /** The pass returns an allocation (`at`). */
-export const LOOP_RETURN: i32 = 5
+const LOOP_RETURN: i32 = 5
 /** The function or a callee releases or resets the arena (`name`, `""` for the function itself). */
-export const LOOP_CONTROL: i32 = 6
+const LOOP_CONTROL: i32 = 6
 /** A callee has no facts to read (`name`). */
-export const LOOP_UNSEEN: i32 = 7
+const LOOP_UNSEEN: i32 = 7
 
 /** The walk over one loop body that decides its `LoopScope`. */
 class PassWalk {

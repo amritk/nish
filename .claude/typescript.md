@@ -161,13 +161,10 @@ compiler adds as house rules:
   `import.meta.dirname`, and the `.mjs` files exist only where a name wants to
   say "this is loaded by something else" (`runtime/shim.mjs`,
   `runtime/nish.mjs`, `bench/`).
-- **The arrow rule is mid-migration.** The harness predates it and still holds
-  `function` declarations, so the rule is `warn` rather than `error`:
-  `npm run lint` stays green, and the warning count is the size of what is
-  left. New code follows the rule, and a file opened for another reason is
-  converted while you are in it. To see only real errors while that backlog
-  stands, run `npm run lint -- --diagnostic-level=error`. There is no automatic
-  fix, because moving a declaration to a `const` can reorder a file.
+- **Every function is an arrow bound to a `const`**, in the harness as in the
+  compiler (`biome-plugins/no-function-declaration.grit`, an error). A `const`
+  is not hoisted, so a helper that module-level code calls is defined above
+  that code.
 
 ## What differs from the sibling repos
 
@@ -200,10 +197,9 @@ linted. What still differs:
 - **File and directory names are kebab-case**: `emit-arrays.ts`, not
   `emit-arrays.ts` or `emitArrays.ts`. Biome's `useFilenamingConvention` checks
   the files Biome reads, and `scripts/check-filenames.mjs` checks the rest of
-  the tree. ALL-CAPS documents (`README.md`, `docs/LANGUAGE.md`) and the test
-  fixture trees are exempt ([`linting.md`](./linting.md)). Some files still
-  have snake_case names; they are renamed in the cleanup pass, so a new file is
-  kebab-case even when its neighbours are not.
+  the tree. ALL-CAPS documents (`README.md`, `docs/LANGUAGE.md`), the test
+  fixture trees and a `node_modules` directory are exempt
+  ([`linting.md`](./linting.md)).
 - **Three kinds of name are exempt, because the spelling is the meaning.**
   A name that is a JavaScript global or builtin keeps that global's exact
   spelling, since the name *is* the identifier being matched — `Proxy` and

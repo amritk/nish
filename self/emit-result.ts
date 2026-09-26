@@ -321,7 +321,7 @@ export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, privat
  * a register and the callee builds the object once, in its prologue, with
  * `stack` from `stackParams` rather than from a call site.
  */
-export const unpackResult = (emitter: Emitter, type: i32, word: string, stack: boolean): string => {
+const unpackResult = (emitter: Emitter, type: i32, word: string, stack: boolean): string => {
   declareResultTypes(emitter, type)
   const layout = resultLayout(emitter.table, type)
   const object = allocateResultIn(emitter, layout, stack)

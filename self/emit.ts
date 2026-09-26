@@ -1142,7 +1142,7 @@ export class Emitter {
     // reached by a name instead of a dot.
     const builtin = this.program.nodeBuiltins[expr.id]
     if (builtin.length > 0) {
-      return emitNamespaceProperty(this, expr, builtin)
+      return emitNamespaceProperty(this, builtin)
     }
     const local = this.program.nodeLocals[expr.id]
     if (local !== null) {
@@ -1173,7 +1173,7 @@ export class Emitter {
       if (this.program.isEnumMember(this.table, expr)) {
         return `${this.program.nodeEnumValues[expr.id]}`
       }
-      return emitNamespaceProperty(this, expr, dottedName(expr))
+      return emitNamespaceProperty(this, dottedName(expr))
     }
     if (this.table.isResult(this.typeOf(expr.children[0]))) {
       return emitResultProperty(this, expr, this.typeOf(expr.children[0])) // WP16

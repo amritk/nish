@@ -50,7 +50,7 @@ import { INTERNAL } from "./codes"
  * `EX_SOFTWARE` from `sysexits.h`, which is what stage0 exits with for an
  * internal error and what `docs/wp12-release.md` documents.
  */
-export const EXIT_INTERNAL: i32 = 70
+const EXIT_INTERNAL: i32 = 70
 
 /**
  * The variable stage0 reads for the stack behind an internal error. Named here

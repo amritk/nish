@@ -63,7 +63,7 @@ export const stringifyCallee = (type: i32): string => {
 }
 
 /** Lower `expr` (string, number or boolean) and answer an `i8*` string value. */
-export const emitToString = (emitter: Emitter, expr: Node): string => {
+const emitToString = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr)
   let value = emitter.emitExpression(expr)
   if (type === T_BOOL) {

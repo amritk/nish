@@ -306,8 +306,7 @@ export const cType = (table: TypeTable, t: i32, position: i32, written: boolean)
  * separator: `Result<i32, string>` is `..._i32_str` and a `Result` over a
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
  */
-export const cResultName = (table: TypeTable, t: i32): string =>
-  collapseSeparators(table.resultStructName(t), false)
+const cResultName = (table: TypeTable, t: i32): string => collapseSeparators(table.resultStructName(t), false)
 
 /**
  * `.` and `$` to `_`, and optionally the `_` the user wrote to `_0`. Shared by
@@ -389,7 +388,7 @@ export const cFieldType = (table: TypeTable, t: i32): string => {
 }
 
 /** Every `Result` type mentioned inside `t`, itself included, innermost first. */
-export const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
+const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
   const kind = table.kindOf(t)
   if (kind === K_ARRAY || kind === K_NULLABLE) {
     resultTypesIn(table, table.refOf(t), out)
@@ -406,7 +405,7 @@ export const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
  * one that appears as a pointer: a large `Result` either way, a class field,
  * or a payload of another `Result`. Both can be true of one type.
  */
-export class ResultUse {
+class ResultUse {
   type: i32
   layout: ResultLayout
   word: boolean
@@ -425,7 +424,7 @@ export class ResultUse {
  * order a header can emit them (a payload before the `Result` that carries
  * it).
  */
-export const resultTypesUsed = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] => {
+const resultTypesUsed = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] => {
   const uses: ResultUse[] = []
   const index = new StringMap()
   for (const fn of fns) {
@@ -535,7 +534,7 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
  * stage0's `src/` holds these in a `Set`. A chain of comparisons is what the language
  * has, and it costs about what hashing the name would have cost anyway.
  */
-export const isCReserved = (name: string): boolean =>
+const isCReserved = (name: string): boolean =>
   name === "auto" ||
   name === "bool" ||
   name === "break" ||
@@ -713,7 +712,7 @@ export const cAliasReason = (sig: FunctionSig): string => {
  * rather than assumed. `declared` is what the sidecar declares; a function
  * with no C prototype is never declared, and `main` never is.
  */
-export const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalFunction[] => {
+const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalFunction[] => {
   const seen = new StringMap()
   const out: ExternalFunction[] = []
   let i = 0

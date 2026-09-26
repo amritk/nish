@@ -42,7 +42,7 @@ import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types"
  * four-way union stage0's `src/` writes, per §2.1: the field the type selects is the
  * live one, and `bool` lives in `intValue` as 0 or 1.
  */
-export class ConstValue {
+class ConstValue {
   type: i32
   intValue: i64
   floatValue: f64

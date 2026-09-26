@@ -106,7 +106,7 @@ const aliasOf = (spec: string): string => {
  * the two compilers resolve `--target host` to the same triple on the same
  * machine (`tests/run.js`, the WP14 block).
  */
-export const hostTriple = (): string => {
+const hostTriple = (): string => {
   const arch = process.arch
   let cpu = ""
   if (arch === "x64") {

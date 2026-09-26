@@ -127,7 +127,7 @@ const headerAccess = (emitter: Emitter, index: i32): string => {
 }
 
 /** The same, for a load or store of array element data. */
-export const elementAccess = (emitter: Emitter): string => {
+const elementAccess = (emitter: Emitter): string => {
   if (!emitter.opts.optimizeAttributes) {
     return ""
   }

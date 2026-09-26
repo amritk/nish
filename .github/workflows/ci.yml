@@ -692,6 +692,17 @@ jobs:
       - name: Lint (only when package.json defines a lint script)
         run: npm run lint --if-present
 
+      # Unused files, exports and dependencies (knip.json). An export no other
+      # module imports is one the compiler must keep external, so it is not
+      # free: this is what keeps self/'s internal functions internal.
+      - name: Dead code
+        run: npm run lint:dead
+
+      # Ubuntu runners ship shellcheck; `pip install shellcheck-py` is the
+      # local route. Warnings and up, over every shell script the repo runs.
+      - name: Shell scripts
+        run: shellcheck -S warning scripts/*.sh docs/cookbook/regen.sh install.sh .github/*.sh .claude/hooks/*.sh
+
       # Every relative link and heading anchor in README, CHANGELOG and docs/**.
       # The guidelines are a graph of pointers between files; a broken one sends
       # a reader -- human or agent -- to a page that does not exist.

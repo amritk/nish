@@ -159,19 +159,19 @@ import { T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647
 
-export const FACT_NON_NEGATIVE: i32 = 0
-export const FACT_BELOW: i32 = 1
-export const FACT_AT_MOST: i32 = 2
-export const FACT_MAX_INDEX: i32 = 3
-export const FACT_MIN_LENGTH: i32 = 4
-export const FACT_MIN_VALUE: i32 = 5
+const FACT_NON_NEGATIVE: i32 = 0
+const FACT_BELOW: i32 = 1
+const FACT_AT_MOST: i32 = 2
+const FACT_MAX_INDEX: i32 = 3
+const FACT_MIN_LENGTH: i32 = 4
+const FACT_MIN_VALUE: i32 = 5
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
  * is the length holder; `w` is the length holder of `below` and `atMost`; `n`
  * is the literal of the three constant families.
  */
-export class Fact {
+class Fact {
   kind: i32
   v: Local
   w: Local | null
@@ -186,7 +186,7 @@ export class Fact {
 }
 
 /** What a condition proves where it holds, and where it does not. */
-export class ConditionFacts {
+class ConditionFacts {
   whenTrue: Fact[]
   whenFalse: Fact[]
 
@@ -2091,7 +2091,7 @@ export const isBoundsAssignment = (op: string): boolean => {
 /** `recordStoreType`: the element store writes a pointer or a value, and rewrites no record. */
 export const NO_RECORD: i32 = -1
 /** `recordStoreType`: the checker recorded no element type, so nothing says what the store reaches. */
-export const ANY_RECORD: i32 = -2
+const ANY_RECORD: i32 = -2
 
 /**
  * Which record an element store writes in place. An array of records keeps
@@ -2561,7 +2561,6 @@ const walkBoundsStatement = (walk: BoundsWalk, state: State, stmt: Node): boolea
   if (walk.done) {
     return false
   }
-  const ctx = walk.ctx
 
   if (stmt.kind === N_BLOCK) {
     for (const inner of stmt.children) {
@@ -3024,7 +3023,7 @@ const inertOperands = (program: CheckedProgram, args: Node[]): boolean => {
  * release takes no reference and still hands the memory behind every array
  * built since the mark to whatever allocates next.
  */
-export const callSummary = (walk: BoundsWalk, call: Node): CallSummary | null => {
+const callSummary = (walk: BoundsWalk, call: Node): CallSummary | null => {
   const tables = walk.tables
   if (tables === null) {
     return null

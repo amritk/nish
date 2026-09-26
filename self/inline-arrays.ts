@@ -104,7 +104,7 @@ import { BuildMode, hostVisible } from "./visibility"
  * removes it; a field assigned from a call pays off only when it is read a few
  * dozen times per assignment, as AWFY Queens' are.
  */
-export const INLINE_SLOT_BYTES: i32 = 256
+const INLINE_SLOT_BYTES: i32 = 256
 
 /** One array field that may be stored inline, and what the walk has found about it. */
 class Candidate {

@@ -21,7 +21,7 @@ import { roundUpTo } from "./structs"
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
-import { CheckedProgram, FunctionSig } from "./program"
+import { CheckedProgram } from "./program"
 import { Scope } from "./symbols"
 import { R_ERR, R_OK, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -404,11 +404,11 @@ export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32):
  * handing the value on (an argument, a `return`) counts: the responsibility
  * moves with the value, and the receiving signature carries the same rules.
  */
-export const checkResultLocalsHandled = (ctx: CheckContext, sig: FunctionSig, body: Node): void => {
+export const checkResultLocalsHandled = (ctx: CheckContext, body: Node): void => {
   const declarations: Node[] = []
   const read: boolean[] = []
   collectResultLocals(ctx.program, ctx.table, body, declarations)
-  for (const decl of declarations) {
+  while (read.length < declarations.length) {
     read.push(false)
   }
   markResultReads(ctx.program, body, declarations, read)

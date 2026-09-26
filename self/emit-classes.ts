@@ -49,7 +49,7 @@ import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
 // ---- Helpers ------------------------------------------------------------------------
 
 /** The `StructInfo` behind a struct-typed value; the checker resolved the same one. */
-export const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
+const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
   const info = emitter.program.struct(emitter.table.nameOf(type))
   if (info !== null) {
     return info
@@ -147,7 +147,7 @@ const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
 }
 
 /** Store the literal initializers of the fields `info` declares itself. */
-export const emitFieldInitializers = (emitter: Emitter, info: StructInfo, receiver: string): void => {
+const emitFieldInitializers = (emitter: Emitter, info: StructInfo, receiver: string): void => {
   for (const field of info.fields) {
     if (field.initializer !== null) {
       storeField(emitter, info, receiver, field, initializerConstant(emitter, field))
