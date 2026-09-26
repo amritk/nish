@@ -6,30 +6,33 @@
 //   npm run build && node bench/run.mjs [options]
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
 //     --only a,b        benchmark names to include (default: all); `awfy` names
-//                       the Are We Fast Yet ports in bench/awfy/ and `maps` the
-//                       map layout prototypes, which run only when named (see
+//                       the Are We Fast Yet ports in bench/awfy/, which run only
+//                       when named, and `maps` the WP32 map programs (see
 //                       bench/README.md)
 //     --n name=value    override a benchmark's size (the `bench:n` line in its
-//                       sources); `maps=<n>` sizes all the map prototypes
+//                       sources); `maps=<n>` sizes all the map programs at once
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
 //     --no-go           skip Go even when the go tool is installed
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md)
 //     --compiler <nish> the compiler under test (default build/nish; a
 //                       native nish runs directly, a .js entry under node)
-//     --instructions    count the instructions each of the 18 programs executes
+//     --instructions    count the instructions each of the 21 programs executes
 //                       under valgrind's cachegrind, at the sizes in
 //                       bench/instructions.json; nothing is timed. With --check,
 //                       fail when one exceeds its baseline by more than the
 //                       tolerance; with --update, rewrite the baseline (a PR that
 //                       does must say why). --runs N repeats each run (default 1)
 //
-// The WP32 map layout prototypes (bench/map_proto_*.ts) run only when `--only`
-// names `maps` (or one of them). Each runs five workloads over string and
-// integer keys and prints one checksum line per workload, which must equal what
-// bench/map_node.mjs prints from Node's `Map`; each workload is timed by the
-// program itself, and the table goes to stdout, not to docs/BENCHMARKS.md.
-// `--n maps=<power of two>` resizes all five. See bench/README.md.
+// The WP32 map programs are the four layout prototypes (bench/map_proto_*.ts)
+// and the three measurements of the global `Map` (map_wordcount, map_presize,
+// map_vs_stringmap), each beside a Node twin. Every checksum line is one of the
+// ten bench/map_node.mjs prints from Node's `Map`, so every program runs a
+// workload of docs/wp32-map.md §2 exactly; each workload is timed by the
+// program itself. They run at 2^16 and 2^20 keys, in and out of the cache, and
+// their tables, comparisons (a) to (d), go to docs/BENCHMARKS.md with the rest;
+// `--only maps` prints them instead. `--n maps=<power of two>` picks one size.
+// See bench/README.md.
 //
 // The data-parallel kernels (bench/par_*.ts) are not twins: each is one Nish
 // binary run twice, as the loop (`seq`) and as `parallelMapInto` (`par`), and
@@ -118,6 +121,21 @@ const MAPS = [
   { name: "map_proto_unordered", label: "unordered" },
 ];
 const MAPS_NODE = "map_node";
+
+/**
+ * The global `Map` measured in docs/wp32-map.md §10: comparisons (b), (c) and
+ * (d). Each program runs the variants it names, one per process when timed
+ * (`<name> time <variant>`), and prints what its twin prints; `map_node` is
+ * the twin of `map_vs_stringmap` because they run the same ten workloads.
+ */
+const MAP_MEASURES = [
+  { name: "map_wordcount", twin: "map_wordcount", variants: ["fused", "double"] },
+  { name: "map_presize", twin: "map_presize", variants: ["grow", "reserve"] },
+  { name: "map_vs_stringmap", twin: MAPS_NODE, variants: ["map", "stringmap"] },
+];
+
+/** The key counts the map tables are timed at: inside the last-level cache, and well outside it. */
+const MAP_SIZES = ["65536", "1048576"];
 
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
 function sourceArgs(name) {
@@ -465,8 +483,8 @@ const countInstructions = (valgrind, exe, args, name) => {
 
 /**
  * `--instructions`: build the seven bench/ programs, the four map layout
- * prototypes and the seven AWFY ports at the sizes bench/instructions.json
- * names, count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
+ * prototypes, the three `Map` measurements and the seven AWFY ports at the
+ * sizes bench/instructions.json names, count each run, and print the counts against the baseline. `--check` fails on any count above it by more than the
  * tolerance, and `--update` writes the counts back. Answers the exit status.
  */
 const runInstructions = () => {
@@ -477,7 +495,12 @@ const runInstructions = () => {
   if ((opts.check || opts.update) && host !== baseline.platform) {
     fail(`the baseline is counted on ${baseline.platform}, so this ${host} host can neither check nor update it`);
   }
-  const names = [...BENCHMARKS.map((b) => b.name), ...MAPS.map((b) => b.name), ...AWFY.map((b) => b.name)];
+  const names = [
+    ...BENCHMARKS.map((b) => b.name),
+    ...MAPS.map((b) => b.name),
+    ...MAP_MEASURES.map((b) => b.name),
+    ...AWFY.map((b) => b.name),
+  ];
   const listed = Object.keys(baseline.programs);
   if (listed.join(",") !== names.join(",")) {
     fail(`bench/instructions.json must list ${names.join(", ")} in that order; it lists ${listed.join(", ")}`);
@@ -494,7 +517,10 @@ const runInstructions = () => {
   const rel = (p) => path.relative(root, p);
   const jobs = []; // { name, size, exe, args }
   process.stderr.write("instructions: building");
-  const programs = [...BENCHMARKS.filter((x) => wanted(x.name, "")), ...MAPS.filter((x) => wanted(x.name, "maps"))];
+  const programs = [
+    ...BENCHMARKS.filter((x) => wanted(x.name, "")),
+    ...[...MAPS, ...MAP_MEASURES].filter((x) => wanted(x.name, "maps")),
+  ];
   for (const b of programs) {
     const n = baseline.programs[b.name].n;
     const ts = prepare(`${b.name}.ts`, String(n), src);
@@ -576,7 +602,7 @@ const runInstructions = () => {
     }).trim();
     const valgrindVersion = version(valgrind);
     // The file's `commit` and `valgrind` say where every count was measured, so
-    // only an update of all eighteen restamps them. An `--only` update stamps
+    // only an update of every program restamps them. An `--only` update stamps
     // the programs it counted instead, and a later full update clears those.
     const partial = rows.length < names.length;
     for (const r of rows) {
@@ -641,8 +667,13 @@ const known = (name) =>
   name === "maps" ||
   BENCHMARKS.some((b) => b.name === name) ||
   PARALLEL.some((b) => b.name === name) ||
-  MAPS.some((b) => b.name === name);
+  MAPS.some((b) => b.name === name) ||
+  MAP_MEASURES.some((b) => b.name === name);
 if (opts.only) for (const name of opts.only) if (!known(name)) fail(`unknown benchmark \`${name}\``);
+
+/** Whether `--only` asks for a map program: `maps` names all seven, and no `--only` runs them with the rest. */
+const mapWanted = (name) => !opts.only || opts.only.has("maps") || opts.only.has(name);
+const mapsSelected = [...MAPS, ...MAP_MEASURES].some((b) => mapWanted(b.name));
 
 /**
  * The AWFY ports: build the harness checked, the compiler's default, then run
@@ -675,81 +706,231 @@ const runAwfy = () => {
 };
 if (opts.only?.has("awfy")) {
   runAwfy();
-  if (selected.length === 0 && selectedParallel.length === 0) process.exit(0);
+  if (selected.length === 0 && selectedParallel.length === 0 && !mapsSelected) process.exit(0);
 }
+
+/** A time in ms as the report prints it. */
+const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2));
 
 /**
- * The map layout prototypes: build each with `--profile speed`, run it and the
- * Node twin once for the checksums, which must be the same lines, then (unless
- * `--validate`) run each `--warmup` + `--runs` times with `time`, which makes
- * the program print `time <workload> <kind> <ns>` to stderr per workload. The
- * table is each workload's minimum over the timed runs, in ms.
+ * The map programs at one size (`undefined` keeps each file's own): build each
+ * native one with `--profile speed`, and require its checksum lines to be its
+ * twin's, and every line to be one bench/map_node.mjs prints, so that each
+ * workload is §2's. Unless `--validate`, time every column `--warmup` +
+ * `--runs` times, the columns interleaved round by round so that a slow
+ * stretch of a shared machine falls on all of them. A column is one process
+ * per run: a prototype with `time`, a measurement with `time <variant>`, which
+ * print `time <workload> <kind>[ <variant>] <ns>` to stderr per workload.
+ * Answers the Markdown for comparisons (a) to (d), each cell `min / median`.
  */
-const runMaps = () => {
-  const wanted = MAPS.filter((b) => opts.only.has("maps") || opts.only.has(b.name));
-  const size = opts.sizes.get("maps");
-  if (size !== undefined && (Number(size) < 16 || (Number(size) & (Number(size) - 1)) !== 0)) {
-    fail(`--n maps=${size}: the map prototypes draw keys by masking, so the size is a power of two, 16 or more`);
-  }
-  const node = prepare(`${MAPS_NODE}.mjs`, size);
-  const programs = [];
-  for (const b of wanted) {
-    process.stderr.write(`${b.name}: building`);
-    const ts = prepare(`${b.name}.ts`, size);
-    const exe = path.join(outDir, b.name);
-    const args = [path.relative(root, ts), ...sourceArgs(b.name), "--link", path.relative(root, exe), "--profile", "speed"];
-    run(nishc.cmd, [...nishc.prefix, ...args], b.name);
-    programs.push({ ...b, cmd: exe, args: [] });
+const mapsAtSize = (size) => {
+  const rel = (p) => path.relative(root, p);
+  const build = (name) => {
+    process.stderr.write(`${name}: building`);
+    const ts = prepare(`${name}.ts`, size);
+    const exe = path.join(outDir, name);
+    run(
+      nishc.cmd,
+      [...nishc.prefix, rel(ts), ...sourceArgs(name), "--link", rel(exe), "--profile", "speed"],
+      name
+    );
     process.stderr.write(" ok\n");
-  }
-  programs.push({ name: MAPS_NODE, label: "Node Map", cmd: process.execPath, args: [node] });
-
+    return exe;
+  };
+  const protos = MAPS.filter((b) => mapWanted(b.name)).map((b) => ({ ...b, exe: build(b.name) }));
+  const measures = MAP_MEASURES.filter((b) => mapWanted(b.name)).map((b) => ({
+    ...b,
+    exe: build(b.name),
+    twinFile: prepare(`${b.twin}.mjs`, size),
+  }));
+  const node = prepare(`${MAPS_NODE}.mjs`, size);
   const reference = run(process.execPath, [node], MAPS_NODE).stdout;
+  const known = new Set(reference.trim().split("\n"));
+
   let disagree = 0;
-  for (const p of programs.slice(0, -1)) {
-    const out = run(p.cmd, p.args, p.name).stdout;
-    if (out !== reference) {
-      disagree++;
-      console.error(`CHECKSUM MISMATCH ${p.name}:\n--- ${MAPS_NODE}\n${reference}--- ${p.name}\n${out}`);
-    }
+  const mismatch = (what, want, wantName, got) => {
+    disagree++;
+    console.error(`CHECKSUM MISMATCH ${what}:\n--- ${wantName}\n${want}--- ${what}\n${got}`);
+  };
+  for (const p of protos) {
+    const out = run(p.exe, [], p.name).stdout;
+    if (out !== reference) mismatch(p.name, reference, MAPS_NODE, out);
+  }
+  for (const m of measures) {
+    const out = run(m.exe, [], m.name).stdout;
+    const twin = run(process.execPath, [m.twinFile], m.twin).stdout;
+    if (out !== twin) mismatch(m.name, twin, `${m.twin}.mjs`, out);
+    else if (
+      out === "" ||
+      !out
+        .trim()
+        .split("\n")
+        .every((l) => known.has(l))
+    )
+      mismatch(m.name, reference, MAPS_NODE, out);
   }
   if (disagree > 0) {
-    console.error(`${disagree} map prototype(s) disagree with Node's Map`);
+    console.error(`${disagree} map program(s) disagree with Node's Map`);
     process.exit(1);
   }
-  const workloads = reference.trim().split("\n").map((l) => l.split(" ").slice(0, 2).join(" "));
+  const workloads = reference
+    .trim()
+    .split("\n")
+    .map((l) => l.split(" ").slice(0, 2).join(" "));
   if (opts.validate) {
-    console.log(`maps: ${programs.length - 1} prototype(s) agree with Node's Map over ${workloads.length} workloads`);
+    console.log(
+      `maps: ${protos.length} prototype(s) and ${measures.length} measurement(s) agree with Node's Map over ${workloads.length} workloads`
+    );
     for (const line of reference.trim().split("\n")) console.log(`  ${line}`);
-    return;
+    return [];
   }
 
-  process.stderr.write("maps: timing");
-  for (const p of programs) {
-    p.best = new Map();
-    for (let i = 0; i < opts.warmup + opts.runs; i++) {
-      const r = spawnSync(p.cmd, [...p.args, "time"], { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
-      if (r.status !== 0) fail(`${p.name} time exited with ${r.status}\n${r.stderr}`);
-      if (i < opts.warmup) continue;
-      for (const [, workload, ns] of r.stderr.matchAll(/^time (\S+ \S+) (\d+)$/gm)) {
-        p.best.set(workload, Math.min(p.best.get(workload) ?? Infinity, Number(ns) / 1e6));
-      }
-      process.stderr.write(".");
+  const columns = [
+    ...protos.map((p) => ({ key: p.name, cmd: p.exe, args: ["time"] })),
+    { key: MAPS_NODE, cmd: process.execPath, args: [node, "time"] },
+  ];
+  for (const m of measures) {
+    for (const v of m.variants) {
+      columns.push({ key: `${m.name}:${v}`, cmd: m.exe, args: ["time", v] });
+      if (m.twin !== MAPS_NODE)
+        columns.push({ key: `${m.twin}.mjs:${v}`, cmd: process.execPath, args: [m.twinFile, "time", v] });
     }
   }
-  process.stderr.write("\n");
-  const width = 16;
-  console.log(`\nWP32 map layouts: each workload's minimum over ${opts.runs} runs after ${opts.warmup} warm-up (ms)`);
-  console.log(`${"workload".padEnd(12)}${programs.map((p) => p.label.padStart(width)).join("")}`);
-  for (const w of workloads) {
-    const cells = programs.map((p) => (p.best.has(w) ? p.best.get(w).toFixed(1) : "-").padStart(width));
-    console.log(`${w.padEnd(12)}${cells.join("")}`);
+  for (const c of columns) c.samples = new Map();
+  process.stderr.write(`maps: timing ${columns.length} columns at n = ${size ?? "default"}`);
+  for (let i = 0; i < opts.warmup + opts.runs; i++) {
+    for (const c of columns) {
+      const r = spawnSync(c.cmd, c.args, { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
+      if (r.status !== 0) fail(`${c.key} ${c.args.join(" ")} exited with ${r.status}\n${r.stderr}`);
+      if (i < opts.warmup) continue;
+      for (const [, workload, ns] of r.stderr.matchAll(/^time (\S+ \S+)(?: \S+)? (\d+)$/gm)) {
+        if (!c.samples.has(workload)) c.samples.set(workload, []);
+        c.samples.get(workload).push(Number(ns) / 1e6);
+      }
+    }
+    process.stderr.write(".");
   }
+  process.stderr.write("\n");
+  const presize = measures.find((m) => m.name === "map_presize");
+  const rss = new Map(presize ? presize.variants.map((v) => [v, peakRssKb(presize.exe, [v])]) : []);
+
+  /** `{ min, median }` of column `key` on `workload`, or null when it did not run there. */
+  const cell = (key, workload) => {
+    const xs = columns.find((c) => c.key === key)?.samples.get(workload);
+    return xs && xs.length > 0 ? { min: Math.min(...xs), median: median(xs) } : null;
+  };
+  const noisy = new Set(); // `column on workload`, once however many tables show the cell
+  const lines = [];
+  const table = (title, rows, cols, ratios) => {
+    lines.push(`**${title}**`, "");
+    lines.push(`| workload | ${[...cols.map(([, l]) => l), ...ratios.map(([l]) => l)].join(" | ")} |`);
+    lines.push(`| --- | ${[...cols, ...ratios].map(() => "---:").join(" | ")} |`);
+    for (const w of rows) {
+      const cells = cols.map(([key]) => {
+        const c = cell(key, w);
+        if (c === null) return "";
+        if (c.median > c.min * 1.05) noisy.add(`${key} on ${w}`);
+        return `${fmt(c.min)} / ${fmt(c.median)}`;
+      });
+      const quotients = ratios.map(([, num, den]) => {
+        const a = cell(num, w);
+        const b = cell(den, w);
+        return a && b ? `${(a.min / b.min).toFixed(2)}x` : "";
+      });
+      lines.push(`| ${w} | ${[...cells, ...quotients].join(" | ")} |`);
+    }
+    lines.push("");
+  };
+  const counts = workloads.filter((w) => w.startsWith("count "));
+  const inserts = workloads.filter((w) => w.startsWith("insert "));
+  lines.push(`### n = ${Number(size ?? 65536).toLocaleString("en-US")}`, "");
+  table(
+    "(a) the four layout prototypes",
+    workloads,
+    [...MAPS.map((b) => [b.name, b.label]), [MAPS_NODE, "Node `Map`"]],
+    [
+      ["u32 fp / unordered", "map_proto_ordered_fp32", "map_proto_unordered"],
+      ["u32 fp / Node", "map_proto_ordered_fp32", MAPS_NODE],
+    ]
+  );
+  table(
+    "(b) word count: fused against double lookup",
+    counts,
+    [
+      ["map_wordcount:fused", "`Map` fused"],
+      ["map_wordcount:double", "`Map` double"],
+      ["map_proto_unordered", "unordered"],
+      ["map_wordcount.mjs:fused", "Node fused"],
+      ["map_wordcount.mjs:double", "Node double"],
+    ],
+    [
+      ["double / fused", "map_wordcount:double", "map_wordcount:fused"],
+      ["fused / unordered", "map_wordcount:fused", "map_proto_unordered"],
+      ["fused / Node fused", "map_wordcount:fused", "map_wordcount.mjs:fused"],
+    ]
+  );
+  table(
+    "(c) insert: presized with `reserve` against growing",
+    inserts,
+    [
+      ["map_presize:grow", "`Map` growing"],
+      ["map_presize:reserve", "`Map` `reserve`"],
+      ["map_proto_unordered", "unordered"],
+      ["map_presize.mjs:grow", "Node growing"],
+      ["map_presize.mjs:reserve", "Node `reserve`"],
+    ],
+    [
+      ["growing / reserve", "map_presize:grow", "map_presize:reserve"],
+      ["reserve / unordered", "map_presize:reserve", "map_proto_unordered"],
+      ["reserve / Node", "map_presize:reserve", "map_presize.mjs:grow"],
+    ]
+  );
+  if (rss.size > 0) {
+    const kb = (v) => (rss.get(v) != null ? `${rss.get(v).toLocaleString("en-US")} KB` : "not measured");
+    lines.push(
+      `Peak RSS of \`map_presize\` running one variant alone (whole process, both key sets included): growing ${kb("grow")}, \`reserve\` ${kb("reserve")}.`,
+      ""
+    );
+  }
+  table(
+    "(d) the global `Map` against `StringMap`",
+    workloads,
+    [
+      ["map_vs_stringmap:map", "`Map`"],
+      ["map_vs_stringmap:stringmap", "`StringMap`"],
+      ["map_proto_unordered", "unordered"],
+      [MAPS_NODE, "Node `Map`"],
+    ],
+    [
+      ["`Map` / `StringMap`", "map_vs_stringmap:map", "map_vs_stringmap:stringmap"],
+      ["`Map` / unordered", "map_vs_stringmap:map", "map_proto_unordered"],
+      ["`Map` / Node", "map_vs_stringmap:map", MAPS_NODE],
+    ]
+  );
+  lines.push(
+    noisy.size === 0
+      ? "Every cell's median is within 5% of its minimum."
+      : `Of ${columns.length} columns by their workloads, ${noisy.size} cell(s) have a median more than 5% above their minimum: ${[...noisy].join(", ")}.`,
+    ""
+  );
+  return lines;
 };
-if (opts.only?.has("maps") || MAPS.some((b) => opts.only?.has(b.name))) {
-  runMaps();
-  if (selected.length === 0 && selectedParallel.length === 0) process.exit(0);
-}
+
+/** The map programs at every size asked for: the tables' Markdown, or nothing under `--validate`. */
+const runMaps = () => {
+  const given = opts.sizes.get("maps");
+  if (given !== undefined && (Number(given) < 16 || (Number(given) & (Number(given) - 1)) !== 0)) {
+    fail(
+      `--n maps=${given}: the map programs draw keys by masking, so the size is a power of two, 16 or more`
+    );
+  }
+  const sizes = given !== undefined ? [given] : opts.validate ? [undefined] : MAP_SIZES;
+  const lines = sizes.flatMap(mapsAtSize);
+  if (lines.length > 0) console.log(`\n${lines.join("\n")}`);
+  return lines;
+};
+const mapLines = mapsSelected ? runMaps() : [];
+if (opts.only && mapsSelected && selected.length === 0 && selectedParallel.length === 0) process.exit(0);
 
 /**
  * The data-parallel kernels: build each once, run it as the loop and as the
@@ -818,7 +999,6 @@ if (opts.validate) {
 
 // ---- Report ---------------------------------------------------------------------------------
 
-const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2));
 const columns = [
   ["nish", "Nish"],
   ["nish-nsw", "Nish `--nsw`"],
@@ -921,6 +1101,15 @@ if (parallelRows.length > 0) {
     );
   }
   lines.push("");
+}
+
+if (mapLines.length > 0) {
+  lines.push("## Map and Set (WP32)", "");
+  lines.push(
+    `Each workload is timed by the program around the workload alone, not as process wall time, and every column is its own process, the columns taking turns round by round: ${opts.runs} timed runs after ${opts.warmup} warm-up, min / median in ms. The workloads are [docs/wp32-map.md](wp32-map.md) §2's, over the same keys, and every program prints checksum lines \`bench/map_node.mjs\` prints from Node's \`Map\`. \`unordered\` is the S1 prototype with keys and values in the buckets, the layout the language does not ship; the ratios divide minimums. The programs are built with \`nish bench/<name>.ts --link <exe> --profile speed\`, and bench/README.md describes them; §10 of the note reads the numbers.`,
+    ""
+  );
+  lines.push(...mapLines);
 }
 
 lines.push("## Checksums", "");
