@@ -153,6 +153,8 @@ cases/map_key_u32 added after R6: no rewriter to freeze it with
 cases/map_key_u64 added after R6: no rewriter to freeze it with
 cases/map_key_u8 added after R6: no rewriter to freeze it with
 cases/map_type_param_shadow added after R6: no rewriter to freeze it with
+cases/map_value_result added after R6: no rewriter to freeze it with
+cases/map_value_result_by_value added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with
@@ -172,6 +174,7 @@ cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
+cases/res_result_store added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with

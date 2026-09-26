@@ -2419,6 +2419,29 @@ export const elementOrigin = (ctx: CheckContext, iterable: Node, scope: Scope): 
   return originElement(originOf(ctx, iterable, scope))
 }
 
+/**
+ * Whether the value of `expr`, in the instantiation whose body is being
+ * checked, is a `T` as the template wrote it: `items.pop()` on `items: T[]`,
+ * `identity(x)` on `x: T`. The must-handle rule (#233) judges a discarded
+ * value by that declared type, as Rust's `must_use` does, so a template that
+ * drops a `T` is not refused at `T = Result`, and one that drops a
+ * `Result<T, E>` still is.
+ *
+ * Unlike `originParameter`, an unknown origin answers false: here failing
+ * closed means refusing the discard, not waving it through.
+ */
+export const isParameterValue = (ctx: CheckContext, expr: Node, scope: Scope): boolean => {
+  if (ctx.typeBindings.size() === 0) {
+    return false
+  }
+  const at = substituted(originOf(ctx, expr, scope))
+  if (at === null || at.unknown || at.names.length > 0) {
+    return false
+  }
+  const node = unwrapOrigin(at.annotation)
+  return isBareName(node) && ctx.typeBindings.has(node.text)
+}
+
 /** The position of `name` in `names`, or -1. */
 const indexOfName = (names: string[], name: string): i32 => {
   let i = 0

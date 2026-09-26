@@ -20,6 +20,7 @@ import { checkBuiltinArity } from "./builtins"
 import { roundUpTo } from "./structs"
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
+import { isParameterValue } from "./generics"
 import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
 import { CheckedProgram } from "./program"
 import { Scope } from "./symbols"
@@ -383,9 +384,22 @@ export const narrowResultTest = (cond: Node, scope: Scope, table: TypeTable, whe
  * Called for every expression statement. A bare call that answers a `Result`
  * is the one shape where a failure would vanish without a trace, so it is the
  * shape this rule names.
+ *
+ * Two statements answer a `Result` without dropping one (#233). An assignment
+ * (`rs[0] = rs[1]`, `r2 = r1`) moves the value into its target, whose own
+ * rules follow it: a local must still be inspected
+ * (`checkResultLocalsHandled`). And in a generic body the value is judged by
+ * the type the template declared, not by the instantiation's: a `T` dropped by
+ * `items.pop()` is not a `Result` to its author, even at `T = Result`.
  */
-export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32): void => {
+export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32, scope: Scope): void => {
   if (!ctx.table.isResult(type)) {
+    return
+  }
+  if (expr.kind === N_BINARY && expr.text === "=") {
+    return
+  }
+  if (isParameterValue(ctx, expr, scope)) {
     return
   }
   ctx.error(

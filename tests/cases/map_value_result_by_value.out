@@ -1,0 +1,4 @@
+ok 2 absent
+err -1
+ok 10
+7 ok 100;err -1;ok 2;err -3;err -5;ok 8;ok 10

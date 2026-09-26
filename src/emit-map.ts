@@ -59,6 +59,7 @@ import {
   MAP_RESERVE,
   StructInfo,
 } from "./program"
+import { packResultObject, privateResultAbi, unpackReturnedResult } from "./emit-result"
 import { isMapOwner } from "./generics"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isUndefined } from "./validator"
@@ -422,8 +423,33 @@ const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
   }
   const fn = emitter.fn
   const index = fn.emitValue(`trunc i64 ${parts.packed} to i32`)
-  const operands = `${emitter.llvm(read.paramTypes[0])} ${parts.receiver}, i32 ${index}`
-  return fn.emitValue(`call ${emitter.llvm(read.returnType)} @${read.name}(${operands})`)
+  return callValueAt(emitter, read, `${emitter.llvm(read.paramTypes[0])} ${parts.receiver}, i32 ${index}`)
+}
+
+/**
+ * A call of `valueAt`, which answers `V`. A `V` that is a `Result` small
+ * enough to pack comes back in a register, and is unpacked into the object
+ * every other construct reads, as any other call's is (#233).
+ */
+const callValueAt = (emitter: Emitter, read: FunctionSig, operands: string): string => {
+  const privateAbi = privateResultAbi(emitter, read.visibleOutside())
+  const value = emitter.fn.emitValue(
+    `call ${emitter.llvmAbi(read.returnType, privateAbi)} @${read.name}(${operands})`
+  )
+  if (!emitter.table.resultByValue(read.returnType)) {
+    return value
+  }
+  return unpackReturnedResult(emitter, read.returnType, value, false, privateAbi)
+}
+
+/** A `V` handed to `setValueAt` or `insertAt` as parameter `index` of `sig`: a packable `Result` goes as its word. */
+const valueOperand = (emitter: Emitter, sig: FunctionSig, index: i32, value: string): string => {
+  const type = sig.paramTypes[index]
+  const privateAbi = privateResultAbi(emitter, sig.visibleOutside())
+  const passed = emitter.table.resultByValue(type)
+    ? packResultObject(emitter, type, value, privateAbi)
+    : value
+  return `${emitter.llvmAbi(type, privateAbi)} ${passed}`
 }
 
 /**
@@ -482,7 +508,9 @@ const zeroOf = (emitter: Emitter, type: i32): string => {
   if (type === T_BOOL) {
     return "false"
   }
-  return emitter.table.isPointer(emitter.table.stripNull(type)) ? "null" : "0"
+  // A `Result` is a pointer to its tagged box (#233).
+  const stripped = emitter.table.stripNull(type)
+  return emitter.table.isPointer(stripped) || emitter.table.isResult(stripped) ? "null" : "0"
 }
 
 /**
@@ -637,7 +665,7 @@ export const emitWalk = (emitter: Emitter, stmt: Node): void => {
   fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`)
 
   fn.placeBlock(bodyBlock)
-  const value = fn.emitValue(`call ${emitter.llvm(read.returnType)} @${read.name}(${receiver}, i32 ${at})`)
+  const value = callValueAt(emitter, read, `${receiver}, i32 ${at}`)
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`)
   const target = new LoopTarget(endBlock, incBlock)
   target.walkClose = `call void @${close.name}(${receiver})`
@@ -847,7 +875,7 @@ const emitFoundOrInsert = (emitter: Emitter, probe: FusedProbe, value: string): 
 const emitSetValueAt = (emitter: Emitter, probe: FusedProbe, value: string): void => {
   const write = tableMethod(emitter, probe.owner, "setValueAt")
   const index = emitter.fn.emitValue(`trunc i64 ${probe.packed} to i32`)
-  const operands = `${emitter.llvm(write.paramTypes[0])} ${probe.receiver}, i32 ${index}, ${emitter.llvm(write.paramTypes[2])} ${value}`
+  const operands = `${emitter.llvm(write.paramTypes[0])} ${probe.receiver}, i32 ${index}, ${valueOperand(emitter, write, 2, value)}`
   emitter.fn.emit(`call void @${write.name}(${operands})`)
 }
 
@@ -856,7 +884,7 @@ const emitInsertAt = (emitter: Emitter, probe: FusedProbe, value: string): void 
   const insert = tableMethod(emitter, probe.owner, "insertAt")
   const types = insert.paramTypes
   const operands = `${emitter.llvm(types[0])} ${probe.receiver}, i64 ${probe.packed}, ${emitter.llvm(types[2])} ${probe.key}`
-  const stored = types.length > 3 ? `, ${emitter.llvm(types[3])} ${value}` : ""
+  const stored = types.length > 3 ? `, ${valueOperand(emitter, insert, 3, value)}` : ""
   emitter.fn.emit(`call void @${insert.name}(${operands}${stored})`)
 }
 
@@ -889,6 +917,13 @@ const emitMapRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): str
       internalErrorFor("emitter: `getOrInsert` takes a table, a key and a value", emitter.opts.json)
     )
   }
+  // A packable `Result` argument arrived as the call's word (or arms): made
+  // the object again, it is what `insertAt` is handed and what the `phi` joins.
+  let fallback = values[2]
+  if (emitter.table.resultByValue(sig.paramTypes[2])) {
+    const privateAbi = privateResultAbi(emitter, sig.visibleOutside())
+    fallback = unpackReturnedResult(emitter, sig.paramTypes[2], fallback, false, privateAbi)
+  }
   const kept = emitProbeCall(emitter, -1, tableMethod(emitter, owner, "probe"), values[0], values[1])
   const ty = emitter.llvm(sig.returnType)
   const found = fn.newBlock("get.found")
@@ -903,11 +938,11 @@ const emitMapRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): str
   const foundEdge = fn.currentBlock().label
   fn.emit(`br label %${done.label}`)
   fn.placeBlock(insert)
-  emitInsertAt(emitter, kept, values[2])
+  emitInsertAt(emitter, kept, fallback)
   const insertEdge = fn.currentBlock().label
   fn.emit(`br label %${done.label}`)
   fn.placeBlock(done)
-  return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${values[2]}, %${insertEdge} ]`)
+  return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${fallback}, %${insertEdge} ]`)
 }
 
 /**
