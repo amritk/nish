@@ -16,7 +16,7 @@ import { checkExpression } from "./expressions";
 import { checkDefiniteAssignment } from "./assignment";
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
-import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModuleNames } from "./nish_modules";
+import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModuleNames } from "./nish-modules";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
@@ -75,7 +75,7 @@ import {
   Node,
 } from "./nodes";
 import { StringSet } from "./map";
-import { COLLECTIONS_SPECIFIER } from "./std_modules";
+import { COLLECTIONS_SPECIFIER } from "./std-modules";
 import {
   AliasInfo,
   CheckedProgram,

@@ -49,7 +49,7 @@ import {
   storesInlineElements,
   unwrapParens,
   unwrapStringPassthrough,
-} from "./emit_util";
+} from "./emit-util";
 import {
   N_ARRAY,
   N_ARROW,
@@ -82,8 +82,8 @@ import {
   N_WHILE,
   Node,
 } from "./nodes";
-import { literalLength } from "./emit_arrays";
-import { isResultConstructorCall, resultMethodName } from "./emit_result";
+import { literalLength } from "./emit-arrays";
+import { isResultConstructorCall, resultMethodName } from "./emit-result";
 import { StringSet } from "./map";
 import { Options } from "./options";
 import { CheckedProgram, elementStride, FunctionSig } from "./program";
@@ -336,7 +336,7 @@ class EscapeAnalysis {
    * Bytes per element, for the stack budget. WP15 §2a: an array of classes
    * holds its elements inline, so a stackable `new Array<Point>(64)` is 64
    * `Point`s of slot rather than 64 pointers — the same question
-   * `emit_arrays.ts` asks, and it has to be asked the same way or the budget
+   * `emit-arrays.ts` asks, and it has to be asked the same way or the budget
    * and the `[n x T]` slot the emitter writes would disagree.
    */
   elementSize(elem: i32): i32 {

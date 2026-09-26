@@ -71,7 +71,7 @@ export const T_FIRST_DERIVED: i32 = 13;
  * about. `T_ERROR` passes so a signature that already failed to resolve reports
  * once rather than twice.
  *
- * Deliberately not `interop_abi`'s scalar set, which leaves `i64` and `u64` out:
+ * Deliberately not `interop-abi`'s scalar set, which leaves `i64` and `u64` out:
  * the C ABI spells both (`int64_t`, `uint64_t`), so excluding them would refuse
  * a signature the compiler can already write into a header.
  */

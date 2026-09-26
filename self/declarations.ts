@@ -11,7 +11,7 @@
 // types, arity and the rules about `main`.
 
 import { CheckContext } from "./context";
-import { isNishSpecifier, nishModuleNames } from "./nish_modules";
+import { isNishSpecifier, nishModuleNames } from "./nish-modules";
 import { STD_PREFIX } from "./branding";
 import { parseBareSpecifier } from "./packages";
 import { rejectForeignPointer, resolveType } from "./annotations";

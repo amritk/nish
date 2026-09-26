@@ -40,21 +40,21 @@
 // defines, with its own vocabulary and byte offsets. Printing someone else's
 // node names would be imitation rather than parity, so both compilers answer
 // the flag and each answers it about its own tree. The printer is
-// `ast_text.ts`, shared with `dump_ast.ts` so the flag and the parser oracle
+// `ast-text.ts`, shared with `dump-ast.ts` so the flag and the parser oracle
 // cannot drift, and the goldens are per compiler
-// (`tests/cases/dump_ast.stdout` is stage0's, `tests/self/dump_ast.golden`
+// (`tests/cases/dump_ast.stdout` is stage0's, `tests/self/dump-ast.golden`
 // this one's) because there is nothing between them to be an oracle.
 
-import { astText } from "./ast_text";
+import { astText } from "./ast-text";
 import { CLI, VERSION } from "./branding";
 import { Compilation, EmittedModule } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { checkedText } from "./dump";
-import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop_abi";
-import { generateDts } from "./interop_dts";
-import { generateHeader } from "./interop_header";
-import { generateNapiShim, napiBridges } from "./interop_napi";
-import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
+import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi";
+import { generateDts } from "./interop-dts";
+import { generateHeader } from "./interop-header";
+import { generateNapiShim, napiBridges } from "./interop-napi";
+import { generateWasmLoader, wasmLoaderPath } from "./interop-wasm";
 import { Options } from "./options";
 import { basenameWithout, dirname } from "./paths";
 import { hexOfI64, jsonQuote, splitByte } from "./strings";
@@ -570,7 +570,7 @@ export const main = (): number => {
   // `--emit-ast` needs only the parsed and Phase 0 validated modules, so it
   // answers before `check` and writes no IR — the same point in the pipeline
   // stage0 answers it from. The tree is this compiler's own, not a mirror of
-  // stage0's (`ast_text.ts` says why), so the two goldens differ by design.
+  // stage0's (`ast-text.ts` says why), so the two goldens differ by design.
   //
   // *Validated*, though, is the half that used to be missing: `load` reported
   // a Phase 0 refusal into the sink and answered true anyway, so a program

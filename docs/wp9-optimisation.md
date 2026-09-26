@@ -798,11 +798,11 @@ one.
 - `tests/cases/mem_reclaim_no_stack_alloc.ts` (`--no-stack-alloc`) — the reclaim
   is in the arena layer, not the stack layer, so the flag moves the `Point` into
   the arena and leaves the bracket exactly where it was.
-- `tests/runtime_test.c` — `nish_arena_keep` directly: the move-down case, the
+- `tests/runtime-test.c` — `nish_arena_keep` directly: the move-down case, the
   cross-chunk move, the full-chunk fallback that unlinks the middle chunks, and
   three refusals (a block older than the mark, a read-only literal, a stale
   mark).
-- `docs/cookbook/mem_reclaim.ts` — the cookbook entry, so the IR is in
+- `docs/cookbook/mem-reclaim.ts` — the cookbook entry, so the IR is in
   `docs/IR_COOKBOOK.md`.
 
 There is no `reject_*` case, and deliberately so: the reclaim adds no surface
@@ -1012,7 +1012,7 @@ Two steps, in the order they pay:
    the runtime, whose accesses carry C's own TBAA root, and accesses under
    different roots are never proven disjoint. It must hold for arrays of
    inline records, for `--threads` builds, and for the stack arrays of the
-   memory model (`docs/LANGUAGE.md`, item 1), whose header is an `alloca`. `self/tbaa.ts` and `self/emit_arrays.ts` own it, and the
+   memory model (`docs/LANGUAGE.md`, item 1), whose header is an `alloca`. `self/tbaa.ts` and `self/emit-arrays.ts` own it, and the
    `arr_field_reload` guard in `tests/run.js` is where a structural check
    for it belongs.
 2. **Fixed-length array fields inline in the object**, for a field that is
@@ -1303,7 +1303,7 @@ also counts the read-only constants and the `.eh_frame` unwind entries the
 `size` profile strips) and the source at 11,432 bytes.
 This pass brought both back down without changing any observable behaviour:
 no prototype, symbol name, message, exit status or output byte moved, and
-`tests/runtime_test.c` asserts exactly what it did before.
+`tests/runtime-test.c` asserts exactly what it did before.
 
 | | Before | After | Target |
 | --- | ---: | ---: | ---: |
@@ -1334,7 +1334,7 @@ one, starting from 4,195):
    trailing `snprintf("e%+d")` for the exponent form. Checked against Node's
    `String(x)` on 40,024 doubles (random bit patterns, decimal fractions,
    integers up to 1e21, every boundary in the test) with zero mismatches, on
-   top of the 27 cases in `tests/runtime_test.c`. 3,738 (-243).
+   top of the 27 cases in `tests/runtime-test.c`. 3,738 (-243).
 3. **`nish_argv_init` with one `malloc`** for the header, the pointer table
    and every string: rejected, the second `strlen` pass costs more than the
    second out-of-memory check saved (3,775; a `strlen(strcpy())` variant of
@@ -1377,7 +1377,7 @@ Smoke binaries (`npm run smoke`, size profile) did not grow: `hello` 4,696
 and `multi/main` 4,488 unchanged, `argv` 10,808 -> 10,304, `nbody` 8,800 ->
 8,536. No WASI sysroot is installed here, so the `wasi` profile could not be
 linked; the guarded block compiles on the host with `-D__wasi__
--fsyntax-only -Wall -Wextra -Werror`, and `runtime/runtime_wasm.c` is
+-fsyntax-only -Wall -Wextra -Werror`, and `runtime/runtime-wasm.c` is
 untouched.
 
 ## Tests

@@ -31,10 +31,10 @@
 // nothing. The checker calls it once the calls are checked, the attribute pass
 // reads what it recorded to name the table's functions a fused call reaches
 // instead (`fusedCalleesOf`), and the emitter lowers it (`emitFusedCall`, both
-// in `self/emit_map.ts`).
+// in `self/emit-map.ts`).
 
 import { CheckContext } from "./context";
-import { isAssignmentOperator, unwrapParens } from "./emit_util";
+import { isAssignmentOperator, unwrapParens } from "./emit-util";
 import { isCollectionStruct, isMapOwner } from "./generics";
 import {
   N_BINARY,

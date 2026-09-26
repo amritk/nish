@@ -314,7 +314,7 @@ built once.
 `runtime.c` had a hard 4,096-byte `.text` budget and stood at 3,852 when this
 note was written (MASTER_PLAN §4); there are now two ceilings, each summed over
 every `.text*` section — 3,584 bytes for the core `runtime.c` with 104 bytes of
-headroom, and 1,280 for `runtime_os.c` with 90 (`docs/wp7-runtime.md` §"Runtime
+headroom, and 1,280 for `runtime-os.c` with 90 (`docs/wp7-runtime.md` §"Runtime
 additions and budget"). A poller, a timer heap and a ready queue are not 244
 bytes, and they are not 90 either.
 
@@ -326,7 +326,7 @@ no scheduler.
 
 ### 4.6 wasm is the one target where a loop exists, and it is not ours
 
-`runtime_wasm.c` has no loop and cannot have one: the host owns it. Re-entering
+`runtime-wasm.c` has no loop and cannot have one: the host owns it. Re-entering
 a wasm instance in the middle of a function needs JSPI or an Asyncify rewrite,
 and WASI preview1 has `poll_oneoff` but the twin has no sockets to poll. So the
 target where an event loop already exists is the target where the feature is
@@ -371,7 +371,7 @@ a defence-in-depth rejection in the phase that owns the semantics is the
 pattern `.claude/selfhost.md` recommends ("lex and parse what is written;
 refuse in the phase that owns the rule"). stage1 refuses the same programs in
 its parser, where a different wording is allowed by design
-(`tests/self/reject_oracle.js`).
+(`tests/self/reject-oracle.js`).
 
 ## 5. What to build instead
 
@@ -451,7 +451,7 @@ asynchrony is entirely in generated C.
   function that threw synchronously would be the one failure a `.catch` cannot
   reach, and `await` would surface it from the call rather than from the settle.
 - **Acceptance, measured rather than asserted.** `examples/node-addon-async.mjs`
-  is the harness and `tests/self/interop_async.ts` the addon; a ticker asking to
+  is the harness and `tests/self/interop-async.ts` the addon; a ticker asking to
   be woken every 5 ms reports its worst lateness, which is the latency the loop
   shows a user:
 
@@ -473,7 +473,7 @@ asynchrony is entirely in generated C.
   flag emits a byte-identical shim — checked over the whole interop corpus, IR
   included, against the generator as it stood before the change.
 - **It landed twice, like everything else** (§4.8): stage0's `src/interop/napi.ts` and
-  `self/interop_napi.ts`, with `tests/self/interop_oracle.js` diffing the
+  `self/interop-napi.ts`, with `tests/self/interop_oracle.js` diffing the
   `.napi.c` of both compilers byte for byte over the corpus, the asynchronous
   sidecar now among them. The stage1 half is where the closure-free shape shows:
   stage0's `src/` passes each wrapper a `fail` closure and `self/` passes a mode, and the
@@ -820,7 +820,7 @@ pub extern "C" fn future_size() -> usize {
 Three commands, from a clean checkout with LLVM 18 and Node 22 on `PATH`:
 
 ```bash
-node dist/index.js tests/self/interop_async.ts -o build/spin.ll \
+node dist/index.js tests/self/interop-async.ts -o build/spin.ll \
   --emit-napi-async build/spin_napi.c --threads
 scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
   -o build/spin.node --profile napi --threads
@@ -855,7 +855,7 @@ The soundness half, which is not a latency question:
 # 64 concurrent calls to a function that allocates on every round, under tsan
 clang -std=c11 -O1 -g -fsanitize=thread -DNISH_THREADS=1 -ftls-model=initial-exec \
   -fPIC -shared -Wno-override-module -I"$NODE_INCLUDE" -Iruntime \
-  build/spin.ll runtime/runtime.c runtime/runtime_os.c build/spin_napi.c \
+  build/spin.ll runtime/runtime.c runtime/runtime-os.c build/spin_napi.c \
   -o build/spin_tsan.node
 LD_PRELOAD=$(clang -print-file-name=libtsan.so) node examples/node-addon-async.mjs build/spin_tsan.node
 ```

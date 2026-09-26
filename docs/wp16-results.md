@@ -24,7 +24,7 @@ stage0's `src/checker/result.ts` (the rules), stage0's `src/checker/narrowing.ts
 lowering), stage0's `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
 pointer facts), stage0's `src/validator.ts` (Phase 0 refuses `throw`).
 Stage1, mirroring each: `self/types.ts`, `self/annotations.ts`,
-`self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit_result.ts`,
+`self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit-result.ts`,
 `self/escape.ts`, `self/attributes.ts`, `self/validator.ts`.
 Shared: `runtime/nish.d.ts` (the ambient declarations),
 `runtime/shim.mjs` and `tests/differential/rewrite.js` (the Node twin).

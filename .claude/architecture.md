@@ -29,7 +29,7 @@ Compilation                                                            self/comp
    ├─ emit
    │    ├─ Phase C0 attributes   program-wide purity/escape/loop fixpoint self/attributes.ts
    │    └─ Phase C1 IR text      one module per source file             self/emit.ts
-   └─ interop sidecars           --emit-header / --emit-dts / --emit-napi self/interop_*.ts
+   └─ interop sidecars           --emit-header / --emit-dts / --emit-napi self/interop-*.ts
    │
    ▼
 .ll files ──▶ scripts/build.sh + runtime/*.c ──▶ native binary / .wasm / .node
@@ -57,7 +57,7 @@ Compilation                                                            self/comp
 - **The runtime has two budgets.** Every `.text*` section of
   `clang -Oz -c <file>`, summed, for each of the runtime's two translation
   units: `runtime/runtime.c` — the core every program touches, which is a closed
-  set — stays under 3,584 bytes and is 3,515 today; `runtime/runtime_os.c` — the
+  set — stays under 3,584 bytes and is 3,515 today; `runtime/runtime-os.c` — the
   syscall wrappers, which is the surface that grows as the language reaches
   further into the operating system — stays under 1,280 and is 1,251. They are
   apart so that a new builtin for files, directories, processes, the environment
@@ -69,7 +69,7 @@ Compilation                                                            self/comp
   budget", and the two are raised for different reasons: the core's should come
   down over time, the other one's rises with the surface.
 - **A link line names the runtime through `scripts/build.sh`.** It compiles
-  `runtime_os.c` beside any `runtime.c` it is handed, which is what keeps
+  `runtime-os.c` beside any `runtime.c` it is handed, which is what keeps
   `nish --link`, the published package and every recipe in the
   documents correct with one file named. A direct `clang` line names both.
 - **The name lives in one file.** `self/branding.ts` is the only source file
@@ -104,16 +104,16 @@ self/                the compiler, in Nish, built by the last release (see selfh
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
   checker.ts …       pass 1 signatures, pass 1b imports, pass 2 bodies; side tables in program.ts
   emit*.ts …         attributes, escape analysis, target table, ir builder, runtime ABI
-  interop_*.ts       C header, wasm .d.ts and N-API shim generators
+  interop-*.ts       C header, wasm .d.ts and N-API shim generators
 std/                 the standard library, in Nish
-runtime/             runtime.c (core), runtime_os.c (the syscall wrappers), nish.h,
-                     nish.d.ts (the builtins, for npm run check), runtime_wasm.c,
+runtime/             runtime.c (core), runtime-os.c (the syscall wrappers), nish.h,
+                     nish.d.ts (the builtins, for npm run check), runtime-wasm.c,
                      shim.mjs (the Node twin)
 bin/                 the npm command, which hands over to the prebuilt native compiler
 scripts/             build.sh (clang/LTO profiles), bootstrap.sh, fetch-seed.sh,
                      size-report.sh, smoke.sh, changelog-gen.mjs
 tests/               run.js + cases/ (goldens), link/, ir/, layout/, differential/, self/,
-                     wordings/, nish/, driver.c, runtime_test.c
+                     wordings/, nish/, driver.c, runtime-test.c
 examples/            Nish inputs used by the README, smoke test and size report
 bench/               Nish / C / Rust suite that writes docs/BENCHMARKS.md
 docs/                LANGUAGE, ARCHITECTURE, IR_COOKBOOK, FAQ, INSTALL, MASTER_PLAN, wp*.md design notes

@@ -16,7 +16,7 @@
 
 import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
-import { unwrapParens } from "./emit_util";
+import { unwrapParens } from "./emit-util";
 import {
   N_BIGINT,
   N_BINARY,

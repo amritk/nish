@@ -17,7 +17,7 @@
 - [ ] New construct: implemented in `self/`, golden `.ll`, native round trip (`.out`), at least one `reject_*` case
 - [ ] New construct: not *used* in `self/`'s own source until the next release (the rolling freeze CI's `bootstrap` job checks)
 - [ ] `docs/LANGUAGE.md` and the IR cookbook updated, `CHANGELOG.md` line added
-- [ ] `runtime.c` / `runtime_os.c` size reported if either changed (`node tests/run.js budget`)
+- [ ] `runtime.c` / `runtime-os.c` size reported if either changed (`node tests/run.js budget`)
 
 ## Related issues
 

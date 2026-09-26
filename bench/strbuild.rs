@@ -1,6 +1,6 @@
 // Rust twin of strbuild.ts: the same join tree over immutable strings, where
 // every concatenation allocates a fresh String (`[a, b].concat()`) and the
-// inputs are dropped, matching strbuild_naive.c. (The idiomatic
+// inputs are dropped, matching strbuild-naive.c. (The idiomatic
 // `String::push_str` would grow one buffer in place instead and is O(n);
 // docs/BENCHMARKS.md reports it separately.)
 const N: i32 = 131072; // bench:n

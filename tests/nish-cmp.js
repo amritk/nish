@@ -45,7 +45,7 @@
  *   - not the wording of diagnostics, and not the dumps. A program both
  *     compilers refuse is counted and named apart (there is no artefact on
  *     either side); its message is pinned by the `.err` fragments checked in
- *     beside it, which `tests/self/reject_oracle.js` reads. A program compiled with `--emit-ast` or `--emit-checked` writes
+ *     beside it, which `tests/self/reject-oracle.js` reads. A program compiled with `--emit-ast` or `--emit-checked` writes
  *     no artefact either, and its stdout is pinned by the `<name>.stdout`
  *     golden beside it. Both are counted in the summary rather than folded
  *     into a skip count;
@@ -145,7 +145,7 @@ const DECLARED = [
     why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
   },
   {
-    program: "docs/cookbook/fn_add_no_semicolons.ts",
+    program: "docs/cookbook/fn-add-no-semicolons.ts",
     changelog: "Make semicolons optional, by TypeScript's insertion rule",
     why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
   },
@@ -205,7 +205,7 @@ const DECLARED = [
     why: "its word count, `counts.set(w, (counts.get(w) ?? 0) + 1)`, is now one probe",
   },
   {
-    program: "docs/cookbook/map_get.ts",
+    program: "docs/cookbook/map-get.ts",
     changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
     why: "its `bump` is the word-count update, now one probe",
   },
@@ -216,7 +216,7 @@ const DECLARED = [
     why: "`tally.ts` is a guarded insert, `if (!m.has(w)) { m.set(w, 1); }`, now one probe",
   },
   {
-    program: "docs/cookbook/map_fused.ts",
+    program: "docs/cookbook/map-fused.ts",
     changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
     why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
   },
@@ -256,7 +256,7 @@ const DECLARED = [
     why: "it imports `nish/map`, which the reference compiler does not have",
   },
   {
-    program: "docs/cookbook/map_fused_extras.ts",
+    program: "docs/cookbook/map-fused-extras.ts",
     changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
     why: "it imports `nish/map`, which the reference compiler does not have",
   },
@@ -366,7 +366,7 @@ const DECLARED = [
     why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
   },
   {
-    program: "docs/cookbook/map_iter.ts",
+    program: "docs/cookbook/map-iter.ts",
     changelog: "For...of over Map keys() and values() and over a Set",
     why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
   },
@@ -431,7 +431,7 @@ const DECLARED = [
     why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
   },
   {
-    program: "docs/cookbook/map_get.ts",
+    program: "docs/cookbook/map-get.ts",
     changelog: "Map.get, typed V | undefined and narrowed as TypeScript does",
     why: "a new program: it calls `get` on the global `Map`, or uses `??` or `=== undefined` on its result, which the reference compiler refuses",
   },
@@ -556,7 +556,7 @@ const DECLARED = [
     why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
   },
   {
-    program: "docs/cookbook/map_has.ts",
+    program: "docs/cookbook/map-has.ts",
     changelog: "The global Map and Set, backed by std/collections.ts",
     why: "a new program: it names the global `Map` or `Set`, which the reference compiler refuses as an unknown class",
   },
@@ -589,8 +589,8 @@ const DECLARED = [
     why: "a new program; its two loop checks stay, but `xs[0]` loses its check: the builtin `toI32` calls before it no longer drop the length its array literal proved",
   },
   {
-    program: "docs/cookbook/str_bounds_toi32.ts",
-    file: "str_bounds_toi32.ll",
+    program: "docs/cookbook/str-bounds-toi32.ts",
+    file: "str-bounds-toi32.ll",
     changelog: "Prove bounds through toI32(length) and compile std/text silent",
     why: "the cookbook snippet for the `toI32(s.length)` hoist, whose check the reference compiler keeps",
   },
@@ -715,7 +715,7 @@ const DECLARED = [
     why: "a new program: a field written through a constrained parameter, which the reference compiler refuses to parse",
   },
   {
-    program: "docs/cookbook/gen_constraint.ts",
+    program: "docs/cookbook/gen-constraint.ts",
     file: "exit",
     changelog: "Constrained type parameters (WP18 G6)",
     why: "a new cookbook snippet: the constrained-parameter lowering, which the reference compiler refuses to parse",
@@ -949,7 +949,7 @@ const DECLARED = [
     why: "a new program: `Box<i32>.pair<U>` under -g, which the reference compiler refuses at the method's type parameter list and HEAD compiles with `DISubprogram`s named `Box<i32>.pair<string>` and `Box<i32>.pair<i32>`",
   },
   {
-    program: "docs/cookbook/gen_method.ts",
+    program: "docs/cookbook/gen-method.ts",
     file: "exit",
     changelog: "Generic methods on classes (WP18 §14 q7)",
     why: "the cookbook snippet for a generic method, which the reference compiler refuses at the method's type parameter list and HEAD compiles to `@Chooser.pick$i32`, `@Chooser.pick$str` and `@Box$i32.keep$str`",
@@ -974,8 +974,8 @@ const DECLARED = [
       why: "the compiler's own field-held accesses are proven by property-path length facts, so their checks and the attributes a dropped panic frees move in every module",
     })),
   {
-    program: "bench/hoist_field.ts",
-    file: "hoist_field.ll",
+    program: "bench/hoist-field.ts",
+    file: "hoist-field.ll",
     changelog: "Key bounds length facts by property path",
     why: "`fieldScan`'s `h.xs[i]` is proven by `i < h.xs.length`, the check the reference compiler keeps and the 2.38x this change measures",
   },
@@ -1132,8 +1132,8 @@ const DECLARED = [
     why: "a new program: a whole-record store into `rs` keeps `c.rec.xs`, read off a `Rec` view in a class field, from being hoisted and keeps its check, where the reference compiler hoists it and reads the replaced array",
   },
   {
-    program: "docs/cookbook/arr_bounds_path.ts",
-    file: "arr_bounds_path.ll",
+    program: "docs/cookbook/arr-bounds-path.ts",
+    file: "arr-bounds-path.ll",
     changelog: "Key bounds length facts by property path",
     why: "the cookbook snippet for a property-path fact, whose `h.xs[i]` check the reference compiler keeps",
   },
@@ -1175,13 +1175,13 @@ const DECLARED = [
   },
   {
     program: "tests/cases/str_bytes.ts",
-    file: "str_bytes.ll",
+    file: "str-bytes.ll",
     changelog: "A function whose unproven charCodeAt can panic is not willreturn",
     why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it and `@test` lose `willreturn`, and `@firstByte` its `readonly`, as an unproven `a[i]` already does",
   },
   {
-    program: "docs/cookbook/str_bytes.ts",
-    file: "str_bytes.ll",
+    program: "docs/cookbook/str-bytes.ts",
+    file: "str-bytes.ll",
     changelog: "A function whose unproven charCodeAt can panic is not willreturn",
     why: "`@firstByte`'s unproven `charCodeAt(0)` can reach `nish_panic_index`, so it loses `willreturn` and `readonly` and the attribute groups renumber",
   },
@@ -1318,13 +1318,13 @@ const DECLARED = [
     why: "a new program: a private function and arrows passed to another module's templates, which the reference compiler refuses to parse",
   },
   {
-    program: "docs/cookbook/fnarg_named.ts",
+    program: "docs/cookbook/fnarg-named.ts",
     file: "exit",
     changelog: "Compile-time function parameters, monomorphised per callee",
     why: "the cookbook snippet for a function parameter given two named callees, which the reference compiler refuses to parse",
   },
   {
-    program: "docs/cookbook/fnarg_arrow.ts",
+    program: "docs/cookbook/fnarg-arrow.ts",
     file: "exit",
     changelog: "Compile-time function parameters, monomorphised per callee",
     why: "the cookbook snippet for a lifted arrow argument, which the reference compiler refuses to parse",
@@ -1384,14 +1384,14 @@ const DECLARED = [
     why: "`main` gets the callee arena scope: it takes no pointer, and a callee leaves arena memory behind",
   },
   {
-    program: "docs/cookbook/mem_callee_scope.ts",
-    file: "mem_callee_scope.ll",
+    program: "docs/cookbook/mem-callee-scope.ts",
+    file: "mem-callee-scope.ll",
     changelog: "Give a function the arena scope when only its callees allocate",
     why: "the cookbook snippet for the callee scope: `size` brackets itself, which the reference compiler does not give it",
   },
   {
     program: "tests/cases/mem_callee_scope.ts",
-    file: "mem_callee_scope.ll",
+    file: "mem-callee-scope.ll",
     changelog: "Give a function the arena scope when only its callees allocate",
     why: "a new program: `List.benchmark` brackets itself with the callee scope, which the reference compiler does not give it",
   },
@@ -1607,7 +1607,7 @@ const DECLARED = [
   },
   {
     program: "tests/cases/arr_repeat_check.ts",
-    file: "arr_repeat_check.ll",
+    file: "arr-repeat-check.ll",
     changelog: "A passed bounds check proves the same index on the same array",
     why: "a new program: AWFY Permute's `swap` on a field array keeps two of its four checks, and `double`'s repeated `this.v[i]` one of three",
   },
@@ -1678,8 +1678,8 @@ const DECLARED = [
     why: "`once[0]` in the `return` is proven by the checked store `once[0] = 7` before it",
   },
   {
-    program: "docs/cookbook/arr_repeat_check.ts",
-    file: "arr_repeat_check.ll",
+    program: "docs/cookbook/arr-repeat-check.ts",
+    file: "arr-repeat-check.ll",
     changelog: "A passed bounds check proves the same index on the same array",
     why: "the cookbook snippet for the rule: `swap` keeps two of its four checks",
   },
@@ -2142,7 +2142,7 @@ function excerpt(want, got, limit) {
  *
  * Returns exactly one of:
  *   `{ dump }`         — its own flags ask for a dump, so neither side writes an artefact
- *   `{ refused }`      — both compilers refuse it; the message is `reject_oracle.js`'s
+ *   `{ refused }`      — both compilers refuse it; the message is `reject-oracle.js`'s
  *   `{ differences }`  — `[{ surface, detail }]`, where `surface` is the file name or "exit"
  *   `{ files, lines, rooted, versioned }` — they agree, over this many files
  *                      and IR lines, this many of them only once each side's

@@ -127,7 +127,7 @@ compiler adds as house rules:
 - **Dispatch by a central `switch` on the node kind, not by `if` chains**
   across constructs. A new construct is a new case in each layer, mirrored.
 - **A module owns a construct family**, and the family's checker and emitter
-  halves are named for each other (`arrays.ts` / `emit_arrays.ts`).
+  halves are named for each other (`arrays.ts` / `emit-arrays.ts`).
 - **The rolling freeze.** `self/` is built by the last release, so it may only
   use what that release compiles, however much the tree it sits in can.
 
@@ -198,7 +198,7 @@ linted. What still differs:
   title-cased: `IRBlock`, `IRFunction`, not `IrBlock` or `IrFunction`. An object key
   that names an environment variable is CONSTANT_CASE too (`NISH_BOOTSTRAP`).
 - **File and directory names are kebab-case**: `emit-arrays.ts`, not
-  `emit_arrays.ts` or `emitArrays.ts`. Biome's `useFilenamingConvention` checks
+  `emit-arrays.ts` or `emitArrays.ts`. Biome's `useFilenamingConvention` checks
   the files Biome reads, and `scripts/check-filenames.mjs` checks the rest of
   the tree. ALL-CAPS documents (`README.md`, `docs/LANGUAGE.md`) and the test
   fixture trees are exempt ([`linting.md`](./linting.md)). Some files still

@@ -83,7 +83,7 @@ diagnostic means adding its fragment to `self/codes.ts` with the next free
 number in its band. **A number is never moved, reused or handed out twice**: a
 retired message keeps its entry, and `--check` fails on a duplicate code or an
 entry that does not have the table's shape. It does not know whether a code is
-*reached* — `tests/diagnostic_coverage.js` asks that, one `tests/wordings/`
+*reached* — `tests/diagnostic-coverage.js` asks that, one `tests/wordings/`
 program per code, and fails a code no program provokes and no line of
 `tests/wordings/unreachable.txt` explains. In a merge conflict in
 `self/codes.ts`, keep both sides' entries and renumber only the ones this branch

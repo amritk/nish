@@ -5,7 +5,7 @@
  * with `self/runtime.ts` (the IR side) and the implementation, which is
  * two translation units: `runtime/runtime.c` holds the core every program
  * touches — the arena, strings, arrays, number formatting, the panics — and
- * `runtime/runtime_os.c` holds everything that wraps a system call: the file
+ * `runtime/runtime-os.c` holds everything that wraps a system call: the file
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch`. They are separate so that each carries
  * its own measured code-size ceiling (docs/wp7-runtime.md, "Runtime additions
@@ -41,7 +41,7 @@ extern "C" {
  * ELF refuses to link that against a non-TLS definition. `scripts/build.sh
  * --threads` passes the macro to every input, which is how `nish --threads
  * --link` keeps the two halves in step. The same definition is in
- * runtime/runtime.c and runtime/runtime_wasm.c. */
+ * runtime/runtime.c and runtime/runtime-wasm.c. */
 #ifdef NISH_THREADS
 #define NISH_TLS _Thread_local
 #else
@@ -73,7 +73,7 @@ typedef struct nish_str {
  * `off` and `cap` are `uint64_t` and not `size_t` because that `i64` is what
  * the inlined fast path bumps and compares on every target: under wasm32 a
  * `size_t` pair would put them at bytes 4 and 8 while compiled code reads 8
- * and 16. runtime.c and runtime_wasm.c static-assert these offsets. */
+ * and 16. runtime.c and runtime-wasm.c static-assert these offsets. */
 struct nish_arena {
   char *buf;
   uint64_t off;
@@ -140,7 +140,7 @@ nish_str *nish_str_from_u64(uint64_t v);
 
 /* Process and file I/O (WP7). `nish_exit` never returns; the file functions
  * print a message to stderr and exit(1) on a fatal error. Everything from here
- * to the end of the clock section below is implemented in runtime_os.c, with
+ * to the end of the clock section below is implemented in runtime-os.c, with
  * `nish_random` and `nish_argv_init` the exceptions: neither asks the operating
  * system anything (the clock only seeds the first, and the entry point hands the
  * second its arguments), so both stay with the core. `nish_random` keeps one seed
@@ -181,11 +181,11 @@ void nish_append_file(const nish_str *path, const nish_str *data);
  * A returned array lives in the arena (valid until the next reset/release):
  * copy `len` elements out of `data` before recycling.
  *
- * An array field stored inside its object (`self/inline_arrays.ts`) is this
+ * An array field stored inside its object (`self/inline-arrays.ts`) is this
  * header followed by its `K` slots, `struct { nish_array h; T slots[K]; }`
  * with `h.data == (char *)slots` and `h.cap == K`; `self/runtime.ts`'s
  * `ARRAY_TYPE` and `self/structs.ts`'s `INLINE_HEADER_BYTES` are the same 24
- * bytes, and `tests/layout/inline_array.c` holds the three to it. It only
+ * bytes, and `tests/layout/inline-array.c` holds the three to it. It only
  * happens where no header, `.d.ts` or N-API shim describes the class, so a
  * host that includes a generated header never meets one. */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
@@ -260,7 +260,7 @@ int32_t nish_spawn(const nish_array *argv);
  * paths must differ: each is opened separately with its own offset, so naming
  * one file twice makes the streams overwrite each other instead of
  * interleaving; capture them apart and concatenate to merge them. One `static`
- * implementation in runtime_os.c backs both spawn builtins, which is what keeps
+ * implementation in runtime-os.c backs both spawn builtins, which is what keeps
  * the argument vector, the wait and the signal convention written once. */
 int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err);
 
@@ -316,7 +316,7 @@ double nish_parse_number(const nish_str *s, int32_t mode);
 /* Checked integer division (Rust semantics): the failed-check path. */
 void nish_panic_div(bool by_zero);
 
-/* ---- Parallel work (WP20 T1 / wp29 stage P1), runtime/runtime_parallel.c ----
+/* ---- Parallel work (WP20 T1 / wp29 stage P1), runtime/runtime-parallel.c ----
  *
  * One region of work, divided. `nish_parallel_range` calls `body(lo, hi, ctx)`
  * once per chunk of a partition of `[0, len)`: contiguous chunks, at most one

@@ -45,7 +45,7 @@ let wasm = null;
 if (spawnSync("clang", ["-print-prog-name=wasm-ld"]).status === 0) {
   // sumArray takes an array, so the module links the freestanding wasm runtime;
   // sum.mjs (written next to sum.d.ts) is the loader that marshals the Float64Array.
-  run("bash", ["scripts/build.sh", `${out}/sum.ll`, "runtime/runtime_wasm.c", "-o", `${out}/sum.wasm`, "--profile", "wasm"]);
+  run("bash", ["scripts/build.sh", `${out}/sum.ll`, "runtime/runtime-wasm.c", "-o", `${out}/sum.wasm`, "--profile", "wasm"]);
   const { load } = await import(pathToFileURL(`${out}/sum.mjs`));
   wasm = await load(readFileSync(`${out}/sum.wasm`));
 }

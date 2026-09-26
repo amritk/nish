@@ -51,13 +51,13 @@ text_sum() {                             # text_sum <object>: every .text* secti
 }
 sect() { size -A "$2" | awk -v s="$1" '$1 == s { print $2 }'; }
 "${CC:-clang}" -Oz -c runtime/runtime.c -o build/size/runtime.o
-"${CC:-clang}" -Oz -c runtime/runtime_os.c -o build/size/runtime_os.o
+"${CC:-clang}" -Oz -c runtime/runtime-os.c -o build/size/runtime_os.o
 row runtime "$(text_sum build/size/runtime.o)" \
   "clang -Oz -c runtime/runtime.c && size -A (.text*; budget 3584)"
 row runtime_os "$(text_sum build/size/runtime_os.o)" \
-  "clang -Oz -c runtime/runtime_os.c && size -A (.text*; budget 1280)"
+  "clang -Oz -c runtime/runtime-os.c && size -A (.text*; budget 1280)"
 row rodata "$(sect .rodata build/size/runtime.o)" "the core object's .rodata (no budget; the Ryu tables live here)"
-# `scripts/build.sh` compiles runtime_os.c beside any runtime.c it is handed, so naming the
+# `scripts/build.sh` compiles runtime-os.c beside any runtime.c it is handed, so naming the
 # core here builds the whole runtime -- and `--gc-sections` then drops whatever this module
 # never calls, which for `examples/add.ts` is all of it.
 for p in debug speed size; do

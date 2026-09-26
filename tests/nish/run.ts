@@ -485,7 +485,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   // carries its own size budget. A direct `clang` line names both; only
   // `scripts/build.sh` pairs them for its callers.
   link.push("runtime/runtime.c");
-  link.push("runtime/runtime_os.c");
+  link.push("runtime/runtime-os.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

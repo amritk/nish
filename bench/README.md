@@ -69,7 +69,7 @@ used to show, the respelling that did *not* close it and the private per-arm
 ABI that did, are in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
 
-`strbuild` has one more version, `strbuild_naive.c`: the same immutable-string
+`strbuild` has one more version, `strbuild-naive.c`: the same immutable-string
 algorithm with a `malloc` per string and a `free` as soon as a string has been
 copied into its successor. Against `strbuild.c` (a bump arena that never
 frees, i.e. the Nish runtime's model) it isolates what the arena costs and
@@ -90,13 +90,13 @@ both.
 
 | Name | What it measures | Size (`bench:n`) |
 | --- | --- | --- |
-| `par_compute` | 64 dependent square roots per element, nothing shared and nothing allocated: the cores are the only limit | 2^21 elements |
-| `par_alloc` | a string formatted and its bytes summed per element: the body allocates, the compiler says so (NL9012) and each element gives its bytes back | 2^22 elements |
-| `par_nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
-| `par_short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
+| `par-compute` | 64 dependent square roots per element, nothing shared and nothing allocated: the cores are the only limit | 2^21 elements |
+| `par-alloc` | a string formatted and its bytes summed per element: the body allocates, the compiler says so (NL9012) and each element gives its bytes back | 2^22 elements |
+| `par-nbody` | 1024 bodies under gravity, one map per step over 3n probes (one per body and axis), each summing over every other body | 1024 bodies, 16 steps |
+| `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 
 ```bash
-node bench/run.mjs --only par            # the four; `--only par_nbody` names one
+node bench/run.mjs --only par            # the four; `--only par-nbody` names one
 node bench/run.mjs --validate --only par # both runs of each, checksums only
 ```
 
@@ -116,15 +116,15 @@ they compile on any compiler that builds this tree.
 
 | Name | Layout |
 | --- | --- |
-| `map_proto_ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`self/map.ts`) had before WP32 S6 |
-| `map_proto_ordered_fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
-| `map_proto_ordered_fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
-| `map_proto_unordered` | unordered: hash, key and value in the bucket |
+| `map-proto-ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`self/map.ts`) had before WP32 S6 |
+| `map-proto-ordered-fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
+| `map-proto-ordered-fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
+| `map-proto-unordered` | unordered: hash, key and value in the bucket |
 
 Each runs five workloads over string keys and then over integer keys: insert,
 hit, miss, word count and delete churn. An LCG in the program drives them, with
 no I/O. Each prints one checksum line per workload. The twin is not C:
-`map_node.mjs` runs the same workloads on Node's global `Map`, and all five
+`map-node.mjs` runs the same workloads on Node's global `Map`, and all five
 must print the same ten lines. Given `time` as its first argument, each program
 also prints every workload's elapsed nanoseconds to stderr. It measures around
 the workload alone, so the table is not process wall time.
@@ -133,24 +133,24 @@ the workload alone, so the table is not process wall time.
 
 Three more programs time the `Map` that shipped ([docs/wp32-map.md](../docs/wp32-map.md)
 §10) on the same workloads, so every checksum line they print is one of the
-ten `map_node.mjs` prints, and the unordered prototype's row is the same work.
+ten `map-node.mjs` prints, and the unordered prototype's row is the same work.
 Each runs two variants, and checks in the program that both reach the same
 checksum:
 
 | Name | Variants | Comparison | Node twin |
 | --- | --- | --- | --- |
-| `map_wordcount` | `fused`: `counts.set(w, (counts.get(w) ?? 0) + 1)`, one probe a word; `double`: a `get` into a `const`, then the `set`, which §9.1 leaves unfused, two probes a word | (b), on §2's `count` | `map_wordcount.mjs` |
-| `map_presize` | `grow`, and `reserve`: `reserve(m, n)` from `nish/map` before the first insert | (c), on §2's `insert` | `map_presize.mjs`, where `reserve` is `nish/map`'s own body and does nothing |
-| `map_vs_stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete` | (d) | `map_node.mjs` |
+| `map-wordcount` | `fused`: `counts.set(w, (counts.get(w) ?? 0) + 1)`, one probe a word; `double`: a `get` into a `const`, then the `set`, which §9.1 leaves unfused, two probes a word | (b), on §2's `count` | `map-wordcount.mjs` |
+| `map-presize` | `grow`, and `reserve`: `reserve(m, n)` from `nish/map` before the first insert | (c), on §2's `insert` | `map-presize.mjs`, where `reserve` is `nish/map`'s own body and does nothing |
+| `map-vs-stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete` | (d) | `map-node.mjs` |
 
-`StringMap` is compiler-internal, so `map_vs_stringmap.ts` carries a copy of
+`StringMap` is compiler-internal, so `map-vs-stringmap.ts` carries a copy of
 it, lines 28 to 204 of `self/map.ts` between two marked rules, and the `bench`
 check in `tests/run.js` fails when the copy is no longer a verbatim part of
 `self/map.ts`. Given `time [variant]`, each program prints its workloads'
 elapsed nanoseconds to stderr; naming a variant runs it alone. The runner times
 every variant, and every twin, in a process of its own, because in one process
 the second variant would run on the memory the first left, and under Node on a
-warm JIT. `map_presize grow` and `map_presize reserve` are also each run once
+warm JIT. `map-presize grow` and `map-presize reserve` are also each run once
 for their peak RSS.
 
 ```bash
@@ -230,7 +230,7 @@ hash-table code the gate holds, so a codegen regression in a probe loop, or in
 | Nish `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
 | Nish (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
-| C `-O3` naive | `strbuild_naive.c` only |
+| C `-O3` naive | `strbuild-naive.c` only |
 | Go | `go build -trimpath -ldflags=-s -w` |
 | Rust `-O3` | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
 | Rust native | as above plus `-C target-cpu=native` |
@@ -389,7 +389,7 @@ LLVM, so the check runs there on every push.
   not part of this suite either. It times both shapes against each other inside
   one process and prints the two figures, so `nish bench/substr.ts --link x &&
   ./x` is the whole protocol: no baseline compiler and no second build.
-- `hoist_field.ts`: what hoisting an array header out of a loop is worth
+- `hoist-field.ts`: what hoisting an array header out of a loop is worth
   (WP15 §2c candidate 2), not part of this suite either. Three scans do the same
   arithmetic over the same 8192 doubles and differ only in where the source
   array is *kept* — a parameter, a class field, and a class field read once into
@@ -398,7 +398,7 @@ LLVM, so the check runs there on every push.
 
   ```bash
   npm run build
-  build/nish bench/hoist_field.ts -o build/hoistir/ --link build/hoist --profile speed
+  build/nish bench/hoist-field.ts -o build/hoistir/ --link build/hoist --profile speed
   taskset -c 2 build/hoist
   ```
 

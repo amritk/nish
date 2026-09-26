@@ -3,7 +3,7 @@
  * compiled with.
  *
  * Three oracles walk the same set of Nish programs — `checked_oracle.js`,
- * `ir_oracle.js` and, for the negatives, `reject_oracle.js` — and a program
+ * `ir_oracle.js` and, for the negatives, `reject-oracle.js` — and a program
  * that is only compilable with a flag has to be given it by all of them.
  * Otherwise stage0 refuses it, the oracle records "stage0 rejects it", and a
  * file nobody is comparing looks like a fact about the port.
@@ -85,7 +85,7 @@ function checkerArgs(file) {
 
 /**
  * Every positive whole program of the corpus. A source with a `.err` sidecar
- * is a rejection and belongs to `reject_oracle.js`, so it is left out here.
+ * is a rejection and belongs to `reject-oracle.js`, so it is left out here.
  *
  * A **subdirectory holding a `main.ts`** is one program too, which is how the
  * multi-module shapes are written everywhere in this repository that is not

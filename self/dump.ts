@@ -3,7 +3,7 @@
 //
 // It lives apart from the two programs that print it because both do: the
 // `self/compile.ts` driver writes it for `--emit-checked`, and
-// `self/dump_checked.ts` is the one-file entry `tests/self/checked_oracle.js`
+// `self/dump-checked.ts` is the one-file entry `tests/self/checked_oracle.js`
 // spawns. One module means one format, which is the whole point of a dump that
 // is compared byte for byte with stage0's.
 //

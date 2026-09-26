@@ -51,10 +51,10 @@ import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
 import { StringMap, StringSet } from "./map";
-import { isNishSpecifier } from "./nish_modules";
+import { isNishSpecifier } from "./nish-modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
-import { layoutInlineArrays } from "./inline_arrays";
+import { layoutInlineArrays } from "./inline-arrays";
 import { proveCallSiteRanges } from "./ranges";
 import {
   PACKAGE_ROOT_SEGMENT,
@@ -89,7 +89,7 @@ import {
   manifestVersion,
   nishExportEntry,
 } from "./manifest";
-import { COLLECTIONS_SPECIFIER, isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std_modules";
+import { COLLECTIONS_SPECIFIER, isStdModuleName, stdModuleName, stdModuleNames, stdModulePath } from "./std-modules";
 import {
   allocationWarning,
   arenaMessage,
@@ -573,7 +573,7 @@ export class Compilation {
       // the second one reaches the IR (§A7's third bullet).
       //
       // A driver that never looked for its package — the `--emit-checked`
-      // dump entries the stage1 oracles build (`self/dump_checked.ts`) — is
+      // dump entries the stage1 oracles build (`self/dump-checked.ts`) — is
       // answered from the working directory, which is the last place
       // `compile.ts` looks too. Without it `/std/<name>.ts` was asked for, and
       // a corpus program importing the library could not be dumped at all.
@@ -880,7 +880,7 @@ export class Compilation {
       programs.push(unit.checker.program);
     }
     const mode = buildModeOf(this.opts, programs);
-    // Which array fields live inside their objects (`self/inline_arrays.ts`).
+    // Which array fields live inside their objects (`self/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
     layoutInlineArrays(contexts, mode);

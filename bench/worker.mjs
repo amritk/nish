@@ -52,7 +52,7 @@ run(nishc.cmd, [...nishc.prefix, "bench/scan.ts", "-o", `${out}/scan.ll`]);
 run("bash", [
   "scripts/build.sh",
   `${out}/scan.ll`,
-  "runtime/runtime_wasm.c",
+  "runtime/runtime-wasm.c",
   "-o",
   `${out}/scan.wasm`,
   "--profile",

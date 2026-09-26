@@ -818,7 +818,7 @@ export class Parser {
    * reach the marker's rule either. Both compilers still refuse every one of
    * those programs, and the difference is §A3's declared class — stage1's first
    * diagnostic is a syntax error — which `--parity` declares and
-   * `tests/self/reject_oracle.js` counts rather than fails
+   * `tests/self/reject-oracle.js` counts rather than fails
    * (`tests/cases/reject_cls_static_field_untyped`, `reject_cls_static_block`,
    * `reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`).
    * Keeping a copy of the rule here would put the sentence back, uncoded and in
@@ -929,7 +929,7 @@ export class Parser {
       // read and refused here rather than carried to the checker because the
       // `typescript` package parses it and leaves the refusal to its own
       // checker, so a list kept on this node would be a tree
-      // `tests/parser_oracle.js` cannot print (docs/wp18-generics.md §15.8).
+      // `tests/parser-oracle.js` cannot print (docs/wp18-generics.md §15.8).
       if (this.at(TOK_LT)) {
         const listStart = this.start;
         this.parseTypeParameters();

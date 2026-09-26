@@ -45,8 +45,8 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 
 Nish source is TypeScript syntax, read by the compiler's own lexer and
 parser (`self/lexer.ts`, `self/parser.ts`), which follow TypeScript's rules for
-tokens, comments, and ASI; `tests/lexer_oracle.js` and
-`tests/parser_oracle.js` hold them to the `typescript` package's scanner and
+tokens, comments, and ASI; `tests/lexer-oracle.js` and
+`tests/parser-oracle.js` hold them to the `typescript` package's scanner and
 parser over the test corpus. Syntax errors are reported as `syntax error:` in
 the same `file:line:col` shape (`tests/run.js`, WP10 block).
 
@@ -153,7 +153,7 @@ same `i32`).
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `self/types.ts` (`TypeTable.llvmType`, `alignOf`),
-`self/interop_abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
+`self/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
 `cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
 `sizeof` cross-checked against clang, [wp2-classes.md](wp2-classes.md#layout)).
 
@@ -1919,7 +1919,7 @@ export const main = (): i32 => {
   runs under Node and what `npm run check` type-checks. The compiler recognises
   the two templates by module and name and lowers one call in each instance —
   the loop over the whole range — onto `nish_parallel_range`
-  (`runtime/runtime_parallel.c`), which hands each thread a contiguous chunk
+  (`runtime/runtime-parallel.c`), which hands each thread a contiguous chunk
   and joins them all before it returns. Everything else in the instance is
   emitted as written (`tests/link/par_map`, whose `threads.ll` is the whole
   lowering).
@@ -2857,7 +2857,7 @@ program:
   from a call still makes its array and then copies it, a cost that is about
   the same at 8 slots as at 64. A field reassigned from a call and read fewer
   than a few dozen times per assignment is therefore slower inline; the
-  measurement is in the header of `self/inline_arrays.ts`.
+  measurement is in the header of `self/inline-arrays.ts`.
 
 Why reference semantics are unchanged: the object is still a pointer, so a
 class holding an inline field can be stored in arrays and passed around as
@@ -2948,7 +2948,7 @@ import { write } from "nish:io";
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
-`Infinity`, `-0` as `0`) (`tests/runtime_test.c`, `tests/cases/str_f64_mode`,
+`Infinity`, `-0` as `0`) (`tests/runtime-test.c`, `tests/cases/str_f64_mode`,
 `math_intrinsics`). Booleans print `true`/`false`.
 
 ### `Math`
@@ -3238,7 +3238,7 @@ stored in a field would land in the written set and lose the `const` its
 annotation promised (`tests/cases/arr_readonly_escape`). The checker is what
 makes the promise true — no store, no `push`, no `pop`, and no widening back to
 a mutable `T[]` — and it is exact where the fixpoint is not
-(`writtenArrayParams`, `self/interop_abi.ts`).
+(`writtenArrayParams`, `self/interop-abi.ts`).
 
 `process.argv` is read-only under a rule of its own rather than this type
 (`` `process.argv` is read-only ``), because it is a value and not an

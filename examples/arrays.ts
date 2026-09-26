@@ -4,7 +4,7 @@
 //
 //   nish examples/arrays.ts -o build/arrays.ll \
 //     --emit-header build/arrays.h --emit-dts build/arrays.d.ts --emit-napi build/arrays_napi.c
-//   scripts/build.sh build/arrays.ll runtime/runtime_wasm.c -o build/arrays.wasm --profile wasm
+//   scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
 //   node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(...) = 2, 4, 6
 //   scripts/build.sh build/arrays.ll runtime/runtime.c build/arrays_napi.c -o build/arrays.node --profile napi
 //   node examples/node-addon.mjs build/arrays.node

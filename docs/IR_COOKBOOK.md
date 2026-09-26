@@ -74,7 +74,7 @@ function is pure and always returns. `add` is not `export`ed, so it is
 ([Linkage](#linkage-export-and---no-strict-exports)) — and the `nsw` on its
 `add` is the other default ([Integer overflow](#integer-overflow-nsw-by-default---wrapping-to-opt-out)).
 
-<!-- cookbook:begin fn_add -->
+<!-- cookbook:begin fn-add -->
 ```ts
 const add = (a: number, b: number): number => a + b;
 ```
@@ -88,7 +88,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end fn_add -->
+<!-- cookbook:end fn-add -->
 
 ### The same function with the `function` keyword
 
@@ -97,11 +97,11 @@ The declaration form is a spelling, not a lowering
 checked signature and never the syntax that produced it, so the legacy
 `function` spelling and the arrow above compile to the same module, instruction
 for instruction — attribute group included. `function` is still accepted, and
-this listing is now the only one in the cookbook that uses it: `decl_ffi` was
+this listing is now the only one in the cookbook that uses it: `decl-ffi` was
 the last of the others, and what it has left is `declare function`, which is a
 different thing (§9).
 
-<!-- cookbook:begin fn_add_function -->
+<!-- cookbook:begin fn-add-function -->
 ```ts
 function add(a: number, b: number): number {
   return a + b;
@@ -117,16 +117,16 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end fn_add_function -->
+<!-- cookbook:end fn-add-function -->
 
 ### The same function without semicolons
 
 A semicolon is optional wherever TypeScript would insert one: at a line break,
 before a `}` and at the end of the file ([Lexical rules](LANGUAGE.md#lexical-rules)).
 The parser drops a `;` whether it was written or inserted, so nothing after it
-can tell the two apart, and this is `fn_add`'s module byte for byte.
+can tell the two apart, and this is `fn-add`'s module byte for byte.
 
-<!-- cookbook:begin fn_add_no_semicolons -->
+<!-- cookbook:begin fn-add-no-semicolons -->
 ```ts
 const add = (a: number, b: number): number => a + b
 ```
@@ -140,11 +140,11 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end fn_add_no_semicolons -->
+<!-- cookbook:end fn-add-no-semicolons -->
 
 ### The same function with `--plain`
 
-<!-- cookbook:begin fn_add_plain -->
+<!-- cookbook:begin fn-add-plain -->
 Compiled with `--plain`.
 
 ```ts
@@ -158,14 +158,14 @@ entry:
   ret i32 %0
 }
 ```
-<!-- cookbook:end fn_add_plain -->
+<!-- cookbook:end fn-add-plain -->
 
 ### `--number-mode f64`
 
 `number` becomes `double`; float constants are printed as IEEE-754 hex because
 LLVM rejects decimal literals that do not round-trip exactly.
 
-<!-- cookbook:begin fn_f64 -->
+<!-- cookbook:begin fn-f64 -->
 Compiled with `--number-mode f64`.
 
 ```ts
@@ -181,7 +181,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end fn_f64 -->
+<!-- cookbook:end fn-f64 -->
 
 ### A generic function
 
@@ -202,7 +202,7 @@ the declaring package's prefix (`tests/link/package_generic_import`). A
 two-module program cannot be a snippet here, which is why those three are the
 cases that pin it.
 
-<!-- cookbook:begin gen_function -->
+<!-- cookbook:begin gen-function -->
 ```ts
 const identity = <T>(x: T): T => x;
 
@@ -255,7 +255,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
 ```
-<!-- cookbook:end gen_function -->
+<!-- cookbook:end gen-function -->
 
 ### Inference, and per-instantiation facts
 
@@ -266,7 +266,7 @@ declaration — comparing two integers reads no memory, comparing two strings
 calls into the runtime, so one source line gets `readnone` in one instantiation
 and `readonly` in the other.
 
-<!-- cookbook:begin gen_infer -->
+<!-- cookbook:begin gen-infer -->
 ```ts
 const firstOf = <T>(xs: T[]): T => xs[0];
 
@@ -390,7 +390,7 @@ attributes #5 = { nounwind noreturn cold }
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
 ```
-<!-- cookbook:end gen_infer -->
+<!-- cookbook:end gen-infer -->
 
 ### A generic class
 
@@ -408,7 +408,7 @@ and its members are emitted by the module that declares `Box`, and a module
 that holds one gets the `%struct` line and a `declare` per member, exactly as
 it does for an imported declared class.
 
-<!-- cookbook:begin gen_class -->
+<!-- cookbook:begin gen-class -->
 ```ts
 class Box<T> {
   value: T;
@@ -505,7 +505,7 @@ attributes #2 = { nounwind }
 !6 = !{!"Box$str", !5, i64 0}
 !7 = !{!6, !5, i64 0}
 ```
-<!-- cookbook:end gen_class -->
+<!-- cookbook:end gen-class -->
 
 ### A constrained type parameter
 
@@ -521,7 +521,7 @@ decides which members a `T` may name (only `Shape`'s, so `shape.radius` is
 refused even at `T = Circle`) and which type arguments a call may imply (a
 class that does not `implements Shape` is refused at the call).
 
-<!-- cookbook:begin gen_constraint -->
+<!-- cookbook:begin gen-constraint -->
 ```ts
 interface Shape {
   area: i32;
@@ -613,7 +613,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind }
 ```
-<!-- cookbook:end gen_constraint -->
+<!-- cookbook:end gen-constraint -->
 
 ### A generic method
 
@@ -626,7 +626,7 @@ for that type — `this` first, the same body, its own attributes — and a seco
 call at a tuple already asked for adds nothing. Inside `keep` both the class's
 `T` and the method's `U` are bound (docs/wp18-generics.md §15.8).
 
-<!-- cookbook:begin gen_method -->
+<!-- cookbook:begin gen-method -->
 ```ts
 class Chooser {
   flip: boolean = false;
@@ -757,7 +757,7 @@ attributes #2 = { nounwind }
 !6 = !{!"Box$i32", !5, i64 0}
 !7 = !{!6, !5, i64 0}
 ```
-<!-- cookbook:end gen_method -->
+<!-- cookbook:end gen-method -->
 
 ### A function parameter
 
@@ -770,7 +770,7 @@ callee and no parameter for `f` at all: there is no function pointer and no
 indirect call, and each gets the attributes of its own callee
 (docs/wp23-language-surface.md §6).
 
-<!-- cookbook:begin fnarg_named -->
+<!-- cookbook:begin fnarg-named -->
 ```ts
 // A function-typed parameter makes `apply` a template over its callee: one
 // `define` per function argument, each calling its callee directly.
@@ -820,7 +820,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end fnarg_named -->
+<!-- cookbook:end fnarg-named -->
 
 ### An arrow argument, lifted
 
@@ -831,7 +831,7 @@ top-level names. Its parameter takes `T` from the array, and its concise body
 binds `U`, so the instantiation is `map<i32, f64, (n) => ...>`,
 `@map$i32$f64$fn.13.halves$arrow0`.
 
-<!-- cookbook:begin fnarg_arrow -->
+<!-- cookbook:begin fnarg-arrow -->
 ```ts
 // An arrow argument is lifted into a function of its own, and `U` is bound
 // from its body: `map<i32, f64, (n) => ...>`.
@@ -983,7 +983,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!"element double", !6, i64 0}
 !16 = !{!15, !15, i64 0}
 ```
-<!-- cookbook:end fnarg_arrow -->
+<!-- cookbook:end fnarg-arrow -->
 
 ### `nish/threads`: a map and a reduce over the partitioner
 
@@ -1018,7 +1018,7 @@ grain of one block. The whole of both
 modules is `tests/link/par_map`'s golden (docs/LANGUAGE.md, "Data
 parallelism").
 
-<!-- cookbook:begin par_map -->
+<!-- cookbook:begin par-map -->
 ```ts
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
@@ -1058,7 +1058,7 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end par_map -->
+<!-- cookbook:end par-map -->
 
 ### `nish/threads`: a body that allocates
 
@@ -1068,7 +1068,7 @@ parallel body it gets one anyway, so each call marks the arena of whichever
 thread runs it and releases it before returning, and a map holds one element's
 string at a time. The call compiles with performance warning NL9012.
 
-<!-- cookbook:begin par_alloc -->
+<!-- cookbook:begin par-alloc -->
 ```ts
 import { parallelMapInto } from "nish/threads";
 
@@ -1129,7 +1129,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end par_alloc -->
+<!-- cookbook:end par-alloc -->
 
 ### `Map` and `Set`: one probe, copied into the module
 
@@ -1141,13 +1141,13 @@ code (docs/wp32-map.md §4.1). `s.has(x)` is a call to `Set$i32.has`, which asks
 place — here `fmix32`, then 0 moved to 1 — and the loop reads `entryHashes`
 and `entryKeys` only after the bucket word's top eight bits match the hash's,
 comparing the stored hash before the key (§2). `hashKey` and `sameKey` are
-never called: they are intrinsics `self/emit_map.ts` lowers per key type. So is
+never called: they are intrinsics `self/emit-map.ts` lowers per key type. So is
 `storedKey`, where `insertAt` pushes the key: a float key is pushed as
 `fadd <key>, 0.0`, which stores a -0 as +0 as JavaScript does, and every other
 key is pushed as it is, with no instruction added
 (`tests/cases/map_key_negzero`).
 
-<!-- cookbook:begin map_has -->
+<!-- cookbook:begin map-has -->
 ```ts
 export const seen = (s: Set<i32>, x: i32): boolean => s.has(x);
 ```
@@ -1399,7 +1399,7 @@ attributes #3 = { noreturn nounwind }
 !19 = !{!"element i32", !1, i64 0}
 !20 = !{!19, !19, i64 0}
 ```
-<!-- cookbook:end map_has -->
+<!-- cookbook:end map-has -->
 
 ### `m.get(k)`: a found bit and a value, never a struct
 
@@ -1415,7 +1415,7 @@ its own ([the next section but one](#fused-lookups-one-probe-for-a-key-asked-abo
 bit negated, so the narrowed read of `n` after the early return is that `phi`,
 with nothing stored and nothing probed a second time.
 
-<!-- cookbook:begin map_get -->
+<!-- cookbook:begin map-get -->
 ```ts
 export const bump = (m: Map<string, i32>, w: string): void => {
   m.set(w, (m.get(w) ?? 0) + 1);
@@ -2712,7 +2712,7 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !26 = !{!25, !25, i64 0}
 !27 = !{!17, !15, i64 0}
 ```
-<!-- cookbook:end map_get -->
+<!-- cookbook:end map-get -->
 
 ### `Map` and `Set` iteration
 
@@ -2730,7 +2730,7 @@ zero a rebuild doubles instead of compacting, so no entry moves under the
 cursor. That is two stores a loop, in `walkOpen` and `walkClose`, and none an
 entry.
 
-<!-- cookbook:begin map_iter -->
+<!-- cookbook:begin map-iter -->
 ```ts
 export const total = (m: Map<i32, i32>): i32 => {
   let sum: i32 = 0;
@@ -2953,7 +2953,7 @@ attributes #4 = { nounwind noreturn cold }
 !18 = !{!16, !15, i64 40}
 !19 = !{!16, !15, i64 32}
 ```
-<!-- cookbook:end map_iter -->
+<!-- cookbook:end map-iter -->
 
 ### Fused lookups: one probe for a key asked about twice
 
@@ -2972,7 +2972,7 @@ allocate or assign, so no bucket can move in between; a pattern that breaks
 that rule is the separate calls, one probe each. The instance's `set`, `has`
 and `add` are not called here, so they are not copied into the module.
 
-<!-- cookbook:begin map_fused -->
+<!-- cookbook:begin map-fused -->
 ```ts
 export const count = (counts: Map<string, i32>, w: string): void => {
   counts.set(w, (counts.get(w) ?? 0) + 1);
@@ -4505,7 +4505,7 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !34 = !{!28, !15, i64 40}
 !35 = !{!28, !15, i64 0}
 ```
-<!-- cookbook:end map_fused -->
+<!-- cookbook:end map-fused -->
 
 ### `nish/map`: `getOrInsert` and `reserve`
 
@@ -4519,7 +4519,7 @@ an argument is. `reserve(ids, n)` is one call of the table's `reserveSlots`,
 which doubles the bucket table until `n` entries fit under the load bound and
 re-files it from the stored hashes, moving no entry.
 
-<!-- cookbook:begin map_fused_extras -->
+<!-- cookbook:begin map-fused-extras -->
 ```ts
 import { getOrInsert, reserve } from "nish/map";
 
@@ -5839,7 +5839,7 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !26 = !{!"element ptr", !1, i64 0}
 !27 = !{!26, !26, i64 0}
 ```
-<!-- cookbook:end map_fused_extras -->
+<!-- cookbook:end map-fused-extras -->
 
 ## Types
 
@@ -5848,7 +5848,7 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 `i64` arithmetic overflows like `i32` — undefined by default, wrapping under
 `--wrapping`; `toI32` on an `i64` is a `trunc`, which wraps either way.
 
-<!-- cookbook:begin types_i64 -->
+<!-- cookbook:begin types-i64 -->
 ```ts
 const square = (x: i64): i64 => x * x;
 
@@ -5887,14 +5887,14 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end types_i64 -->
+<!-- cookbook:end types-i64 -->
 
 ### `boolean`
 
 `boolean` is `i1`, `zeroext` at the ABI boundary; `!` is `xor i1 %x, true`;
 `&&` short-circuits through its own block and a `phi`.
 
-<!-- cookbook:begin types_bool -->
+<!-- cookbook:begin types-bool -->
 ```ts
 const xor = (a: boolean, b: boolean): boolean => a !== b;
 
@@ -5924,14 +5924,14 @@ land.end:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end types_bool -->
+<!-- cookbook:end types-bool -->
 
 ### Numeric literals and contextual typing
 
 `3000000000` takes `i64` from the annotation, `2` takes `f64` from the other
 operand, and every `f64` constant is IEEE-754 hex.
 
-<!-- cookbook:begin expr_literals -->
+<!-- cookbook:begin expr-literals -->
 ```ts
 const literals = (): f64 => {
   const big: i64 = 3000000000;
@@ -5961,7 +5961,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_literals -->
+<!-- cookbook:end expr-literals -->
 
 ## Declarations
 
@@ -5971,7 +5971,7 @@ attributes #0 = { nounwind willreturn readnone }
 `load`s, writes are `store`s. `opt -mem2reg` (part of `-O1`) promotes them to
 registers, so this costs nothing.
 
-<!-- cookbook:begin decl_locals -->
+<!-- cookbook:begin decl-locals -->
 ```ts
 const polynomial = (x: number, k: number): number => {
   let acc: number = x * x * 3;
@@ -6002,7 +6002,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end decl_locals -->
+<!-- cookbook:end decl-locals -->
 
 ### Module constants
 
@@ -6013,7 +6013,7 @@ The checker folds it, and every use site carries the value — `AREA` reaches
 folding stops at the constant, and `${...}` is not itself a constant
 expression.
 
-<!-- cookbook:begin decl_const -->
+<!-- cookbook:begin decl-const -->
 ```ts
 const WIDTH: i32 = 8;
 const AREA: i32 = WIDTH * WIDTH;
@@ -6055,7 +6055,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end decl_const -->
+<!-- cookbook:end decl-const -->
 
 ### Type aliases
 
@@ -6064,7 +6064,7 @@ nothing: `Byte` is `u8`, `Bytes` is `u8[]`, `Label` is `string`, and the IR
 below is the IR of the same program with the aliases written out. There is no
 listing for "the alias", because there is nothing for it to be.
 
-<!-- cookbook:begin decl_type_alias -->
+<!-- cookbook:begin decl-type-alias -->
 ```ts
 type Byte = u8;
 type Bytes = Byte[];
@@ -6171,7 +6171,7 @@ attributes #2 = { nounwind }
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
 ```
-<!-- cookbook:end decl_type_alias -->
+<!-- cookbook:end decl-type-alias -->
 
 ### `declare function`: calling C
 
@@ -6204,7 +6204,7 @@ exactly as it is written; the two definitions beside it are arrows bound to a
 spelling for the ambient one would need a function type, and Phase 0 forbids
 those.
 
-<!-- cookbook:begin decl_ffi -->
+<!-- cookbook:begin decl-ffi -->
 ```ts
 declare function abs(n: i32): i32;
 
@@ -6243,7 +6243,7 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 ```
-<!-- cookbook:end decl_ffi -->
+<!-- cookbook:end decl-ffi -->
 
 ### `CPtr`: the pointer a C function hands back
 
@@ -6263,7 +6263,7 @@ than a happy accident: no pointer this compiler allocated crosses the boundary
 in either direction, so there is nothing for C to have captured when the scope
 releases.
 
-<!-- cookbook:begin decl_ffi_pointer -->
+<!-- cookbook:begin decl-ffi-pointer -->
 ```ts
 declare function calloc(count: u64, size: u64): CPtr | null;
 declare function free(block: CPtr): void;
@@ -6311,7 +6311,7 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 ```
-<!-- cookbook:end decl_ffi_pointer -->
+<!-- cookbook:end decl-ffi-pointer -->
 
 ### Numeric `enum`
 
@@ -6323,7 +6323,7 @@ There is no symbol, no table and no `%struct` for the enum, which is why the
 same program written with `i32` module constants compiles to a byte-identical
 module (`tests/cases/enum_ir` and `enum_expanded`).
 
-<!-- cookbook:begin decl_enum -->
+<!-- cookbook:begin decl-enum -->
 ```ts
 enum Kind {
   If = 1,
@@ -6401,14 +6401,14 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind }
 ```
-<!-- cookbook:end decl_enum -->
+<!-- cookbook:end decl-enum -->
 
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that
 calls it, releases the arena, and returns the exit code.
 
-<!-- cookbook:begin decl_main -->
+<!-- cookbook:begin decl-main -->
 ```ts
 export const main = (): number => {
   console.log("hello from Nish");
@@ -6438,7 +6438,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end decl_main -->
+<!-- cookbook:end decl-main -->
 
 ### A shebang line, and `nish run`
 
@@ -6488,7 +6488,7 @@ specialise it for its call sites, or drop it; only an exported function is a
 C-ABI symbol. This is the default, so the snippet below is compiled with no
 flags at all.
 
-<!-- cookbook:begin decl_strict_exports -->
+<!-- cookbook:begin decl-strict-exports -->
 ```ts
 export const double = (n: number): number => helper(n) * 2;
 
@@ -6511,12 +6511,12 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end decl_strict_exports -->
+<!-- cookbook:end decl-strict-exports -->
 
 `--no-strict-exports` puts every function back on the C ABI, which is what a
 driver that calls a non-exported function needs. The same source:
 
-<!-- cookbook:begin decl_no_strict_exports -->
+<!-- cookbook:begin decl-no-strict-exports -->
 Compiled with `--no-strict-exports`.
 
 ```ts
@@ -6541,11 +6541,11 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end decl_no_strict_exports -->
+<!-- cookbook:end decl-no-strict-exports -->
 
 ### Modules: the exporter
 
-<!-- cookbook:begin mod_math -->
+<!-- cookbook:begin mod-math -->
 ```ts
 export const square = (n: number): number => n * n;
 ```
@@ -6559,7 +6559,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end mod_math -->
+<!-- cookbook:end mod-math -->
 
 ### Modules: the importer
 
@@ -6567,9 +6567,9 @@ The importer `declare`s `square` with exactly the attributes the exporter's
 `define` carries; the attribute-group numbers are per module, the contents are
 identical.
 
-<!-- cookbook:begin mod_main -->
+<!-- cookbook:begin mod-main -->
 ```ts
-import { square } from "./mod_math";
+import { square } from "./mod-math";
 
 export const main = (): number => square(7);
 ```
@@ -6595,20 +6595,20 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 ```
-<!-- cookbook:end mod_main -->
+<!-- cookbook:end mod-main -->
 
 ### Modules: a package imported by name
 
-`import { scale } from "cookbook_pkg"` resolves through `node_modules` and the
+`import { scale } from "cookbook-pkg"` resolves through `node_modules` and the
 `nish` export condition, and what it resolves to is the package's **source**
 (WP21 S2, [wp21-packages.md](wp21-packages.md) §2). The package is compiled into
 this program like any other module, so the only thing the IR shows of it is the
 prefix on its symbols: a dependency's functions are `<package>.<name>`, and the
 root package — the program being compiled — keeps the bare names it always had.
 
-<!-- cookbook:begin mod_package -->
+<!-- cookbook:begin mod-package -->
 ```ts
-import { scale } from "cookbook_pkg";
+import { scale } from "cookbook-pkg";
 
 export const main = (): number => scale(7);
 ```
@@ -6634,7 +6634,7 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 ```
-<!-- cookbook:end mod_package -->
+<!-- cookbook:end mod-package -->
 
 ## Statements
 
@@ -6643,7 +6643,7 @@ attributes #2 = { nounwind willreturn }
 Blocks are named `if.then`, `if.else`, `if.end` (`.N` suffixes when reused).
 A branch that already ended in `ret` gets no `br`.
 
-<!-- cookbook:begin stmt_if -->
+<!-- cookbook:begin stmt-if -->
 ```ts
 const abs = (x: number): number => {
   if (x < 0) {
@@ -6698,14 +6698,14 @@ if.end:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end stmt_if -->
+<!-- cookbook:end stmt-if -->
 
 ### `while`
 
 Loop-carried variables stay in allocas (no `phi`); `mem2reg` rebuilds the SSA
 form. A loop that is not a counted `for` drops `willreturn`.
 
-<!-- cookbook:begin stmt_while -->
+<!-- cookbook:begin stmt-while -->
 ```ts
 const countDigits = (n: number): number => {
   let digits = 0;
@@ -6763,11 +6763,11 @@ while.end:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end stmt_while -->
+<!-- cookbook:end stmt-while -->
 
 ### `do ... while`
 
-<!-- cookbook:begin stmt_do -->
+<!-- cookbook:begin stmt-do -->
 ```ts
 const sumDigits = (n: number): number => {
   let sum = 0;
@@ -6839,14 +6839,14 @@ do.end:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end stmt_do -->
+<!-- cookbook:end stmt-do -->
 
 ### `for`
 
 A counted loop (`i < n; i++` with `i` and `n` untouched in the body) keeps
 `willreturn`. `continue` jumps to `for.inc`.
 
-<!-- cookbook:begin stmt_for -->
+<!-- cookbook:begin stmt-for -->
 ```ts
 const sumTo = (n: number): number => {
   let sum = 0;
@@ -6891,7 +6891,7 @@ for.end:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end stmt_for -->
+<!-- cookbook:end stmt-for -->
 
 ### `switch`
 
@@ -6901,7 +6901,7 @@ clauses have no block of their own — `case 1:` points at the body of `case 2:`
 which is the whole of Nish's fallthrough. A label that names a module
 constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
-<!-- cookbook:begin stmt_switch -->
+<!-- cookbook:begin stmt-switch -->
 ```ts
 const KIND_CALL: i32 = 4;
 
@@ -6945,7 +6945,7 @@ sw.default:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end stmt_switch -->
+<!-- cookbook:end stmt-switch -->
 
 ### `break` / `continue`
 
@@ -6953,7 +6953,7 @@ attributes #0 = { nounwind willreturn readnone }
 the block they are in, so `if.then` gets no second branch. The `break` here
 also disqualifies nothing: the loop is still counted, so `willreturn` stays.
 
-<!-- cookbook:begin stmt_break_continue -->
+<!-- cookbook:begin stmt-break-continue -->
 ```ts
 const sumOdd = (n: number): number => {
   let s = 0;
@@ -7036,7 +7036,7 @@ for.end:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end stmt_break_continue -->
+<!-- cookbook:end stmt-break-continue -->
 
 ### `Result<T, E>`
 
@@ -7048,7 +7048,7 @@ continues in `res.ok`; `isErr()` is that same load, and the payload reads are
 `getelementptr` + `load` in the block the branch guards. Nothing here unwinds:
 every function is still `nounwind`.
 
-<!-- cookbook:begin stmt_result -->
+<!-- cookbook:begin stmt-result -->
 ```ts
 const half = (n: number): Result<number, string> => {
   if (n % 2 !== 0) {
@@ -7215,7 +7215,7 @@ attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
-<!-- cookbook:end stmt_result -->
+<!-- cookbook:end stmt-result -->
 
 ### `Result<T, E>` returned in a register
 
@@ -7243,7 +7243,7 @@ than building an `Err`. `@describe` is the caller's view: one alloca, one
 unpack, then the WP16 `getelementptr` + `load` the discriminant test guards,
 unchanged.
 
-<!-- cookbook:begin stmt_result_by_value -->
+<!-- cookbook:begin stmt-result-by-value -->
 ```ts
 const half = (n: number): Result<number, number> => {
   if (n % 2 !== 0) {
@@ -7401,14 +7401,14 @@ if.end:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end stmt_result_by_value -->
+<!-- cookbook:end stmt-result-by-value -->
 
 ### `process.exit(code)`
 
 A `noreturn` call plus `unreachable`; it is a terminator, so `finish` needs
 no `return`. Every function that can reach it loses `willreturn`.
 
-<!-- cookbook:begin stmt_process_exit -->
+<!-- cookbook:begin stmt-process-exit -->
 ```ts
 const finish = (code: number): number => {
   console.log("exiting");
@@ -7433,14 +7433,14 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { noreturn nounwind }
 ```
-<!-- cookbook:end stmt_process_exit -->
+<!-- cookbook:end stmt-process-exit -->
 
 ### `for (const x of a)`
 
 An index loop over the header's `len`, re-read every iteration; no bounds
 check is needed because the loop condition is the check.
 
-<!-- cookbook:begin stmt_for_of -->
+<!-- cookbook:begin stmt-for-of -->
 ```ts
 const total = (xs: number[]): number => {
   let sum = 0;
@@ -7511,13 +7511,13 @@ attributes #0 = { nounwind willreturn readonly }
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end stmt_for_of -->
+<!-- cookbook:end stmt-for-of -->
 
 ## Expressions
 
 ### Ternary
 
-<!-- cookbook:begin expr_ternary -->
+<!-- cookbook:begin expr-ternary -->
 ```ts
 const max = (a: number, b: number): number => (a > b ? a : b);
 ```
@@ -7541,14 +7541,14 @@ cond.end:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_ternary -->
+<!-- cookbook:end expr-ternary -->
 
 ### Short-circuit `&&` / `||`
 
 The right operand lives in its own block (`land.rhs`, `lor.rhs`), so
 `zeroOrSmallQuotient(0)` never divides by zero.
 
-<!-- cookbook:begin expr_logical -->
+<!-- cookbook:begin expr-logical -->
 ```ts
 const inRange = (x: number, lo: number, hi: number): boolean => x >= lo && x < hi;
 
@@ -7603,13 +7603,13 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end expr_logical -->
+<!-- cookbook:end expr-logical -->
 
 ### Compound assignment, `++` / `--`
 
 Load, apply, store; postfix yields the old value, prefix the new one.
 
-<!-- cookbook:begin expr_compound -->
+<!-- cookbook:begin expr-compound -->
 ```ts
 const step = (): number => {
   let x = 10;
@@ -7650,14 +7650,14 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_compound -->
+<!-- cookbook:end expr-compound -->
 
 ### Bitwise `& | ^` and `~`
 
 One instruction each, and no panic path: unlike `/` these leave the function
 `readnone` and `willreturn`. `~a` is `xor a, -1`, because LLVM has no `not`.
 
-<!-- cookbook:begin expr_bitwise -->
+<!-- cookbook:begin expr-bitwise -->
 ```ts
 const mix = (a: i32, b: i32): i32 => (a & b) | (a ^ b);
 
@@ -7691,7 +7691,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_bitwise -->
+<!-- cookbook:end expr-bitwise -->
 
 ### A field or an element as the compound target
 
@@ -7703,7 +7703,7 @@ therefore evaluated exactly once, so `bytes[next()] &= 255` calls `next()` a
 single time. The shift-count mask is the local's, too — `f.bits <<= n` masks
 `n` to 31 before the `shl`.
 
-<!-- cookbook:begin expr_compound_target -->
+<!-- cookbook:begin expr-compound-target -->
 ```ts
 class Flags {
   bits: i32 = 0;
@@ -7789,7 +7789,7 @@ attributes #2 = { nounwind noreturn cold }
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end expr_compound_target -->
+<!-- cookbook:end expr-compound-target -->
 
 ### Shifts, and the count mask
 
@@ -7799,7 +7799,7 @@ for `i64` — because LLVM makes a wider shift poison while JavaScript wraps the
 count; Nish follows JavaScript. A constant count is masked at compile time
 and no `and` appears (`a >> 3` below); a variable one costs the `and`.
 
-<!-- cookbook:begin expr_shifts -->
+<!-- cookbook:begin expr-shifts -->
 ```ts
 const constantCount = (a: i32): i32 => a >> 3;
 
@@ -7843,7 +7843,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_shifts -->
+<!-- cookbook:end expr-shifts -->
 
 ### Checked integer division
 
@@ -7855,7 +7855,7 @@ argument is true, `attempt to divide with overflow` otherwise) and exits 1;
 is neither `willreturn` nor `readnone`. LLVM folds the check away for a
 constant divisor at `-O1`. `f64` division is a bare `fdiv`.
 
-<!-- cookbook:begin expr_div_checked -->
+<!-- cookbook:begin expr-div-checked -->
 ```ts
 const div = (a: number, b: number): number => a / b;
 ```
@@ -7884,7 +7884,7 @@ div.ok:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end expr_div_checked -->
+<!-- cookbook:end expr-div-checked -->
 
 ### Unsigned integers
 
@@ -7901,7 +7901,7 @@ looking at in the listing below:
   same width and different signedness moves no bits and emits no instruction,
   which is why an unsigned type costs nothing to represent.
 
-<!-- cookbook:begin expr_unsigned -->
+<!-- cookbook:begin expr-unsigned -->
 ```ts
 const divide = (a: u32, b: u32): u32 => a / b;
 
@@ -7958,7 +7958,7 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end expr_unsigned -->
+<!-- cookbook:end expr-unsigned -->
 
 ### `f32`
 
@@ -7972,7 +7972,7 @@ exactly representable as a float — so `0.1` as an `f32` is
 `0x3FB99999A0000000`, the double nearest to `(float) 0.1`, and not the `f64`
 spelling `0x3FB999999999999A`.
 
-<!-- cookbook:begin expr_f32 -->
+<!-- cookbook:begin expr-f32 -->
 ```ts
 const blend = (a: f32, b: f32): f32 => (a + b) / b;
 
@@ -8020,7 +8020,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end expr_f32 -->
+<!-- cookbook:end expr-f32 -->
 
 ## Strings
 
@@ -8030,7 +8030,7 @@ A literal is `{ i64 len, [len+1 x i8] }` constant data referenced through a
 constant `bitcast`; identical literals share one constant; no allocation, so
 the functions stay `readnone`.
 
-<!-- cookbook:begin str_literal -->
+<!-- cookbook:begin str-literal -->
 ```ts
 const greeting = (): string => "hello, world";
 
@@ -8052,7 +8052,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end str_literal -->
+<!-- cookbook:end str-literal -->
 
 ### `+`, `===`, `.length`
 
@@ -8060,7 +8060,7 @@ attributes #0 = { nounwind willreturn readnone }
 `nish_str_eq` (reads: caller becomes `readonly`), `.length` is a direct
 `load i64` of the header (no call).
 
-<!-- cookbook:begin str_ops -->
+<!-- cookbook:begin str-ops -->
 ```ts
 const join = (a: string, b: string): string => a + b;
 
@@ -8097,7 +8097,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn memory(argmem: read) }
 ```
-<!-- cookbook:end str_ops -->
+<!-- cookbook:end str-ops -->
 
 ### The byte methods
 
@@ -8112,7 +8112,7 @@ parameters.
 Under `opt -O2` the clamp of a literal `0` folds away entirely and `head`
 becomes `max(0, min(n, len))` and the call.
 
-<!-- cookbook:begin str_bytes -->
+<!-- cookbook:begin str-bytes -->
 ```ts
 const firstByte = (s: string): number => s.charCodeAt(0);
 
@@ -8189,7 +8189,7 @@ attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { nounwind noreturn cold }
 attributes #5 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end str_bytes -->
+<!-- cookbook:end str-bytes -->
 
 ### The fast slice
 
@@ -8209,7 +8209,7 @@ clamp is not a check but part of the answer. That is why the two live side by
 side rather than one replacing the other, and it is worth 1.18x on a scan that
 slices every word out of a 300 KB source.
 
-<!-- cookbook:begin str_slice -->
+<!-- cookbook:begin str-slice -->
 ```ts
 const head = (s: string, n: number): string => s.slice(0, n);
 
@@ -8291,7 +8291,7 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
 ```
-<!-- cookbook:end str_slice -->
+<!-- cookbook:end str-slice -->
 
 ### Template literals
 
@@ -8299,7 +8299,7 @@ Constant parts are interned, holes are converted (`nish_str_from_i32`, a
 `select` for booleans, identity for strings), and everything is chained
 through `nish_str_concat`.
 
-<!-- cookbook:begin str_template -->
+<!-- cookbook:begin str-template -->
 ```ts
 const describe = (n: number, ok: boolean, name: string): string => `${name}: n=${n}, ok=${ok}`;
 ```
@@ -8326,11 +8326,11 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 ```
-<!-- cookbook:end str_template -->
+<!-- cookbook:end str-template -->
 
 ### `console.log`
 
-<!-- cookbook:begin str_console_log -->
+<!-- cookbook:begin str-console-log -->
 ```ts
 const report = (): void => {
   console.log("text");
@@ -8363,7 +8363,7 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 ```
-<!-- cookbook:end str_console_log -->
+<!-- cookbook:end str-console-log -->
 
 ## Arrays
 
@@ -8373,7 +8373,7 @@ Unsigned compare against `len`; the failing branch calls the `noreturn cold`
 `nish_panic_index`. `a` is `readonly` in `get` (never stored through) and only
 `nocapture` in `set`.
 
-<!-- cookbook:begin arr_index -->
+<!-- cookbook:begin arr-index -->
 ```ts
 const get = (a: number[], i: number): number => a[i];
 
@@ -8447,7 +8447,7 @@ attributes #1 = { nounwind noreturn cold }
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end arr_index -->
+<!-- cookbook:end arr-index -->
 
 ### A byte element: the same lowering at width 1
 
@@ -8465,7 +8465,7 @@ parameter is a bare `i8` with no `zeroext`, so a narrow value's range is the
 caller's obligation at a *scalar* boundary; at this one there is nothing to
 restore, because the element never travels in a value type at all.
 
-<!-- cookbook:begin arr_u8_elements -->
+<!-- cookbook:begin arr-u8-elements -->
 ```ts
 const get = (bytes: u8[], i: number): u8 => bytes[i];
 
@@ -8539,7 +8539,7 @@ attributes #1 = { nounwind noreturn cold }
 !12 = !{!"element i8", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end arr_u8_elements -->
+<!-- cookbook:end arr-u8-elements -->
 
 ### A proven index: the check the checker removed
 
@@ -8549,7 +8549,7 @@ to trust it (WP15 §2.1/§2.2, `self/bounds.ts`). The loop condition
 proves `i`; the length guard proves the constant `0`. Neither function names
 `nish_panic_index`, so both keep `willreturn`.
 
-<!-- cookbook:begin arr_bounds_proven -->
+<!-- cookbook:begin arr-bounds-proven -->
 ```ts
 const sum = (a: number[]): number => {
   let total = 0;
@@ -8648,7 +8648,7 @@ attributes #1 = { nounwind willreturn readonly }
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end arr_bounds_proven -->
+<!-- cookbook:end arr-bounds-proven -->
 
 ### A proven index through a field: a property-path fact
 
@@ -8661,7 +8661,7 @@ at any call, at any store to a field the path names (through any holder), at a
 whole-record element store and at an assignment to the root, which is why this
 loop has none of them.
 
-<!-- cookbook:begin arr_bounds_path -->
+<!-- cookbook:begin arr-bounds-path -->
 ```ts
 class Holder {
   xs: i32[];
@@ -8752,7 +8752,7 @@ attributes #1 = { nounwind readonly }
 !15 = !{!"element i32", !1, i64 0}
 !16 = !{!15, !15, i64 0}
 ```
-<!-- cookbook:end arr_bounds_path -->
+<!-- cookbook:end arr-bounds-path -->
 
 ### A passed check proves the repeat
 
@@ -8767,7 +8767,7 @@ a field the path names, or a reassignment of the index or the root — and a
 store whose value calls anything teaches a path nothing, because its check
 passed on the array the path named before the call.
 
-<!-- cookbook:begin arr_repeat_check -->
+<!-- cookbook:begin arr-repeat-check -->
 ```ts
 // This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
 // Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
@@ -8925,7 +8925,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !16 = !{!"element i32", !6, i64 0}
 !17 = !{!16, !16, i64 0}
 ```
-<!-- cookbook:end arr_repeat_check -->
+<!-- cookbook:end arr-repeat-check -->
 
 ### A hoisted `toI32(s.length)`: the proof in both number modes
 
@@ -8942,7 +8942,7 @@ proves nothing. Pinned by `tests/cases/perf_bounds_toi32` and
 `perf_bounds_toi32_f64`, with `perf_bounds_toi32_loop` and
 `perf_bounds_toi32_user` as the shapes that keep their check.
 
-<!-- cookbook:begin str_bounds_toi32 -->
+<!-- cookbook:begin str-bounds-toi32 -->
 Compiled with `--number-mode f64`.
 
 ```ts
@@ -9014,7 +9014,7 @@ while.end:
 attributes #0 = { nounwind readonly }
 attributes #1 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end str_bounds_toi32 -->
+<!-- cookbook:end str-bounds-toi32 -->
 
 ### An array in a class field: the header hoisted into the preheader
 
@@ -9102,7 +9102,7 @@ rule and why it is sound are in
 asserts the `opt -O3` result on `tests/cases/arr_field_reload.ts`, and
 `arr_field_reload_records` is the inline-record case that must still reload.
 
-<!-- cookbook:begin arr_field_element -->
+<!-- cookbook:begin arr-field-element -->
 ```ts
 // This code is derived from the SOM benchmarks, see bench/awfy/AUTHORS.md.
 // Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
@@ -9257,7 +9257,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !16 = !{!"element i32", !6, i64 0}
 !17 = !{!16, !16, i64 0}
 ```
-<!-- cookbook:end arr_field_element -->
+<!-- cookbook:end arr-field-element -->
 
 ### A field store beside an array's header
 
@@ -9278,7 +9278,7 @@ Array`, a literal, `push`, `pop`) or C behind a call (`nish_array_grow`, the
 host entries), and the rule that makes that sound is in
 [ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules).
 
-<!-- cookbook:begin arr_header_field -->
+<!-- cookbook:begin arr-header-field -->
 ```ts
 class Link {
   next: Link | null = null;
@@ -9435,7 +9435,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !18 = !{!"Link", !15, i64 0}
 !19 = !{!18, !15, i64 0}
 ```
-<!-- cookbook:end arr_header_field -->
+<!-- cookbook:end arr-header-field -->
 
 ### An array field stored in its object
 
@@ -9451,7 +9451,7 @@ have allocated. `take` is not `readonly` on `this`, because an element store
 now writes the object's own bytes. `Rows` is not exported; an exported class
 keeps the pointer layout in every build but a closed-world `--link`.
 
-<!-- cookbook:begin cls_inline_array -->
+<!-- cookbook:begin cls-inline-array -->
 ```ts
 class Rows {
   free: boolean[];
@@ -9582,7 +9582,7 @@ attributes #2 = { nounwind noreturn cold }
 !13 = !{!9, !7, i64 8}
 !14 = !{!9, !8, i64 16}
 ```
-<!-- cookbook:end cls_inline_array -->
+<!-- cookbook:end cls-inline-array -->
 
 ### `--unchecked-indexing`
 
@@ -9591,7 +9591,7 @@ The compare, the branch and the panic block disappear; `get` regains
 behaviour. Unlike the proof above, this is a promise the *program* makes:
 an out-of-range index is undefined behaviour rather than a panic.
 
-<!-- cookbook:begin arr_unchecked -->
+<!-- cookbook:begin arr-unchecked -->
 Compiled with `--unchecked-indexing`.
 
 ```ts
@@ -9628,7 +9628,7 @@ attributes #0 = { nounwind willreturn readonly }
 !11 = !{!"element i32", !6, i64 0}
 !12 = !{!11, !11, i64 0}
 ```
-<!-- cookbook:end arr_unchecked -->
+<!-- cookbook:end arr-unchecked -->
 
 ### Literals and `push`
 
@@ -9636,7 +9636,7 @@ attributes #0 = { nounwind willreturn readonly }
 `nish_array_grow` only when `len == cap`; `[1, 2]` allocates the header (24
 bytes) and the data (`n * sizeof(T)`).
 
-<!-- cookbook:begin arr_literal_push -->
+<!-- cookbook:begin arr-literal-push -->
 ```ts
 const squares = (n: number): number[] => {
   const xs: number[] = [];
@@ -9780,7 +9780,7 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
 ```
-<!-- cookbook:end arr_literal_push -->
+<!-- cookbook:end arr-literal-push -->
 
 ### `join` and `indexOf`
 
@@ -9792,7 +9792,7 @@ zero rather than by branching, so the copy body stays one block. `indexOf`
 scans with the `===` of the element type — `nish_str_eq` here, an `icmp eq` for
 a number.
 
-<!-- cookbook:begin arr_join -->
+<!-- cookbook:begin arr-join -->
 ```ts
 const report = (parts: string[]): string => parts.join(", ");
 
@@ -9972,14 +9972,14 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!"element ptr", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end arr_join -->
+<!-- cookbook:end arr-join -->
 
 ### `new Array<T>(n)` and `.length`
 
 `new Array<number>(n)` allocates and zero-fills with `llvm.memset`;
 `.length` is one `load` of the header.
 
-<!-- cookbook:begin arr_new -->
+<!-- cookbook:begin arr-new -->
 ```ts
 const zeros = (n: number): number[] => new Array<number>(n);
 
@@ -10063,7 +10063,7 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
 ```
-<!-- cookbook:end arr_new -->
+<!-- cookbook:end arr-new -->
 
 ### `readonly T[]`
 
@@ -10076,7 +10076,7 @@ nocapture` on both parameters is the whole-program fixpoint's, earned the way
 it always was; on `sum` the signature guarantees it as well, which is what lets
 `--emit-header` write `const nish_array *` without proving anything.
 
-<!-- cookbook:begin arr_readonly -->
+<!-- cookbook:begin arr-readonly -->
 ```ts
 const sum = (xs: readonly number[]): number => {
   let total = 0;
@@ -10195,7 +10195,7 @@ attributes #0 = { nounwind willreturn readonly }
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
 ```
-<!-- cookbook:end arr_readonly -->
+<!-- cookbook:end arr-readonly -->
 
 ### An array of records is contiguous
 
@@ -10214,7 +10214,7 @@ array of a `class` is unchanged and still holds one pointer per slot; the rule
 and its reason are in `docs/LANGUAGE.md`,
 "Arrays of records are contiguous".
 
-<!-- cookbook:begin arr_records -->
+<!-- cookbook:begin arr-records -->
 ```ts
 interface Point {
   x: f64;
@@ -10385,7 +10385,7 @@ attributes #2 = { nounwind willreturn }
 !11 = !{!9, !8, i64 16}
 !12 = !{!9, !7, i64 8}
 ```
-<!-- cookbook:end arr_records -->
+<!-- cookbook:end arr-records -->
 
 
 
@@ -10397,7 +10397,7 @@ attributes #2 = { nounwind willreturn }
 `bitcast` and a constructor call; methods are `@Point.method` with `%this`
 first; fields are `getelementptr inbounds` + `load`/`store`.
 
-<!-- cookbook:begin cls_point -->
+<!-- cookbook:begin cls-point -->
 ```ts
 class Point {
   x: number;
@@ -10466,14 +10466,14 @@ attributes #1 = { nounwind willreturn readonly }
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
 ```
-<!-- cookbook:end cls_point -->
+<!-- cookbook:end cls-point -->
 
 ### Field initializers without a constructor
 
 `new Defaults()` stores the literals inline; there is no
 `@Defaults.constructor` symbol.
 
-<!-- cookbook:begin cls_initializers -->
+<!-- cookbook:begin cls-initializers -->
 ```ts
 class Defaults {
   n: number = 42;
@@ -10544,7 +10544,7 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !7 = !{!5, !3, i64 4}
 !8 = !{!5, !4, i64 8}
 ```
-<!-- cookbook:end cls_initializers -->
+<!-- cookbook:end cls-initializers -->
 
 ### Interfaces, object literals, `implements`
 
@@ -10552,7 +10552,7 @@ An object literal allocates and stores every field; a class that `implements`
 an interface converts to it with one `bitcast` because the layouts are
 identical.
 
-<!-- cookbook:begin cls_interface -->
+<!-- cookbook:begin cls-interface -->
 ```ts
 interface Pair {
   first: number;
@@ -10642,7 +10642,7 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
-<!-- cookbook:end cls_interface -->
+<!-- cookbook:end cls-interface -->
 
 ### Widening: `implements` as a prefix
 
@@ -10653,7 +10653,7 @@ there is no inheritance, so a class is never a prefix of another class. A
 `Shape` operation reads and writes the `Square`'s own bytes at the same
 offsets, the class keeps its own methods, and nothing converts back.
 
-<!-- cookbook:begin cls_prefix -->
+<!-- cookbook:begin cls-prefix -->
 ```ts
 interface Shape {
   x: number;
@@ -10728,7 +10728,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 ```
-<!-- cookbook:end cls_prefix -->
+<!-- cookbook:end cls-prefix -->
 
 ## Memory
 
@@ -10741,7 +10741,7 @@ reads and writes its own `%Pair.obj`, so it is `readnone`; `nearest` runs
 the constructor on `%Point.obj` and inherits its `write` effect. Nothing in
 the module touches the arena, so there is no arena prelude at all.
 
-<!-- cookbook:begin mem_stack_object -->
+<!-- cookbook:begin mem-stack-object -->
 ```ts
 interface Pair {
   first: number;
@@ -10840,7 +10840,7 @@ attributes #2 = { nounwind willreturn readnone }
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
 ```
-<!-- cookbook:end mem_stack_object -->
+<!-- cookbook:end mem-stack-object -->
 
 ### The same module with `--no-stack-alloc`
 
@@ -10849,7 +10849,7 @@ each one still dies with its function, both functions get an automatic
 arena scope: `nish_arena_mark` after the allocas, `nish_arena_release` before
 the `ret`. This is the IR every `new` produced before WP6.
 
-<!-- cookbook:begin mem_stack_object_arena -->
+<!-- cookbook:begin mem-stack-object-arena -->
 Compiled with `--no-stack-alloc`.
 
 ```ts
@@ -10988,7 +10988,7 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
 ```
-<!-- cookbook:end mem_stack_object_arena -->
+<!-- cookbook:end mem-stack-object-arena -->
 
 ### An arena-scoped function
 
@@ -10998,7 +10998,7 @@ the arena on entry and releases it before returning: called a million
 times, `Arena.used()` stays flat. `label` returns its template, so the
 caller owns that memory and `label` gets no scope.
 
-<!-- cookbook:begin mem_arena_scope -->
+<!-- cookbook:begin mem-arena-scope -->
 ```ts
 // The concatenation is an arena temporary that dies with the call, so the
 // function marks the arena on entry and releases it before returning.
@@ -11040,7 +11040,7 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 ```
-<!-- cookbook:end mem_arena_scope -->
+<!-- cookbook:end mem-arena-scope -->
 
 ### A scope earned through callees
 
@@ -11056,7 +11056,7 @@ analysis, stack allocation, and arena scopes" (`tests/cases/mem_callee_scope`,
 `mem_callee_scope_tree`, and the `_escape`, `_return`, `_control` and
 `_nested` negatives).
 
-<!-- cookbook:begin mem_callee_scope -->
+<!-- cookbook:begin mem-callee-scope -->
 ```ts
 // `size` allocates nothing itself: `chain` builds the list and `size` keeps a
 // number. `n` is the only thing it was handed and cannot hold a pointer, so
@@ -11218,7 +11218,7 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !5 = !{!4, !3, i64 8}
 !6 = !{!4, !2, i64 0}
 ```
-<!-- cookbook:end mem_callee_scope -->
+<!-- cookbook:end mem-callee-scope -->
 
 ### A scope around each pass of a loop
 
@@ -11232,7 +11232,7 @@ returned. The rule and its proof are in [ARCHITECTURE.md](ARCHITECTURE.md),
 (`tests/cases/mem_loop_scope`, `mem_loop_scope_control`, and the `_escape`,
 `_forof` and `_interior` negatives).
 
-<!-- cookbook:begin mem_loop_scope -->
+<!-- cookbook:begin mem-loop-scope -->
 ```ts
 // `summarise` returns a pointer, so it gets no scope of its own, and each
 // list `build` returns is garbage once its length is read. Nothing the pass
@@ -11404,7 +11404,7 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !16 = !{!"element i32", !1, i64 0}
 !17 = !{!16, !16, i64 0}
 ```
-<!-- cookbook:end mem_loop_scope -->
+<!-- cookbook:end mem-loop-scope -->
 
 ### A tail call, and the release ahead of it
 
@@ -11422,7 +11422,7 @@ and its proof are in [wp6-memory.md](wp6-memory.md) §2b
 `tests/link/tail_call_depth` / `tail_call_depth_debug` for the depth it
 buys).
 
-<!-- cookbook:begin mem_tail_release -->
+<!-- cookbook:begin mem-tail-release -->
 ```ts
 // A tail call whose arguments are all scalars is the last thing its function
 // does, and carries `tail` to say so: the callee is handed no pointer, so it
@@ -11528,7 +11528,7 @@ if.end:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end mem_tail_release -->
+<!-- cookbook:end mem-tail-release -->
 
 ### Reclaiming a returned temporary at the call site
 
@@ -11550,7 +11550,7 @@ it (`tests/cases/fn_arrow_concise`, WP22 §8a). The rule, its proof and what it
 measured are in [wp6-memory.md](wp6-memory.md) §2a and
 [wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim).
 
-<!-- cookbook:begin mem_reclaim -->
+<!-- cookbook:begin mem-reclaim -->
 ```ts
 // A string builder cannot reclaim its own temporaries: the string it returns
 // has to outlive it, so `join` gets no arena scope and every intermediate it
@@ -11677,7 +11677,7 @@ attributes #0 = { nounwind willreturn }
 !3 = !{!"Box", !2, i64 0}
 !4 = !{!3, !2, i64 0}
 ```
-<!-- cookbook:end mem_reclaim -->
+<!-- cookbook:end mem-reclaim -->
 
 ### `Arena.mark` / `release` / `used` / `reset`
 
@@ -11687,7 +11687,7 @@ scope (its own mark would be invalidated by the user's release); the
 8000-byte `new Array<number>(2000)` is over the 4096-byte stack cap, so it
 is an arena allocation that the release reclaims.
 
-<!-- cookbook:begin mem_arena_builtins -->
+<!-- cookbook:begin mem-arena-builtins -->
 ```ts
 const measure = (): i64 => {
   const m = Arena.mark();
@@ -11796,7 +11796,7 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
 ```
-<!-- cookbook:end mem_arena_builtins -->
+<!-- cookbook:end mem-arena-builtins -->
 
 ### `T | null` and narrowing
 
@@ -11809,7 +11809,7 @@ usual rules allow them. A type may be parenthesised, and `(T | null)[]` is
 where it matters: `T | null[]` groups the other way, so the parentheses are
 what make the *element* nullable rather than the array.
 
-<!-- cookbook:begin mem_nullable -->
+<!-- cookbook:begin mem-nullable -->
 ```ts
 class Node {
   value: number;
@@ -11968,7 +11968,7 @@ attributes #4 = { nounwind noreturn cold }
 !17 = !{!"element ptr", !1, i64 0}
 !18 = !{!17, !17, i64 0}
 ```
-<!-- cookbook:end mem_nullable -->
+<!-- cookbook:end mem-nullable -->
 
 ## Builtins
 
@@ -11979,7 +11979,7 @@ sequence that matches JavaScript's round-half-up; `Math.min`/`max` are
 `llvm.minnum`/`maxnum`. All intrinsics are `readnone willreturn`, so the
 callers stay pure.
 
-<!-- cookbook:begin builtin_math_f64 -->
+<!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
 
 ```ts
@@ -12024,11 +12024,11 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end builtin_math_f64 -->
+<!-- cookbook:end builtin-math-f64 -->
 
 ### `Math.abs` / `min` / `max` on integers, `Math.PI`
 
-<!-- cookbook:begin builtin_math_i32 -->
+<!-- cookbook:begin builtin-math-i32 -->
 ```ts
 const clamp = (x: number, lo: number, hi: number): number => Math.min(Math.max(x, lo), hi);
 
@@ -12063,13 +12063,13 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end builtin_math_i32 -->
+<!-- cookbook:end builtin-math-i32 -->
 
 ### `toI32` / `toI64` / `toF64`
 
 `sext`, `sitofp`, and the saturating `llvm.fptosi.sat` for `f64` to integer.
 
-<!-- cookbook:begin builtin_conversions -->
+<!-- cookbook:begin builtin-conversions -->
 ```ts
 const widen = (n: number): i64 => toI64(n);
 
@@ -12101,13 +12101,13 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end builtin_conversions -->
+<!-- cookbook:end builtin-conversions -->
 
 ### `Math.random`
 
 `nish_random` mutates global state (effect `write`), so `coin` is not pure.
 
-<!-- cookbook:begin builtin_random -->
+<!-- cookbook:begin builtin-random -->
 ```ts
 const coin = (): boolean => Math.random() < 0.5;
 ```
@@ -12124,7 +12124,7 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 ```
-<!-- cookbook:end builtin_random -->
+<!-- cookbook:end builtin-random -->
 
 ### Streams, `readFileSyncOrNull` and `panic`
 
@@ -12135,7 +12135,7 @@ no runtime function of its own — the message goes through `nish_write` and the
 a `ret` on that path. `readFileSyncOrNull` returns a pointer that may be
 `null`, so the checker makes the caller narrow it before it can be read.
 
-<!-- cookbook:begin builtin_streams -->
+<!-- cookbook:begin builtin-streams -->
 ```ts
 const report = (problem: string): void => {
   console.error(problem);
@@ -12201,11 +12201,11 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { noreturn nounwind }
 ```
-<!-- cookbook:end builtin_streams -->
+<!-- cookbook:end builtin-streams -->
 
 ### File I/O
 
-<!-- cookbook:begin builtin_files -->
+<!-- cookbook:begin builtin-files -->
 ```ts
 export const main = (): number => {
   writeFileSync("out.txt", "hello\n");
@@ -12258,7 +12258,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end builtin_files -->
+<!-- cookbook:end builtin-files -->
 
 ### Directories and subprocesses
 
@@ -12268,7 +12268,7 @@ Note what the escape analysis makes of the vector: `argv` is handed to
 `nish_spawn`, which keeps pointers into it, so the literal stays in the arena
 and `nish_main` gets no arena scope and no `willreturn`.
 
-<!-- cookbook:begin builtin_process -->
+<!-- cookbook:begin builtin-process -->
 ```ts
 export const main = (): number => {
   if (!mkdirSync("build/out")) {
@@ -12385,7 +12385,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
 ```
-<!-- cookbook:end builtin_process -->
+<!-- cookbook:end builtin-process -->
 
 ### What machine this is
 
@@ -12398,7 +12398,7 @@ from them alone stays pure and two reads of one property fold into one.
 directory to be made. `--target host` maps the same pair of strings to a triple
 (`hostTriple` in `self/target.ts`).
 
-<!-- cookbook:begin builtin_host -->
+<!-- cookbook:begin builtin-host -->
 ```ts
 export const main = (): number => {
   const out = "build/out";
@@ -12476,7 +12476,7 @@ attributes #1 = { nounwind willreturn }
 attributes #2 = { noreturn nounwind }
 attributes #3 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end builtin_host -->
+<!-- cookbook:end builtin-host -->
 
 ### Listing, redirecting, and timing
 
@@ -12498,7 +12498,7 @@ Read the `declare` lines as carefully as the body. `@nish_readdir` is `noalias`
 load-bearing one: two `readnone` reads of a clock fold into one and every
 interval measured with them is exactly zero.
 
-<!-- cookbook:begin builtin_driver -->
+<!-- cookbook:begin builtin-driver -->
 ```ts
 export const main = (): number => {
   const cases = readdirSync("tests/cases");
@@ -12650,7 +12650,7 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
 ```
-<!-- cookbook:end builtin_driver -->
+<!-- cookbook:end builtin-driver -->
 
 ### Reading the environment
 
@@ -12669,7 +12669,7 @@ The `cc === null ? "clang" : cc` below is how a default is written, and why the
 builtin takes no second argument: the fallback is an ordinary ternary over a
 nullable, so `getenv` does not need a spelling of its own for it.
 
-<!-- cookbook:begin builtin_env -->
+<!-- cookbook:begin builtin-env -->
 ```ts
 export const main = (): number => {
   const cc = getenv("CC");
@@ -12729,7 +12729,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end builtin_env -->
+<!-- cookbook:end builtin-env -->
 
 ### Resolving a path
 
@@ -12752,7 +12752,7 @@ npm, which links every command as `node_modules/.bin/<name>`. Without this the
 directory `argv[0]` names is the link's rather than the package's
 (`docs/wp19-stage0-retirement.md` §5a item 4).
 
-<!-- cookbook:begin builtin_realpath -->
+<!-- cookbook:begin builtin-realpath -->
 ```ts
 export const main = (): number => {
   const here = realpathSync(".");
@@ -12811,7 +12811,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end builtin_realpath -->
+<!-- cookbook:end builtin-realpath -->
 
 ### Builtin modules (`nish:`)
 
@@ -12823,7 +12823,7 @@ same load of `@nish_argv`. What the import buys is at the name, not in the IR �
 a user function called `write` collides with it instead of silently replacing
 it (`docs/LANGUAGE.md` -> Builtin modules).
 
-<!-- cookbook:begin builtin_nish_modules -->
+<!-- cookbook:begin builtin-nish-modules -->
 ```ts
 import { readFileSync, writeFileSync } from "nish:fs";
 import { argv } from "nish:process";
@@ -12892,7 +12892,7 @@ attributes #1 = { nounwind }
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
 ```
-<!-- cookbook:end builtin_nish_modules -->
+<!-- cookbook:end builtin-nish-modules -->
 
 ## Optimisation flags
 
@@ -12907,7 +12907,7 @@ flagged at all — `u8`..`u64` are defined as wrapping, which is what hashing an
 bit-packing are written against. This is the default, so the snippet below is
 compiled with no flags.
 
-<!-- cookbook:begin opt_nsw -->
+<!-- cookbook:begin opt-nsw -->
 ```ts
 const poly = (x: number, y: number): number => x * x - 3 * y + -x;
 ```
@@ -12925,14 +12925,14 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end opt_nsw -->
+<!-- cookbook:end opt-nsw -->
 
 `--wrapping` turns the flag off for the whole compilation and gives back
 two's-complement wrapping, so `2147483647 + 1` is `-2147483648`. It is what a
 hash, a linear congruential generator or a wrap-around counter needs; the same
 source, one flag, and no `nsw` anywhere:
 
-<!-- cookbook:begin opt_wrapping -->
+<!-- cookbook:begin opt-wrapping -->
 Compiled with `--wrapping`.
 
 ```ts
@@ -12952,7 +12952,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end opt_wrapping -->
+<!-- cookbook:end opt-wrapping -->
 
 A module constant follows the same rule, because a fold has to agree with the
 instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
@@ -12967,7 +12967,7 @@ pointer size, alignments, and vector width without `-mtriple`. Without the
 flag the module is target-neutral and clang fills both in at link time.
 `--target host` picks the running machine's triple.
 
-<!-- cookbook:begin opt_target -->
+<!-- cookbook:begin opt-target -->
 Compiled with `--target x86_64-unknown-linux-gnu`.
 
 ```ts
@@ -12986,7 +12986,7 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end opt_target -->
+<!-- cookbook:end opt-target -->
 
 ## The runtime prelude
 
@@ -12995,7 +12995,7 @@ allocator into the module (normally only the symbols a module uses are
 declared). This is the complete C ABI a compiled module can depend on; the
 struct layouts must match `runtime/runtime.c` byte for byte.
 
-<!-- cookbook:begin runtime_prelude -->
+<!-- cookbook:begin runtime-prelude -->
 Compiled with `--runtime-decls`.
 
 ```ts
@@ -13092,4 +13092,4 @@ attributes #5 = { nounwind }
 attributes #6 = { nounwind noreturn cold }
 attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
-<!-- cookbook:end runtime_prelude -->
+<!-- cookbook:end runtime-prelude -->

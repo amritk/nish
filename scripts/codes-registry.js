@@ -4,7 +4,7 @@
  * `self/codes.ts` holds the table -- a fragment line, then the `NL####` line
  * that names its rule. Three places in this repository read it back:
  * `scripts/gen-diagnostic-codes.mjs`, which checks the registry's shape, its
- * order and that no number is used twice; `tests/diagnostic_coverage.js`,
+ * order and that no number is used twice; `tests/diagnostic-coverage.js`,
  * which asks which codes the suite reaches; and the `codes:` checks in
  * `tests/run.js`. This module is that parse, once, so the copies cannot drift
  * apart again ([issue #96](https://github.com/amritk/nish/issues/96)).

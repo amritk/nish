@@ -14,7 +14,7 @@ import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builti
 import { checkResultMethod, checkResultProperty } from "./result";
 import { CheckContext } from "./context";
 import { internalErrorFor } from "./ice";
-import { unwrapParens } from "./emit_util";
+import { unwrapParens } from "./emit-util";
 import {
   checkGenericCall,
   instantiateWritten,
@@ -242,7 +242,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
  * only when it found one. The call is checked, and recorded, as a call of
  * `probe`, and its maybe type is what tells the whole-program facts and the
  * emitter that `probe`'s table's `valueAt` is called too (`valueReaderOf` in
- * `self/emit_map.ts`), so both functions are copied into the module.
+ * `self/emit-map.ts`), so both functions are copied into the module.
  */
 const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node, scope: Scope): i32 => {
   const probe = info.method("probe");

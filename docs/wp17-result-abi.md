@@ -437,9 +437,9 @@ seed and the differential oracle, not retired, and `tests/self/ir_oracle.js`
 requires stage1 to compile every program in the corpus with no exemption
 list. So this lands in stage0's `src/` and `self/` together — stage0's `src/types.ts` /
 `self/types.ts` (the predicate and the return slot),
-stage0's `src/codegen/emit/result.ts` / `self/emit_result.ts` (the pack and the
+stage0's `src/codegen/emit/result.ts` / `self/emit-result.ts` (the pack and the
 unpack), stage0's `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
-and `emit/classes.ts` / `self/emit.ts` and `self/emit_classes.ts` (the
+and `emit/classes.ts` / `self/emit.ts` and `self/emit-classes.ts` (the
 `define`, the `declare`, the `ret`, the prologue and the two call sites), plus
 `escape.ts` and `attributes.ts` on each side (the allocation moved to whichever
 side unpacks, so the sites, the reported allocator call and the new

@@ -33,8 +33,8 @@ fails a change that uses a construct too early.
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises Nish-0 | **done** — `tests/lexer_oracle.js` |
-| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js` |
+| S1 | `self/lexer.ts` tokenises Nish-0 | **done** — `tests/lexer-oracle.js` |
+| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser-oracle.js` |
 | S3 | the checker: types, scopes, side tables | **done** — proved against stage0 by `checked_oracle.js` until R6, by `tests/self/goldens/` since |
 | S4 | the emitter: IR text | **done** — proved against stage0 by `ir_oracle.js` and `interop_oracle.js` until R6, by the `.ll` goldens and `tests/nish-cmp.js` since |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
@@ -71,8 +71,8 @@ up from the binary's own path or in the working directory. `-g` goes into the
 `--version`, `--target host` and the interop sidecars (`--emit-header`,
 `--emit-dts`, `--emit-napi`, and the loader `--emit-dts` writes beside its
 declarations) are all answered there. `--emit-ast` prints the flattened tree
-`self/nodes.ts` defines, with byte offsets, through `self/ast_text.ts` — shared
-with `self/dump_ast.ts` so the flag and the parser oracle cannot drift — and is
+`self/nodes.ts` defines, with byte offsets, through `self/ast-text.ts` — shared
+with `self/dump-ast.ts` so the flag and the parser oracle cannot drift — and is
 pinned by `tests/cases/dump_ast.stdout`. A broken invariant exits **70** with
 the report `self/ice.ts` prints, and `NISH_SIMULATE_ICE` is the hook the suite
 drives that path with.
@@ -133,7 +133,7 @@ What the rest forces:
 | `self/` | holds |
 | --- | --- |
 | `strings.ts` `map.ts` `paths.ts` | the standard library the compiler needs and Nish-0 does not have |
-| `packages.ts` `nish_modules.ts` `std_modules.ts` `manifest.ts` | module resolution: which package a module is in and the prefix its symbols carry, the `nish:` builtin modules, the `nish/` standard library, and the `nish` condition of a `package.json` (WP21) |
+| `packages.ts` `nish-modules.ts` `std-modules.ts` `manifest.ts` | module resolution: which package a module is in and the prefix its symbols carry, the `nish:` builtin modules, the `nish/` standard library, and the `nish` condition of a `package.json` (WP21) |
 | `branding.ts` | the language name every diagnostic reads — the one source file that spells it |
 | `ice.ts` | the exit-70 report a broken invariant prints, which the language's `panic` (exit 1) is not |
 | `tokens.ts` `lexer.ts` | the scanner |
@@ -148,14 +148,14 @@ What the rest forces:
 | `bounds.ts` | the WP15 §2 bounds-check proof, whose verdicts the emitter reads out of `nodeProvenIndex` |
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | the IR builder, the runtime ABI table, the target triples, the options |
 | `tbaa.ts` | the type-based alias metadata on class field accesses (WP9) |
-| `inline_arrays.ts` | which array fields are stored inside their objects, decided once every body is checked (docs/LANGUAGE.md, "Fixed-length array fields are stored inline") |
+| `inline-arrays.ts` | which array fields are stored inside their objects, decided once every body is checked (docs/LANGUAGE.md, "Fixed-length array fields are stored inline") |
 | `escape.ts` `attributes.ts` | escape analysis and the whole-program attribute fixpoint |
 | `debug.ts` | the DWARF metadata `-g` emits |
-| `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` `emit_result.ts` | the emitter |
+| `emit.ts` `emit-util.ts` `emit-ops.ts` `emit-control.ts` `emit-strings.ts` `emit-arrays.ts` `emit-classes.ts` `emit-builtins.ts` `emit-result.ts` | the emitter |
 | `compilation.ts` | the whole-program driver |
-| `interop_abi.ts` `interop_header.ts` `interop_dts.ts` `interop_wasm.ts` `interop_napi.ts` | the WP8 sidecars, one module per file |
-| `dump.ts` `ast_text.ts` | the `--emit-checked` and `--emit-ast` text, printed by both the driver and the dump entries |
-| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
+| `interop-abi.ts` `interop-header.ts` `interop-dts.ts` `interop-wasm.ts` `interop-napi.ts` | the WP8 sidecars, one module per file |
+| `dump.ts` `ast-text.ts` | the `--emit-checked` and `--emit-ast` text, printed by both the driver and the dump entries |
+| `dump-tokens.ts` `dump-ast.ts` `dump-checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
 | `run-cache.ts` | `nish run`'s cache: where an entry lives, the key a hit is compared on, and the hash that names it |
 
 Cyclic imports between family modules are fine and already used
@@ -174,11 +174,11 @@ clang.
 | the golden cases | every `tests/cases/` and `tests/link/` program against its `.ll`, `.out`, `.err` and `.stdout` — the specification of every lowering and every refusal |
 | `tests/nish-cmp.js` | the last **released** compiler against the one HEAD builds, byte for byte over the corpus: every module's IR and the four WP8 sidecars. A difference fails unless `DECLARED` names it and `CHANGELOG.md` carries the words — the successor to `ir_oracle.js` and `interop_oracle.js` |
 | `tests/self/goldens.js` | stage1 against `tests/self/goldens/`: the `--emit-checked` dump of the corpus and of `self/`, and the stdout of the types, diagnostics and symbols drivers — the successor to the four stage0 oracles that compared those (WP19 G2.4) |
-| `tests/lexer_oracle.js` | `self/lexer.ts` against the `typescript` scanner, token for token |
-| `tests/parser_oracle.js` | `self/parser.ts` against the `typescript` parser, node for node and span for span |
-| `tests/self/support_oracle.js` | `strings.ts` / `map.ts` / `paths.ts` against `node:path`, `JSON.stringify`, `Buffer` and `Map`, and the escapes stage0 used to answer, frozen in `tests/self/goldens/` |
-| `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments. The comparison is driven over fabricated inputs by a `selfCheck` on every run |
-| `tests/diagnostic_coverage.js` | the compiler against `tests/wordings/`, one program per diagnostic code, and against **the registry**: a code in `self/codes.ts` that no program provokes and no line of `tests/wordings/unreachable.txt` explains fails the run (WP19 G2.4, "The wording gap") |
+| `tests/lexer-oracle.js` | `self/lexer.ts` against the `typescript` scanner, token for token |
+| `tests/parser-oracle.js` | `self/parser.ts` against the `typescript` parser, node for node and span for span |
+| `tests/self/support-oracle.js` | `strings.ts` / `map.ts` / `paths.ts` against `node:path`, `JSON.stringify`, `Buffer` and `Map`, and the escapes stage0 used to answer, frozen in `tests/self/goldens/` |
+| `tests/self/reject-oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments. The comparison is driven over fabricated inputs by a `selfCheck` on every run |
+| `tests/diagnostic-coverage.js` | the compiler against `tests/wordings/`, one program per diagnostic code, and against **the registry**: a code in `self/codes.ts` that no program provokes and no line of `tests/wordings/unreachable.txt` explains fails the run (WP19 G2.4, "The wording gap") |
 | `tests/self/bootstrap.js` | the stages: `IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 | `tests/differential/` | every whole program natively against its **frozen** JavaScript rewrite under Node, and `fuzz.js --stage1` over random programs the WP13 generator invents |
 
@@ -208,8 +208,8 @@ a count.
 
 ```bash
 npm run build                          # build/nish, from the seed
-node tests/lexer_oracle.js
-node tests/parser_oracle.js  --verbose
+node tests/lexer-oracle.js
+node tests/parser-oracle.js  --verbose
 node tests/self/goldens.js checked --verbose
 node tests/nish-cmp.js                 # the seed against HEAD; NISH_BOOTSTRAP names the seed
 node tests/differential/fuzz.js --stage1 --count 300

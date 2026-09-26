@@ -260,9 +260,9 @@ is byte-identical between the two compilers.
 **Two corrections to that sentence, both of which matter to the design.**
 
 *The count is 38, not 39.* `internalError` has 38 call sites across nine
-modules today (`self/emit.ts` 11, `self/emit_classes.ts` 9, `self/emit_ops.ts`
-4, `self/interop_napi.ts` 4, `self/emit_builtins.ts` 3, `self/debug.ts` 2,
-`self/emit_arrays.ts` 2, `self/emit_result.ts` 2, `self/types.ts` 1). The note
+modules today (`self/emit.ts` 11, `self/emit-classes.ts` 9, `self/emit-ops.ts`
+4, `self/interop-napi.ts` 4, `self/emit-builtins.ts` 3, `self/debug.ts` 2,
+`self/emit-arrays.ts` 2, `self/emit-result.ts` 2, `self/types.ts` 1). The note
 and the comment have drifted by one.
 
 *`process.argv` is out of reach for a narrower reason than "library module".*
@@ -698,8 +698,8 @@ Five comments in `self/` name the absence of function values:
 | `self/emit.ts:23` | "`Emitter` is `EmitContext` and `Emitter` at once, because the language has no function values to separate them with." |
 | `self/expressions.ts:9` | "a table of function values needs function pointers, which the language does not have" |
 | `self/attributes.ts:26` | stage0's `src/` "registers them into a `factCollectors` array from each `emit/*.ts`, which needs function values" |
-| `self/emit_classes.ts:19` | "the language has no function values to register" |
-| `self/interop_napi.ts:42` | stage0's `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
+| `self/emit-classes.ts:19` | "the language has no function values to register" |
+| `self/interop-napi.ts:42` | stage0's `src/` "models a reader and a boxer as records of closures ... so a `Reader` and a `Boxer` here are **data with a kind**" |
 
 **Four of the five are dispatch tables, and a compile-time function parameter
 solves none of them.** A dispatch table exists precisely to choose a callee the
@@ -880,7 +880,7 @@ null, and `undefined` is forbidden in this language by name — as a type
 (`` `undefined` is forbidden in Nish; use `null` with a `T | null`
 type ``, `reject_undefined_value`), as a value, and as the reason `void expr`
 is refused. It is also why `a.pop()` on an empty array panics rather than
-answering anything (`self/emit_arrays.ts:415`: "there is no `undefined` to
+answering anything (`self/emit-arrays.ts:415`: "there is no `undefined` to
 return and no second return type to widen to"), and why nullish coalescing is
 refused beside it. Optional chaining without `undefined` is not a smaller
 version of optional chaining; it is a different operator.

@@ -230,7 +230,7 @@ what is blocking and what you need — and keep watching.
   the reason in `self/attributes.ts` beside the code.
 - **A struct layout change touches `self/runtime.ts` and `runtime.c` in the same
   commit** and extends a layout test. The C runtime is two translation units
-  with a budget each — `runtime.c` for the core and `runtime_os.c` for whatever
+  with a budget each — `runtime.c` for the core and `runtime-os.c` for whatever
   wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
   and report the size of whichever you changed in the PR.
 - **Third-party code keeps its licence.** A file ported, translated or

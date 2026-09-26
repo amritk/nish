@@ -120,7 +120,7 @@ export const TOK_USHR_ASSIGN: i32 = 84;
 // builds as an operator and the checker refuses by name wherever its left
 // operand is not a `Map.get` result (WP32), instead of the parser complaining
 // about a stray `?`. It is also what lets the lexer be diffed
-// against the `typescript` scanner token for token (tests/lexer_oracle.js).
+// against the `typescript` scanner token for token (tests/lexer-oracle.js).
 export const TOK_EQ_LOOSE: i32 = 85; // ==
 export const TOK_NE_LOOSE: i32 = 86; // !=
 export const TOK_STAR_STAR: i32 = 87; // **

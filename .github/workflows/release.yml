@@ -278,12 +278,12 @@ jobs:
       # compiler that links `hello.ts` and fails on any program that reads a
       # file, lists a directory, spawns a child or asks the clock. That is the
       # half of the runtime no smoke test of one program can see -- `build.sh`
-      # pairs runtime_os.c with runtime.c only `if [ -f "$os" ]`, silently, so
+      # pairs runtime-os.c with runtime.c only `if [ -f "$os" ]`, silently, so
       # its absence is not an error anywhere -- which is why the npm side has
       # this list and why the seed should not go without it.
       #
       # It is a presence check and that is its limit, shared with `Pack`'s: a
-      # runtime_os.c that is present and EMPTY passes here, compiles as an
+      # runtime-os.c that is present and EMPTY passes here, compiles as an
       # empty translation unit, and links both smoke programs. A corrupt one is
       # caught, because clang then fails. Checking content would mean naming a
       # symbol the file must define, which is a second copy of the runtime's
@@ -303,7 +303,7 @@ jobs:
         run: |
           tar -tzf "${{ steps.binary.outputs.asset }}" |
             sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts LICENSE INSTALL.md; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
           done
           echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the fourteen that have to be there"
@@ -391,7 +391,7 @@ jobs:
           # which is louder and no less broken. No smoke test of the unpacked
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts package.json; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -497,7 +497,7 @@ jobs:
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt
           # The tarball must be usable on its own, and this list is what makes that
-          # a gate rather than a hope. `runtime_os.c` is on it because a `files`
+          # a gate rather than a hope. `runtime-os.c` is on it because a `files`
           # regression that dropped it would publish a compiler that links a
           # program printing a string and fails on any program that reads a file,
           # lists a directory, spawns a child or asks the clock -- the half of the
@@ -508,7 +508,7 @@ jobs:
           # packages the matrix above built. The three `bin/` paths are the command
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 

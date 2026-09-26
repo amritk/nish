@@ -61,7 +61,7 @@ fs.mkdirSync(buildDir, { recursive: true });
 
 /**
  * The C runtime's two translation units, as a direct `clang` line has to spell
- * them: `runtime.c` is the core every program touches and `runtime_os.c` is the
+ * them: `runtime.c` is the core every program touches and `runtime-os.c` is the
  * half that wraps the system calls, split apart so that each carries its own
  * `.text*` budget (RUNTIME_TEXT_BUDGET and RUNTIME_OS_TEXT_BUDGET below).
  *
@@ -71,13 +71,13 @@ fs.mkdirSync(buildDir, { recursive: true });
  * line this suite gets wrong should fail as a link error rather than be quietly
  * repaired on the way past.
  */
-const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c", "runtime/runtime_parallel.c"];
+const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime-os.c", "runtime/runtime-parallel.c"];
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c");
 
 /**
- * The C a case is linked against -- `runtime.c`, `runtime_os.c` and the shared
+ * The C a case is linked against -- `runtime.c`, `runtime-os.c` and the shared
  * driver -- compiled to object files once per run instead of once per case.
  *
  * The measurement, on a four-core Linux box: naming the three sources in a
@@ -743,7 +743,7 @@ if (!only || "diagnostics".includes(only)) {
   }
 
   // The parse itself is `scripts/codes-registry.js`, shared with the
-  // generator and with `tests/diagnostic_coverage.js` -- three copies of one
+  // generator and with `tests/diagnostic-coverage.js` -- three copies of one
   // regex is how the first two drifted apart (issue #96), and that module's
   // header is where the story lives. It raises on a registry whose shape has
   // moved, which is caught here rather than left to propagate: a harness that
@@ -805,7 +805,7 @@ if (!only || "diagnostics".includes(only)) {
   );
 
   // Coverage over every code in the registry, not only over the ones some
-  // rejection happens to reach (WP19 G2.4). `tests/diagnostic_coverage.js`
+  // rejection happens to reach (WP19 G2.4). `tests/diagnostic-coverage.js`
   // compiles the negatives, the `perf_*` positives and its own
   // `tests/wordings/` corpus, reads the `code` out of every `--json` object,
   // and requires each of the registry's codes to be either provoked or named
@@ -840,7 +840,7 @@ if (!only || "diagnostics".includes(only)) {
   const wordings = spawnSync(
     "node",
     [
-      path.join(root, "tests", "diagnostic_coverage.js"),
+      path.join(root, "tests", "diagnostic-coverage.js"),
       "--compiler",
       path.relative(root, NISH),
       "--strict-refusals",
@@ -1955,7 +1955,7 @@ pinsModuleId(
 // from the importer was the same string under a relative entry and the whole
 // checkout path under an absolute one, which is why the corpus never saw it
 // and 37 rows of `--parity` did (WP19 §A3, and §A5 on why that gap keeps
-// happening). `self/std_modules.ts` writes the rule down for stage1 and its
+// happening). `self/std-modules.ts` writes the rule down for stage1 and its
 // comment asserts this one; this check is what keeps that sentence true.
 pinsModuleId(
   "link/std_bare_specifier: a `nish/` module is named package-relative, whatever the entry was called",
@@ -2251,7 +2251,7 @@ if (!only || "map_fingerprint_miss".includes(only)) {
 // `getOrInsert` itself. The negatives are counted too, so the rule is proven
 // on both sides. A golden that is not there reads as no function at all,
 // which fails the check, so a renamed fixture fails here rather than dropping it.
-if (!only || "map_fused".includes(only) || "map_extras".includes(only) || "probe".includes(only)) {
+if (!only || "map-fused".includes(only) || "map_extras".includes(only) || "probe".includes(only)) {
   /** The `define` of `fn` in the golden `name.ll`, up to its closing brace. */
   const goldenFunction = (name, fn) => {
     const golden = path.join(casesDir, `${name}.ll`);
@@ -3216,7 +3216,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 //     and is deliberately not `noalias`, and `process.argv` is `malloc`ed once by the
 //     entry wrapper (neither is an identifier builtin either). The builtins are the ones
 //     `isBuiltinFunction` in self/builtins.ts names, the callees of each are what
-//     `identifierBuiltinCalleesNamed` in self/emit_builtins.ts answers for it -- the
+//     `identifierBuiltinCalleesNamed` in self/emit-builtins.ts answers for it -- the
 //     list the attribute pass itself reads, so this asks the emitter rather than a copy
 //     of the emitter -- and the table is the compiler's own, printed by
 //     `--runtime-decls`.
@@ -3245,7 +3245,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
 
   const builtinsDecl = declarationOf(selfSource("builtins.ts"), "isBuiltinFunction");
   const builtins = namesTestedIn(builtinsDecl);
-  const emitBuiltins = selfSource("emit_builtins.ts");
+  const emitBuiltins = selfSource("emit-builtins.ts");
   const calleesDecl = declarationOf(emitBuiltins, "identifierBuiltinCalleesNamed");
   /** The module's string constants, so `out.push(PARSE_RUNTIME)` reads as the symbol it names. */
   const constants = new Map(
@@ -3267,7 +3267,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64"]);
   const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b));
   check(
-    `self/builtins.ts and self/emit_builtins.ts still read as a builtin list and a callee table ` +
+    `self/builtins.ts and self/emit-builtins.ts still read as a builtin list and a callee table ` +
       `(${builtins.length} builtins, ${calleesOf.size} with callees)`,
     builtins.length > 0 && calleesOf.size > 0 && unread.length === 0,
     unread.length > 0
@@ -3538,7 +3538,7 @@ if (!only || "layout".includes(only)) {
       );
     }
   }
-  // Inline array fields: tests/layout/inline_array.ts, compiled without a
+  // Inline array fields: tests/layout/inline-array.ts, compiled without a
   // sidecar so `Rows` holds its arrays inside the object, against its C twin.
   // The twin mirrors each field as `struct { nish_array h; T slots[K]; }` from
   // nish.h, so the three places that state the header -- `ARRAY_TYPE` in
@@ -3546,11 +3546,11 @@ if (!only || "layout".includes(only)) {
   // `nish_array` -- are read here and held to one 24-byte layout, and the
   // object's size is the `nish_alloc_struct` the IR asks for.
   {
-    const inlineTs = path.join(root, "tests", "layout", "inline_array.ts");
-    const inlineC = path.join(root, "tests", "layout", "inline_array.c");
+    const inlineTs = path.join(root, "tests", "layout", "inline-array.ts");
+    const inlineC = path.join(root, "tests", "layout", "inline-array.c");
     const inlineLl = path.join(buildDir, "layout_inline_array.ll");
     const ic = spawnSync(NISH, [inlineTs, "-o", inlineLl], { cwd: root });
-    check("layout: tests/layout/inline_array.ts compiles", ic.status === 0, String(ic.stderr));
+    check("layout: tests/layout/inline-array.ts compiles", ic.status === 0, String(ic.stderr));
     const runtimeTs = fs.readFileSync(path.join(root, "self", "runtime.ts"), "utf8");
     const structsTs = fs.readFileSync(path.join(root, "self", "structs.ts"), "utf8");
     const nishH = fs.readFileSync(path.join(root, "runtime", "nish.h"), "utf8");
@@ -3572,12 +3572,12 @@ if (!only || "layout".includes(only)) {
       const alloc = ir.match(/@nish_alloc_struct\(i64 (\d+)\)/);
       const cSize = fs.readFileSync(inlineC, "utf8").match(/_Static_assert\(sizeof\(struct Rows\) == (\d+)/);
       check(
-        "layout: an inline array field is `{ %struct.nish_array, [K x T] }`, and the object is the size inline_array.c asserts",
+        "layout: an inline array field is `{ %struct.nish_array, [K x T] }`, and the object is the size inline-array.c asserts",
         ir.includes("%struct.Rows = type { { %struct.nish_array, [3 x i1] }, i32,") &&
           alloc !== null &&
           cSize !== null &&
           alloc[1] === cSize[1],
-        `IR allocates ${alloc && alloc[1]}, inline_array.c asserts ${cSize && cSize[1]}`
+        `IR allocates ${alloc && alloc[1]}, inline-array.c asserts ${cSize && cSize[1]}`
       );
       const exe = path.join(buildDir, "layout_inline_array");
       const cc = spawnSync(
@@ -3585,7 +3585,7 @@ if (!only || "layout".includes(only)) {
         ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-O2", "-Iruntime", inlineC, inlineLl, ...RUNTIME_C, "-o", exe],
         { cwd: root }
       );
-      check("layout: inline_array.c compiles with -std=c11 -Wall -Wextra -Werror (offsets agree with clang)", cc.status === 0, String(cc.stderr));
+      check("layout: inline-array.c compiles with -std=c11 -Wall -Wextra -Werror (offsets agree with clang)", cc.status === 0, String(cc.stderr));
       if (cc.status === 0) {
         const run = spawnSync(exe);
         check(
@@ -3691,14 +3691,14 @@ if (!only) {
       "-Werror",
       "-O2",
       ...RUNTIME_C,
-      "tests/runtime_test.c",
+      "tests/runtime-test.c",
       "-o",
       path.join(buildDir, "runtime_test"),
     ],
     { cwd: root }
   );
   check(
-    "runtime.c, runtime_os.c and runtime_parallel.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c and runtime-parallel.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   );
@@ -3719,11 +3719,11 @@ if (!only) {
       "-DNISH_THREADS=1",
       "-pthread",
       // Both translation units, as its non-threaded sibling above names both:
-      // `runtime_test.c` exercises the file I/O, which lives in runtime_os.c
+      // `runtime-test.c` exercises the file I/O, which lives in runtime-os.c
       // since the split, so naming only the core leaves `nish_write_file`,
       // `nish_append_file` and `nish_read_file` undefined at link time.
       ...RUNTIME_C,
-      "tests/runtime_test.c",
+      "tests/runtime-test.c",
       "-o",
       path.join(buildDir, "runtime_test_threads"),
     ],
@@ -3743,10 +3743,10 @@ if (!only) {
     cwd: root,
     stdio: "pipe",
   });
-  const smokeLl = path.join(buildDir, "alloc_smoke.ll");
+  const smokeLl = path.join(buildDir, "alloc-smoke.ll");
   fs.writeFileSync(
     smokeLl,
-    fs.readFileSync(preludeLl, "utf8") + fs.readFileSync(path.join(root, "tests/ir/alloc_smoke.ll"), "utf8")
+    fs.readFileSync(preludeLl, "utf8") + fs.readFileSync(path.join(root, "tests/ir/alloc-smoke.ll"), "utf8")
   );
   const smokeExe = path.join(buildDir, "alloc_smoke");
   const b = spawnSync(
@@ -3755,7 +3755,7 @@ if (!only) {
       "scripts/build.sh",
       smokeLl,
       "runtime/runtime.c",
-      "tests/ir/alloc_smoke_main.c",
+      "tests/ir/alloc-smoke-main.c",
       "-o",
       smokeExe,
       "--profile",
@@ -3792,7 +3792,7 @@ if (!only) {
   const tlsSmokeLl = path.join(buildDir, "alloc_smoke_threads.ll");
   fs.writeFileSync(
     tlsSmokeLl,
-    tlsPrelude + fs.readFileSync(path.join(root, "tests/ir/alloc_smoke.ll"), "utf8")
+    tlsPrelude + fs.readFileSync(path.join(root, "tests/ir/alloc-smoke.ll"), "utf8")
   );
   const tlsSmokeExe = path.join(buildDir, "alloc_smoke_threads");
   const tb = spawnSync(
@@ -3801,7 +3801,7 @@ if (!only) {
       "scripts/build.sh",
       tlsSmokeLl,
       "runtime/runtime.c",
-      "tests/ir/alloc_smoke_threads_main.c",
+      "tests/ir/alloc-smoke-threads-main.c",
       "-pthread",
       "-o",
       tlsSmokeExe,
@@ -3863,7 +3863,7 @@ if (!only) {
       "-O2",
       tlsSmokeLl,
       "runtime/runtime.c",
-      "tests/ir/alloc_smoke_main.c",
+      "tests/ir/alloc-smoke-main.c",
       "-lm",
       "-o",
       mismatchExe,
@@ -4044,7 +4044,7 @@ if (!only) {
 // There are two budgets because there are two translation units, and they grow for
 // unrelated reasons. `runtime.c` is the core every program touches whatever it does --
 // the arena, strings, arrays, number formatting, the panics -- and that is a closed set,
-// so its ceiling should come down over time and never up. `runtime_os.c` is the syscall
+// so its ceiling should come down over time and never up. `runtime-os.c` is the syscall
 // wrappers, and that surface grows whenever the language reaches further into the
 // operating system: three builtins (`readdirSync`, `spawnSyncTo`, `monotonicNanos`) took
 // the single old budget from 4,096 to 4,864 and moved the number a reader saw for "the
@@ -4056,7 +4056,7 @@ if (!only) {
  *
  * Measured 3,480 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 3,449 plus
  * `.text.unlikely.` 31), the whole runtime's 4,670 less the 1,190 bytes that moved into
- * runtime_os.c. The budget is the next 256-byte boundary above that measurement, so 104
+ * runtime-os.c. The budget is the next 256-byte boundary above that measurement, so 104
  * bytes are left. That is deliberately tight: this half is a closed set, so a commit that
  * needs the room is a commit that grew something which was not supposed to grow, and
  * raising this number -- unlike raising the one below it -- should be rare enough to be
@@ -4065,7 +4065,7 @@ if (!only) {
  */
 const RUNTIME_TEXT_BUDGET = 3584;
 /**
- * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
  * Measured 1,251 bytes on 2026-09-14 with clang 18.1.3 on linux-x64 (`.text` 1,216 plus
  * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
@@ -4111,7 +4111,7 @@ const RUNTIME_OS_TEXT_BUDGET = 1536;
 const RUNTIME_THREADS_TEXT_BUDGET = 3840;
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
- * runtime/runtime_parallel.c` -- the half that divides a range of work across
+ * runtime/runtime-parallel.c` -- the half that divides a range of work across
  * threads (WP20 T1, the stage under wp29's surface).
  *
  * Two rows, for the same reason the two above are two: the file compiles in both
@@ -4129,7 +4129,7 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 256;
  * nesting guard.
  *
  * Measured 482 bytes on 2026-09-18 with clang 18.1.3 on linux-x64. This is the number
- * that made the file a third translation unit rather than a third of `runtime_os.c`,
+ * that made the file a third translation unit rather than a third of `runtime-os.c`,
  * which had 29 bytes of its ceiling left: 482 bytes of partitioner does not fit in 29,
  * and raising the syscall half's ceiling to hold it would have moved the number a
  * reader sees for "the operating-system surface" for a reason that has nothing to do
@@ -4157,11 +4157,11 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   else {
     for (const [src, budget, constant, flags] of [
       ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
-      ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
+      ["runtime/runtime-os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
       ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
-      ["runtime/runtime_parallel.c", RUNTIME_PARALLEL_TEXT_BUDGET, "RUNTIME_PARALLEL_TEXT_BUDGET", []],
+      ["runtime/runtime-parallel.c", RUNTIME_PARALLEL_TEXT_BUDGET, "RUNTIME_PARALLEL_TEXT_BUDGET", []],
       [
-        "runtime/runtime_parallel.c",
+        "runtime/runtime-parallel.c",
         RUNTIME_PARALLEL_THREADS_TEXT_BUDGET,
         "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
         ["-DNISH_THREADS=1"],
@@ -4311,10 +4311,10 @@ if (!only || "interop".includes(only)) {
   // and the two runtimes — so the three spellings are compared rather than
   // trusted.
   const tlsMacro = /#ifdef NISH_THREADS\n#define NISH_TLS _Thread_local\n#else\n#define NISH_TLS\n#endif/;
-  const tlsSources = ["nish.h", "runtime.c", "runtime_wasm.c"];
+  const tlsSources = ["nish.h", "runtime.c", "runtime-wasm.c"];
   const withoutMacro = tlsSources.filter((f) => !tlsMacro.test(fs.readFileSync(path.join(runtimeDir, f), "utf8")));
   check(
-    "NISH_TLS is defined the same way in nish.h, runtime.c and runtime_wasm.c",
+    "NISH_TLS is defined the same way in nish.h, runtime.c and runtime-wasm.c",
     withoutMacro.length === 0,
     `missing or different in: ${withoutMacro.join(", ")}`
   );
@@ -4516,10 +4516,10 @@ if (!only || "interop".includes(only)) {
     "-pedantic",
     "-mbulk-memory",
     "-fsyntax-only",
-    path.join(runtimeDir, "runtime_wasm.c"),
+    path.join(runtimeDir, "runtime-wasm.c"),
   ]);
   check(
-    "runtime/runtime_wasm.c compiles for wasm32 under -std=c11 -Wall -Wextra -Werror -pedantic",
+    "runtime/runtime-wasm.c compiles for wasm32 under -std=c11 -Wall -Wextra -Werror -pedantic",
     wasmRt.status === 0,
     String(wasmRt.stderr)
   );
@@ -4835,7 +4835,7 @@ if (!only || "interop".includes(only)) {
       [
         "scripts/build.sh",
         sidecar("interop_generic_fn", "ll"),
-        "runtime/runtime_wasm.c",
+        "runtime/runtime-wasm.c",
         "-o",
         genWasm,
         "--profile",
@@ -5119,15 +5119,15 @@ if (!only || "interop".includes(only)) {
   // under test is the generated C: that the flag is additive and inert when absent,
   // that a build without the thread-local arena is refused rather than raced, and that
   // the two call shapes agree on every answer.
-  const asyncSrc = "tests/self/interop_async.ts";
+  const asyncSrc = "tests/self/interop-async.ts";
   const asyncSync = emit(asyncSrc, ["--emit-napi", sidecar("interop_async_sync", "napi.c")], "interop_async_sync");
   // `--emit-napi-async` requires `--threads`: its exports allocate on a libuv
   // worker, so the module has to reference the thread-local arena as well. No
   // sidecar's text depends on the flag -- only the IR's storage class does.
   const asyncShim = emit(
     asyncSrc,
-    ["--threads", "--emit-napi-async", sidecar("interop_async", "napi.c")],
-    "interop_async"
+    ["--threads", "--emit-napi-async", sidecar("interop-async", "napi.c")],
+    "interop-async"
   );
   const asyncNoThreads = spawnSync(
     NISH,
@@ -5143,17 +5143,17 @@ if (!only || "interop".includes(only)) {
   );
   check(
     "--emit-napi-async writes its shim",
-    asyncShim.status === 0 && fs.existsSync(sidecar("interop_async", "napi.c")),
+    asyncShim.status === 0 && fs.existsSync(sidecar("interop-async", "napi.c")),
     asyncShim.stderr
   );
-  const shimAsync = fs.existsSync(sidecar("interop_async", "napi.c"))
-    ? fs.readFileSync(sidecar("interop_async", "napi.c"), "utf8")
+  const shimAsync = fs.existsSync(sidecar("interop-async", "napi.c"))
+    ? fs.readFileSync(sidecar("interop-async", "napi.c"), "utf8")
     : "";
   const shimPlain = fs.existsSync(sidecar("interop_async_sync", "napi.c"))
     ? fs.readFileSync(sidecar("interop_async_sync", "napi.c"), "utf8")
     : "";
   check(
-    "interop_async.napi.c registers spinAsync/digestAsync beside the synchronous exports and queues them on libuv",
+    "interop-async.napi.c registers spinAsync/digestAsync beside the synchronous exports and queues them on libuv",
     shimAsync.includes('{"spin", nish_napi_spin},') &&
       shimAsync.includes('{"spinAsync", nish_napi_async_spin},') &&
       shimAsync.includes('{"digestAsync", nish_napi_async_digest},') &&
@@ -5214,17 +5214,17 @@ if (!only || "interop".includes(only)) {
   if (!hasNodeHeaders) {
     skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the asynchronous N-API addon is skipped`);
   } else if (shimAsync.length === 0) {
-    check("interop_async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
+    check("interop-async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
   } else {
     const withThreads = spawnSync("clang", [
       ...strictC,
       `-I${nodeInclude}`,
       "-DNISH_THREADS=1",
       "-fsyntax-only",
-      sidecar("interop_async", "napi.c"),
+      sidecar("interop-async", "napi.c"),
     ]);
     check(
-      "interop_async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
+      "interop-async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
       withThreads.status === 0,
       String(withThreads.stderr)
     );
@@ -5234,7 +5234,7 @@ if (!only || "interop".includes(only)) {
       ...strictC,
       `-I${nodeInclude}`,
       "-fsyntax-only",
-      sidecar("interop_async", "napi.c"),
+      sidecar("interop-async", "napi.c"),
     ]);
     check(
       "the same file is rejected without -DNISH_THREADS, naming --threads",
@@ -5242,14 +5242,14 @@ if (!only || "interop".includes(only)) {
       String(noThreads.stderr)
     );
 
-    const asyncAddon = path.join(interopDir, "interop_async.node");
+    const asyncAddon = path.join(interopDir, "interop-async.node");
     const ab = spawnSync(
       "bash",
       [
         "scripts/build.sh",
-        sidecar("interop_async", "ll"),
+        sidecar("interop-async", "ll"),
         "runtime/runtime.c",
-        sidecar("interop_async", "napi.c"),
+        sidecar("interop-async", "napi.c"),
         "-o",
         asyncAddon,
         "--profile",
@@ -5258,7 +5258,7 @@ if (!only || "interop".includes(only)) {
       ],
       { cwd: root }
     );
-    check("napi profile builds interop_async.node with --threads", ab.status === 0, String(ab.stderr));
+    check("napi profile builds interop-async.node with --threads", ab.status === 0, String(ab.stderr));
     if (ab.status === 0) {
       // 4000 rounds rather than the 20000 of the documented measurement: enough
       // work that a blocked loop is unambiguous, little enough that the suite does
@@ -5506,16 +5506,16 @@ if (!only || "interop".includes(only)) {
   //     through the f64 JS holds it in, and takes both arms of a narrow packed `Result`
   //   - a function that genuinely cannot cross is named in the shim with the position and
   //     the type that stopped it, which is what a silent omission hid
-  const widths = emit("tests/self/interop_widths.ts", [
+  const widths = emit("tests/self/interop-widths.ts", [
     "--emit-header",
-    sidecar("interop_widths", "h"),
+    sidecar("interop-widths", "h"),
     "--emit-napi",
-    sidecar("interop_widths", "napi.c"),
+    sidecar("interop-widths", "napi.c"),
   ]);
   const widthsShim =
-    widths.status === 0 ? fs.readFileSync(sidecar("interop_widths", "napi.c"), "utf8") : "";
+    widths.status === 0 ? fs.readFileSync(sidecar("interop-widths", "napi.c"), "utf8") : "";
   check(
-    "interop_widths.napi.c bridges u8/u16/u32/u64/f32 instead of skipping them",
+    "interop-widths.napi.c bridges u8/u16/u32/u64/f32 instead of skipping them",
     // u8: ToUint32 into a temporary, then the width's own modulus.
     widthsShim.includes("if (napi_get_value_uint32(env, argv[0], &x_raw) != napi_ok)") &&
       widthsShim.includes("uint8_t x = (uint8_t)x_raw;") &&
@@ -5569,26 +5569,26 @@ if (!only || "interop".includes(only)) {
   );
 
   if (widths.status === 0) {
-    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("interop_widths", "h")]);
-    check("interop_widths.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
+    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("interop-widths", "h")]);
+    check("interop-widths.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
   }
   // The shim needs node_api.h to compile at all, so this is the same skip the
   // other addon checks take when the Node headers are not installed.
   if (hasNodeHeaders && widths.status === 0 && skips.status === 0) {
-    for (const stem of ["interop_widths", "napi_skips"]) {
+    for (const stem of ["interop-widths", "napi_skips"]) {
       const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
       check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
     }
   }
   if (widths.status === 0 && hasNodeHeaders) {
-    const addon = path.join(interopDir, "interop_widths.node");
+    const addon = path.join(interopDir, "interop-widths.node");
     const b = spawnSync(
       "bash",
       [
         "scripts/build.sh",
-        sidecar("interop_widths", "ll"),
+        sidecar("interop-widths", "ll"),
         "runtime/runtime.c",
-        sidecar("interop_widths", "napi.c"),
+        sidecar("interop-widths", "napi.c"),
         "-o",
         addon,
         "--profile",
@@ -5647,21 +5647,21 @@ if (!only || "interop".includes(only)) {
   //   - the loader masks a narrow argument on the way in, narrows a `u8` / `u16`
   //     result the callee never narrowed, and hands back a `u32` above 2^31 and a
   //     `u64` above 2^63 *positive* rather than as the signed value wasm returns
-  const unsignedSrc = "tests/self/interop_unsigned.ts";
-  const unsigned = emit(unsignedSrc, ["--emit-dts", sidecar("interop_unsigned", "d.ts")]);
+  const unsignedSrc = "tests/self/interop-unsigned.ts";
+  const unsigned = emit(unsignedSrc, ["--emit-dts", sidecar("interop-unsigned", "d.ts")]);
   const unsignedDts =
-    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "d.ts"), "utf8") : "";
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop-unsigned", "d.ts"), "utf8") : "";
   const unsignedMjs =
-    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "mjs"), "utf8") : "";
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop-unsigned", "mjs"), "utf8") : "";
   check(
-    "interop_unsigned.d.ts declares the unsigned widths as `number` / `bigint`",
+    "interop-unsigned.d.ts declares the unsigned widths as `number` / `bigint`",
     unsignedDts.includes("  idU8(x: number): number;") &&
       unsignedDts.includes("  idU32(x: number): number;") &&
       unsignedDts.includes("  idU64(x: bigint): bigint;"),
     unsignedDts
   );
   // The regression guard, and the general one: a `.d.ts` may not promise a function
-  // its loader omits. Before the fix `interop_unsigned.mjs` had none of these ten.
+  // its loader omits. Before the fix `interop-unsigned.mjs` had none of these ten.
   // The expected count is spelled out so a generator that started declaring nothing
   // could not pass this by having nothing to miss (strings.d.ts really declares none:
   // every one of its functions is commented out).
@@ -5670,7 +5670,7 @@ if (!only || "interop".includes(only)) {
     ["strings", 0],
     ["arrays", 9],
     ["res_wasm", 3],
-    ["interop_unsigned", 10],
+    ["interop-unsigned", 10],
   ]) {
     if (!fs.existsSync(sidecar(stem, "d.ts")) || !fs.existsSync(sidecar(stem, "mjs"))) continue;
     const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8");
@@ -5746,14 +5746,14 @@ if (!only || "interop".includes(only)) {
   // in `data` that the typed array reads unsigned -- so a mask here would be
   // wrong rather than redundant, and `& 0xff` appearing in this loader would
   // mean a generator had copied the scalar rule into a place it does not hold.
-  const unsignedArrays = emit("tests/self/interop_unsigned_arrays.ts", [
+  const unsignedArrays = emit("tests/self/interop-unsigned-arrays.ts", [
     "--emit-dts",
-    sidecar("interop_unsigned_arrays", "d.ts"),
+    sidecar("interop-unsigned-arrays", "d.ts"),
   ]);
   const unsignedArraysMjs =
-    unsignedArrays.status === 0 ? fs.readFileSync(sidecar("interop_unsigned_arrays", "mjs"), "utf8") : "";
+    unsignedArrays.status === 0 ? fs.readFileSync(sidecar("interop-unsigned-arrays", "mjs"), "utf8") : "";
   check(
-    "interop_unsigned_arrays.mjs marshals an unsigned element by view and masks only the scalars",
+    "interop-unsigned-arrays.mjs marshals an unsigned element by view and masks only the scalars",
     // Arrays: the constructor and the element size, and nothing else.
     unsignedArraysMjs.includes('arrayIn(xs, Uint8Array, 1, "sumU8: argument 1 (xs)")') &&
       unsignedArraysMjs.includes('arrayIn(xs, Uint16Array, 2, "sumU16: argument 1 (xs)")') &&
@@ -5776,7 +5776,7 @@ if (!only || "interop".includes(only)) {
     unsignedArraysMjs
   );
   check(
-    "interop_unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
+    "interop-unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
     unsignedMjs.includes("idU8: (x) => raw.idU8(x & 0xff) & 0xff,") &&
       unsignedMjs.includes("idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,") &&
       unsignedMjs.includes("idU32: (x) => raw.idU32(x) >>> 0,") &&
@@ -5785,22 +5785,22 @@ if (!only || "interop".includes(only)) {
     unsignedMjs
   );
   if (unsigned.status === 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_unsigned", "d.ts")], {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop-unsigned", "d.ts")], {
       cwd: root,
     });
     check(
-      "interop_unsigned.d.ts passes tsc --noEmit --strict",
+      "interop-unsigned.d.ts passes tsc --noEmit --strict",
       r.status === 0,
       String(r.stdout) + String(r.stderr)
     );
   }
   if (has("wasm-ld")) {
-    const wasm = path.join(interopDir, "interop_unsigned.wasm");
+    const wasm = path.join(interopDir, "interop-unsigned.wasm");
     const w =
       unsigned.status === 0
         ? spawnSync(
             "bash",
-            ["scripts/build.sh", sidecar("interop_unsigned", "ll"), "-o", wasm, "--profile", "wasm"],
+            ["scripts/build.sh", sidecar("interop-unsigned", "ll"), "-o", wasm, "--profile", "wasm"],
             { cwd: root }
           )
         : { status: 1, stderr: unsigned.stderr };
@@ -5808,7 +5808,7 @@ if (!only || "interop".includes(only)) {
     // two results a signed read would get wrong: 4294967295 and 2^64 - 1.
     const script = [
       'import { readFileSync } from "node:fs";',
-      `const { load } = await import(${JSON.stringify(sidecar("interop_unsigned", "mjs"))});`,
+      `const { load } = await import(${JSON.stringify(sidecar("interop-unsigned", "mjs"))});`,
       `const api = await load(readFileSync(${JSON.stringify(wasm)}));`,
       "const out = [];",
       "out.push(api.idU8(0), api.idU8(255), api.idU8(256), api.idU8(300), api.idU8(-1));",
@@ -5836,7 +5836,7 @@ if (!only || "interop".includes(only)) {
   //   - the header spells a read-only array parameter `const nish_array *` and a written one
   //     `nish_array *`, compiles under -Werror, and a C driver passes a stack-built header
   //   - the .d.ts declares typed-array signatures, type-checks, and its companion .mjs loader
-  //     marshals typed arrays into the wasm build (linked with runtime/runtime_wasm.c),
+  //     marshals typed arrays into the wasm build (linked with runtime/runtime-wasm.c),
   //     copies results out, copies written parameters back, and survives a trap
   //   - the N-API addon borrows typed arrays (zero-copy, `fill` mutates in place), returns
   //     fresh typed arrays, bridges strings, and agrees with the wasm build value for value
@@ -5917,7 +5917,7 @@ if (!only || "interop".includes(only)) {
         [
           "scripts/build.sh",
           sidecar("arrays", "ll"),
-          "runtime/runtime_wasm.c",
+          "runtime/runtime-wasm.c",
           "-o",
           wasm,
           "--profile",
@@ -5926,7 +5926,7 @@ if (!only || "interop".includes(only)) {
         { cwd: root }
       );
       check(
-        "wasm profile links examples/arrays.ts with runtime/runtime_wasm.c",
+        "wasm profile links examples/arrays.ts with runtime/runtime-wasm.c",
         w.status === 0,
         String(w.stderr)
       );
@@ -6212,7 +6212,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
   // stage1 cannot read `std/` to list it: `self/` has to compile under the last
   // *released* compiler (the WP19 G2 gate), and `readdirSync` is newer than
-  // that release, so `self/std_modules.ts` carries the list as a literal while
+  // that release, so `self/std-modules.ts` carries the list as a literal while
   // stage0 reads the directory. This is what stops the literal going stale — a
   // disagreement is a diagnostic the two compilers word differently, which the
   // reject oracle would only catch if a case happened to trigger it.
@@ -6224,9 +6224,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       .map((f) => f.slice(0, -3))
       .sort()
       .join(", ");
-    const stage1 = fs.readFileSync(path.join(root, "self", "std_modules.ts"), "utf8");
+    const stage1 = fs.readFileSync(path.join(root, "self", "std-modules.ts"), "utf8");
     check(
-      `self/std_modules.ts lists the modules std/ actually has (${actual})`,
+      `self/std-modules.ts lists the modules std/ actually has (${actual})`,
       stage1.includes(`=> "${actual}"`),
       stage1
         .split("\n")
@@ -6271,7 +6271,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // with the `typescript` scanner's over the whole corpus. The oracle links a
   // binary, so it needs clang; without one this is skipped like every other
   // toolchain-dependent check.
-  const oracle = spawnSync("node", [path.join(root, "tests", "lexer_oracle.js"), "--seed", seedSpec], {
+  const oracle = spawnSync("node", [path.join(root, "tests", "lexer-oracle.js"), "--seed", seedSpec], {
     cwd: root,
     encoding: "utf8",
   });
@@ -6286,11 +6286,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // lexical error and this lexer stops, so the message and the position it
   // stops at are a golden of their own.
   const dumper = path.join(buildDir, "self", "dump_tokens");
-  const built = spawnSync(NISH, [path.join(selfDir, "dump_tokens.ts"), "--link", dumper], {
+  const built = spawnSync(NISH, [path.join(selfDir, "dump-tokens.ts"), "--link", dumper], {
     cwd: root,
     encoding: "utf8",
   });
-  if (check("self/dump_tokens.ts links", built.status === 0, built.stderr)) {
+  if (check("self/dump-tokens.ts links", built.status === 0, built.stderr)) {
     const errorsTs = path.join(root, "tests", "lexer", "errors.ts");
     const run = spawnSync(dumper, [errorsTs], { cwd: root, encoding: "utf8" });
     const want = fs.readFileSync(path.join(root, "tests", "lexer", "errors.out"), "utf8");
@@ -6305,7 +6305,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // must parse to the tree the `typescript` parser builds, span for span;
   // the files the oracle skips are the forbidden constructs Nish-0 has
   // no grammar for yet, and that count is the S2 gate's own measurement.
-  const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js"), "--seed", seedSpec], {
+  const parserOracle = spawnSync("node", [path.join(root, "tests", "parser-oracle.js"), "--seed", seedSpec], {
     cwd: root,
     encoding: "utf8",
   });
@@ -6320,11 +6320,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // parse is an `N_ERROR` node and a diagnostic, and the declaration after
   // it still parses (docs/wp14-selfhost.md §3a D1).
   const astDumper = path.join(buildDir, "self", "dump_ast");
-  const builtAst = spawnSync(NISH, [path.join(selfDir, "dump_ast.ts"), "--link", astDumper], {
+  const builtAst = spawnSync(NISH, [path.join(selfDir, "dump-ast.ts"), "--link", astDumper], {
     cwd: root,
     encoding: "utf8",
   });
-  if (check("self/dump_ast.ts links", builtAst.status === 0, builtAst.stderr)) {
+  if (check("self/dump-ast.ts links", builtAst.status === 0, builtAst.stderr)) {
     // Relative, because the diagnostics quote the path they were given and
     // the golden cannot hold this machine's checkout directory.
     const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" });
@@ -6344,7 +6344,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // while it was in the tree, `node:path` for
   // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
   // the rest.
-  const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js"), "--seed", seedSpec], {
+  const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support-oracle.js"), "--seed", seedSpec], {
     cwd: root,
     encoding: "utf8",
   });
@@ -6383,10 +6383,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // The other half of milestone S3: refusing the programs it should, for the
   // reason each case names. A dump comparison cannot see that, so every
   // `reject_*` case and every `tests/link/` negative is run through
-  // `self/dump_checked.ts` and its own expected fragments are required of the
+  // `self/dump-checked.ts` and its own expected fragments are required of the
   // output -- the assertion section A makes of the driver, made of the checker
   // on its own.
-  const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js"), "--seed", seedSpec], {
+  const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject-oracle.js"), "--seed", seedSpec], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -6415,7 +6415,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // skips on any machine with no seed -- which is most of them, and is the
   // shape `.claude/selfhost.md` warns about: a guard nothing exercises. It is
   // the one piece of that tool that can make two DIFFERING files look equal,
-  // so it is the piece worth a stand-in (`reject_oracle.js`'s `selfCheck` and
+  // so it is the piece worth a stand-in (`reject-oracle.js`'s `selfCheck` and
   // `scripts/verify-binaries.sh` are the precedent).
   //
   // Why the tool needs it at all: two compilers are never installed in one
@@ -6918,14 +6918,14 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     const dumpCase = path.join("examples", "multi", "main.ts");
     const ourDump = spawnSync(compiler, [dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
     const dumpEntry = path.join(shipDir, "dump_checked");
-    const dumpBuilt = spawnSync(compiler, ["self/dump_checked.ts", "--link", dumpEntry, "--profile", "debug"], {
+    const dumpBuilt = spawnSync(compiler, ["self/dump-checked.ts", "--link", dumpEntry, "--profile", "debug"], {
       cwd: root,
       encoding: "utf8",
     });
     const viaEntry =
       dumpBuilt.status === 0
         ? spawnSync(dumpEntry, [dumpCase], { cwd: root, encoding: "utf8" })
-        : { status: dumpBuilt.status, stdout: "", stderr: `could not link self/dump_checked.ts:\n${dumpBuilt.stderr}` };
+        : { status: dumpBuilt.status, stdout: "", stderr: `could not link self/dump-checked.ts:\n${dumpBuilt.stderr}` };
     check(
       "the self-hosted compiler: --emit-checked dumps a whole program as the dump entry does",
       ourDump.status === 0 &&
@@ -7186,14 +7186,14 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // is no oracle between the two — there is a golden per compiler, over
     // the same input file, and this is stage1's. The check is that the flag
     // is answered (exit 0, no IR written) and that the tree is the one
-    // `tests/self/dump_ast.golden` records.
+    // `tests/self/dump-ast.golden` records.
     const astOut = path.join(shipDir, "ast");
     fs.mkdirSync(astOut, { recursive: true });
     const astRun = spawnSync(compiler, ["tests/cases/dump_ast.ts", "--emit-ast", "-o", `${astOut}/`], {
       cwd: root,
       encoding: "utf8",
     });
-    const astGoldenFile = path.join(root, "tests", "self", "dump_ast.golden");
+    const astGoldenFile = path.join(root, "tests", "self", "dump-ast.golden");
     const astGolden = fs.existsSync(astGoldenFile) ? fs.readFileSync(astGoldenFile, "utf8") : "";
     if (process.env.UPDATE_GOLDENS === "1" && astRun.status === 0 && astRun.stdout !== astGolden) {
       fs.writeFileSync(astGoldenFile, astRun.stdout);
@@ -7241,10 +7241,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // compares the outputs; nothing is timed. The Are We Fast Yet ports in bench/awfy/
 // have no twins, so `awfy` builds their harness and runs each one once, which panics
 // when a port's own `verifyResult` fails. `maps` builds the four WP32 map layout
-// prototypes and requires each to print what bench/map_node.mjs prints from
+// prototypes and requires each to print what bench/map-node.mjs prints from
 // Node's `Map`, and the three `Map` measurements of docs/wp32-map.md §10 to print
 // what their Node twins print, lines of that same output. Those three are held
-// to the performance gate's zero warnings, and map_vs_stringmap's copy of
+// to the performance gate's zero warnings, and map-vs-stringmap's copy of
 // `StringMap` to being a verbatim part of self/map.ts. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
@@ -7278,7 +7278,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   // The measurements are programs a reader copies from, so they are held where
   // std/ and examples/ are: no performance warning, built as the bench builds
   // them (they spell their integers `i32` and have no `.args`).
-  for (const name of ["map_wordcount", "map_presize", "map_vs_stringmap"]) {
+  for (const name of ["map-wordcount", "map-presize", "map-vs-stringmap"]) {
     const r = spawnSync(
       NISH,
       [path.join("bench", `${name}.ts`), "--json", "-o", path.join(buildDir, `bench_${name}.ll`)],
@@ -7291,12 +7291,12 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       `${warnings.map(diagnosticLine).join("\n")}${r.stdout}${r.stderr}`
     );
   }
-  // map_vs_stringmap.ts cannot import the compiler, so it carries a copy of
+  // map-vs-stringmap.ts cannot import the compiler, so it carries a copy of
   // StringMap between two rules; the copy must still be self/map.ts's code.
-  const vsSource = fs.readFileSync(path.join(root, "bench", "map_vs_stringmap.ts"), "utf8");
+  const vsSource = fs.readFileSync(path.join(root, "bench", "map-vs-stringmap.ts"), "utf8");
   const copied = vsSource.match(/\/\/ ---- copy of self\/map\.ts ----\n([\s\S]*?)\/\/ ---- end of the copy of self\/map\.ts ----/);
   check(
-    "bench: map_vs_stringmap.ts's copy of StringMap is a verbatim part of self/map.ts",
+    "bench: map-vs-stringmap.ts's copy of StringMap is a verbatim part of self/map.ts",
     copied !== null &&
       copied[1].includes("export class StringMap") &&
       fs.readFileSync(path.join(root, "self", "map.ts"), "utf8").includes(copied[1]),
@@ -8175,11 +8175,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // split out for its own size budget, and `--link` compiles both. A tarball
       // with only the core would install a compiler that cannot link any program
       // that reads a file.
-      "runtime/runtime_os.c",
+      "runtime/runtime-os.c",
       // And the third, which `--link` also compiles: a tarball without it would
       // install a compiler whose every link fails to find `nish_parallel_range`,
       // because build.sh pairs all three from one named input.
-      "runtime/runtime_parallel.c",
+      "runtime/runtime-parallel.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
@@ -8200,7 +8200,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, runtime_os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, runtime-os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -8675,7 +8675,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         const wantedInPlatform = [
           "bin/nish",
           "runtime/runtime.c",
-          "runtime/runtime_os.c",
+          "runtime/runtime-os.c",
           "runtime/nish.h",
           "scripts/build.sh",
           ...fs
@@ -8983,12 +8983,12 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
 
 // ---- The seed fetch -------------------------------------------------------------------
 // `scripts/fetch-seed.sh` is how a fresh clone, the session hook and CI get the
-// released compiler every stage1 here is built with. `tests/fetch_seed.js` drives
+// released compiler every stage1 here is built with. `tests/fetch-seed.js` drives
 // it against a stand-in installer -- which arguments reach `install.sh`, when it
 // is not called at all, what is refused -- with no network and nothing touched in
 // the real `build/seed/`, so it runs in every `npm test`, a degraded one included.
 if (!only || "fetch-seed".includes(only) || "seed".includes(only)) {
-  const fetched = spawnSync("node", [path.join(root, "tests", "fetch_seed.js")], { cwd: root, encoding: "utf8" });
+  const fetched = spawnSync("node", [path.join(root, "tests", "fetch-seed.js")], { cwd: root, encoding: "utf8" });
   const fetchSummary = fetched.stdout.trim().split("\n").pop() ?? "";
   check(
     `scripts/fetch-seed.sh passes its own checks (${fetchSummary})`,
@@ -11343,7 +11343,7 @@ if (!only || "differential".includes(only)) {
 
 // ---- The gate on the prebuilt runtime objects ------------------------------------
 //
-// The links above are fast because `runtime.c`, `runtime_os.c` and the driver
+// The links above are fast because `runtime.c`, `runtime-os.c` and the driver
 // are compiled once per run rather than once per case, and a fast link that
 // quietly used the wrong runtime would be worse than the slow one it replaced.
 // Two checks, and between them they cover both ways that could happen. They sit

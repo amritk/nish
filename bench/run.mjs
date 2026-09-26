@@ -25,9 +25,9 @@
 //                       does must say why). --runs N repeats each run (default 1)
 //
 // The WP32 map programs are the four layout prototypes (bench/map_proto_*.ts)
-// and the three measurements of the global `Map` (map_wordcount, map_presize,
-// map_vs_stringmap), each beside a Node twin. Every checksum line is one of the
-// ten bench/map_node.mjs prints from Node's `Map`, so every program runs a
+// and the three measurements of the global `Map` (map-wordcount, map-presize,
+// map-vs-stringmap), each beside a Node twin. Every checksum line is one of the
+// ten bench/map-node.mjs prints from Node's `Map`, so every program runs a
 // workload of docs/wp32-map.md §2 exactly; each workload is timed by the
 // program itself. They run at 2^16 and 2^20 keys, in and out of the cache, and
 // their tables, comparisons (a) to (d), go to docs/BENCHMARKS.md with the rest;
@@ -76,7 +76,7 @@ const BENCHMARKS = [
   { name: "nbody", what: "n-body, 5 bodies, 2e7 steps (class + array, f64)", integer: false },
   { name: "spectral", what: "spectral norm, n = 3000 (number[] + f64)", integer: false },
   { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])", integer: true },
-  { name: "strbuild", what: "string building, 131072 template pieces joined into 806 KB", integer: true, extraC: ["strbuild_naive"] },
+  { name: "strbuild", what: "string building, 131072 template pieces joined into 806 KB", integer: true, extraC: ["strbuild-naive"] },
   { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", integer: false },
   { name: "result", what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)", integer: true },
 ];
@@ -103,10 +103,10 @@ const AWFY_ITERATIONS = 30;
  * (`seq`) and as `parallelMapInto` (`par`) on every core the machine has.
  */
 const PARALLEL = [
-  { name: "par_compute", what: "64 square roots per element, 2^21 elements (f64)" },
-  { name: "par_alloc", what: "a string formatted and summed per element, 2^22 elements; the body allocates (NL9012)" },
-  { name: "par_nbody", what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step" },
-  { name: "par_short", what: "an 8-element map called 2^20 times, each call fed by the last" },
+  { name: "par-compute", what: "64 square roots per element, 2^21 elements (f64)" },
+  { name: "par-alloc", what: "a string formatted and summed per element, 2^22 elements; the body allocates (NL9012)" },
+  { name: "par-nbody", what: "n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step" },
+  { name: "par-short", what: "an 8-element map called 2^20 times, each call fed by the last" },
 ];
 const AWFY_KEPT = 20;
 
@@ -115,23 +115,23 @@ const AWFY_KEPT = 20;
  * docs/wp32-map.md §2, and the Node twin every one of them must agree with.
  */
 const MAPS = [
-  { name: "map_proto_ordered", label: "ordered" },
-  { name: "map_proto_ordered_fp", label: "ordered+i64 fp" },
-  { name: "map_proto_ordered_fp32", label: "ordered+u32 fp" },
-  { name: "map_proto_unordered", label: "unordered" },
+  { name: "map-proto-ordered", label: "ordered" },
+  { name: "map-proto-ordered-fp", label: "ordered+i64 fp" },
+  { name: "map-proto-ordered-fp32", label: "ordered+u32 fp" },
+  { name: "map-proto-unordered", label: "unordered" },
 ];
-const MAPS_NODE = "map_node";
+const MAPS_NODE = "map-node";
 
 /**
  * The global `Map` measured in docs/wp32-map.md §10: comparisons (b), (c) and
  * (d). Each program runs the variants it names, one per process when timed
- * (`<name> time <variant>`), and prints what its twin prints; `map_node` is
- * the twin of `map_vs_stringmap` because they run the same ten workloads.
+ * (`<name> time <variant>`), and prints what its twin prints; `map-node` is
+ * the twin of `map-vs-stringmap` because they run the same ten workloads.
  */
 const MAP_MEASURES = [
-  { name: "map_wordcount", twin: "map_wordcount", variants: ["fused", "double"] },
-  { name: "map_presize", twin: "map_presize", variants: ["grow", "reserve"] },
-  { name: "map_vs_stringmap", twin: MAPS_NODE, variants: ["map", "stringmap"] },
+  { name: "map-wordcount", twin: "map-wordcount", variants: ["fused", "double"] },
+  { name: "map-presize", twin: "map-presize", variants: ["grow", "reserve"] },
+  { name: "map-vs-stringmap", twin: MAPS_NODE, variants: ["map", "stringmap"] },
 ];
 
 /** The key counts the map tables are timed at: inside the last-level cache, and well outside it. */
@@ -715,7 +715,7 @@ const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.t
 /**
  * The map programs at one size (`undefined` keeps each file's own): build each
  * native one with `--profile speed`, and require its checksum lines to be its
- * twin's, and every line to be one bench/map_node.mjs prints, so that each
+ * twin's, and every line to be one bench/map-node.mjs prints, so that each
  * workload is §2's. Unless `--validate`, time every column `--warmup` +
  * `--runs` times, the columns interleaved round by round so that a slow
  * stretch of a shared machine falls on all of them. A column is one process
@@ -811,7 +811,7 @@ const mapsAtSize = (size) => {
     process.stderr.write(".");
   }
   process.stderr.write("\n");
-  const presize = measures.find((m) => m.name === "map_presize");
+  const presize = measures.find((m) => m.name === "map-presize");
   const rss = new Map(presize ? presize.variants.map((v) => [v, peakRssKb(presize.exe, [v])]) : []);
 
   /** `{ min, median }` of column `key` on `workload`, or null when it did not run there. */
@@ -849,46 +849,46 @@ const mapsAtSize = (size) => {
     workloads,
     [...MAPS.map((b) => [b.name, b.label]), [MAPS_NODE, "Node `Map`"]],
     [
-      ["u32 fp / unordered", "map_proto_ordered_fp32", "map_proto_unordered"],
-      ["u32 fp / Node", "map_proto_ordered_fp32", MAPS_NODE],
+      ["u32 fp / unordered", "map-proto-ordered-fp32", "map-proto-unordered"],
+      ["u32 fp / Node", "map-proto-ordered-fp32", MAPS_NODE],
     ]
   );
   table(
     "(b) word count: fused against double lookup",
     counts,
     [
-      ["map_wordcount:fused", "`Map` fused"],
-      ["map_wordcount:double", "`Map` double"],
-      ["map_proto_unordered", "unordered"],
-      ["map_wordcount.mjs:fused", "Node fused"],
-      ["map_wordcount.mjs:double", "Node double"],
+      ["map-wordcount:fused", "`Map` fused"],
+      ["map-wordcount:double", "`Map` double"],
+      ["map-proto-unordered", "unordered"],
+      ["map-wordcount.mjs:fused", "Node fused"],
+      ["map-wordcount.mjs:double", "Node double"],
     ],
     [
-      ["double / fused", "map_wordcount:double", "map_wordcount:fused"],
-      ["fused / unordered", "map_wordcount:fused", "map_proto_unordered"],
-      ["fused / Node fused", "map_wordcount:fused", "map_wordcount.mjs:fused"],
+      ["double / fused", "map-wordcount:double", "map-wordcount:fused"],
+      ["fused / unordered", "map-wordcount:fused", "map-proto-unordered"],
+      ["fused / Node fused", "map-wordcount:fused", "map-wordcount.mjs:fused"],
     ]
   );
   table(
     "(c) insert: presized with `reserve` against growing",
     inserts,
     [
-      ["map_presize:grow", "`Map` growing"],
-      ["map_presize:reserve", "`Map` `reserve`"],
-      ["map_proto_unordered", "unordered"],
-      ["map_presize.mjs:grow", "Node growing"],
-      ["map_presize.mjs:reserve", "Node `reserve`"],
+      ["map-presize:grow", "`Map` growing"],
+      ["map-presize:reserve", "`Map` `reserve`"],
+      ["map-proto-unordered", "unordered"],
+      ["map-presize.mjs:grow", "Node growing"],
+      ["map-presize.mjs:reserve", "Node `reserve`"],
     ],
     [
-      ["growing / reserve", "map_presize:grow", "map_presize:reserve"],
-      ["reserve / unordered", "map_presize:reserve", "map_proto_unordered"],
-      ["reserve / Node", "map_presize:reserve", "map_presize.mjs:grow"],
+      ["growing / reserve", "map-presize:grow", "map-presize:reserve"],
+      ["reserve / unordered", "map-presize:reserve", "map-proto-unordered"],
+      ["reserve / Node", "map-presize:reserve", "map-presize.mjs:grow"],
     ]
   );
   if (rss.size > 0) {
     const kb = (v) => (rss.get(v) != null ? `${rss.get(v).toLocaleString("en-US")} KB` : "not measured");
     lines.push(
-      `Peak RSS of \`map_presize\` running one variant alone (whole process, both key sets included): growing ${kb("grow")}, \`reserve\` ${kb("reserve")}.`,
+      `Peak RSS of \`map-presize\` running one variant alone (whole process, both key sets included): growing ${kb("grow")}, \`reserve\` ${kb("reserve")}.`,
       ""
     );
   }
@@ -896,15 +896,15 @@ const mapsAtSize = (size) => {
     "(d) the global `Map` against `StringMap`",
     workloads,
     [
-      ["map_vs_stringmap:map", "`Map`"],
-      ["map_vs_stringmap:stringmap", "`StringMap`"],
-      ["map_proto_unordered", "unordered"],
+      ["map-vs-stringmap:map", "`Map`"],
+      ["map-vs-stringmap:stringmap", "`StringMap`"],
+      ["map-proto-unordered", "unordered"],
       [MAPS_NODE, "Node `Map`"],
     ],
     [
-      ["`Map` / `StringMap`", "map_vs_stringmap:map", "map_vs_stringmap:stringmap"],
-      ["`Map` / unordered", "map_vs_stringmap:map", "map_proto_unordered"],
-      ["`Map` / Node", "map_vs_stringmap:map", MAPS_NODE],
+      ["`Map` / `StringMap`", "map-vs-stringmap:map", "map-vs-stringmap:stringmap"],
+      ["`Map` / unordered", "map-vs-stringmap:map", "map-proto-unordered"],
+      ["`Map` / Node", "map-vs-stringmap:map", MAPS_NODE],
     ]
   );
   lines.push(
@@ -1106,7 +1106,7 @@ if (parallelRows.length > 0) {
 if (mapLines.length > 0) {
   lines.push("## Map and Set (WP32)", "");
   lines.push(
-    `Each workload is timed by the program around the workload alone, not as process wall time, and every column is its own process, the columns taking turns round by round: ${opts.runs} timed runs after ${opts.warmup} warm-up, min / median in ms. The workloads are [docs/wp32-map.md](wp32-map.md) §2's, over the same keys, and every program prints checksum lines \`bench/map_node.mjs\` prints from Node's \`Map\`. \`unordered\` is the S1 prototype with keys and values in the buckets, the layout the language does not ship; the ratios divide minimums. The programs are built with \`nish bench/<name>.ts --link <exe> --profile speed\`, and bench/README.md describes them; §10 of the note reads the numbers.`,
+    `Each workload is timed by the program around the workload alone, not as process wall time, and every column is its own process, the columns taking turns round by round: ${opts.runs} timed runs after ${opts.warmup} warm-up, min / median in ms. The workloads are [docs/wp32-map.md](wp32-map.md) §2's, over the same keys, and every program prints checksum lines \`bench/map-node.mjs\` prints from Node's \`Map\`. \`unordered\` is the S1 prototype with keys and values in the buckets, the layout the language does not ship; the ratios divide minimums. The programs are built with \`nish bench/<name>.ts --link <exe> --profile speed\`, and bench/README.md describes them; §10 of the note reads the numbers.`,
     ""
   );
   lines.push(...mapLines);

@@ -238,7 +238,7 @@ tar -xzf "$tmp/nish.tar.gz" -C "$stage" --strip-components=1
 [ -x "$stage/bin/nish" ] || die "$name.tar.gz does not carry bin/nish"
 # Three files rather than release.yml's seven, and deliberately the short list:
 # these are what every release since 0.1.1 has carried, and the rest is what a
-# given release happens to have. `runtime_os.c` arrived in 0.2.0 when the
+# given release happens to have. `runtime-os.c` arrived in 0.2.0 when the
 # runtime was split into two translation units, so demanding it here would make
 # this script refuse to install 0.1.1 -- which it did, until it was pointed at
 # one. What the tarball ought to contain is `release.yml`'s question and it

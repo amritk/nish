@@ -18,7 +18,7 @@
  *
  * Codes are carried in `--json` only. The human summary line
  * `file:line:col: error: <text>` is unchanged and stays byte-for-byte what it
- * has always been, because the `.err` goldens and `tests/self/reject_oracle.js`
+ * has always been, because the `.err` goldens and `tests/self/reject-oracle.js`
  * match on it.
  *
  * A fragment is the longest literal run of a message's template -- the rule in

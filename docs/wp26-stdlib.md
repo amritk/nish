@@ -161,7 +161,7 @@ guarding:
   measured byte budget that a test enforces
   ([wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget); one budget per
   translation unit today — 3,480 of `runtime.c`'s 3,584 bytes of `.text*`, and
-  1,190 of `runtime_os.c`'s 1,280), and a library function costs neither of them
+  1,190 of `runtime-os.c`'s 1,280), and a library function costs neither of them
   anything. The live example is `sort`: `readdirSync` sorts its own result
   *because there is no `sort` for a caller to reach for*, and the answer to that
   gap is a `std/` function, not `nish_sort`.
@@ -384,7 +384,7 @@ preference:
 2. **A link case is what puts the module in front of *both* compilers.**
    `tests/self/corpus.js` exports `linkPrograms()`, which walks
    `tests/link/*/main.ts`, and `ir_oracle.js`, `parity.js` and
-   `reject_oracle.js` all read it. Since a link program is compiled
+   `reject-oracle.js` all read it. Since a link program is compiled
    transitively, `std/testing` and `std/text` are compiled by stage0 *and* by
    stage1 on every suite run, and the IR oracle requires the two to agree byte
    for byte.

@@ -10,7 +10,7 @@ is ever needed.
 The evidence is of three kinds, and every decision below names its own:
 
 - **measurements** of four hand-written layout prototypes against Node's `Map`
-  (`bench/map_proto_*.ts`, `bench/map_node.mjs`; §2);
+  (`bench/map_proto_*.ts`, `bench/map-node.mjs`; §2);
 - **`tsc --strict` experiments**, with TypeScript 5.9.3 and `"lib": ["ES2022"]`,
   the repository's settings (§3, §7);
 - **pointers into the compiler** at `main` `468f09a`, where the
@@ -78,10 +78,10 @@ program that compiles today with no warning:
 
 | Program | Layout | Bucket | Probe reads the entries | Growth |
 | --- | --- | --- | --- | --- |
-| [`map_proto_ordered.ts`](../bench/map_proto_ordered.ts) | StringMap's: ordered, bucket = index + 1 | `i32` | at every occupied bucket, for a full key compare | hashes every key again |
-| [`map_proto_ordered_fp.ts`](../bench/map_proto_ordered_fp.ts) | ordered, `hash32 << 32 \| index + 1` | `i64` | only when the bucket's hash equals the key's | re-files from `hashes` |
-| [`map_proto_ordered_fp32.ts`](../bench/map_proto_ordered_fp32.ts) | ordered, `hash >>> 24 << 24 \| index + 1` | `u32` | only on a fingerprint match. The stored hash is compared before the key | re-files from `hashes` |
-| [`map_proto_unordered.ts`](../bench/map_proto_unordered.ts) | unordered: hash, key and value in the bucket | three parallel bucket arrays | never: the key is in the bucket | re-files from the bucket hashes |
+| [`map-proto-ordered.ts`](../bench/map-proto-ordered.ts) | StringMap's: ordered, bucket = index + 1 | `i32` | at every occupied bucket, for a full key compare | hashes every key again |
+| [`map-proto-ordered-fp.ts`](../bench/map-proto-ordered-fp.ts) | ordered, `hash32 << 32 \| index + 1` | `i64` | only when the bucket's hash equals the key's | re-files from `hashes` |
+| [`map-proto-ordered-fp32.ts`](../bench/map-proto-ordered-fp32.ts) | ordered, `hash >>> 24 << 24 \| index + 1` | `u32` | only on a fingerprint match. The stored hash is compared before the key | re-files from `hashes` |
+| [`map-proto-unordered.ts`](../bench/map-proto-unordered.ts) | unordered: hash, key and value in the bucket | three parallel bucket arrays | never: the key is in the bucket | re-files from the bucket hashes |
 
 All four run five workloads over the same `2n` distinct keys. The keys are
 `i * 2654435761` as an `i32`, and `` `k${key}` `` for the string map. A 32-bit
@@ -95,7 +95,7 @@ LCG drives the workloads, in the program, with no I/O:
 | count | word count: `8n` words drawn from `n / 4`, skewed towards low indices by `r1 & r2`, each counted with one probe | distinct words, and `Σ count × index` |
 | churn | `8n` inserts into a sliding window of `n / 2` live keys, each paired with the delete of the key that leaves it | the live count, and the sum over a walk |
 
-[`bench/map_node.mjs`](../bench/map_node.mjs) runs the same workloads on Node's
+[`bench/map-node.mjs`](../bench/map-node.mjs) runs the same workloads on Node's
 global `Map`, spelling every 32-bit step as the prototypes compute it
 (`Math.imul`, `>>> 0`). `node bench/run.mjs --only maps --validate` requires
 all five programs to print the same ten lines. `npm test` runs that at
@@ -467,7 +467,7 @@ reason above.
 ### 5.2 Hash and equality per key type
 
 `hashKey<K>` and `sameKey<K>` are intrinsics that S2 lowers per `K` in
-`self/emit_map.ts`, as inline IR. They make no runtime call, because the
+`self/emit-map.ts`, as inline IR. They make no runtime call, because the
 runtime's `.text` budget has no room:
 
 | `K` | `hashKey` | `sameKey` |
@@ -533,7 +533,7 @@ what any program prints.
 
 `for (const k of m.keys())` and `for (const v of m.values())` walk the entries
 in index order. They skip dead ones, and **re-read the entry count every pass**.
-S4 lowers them in `emitForOf` ([`self/emit_arrays.ts`](../self/emit_arrays.ts)
+S4 lowers them in `emitForOf` ([`self/emit-arrays.ts`](../self/emit-arrays.ts)
 line 1127). **The semantics are JavaScript's exactly**, because an entry never
 moves while a loop is walking the table:
 
@@ -704,14 +704,14 @@ Three programs time the shipped `Map` on §2's workloads, each beside a Node
 twin. [`bench/README.md`](../bench/README.md#the-global-map-measured)
 describes them:
 
-- **(b)** [`map_wordcount`](../bench/map_wordcount.ts) is fused against double
+- **(b)** [`map-wordcount`](../bench/map-wordcount.ts) is fused against double
   lookup on word count.
-- **(c)** [`map_presize`](../bench/map_presize.ts) is `reserve` against growing
+- **(c)** [`map-presize`](../bench/map-presize.ts) is `reserve` against growing
   on insert.
-- **(d)** [`map_vs_stringmap`](../bench/map_vs_stringmap.ts) is `Map` against
+- **(d)** [`map-vs-stringmap`](../bench/map-vs-stringmap.ts) is `Map` against
   `StringMap` on all ten workloads.
 
-Each program prints lines that `bench/map_node.mjs` prints, and `--validate`
+Each program prints lines that `bench/map-node.mjs` prints, and `--validate`
 requires that. So every row is the same work, over the same keys, as the
 unordered prototype's row beside it. `StringMap` is compiler-internal, so the
 program carries a verbatim copy of it from `self/map.ts`. `tests/run.js` fails
@@ -730,8 +730,8 @@ allocation added. In the IR the fused loop calls `probe` once per word, then
 - **Instruction counts.** These do not move, and they carry every claim below
   that says "fewer instructions".
   - `--instructions` counts the three programs at `n` = 16,384 with a spread of
-    0 over three runs: `map_wordcount` 111,693,790, `map_presize` 56,609,708
-    and `map_vs_stringmap` 330,510,892 (`bench/instructions.json`).
+    0 over three runs: `map-wordcount` 111,693,790, `map-presize` 56,609,708
+    and `map-vs-stringmap` 330,510,892 (`bench/instructions.json`).
   - Each variant was counted alone the same way, from `build/bench/instructions/`
     after `node bench/run.mjs --instructions`:
 
@@ -742,10 +742,10 @@ allocation added. In the IR the fused loop calls `probe` once per word, then
     ```
 
   - Building the key set is counted by naming a variant the program does not
-    have, `./map_wordcount none` and `./map_presize none`, which run neither
+    have, `./map-wordcount none` and `./map-presize none`, which run neither
     variant. They read 8,264,248 and 8,231,470. Each variant's figure below is
     its summary less its program's key-set count.
-  - `./map_vs_stringmap map` is `Map` on all ten workloads, key set included,
+  - `./map-vs-stringmap map` is `Map` on all ten workloads, key set included,
     as each prototype's whole-program count in `bench/instructions.json` is.
 - **Wall time.** These are the tables in [BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32),
   from `node bench/run.mjs --runs 9`.
@@ -814,7 +814,7 @@ instruction counts. A single cell is worth about ±25%.
 - **Memory.** `reserve` saves memory as well as instructions, the opposite of
   the trade the plan expected. Each abandoned bucket array stays in the arena
   until its scope ends, and a presized table never abandons one. Peak RSS of
-  `map_presize` running one variant alone (the whole process, with both key
+  `map-presize` running one variant alone (the whole process, with both key
   sets) was 33,588 KB growing and 29,108 KB presized at 65,536, −13%. At 2^20
   it was 510,388 KB and 444,340 KB, −13%. Unlike the times, those are the same
   in every run.

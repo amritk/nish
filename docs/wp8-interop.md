@@ -12,7 +12,7 @@ nish x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
 ```
 
 Both compilers write them. The self-hosted compiler carries its own port of
-the generators (`self/interop_*.ts`, WP14 §7) and answers the same four flags
+the generators (`self/interop-*.ts`, WP14 §7) and answers the same four flags
 with the same bytes; `tests/self/interop_oracle.js` is what says so.
 
 ## The C ABI
@@ -135,7 +135,7 @@ int32_t add(int32_t a, int32_t b);
 
 ```bash
 clang -std=c11 -Wall -Wextra -Werror -Wno-override-module -Iruntime -Ibuild \
-      build/add.ll runtime/runtime.c runtime/runtime_os.c my_host.c -o my_host
+      build/add.ll runtime/runtime.c runtime/runtime-os.c my_host.c -o my_host
 ```
 
 ## `--emit-dts <file.d.ts>`: typings and a loader for the wasm build
@@ -159,7 +159,7 @@ export type WasmBool = 0 | 1;
 export interface Exports {
   /** Linear memory of the instance (the arena and string constants live here). */
   readonly memory: WebAssembly.Memory;
-  /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
+  /** runtime-wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
   nish_reset_arena(): void;
   nish_free_arena(): void;
   // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs ...
@@ -227,7 +227,7 @@ scale: (xs, k) => scoped(() => {
 The wasm ABI has four value types — `i32`, `i64`, `f32`, `f64` — so `u8`,
 `u16` and `u32` all travel in the same one as an `i32` and a `u64` in the same
 one as an `i64`. The loader is the only place their range can be restored, and
-`tests/self/interop_unsigned.ts` is the module the suite builds and calls to
+`tests/self/interop-unsigned.ts` is the module the suite builds and calls to
 prove it does:
 
 ```js
@@ -273,7 +273,7 @@ is exactly representable in the double a result comes back in.
 `memory.buffer` is re-read after every call into the module because
 `memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
 `nish_alloc_array` / `nish_arena_mark` / `nish_arena_release`, comes from
-`runtime/runtime_wasm.c`, a freestanding subset of the runtime: linear
+`runtime/runtime-wasm.c`, a freestanding subset of the runtime: linear
 memory past `__heap_base` is one arena chunk that grows with `memory.grow`,
 `nish_array_grow` and the panics are there (`nish_panic_index` is
 `unreachable`, which the host sees as a `RuntimeError`), and there are no
@@ -284,7 +284,7 @@ function takes or returns an array:
 
 ```bash
 node dist/index.js examples/arrays.ts -o build/arrays.ll --emit-dts build/arrays.d.ts
-scripts/build.sh build/arrays.ll runtime/runtime_wasm.c -o build/arrays.wasm --profile wasm
+scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
 node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(1, 2, 3, 2) = 2, 4, 6
 ```
 
@@ -397,7 +397,7 @@ Two details are decisions rather than defaults:
 A `Result` passed or returned by value narrows its arms the same way: an
 `f32` value arm and a `u8` error arm each read into their own temporary and
 then into the union member the discriminant selects.
-`tests/self/interop_widths.ts` is the fixture, built into a real addon and
+`tests/self/interop-widths.ts` is the fixture, built into a real addon and
 called by the interop section of `tests/run.js`.
 
 ### Functions the shim cannot bridge say so
@@ -509,7 +509,7 @@ thing that package recommended building.
 `<name>Async` for every export whose arguments and result are plain scalars:
 
 ```bash
-node dist/index.js tests/self/interop_async.ts -o build/spin.ll \
+node dist/index.js tests/self/interop-async.ts -o build/spin.ll \
   --emit-napi-async build/spin_napi.c --threads
 scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
   -o build/spin.node --profile napi --threads
@@ -555,8 +555,8 @@ Three properties are worth knowing before using it:
 
 ```c
 /* Not bridged asynchronously, and why. ... */
-/* tests/self/interop_async.ts: label(n: number): string -- no `labelAsync`: it returns string, which lives in the worker thread's arena */
-/* tests/self/interop_async.ts: total(xs: Int32Array): number -- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads */
+/* tests/self/interop-async.ts: label(n: number): string -- no `labelAsync`: it returns string, which lives in the worker thread's arena */
+/* tests/self/interop-async.ts: total(xs: Int32Array): number -- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads */
 ```
 
 A by-value `Result` *parameter* does cross, because it is scalars in a register
@@ -635,22 +635,22 @@ real pass over the buffer on top of the crossing.
 | File | Role |
 | --- | --- |
 | `runtime/nish.h` | Public C header: `nish_str`, `nish_array`, `struct nish_arena`, runtime prototypes (`nish_alloc_array` included), `NISH_SYMBOL`. |
-| `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
+| `runtime/runtime-wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
 | stage0's `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | stage0's `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
 | stage0's `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async` (which requires `--threads`). |
-| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same four flags and writes the same files. |
+| `self/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same four flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all five generated files compared byte for byte — the asynchronous shim among them. |
-| `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
+| `tests/self/interop-payloads.ts`, `tests/self/interop-widths.ts`, `tests/self/interop-unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
-| `tests/self/interop_async.ts`, `examples/node-addon-async.mjs` | The WP24 A1 fixture — the shapes that get a `<name>Async` and the string and borrowed-array ones that do not — and the harness that calls both and measures what the loop was spared. |
+| `tests/self/interop-async.ts`, `examples/node-addon-async.mjs` | The WP24 A1 fixture — the shapes that get a `<name>Async` and the string and borrowed-array ones that do not — and the harness that calls both and measures what the loop was spared. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
 | `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `nish_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, the comment a skipped function leaves behind, and the WP24 A1 asynchronous exports — that `--emit-napi-async` is additive and inert when absent, that it is refused without `--threads`, that the generated C refuses to compile without `-DNISH_THREADS`, and that a built addon agrees with its synchronous twin while leaving the event loop responsive. |
 
 ## Not in this package
 
-- Strings and I/O from wasm: `runtime_wasm.c` has no `nish_str_*`, `nish_print`
+- Strings and I/O from wasm: `runtime-wasm.c` has no `nish_str_*`, `nish_print`
   or files, so string functions stay commented out in the `.d.ts`; a WASI
   build of `runtime.c` would lift that.
 - Zero-copy arrays in wasm: a JS buffer cannot be aliased from linear

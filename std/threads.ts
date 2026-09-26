@@ -11,7 +11,7 @@
  * `npm run check` type-checks, and what the compiler checks the call against.
  * The compiler then recognises the two exported templates by module and name
  * and lowers an instance of either onto `nish_parallel_range`
- * (runtime/runtime_parallel.c): it replaces the one call that walks the whole
+ * (runtime/runtime-parallel.c): it replaces the one call that walks the whole
  * range — `mapRange` for a map, `reduceBlocks` for a reduce — with a region that
  * hands each thread a contiguous piece of it, and emits the rest of the body as
  * written. So the length check, its message and the order a reduce combines in

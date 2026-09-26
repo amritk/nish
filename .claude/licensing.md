@@ -81,6 +81,6 @@ one of these, say so in the PR and ask.
 
 Public-domain code needs no notice, but say so where its constants appear, so
 the next audit does not have to rediscover it: `self/map.ts`,
-`self/emit_map.ts` and `std/collections.ts` mark FNV-1a and MurmurHash3's
+`self/emit-map.ts` and `std/collections.ts` mark FNV-1a and MurmurHash3's
 finalisers, and `runtime/runtime.c` marks xorshift64*.
 `THIRD_PARTY_NOTICES.md` lists them under "Public-domain algorithms".

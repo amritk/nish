@@ -148,7 +148,7 @@ are not stage D's to take (§9).
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
 | `bench/` | 22 | 0 | `bench/run.mjs` reads the same `.args` sidecars `tests/` does |
 | `tests/parser/` | 9 | 0 | fixtures no checker accepts; the parser is the only reader |
-| `docs/cookbook/` | 3 | 137 | `decl_ffi` (done in stage C) and `fn_add_function`, which exists *to be* the `function` spelling |
+| `docs/cookbook/` | 3 | 137 | `decl-ffi` (done in stage C) and `fn-add-function`, which exists *to be* the `function` spelling |
 | `examples/`, `std/`, `tests/nish/` | 0 | 76 | done |
 | `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | — | the real cost centre; IR blocks beside them stay as they are. Done |
 | stage0's `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
@@ -229,7 +229,7 @@ the *parent node* rather than by being told:
    producing a *local*. That made `allocates` false for the callee, and WP9's
    `nish_arena_mark` / `nish_arena_keep` bracket disappeared from every call to
    it — quietly worse code rather than an error, which is why
-   `docs/cookbook/mem_reclaim` catching it in a byte-for-byte IR diff
+   `docs/cookbook/mem-reclaim` catching it in a byte-for-byte IR diff
    mattered.
 
 Both are one predicate on this side, `isFunctionResult` in
@@ -242,7 +242,7 @@ Its checker threads the wanted type down as `want` (`checkReturnValue` in
 reachable there — for a while the two compilers silently disagreed about
 programs no test had written. Its `flowTarget` (`self/escape.ts`) *does* climb,
 so it had bug 2, and `tests/self/ir_oracle.js` caught it the moment
-`docs/cookbook/mem_reclaim.ts` became an arrow: stage0 emitted the bracket,
+`docs/cookbook/mem-reclaim.ts` became an arrow: stage0 emitted the bracket,
 stage1 did not.
 
 The general lesson for the rest of C: the gap is never in the code that reads
@@ -267,7 +267,7 @@ Everything downstream was free, because the parser **normalises**: it builds
 the same `N_FUNCTION` node the `function` spelling builds, with the name from
 the `const` and the parameters, return type and body from the arrow. Stage1's
 checker, emitter, attribute pass and escape analysis are untouched for block
-bodies. `tests/parser_oracle.js` normalises the same way, and says so — it is
+bodies. `tests/parser-oracle.js` normalises the same way, and says so — it is
 the one place that oracle reshapes a `typescript` tree rather than
 transcribing it, and it does so because the language says the two spellings
 declare one thing.
@@ -756,10 +756,10 @@ owes an answer to:
 
 | File | What it is | What stage D owes it |
 | --- | --- | --- |
-| `tests/cases/reject_fn_nested.ts` | a `function` inside a body, refused as `Unsupported statement in Phase 1: FunctionDeclaration` | **scope §6's rule to the top level.** A nested declaration is already refused, by a rule with its own registry code; a stage D rejection that fired first would shadow that wording and `tests/diagnostic_coverage.js` would then have a code no program provokes |
+| `tests/cases/reject_fn_nested.ts` | a `function` inside a body, refused as `Unsupported statement in Phase 1: FunctionDeclaration` | **scope §6's rule to the top level.** A nested declaration is already refused, by a rule with its own registry code; a stage D rejection that fired first would shadow that wording and `tests/diagnostic-coverage.js` would then have a code no program provokes |
 | `tests/cases/reject_fn_anonymous.ts` | `export default function ()`, refused as `Functions must be named` | **name the function before refusing the spelling.** §6's message interpolates the name, so there is nothing for it to say here; the existing rule has to keep firing first |
 | `tests/cases/reject_arrow_annotated.ts`, `reject_arrow_let.ts` | the arrow rules, whose `main` is still a `function` | mechanical, but **before** stage D rather than with it: each case pins a *first* diagnostic, and a rejection of its entry point would become the first |
-| `docs/cookbook/fn_add_function.ts` | the listing that exists to be the legacy spelling, beside `fn_add` | the listing is the evidence for §2, so deleting it removes the demonstration that the two spellings compile identically. Either the section goes with the spelling, or the pair moves somewhere the rejection does not reach |
+| `docs/cookbook/fn-add-function.ts` | the listing that exists to be the legacy spelling, beside `fn-add` | the listing is the evidence for §2, so deleting it removes the demonstration that the two spellings compile identically. Either the section goes with the spelling, or the pair moves somewhere the rejection does not reach |
 | `tests/differential/arrow-parity/declared.ts` | half of the guard that the two spellings rewrite to the same JavaScript (§8b) | the same question, and it is the sharper one: the guard *is* a pair of spellings, so stage D removes one of its halves. The guard has value after D only if a `function` program can still be checked somewhere |
 
 The last two are one question — **what proves an equivalence after one of its
@@ -808,7 +808,7 @@ JSDoc, which costs nothing to reword and carries no code.
 - ~~**The entry point.**~~ **Settled, and taken.** `export const main =
   (): number => ...` is the consequence of §1 and is now the first line of
   every example, of the README quickstart, of `docs/INSTALL.md`'s hello world
-  and of `decl_main` in the cookbook. The diagnostics that name the entry still
+  and of `decl-main` in the cookbook. The diagnostics that name the entry still
   say `export function main`: their text is what
   `scripts/gen-diagnostic-codes.mjs` keys a stable code on, so rewording them
   retires `NL2229` and `NL2149` for a spelling change. They are stage D's to

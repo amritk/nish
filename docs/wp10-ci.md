@@ -509,7 +509,7 @@ Almost none of it was compiling Nish. `tests/batch_worker.js` measured one
 stage0 run, `node dist/index.js <case>`, at about 634 ms, of which **1.5 ms**
 was compiling: 36 ms was Node starting, ~473 ms was `import ts from
 "typescript"`, and ~85 ms was loading `dist/`. The oracles and
-`tests/diagnostic_coverage.js` could not avoid paying it, because what they
+`tests/diagnostic-coverage.js` could not avoid paying it, because what they
 compared was what the *command line* answers, so a process per program was the
 thing under test.
 
@@ -525,7 +525,7 @@ went with stage0's `src/`.
 
 Re-measuring. Both items this section used to list — splitting the WP14
 self-hosting block into a job of its own, and batching
-`tests/diagnostic_coverage.js` — were priced against the stage0 process cost
+`tests/diagnostic-coverage.js` — were priced against the stage0 process cost
 above, and that cost has gone. What still stands is the accounting problem
 either would have hit: `tests/run.js` has no way to run one section and *say*
 it ran one section, and the substring filter is the trap described above. A
@@ -662,7 +662,7 @@ compilers to keep in step (stage0's `src/codes.ts` and `self/codes.ts`, from the
 diagnostic sites of stage0's `src/`). It is frozen now: it scans nothing and writes
 nothing, and `--check`, which CI runs, validates the file's format and that
 every code in it is unique. What stops a diagnostic shipping without a real
-code is `tests/diagnostic_coverage.js`: every registry code has to be provoked
+code is `tests/diagnostic-coverage.js`: every registry code has to be provoked
 by a program in `tests/wordings/` or named with a reason in
 `tests/wordings/unreachable.txt`.
 
@@ -690,7 +690,7 @@ message words of its own and then its registry entry.
 
 Codes appear in `--json` only. The human summary line
 `file:line:col: error: <text>` is unchanged, because the `.err` goldens and
-`tests/self/reject_oracle.js` match on it byte for byte.
+`tests/self/reject-oracle.js` match on it byte for byte.
 
 ### Failures without a source position
 
@@ -734,7 +734,7 @@ rest, including how a program written for one number mode is recorded.
 
 ## `--emit-ast` and `--emit-checked`
 
-Both write to stdout instead of IR (`self/ast_text.ts` and `self/dump.ts`);
+Both write to stdout instead of IR (`self/ast-text.ts` and `self/dump.ts`);
 file names are printed relative to the working directory.
 
 - `--emit-ast`: the syntax tree of every module after Phase 0, one node per

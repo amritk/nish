@@ -32,7 +32,7 @@ The type is `%struct.nish_array*` in every signature, alloca, and load, so
 differ. `T[]` and `Array<T>` are the same type.
 
 Three runtime functions belong to arrays (stage0's `src/codegen/runtime.ts`,
-`runtime/runtime.c`, and the freestanding `runtime/runtime_wasm.c`):
+`runtime/runtime.c`, and the freestanding `runtime/runtime-wasm.c`):
 
 | Symbol | Purpose | Attributes |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Three runtime functions belong to arrays (stage0's `src/codegen/runtime.ts`,
 
 Header and element storage come from the compiler's inline
 `nish_alloc_struct` (`call i8* @nish_alloc_struct(i64 bytes)`), not from C.
-`tests/runtime_test.c` checks `nish_array_grow` and `nish_alloc_array`;
+`tests/runtime-test.c` checks `nish_array_grow` and `nish_alloc_array`;
 `runtime.c` is 8,594 bytes of source and 3,600 bytes of `.text` at `-Oz`
 (budget: 8 KB / 4 KB; `nish_alloc_array` added 102 bytes of `.text`).
 

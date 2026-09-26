@@ -39236,8 +39236,8 @@ function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [in
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_bounds_path.ts
-module docs/cookbook/arr_bounds_path.ts (entry)
+program docs/cookbook/arr-bounds-path.ts
+module docs/cookbook/arr-bounds-path.ts (entry)
 struct Holder (class) size=8 align=8
   field xs: i32[] index=0 offset=0
   constructor -> @Holder.constructor
@@ -39253,8 +39253,8 @@ function total(h: Holder): i32 -> @total
   stackSites=0 stackLocals=0
   local 9:7 s: i32 (let)
   local 10:7 i: i32 (let)
-program docs/cookbook/arr_bounds_proven.ts
-module docs/cookbook/arr_bounds_proven.ts (entry)
+program docs/cookbook/arr-bounds-proven.ts
+module docs/cookbook/arr-bounds-proven.ts (entry)
 function sum(a: i32[]): i32 -> @sum
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer a: size=0 writesThrough=false captured=false
@@ -39265,8 +39265,8 @@ function first(a: i32[]): i32 -> @first
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_field_element.ts
-module docs/cookbook/arr_field_element.ts (entry)
+program docs/cookbook/arr-field-element.ts
+module docs/cookbook/arr-field-element.ts (entry)
 struct Perm (class) size=8 align=8 exported
   field v: i32[] index=0 offset=0
   constructor -> @Perm.constructor
@@ -39283,8 +39283,8 @@ function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [exported met
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 13:11 tmp: i32 (const)
-program docs/cookbook/arr_header_field.ts
-module docs/cookbook/arr_header_field.ts (entry)
+program docs/cookbook/arr-header-field.ts
+module docs/cookbook/arr-header-field.ts (entry)
 struct Link (class) size=8 align=8
   field next: Link | null index=0 offset=0 initialized
 struct Pile (class) size=8 align=8 exported
@@ -39302,8 +39302,8 @@ function Pile.drop(this: Pile): Link | null -> @Pile.drop [exported method]
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 13:11 top: Link | null (const)
-program docs/cookbook/arr_index.ts
-module docs/cookbook/arr_index.ts (entry)
+program docs/cookbook/arr-index.ts
+module docs/cookbook/arr-index.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -39317,8 +39317,8 @@ function set(a: i32[], i: i32, v: i32): void -> @set
   calls: nish_panic_index
   pointer a: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_join.ts
-module docs/cookbook/arr_join.ts (entry)
+program docs/cookbook/arr-join.ts
+module docs/cookbook/arr-join.ts (entry)
 function report(parts: string[]): string -> @report
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct
@@ -39329,8 +39329,8 @@ function firstAt(names: string[], name: string): i32 -> @firstAt
   calls: nish_str_eq
   pointer names: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_literal_push.ts
-module docs/cookbook/arr_literal_push.ts (entry)
+program docs/cookbook/arr-literal-push.ts
+module docs/cookbook/arr-literal-push.ts (entry)
 function squares(n: i32): i32[] -> @squares
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 4:5
@@ -39341,8 +39341,8 @@ function squares(n: i32): i32[] -> @squares
 function pair(): i32[] -> @pair
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_new.ts
-module docs/cookbook/arr_new.ts (entry)
+program docs/cookbook/arr-new.ts
+module docs/cookbook/arr-new.ts (entry)
 function zeros(n: i32): i32[] -> @zeros
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -39351,8 +39351,8 @@ function len(xs: i32[]): i32 -> @len
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_range_call.ts
-module docs/cookbook/arr_range_call.ts (entry)
+program docs/cookbook/arr-range-call.ts
+module docs/cookbook/arr-range-call.ts (entry)
 struct Counts (class) size=16 align=8
   field v: i32[] index=0 offset=0
   field calls: i32 index=1 offset=8 initialized
@@ -39393,8 +39393,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 26:9 c: Counts (const)
   callee 26:13 new Counts -> @Counts.constructor
   callee 27:3 Counts.fill -> @Counts.fill
-program docs/cookbook/arr_readonly.ts
-module docs/cookbook/arr_readonly.ts (entry)
+program docs/cookbook/arr-readonly.ts
+module docs/cookbook/arr-readonly.ts (entry)
 function sum(xs: readonly i32[]): i32 -> @sum
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer xs: size=0 writesThrough=false captured=false
@@ -39407,8 +39407,8 @@ function sumMutable(xs: i32[]): i32 -> @sumMutable
   stackSites=0 stackLocals=0
   local 10:7 total: i32 (let)
   local 11:14 x: i32 (const)
-program docs/cookbook/arr_records.ts
-module docs/cookbook/arr_records.ts (entry)
+program docs/cookbook/arr-records.ts
+module docs/cookbook/arr-records.ts (entry)
 struct Point (interface) size=16 align=8
   field x: f64 index=0 offset=0
   field y: f64 index=1 offset=8
@@ -39425,8 +39425,8 @@ function spread(n: i32): f64 -> @spread [exported]
   local 20:9 ps: Point[] (const)
   local 21:7 i: i32 (let)
   callee 26:10 centroidX -> @centroidX
-program docs/cookbook/arr_repeat_check.ts
-module docs/cookbook/arr_repeat_check.ts (entry)
+program docs/cookbook/arr-repeat-check.ts
+module docs/cookbook/arr-repeat-check.ts (entry)
 struct Perm (class) size=8 align=8
   field v: i32[] index=0 offset=0
   constructor -> @Perm.constructor
@@ -39444,8 +39444,8 @@ function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [method]
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 11:11 tmp: i32 (const)
-program docs/cookbook/arr_u8_elements.ts
-module docs/cookbook/arr_u8_elements.ts (entry)
+program docs/cookbook/arr-u8-elements.ts
+module docs/cookbook/arr-u8-elements.ts (entry)
 function get(bytes: u8[], i: i32): u8 -> @get
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -39459,16 +39459,16 @@ function set(bytes: u8[], i: i32, v: u8): void -> @set
   calls: nish_panic_index
   pointer bytes: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/arr_unchecked.ts
-module docs/cookbook/arr_unchecked.ts (entry)
+program docs/cookbook/arr-unchecked.ts
+module docs/cookbook/arr-unchecked.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: nish_panic_index
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_conversions.ts
-module docs/cookbook/builtin_conversions.ts (entry)
+program docs/cookbook/builtin-conversions.ts
+module docs/cookbook/builtin-conversions.ts (entry)
 function widen(n: i32): i64 -> @widen
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39479,8 +39479,8 @@ function narrow(x: f64): i32 -> @narrow
 function toDouble(n: i32): f64 -> @toDouble
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_driver.ts
-module docs/cookbook/builtin_driver.ts (entry)
+program docs/cookbook/builtin-driver.ts
+module docs/cookbook/builtin-driver.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_readdir
@@ -39489,8 +39489,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 2:9 cases: string[] | null (const)
   local 6:9 started: i64 (const)
   local 7:9 status: i32 (const)
-program docs/cookbook/builtin_env.ts
-module docs/cookbook/builtin_env.ts (entry)
+program docs/cookbook/builtin-env.ts
+module docs/cookbook/builtin-env.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -39498,24 +39498,24 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 2:9 cc: string | null (const)
   local 3:9 compiler: string (const)
-program docs/cookbook/builtin_files.ts
-module docs/cookbook/builtin_files.ts (entry)
+program docs/cookbook/builtin-files.ts
+module docs/cookbook/builtin-files.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_append_file nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
   local 4:9 text: string (const)
-program docs/cookbook/builtin_host.ts
-module docs/cookbook/builtin_host.ts (entry)
+program docs/cookbook/builtin-host.ts
+module docs/cookbook/builtin-host.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_is_dir
   calls: nish_arch nish_arena_mark nish_arena_release nish_exit nish_is_dir nish_mkdir nish_platform nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
   local 2:9 out: string (const)
-program docs/cookbook/builtin_math_f64.ts --number-mode f64
-module docs/cookbook/builtin_math_f64.ts (entry)
+program docs/cookbook/builtin-math-f64.ts --number-mode f64
+module docs/cookbook/builtin-math-f64.ts (entry)
 function hypot(a: f64, b: f64): f64 -> @hypot
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.sqrt.f64
@@ -39528,8 +39528,8 @@ function clamp01(x: f64): f64 -> @clamp01
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.maxnum.f64 llvm.minnum.f64
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_math_i32.ts
-module docs/cookbook/builtin_math_i32.ts (entry)
+program docs/cookbook/builtin-math-i32.ts
+module docs/cookbook/builtin-math-i32.ts (entry)
 function clamp(x: i32, lo: i32, hi: i32): i32 -> @clamp
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.smax.i32 llvm.smin.i32
@@ -39541,8 +39541,8 @@ function magnitude(x: i32): i32 -> @magnitude
 function tau(): f64 -> @tau
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_nish_modules.ts
-module docs/cookbook/builtin_nish_modules.ts (entry)
+program docs/cookbook/builtin-nish-modules.ts
+module docs/cookbook/builtin-nish-modules.ts (entry)
 import readFileSync from "nish:fs" -> builtin readFileSync
 import writeFileSync from "nish:fs" -> builtin writeFileSync
 import argv from "nish:process" -> builtin process.argv
@@ -39552,23 +39552,23 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_write_file
   calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_str_from_i32 nish_write nish_write_file
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_process.ts
-module docs/cookbook/builtin_process.ts (entry)
+program docs/cookbook/builtin-process.ts
+module docs/cookbook/builtin-process.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
   calls: nish_exit nish_mkdir nish_spawn nish_write
   stackSites=0 stackLocals=0
   local 5:9 argv: string[] (const)
-program docs/cookbook/builtin_random.ts
-module docs/cookbook/builtin_random.ts (entry)
+program docs/cookbook/builtin-random.ts
+module docs/cookbook/builtin-random.ts (entry)
 function coin(): boolean -> @coin
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_random
   calls: nish_random
   stackSites=0 stackLocals=0
-program docs/cookbook/builtin_realpath.ts
-module docs/cookbook/builtin_realpath.ts (entry)
+program docs/cookbook/builtin-realpath.ts
+module docs/cookbook/builtin-realpath.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_realpath
@@ -39576,8 +39576,8 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 2:9 here: string | null (const)
   local 3:9 root: string (const)
-program docs/cookbook/builtin_streams.ts
-module docs/cookbook/builtin_streams.ts (entry)
+program docs/cookbook/builtin-streams.ts
+module docs/cookbook/builtin-streams.ts (entry)
 function report(problem: string): void -> @report
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
@@ -39589,8 +39589,8 @@ function load(path: string): i32 -> @load
   calls: nish_arena_mark nish_arena_release nish_exit nish_read_file_or_null nish_str_concat nish_write
   stackSites=0 stackLocals=0
   local 8:9 text: string | null (const)
-program docs/cookbook/cls_initializers.ts
-module docs/cookbook/cls_initializers.ts (entry)
+program docs/cookbook/cls-initializers.ts
+module docs/cookbook/cls-initializers.ts (entry)
 struct Defaults (class) size=16 align=8
   field n: i32 index=0 offset=0 initialized
   field flag: boolean index=1 offset=4 initialized
@@ -39599,8 +39599,8 @@ function make(): Defaults -> @make
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-program docs/cookbook/cls_inline_array.ts
-module docs/cookbook/cls_inline_array.ts (entry)
+program docs/cookbook/cls-inline-array.ts
+module docs/cookbook/cls-inline-array.ts (entry)
 struct Rows (class) size=32 align=8
   field free: boolean[] index=0 offset=0 inline=8
   constructor -> @Rows.constructor
@@ -39632,8 +39632,8 @@ function run(): boolean -> @run [exported]
   callee 20:16 new Rows -> @Rows.constructor
   callee 21:3 Rows.reset -> @Rows.reset
   callee 22:10 Rows.take -> @Rows.take
-program docs/cookbook/cls_interface.ts
-module docs/cookbook/cls_interface.ts (entry)
+program docs/cookbook/cls-interface.ts
+module docs/cookbook/cls-interface.ts (entry)
 struct Pair (interface) size=8 align=4
   field first: i32 index=0 offset=0
   field second: i32 index=1 offset=4
@@ -39657,8 +39657,8 @@ function asPair(o: Ordered): Pair -> @asPair
   escaping: o
   pointer o: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-program docs/cookbook/cls_point.ts
-module docs/cookbook/cls_point.ts (entry)
+program docs/cookbook/cls-point.ts
+module docs/cookbook/cls-point.ts (entry)
 struct Point (class) size=8 align=4
   field x: i32 index=0 offset=0
   field y: i32 index=1 offset=4
@@ -39680,8 +39680,8 @@ function origin(): i32 -> @origin
   local 16:9 p: Point (const)
   callee 16:13 new Point -> @Point.constructor
   callee 18:10 Point.manhattan -> @Point.manhattan
-program docs/cookbook/cls_prefix.ts
-module docs/cookbook/cls_prefix.ts (entry)
+program docs/cookbook/cls-prefix.ts
+module docs/cookbook/cls-prefix.ts (entry)
 struct Shape (interface) size=8 align=4
   field x: i32 index=0 offset=0
   field y: i32 index=1 offset=4
@@ -39712,15 +39712,8 @@ function describe(sq: Square): i32 -> @describe
   stackSites=0 stackLocals=0
   callee 24:42 originDistance -> @originDistance
   callee 24:63 Square.area -> @Square.area
-program docs/cookbook/decl-shebang.ts
-module docs/cookbook/decl-shebang.ts (entry)
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_print
-  calls: nish_print
-  stackSites=0 stackLocals=0
-program docs/cookbook/decl_const.ts
-module docs/cookbook/decl_const.ts (entry)
+program docs/cookbook/decl-const.ts
+module docs/cookbook/decl-const.ts (entry)
 const WIDTH: i32 = 8
 const AREA: i32 = 64
 const LABEL: string = "area = "
@@ -39729,8 +39722,8 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-program docs/cookbook/decl_enum.ts
-module docs/cookbook/decl_enum.ts (entry)
+program docs/cookbook/decl-enum.ts
+module docs/cookbook/decl-enum.ts (entry)
 function weight(k: Kind): i32 -> @weight
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -39742,24 +39735,8 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 19:9 k: Kind (const)
   callee 20:27 weight -> @weight
-program docs/cookbook/decl_ffi.ts
-module docs/cookbook/decl_ffi.ts (entry)
-function abs(n: i32): i32 -> @abs
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: foreign
-  stackSites=0 stackLocals=0
-function pureDouble(n: i32): i32 -> @pureDouble
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via abs
-  calls: abs pureDouble
-  stackSites=0 stackLocals=0
-  callee 5:32 abs -> @abs
-  callee 5:42 pureDouble -> @pureDouble
-program docs/cookbook/decl_ffi_pointer.ts
-module docs/cookbook/decl_ffi_pointer.ts (entry)
+program docs/cookbook/decl-ffi-pointer.ts
+module docs/cookbook/decl-ffi-pointer.ts (entry)
 function calloc(count: u64, size: u64): CPtr | null -> @calloc
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
@@ -39776,22 +39753,38 @@ function main(): i32 -> @nish_main [exported entry]
   local 5:9 block: CPtr | null (const)
   callee 5:17 calloc -> @calloc
   callee 9:3 free -> @free
-program docs/cookbook/decl_locals.ts
-module docs/cookbook/decl_locals.ts (entry)
+program docs/cookbook/decl-ffi.ts
+module docs/cookbook/decl-ffi.ts (entry)
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function pureDouble(n: i32): i32 -> @pureDouble
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via abs
+  calls: abs pureDouble
+  stackSites=0 stackLocals=0
+  callee 5:32 abs -> @abs
+  callee 5:42 pureDouble -> @pureDouble
+program docs/cookbook/decl-locals.ts
+module docs/cookbook/decl-locals.ts (entry)
 function polynomial(x: i32, k: i32): i32 -> @polynomial
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local 2:7 acc: i32 (let)
   local 4:9 bias: i32 (const)
-program docs/cookbook/decl_main.ts
-module docs/cookbook/decl_main.ts (entry)
+program docs/cookbook/decl-main.ts
+module docs/cookbook/decl-main.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_print
   stackSites=0 stackLocals=0
-program docs/cookbook/decl_no_strict_exports.ts
-module docs/cookbook/decl_no_strict_exports.ts (entry)
+program docs/cookbook/decl-no-strict-exports.ts
+module docs/cookbook/decl-no-strict-exports.ts (entry)
 function double(n: i32): i32 -> @double [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -39801,8 +39794,15 @@ function double(n: i32): i32 -> @double [exported]
 function helper(n: i32): i32 -> @helper
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/decl_strict_exports.ts
-module docs/cookbook/decl_strict_exports.ts (entry)
+program docs/cookbook/decl-shebang.ts
+module docs/cookbook/decl-shebang.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print
+  stackSites=0 stackLocals=0
+program docs/cookbook/decl-strict-exports.ts
+module docs/cookbook/decl-strict-exports.ts (entry)
 function double(n: i32): i32 -> @double [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -39812,8 +39812,8 @@ function double(n: i32): i32 -> @double [exported]
 function helper(n: i32): i32 -> @helper
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/decl_type_alias.ts
-module docs/cookbook/decl_type_alias.ts (entry)
+program docs/cookbook/decl-type-alias.ts
+module docs/cookbook/decl-type-alias.ts (entry)
 function widen(b: u8): i32 -> @widen
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39826,8 +39826,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 9:9 label: string (const)
   callee 10:26 widen -> @widen
   callee 10:43 widen -> @widen
-program docs/cookbook/expr_bitwise.ts
-module docs/cookbook/expr_bitwise.ts (entry)
+program docs/cookbook/expr-bitwise.ts
+module docs/cookbook/expr-bitwise.ts (entry)
 function mix(a: i32, b: i32): i32 -> @mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39837,16 +39837,8 @@ function invert(a: i32): i32 -> @invert
 function pack(hi: i32, lo: i32): i32 -> @pack
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_compound.ts
-module docs/cookbook/expr_compound.ts (entry)
-function step(): i32 -> @step
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 2:7 x: i32 (let)
-  local 5:9 a: i32 (const)
-  local 6:9 b: i32 (const)
-program docs/cookbook/expr_compound_target.ts
-module docs/cookbook/expr_compound_target.ts (entry)
+program docs/cookbook/expr-compound-target.ts
+module docs/cookbook/expr-compound-target.ts (entry)
 struct Flags (class) size=4 align=4
   field bits: i32 index=0 offset=0 initialized
 function set(f: Flags, mask: i32): void -> @set
@@ -39868,14 +39860,22 @@ function shiftField(f: Flags, n: i32): void -> @shiftField
   escaping: n
   pointer f: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_div_checked.ts
-module docs/cookbook/expr_div_checked.ts (entry)
+program docs/cookbook/expr-compound.ts
+module docs/cookbook/expr-compound.ts (entry)
+function step(): i32 -> @step
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 2:7 x: i32 (let)
+  local 5:9 a: i32 (const)
+  local 6:9 b: i32 (const)
+program docs/cookbook/expr-div-checked.ts
+module docs/cookbook/expr-div-checked.ts (entry)
 function div(a: i32, b: i32): i32 -> @div
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_f32.ts
-module docs/cookbook/expr_f32.ts (entry)
+program docs/cookbook/expr-f32.ts
+module docs/cookbook/expr-f32.ts (entry)
 function blend(a: f32, b: f32): f32 -> @blend
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39892,16 +39892,16 @@ function truncate(x: f32): i32 -> @truncate
 function tenth(): f32 -> @tenth
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_literals.ts
-module docs/cookbook/expr_literals.ts (entry)
+program docs/cookbook/expr-literals.ts
+module docs/cookbook/expr-literals.ts (entry)
 function literals(): f64 -> @literals
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local 2:9 big: i64 (const)
   local 3:9 ratio: f64 (const)
   local 4:9 scaled: f64 (const)
-program docs/cookbook/expr_logical.ts
-module docs/cookbook/expr_logical.ts (entry)
+program docs/cookbook/expr-logical.ts
+module docs/cookbook/expr-logical.ts (entry)
 function inRange(x: i32, lo: i32, hi: i32): boolean -> @inRange
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39909,8 +39909,8 @@ function zeroOrSmallQuotient(x: i32): boolean -> @zeroOrSmallQuotient
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_shifts.ts
-module docs/cookbook/expr_shifts.ts (entry)
+program docs/cookbook/expr-shifts.ts
+module docs/cookbook/expr-shifts.ts (entry)
 function constantCount(a: i32): i32 -> @constantCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -39923,14 +39923,14 @@ function fills(a: i32, n: i32): i32 -> @fills
 function wide(a: i64, n: i64): i64 -> @wide
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_ternary.ts
-module docs/cookbook/expr_ternary.ts (entry)
+program docs/cookbook/expr-ternary.ts
+module docs/cookbook/expr-ternary.ts (entry)
 function max(a: i32, b: i32): i32 -> @max
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   stackSites=0 stackLocals=0
-program docs/cookbook/expr_unsigned.ts
-module docs/cookbook/expr_unsigned.ts (entry)
+program docs/cookbook/expr-unsigned.ts
+module docs/cookbook/expr-unsigned.ts (entry)
 function divide(a: u32, b: u32): u32 -> @divide
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
@@ -39947,33 +39947,33 @@ function widen(a: u32): u64 -> @widen
 function reinterpret(a: i32): u32 -> @reinterpret
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_add.ts
-module docs/cookbook/fn_add.ts (entry)
+program docs/cookbook/fn-add-function.ts
+module docs/cookbook/fn-add-function.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_add_function.ts
-module docs/cookbook/fn_add_function.ts (entry)
+program docs/cookbook/fn-add-no-semicolons.ts
+module docs/cookbook/fn-add-no-semicolons.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_add_no_semicolons.ts
-module docs/cookbook/fn_add_no_semicolons.ts (entry)
+program docs/cookbook/fn-add-plain.ts
+module docs/cookbook/fn-add-plain.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_add_plain.ts
-module docs/cookbook/fn_add_plain.ts (entry)
+program docs/cookbook/fn-add.ts
+module docs/cookbook/fn-add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_f64.ts --number-mode f64
-module docs/cookbook/fn_f64.ts (entry)
+program docs/cookbook/fn-f64.ts --number-mode f64
+module docs/cookbook/fn-f64.ts (entry)
 function halve(x: f64): f64 -> @halve
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fnarg_arrow.ts
-module docs/cookbook/fnarg_arrow.ts (entry)
+program docs/cookbook/fnarg-arrow.ts
+module docs/cookbook/fnarg-arrow.ts (entry)
 function halves(xs: i32[]): f64[] -> @halves [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via map$i32$f64$fn.13.halves$arrow0
@@ -39993,8 +39993,8 @@ function map<i32, f64, (n) => ...>(xs: i32[], f: void): f64[] -> @map$i32$f64$fn
   local 4:9 out: f64[] (const)
   local 5:14 x: i32 (const)
   callee 6:14 (n) => ... -> @halves$arrow0
-program docs/cookbook/fnarg_named.ts
-module docs/cookbook/fnarg_named.ts (entry)
+program docs/cookbook/fnarg-named.ts
+module docs/cookbook/fnarg-named.ts (entry)
 function square(x: i32): i32 -> @square
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -40020,8 +40020,8 @@ function apply<cube>(f: void, x: i32): i32 -> @apply$fn.4.cube [instance]
   calls: cube
   stackSites=0 stackLocals=0
   callee 3:52 cube -> @cube
-program docs/cookbook/gen_class.ts
-module docs/cookbook/gen_class.ts (entry)
+program docs/cookbook/gen-class.ts
+module docs/cookbook/gen-class.ts (entry)
 struct Box<i32> (class) size=4 align=4
   field value: i32 index=0 offset=0
   constructor -> @Box$i32.constructor
@@ -40059,8 +40059,8 @@ function Box<string>.get(this: Box<string>): string -> @Box$str.get [method inst
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/gen_constraint.ts
-module docs/cookbook/gen_constraint.ts (entry)
+program docs/cookbook/gen-constraint.ts
+module docs/cookbook/gen-constraint.ts (entry)
 struct Shape (interface) size=4 align=4
   field area: i32 index=0 offset=0
 struct Circle (class) size=8 align=4
@@ -40097,8 +40097,8 @@ function areaOf<Square>(shape: Square): i32 -> @areaOf$$Square [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer shape: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/gen_function.ts
-module docs/cookbook/gen_function.ts (entry)
+program docs/cookbook/gen-function.ts
+module docs/cookbook/gen-function.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -40114,8 +40114,8 @@ function identity<string>(x: string): string -> @identity$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   stackSites=0 stackLocals=0
-program docs/cookbook/gen_infer.ts
-module docs/cookbook/gen_infer.ts (entry)
+program docs/cookbook/gen-infer.ts
+module docs/cookbook/gen-infer.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -40136,8 +40136,8 @@ function eq<string>(a: string, b: string): boolean -> @eq$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-program docs/cookbook/gen_method.ts
-module docs/cookbook/gen_method.ts (entry)
+program docs/cookbook/gen-method.ts
+module docs/cookbook/gen-method.ts (entry)
 struct Chooser (class) size=1 align=1
   field flip: boolean index=0 offset=0 initialized
 struct Box<i32> (class) size=4 align=4
@@ -40173,8 +40173,353 @@ function Box<i32>.keep<string>(this: Box<i32>, other: string): i32 -> @Box$i32.k
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=4 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-program docs/cookbook/map_fused.ts
-module docs/cookbook/map_fused.ts (entry)
+program docs/cookbook/map-fused-extras.ts
+module docs/cookbook/map-fused-extras.ts (entry)
+import getOrInsert from "nish/map" -> generic function getOrInsert
+import reserve from "nish/map" -> generic function reserve
+import Map from "nish/collections" -> generic class Map
+function idOf(ids: Map<string, i32>, w: string): i32 -> @idOf [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$i32.probe
+  escaping: w
+  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.valueAt
+  pointer ids: size=56 writesThrough=true captured=true passedTo=nish.getOrInsert$str$i32#0
+  stackSites=0 stackLocals=0
+  callee 3:64 getOrInsert<string, i32> -> @nish.getOrInsert$str$i32
+function presize(ids: Map<string, i32>, n: i32): void -> @presize [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$i32.reserveSlots
+  escaping: n
+  calls: nish.Map$str$i32.reserveSlots
+  pointer ids: size=56 writesThrough=true captured=false passedTo=nish.reserve$str$i32#0
+  stackSites=0 stackLocals=0
+  callee 6:3 reserve<string, i32> -> @nish.reserve$str$i32
+module std/map.ts [package nish]
+import Map from "nish/collections" -> generic class Map
+function getOrInsert<string, i32>(m: Map<string, i32>, key: string, value: i32): i32 -> @nish.getOrInsert$str$i32 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$i32.probe
+  escaping: key value
+  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.set nish.Map$str$i32.valueAt
+  pointer m: size=56 writesThrough=true captured=true passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.set#0 nish.Map$str$i32.probe#0 nish.Map$str$i32.valueAt#0 nish.Map$str$i32.insertAt#0
+  stackSites=0 stackLocals=0
+  local 31:9 found: i32 | undefined (const)
+  callee 31:17 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+  callee 35:3 Map<string, i32>.set -> @nish.Map$str$i32.set
+function reserve<string, i32>(m: Map<string, i32>, n: i32): void -> @nish.reserve$str$i32 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$i32.reserveSlots
+  calls: nish.Map$str$i32.reserveSlots
+  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
+  stackSites=0 stackLocals=0
+module std/collections.ts [package nish]
+const INDEX_CAP: i32 = 16777215
+const INITIAL_SLOTS: i32 = 8
+struct Map<string, i32> (class) size=56 align=8 exported
+  field size: i32 index=0 offset=0 initialized
+  field slots: u32[] index=1 offset=8
+  field mask: i32 index=2 offset=16 initialized
+  field live: i32 index=3 offset=20 initialized
+  field entryKeys: string[] index=4 offset=24
+  field entryValues: i32[] index=5 offset=32
+  field entryHashes: u32[] index=6 offset=40
+  field walks: i32 index=7 offset=48 initialized
+  constructor -> @nish.Map$str$i32.constructor
+  method probe -> @nish.Map$str$i32.probe
+  method has -> @nish.Map$str$i32.has
+  method set -> @nish.Map$str$i32.set
+  method delete -> @nish.Map$str$i32.delete
+  method clear -> @nish.Map$str$i32.clear
+  method walkOpen -> @nish.Map$str$i32.walkOpen
+  method walkNext -> @nish.Map$str$i32.walkNext
+  method walkClose -> @nish.Map$str$i32.walkClose
+  method keyAt -> @nish.Map$str$i32.keyAt
+  method valueAt -> @nish.Map$str$i32.valueAt
+  method setValueAt -> @nish.Map$str$i32.setValueAt
+  method insertAt -> @nish.Map$str$i32.insertAt
+  method rebuild -> @nish.Map$str$i32.rebuild
+  method reserveSlots -> @nish.Map$str$i32.reserveSlots
+function homeBucket(h: u32, mask: i32): i32 -> @nish.homeBucket
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function slotWord(h: u32, index: i32): u32 -> @nish.slotWord
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function foundAt(bucket: i32, index: i32): i64 -> @nish.foundAt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function absentAt(bucket: i32, h: u32): i64 -> @nish.absentAt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fileEntry(slots: u32[], mask: i32, h: u32, index: i32): void -> @nish.fileEntry
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 128:7
+  escaping: h index mask
+  calls: nish.homeBucket nish.slotWord
+  pointer slots: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 124:9 word: u32 (const)
+  callee 124:16 slotWord -> @nish.slotWord
+  local 125:7 bucket: i32 (let)
+  callee 125:16 homeBucket -> @nish.homeBucket
+function compactHashes(hashes: u32[]): void -> @nish.compactHashes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 157:7
+  calls: nish_panic_index
+  pointer hashes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 152:9 used: i32 (const)
+  local 153:7 to: i32 (let)
+  local 154:12 from: i32 (let)
+  local 155:11 h: u32 (const)
+function rebuiltSlots(slots: u32[], live: i32, used: i32): u32[] -> @nish.rebuiltSlots
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.clearSlots
+  escaping: slots
+  calls: nish.clearSlots
+  pointer slots: size=0 writesThrough=true captured=true passedTo=nish.clearSlots#0
+  stackSites=0 stackLocals=0
+  local 174:9 n: i32 (const)
+  callee 176:5 clearSlots -> @nish.clearSlots
+function refile(slots: u32[], hashes: u32[]): void -> @nish.refile
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.fileEntry
+  calls: nish.fileEntry
+  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 188:9 mask: i32 (const)
+  local 189:12 i: i32 (let)
+  local 190:11 h: u32 (const)
+  callee 192:7 fileEntry -> @nish.fileEntry
+function killEntry(slots: u32[], hashes: u32[], found: i64): void -> @nish.killEntry
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 206:5
+  pointer slots: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 203:9 at: i32 (const)
+  local 204:9 bucket: i32 (const)
+function clearSlots(slots: u32[]): void -> @nish.clearSlots
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 220:5
+  pointer slots: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 219:12 i: i32 (let)
+function nextLive(hashes: u32[], from: i32): i32 -> @nish.nextLive
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 232:12 i: i32 (let)
+function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): void -> @nish.fileAppended
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 254:5
+  escaping: bucket h mask
+  calls: nish.fileEntry nish.slotWord
+  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
+  stackSites=0 stackLocals=0
+  callee 254:21 slotWord -> @nish.slotWord
+  callee 256:5 fileEntry -> @nish.fileEntry
+function Map<string, i32>.constructor(this: Map<string, i32>): void -> @nish.Map$str$i32.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.probe(this: Map<string, i32>, key: string): i64 -> @nish.Map$str$i32.probe [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.probeTable$str
+  escaping: key
+  calls: nish.probeTable$str
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 295:12 probeTable<string> -> @nish.probeTable$str
+function Map<string, i32>.has(this: Map<string, i32>, key: string): boolean -> @nish.Map$str$i32.has [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$i32.probe
+  escaping: key
+  calls: nish.Map$str$i32.probe
+  pointer this: size=56 writesThrough=false captured=false passedTo=nish.Map$str$i32.probe#0
+  stackSites=0 stackLocals=0
+  callee 299:12 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+function Map<string, i32>.set(this: Map<string, i32>, key: string, value: i32): Map<string, i32> -> @nish.Map$str$i32.set [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
+  sharedWrite: via nish.Map$str$i32.probe
+  escaping: key this value
+  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.setValueAt
+  pointer this: size=56 writesThrough=true captured=true passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.setValueAt#0 nish.Map$str$i32.insertAt#0
+  stackSites=0 stackLocals=0
+  local 304:11 found: i64 (const)
+  callee 304:19 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+  callee 306:7 Map<string, i32>.setValueAt -> @nish.Map$str$i32.setValueAt
+  callee 308:7 Map<string, i32>.insertAt -> @nish.Map$str$i32.insertAt
+function Map<string, i32>.delete(this: Map<string, i32>, key: string): boolean -> @nish.Map$str$i32.delete [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 319:5
+  escaping: key
+  calls: nish.Map$str$i32.probe nish.killEntry
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.probe#0
+  stackSites=0 stackLocals=0
+  local 314:11 found: i64 (const)
+  callee 314:19 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+  callee 318:5 killEntry -> @nish.killEntry
+function Map<string, i32>.clear(this: Map<string, i32>): void -> @nish.Map$str$i32.clear [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 337:5
+  calls: nish.clearSlots nish.truncate$i32 nish.truncate$str nish.truncate$u32
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 329:5 clearSlots -> @nish.clearSlots
+  callee 331:7 clearSlots -> @nish.clearSlots
+  callee 333:7 truncate<string> -> @nish.truncate$str
+  callee 334:7 truncate<i32> -> @nish.truncate$i32
+  callee 335:7 truncate<u32> -> @nish.truncate$u32
+function Map<string, i32>.walkOpen(this: Map<string, i32>): void -> @nish.Map$str$i32.walkOpen [exported method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 349:5
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.walkNext(this: Map<string, i32>, from: i32): i32 -> @nish.Map$str$i32.walkNext [exported method instance]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: nish.nextLive
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 353:12 nextLive -> @nish.nextLive
+function Map<string, i32>.walkClose(this: Map<string, i32>): void -> @nish.Map$str$i32.walkClose [exported method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 357:5
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @nish.Map$str$i32.keyAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: index
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: index
+  calls: nish_exit nish_panic_index nish_write
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 379:7
+  escaping: index value
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, i32>.insertAt(this: Map<string, i32>, absent: i64, key: string, value: i32): void -> @nish.Map$str$i32.insertAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 397:5
+  escaping: key value
+  calls: nish.Map$str$i32.rebuild nish.fileAppended nish.storedKey$str nish_array_grow nish_exit nish_write
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.rebuild#0 nish.Map$str$i32.rebuild#0
+  stackSites=0 stackLocals=0
+  local 385:11 packed: i64 (const)
+  local 386:9 bucket: i32 (let)
+  local 387:11 h: u32 (const)
+  callee 394:7 Map<string, i32>.rebuild -> @nish.Map$str$i32.rebuild
+  callee 397:25 storedKey<string> -> @nish.storedKey$str
+  local 404:11 used: i32 (const)
+  callee 406:7 Map<string, i32>.rebuild -> @nish.Map$str$i32.rebuild
+  callee 408:7 fileAppended -> @nish.fileAppended
+function Map<string, i32>.rebuild(this: Map<string, i32>): void -> @nish.Map$str$i32.rebuild [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 426:5
+  calls: nish.compactEntries$i32 nish.compactEntries$str nish.compactHashes nish.rebuiltSlots nish.refile
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 418:11 used: i32 (const)
+  local 419:11 walking: boolean (const)
+  local 420:11 slots: u32[] (const)
+  callee 420:19 rebuiltSlots -> @nish.rebuiltSlots
+  callee 422:7 compactEntries<string> -> @nish.compactEntries$str
+  callee 423:7 compactEntries<i32> -> @nish.compactEntries$i32
+  callee 424:7 compactHashes -> @nish.compactHashes
+  callee 428:5 refile -> @nish.refile
+function Map<string, i32>.reserveSlots(this: Map<string, i32>, n: i32): void -> @nish.Map$str$i32.reserveSlots [exported method instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 452:7
+  calls: nish.refile
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 444:11 want: i32 (const)
+  local 445:11 have: i32 (const)
+  local 446:9 size: i32 (let)
+  local 451:13 slots: u32[] (const)
+  callee 454:7 refile -> @nish.refile
+function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: key mask
+  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_exit nish_write
+  pointer slots: size=0 writesThrough=false captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 97:9 h: u32 (const)
+  callee 97:13 hashKey<string> -> @nish.hashKey$str
+  local 98:9 fingerprint: u32 (const)
+  local 99:7 bucket: i32 (let)
+  callee 99:16 homeBucket -> @nish.homeBucket
+  local 103:11 word: u32 (const)
+  callee 105:14 absentAt -> @nish.absentAt
+  local 108:13 at: i32 (const)
+  callee 109:98 sameKey<string> -> @nish.sameKey$str
+  callee 110:16 foundAt -> @nish.foundAt
+function truncate<string>(items: string[]): void -> @nish.truncate$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 243:5
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function truncate<i32>(items: i32[]): void -> @nish.truncate$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 243:5
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function truncate<u32>(items: u32[]): void -> @nish.truncate$u32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 243:5
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function storedKey<string>(key: string): string -> @nish.storedKey$str [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  stackSites=0 stackLocals=0
+function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.compactEntries$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 141:7
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 137:9 used: i32 (const)
+  local 138:7 to: i32 (let)
+  local 139:12 from: i32 (let)
+function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compactEntries$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 141:7
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 137:9 used: i32 (const)
+  local 138:7 to: i32 (let)
+  local 139:12 from: i32 (let)
+function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+program docs/cookbook/map-fused.ts
+module docs/cookbook/map-fused.ts (entry)
 import Map from "nish/collections" -> generic class Map
 import Set from "nish/collections" -> generic class Set
 function count(counts: Map<string, i32>, w: string): void -> @count [exported]
@@ -40623,353 +40968,8 @@ function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [in
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-program docs/cookbook/map_fused_extras.ts
-module docs/cookbook/map_fused_extras.ts (entry)
-import getOrInsert from "nish/map" -> generic function getOrInsert
-import reserve from "nish/map" -> generic function reserve
-import Map from "nish/collections" -> generic class Map
-function idOf(ids: Map<string, i32>, w: string): i32 -> @idOf [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$str$i32.probe
-  escaping: w
-  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.valueAt
-  pointer ids: size=56 writesThrough=true captured=true passedTo=nish.getOrInsert$str$i32#0
-  stackSites=0 stackLocals=0
-  callee 3:64 getOrInsert<string, i32> -> @nish.getOrInsert$str$i32
-function presize(ids: Map<string, i32>, n: i32): void -> @presize [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$str$i32.reserveSlots
-  escaping: n
-  calls: nish.Map$str$i32.reserveSlots
-  pointer ids: size=56 writesThrough=true captured=false passedTo=nish.reserve$str$i32#0
-  stackSites=0 stackLocals=0
-  callee 6:3 reserve<string, i32> -> @nish.reserve$str$i32
-module std/map.ts [package nish]
-import Map from "nish/collections" -> generic class Map
-function getOrInsert<string, i32>(m: Map<string, i32>, key: string, value: i32): i32 -> @nish.getOrInsert$str$i32 [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$str$i32.probe
-  escaping: key value
-  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.set nish.Map$str$i32.valueAt
-  pointer m: size=56 writesThrough=true captured=true passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.set#0 nish.Map$str$i32.probe#0 nish.Map$str$i32.valueAt#0 nish.Map$str$i32.insertAt#0
-  stackSites=0 stackLocals=0
-  local 31:9 found: i32 | undefined (const)
-  callee 31:17 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee 35:3 Map<string, i32>.set -> @nish.Map$str$i32.set
-function reserve<string, i32>(m: Map<string, i32>, n: i32): void -> @nish.reserve$str$i32 [exported instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$str$i32.reserveSlots
-  calls: nish.Map$str$i32.reserveSlots
-  pointer m: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.reserveSlots#0
-  stackSites=0 stackLocals=0
-module std/collections.ts [package nish]
-const INDEX_CAP: i32 = 16777215
-const INITIAL_SLOTS: i32 = 8
-struct Map<string, i32> (class) size=56 align=8 exported
-  field size: i32 index=0 offset=0 initialized
-  field slots: u32[] index=1 offset=8
-  field mask: i32 index=2 offset=16 initialized
-  field live: i32 index=3 offset=20 initialized
-  field entryKeys: string[] index=4 offset=24
-  field entryValues: i32[] index=5 offset=32
-  field entryHashes: u32[] index=6 offset=40
-  field walks: i32 index=7 offset=48 initialized
-  constructor -> @nish.Map$str$i32.constructor
-  method probe -> @nish.Map$str$i32.probe
-  method has -> @nish.Map$str$i32.has
-  method set -> @nish.Map$str$i32.set
-  method delete -> @nish.Map$str$i32.delete
-  method clear -> @nish.Map$str$i32.clear
-  method walkOpen -> @nish.Map$str$i32.walkOpen
-  method walkNext -> @nish.Map$str$i32.walkNext
-  method walkClose -> @nish.Map$str$i32.walkClose
-  method keyAt -> @nish.Map$str$i32.keyAt
-  method valueAt -> @nish.Map$str$i32.valueAt
-  method setValueAt -> @nish.Map$str$i32.setValueAt
-  method insertAt -> @nish.Map$str$i32.insertAt
-  method rebuild -> @nish.Map$str$i32.rebuild
-  method reserveSlots -> @nish.Map$str$i32.reserveSlots
-function homeBucket(h: u32, mask: i32): i32 -> @nish.homeBucket
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function slotWord(h: u32, index: i32): u32 -> @nish.slotWord
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function foundAt(bucket: i32, index: i32): i64 -> @nish.foundAt
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function absentAt(bucket: i32, h: u32): i64 -> @nish.absentAt
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function fileEntry(slots: u32[], mask: i32, h: u32, index: i32): void -> @nish.fileEntry
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 128:7
-  escaping: h index mask
-  calls: nish.homeBucket nish.slotWord
-  pointer slots: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 124:9 word: u32 (const)
-  callee 124:16 slotWord -> @nish.slotWord
-  local 125:7 bucket: i32 (let)
-  callee 125:16 homeBucket -> @nish.homeBucket
-function compactHashes(hashes: u32[]): void -> @nish.compactHashes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 157:7
-  calls: nish_panic_index
-  pointer hashes: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 152:9 used: i32 (const)
-  local 153:7 to: i32 (let)
-  local 154:12 from: i32 (let)
-  local 155:11 h: u32 (const)
-function rebuiltSlots(slots: u32[], live: i32, used: i32): u32[] -> @nish.rebuiltSlots
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.clearSlots
-  escaping: slots
-  calls: nish.clearSlots
-  pointer slots: size=0 writesThrough=true captured=true passedTo=nish.clearSlots#0
-  stackSites=0 stackLocals=0
-  local 174:9 n: i32 (const)
-  callee 176:5 clearSlots -> @nish.clearSlots
-function refile(slots: u32[], hashes: u32[]): void -> @nish.refile
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.fileEntry
-  calls: nish.fileEntry
-  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
-  pointer hashes: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 188:9 mask: i32 (const)
-  local 189:12 i: i32 (let)
-  local 190:11 h: u32 (const)
-  callee 192:7 fileEntry -> @nish.fileEntry
-function killEntry(slots: u32[], hashes: u32[], found: i64): void -> @nish.killEntry
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 206:5
-  pointer slots: size=0 writesThrough=true captured=false
-  pointer hashes: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 203:9 at: i32 (const)
-  local 204:9 bucket: i32 (const)
-function clearSlots(slots: u32[]): void -> @nish.clearSlots
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 220:5
-  pointer slots: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 219:12 i: i32 (let)
-function nextLive(hashes: u32[], from: i32): i32 -> @nish.nextLive
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: from
-  pointer hashes: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 232:12 i: i32 (let)
-function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): void -> @nish.fileAppended
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 254:5
-  escaping: bucket h mask
-  calls: nish.fileEntry nish.slotWord
-  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
-  stackSites=0 stackLocals=0
-  callee 254:21 slotWord -> @nish.slotWord
-  callee 256:5 fileEntry -> @nish.fileEntry
-function Map<string, i32>.constructor(this: Map<string, i32>): void -> @nish.Map$str$i32.constructor [exported constructor instance]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.probe(this: Map<string, i32>, key: string): i64 -> @nish.Map$str$i32.probe [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.probeTable$str
-  escaping: key
-  calls: nish.probeTable$str
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee 295:12 probeTable<string> -> @nish.probeTable$str
-function Map<string, i32>.has(this: Map<string, i32>, key: string): boolean -> @nish.Map$str$i32.has [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.Map$str$i32.probe
-  escaping: key
-  calls: nish.Map$str$i32.probe
-  pointer this: size=56 writesThrough=false captured=false passedTo=nish.Map$str$i32.probe#0
-  stackSites=0 stackLocals=0
-  callee 299:12 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-function Map<string, i32>.set(this: Map<string, i32>, key: string, value: i32): Map<string, i32> -> @nish.Map$str$i32.set [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
-  sharedWrite: via nish.Map$str$i32.probe
-  escaping: key this value
-  calls: nish.Map$str$i32.insertAt nish.Map$str$i32.probe nish.Map$str$i32.setValueAt
-  pointer this: size=56 writesThrough=true captured=true passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.setValueAt#0 nish.Map$str$i32.insertAt#0
-  stackSites=0 stackLocals=0
-  local 304:11 found: i64 (const)
-  callee 304:19 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee 306:7 Map<string, i32>.setValueAt -> @nish.Map$str$i32.setValueAt
-  callee 308:7 Map<string, i32>.insertAt -> @nish.Map$str$i32.insertAt
-function Map<string, i32>.delete(this: Map<string, i32>, key: string): boolean -> @nish.Map$str$i32.delete [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 319:5
-  escaping: key
-  calls: nish.Map$str$i32.probe nish.killEntry
-  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.probe#0
-  stackSites=0 stackLocals=0
-  local 314:11 found: i64 (const)
-  callee 314:19 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee 318:5 killEntry -> @nish.killEntry
-function Map<string, i32>.clear(this: Map<string, i32>): void -> @nish.Map$str$i32.clear [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 337:5
-  calls: nish.clearSlots nish.truncate$i32 nish.truncate$str nish.truncate$u32
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  callee 329:5 clearSlots -> @nish.clearSlots
-  callee 331:7 clearSlots -> @nish.clearSlots
-  callee 333:7 truncate<string> -> @nish.truncate$str
-  callee 334:7 truncate<i32> -> @nish.truncate$i32
-  callee 335:7 truncate<u32> -> @nish.truncate$u32
-function Map<string, i32>.walkOpen(this: Map<string, i32>): void -> @nish.Map$str$i32.walkOpen [exported method instance]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 349:5
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.walkNext(this: Map<string, i32>, from: i32): i32 -> @nish.Map$str$i32.walkNext [exported method instance]
-  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: from
-  calls: nish.nextLive
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  callee 353:12 nextLive -> @nish.nextLive
-function Map<string, i32>.walkClose(this: Map<string, i32>): void -> @nish.Map$str$i32.walkClose [exported method instance]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 357:5
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.keyAt(this: Map<string, i32>, index: i32): string -> @nish.Map$str$i32.keyAt [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_write
-  escaping: index
-  calls: nish_exit nish_panic_index nish_write
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.valueAt(this: Map<string, i32>, index: i32): i32 -> @nish.Map$str$i32.valueAt [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_write
-  escaping: index
-  calls: nish_exit nish_panic_index nish_write
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.setValueAt(this: Map<string, i32>, index: i32, value: i32): void -> @nish.Map$str$i32.setValueAt [exported method instance]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 379:7
-  escaping: index value
-  pointer this: size=56 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Map<string, i32>.insertAt(this: Map<string, i32>, absent: i64, key: string, value: i32): void -> @nish.Map$str$i32.insertAt [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 397:5
-  escaping: key value
-  calls: nish.Map$str$i32.rebuild nish.fileAppended nish.storedKey$str nish_array_grow nish_exit nish_write
-  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$i32.rebuild#0 nish.Map$str$i32.rebuild#0
-  stackSites=0 stackLocals=0
-  local 385:11 packed: i64 (const)
-  local 386:9 bucket: i32 (let)
-  local 387:11 h: u32 (const)
-  callee 394:7 Map<string, i32>.rebuild -> @nish.Map$str$i32.rebuild
-  callee 397:25 storedKey<string> -> @nish.storedKey$str
-  local 404:11 used: i32 (const)
-  callee 406:7 Map<string, i32>.rebuild -> @nish.Map$str$i32.rebuild
-  callee 408:7 fileAppended -> @nish.fileAppended
-function Map<string, i32>.rebuild(this: Map<string, i32>): void -> @nish.Map$str$i32.rebuild [exported method instance]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 426:5
-  calls: nish.compactEntries$i32 nish.compactEntries$str nish.compactHashes nish.rebuiltSlots nish.refile
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 418:11 used: i32 (const)
-  local 419:11 walking: boolean (const)
-  local 420:11 slots: u32[] (const)
-  callee 420:19 rebuiltSlots -> @nish.rebuiltSlots
-  callee 422:7 compactEntries<string> -> @nish.compactEntries$str
-  callee 423:7 compactEntries<i32> -> @nish.compactEntries$i32
-  callee 424:7 compactHashes -> @nish.compactHashes
-  callee 428:5 refile -> @nish.refile
-function Map<string, i32>.reserveSlots(this: Map<string, i32>, n: i32): void -> @nish.Map$str$i32.reserveSlots [exported method instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 452:7
-  calls: nish.refile
-  pointer this: size=56 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 444:11 want: i32 (const)
-  local 445:11 have: i32 (const)
-  local 446:9 size: i32 (let)
-  local 451:13 slots: u32[] (const)
-  callee 454:7 refile -> @nish.refile
-function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_write
-  escaping: key mask
-  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_exit nish_write
-  pointer slots: size=0 writesThrough=false captured=false
-  pointer hashes: size=0 writesThrough=false captured=false
-  pointer keys: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 97:9 h: u32 (const)
-  callee 97:13 hashKey<string> -> @nish.hashKey$str
-  local 98:9 fingerprint: u32 (const)
-  local 99:7 bucket: i32 (let)
-  callee 99:16 homeBucket -> @nish.homeBucket
-  local 103:11 word: u32 (const)
-  callee 105:14 absentAt -> @nish.absentAt
-  local 108:13 at: i32 (const)
-  callee 109:98 sameKey<string> -> @nish.sameKey$str
-  callee 110:16 foundAt -> @nish.foundAt
-function truncate<string>(items: string[]): void -> @nish.truncate$str [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 243:5
-  calls: nish_panic_index
-  pointer items: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function truncate<i32>(items: i32[]): void -> @nish.truncate$i32 [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 243:5
-  calls: nish_panic_index
-  pointer items: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function truncate<u32>(items: u32[]): void -> @nish.truncate$u32 [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 243:5
-  calls: nish_panic_index
-  pointer items: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function storedKey<string>(key: string): string -> @nish.storedKey$str [instance]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: key
-  stackSites=0 stackLocals=0
-function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.compactEntries$str [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 141:7
-  calls: nish_panic_index
-  pointer items: size=0 writesThrough=true captured=false
-  pointer hashes: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 137:9 used: i32 (const)
-  local 138:7 to: i32 (let)
-  local 139:12 from: i32 (let)
-function compactEntries<i32>(items: i32[], hashes: u32[]): void -> @nish.compactEntries$i32 [instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 141:7
-  calls: nish_panic_index
-  pointer items: size=0 writesThrough=true captured=false
-  pointer hashes: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 137:9 used: i32 (const)
-  local 138:7 to: i32 (let)
-  local 139:12 from: i32 (let)
-function hashKey<string>(key: string): u32 -> @nish.hashKey$str [instance]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq
-  stackSites=0 stackLocals=0
-program docs/cookbook/map_get.ts
-module docs/cookbook/map_get.ts (entry)
+program docs/cookbook/map-get.ts
+module docs/cookbook/map-get.ts (entry)
 import Map from "nish/collections" -> generic class Map
 function bump(m: Map<string, i32>, w: string): void -> @bump [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -41295,8 +41295,8 @@ function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [in
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-program docs/cookbook/map_has.ts
-module docs/cookbook/map_has.ts (entry)
+program docs/cookbook/map-has.ts
+module docs/cookbook/map-has.ts (entry)
 import Set from "nish/collections" -> generic class Set
 function seen(s: Set<i32>, x: i32): boolean -> @seen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -41564,8 +41564,8 @@ function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/map_iter.ts
-module docs/cookbook/map_iter.ts (entry)
+program docs/cookbook/map-iter.ts
+module docs/cookbook/map-iter.ts (entry)
 import Map from "nish/collections" -> generic class Map
 function total(m: Map<i32, i32>): i32 -> @total [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -41865,8 +41865,8 @@ function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/mem_arena_builtins.ts
-module docs/cookbook/mem_arena_builtins.ts (entry)
+program docs/cookbook/mem-arena-builtins.ts
+module docs/cookbook/mem-arena-builtins.ts (entry)
 function measure(): i64 -> @measure
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
@@ -41880,8 +41880,8 @@ function recycle(): void -> @recycle
   sharedWrite: via nish_reset_arena
   calls: nish_reset_arena
   stackSites=0 stackLocals=0
-program docs/cookbook/mem_arena_scope.ts
-module docs/cookbook/mem_arena_scope.ts (entry)
+program docs/cookbook/mem-arena-scope.ts
+module docs/cookbook/mem-arena-scope.ts (entry)
 function greet(name: string): void -> @greet
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -41891,8 +41891,8 @@ function label(name: string): string -> @label
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-program docs/cookbook/mem_callee_scope.ts
-module docs/cookbook/mem_callee_scope.ts (entry)
+program docs/cookbook/mem-callee-scope.ts
+module docs/cookbook/mem-callee-scope.ts (entry)
 struct Cell (class) size=16 align=8
   field v: i32 index=0 offset=0
   field next: Cell | null index=1 offset=8 initialized
@@ -41920,8 +41920,8 @@ function size(n: i32): i32 -> @size [exported]
   local 25:7 k: i32 (let)
   local 26:7 p: Cell | null (let)
   callee 26:11 chain -> @chain
-program docs/cookbook/mem_loop_scope.ts
-module docs/cookbook/mem_loop_scope.ts (entry)
+program docs/cookbook/mem-loop-scope.ts
+module docs/cookbook/mem-loop-scope.ts (entry)
 struct Box (class) size=4 align=4
   field n: i32 index=0 offset=0
   constructor -> @Box.constructor
@@ -41942,8 +41942,8 @@ function summarise(rounds: i32): Box -> @summarise [exported]
   local 18:12 i: i32 (let)
   callee 19:21 build -> @build
   callee 21:10 new Box -> @Box.constructor
-program docs/cookbook/mem_nullable.ts
-module docs/cookbook/mem_nullable.ts (entry)
+program docs/cookbook/mem-nullable.ts
+module docs/cookbook/mem-nullable.ts (entry)
 struct Node (class) size=16 align=8
   field value: i32 index=0 offset=0
   field next: Node | null index=1 offset=8 initialized
@@ -41971,8 +41971,8 @@ function firstValue(slots: Node | null[]): i32 -> @firstValue
   pointer slots: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 26:9 head: Node | null (const)
-program docs/cookbook/mem_reclaim.ts
-module docs/cookbook/mem_reclaim.ts (entry)
+program docs/cookbook/mem-reclaim.ts
+module docs/cookbook/mem-reclaim.ts (entry)
 struct Box (class) size=8 align=8
   field text: string index=0 offset=0
   constructor -> @Box.constructor
@@ -42008,8 +42008,8 @@ function report(b: Box, n: i32): string -> @report
   stackSites=0 stackLocals=0
   callee 32:47 join -> @join
   callee 32:57 fill -> @fill
-program docs/cookbook/mem_stack_object.ts
-module docs/cookbook/mem_stack_object.ts (entry)
+program docs/cookbook/mem-stack-object-arena.ts
+module docs/cookbook/mem-stack-object-arena.ts (entry)
 struct Pair (interface) size=8 align=4
   field first: i32 index=0 offset=0
   field second: i32 index=1 offset=4
@@ -42040,8 +42040,8 @@ function nearest(x: i32): i32 -> @nearest
   local 28:9 p: Point (const)
   callee 28:13 new Point -> @Point.constructor
   callee 29:10 Point.manhattan -> @Point.manhattan
-program docs/cookbook/mem_stack_object_arena.ts
-module docs/cookbook/mem_stack_object_arena.ts (entry)
+program docs/cookbook/mem-stack-object.ts
+module docs/cookbook/mem-stack-object.ts (entry)
 struct Pair (interface) size=8 align=4
   field first: i32 index=0 offset=0
   field second: i32 index=1 offset=4
@@ -42072,8 +42072,8 @@ function nearest(x: i32): i32 -> @nearest
   local 28:9 p: Point (const)
   callee 28:13 new Point -> @Point.constructor
   callee 29:10 Point.manhattan -> @Point.manhattan
-program docs/cookbook/mem_tail_release.ts
-module docs/cookbook/mem_tail_release.ts (entry)
+program docs/cookbook/mem-tail-release.ts
+module docs/cookbook/mem-tail-release.ts (entry)
 function sum(n: i32, acc: i32): i32 -> @sum
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: acc
@@ -42092,32 +42092,32 @@ function joinTo(n: i32, text: string): i32 -> @joinTo
   calls: joinTo nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 27:10 joinTo -> @joinTo
-program docs/cookbook/mod_main.ts
-module docs/cookbook/mod_main.ts (entry)
-import square from "./mod_math" -> function @square
+program docs/cookbook/mod-main.ts
+module docs/cookbook/mod-main.ts (entry)
+import square from "./mod-math" -> function @square
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: square
   stackSites=0 stackLocals=0
   callee 3:35 square -> @square
-module docs/cookbook/mod_math.ts
+module docs/cookbook/mod-math.ts
 function square(n: i32): i32 -> @square [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/mod_math.ts
-module docs/cookbook/mod_math.ts (entry)
+program docs/cookbook/mod-math.ts
+module docs/cookbook/mod-math.ts (entry)
 function square(n: i32): i32 -> @square [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/mod_package.ts
-module docs/cookbook/mod_package.ts (entry)
-import scale from "cookbook_pkg" -> function @cookbook_pkg.scale
+program docs/cookbook/mod-package.ts
+module docs/cookbook/mod-package.ts (entry)
+import scale from "cookbook-pkg" -> function @cookbook_pkg.scale
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: cookbook_pkg.scale
   stackSites=0 stackLocals=0
   callee 3:35 scale -> @cookbook_pkg.scale
-module docs/cookbook/node_modules/cookbook_pkg/index.ts [package cookbook_pkg]
+module docs/cookbook/node_modules/cookbook-pkg/index.ts [package cookbook-pkg]
 function helper(n: i32): i32 -> @cookbook_pkg.helper
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -42127,23 +42127,23 @@ function scale(n: i32): i32 -> @cookbook_pkg.scale [exported]
   calls: cookbook_pkg.helper
   stackSites=0 stackLocals=0
   callee 3:45 helper -> @cookbook_pkg.helper
-program docs/cookbook/opt_nsw.ts
-module docs/cookbook/opt_nsw.ts (entry)
+program docs/cookbook/opt-nsw.ts
+module docs/cookbook/opt-nsw.ts (entry)
 function poly(x: i32, y: i32): i32 -> @poly
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/opt_target.ts
-module docs/cookbook/opt_target.ts (entry)
+program docs/cookbook/opt-target.ts
+module docs/cookbook/opt-target.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/opt_wrapping.ts --wrapping
-module docs/cookbook/opt_wrapping.ts (entry)
+program docs/cookbook/opt-wrapping.ts --wrapping
+module docs/cookbook/opt-wrapping.ts (entry)
 function poly(x: i32, y: i32): i32 -> @poly
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/par_alloc.ts
-module docs/cookbook/par_alloc.ts (entry)
+program docs/cookbook/par-alloc.ts
+module docs/cookbook/par-alloc.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 function label(x: i32): i32 -> @label
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
@@ -42197,8 +42197,8 @@ function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi:
   local 59:12 i: i32 (let)
   local 60:11 y: i32 (const)
   callee 60:15 label -> @label
-program docs/cookbook/par_map.ts
-module docs/cookbook/par_map.ts (entry)
+program docs/cookbook/par-map.ts
+module docs/cookbook/par-map.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 import parallelReduce from "nish/threads" -> generic function parallelReduce
 function square(x: f64): f64 -> @square
@@ -42293,22 +42293,22 @@ function reduceRange<f64, (a, b) => ...>(src: f64[], f: void, identity: f64, lo:
   local 69:7 acc: f64 (let)
   local 70:12 i: i32 (let)
   callee 71:11 (a, b) => ... -> @sumOfSquares$arrow0
-program docs/cookbook/runtime_prelude.ts
-module docs/cookbook/runtime_prelude.ts (entry)
+program docs/cookbook/runtime-prelude.ts
+module docs/cookbook/runtime-prelude.ts (entry)
 function identity(s: string): string -> @identity
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
   stackSites=0 stackLocals=0
-program docs/cookbook/stmt_break_continue.ts
-module docs/cookbook/stmt_break_continue.ts (entry)
+program docs/cookbook/stmt-break-continue.ts
+module docs/cookbook/stmt-break-continue.ts (entry)
 function sumOdd(n: i32): i32 -> @sumOdd
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
   local 2:7 s: i32 (let)
   local 3:12 i: i32 (let)
-program docs/cookbook/stmt_do.ts
-module docs/cookbook/stmt_do.ts (entry)
+program docs/cookbook/stmt-do.ts
+module docs/cookbook/stmt-do.ts (entry)
 function sumDigits(n: i32): i32 -> @sumDigits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -42316,23 +42316,23 @@ function sumDigits(n: i32): i32 -> @sumDigits
   stackSites=0 stackLocals=0
   local 2:7 sum: i32 (let)
   local 3:7 rest: i32 (let)
-program docs/cookbook/stmt_for.ts
-module docs/cookbook/stmt_for.ts (entry)
-function sumTo(n: i32): i32 -> @sumTo
-  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 2:7 sum: i32 (let)
-  local 3:12 i: i32 (let)
-program docs/cookbook/stmt_for_of.ts
-module docs/cookbook/stmt_for_of.ts (entry)
+program docs/cookbook/stmt-for-of.ts
+module docs/cookbook/stmt-for-of.ts (entry)
 function total(xs: i32[]): i32 -> @total
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 2:7 sum: i32 (let)
   local 3:14 x: i32 (const)
-program docs/cookbook/stmt_if.ts
-module docs/cookbook/stmt_if.ts (entry)
+program docs/cookbook/stmt-for.ts
+module docs/cookbook/stmt-for.ts (entry)
+function sumTo(n: i32): i32 -> @sumTo
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 2:7 sum: i32 (let)
+  local 3:12 i: i32 (let)
+program docs/cookbook/stmt-if.ts
+module docs/cookbook/stmt-if.ts (entry)
 function abs(x: i32): i32 -> @abs
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
@@ -42342,36 +42342,15 @@ function pick(flag: boolean, a: i32, b: i32): i32 -> @pick
   escaping: a b
   stackSites=0 stackLocals=0
   local 9:7 r: i32 (let)
-program docs/cookbook/stmt_process_exit.ts
-module docs/cookbook/stmt_process_exit.ts (entry)
+program docs/cookbook/stmt-process-exit.ts
+module docs/cookbook/stmt-process-exit.ts (entry)
 function finish(code: i32): i32 -> @finish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_exit nish_print
   stackSites=0 stackLocals=0
-program docs/cookbook/stmt_result.ts
-module docs/cookbook/stmt_result.ts (entry)
-function half(n: i32): Result<i32, string> -> @half
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  calls: nish_alloc_struct nish_panic_div
-  stackSites=0 stackLocals=0
-function quarter(n: i32): Result<i32, string> -> @quarter
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  escaping: n
-  calls: half nish_alloc_struct
-  stackSites=0 stackLocals=0
-  local 9:9 h: i32 (const)
-  callee 9:13 half -> @half
-  callee 10:10 half -> @half
-function describe(n: i32): string -> @describe
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: n
-  calls: nish_str_from_i32 quarter
-  stackSites=0 stackLocals=0
-  local 14:9 outcome: Result<i32, string> (const)
-  callee 14:19 quarter -> @quarter
-program docs/cookbook/stmt_result_by_value.ts
-module docs/cookbook/stmt_result_by_value.ts (entry)
+program docs/cookbook/stmt-result-by-value.ts
+module docs/cookbook/stmt-result-by-value.ts (entry)
 function half(n: i32): Result<i32, i32> -> @half
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=12
   escaping: n
@@ -42392,15 +42371,36 @@ function describe(n: i32): i32 -> @describe
   stackSites=1 stackLocals=1
   local 14:9 outcome: Result<i32, i32> (const)
   callee 14:19 quarter -> @quarter
-program docs/cookbook/stmt_switch.ts
-module docs/cookbook/stmt_switch.ts (entry)
+program docs/cookbook/stmt-result.ts
+module docs/cookbook/stmt-result.ts (entry)
+function half(n: i32): Result<i32, string> -> @half
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: nish_alloc_struct nish_panic_div
+  stackSites=0 stackLocals=0
+function quarter(n: i32): Result<i32, string> -> @quarter
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: n
+  calls: half nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local 9:9 h: i32 (const)
+  callee 9:13 half -> @half
+  callee 10:10 half -> @half
+function describe(n: i32): string -> @describe
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish_str_from_i32 quarter
+  stackSites=0 stackLocals=0
+  local 14:9 outcome: Result<i32, string> (const)
+  callee 14:19 quarter -> @quarter
+program docs/cookbook/stmt-switch.ts
+module docs/cookbook/stmt-switch.ts (entry)
 const KIND_CALL: i32 = 4
 function classify(kind: i32): i32 -> @classify
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: kind
   stackSites=0 stackLocals=0
-program docs/cookbook/stmt_while.ts
-module docs/cookbook/stmt_while.ts (entry)
+program docs/cookbook/stmt-while.ts
+module docs/cookbook/stmt-while.ts (entry)
 function countDigits(n: i32): i32 -> @countDigits
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
@@ -42408,8 +42408,8 @@ function countDigits(n: i32): i32 -> @countDigits
   stackSites=0 stackLocals=0
   local 2:7 digits: i32 (let)
   local 3:7 rest: i32 (let)
-program docs/cookbook/str_bounds_toi32.ts --number-mode f64
-module docs/cookbook/str_bounds_toi32.ts (entry)
+program docs/cookbook/str-bounds-toi32.ts --number-mode f64
+module docs/cookbook/str-bounds-toi32.ts (entry)
 function countCode(s: string, code: i32): i32 -> @countCode
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.fptosi.sat.i32.f64
@@ -42417,8 +42417,8 @@ function countCode(s: string, code: i32): i32 -> @countCode
   local 2:9 n: i32 (const)
   local 3:7 count: i32 (let)
   local 4:7 i: i32 (let)
-program docs/cookbook/str_bytes.ts
-module docs/cookbook/str_bytes.ts (entry)
+program docs/cookbook/str-bytes.ts
+module docs/cookbook/str-bytes.ts (entry)
 function firstByte(s: string): i32 -> @firstByte
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -42431,23 +42431,23 @@ function has(s: string, sub: string): boolean -> @has
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at
   stackSites=0 stackLocals=0
-program docs/cookbook/str_console_log.ts
-module docs/cookbook/str_console_log.ts (entry)
+program docs/cookbook/str-console-log.ts
+module docs/cookbook/str-console-log.ts (entry)
 function report(): void -> @report
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
-program docs/cookbook/str_literal.ts
-module docs/cookbook/str_literal.ts (entry)
+program docs/cookbook/str-literal.ts
+module docs/cookbook/str-literal.ts (entry)
 function greeting(): string -> @greeting
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function same(): string -> @same
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/str_ops.ts
-module docs/cookbook/str_ops.ts (entry)
+program docs/cookbook/str-ops.ts
+module docs/cookbook/str-ops.ts (entry)
 function join(a: string, b: string): string -> @join
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -42459,8 +42459,8 @@ function same(a: string, b: string): boolean -> @same
 function len(s: string): i32 -> @len
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/str_slice.ts
-module docs/cookbook/str_slice.ts (entry)
+program docs/cookbook/str-slice.ts
+module docs/cookbook/str-slice.ts (entry)
 function head(s: string, n: i32): string -> @head
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_slice nish_str_new
@@ -42473,22 +42473,22 @@ function proven(): string -> @proven
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_slice nish_str_new
   stackSites=0 stackLocals=0
-program docs/cookbook/str_template.ts
-module docs/cookbook/str_template.ts (entry)
+program docs/cookbook/str-template.ts
+module docs/cookbook/str-template.ts (entry)
 function describe(n: i32, ok: boolean, name: string): string -> @describe
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-program docs/cookbook/types_bool.ts
-module docs/cookbook/types_bool.ts (entry)
+program docs/cookbook/types-bool.ts
+module docs/cookbook/types-bool.ts (entry)
 function xor(a: boolean, b: boolean): boolean -> @xor
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function neither(a: boolean, b: boolean): boolean -> @neither
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program docs/cookbook/types_i64.ts
-module docs/cookbook/types_i64.ts (entry)
+program docs/cookbook/types-i64.ts
+module docs/cookbook/types-i64.ts (entry)
 function square(x: i64): i64 -> @square
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -43055,8 +43055,8 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 11:9 N: i32 (const)
   callee 12:15 fib -> @fib
-program bench/hoist_field.ts
-module bench/hoist_field.ts (entry)
+program bench/hoist-field.ts
+module bench/hoist-field.ts (entry)
 struct Holder (class) size=8 align=8
   field xs: f64[] index=0 offset=0
   constructor -> @Holder.constructor
@@ -43151,8 +43151,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 163:11 param: i64 (const)
   local 164:11 field: i64 (const)
   local 165:11 hoisted: i64 (const)
-program bench/map_presize.ts
-module bench/map_presize.ts (entry)
+program bench/map-presize.ts
+module bench/map-presize.ts (entry)
 import reserve from "nish/map" -> generic function reserve
 import Map from "nish/collections" -> generic class Map
 function intKeys(n: i32): i32[] -> @intKeys
@@ -43784,410 +43784,8 @@ function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program bench/map_proto_ordered.ts
-module bench/map_proto_ordered.ts (entry)
-const EMPTY: i32 = 0
-const TOMB: i32 = -1
-const INITIAL_SLOTS: i32 = 8
-struct StrMap (class) size=48 align=8
-  field slots: i32[] index=0 offset=0
-  field mask: i32 index=1 offset=8 initialized
-  field keys: string[] index=2 offset=16
-  field values: i32[] index=3 offset=24
-  field alive: boolean[] index=4 offset=32
-  field live: i32 index=5 offset=40 initialized
-  field found: i32 index=6 offset=44 initialized
-  constructor -> @StrMap.constructor
-  method probe -> @StrMap.probe
-  method get -> @StrMap.get
-  method add -> @StrMap.add
-  method set -> @StrMap.set
-  method insertAt -> @StrMap.insertAt
-  method delete -> @StrMap.delete
-  method rebuild -> @StrMap.rebuild
-  method sum -> @StrMap.sum
-struct IntMap (class) size=48 align=8
-  field slots: i32[] index=0 offset=0
-  field mask: i32 index=1 offset=8 initialized
-  field keys: i32[] index=2 offset=16
-  field values: i32[] index=3 offset=24
-  field alive: boolean[] index=4 offset=32
-  field live: i32 index=5 offset=40 initialized
-  field found: i32 index=6 offset=44 initialized
-  constructor -> @IntMap.constructor
-  method probe -> @IntMap.probe
-  method get -> @IntMap.get
-  method add -> @IntMap.add
-  method set -> @IntMap.set
-  method insertAt -> @IntMap.insertAt
-  method delete -> @IntMap.delete
-  method rebuild -> @IntMap.rebuild
-  method sum -> @IntMap.sum
-struct Rng (class) size=4 align=4
-  field state: u32 index=0 offset=0 initialized
-  method next -> @Rng.next
-function hashStr(key: string): u32 -> @hashStr
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 23:7 h: u32 (let)
-  local 24:12 i: i32 (let)
-function hashInt(key: i32): u32 -> @hashInt
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 32:7 h: u32 (let)
-function home(h: u32, mask: i32): i32 -> @home
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function StrMap.probe(this: StrMap, key: string): i32 -> @StrMap.probe [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 76:9
-  escaping: key
-  calls: hashStr home nish_exit nish_str_eq nish_write
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 67:11 n: i32 (const)
-  local 68:9 b: i32 (let)
-  callee 68:13 home -> @home
-  callee 68:18 hashStr -> @hashStr
-  local 70:13 s: i32 (const)
-  local 74:13 at: i32 (const)
-function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StrMap.probe
-  escaping: key missing
-  calls: StrMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
-  stackSites=0 stackLocals=0
-  local 85:11 at: i32 (const)
-  callee 85:16 StrMap.probe -> @StrMap.probe
-function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 94:9
-  escaping: delta key
-  calls: StrMap.insertAt StrMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
-  stackSites=0 stackLocals=0
-  local 91:11 at: i32 (const)
-  callee 91:16 StrMap.probe -> @StrMap.probe
-  callee 98:5 StrMap.insertAt -> @StrMap.insertAt
-function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 105:9
-  escaping: key value
-  calls: StrMap.insertAt StrMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
-  stackSites=0 stackLocals=0
-  local 102:11 at: i32 (const)
-  callee 102:16 StrMap.probe -> @StrMap.probe
-  callee 109:5 StrMap.insertAt -> @StrMap.insertAt
-function StrMap.insertAt(this: StrMap, b: i32, key: string, value: i32): void -> @StrMap.insertAt [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 114:5
-  escaping: b key value
-  calls: StrMap.rebuild nish_array_grow
-  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.rebuild#0
-  stackSites=0 stackLocals=0
-  local 118:11 used: i32 (const)
-  callee 124:7 StrMap.rebuild -> @StrMap.rebuild
-function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 134:7
-  escaping: key
-  calls: StrMap.probe nish_panic_index
-  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
-  stackSites=0 stackLocals=0
-  local 129:11 at: i32 (const)
-  callee 129:16 StrMap.probe -> @StrMap.probe
-function StrMap.rebuild(this: StrMap): void -> @StrMap.rebuild [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 152:9
-  calls: hashStr home nish_panic_index
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 147:11 used: i32 (const)
-  local 148:11 size: i32 (const)
-  local 149:9 to: i32 (let)
-  local 150:14 from: i32 (let)
-  local 167:13 slots: i32[] (const)
-  local 168:16 i: i32 (let)
-  local 175:14 i: i32 (let)
-  local 176:11 b: i32 (let)
-  callee 176:15 home -> @home
-  callee 176:20 hashStr -> @hashStr
-function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=48 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 188:9 total: u32 (let)
-  local 189:14 i: i32 (let)
-function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function IntMap.probe(this: IntMap, key: i32): i32 -> @IntMap.probe [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 232:9
-  escaping: key
-  calls: hashInt home nish_exit nish_write
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 223:11 n: i32 (const)
-  local 224:9 b: i32 (let)
-  callee 224:13 home -> @home
-  callee 224:18 hashInt -> @hashInt
-  local 226:13 s: i32 (const)
-  local 230:13 at: i32 (const)
-function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via IntMap.probe
-  escaping: key missing
-  calls: IntMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
-  stackSites=0 stackLocals=0
-  local 241:11 at: i32 (const)
-  callee 241:16 IntMap.probe -> @IntMap.probe
-function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 250:9
-  escaping: delta key
-  calls: IntMap.insertAt IntMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
-  stackSites=0 stackLocals=0
-  local 247:11 at: i32 (const)
-  callee 247:16 IntMap.probe -> @IntMap.probe
-  callee 254:5 IntMap.insertAt -> @IntMap.insertAt
-function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 261:9
-  escaping: key value
-  calls: IntMap.insertAt IntMap.probe
-  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
-  stackSites=0 stackLocals=0
-  local 258:11 at: i32 (const)
-  callee 258:16 IntMap.probe -> @IntMap.probe
-  callee 265:5 IntMap.insertAt -> @IntMap.insertAt
-function IntMap.insertAt(this: IntMap, b: i32, key: i32, value: i32): void -> @IntMap.insertAt [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 270:5
-  escaping: b key value
-  calls: IntMap.rebuild nish_array_grow
-  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.rebuild#0
-  stackSites=0 stackLocals=0
-  local 274:11 used: i32 (const)
-  callee 280:7 IntMap.rebuild -> @IntMap.rebuild
-function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 290:7
-  escaping: key
-  calls: IntMap.probe nish_panic_index
-  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
-  stackSites=0 stackLocals=0
-  local 285:11 at: i32 (const)
-  callee 285:16 IntMap.probe -> @IntMap.probe
-function IntMap.rebuild(this: IntMap): void -> @IntMap.rebuild [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 308:9
-  calls: hashInt home nish_panic_index
-  pointer this: size=48 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 303:11 used: i32 (const)
-  local 304:11 size: i32 (const)
-  local 305:9 to: i32 (let)
-  local 306:14 from: i32 (let)
-  local 323:13 slots: i32[] (const)
-  local 324:16 i: i32 (let)
-  local 331:14 i: i32 (let)
-  local 332:11 b: i32 (let)
-  callee 332:15 home -> @home
-  callee 332:20 hashInt -> @hashInt
-function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=48 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 344:9 total: u32 (let)
-  local 345:14 i: i32 (let)
-function Rng.next(this: Rng): i32 -> @Rng.next [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 361:5
-  pointer this: size=4 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function intKeys(n: i32): i32[] -> @intKeys
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 374:5
-  calls: nish_array_grow
-  stackSites=0 stackLocals=0
-  local 372:9 keys: i32[] (const)
-  local 373:12 i: i32 (let)
-function strKeys(ints: i32[]): string[] -> @strKeys
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 382:5
-  calls: nish_array_grow nish_str_concat nish_str_from_i32
-  pointer ints: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 380:9 keys: string[] (const)
-  local 381:14 k: i32 (const)
-function clock(timing: boolean): i64 -> @clock
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_monotonic_nanos
-  calls: nish_monotonic_nanos
-  stackSites=0 stackLocals=0
-function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
-  stackSites=0 stackLocals=0
-function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via StrMap.set
-  calls: StrMap.constructor StrMap.set nish_alloc_struct
-  pointer keys: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 399:9 m: StrMap (const)
-  callee 399:13 new StrMap -> @StrMap.constructor
-  local 400:12 i: i32 (let)
-  callee 401:5 StrMap.set -> @StrMap.set
-function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via IntMap.set
-  calls: IntMap.constructor IntMap.set nish_alloc_struct
-  pointer keys: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local 407:9 m: IntMap (const)
-  callee 407:13 new IntMap -> @IntMap.constructor
-  local 408:12 i: i32 (let)
-  callee 409:5 IntMap.set -> @IntMap.set
-function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via clock
-  escaping: n timing
-  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
-  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
-  stackSites=3 stackLocals=3
-  local 415:9 mask: i32 (const)
-  local 416:9 rng: Rng (const)
-  local 417:7 t: i64 (let)
-  callee 417:11 clock -> @clock
-  local 418:7 built: i32 (let)
-  local 419:12 round: i32 (let)
-  callee 420:21 fillStrMap -> @fillStrMap
-  local 422:9 m: StrMap (const)
-  callee 422:13 fillStrMap -> @fillStrMap
-  callee 423:3 report -> @report
-  callee 423:56 StrMap.sum -> @StrMap.sum
-  callee 425:7 clock -> @clock
-  local 426:7 hits: u32 (let)
-  local 427:12 j: i32 (let)
-  local 428:11 at: i32 (const)
-  callee 428:16 Rng.next -> @Rng.next
-  callee 430:27 StrMap.get -> @StrMap.get
-  callee 433:3 report -> @report
-  callee 435:7 clock -> @clock
-  local 436:7 misses: u32 (let)
-  local 437:12 j: i32 (let)
-  local 438:11 at: i32 (const)
-  callee 438:21 Rng.next -> @Rng.next
-  callee 440:31 StrMap.get -> @StrMap.get
-  callee 443:3 report -> @report
-  callee 445:7 clock -> @clock
-  local 446:9 vocab: i32 (const)
-  local 447:9 counts: StrMap (const)
-  callee 447:18 new StrMap -> @StrMap.constructor
-  local 448:12 j: i32 (let)
-  local 449:11 at: i32 (const)
-  callee 449:16 Rng.next -> @Rng.next
-  callee 449:29 Rng.next -> @Rng.next
-  callee 451:7 StrMap.add -> @StrMap.add
-  local 454:7 weighted: u32 (let)
-  local 455:12 i: i32 (let)
-  callee 456:33 StrMap.get -> @StrMap.get
-  callee 458:3 report -> @report
-  callee 460:7 clock -> @clock
-  local 461:9 window: i32 (const)
-  local 462:9 pool: i32 (const)
-  local 463:9 churn: StrMap (const)
-  callee 463:17 new StrMap -> @StrMap.constructor
-  local 464:12 i: i32 (let)
-  local 465:11 add: i32 (const)
-  callee 467:7 StrMap.set -> @StrMap.set
-  local 469:11 drop: i32 (const)
-  callee 471:7 StrMap.delete -> @StrMap.delete
-  callee 474:3 report -> @report
-  callee 474:51 StrMap.sum -> @StrMap.sum
-function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via clock
-  escaping: n timing
-  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
-  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
-  stackSites=3 stackLocals=3
-  local 478:9 mask: i32 (const)
-  local 479:9 rng: Rng (const)
-  local 480:7 t: i64 (let)
-  callee 480:11 clock -> @clock
-  local 481:7 built: i32 (let)
-  local 482:12 round: i32 (let)
-  callee 483:21 fillIntMap -> @fillIntMap
-  local 485:9 m: IntMap (const)
-  callee 485:13 fillIntMap -> @fillIntMap
-  callee 486:3 report -> @report
-  callee 486:56 IntMap.sum -> @IntMap.sum
-  callee 488:7 clock -> @clock
-  local 489:7 hits: u32 (let)
-  local 490:12 j: i32 (let)
-  local 491:11 at: i32 (const)
-  callee 491:16 Rng.next -> @Rng.next
-  callee 493:27 IntMap.get -> @IntMap.get
-  callee 496:3 report -> @report
-  callee 498:7 clock -> @clock
-  local 499:7 misses: u32 (let)
-  local 500:12 j: i32 (let)
-  local 501:11 at: i32 (const)
-  callee 501:21 Rng.next -> @Rng.next
-  callee 503:31 IntMap.get -> @IntMap.get
-  callee 506:3 report -> @report
-  callee 508:7 clock -> @clock
-  local 509:9 vocab: i32 (const)
-  local 510:9 counts: IntMap (const)
-  callee 510:18 new IntMap -> @IntMap.constructor
-  local 511:12 j: i32 (let)
-  local 512:11 at: i32 (const)
-  callee 512:16 Rng.next -> @Rng.next
-  callee 512:29 Rng.next -> @Rng.next
-  callee 514:7 IntMap.add -> @IntMap.add
-  local 517:7 weighted: u32 (let)
-  local 518:12 i: i32 (let)
-  callee 519:33 IntMap.get -> @IntMap.get
-  callee 521:3 report -> @report
-  callee 523:7 clock -> @clock
-  local 524:9 window: i32 (const)
-  local 525:9 pool: i32 (const)
-  local 526:9 churn: IntMap (const)
-  callee 526:17 new IntMap -> @IntMap.constructor
-  local 527:12 i: i32 (let)
-  local 528:11 add: i32 (const)
-  callee 530:7 IntMap.set -> @IntMap.set
-  local 532:11 drop: i32 (const)
-  callee 534:7 IntMap.delete -> @IntMap.delete
-  callee 537:3 report -> @report
-  callee 537:51 IntMap.sum -> @IntMap.sum
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via intKeys
-  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
-  stackSites=0 stackLocals=0
-  local 542:9 n: i32 (const)
-  local 543:9 timing: boolean (const)
-  local 544:9 ints: i32[] (const)
-  callee 544:16 intKeys -> @intKeys
-  callee 545:3 runStr -> @runStr
-  callee 545:10 strKeys -> @strKeys
-  callee 546:3 runInt -> @runInt
-program bench/map_proto_ordered_fp.ts
-module bench/map_proto_ordered_fp.ts (entry)
+program bench/map-proto-ordered-fp.ts
+module bench/map-proto-ordered-fp.ts (entry)
 const TOMB: i64 = 4294967295
 const INITIAL_SLOTS: i32 = 8
 struct StrMap (class) size=48 align=8
@@ -44604,8 +44202,8 @@ function main(): i32 -> @nish_main [exported entry]
   callee 558:3 runStr -> @runStr
   callee 558:10 strKeys -> @strKeys
   callee 559:3 runInt -> @runInt
-program bench/map_proto_ordered_fp32.ts
-module bench/map_proto_ordered_fp32.ts (entry)
+program bench/map-proto-ordered-fp32.ts
+module bench/map-proto-ordered-fp32.ts (entry)
 const INDEX_CAP: i32 = 16777215
 const INITIAL_SLOTS: i32 = 8
 struct StrMap (class) size=48 align=8
@@ -45024,8 +44622,410 @@ function main(): i32 -> @nish_main [exported entry]
   callee 577:3 runStr -> @runStr
   callee 577:10 strKeys -> @strKeys
   callee 578:3 runInt -> @runInt
-program bench/map_proto_unordered.ts
-module bench/map_proto_unordered.ts (entry)
+program bench/map-proto-ordered.ts
+module bench/map-proto-ordered.ts (entry)
+const EMPTY: i32 = 0
+const TOMB: i32 = -1
+const INITIAL_SLOTS: i32 = 8
+struct StrMap (class) size=48 align=8
+  field slots: i32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: string[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field alive: boolean[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @StrMap.constructor
+  method probe -> @StrMap.probe
+  method get -> @StrMap.get
+  method add -> @StrMap.add
+  method set -> @StrMap.set
+  method insertAt -> @StrMap.insertAt
+  method delete -> @StrMap.delete
+  method rebuild -> @StrMap.rebuild
+  method sum -> @StrMap.sum
+struct IntMap (class) size=48 align=8
+  field slots: i32[] index=0 offset=0
+  field mask: i32 index=1 offset=8 initialized
+  field keys: i32[] index=2 offset=16
+  field values: i32[] index=3 offset=24
+  field alive: boolean[] index=4 offset=32
+  field live: i32 index=5 offset=40 initialized
+  field found: i32 index=6 offset=44 initialized
+  constructor -> @IntMap.constructor
+  method probe -> @IntMap.probe
+  method get -> @IntMap.get
+  method add -> @IntMap.add
+  method set -> @IntMap.set
+  method insertAt -> @IntMap.insertAt
+  method delete -> @IntMap.delete
+  method rebuild -> @IntMap.rebuild
+  method sum -> @IntMap.sum
+struct Rng (class) size=4 align=4
+  field state: u32 index=0 offset=0 initialized
+  method next -> @Rng.next
+function hashStr(key: string): u32 -> @hashStr
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 23:7 h: u32 (let)
+  local 24:12 i: i32 (let)
+function hashInt(key: i32): u32 -> @hashInt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 32:7 h: u32 (let)
+function home(h: u32, mask: i32): i32 -> @home
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function StrMap.constructor(this: StrMap): void -> @StrMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function StrMap.probe(this: StrMap, key: string): i32 -> @StrMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 76:9
+  escaping: key
+  calls: hashStr home nish_exit nish_str_eq nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 67:11 n: i32 (const)
+  local 68:9 b: i32 (let)
+  callee 68:13 home -> @home
+  callee 68:18 hashStr -> @hashStr
+  local 70:13 s: i32 (const)
+  local 74:13 at: i32 (const)
+function StrMap.get(this: StrMap, key: string, missing: i32): i32 -> @StrMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StrMap.probe
+  escaping: key missing
+  calls: StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 85:11 at: i32 (const)
+  callee 85:16 StrMap.probe -> @StrMap.probe
+function StrMap.add(this: StrMap, key: string, delta: i32): void -> @StrMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 94:9
+  escaping: delta key
+  calls: StrMap.insertAt StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 91:11 at: i32 (const)
+  callee 91:16 StrMap.probe -> @StrMap.probe
+  callee 98:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.set(this: StrMap, key: string, value: i32): void -> @StrMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 105:9
+  escaping: key value
+  calls: StrMap.insertAt StrMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0 StrMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 102:11 at: i32 (const)
+  callee 102:16 StrMap.probe -> @StrMap.probe
+  callee 109:5 StrMap.insertAt -> @StrMap.insertAt
+function StrMap.insertAt(this: StrMap, b: i32, key: string, value: i32): void -> @StrMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 114:5
+  escaping: b key value
+  calls: StrMap.rebuild nish_array_grow
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 118:11 used: i32 (const)
+  callee 124:7 StrMap.rebuild -> @StrMap.rebuild
+function StrMap.delete(this: StrMap, key: string): boolean -> @StrMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 134:7
+  escaping: key
+  calls: StrMap.probe nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=StrMap.probe#0
+  stackSites=0 stackLocals=0
+  local 129:11 at: i32 (const)
+  callee 129:16 StrMap.probe -> @StrMap.probe
+function StrMap.rebuild(this: StrMap): void -> @StrMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 152:9
+  calls: hashStr home nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 147:11 used: i32 (const)
+  local 148:11 size: i32 (const)
+  local 149:9 to: i32 (let)
+  local 150:14 from: i32 (let)
+  local 167:13 slots: i32[] (const)
+  local 168:16 i: i32 (let)
+  local 175:14 i: i32 (let)
+  local 176:11 b: i32 (let)
+  callee 176:15 home -> @home
+  callee 176:20 hashStr -> @hashStr
+function StrMap.sum(this: StrMap): u32 -> @StrMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 188:9 total: u32 (let)
+  local 189:14 i: i32 (let)
+function IntMap.constructor(this: IntMap): void -> @IntMap.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function IntMap.probe(this: IntMap, key: i32): i32 -> @IntMap.probe [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 232:9
+  escaping: key
+  calls: hashInt home nish_exit nish_write
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 223:11 n: i32 (const)
+  local 224:9 b: i32 (let)
+  callee 224:13 home -> @home
+  callee 224:18 hashInt -> @hashInt
+  local 226:13 s: i32 (const)
+  local 230:13 at: i32 (const)
+function IntMap.get(this: IntMap, key: i32, missing: i32): i32 -> @IntMap.get [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IntMap.probe
+  escaping: key missing
+  calls: IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 241:11 at: i32 (const)
+  callee 241:16 IntMap.probe -> @IntMap.probe
+function IntMap.add(this: IntMap, key: i32, delta: i32): void -> @IntMap.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 250:9
+  escaping: delta key
+  calls: IntMap.insertAt IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 247:11 at: i32 (const)
+  callee 247:16 IntMap.probe -> @IntMap.probe
+  callee 254:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.set(this: IntMap, key: i32, value: i32): void -> @IntMap.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 261:9
+  escaping: key value
+  calls: IntMap.insertAt IntMap.probe
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0 IntMap.insertAt#0
+  stackSites=0 stackLocals=0
+  local 258:11 at: i32 (const)
+  callee 258:16 IntMap.probe -> @IntMap.probe
+  callee 265:5 IntMap.insertAt -> @IntMap.insertAt
+function IntMap.insertAt(this: IntMap, b: i32, key: i32, value: i32): void -> @IntMap.insertAt [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 270:5
+  escaping: b key value
+  calls: IntMap.rebuild nish_array_grow
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.rebuild#0
+  stackSites=0 stackLocals=0
+  local 274:11 used: i32 (const)
+  callee 280:7 IntMap.rebuild -> @IntMap.rebuild
+function IntMap.delete(this: IntMap, key: i32): boolean -> @IntMap.delete [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 290:7
+  escaping: key
+  calls: IntMap.probe nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false passedTo=IntMap.probe#0
+  stackSites=0 stackLocals=0
+  local 285:11 at: i32 (const)
+  callee 285:16 IntMap.probe -> @IntMap.probe
+function IntMap.rebuild(this: IntMap): void -> @IntMap.rebuild [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 308:9
+  calls: hashInt home nish_panic_index
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 303:11 used: i32 (const)
+  local 304:11 size: i32 (const)
+  local 305:9 to: i32 (let)
+  local 306:14 from: i32 (let)
+  local 323:13 slots: i32[] (const)
+  local 324:16 i: i32 (let)
+  local 331:14 i: i32 (let)
+  local 332:11 b: i32 (let)
+  callee 332:15 home -> @home
+  callee 332:20 hashInt -> @hashInt
+function IntMap.sum(this: IntMap): u32 -> @IntMap.sum [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 344:9 total: u32 (let)
+  local 345:14 i: i32 (let)
+function Rng.next(this: Rng): i32 -> @Rng.next [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 361:5
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function intKeys(n: i32): i32[] -> @intKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 374:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 372:9 keys: i32[] (const)
+  local 373:12 i: i32 (let)
+function strKeys(ints: i32[]): string[] -> @strKeys
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 382:5
+  calls: nish_array_grow nish_str_concat nish_str_from_i32
+  pointer ints: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 380:9 keys: string[] (const)
+  local 381:14 k: i32 (const)
+function clock(timing: boolean): i64 -> @clock
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function report(timing: boolean, name: string, started: i64, checksum: string): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+function fillStrMap(keys: string[], n: i32): StrMap -> @fillStrMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via StrMap.set
+  calls: StrMap.constructor StrMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 399:9 m: StrMap (const)
+  callee 399:13 new StrMap -> @StrMap.constructor
+  local 400:12 i: i32 (let)
+  callee 401:5 StrMap.set -> @StrMap.set
+function fillIntMap(keys: i32[], n: i32): IntMap -> @fillIntMap
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via IntMap.set
+  calls: IntMap.constructor IntMap.set nish_alloc_struct
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 407:9 m: IntMap (const)
+  callee 407:13 new IntMap -> @IntMap.constructor
+  local 408:12 i: i32 (let)
+  callee 409:5 IntMap.set -> @IntMap.set
+function runStr(keys: string[], n: i32, timing: boolean): void -> @runStr
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: Rng.next StrMap.add StrMap.constructor StrMap.delete StrMap.get StrMap.set StrMap.sum clock fillStrMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillStrMap#0 fillStrMap#0
+  stackSites=3 stackLocals=3
+  local 415:9 mask: i32 (const)
+  local 416:9 rng: Rng (const)
+  local 417:7 t: i64 (let)
+  callee 417:11 clock -> @clock
+  local 418:7 built: i32 (let)
+  local 419:12 round: i32 (let)
+  callee 420:21 fillStrMap -> @fillStrMap
+  local 422:9 m: StrMap (const)
+  callee 422:13 fillStrMap -> @fillStrMap
+  callee 423:3 report -> @report
+  callee 423:56 StrMap.sum -> @StrMap.sum
+  callee 425:7 clock -> @clock
+  local 426:7 hits: u32 (let)
+  local 427:12 j: i32 (let)
+  local 428:11 at: i32 (const)
+  callee 428:16 Rng.next -> @Rng.next
+  callee 430:27 StrMap.get -> @StrMap.get
+  callee 433:3 report -> @report
+  callee 435:7 clock -> @clock
+  local 436:7 misses: u32 (let)
+  local 437:12 j: i32 (let)
+  local 438:11 at: i32 (const)
+  callee 438:21 Rng.next -> @Rng.next
+  callee 440:31 StrMap.get -> @StrMap.get
+  callee 443:3 report -> @report
+  callee 445:7 clock -> @clock
+  local 446:9 vocab: i32 (const)
+  local 447:9 counts: StrMap (const)
+  callee 447:18 new StrMap -> @StrMap.constructor
+  local 448:12 j: i32 (let)
+  local 449:11 at: i32 (const)
+  callee 449:16 Rng.next -> @Rng.next
+  callee 449:29 Rng.next -> @Rng.next
+  callee 451:7 StrMap.add -> @StrMap.add
+  local 454:7 weighted: u32 (let)
+  local 455:12 i: i32 (let)
+  callee 456:33 StrMap.get -> @StrMap.get
+  callee 458:3 report -> @report
+  callee 460:7 clock -> @clock
+  local 461:9 window: i32 (const)
+  local 462:9 pool: i32 (const)
+  local 463:9 churn: StrMap (const)
+  callee 463:17 new StrMap -> @StrMap.constructor
+  local 464:12 i: i32 (let)
+  local 465:11 add: i32 (const)
+  callee 467:7 StrMap.set -> @StrMap.set
+  local 469:11 drop: i32 (const)
+  callee 471:7 StrMap.delete -> @StrMap.delete
+  callee 474:3 report -> @report
+  callee 474:51 StrMap.sum -> @StrMap.sum
+function runInt(keys: i32[], n: i32, timing: boolean): void -> @runInt
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via clock
+  escaping: n timing
+  calls: IntMap.add IntMap.constructor IntMap.delete IntMap.get IntMap.set IntMap.sum Rng.next clock fillIntMap nish_panic_div nish_str_concat nish_str_from_i32 nish_str_from_u64 report
+  pointer keys: size=0 writesThrough=true captured=false passedTo=fillIntMap#0 fillIntMap#0
+  stackSites=3 stackLocals=3
+  local 478:9 mask: i32 (const)
+  local 479:9 rng: Rng (const)
+  local 480:7 t: i64 (let)
+  callee 480:11 clock -> @clock
+  local 481:7 built: i32 (let)
+  local 482:12 round: i32 (let)
+  callee 483:21 fillIntMap -> @fillIntMap
+  local 485:9 m: IntMap (const)
+  callee 485:13 fillIntMap -> @fillIntMap
+  callee 486:3 report -> @report
+  callee 486:56 IntMap.sum -> @IntMap.sum
+  callee 488:7 clock -> @clock
+  local 489:7 hits: u32 (let)
+  local 490:12 j: i32 (let)
+  local 491:11 at: i32 (const)
+  callee 491:16 Rng.next -> @Rng.next
+  callee 493:27 IntMap.get -> @IntMap.get
+  callee 496:3 report -> @report
+  callee 498:7 clock -> @clock
+  local 499:7 misses: u32 (let)
+  local 500:12 j: i32 (let)
+  local 501:11 at: i32 (const)
+  callee 501:21 Rng.next -> @Rng.next
+  callee 503:31 IntMap.get -> @IntMap.get
+  callee 506:3 report -> @report
+  callee 508:7 clock -> @clock
+  local 509:9 vocab: i32 (const)
+  local 510:9 counts: IntMap (const)
+  callee 510:18 new IntMap -> @IntMap.constructor
+  local 511:12 j: i32 (let)
+  local 512:11 at: i32 (const)
+  callee 512:16 Rng.next -> @Rng.next
+  callee 512:29 Rng.next -> @Rng.next
+  callee 514:7 IntMap.add -> @IntMap.add
+  local 517:7 weighted: u32 (let)
+  local 518:12 i: i32 (let)
+  callee 519:33 IntMap.get -> @IntMap.get
+  callee 521:3 report -> @report
+  callee 523:7 clock -> @clock
+  local 524:9 window: i32 (const)
+  local 525:9 pool: i32 (const)
+  local 526:9 churn: IntMap (const)
+  callee 526:17 new IntMap -> @IntMap.constructor
+  local 527:12 i: i32 (let)
+  local 528:11 add: i32 (const)
+  callee 530:7 IntMap.set -> @IntMap.set
+  local 532:11 drop: i32 (const)
+  callee 534:7 IntMap.delete -> @IntMap.delete
+  callee 537:3 report -> @report
+  callee 537:51 IntMap.sum -> @IntMap.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via intKeys
+  calls: intKeys nish_arena_mark nish_arena_release nish_panic_index nish_str_eq runInt runStr strKeys
+  stackSites=0 stackLocals=0
+  local 542:9 n: i32 (const)
+  local 543:9 timing: boolean (const)
+  local 544:9 ints: i32[] (const)
+  callee 544:16 intKeys -> @intKeys
+  callee 545:3 runStr -> @runStr
+  callee 545:10 strKeys -> @strKeys
+  callee 546:3 runInt -> @runInt
+program bench/map-proto-unordered.ts
+module bench/map-proto-unordered.ts (entry)
 const INITIAL_SLOTS: i32 = 8
 struct StrMap (class) size=32 align=8
   field hashes: u32[] index=0 offset=0
@@ -45431,8 +45431,8 @@ function main(): i32 -> @nish_main [exported entry]
   callee 531:3 runStr -> @runStr
   callee 531:10 strKeys -> @strKeys
   callee 532:3 runInt -> @runInt
-program bench/map_vs_stringmap.ts
-module bench/map_vs_stringmap.ts (entry)
+program bench/map-vs-stringmap.ts
+module bench/map-vs-stringmap.ts (entry)
 import Map from "nish/collections" -> generic class Map
 const INITIAL_SLOTS: i32 = 16
 const INDEX_CAP: i32 = 16777215
@@ -46357,8 +46357,8 @@ function hashKey<i32>(key: i32): u32 -> @nish.hashKey$i32 [instance]
 function sameKey<i32>(a: i32, b: i32): boolean -> @nish.sameKey$i32 [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-program bench/map_wordcount.ts
-module bench/map_wordcount.ts (entry)
+program bench/map-wordcount.ts
+module bench/map-wordcount.ts (entry)
 import Map from "nish/collections" -> generic class Map
 struct Rng (class) size=4 align=4
   field state: u32 index=0 offset=0 initialized
@@ -47087,8 +47087,8 @@ function main(): i32 -> @nish_main [exported entry]
   local 97:12 k: i32 (let)
   callee 98:5 advance -> @advance
   callee 100:15 energy -> @energy
-program bench/par_alloc.ts
-module bench/par_alloc.ts (entry)
+program bench/par-alloc.ts
+module bench/par-alloc.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 function label(x: i32): i32 -> @label
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
@@ -47152,8 +47152,8 @@ function mapRange<i32, i32, label>(src: i32[], dst: i32[], f: void, lo: i32, hi:
   local 59:12 i: i32 (let)
   local 60:11 y: i32 (const)
   callee 60:15 label -> @label
-program bench/par_compute.ts
-module bench/par_compute.ts (entry)
+program bench/par-compute.ts
+module bench/par-compute.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 function settle(x: f64): f64 -> @settle
   facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -47218,8 +47218,8 @@ function mapRange<f64, f64, settle>(src: f64[], dst: f64[], f: void, lo: i32, hi
   local 59:12 i: i32 (let)
   local 60:11 y: f64 (const)
   callee 60:15 settle -> @settle
-program bench/par_nbody.ts
-module bench/par_nbody.ts (entry)
+program bench/par-nbody.ts
+module bench/par-nbody.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 const SOFTENING: f64 = 0.01
 struct Body (class) size=56 align=8
@@ -47350,8 +47350,8 @@ function mapRange<Probe, f64, accel>(src: Probe[], dst: f64[], f: void, lo: i32,
   local 59:12 i: i32 (let)
   local 60:11 y: f64 (const)
   callee 60:15 accel -> @accel
-program bench/par_short.ts
-module bench/par_short.ts (entry)
+program bench/par-short.ts
+module bench/par-short.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
 function bump(x: i32): i32 -> @bump
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

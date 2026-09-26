@@ -100,8 +100,8 @@ export const runCacheKey = (
   key.add(`cc ${cc}\n`);
   key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`);
   key.add(`runtime.c ${fileFingerprint(`${root}/runtime/runtime.c`)}\n`);
-  key.add(`runtime_os.c ${fileFingerprint(`${root}/runtime/runtime_os.c`)}\n`);
-  key.add(`runtime_parallel.c ${fileFingerprint(`${root}/runtime/runtime_parallel.c`)}\n`);
+  key.add(`runtime-os.c ${fileFingerprint(`${root}/runtime/runtime-os.c`)}\n`);
+  key.add(`runtime-parallel.c ${fileFingerprint(`${root}/runtime/runtime-parallel.c`)}\n`);
   key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`);
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`);
