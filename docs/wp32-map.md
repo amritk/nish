@@ -795,12 +795,16 @@ instruction counts. A single cell is worth about ±25%.
 - **What it saves.** Both end at the same bucket count, so what presizing saves
   is the rebuilds. At 2^20 that is eighteen doublings, from 8 buckets to 2^21,
   each re-filing every bucket from `hashes`.
-- **Wall time.** Integer insert is faster by 1.34x to 1.91x in this table, and
-  the review's pass read about 1.5x at both sizes. String insert in the cache is
-  1.36x here and 1.41x there. **String insert out of the cache is not reliably
-  faster.** It reads 1.39x here but 0.96x in the review's pass. At that size a
-  string insert is dominated by hashing the key and by cache misses, not by
-  rebuilds.
+- **Wall time, in the cache.** Presized insert is faster there, and that
+  reproduces. This table reads 1.91x (integer) and 1.36x (string). The review's
+  two passes read 1.50x and 1.52x (integer), and 1.41x and 1.37x (string).
+- **Wall time, out of the cache.** Insert at 2^20 is **not reliably faster,
+  for either key kind.** This table reads 1.34x (integer) and 1.39x (string).
+  The review's passes read 1.50x and [1.03x](https://github.com/amritk/nish/pull/244#discussion_r4110702334)
+  (integer), and 0.96x and 1.03x (string), medians agreeing. At that size an
+  insert is dominated by hashing the key and by cache misses on the entry
+  arrays, not by rebuilds, and the rebuilds' saving is inside this machine's
+  noise.
 - **Memory.** `reserve` saves memory as well as instructions, the opposite of
   the trade the plan expected. Each abandoned bucket array stays in the arena
   until its scope ends, and a presized table never abandons one. Peak RSS of
