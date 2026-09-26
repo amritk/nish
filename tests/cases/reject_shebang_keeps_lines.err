@@ -1,0 +1,1 @@
+reject_shebang_keeps_lines.ts:5:10: error: Return type mismatch

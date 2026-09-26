@@ -88,6 +88,7 @@ export const main = (): number => {
 nish hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
 ./hello                            # hello from Nish
 nish hello.ts -o hello.ll     # IR only
+nish run hello.ts             # build into a cache and run it: a script, still native
 ```
 
 The IR is readable as is. `examples/add.ts` compiles to:
@@ -275,6 +276,7 @@ buys is the output: no GC, no runtime, and the sizes under
 
 ```
 nish <entry.ts> [more.ts ...] [options]
+nish run [options] <file.ts> [args ...]
        nish --version | --help
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
@@ -326,6 +328,22 @@ with `2`. `-g` adds a DWARF line table and variables to the IR so
 ([docs/wp10-ci.md](docs/wp10-ci.md)).
 Multi-file programs: `nish examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
+
+**`nish run` is the scripting shape.** `nish run tool.ts a b` compiles
+`tool.ts`, links it into a cache, and starts it with `a b` as its arguments.
+Its stdin, stdout and stderr are the program's, and its exit status is the
+program's once it starts (`128 + n` for a signal). The options before the file
+are the compiler's (`--number-mode f64`, `--profile speed`, `-g`), and
+everything after it is the program's, `--help` included. Nothing is
+interpreted: every run compiles, which takes milliseconds, and links only when
+the IR, the recipe or the runtime is new, so the first run of an edit pays for
+one `--profile debug` link (the default here, and the fast one) and every run
+after that starts the cached binary. The cache is `$XDG_CACHE_HOME/nish/run`,
+or `~/.cache/nish/run`. Each entry is one program, so `rm -rf` of it is always
+safe. `-o`, `--link`, `--target`, the `--emit-*` sidecars and
+`--profile wasi` write something a run keeps to itself, so they are usage
+errors there, and performance warnings are not printed, because stderr belongs
+to the program.
 
 Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime_os.c -o app`
 (the `overriding the module target triple` warning is harmless: the IR is

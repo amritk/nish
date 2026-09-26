@@ -1,0 +1,1 @@
+reject_shebang_not_first.ts:3:1: syntax error: '#!' can only be used at the start of a file

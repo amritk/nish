@@ -37,6 +37,7 @@ and it is the only authority.
 nish program.ts --json            # one JSON object per diagnostic, on stdout
 nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
+nish run program.ts a b           # build into a cache, then run it with `a b`
 nish --help                       # the full flag list, stdout, exit 0
 ```
 
@@ -58,7 +59,9 @@ exclusive:
   `NL0000` a diagnostic with no rule yet.
 - **Exit codes**: `0` ok, `1` the program was rejected, `2` usage, `3` the C
   toolchain is unusable, `70` an internal compiler error — that last one is a
-  bug in `nish`, not in your program, and is worth reporting.
+  bug in `nish`, not in your program, and is worth reporting. `nish run`
+  answers the same codes until the program starts, and the program's own
+  status after that.
 - Every failure is a `--json` object, toolchain and internal errors included,
   so you never have to parse stderr to find out why a run failed.
 

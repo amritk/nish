@@ -60,7 +60,8 @@ change to the compiler is a change to `self/`.
 
 ```
 self/               the compiler, in Nish — see .claude/selfhost.md
-  compile.ts        CLI: flags, output planning, exit codes
+  compile.ts        CLI: flags, output planning, exit codes, `nish run`
+  run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
   checker.ts …      pass 1 signatures, pass 1b imports, pass 2 bodies
