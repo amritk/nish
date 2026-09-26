@@ -59,10 +59,23 @@
 // each body — which was the one under its settled entry, since a changed
 // entry marks its body for another — is what gets recorded.
 //
-// Two narrowings keep the cost to what can pay: only a candidate with an
-// access pass 2 left checked, or one that calls such a candidate, takes part
-// (`narrowCandidates`), and a body is walked again after the rounds only when
-// it has such an access and a call with a summary, or entry facts.
+// What keeps the cost to what can pay, none of it at the price of a proof
+// (docs/ARCHITECTURE.md, the call-site ranges row, has the argument):
+//
+//   - only a candidate with an access some walk could prove (`isOpenAccess`),
+//     or one that calls such a candidate, takes part (`narrowCandidates`), and
+//     a body is walked again after the rounds only when it has such an access
+//     and a call with a summary, or entry facts;
+//   - a round joins again only the entries its walks can have moved, and an
+//     empty entry, which stays empty, is not joined again;
+//   - a site for a callee entered with nothing, which stays so, is not worked
+//     out; a body whose candidate callees are all entered with nothing is not
+//     walked for its sites; and a body with nothing open stops walking once it
+//     has noted a site for every call to a candidate it makes.
+//
+// `--range-reference` (`Options.rangeReference`) runs the pass without any of
+// that, by the rule #222 shipped, and `tests/run.js` requires the same proofs
+// both ways over `self/` and AWFY.
 //
 // What holds on entry is then subject to every rule in bounds.ts: a parameter
 // cannot be assigned, and a path fact is dropped by a store to a field on it,
@@ -84,6 +97,7 @@ import {
   BoundsWalk,
   CallSummary,
   EntryFacts,
+  NOT_HERE,
   NO_RECORD,
   RangeSite,
   RangeTables,
@@ -91,7 +105,9 @@ import {
   commitProofs,
   isBoundsAssignment,
   isInertBuiltin,
+  isOpenAccess,
   joinEntryFacts,
+  parameterLocals,
   recordStoreType,
   sameEntryFacts,
   unwrapBoundsParens,
@@ -99,8 +115,9 @@ import {
 } from "./bounds";
 import { CheckContext } from "./context";
 import { Diagnostic } from "./diagnostics";
-import { N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes";
+import { N_ARROW, N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes";
 import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR } from "./program";
+import { Local } from "./symbols";
 import { BuildMode, hostVisible } from "./visibility";
 
 /**
@@ -138,13 +155,26 @@ class RangeBody {
   stale: boolean;
   /** Called from a place with no state to judge the call in, so entered knowing nothing. */
   forced: boolean;
+  /** Its program's callee table (`RangeTables.calleesOf`). */
+  callees: i32[];
+  /** Its parameters' locals (`parameterLocals`), found the first time an entry is seeded. */
+  params: (Local | null)[] | null;
 
-  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, instance: Instantiation | null) {
+  constructor(
+    ctx: CheckContext,
+    sig: FunctionSig,
+    body: Node,
+    instance: Instantiation | null,
+    tables: RangeTables,
+    callees: i32[]
+  ) {
     this.ctx = ctx;
+    this.callees = callees;
+    this.params = null;
     this.sig = sig;
     this.body = body;
     this.instance = instance;
-    this.scan = new StoreScan();
+    this.scan = new StoreScan(ctx, tables, callees);
     this.entering = null;
     this.joined = null;
     this.sites = null;
@@ -166,6 +196,20 @@ const takesEntryFacts = (sig: FunctionSig, mode: BuildMode, isEntry: boolean): b
   sig.compileTime.length === 0 &&
   !sig.foreign();
 
+/** The locals `body`'s entry facts are seeded into, found once, and only for a body entered with some. */
+const paramsOf = (body: RangeBody, entering: EntryFacts | null): (Local | null)[] => {
+  const known = body.params;
+  if (known !== null) {
+    return known;
+  }
+  if (entering === null || entering.isEmpty()) {
+    return [];
+  }
+  const params = parameterLocals(body.ctx.program, body.sig, body.body);
+  body.params = params;
+  return params;
+};
+
 /** The walked body `sig` is, or `null` for one with no body here. */
 const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): RangeBody | null => {
   const at = tables.index.get(sig.name, -1);
@@ -177,7 +221,7 @@ const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
  * Runs after pass 3, so every body — every instantiation's included — has its
  * side tables, and before the attribute analysis, which reads the proofs.
  */
-export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode): void => {
+export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, reference: boolean): void => {
   if (contexts.length === 0 || contexts[0].uncheckedIndexing) {
     return;
   }
@@ -189,15 +233,16 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode): 
     if (program.activeInstance !== null) {
       return;
     }
+    const callees = tables.calleesOf(program);
     for (const sig of program.functions) {
       const body = sig.body();
       if (body === null || !sig.definedIn(program.source)) {
         continue;
       }
       if (sig.instance !== null) {
-        hidden.push(new RangeBody(ctx, sig, body, sig.instance));
+        hidden.push(new RangeBody(ctx, sig, body, sig.instance, tables, callees));
       } else if (!sig.lifted) {
-        const walked = new RangeBody(ctx, sig, body, null);
+        const walked = new RangeBody(ctx, sig, body, null, tables, callees);
         const entryMain = program.entryMain;
         walked.candidate = takesEntryFacts(sig, mode, entryMain !== null && entryMain === sig);
         tables.add(sig, walked.candidate);
@@ -207,22 +252,22 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode): 
     for (const info of program.instantiationList) {
       const body = info.sig.body();
       if (body !== null) {
-        hidden.push(new RangeBody(ctx, info.sig, body, info));
+        hidden.push(new RangeBody(ctx, info.sig, body, info, tables, callees));
       }
     }
   }
-  summarise(tables, bodies);
-  narrowCandidates(tables, bodies);
+  const order = summarise(tables, bodies);
+  narrowCandidates(tables, bodies, order, reference);
 
   // A call from a body with no state to judge it in gives its callee nothing.
   for (const body of hidden) {
     const instance = body.instance;
     if (instance !== null) {
-      forceCalls(tables, bodies, instance.nodeCallees, body.body, []);
+      forceCalls(tables, bodies, instance.nodeCallees, body.body);
     }
   }
 
-  const settled = settleEntries(tables, bodies);
+  const settled = settleEntries(tables, bodies, reference);
 
   // The entries are settled, and a body's last walk was the one under its
   // settled entry, since every change to an entry marks its body for another
@@ -239,36 +284,39 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode): 
     }
     const entering: EntryFacts | null = settled && body.candidate ? body.entering : null;
     const known = entering !== null && !entering.isEmpty();
-    if (!body.scan.open || (!body.scan.calls && !known)) {
+    if (!isOpen(body.scan, reference) || (!body.scan.calls && !known)) {
       continue;
     }
-    const walk = walkWithRanges(body.ctx, body.sig, body.body, tables, entering, true);
+    const walk = walkWithRanges(body.ctx, paramsOf(body, entering), body.body, tables, body.callees, entering, true, -1);
     retractWarnings(body.ctx, walk.proved);
   }
 };
 
 /**
  * Keep as candidates only the functions whose entry facts could prove
- * something: one with an access pass 2 left checked, or one that calls such a
- * candidate and could hand its facts on. The rest are entered with nothing, as
- * if a caller had been hidden, which costs no proof — and no walk of a caller
- * that calls nothing else.
+ * something: one with an access some walk could still prove (`isOpen`), or
+ * one that calls such a candidate and could hand its facts on. The rest are
+ * entered with nothing, as if a caller had been hidden, which costs no proof —
+ * an access `isOpenAccess` turns down keeps its check under every entry — and
+ * no walk of a caller that calls nothing else.
  */
-const narrowCandidates = (tables: RangeTables, bodies: RangeBody[]): void => {
+const narrowCandidates = (tables: RangeTables, bodies: RangeBody[], order: i32[], reference: boolean): void => {
   const useful: boolean[] = [];
   for (const body of bodies) {
-    useful.push(body.candidate && body.scan.open);
+    useful.push(body.candidate && isOpen(body.scan, reference));
   }
+  // Usefulness runs from a callee to its callers, so callees go first.
   let changed = true;
   while (changed) {
     changed = false;
-    let at = 0;
-    for (const body of bodies) {
-      if (body.candidate && at < useful.length && !useful[at] && callsUseful(body.scan, useful)) {
-        useful[at] = true;
-        changed = true;
+    for (const at of order) {
+      if (at >= 0 && at < bodies.length && at < useful.length) {
+        const body = bodies[at];
+        if (body.candidate && !useful[at] && callsUseful(body.scan, useful)) {
+          useful[at] = true;
+          changed = true;
+        }
       }
-      at = at + 1;
     }
   }
   let at = 0;
@@ -284,6 +332,13 @@ const narrowCandidates = (tables: RangeTables, bodies: RangeBody[]): void => {
   }
 };
 
+/**
+ * Whether a walk of the body `scan` read could prove more than pass 2 did: it
+ * has an access `isOpenAccess` answers for — or, by the reference rule of
+ * `--range-reference`, any access pass 2 left checked and any `substring`.
+ */
+const isOpen = (scan: StoreScan, reference: boolean): boolean => (reference ? scan.openAny : scan.open);
+
 const callsUseful = (scan: StoreScan, useful: boolean[]): boolean => {
   for (const callee of scan.callees) {
     if (callee >= 0 && callee < useful.length && useful[callee]) {
@@ -297,8 +352,17 @@ const callsUseful = (scan: StoreScan, useful: boolean[]): boolean => {
  * The entry fixpoint of the header, answering whether it settled within
  * `ROUND_LIMIT` rounds. A body's `entering` is `null` while nothing reached
  * calls it, and always for one that takes no entry facts.
+ *
+ * A round joins again only the entries it can have moved: those of the
+ * callees of a body it walked, and of a function it forced. Every other
+ * callee's sites are the objects the last round joined, in the same order, so
+ * its join would come out as the one its `entering` already says.
  */
-const settleEntries = (tables: RangeTables, bodies: RangeBody[]): boolean => {
+const settleEntries = (tables: RangeTables, bodies: RangeBody[], reference: boolean): boolean => {
+  const touched: boolean[] = [];
+  for (const body of bodies) {
+    touched.push(body.candidate);
+  }
   let rounds = 0;
   let changed = true;
   while (changed) {
@@ -311,14 +375,38 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[]): boolean => {
       // A body that calls no candidate has no site to find, so the fixpoint
       // never needs to walk it.
       const reached = !body.candidate || body.entering !== null;
-      if (reached && body.stale && body.scan.callsCandidate) {
-        const walk = walkWithRanges(body.ctx, body.sig, body.body, tables, body.entering, false);
+      if (reached && body.stale && body.scan.callsCandidate && !reference && !feedsEntry(bodies, body)) {
+        // Every candidate it calls is entered knowing nothing already, and
+        // an empty entry stays empty, so no site of this body can move one.
+        // Its own proofs are left to the walk after the rounds, under the
+        // entry it settles on: the last walk it had was under an older one.
+        body.stale = false;
+        body.last = null;
+      } else if (reached && body.stale && body.scan.callsCandidate) {
+        const walk = walkWithRanges(
+          body.ctx,
+          paramsOf(body, body.entering),
+          body.body,
+          tables,
+          body.callees,
+          body.entering,
+          false,
+          reference || body.scan.open ? -1 : candidateCalls(bodies, body)
+        );
+        touchCallees(touched, body.sites);
+        touchCallees(touched, walk.sites);
         body.sites = walk.sites;
         body.last = walk;
-        forceUnseen(bodies, body.scan, walk.sites);
+        forceUnseen(bodies, body, walk.sites, touched);
         body.stale = false;
       }
-      body.joined = null;
+    }
+    let at = 0;
+    for (const body of bodies) {
+      if (at < touched.length && touched[at]) {
+        body.joined = null;
+      }
+      at = at + 1;
     }
     for (const body of bodies) {
       const sites = body.sites;
@@ -326,15 +414,30 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[]): boolean => {
         continue;
       }
       for (const site of sites) {
-        const callee = bodyOf(tables, bodies, site.callee);
-        if (callee !== null) {
+        if (site.at >= 0 && site.at < bodies.length && touched[site.at]) {
+          // Nothing joined with anything is nothing, so a join that is
+          // already empty stays as it is.
+          const callee = bodies[site.at];
           const joined = callee.joined;
-          callee.joined = joined === null ? site.facts : joinEntryFacts(joined, site.facts);
+          if (joined === null) {
+            callee.joined = site.facts;
+          } else if (reference || !joined.isEmpty()) {
+            callee.joined = joinEntryFacts(joined, site.facts);
+          }
         }
       }
     }
+    at = 0;
     for (const body of bodies) {
-      if (!body.candidate) {
+      const self = at;
+      let moved = false;
+      if (at < touched.length && touched[at]) {
+        // The reference joins every entry again in every round.
+        touched[at] = reference && body.candidate;
+        moved = true;
+      }
+      at = at + 1;
+      if (!body.candidate || !moved) {
         continue;
       }
       // A forced function is reached, and entered knowing nothing.
@@ -348,6 +451,9 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[]): boolean => {
         body.entering = next;
         body.stale = true;
         changed = true;
+        if (!reference && next !== null && next.isEmpty()) {
+          tables.settleEmpty(self, next);
+        }
       }
     }
   }
@@ -355,26 +461,67 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[]): boolean => {
 };
 
 /**
- * Mark every function called in `node` by a call that is not one of `seen`:
- * its entry facts can only be empty. `callees` is the table the calls were
- * resolved into, the instantiation's for an instantiation's body.
+ * How many calls to a candidate `body` makes. A walk of a body with nothing
+ * open proves nothing, and is only after its sites: once it has noted this
+ * many, every call it will ever note is noted, and the rest of the body is
+ * not walked. A call it cannot reach with a state — after a `return`, inside
+ * an arrow — keeps the count from being met, and that walk goes to the end.
  */
-const forceCalls = (
-  tables: RangeTables,
-  bodies: RangeBody[],
-  callees: (FunctionSig | null)[],
-  node: Node,
-  seen: RangeSite[]
-): void => {
+const candidateCalls = (bodies: RangeBody[], body: RangeBody): i32 => {
+  let count = 0;
+  for (const at of body.scan.userCallees) {
+    if (at >= 0 && at < bodies.length && bodies[at].candidate) {
+      count = count + 1;
+    }
+  }
+  return count;
+};
+
+/**
+ * Whether a site of `body` could still move an entry: it calls a candidate
+ * that no site has reached yet, or one entered knowing something. An entry
+ * that is empty stays empty, since the join with an empty site is empty and
+ * every entry only weakens.
+ */
+const feedsEntry = (bodies: RangeBody[], body: RangeBody): boolean => {
+  for (const callee of body.scan.callees) {
+    if (callee >= 0 && callee < bodies.length && bodies[callee].candidate) {
+      const entering = bodies[callee].entering;
+      if (entering === null || !entering.isEmpty()) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+const touchCallees = (touched: boolean[], sites: RangeSite[] | null): void => {
+  if (sites === null) {
+    return;
+  }
+  for (const site of sites) {
+    if (site.at >= 0 && site.at < touched.length) {
+      touched[site.at] = true;
+    }
+  }
+};
+
+/**
+ * Mark every candidate called in `node`, an instantiation's body: no walk
+ * reaches such a call with a state, so its callee's entry facts can only be
+ * empty. `callees` is the table the calls were resolved into, the
+ * instantiation's own.
+ */
+const forceCalls = (tables: RangeTables, bodies: RangeBody[], callees: (FunctionSig | null)[], node: Node): void => {
   if (node.kind === N_CALL) {
     const callee = callees[node.id];
     const target: RangeBody | null = callee === null ? null : bodyOf(tables, bodies, callee);
-    if (target !== null && target.candidate && !sawCall(seen, node)) {
+    if (target !== null && target.candidate) {
       target.forced = true;
     }
   }
   for (const child of node.children) {
-    forceCalls(tables, bodies, callees, child, seen);
+    forceCalls(tables, bodies, callees, child);
   }
 };
 
@@ -384,18 +531,42 @@ const forceCalls = (
  * state — one inside an arrow, or after a `return` — leaves its callee
  * entered knowing nothing.
  */
-const forceUnseen = (bodies: RangeBody[], scan: StoreScan, seen: RangeSite[]): void => {
+const forceUnseen = (bodies: RangeBody[], body: RangeBody, seen: RangeSite[], touched: boolean[]): void => {
+  // The calls the walk saw are marked in the callee table, by the sign of
+  // their entry, for the length of this scan: a search of `seen` per call
+  // cost more than the walk that found them.
+  const known = body.callees;
+  for (const site of seen) {
+    const id = site.call.id;
+    if (id >= 0 && id < known.length && known[id] > 0) {
+      known[id] = -known[id];
+    }
+  }
+  const scan = body.scan;
   let k = 0;
   for (const call of scan.userCalls) {
     const at = k < scan.userCallees.length ? scan.userCallees[k] : -1;
-    if (at >= 0 && at < bodies.length && bodies[at].candidate && !sawCall(seen, call)) {
+    if (at >= 0 && at < bodies.length && bodies[at].candidate && !bodies[at].forced && !sawCall(known, seen, call)) {
       bodies[at].forced = true;
+      if (at < touched.length) {
+        touched[at] = true;
+      }
     }
     k = k + 1;
   }
+  for (const site of seen) {
+    const id = site.call.id;
+    if (id >= 0 && id < known.length && known[id] < 0) {
+      known[id] = -known[id];
+    }
+  }
 };
 
-const sawCall = (seen: RangeSite[], call: Node): boolean => {
+const sawCall = (known: i32[], seen: RangeSite[], call: Node): boolean => {
+  const mark = call.id < known.length ? known[call.id] : 0;
+  if (mark !== 0) {
+    return mark < 0;
+  }
   for (const site of seen) {
     if (site.call === call) {
       return true;
@@ -411,15 +582,22 @@ const sawCall = (seen: RangeSite[], call: Node): boolean => {
  * a function stores what its body stores and what its callees do, and one
  * that may resize an array, or calls anything without a summary, has none.
  */
-const summarise = (tables: RangeTables, bodies: RangeBody[]): void => {
+const summarise = (tables: RangeTables, bodies: RangeBody[]): i32[] => {
   for (const body of bodies) {
-    scanStores(body.ctx, tables, body.body, body.scan);
+    scanStores(body.body, body.scan, false);
   }
+  // Callees first, so that a sweep hands a summary on up a whole chain of
+  // calls; only a cycle takes a second. The fixpoint is a union, so the order
+  // changes how soon it is reached and not what it is.
+  const order = calleesFirst(bodies);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const body of bodies) {
-      const scan = body.scan;
+    for (const next of order) {
+      if (next < 0 || next >= bodies.length) {
+        continue;
+      }
+      const scan = bodies[next].scan;
       if (scan.opaque) {
         continue;
       }
@@ -455,10 +633,69 @@ const summarise = (tables: RangeTables, bodies: RangeBody[]): void => {
     }
     at = at + 1;
   }
+  return order;
+};
+
+/**
+ * Every body's index, each callee before its callers wherever the calls form
+ * no cycle: the order a depth-first search over `callees` finishes them in.
+ */
+const calleesFirst = (bodies: RangeBody[]): i32[] => {
+  const order: i32[] = [];
+  const seen: boolean[] = [];
+  while (seen.length < bodies.length) {
+    seen.push(false);
+  }
+  const stack: i32[] = [];
+  const edge: i32[] = [];
+  let root = 0;
+  while (root < seen.length) {
+    if (!seen[root]) {
+      seen[root] = true;
+      stack.push(root);
+      edge.push(0);
+    }
+    while (stack.length > 0) {
+      // `stack` and `edge` move in step: a body, and how many of its callees
+      // have been looked at.
+      const top = stack.length - 1;
+      if (top < 0 || top >= edge.length) {
+        break;
+      }
+      const current = stack[top];
+      if (current < 0 || current >= bodies.length) {
+        break;
+      }
+      const callees = bodies[current].scan.callees;
+      const k = edge[top];
+      if (k >= 0 && k < callees.length) {
+        edge[top] = k + 1;
+        const callee = callees[k];
+        if (callee >= 0 && callee < seen.length && !seen[callee]) {
+          seen[callee] = true;
+          stack.push(callee);
+          edge.push(0);
+        }
+      } else {
+        order.push(current);
+        stack.pop();
+        edge.pop();
+      }
+    }
+    root = root + 1;
+  }
+  return order;
 };
 
 /** What one body does by itself, and whom it calls. */
 class StoreScan {
+  /** What `scanStores` reads the body with: its context, the tables, and its program's callee table. */
+  ctx: CheckContext;
+  tables: RangeTables;
+  known: i32[];
+  /** The last callee `noteCall` looked up, and what the lookup answered. */
+  lastCallee: FunctionSig | null;
+  lastAt: i32;
   fields: string[];
   records: i32[];
   /** Indices into the summary table, each once. */
@@ -478,10 +715,17 @@ class StoreScan {
   inert: boolean;
   /** It calls a function that takes entry facts (`narrowCandidates`): only then does its walk find call sites. */
   callsCandidate: boolean;
-  /** It has an access pass 2 left checked, or a `substring` bound: only then can a walk prove more. */
+  /** It has an access pass 2 left checked that some walk could prove (`isOpenAccess`): only then can a walk prove more. */
   open: boolean;
+  /** It has any access pass 2 left checked, or any `substring` call: `open` as the reference rule reads it. */
+  openAny: boolean;
 
-  constructor() {
+  constructor(ctx: CheckContext, tables: RangeTables, known: i32[]) {
+    this.ctx = ctx;
+    this.tables = tables;
+    this.known = known;
+    this.lastCallee = null;
+    this.lastAt = -1;
     this.opaque = false;
     this.fields = [];
     this.records = [];
@@ -492,42 +736,88 @@ class StoreScan {
     this.inert = false;
     this.callsCandidate = false;
     this.open = false;
+    this.openAny = false;
   }
 }
 
-const scanStores = (ctx: CheckContext, tables: RangeTables, node: Node, scan: StoreScan): void => {
+const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
+  const ctx = scan.ctx;
   const program = ctx.program;
-  if (node.kind === N_BINARY && isBoundsAssignment(node.text)) {
-    noteStore(program, ctx, node.children[0], scan);
-  }
-  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
-    noteStore(program, ctx, node.children[0], scan);
-  }
-  if (node.kind === N_INDEX && !program.nodeProvenIndex[node.id]) {
-    scan.open = true;
-  }
-  if (node.kind === N_CALL && isBoundedCall(node)) {
-    scan.open = true;
-  }
-  if (node.kind === N_NEW || (node.kind === N_CALL && !callsNothing(ctx, node))) {
-    const callee = program.nodeCallees[node.id];
-    const at = callee === null ? -1 : tables.index.get(callee.name, -1);
-    if (at >= 0 && node.kind === N_CALL) {
-      scan.userCalls.push(node);
-      scan.userCallees.push(at);
+  const kind = node.kind;
+  if (kind === N_BINARY) {
+    if (isBoundsAssignment(node.text)) {
+      noteStore(program, ctx, node.children[0], scan);
     }
-    if (at >= 0) {
-      if (scan.callees.indexOf(at) < 0) {
-        scan.callees.push(at);
+  } else if (kind === N_UNARY) {
+    if (node.text === "++" || node.text === "--") {
+      noteStore(program, ctx, node.children[0], scan);
+    }
+  } else if (kind === N_INDEX) {
+    if (!program.nodeProvenIndex[node.id]) {
+      scan.openAny = true;
+      // An arrow's accesses are proved in its own lifted body, never in this one's walk.
+      if (!scan.open && !inArrow && isOpenAccess(ctx, node)) {
+        scan.open = true;
       }
-    } else if (isInertBuiltin(program, node)) {
+    }
+  } else if (kind === N_CALL) {
+    if (isBoundedCall(node)) {
+      scan.openAny = true;
+      if (!scan.open && !inArrow && isOpenAccess(ctx, node)) {
+        scan.open = true;
+      }
+    }
+    if (!callsNothing(ctx, node)) {
+      noteCall(node, scan);
+    }
+  } else if (kind === N_NEW) {
+    noteCall(node, scan);
+  }
+  const arrow = inArrow || node.kind === N_ARROW;
+  for (const child of node.children) {
+    // Nothing a leaf is can store, call or be checked.
+    if (child.children.length > 0) {
+      scanStores(child, scan, arrow);
+    }
+  }
+};
+
+/** A call or a `new`: whom it calls, recorded in `known` as well, or what a builtin does. */
+const noteCall = (node: Node, scan: StoreScan): void => {
+  const program = scan.ctx.program;
+  const known = scan.known;
+  const callee = program.nodeCallees[node.id];
+  // A body calls the same function over and over, and the name need only be
+  // looked up once in a row.
+  let at = -1;
+  const last = scan.lastCallee;
+  if (callee !== null && last !== null && callee === last) {
+    at = scan.lastAt;
+  } else if (callee !== null) {
+    at = scan.tables.index.get(callee.name, -1);
+    scan.lastCallee = callee;
+    scan.lastAt = at;
+  }
+  if (at < 0) {
+    if (callee !== null && node.id < known.length) {
+      known[node.id] = NOT_HERE;
+    }
+    if (isInertBuiltin(program, node)) {
       scan.inert = true;
     } else {
       scan.opaque = true;
     }
+    return;
   }
-  for (const child of node.children) {
-    scanStores(ctx, tables, child, scan);
+  if (node.id < known.length) {
+    known[node.id] = at + 1;
+  }
+  if (node.kind === N_CALL) {
+    scan.userCalls.push(node);
+    scan.userCallees.push(at);
+  }
+  if (scan.callees.indexOf(at) < 0) {
+    scan.callees.push(at);
   }
 };
 

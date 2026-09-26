@@ -410,6 +410,9 @@ export const main = (): number => {
       warnPerformance = false;
     } else if (value === "--runtime-decls") {
       opts.runtimeDecls = true;
+    } else if (value === "--range-reference") {
+      // Not in the usage: the test hook `Options.rangeReference` describes.
+      opts.rangeReference = true;
     } else if (value === "-g") {
       opts.debugInfo = true;
     } else if (value === "--json") {
