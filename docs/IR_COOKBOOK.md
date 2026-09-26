@@ -1131,6 +1131,87 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end par-alloc -->
 
+### `nish/threads`: a scope of tasks
+
+`using s = scope()` opens a scope and `s.spawn(entry, arg, dst, at)` files a
+task on it; the block's every exit is a call to `nish_scope_join`, which runs
+the tasks — the first on this thread, each other on a thread of its own — and,
+once all have finished, stores each answer. Below, the join is the one call
+before the `ret`; in a function with an arena scope it comes before the
+release, so the scope's memory outlives every task that reads it. Each spawn is an
+instance of `ThreadScope.spawn` in `nish/threads`'s own module, where the
+call `runTask(entry, arg, dst, at)` becomes a payload and a filing:
+
+```llvm
+%task.payload = alloca { i32, %struct.nish_array*, i32, i32 }, align 8
+; ... arg, dst and at stored into its first three fields ...
+call void @nish_scope_spawn(i8* %scope, void (i8*)* @<spawn>$run, void (i8*)* @<spawn>$finish, i8* %payload, i64 <size>)
+```
+
+`@<spawn>$run(p)` calls `entry(arg)` into the payload's last field on the
+task's thread, and `@<spawn>$finish(p)` calls the checked `storeResult(dst, at,
+r)` on the thread that opened the scope, after the join. The whole of both
+modules is `tests/link/thread_scope_basic`'s golden (docs/LANGUAGE.md, "Scoped
+tasks").
+
+<!-- cookbook:begin thread-scope -->
+```ts
+import { scope } from "nish/threads"
+
+const square = (n: i32): i32 => n * n
+
+const cube = (n: i32): i32 => n * n * n
+
+export const powers = (n: i32, out: i32[]): void => {
+  using s = scope()
+  s.spawn(square, n, out, 0)
+  s.spawn(cube, n, out, 1)
+}
+```
+
+```llvm
+%struct.ThreadScope = type { i32 }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish_scope_join(i8* noundef nonnull) #1
+
+define hidden noundef i32 @square(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, %n
+  ret i32 %0
+}
+
+define hidden noundef i32 @cube(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, %n
+  %1 = mul nsw i32 %0, %n
+  ret i32 %1
+}
+
+define void @powers(i32 noundef %n, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %out) #1 {
+entry:
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %0 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %0, %struct.ThreadScope** %s.addr, align 8
+  %1 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %2 = bitcast %struct.ThreadScope* %1 to i8*
+  %3 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* %3, i32 %n, %struct.nish_array* %out, i32 0)
+  %4 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* %4, i32 %n, %struct.nish_array* %out, i32 1)
+  call void @nish_scope_join(i8* %2)
+  ret void
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end thread-scope -->
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the
@@ -13058,6 +13139,8 @@ declare void @nish_panic_index(i64 noundef, i64 noundef) #6
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #5
+declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #5
+declare void @nish_scope_join(i8* noundef nonnull) #5
 declare noundef i64 @nish_cpu_count() #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {

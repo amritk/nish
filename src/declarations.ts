@@ -16,6 +16,7 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { functionTypeHereMessage, isFunctionParameter } from "./generics"
+import { isThreadsModule } from "./parallel"
 import { FLAG_EXPORTED, N_EMPTY, N_LIST, Node } from "./nodes"
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
@@ -55,7 +56,9 @@ export const collectParams = (
     // more. Only a top-level function may have one; everywhere else the
     // parameter is refused by what it belongs to.
     if (isFunctionParameter(param)) {
-      if (owner >= 0 || foreign) {
+      // One method may take one: `ThreadScope.spawn` in `nish/threads`, whose
+      // task is named at the call like a data-parallel body (WP29 P2).
+      if ((owner >= 0 && !isThreadsModule(ctx.program)) || foreign) {
         const what = foreign ? "a `declare function`" : "a method or a constructor"
         ctx.error(param.children[1], functionTypeHereMessage(name, what))
         continue

@@ -28,6 +28,7 @@ import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer } from "./lexer"
 import {
   FLAG_CONST,
+  FLAG_USING,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_FOREIGN,
@@ -1002,6 +1003,58 @@ export class Parser {
   }
 
   /**
+   * Whether the member in hand is named `[Symbol.dispose]` and is a method: the
+   * one computed name the grammar reads (WP29 P2). It is what TypeScript and
+   * Node look for on the value of a `using` declaration, so `nish/threads`'s
+   * scope declares one; which classes may is the validator's rule.
+   */
+  disposeNameAhead(): boolean {
+    const scan = new Lexer(this.file.text)
+    scan.pos = this.start
+    scan.next() // `[`
+    const words: string[] = []
+    const kinds: i32[] = []
+    for (let i: i32 = 0; i < 5; i++) {
+      scan.next()
+      kinds.push(scan.kind)
+      words.push(scan.value)
+    }
+    return (
+      kinds[0] === TOK_IDENT &&
+      words[0] === "Symbol" &&
+      kinds[1] === TOK_DOT &&
+      kinds[2] === TOK_IDENT &&
+      words[2] === "dispose" &&
+      kinds[3] === TOK_RBRACKET &&
+      kinds[4] === TOK_LPAREN
+    )
+  }
+
+  /**
+   * `[Symbol.dispose](): void { ... }`, as a method whose name is the text
+   * `[Symbol.dispose]`: no declared name can spell it, so it cannot collide
+   * with one, and the tree keeps the method's shape for everything that walks
+   * members.
+   */
+  parseDisposeMethod(start: i32, modifiers: i32): Node {
+    const method = this.node(N_METHOD, start, this.end)
+    const name = this.node(N_IDENT, start, this.end)
+    name.text = "[Symbol.dispose]"
+    while (!this.at(TOK_RBRACKET)) {
+      this.advance()
+    }
+    name.end = this.end
+    this.advance() // `]`
+    method.children.push(name)
+    method.flags = modifiers
+    method.children.push(this.parseParameters())
+    method.children.push(this.parseReturnType())
+    method.children.push(this.parseBlock())
+    method.end = this.previousEnd
+    return method
+  }
+
+  /**
    * A field, a method, or the constructor. `constructor` is an identifier to
    * the lexer, and only `constructor(` is one: a member called `constructor`
    * with a `:` after it takes the field path.
@@ -1049,6 +1102,9 @@ export class Parser {
       ctor.children.push(this.parseBlock())
       ctor.end = this.previousEnd
       return ctor
+    }
+    if (this.at(TOK_LBRACKET) && this.disposeNameAhead()) {
+      return this.parseDisposeMethod(start, modifiers)
     }
     if (!this.at(TOK_IDENT)) {
       return this.fail(
@@ -1438,6 +1494,11 @@ export class Parser {
       case TOK_LET:
       case TOK_CONST:
         return this.parseVariableStatement(start)
+      case TOK_IDENT:
+        if (this.usingAhead()) {
+          return this.parseVariableStatement(start)
+        }
+        return this.parseExpressionStatement(start)
       case TOK_IF:
         return this.parseIf(start)
       case TOK_WHILE:
@@ -1464,10 +1525,34 @@ export class Parser {
     }
   }
 
+  /**
+   * Whether the identifier in hand opens a `using` declaration (WP29 P2):
+   * `using` is a word TypeScript reads as a keyword only when a binding name
+   * follows it on the same line, and as an ordinary identifier everywhere
+   * else, so `using(x)` and `using = 1` stay the expressions they are.
+   */
+  usingAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "using" || this.peek() !== TOK_IDENT) {
+      return false
+    }
+    for (let i: i32 = this.end; i < this.aheadStart; i++) {
+      const c = this.lexer.at(i)
+      if (c === CH_LF || c === CH_CR) {
+        return false
+      }
+    }
+    return true
+  }
+
   parseVariableStatement(start: i32): Node {
     const node = this.node(N_VAR, start, this.end)
-    if (this.at(TOK_CONST)) {
+    // A `using` binding is a `const` the scope rules then hold to more
+    // (`src/parallel.ts`): it cannot be reassigned either.
+    if (this.at(TOK_CONST) || this.at(TOK_IDENT)) {
       node.flags = node.flags | FLAG_CONST
+    }
+    if (this.at(TOK_IDENT)) {
+      node.flags = node.flags | FLAG_USING
     }
     this.advance()
     node.children.push(this.parseVariableDeclarations())

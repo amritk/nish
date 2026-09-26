@@ -1,8 +1,9 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**P1 is built; P2 and P3 are proposed.** §4.1's two forms are in
-`std/threads.ts` and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
-states their rules; the status note under §4.1 says what was decided on the way
+**P1 and P2 are built; P3 is proposed.** §4.1's two forms and §4.2's scope are
+in `std/threads.ts`, and [LANGUAGE.md](LANGUAGE.md#data-parallelism-nishthreads)
+and [its next section](LANGUAGE.md#scoped-tasks-using-s--scope) state their
+rules; the status notes under §4.1 and §4.2 say what was decided on the way
 and §11 what closed. [wp20-threads.md](wp20-threads.md) is the
 plan of record for *whether* and *why* — 1:1 OS threads, data races rejected at
 compile time, T0 and the partitioner built, and the payoff measured at 3.96x on
@@ -270,6 +271,69 @@ construct:
 The argument must be shareable (wp20 T2), the entry must be a named top-level
 function (free — there is nothing else to pass), and what a worker may hand
 back is §7.
+
+**Status: built.** `using s = scope(); s.spawn(entry, arg, dst, at)` compiles,
+and the same file runs under Node. What the build decided, against the
+defaults the plan proposed where it says so:
+
+- **A task runs when its scope joins, not when it is spawned.** This is the
+  decision the rest follows from, and it is what settles §7's question soundly
+  with no lending rule. `spawn` files the task (`nish_scope_spawn` copies its
+  argument, destination and slot into a payload the runtime keeps), and the
+  join (`nish_scope_join`) runs every task of the scope at once — the first on
+  the calling thread, the others one thread each — waits for them, and then
+  stores each answer on the calling thread in spawn order. While the tasks run
+  the parent is inside the join and runs nothing, and the tasks are held to
+  P1's rule — no shared write, no arena control — so nothing writes memory any
+  task can read. A parent that kept running beside its tasks would need either
+  wp20 T2's list or §7's "write through a pointer the parent lent it", and
+  neither can be proved locally: a `readonly T[]` promises only that *this*
+  reference does not store, so the parent can write the same array through
+  another one while a task reads it, and a lent pointer is exclusive only if
+  nothing else aliases it. So T2's list is not the rule, there is no
+  "argument is not shareable" refusal, and any argument may be handed to a task.
+- **A worker hands its result back as its return value, into a destination
+  the parent names:** `spawn(entry, arg, dst, at)` with `entry` of type
+  `(a: A) => R`, storing `dst[at] = entry(arg)` at the join. That is the
+  `parallelMapInto`-style disjoint destination the plan asked for, with the
+  store made by the thread that owns `dst` rather than by the worker, so two
+  tasks naming one slot are not a race either: the later spawn's answer wins,
+  as it would in sequence. A `(a: A) => void` entry, the plan's default, could
+  hand nothing back under P1's rule and was dropped. `R` is a number, a
+  `boolean` or an enum, per §7.
+- **`using` is accepted only for `scope()`**, and a scope only from `using`; a
+  scope is only ever the receiver of a `spawn` statement, which is what keeps
+  it in its block, and the join is emitted at the block's end, at a `return`
+  (before the value is computed), and at a `break` or `continue` that leaves
+  it — inside every arena scope, which releases after it. `using` is parsed as
+  a flag on the existing variable declaration, as a contextual keyword, and
+  `[Symbol.dispose]` is the one computed member name the parser reads, legal
+  only in `nish/threads`. The whole-program pass treats a spawn's parameters
+  as escaping, so an argument is never stack-promoted or given back by a
+  loop's pass before the join reads it.
+- **The entry is a named top-level function**: an arrow, which a data-parallel
+  call takes, is refused for a task, whose name is what a debugger shows for
+  its thread. A `Result` small enough to travel as its parts is refused as an
+  argument.
+- **Nesting.** A task cannot spawn, and cannot call `parallelMapInto` or
+  `parallelReduce`: each is a shared write (a scope's join stores; a map writes
+  `dst`; both reach the runtime), which P1's rule refuses. So `nish_par_depth`
+  never has to decide either case for a program that compiled; the runtime still
+  sets it on a task's thread and runs a task inline where it is non-zero, as it
+  does a nested region. A scope may open inside another scope's block and joins
+  at its own block's end.
+- **Under Node**, `scope()` answers an object whose `spawn` runs its task and
+  stores the answer at once, and whose `[Symbol.dispose]` does nothing. The two
+  print the same unless a program reads a destination, or writes what a task
+  reads, before the block ends ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+  `using` needs `--js-explicit-resource-management` on Node 22, whose flagged
+  `using` never calls `[Symbol.dispose]` — which this design does not need —
+  and is native from Node 24. `runtime/nish.d.ts` declares the disposable
+  protocol (§5), so a program needs no `lib` change.
+- **Measured** on the four-core machine of §8a by `examples/tasks.ts`, four
+  unlike tasks sized to about 0.5 s each on one core: **1.81 s run in sequence,
+  0.547 s as four tasks of one scope, 3.30x** (minimum of five runs), bounded by
+  the longest task.
 
 ### 4.3 Stage P3 — a lock that owns its data
 
@@ -687,14 +751,17 @@ language Nish is a subset of.
   on its two parameters, and a recognised operator given a literal that is not
   its identity. A named function is opaque, and LANGUAGE.md says the obligation
   is its author's.
-- **Whether `scope()` should take the thread count.** It reads like a knob and
-  §9 declines knobs before measurements, but a scope with three spawns and four
-  cores is a different shape from `parallelFor`.
+- ~~**Whether `scope()` should take the thread count.**~~ **Closed by P2: it
+  does not.** Each spawn is one task and each task one thread, the first on the
+  calling thread; a scope with more tasks than cores leaves the scheduler to
+  share them. §9 declines the knob until a measurement asks for it.
 - **What a `Channel<T>` of a non-scalar costs**, which is §7's copy-at-join
   question and the reason channels and non-scalar results should be designed in
   one go rather than separately.
-- **Whether `using` should be admitted in strict at all, or only alongside the
-  threads surface.** This has no deadline: on 0.x any minor may change the
+- ~~**Whether `using` should be admitted in strict at all, or only alongside the
+  threads surface.**~~ **Closed by P2 with the narrow answer**: `using` takes
+  only `scope()` from `nish/threads`, and `[Symbol.dispose]` may be declared
+  only there. The original question, kept for the record: This has no deadline: on 0.x any minor may change the
   language, and after 1.0 the rule at the head of LANGUAGE.md still lets a
   minor turn a refusal into an acceptance. That also settles which way to err:
   the narrow answer — `using` is accepted only for the types the threads module

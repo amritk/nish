@@ -153,6 +153,11 @@ export const FLAG_STATIC: i32 = 64
 // from the same two bits. A field carries `readonly` legitimately, so only a
 // method and a constructor read this.
 export const FLAG_STATIC_FIRST: i32 = 128
+// `flags` on N_VAR: bit 8 is `using` (WP29 P2), set together with `FLAG_CONST`
+// because a `using` binding cannot be reassigned either. The declaration is
+// the same node as a `let` or a `const`, so nothing that walks declarations
+// needs a new kind to find it.
+export const FLAG_USING: i32 = 256
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

@@ -99,6 +99,34 @@ const printTypeScriptTree = (source, sf) => {
   /** `const` rather than `let`, which Nish spells as a flag on the statement. */
   const isConst = (declarationList) => (declarationList.flags & ts.NodeFlags.Const) !== 0
 
+  /**
+   * The statement's kind with its flags. `using` (WP29 P2) is `NodeFlags.Using`
+   * here, which does not carry the `Const` bit; Nish flags it `const` as well,
+   * because the binding cannot be reassigned, and prints both. `await using`
+   * is a construct the language does not have.
+   */
+  const varKind = (declarationList) => {
+    const flags = declarationList.flags & ts.NodeFlags.BlockScoped
+    if (flags === ts.NodeFlags.AwaitUsing) {
+      unsupported(declarationList)
+    }
+    if (flags === ts.NodeFlags.Using) {
+      return "VAR+const+using"
+    }
+    return isConst(declarationList) ? "VAR+const" : "VAR"
+  }
+
+  /**
+   * `[Symbol.dispose]`, the one computed member name Nish parses (WP29 P2),
+   * which it keeps as a name spelled with its brackets.
+   */
+  const isDisposeName = (name) =>
+    ts.isComputedPropertyName(name) &&
+    ts.isPropertyAccessExpression(name.expression) &&
+    ts.isIdentifier(name.expression.expression) &&
+    name.expression.expression.text === "Symbol" &&
+    name.expression.name.text === "dispose"
+
   /** The two modifiers stage1's grammar reads on an `enum`; `declare` is not one (WP23). */
   const isEnumModifier = (m) =>
     m.kind === ts.SyntaxKind.ExportKeyword || m.kind === ts.SyntaxKind.ConstKeyword
@@ -421,11 +449,7 @@ const printTypeScriptTree = (source, sf) => {
         block(node, depth)
         return
       case ts.SyntaxKind.VariableStatement: {
-        if (!isConst(node.declarationList)) {
-          emit(depth, "VAR", s, e)
-        } else {
-          emit(depth, "VAR+const", s, e)
-        }
+        emit(depth, varKind(node.declarationList), s, e)
         list(depth + 1, node.declarationList.declarations, variableDeclaration)
         return
       }
@@ -766,14 +790,20 @@ const printTypeScriptTree = (source, sf) => {
       return
     }
     if (ts.isMethodDeclaration(node)) {
-      if (!ts.isIdentifier(node.name) || node.body === undefined || node.type === undefined) {
+      const dispose = isDisposeName(node.name)
+      if ((!ts.isIdentifier(node.name) && !dispose) || node.body === undefined || node.type === undefined) {
         unsupported(node)
       }
       if (node.typeParameters !== undefined) {
         unsupported(node)
       }
       emit(depth, `METHOD${memberFlags(node)}${memberMarker(node)}`, s, e)
-      identifier(node.name, depth + 1)
+      if (dispose) {
+        const [ns, ne] = span(node.name)
+        emit(depth + 1, "IDENT", ns, ne, "[Symbol.dispose]")
+      } else {
+        identifier(node.name, depth + 1)
+      }
       list(depth + 1, node.parameters, parameter)
       type(node.type, depth + 1)
       block(node.body, depth + 1)

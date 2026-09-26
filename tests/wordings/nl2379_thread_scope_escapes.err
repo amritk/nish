@@ -1,0 +1,1 @@
+A `ThreadScope` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it

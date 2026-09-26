@@ -1,0 +1,1 @@
+`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs

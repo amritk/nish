@@ -1,0 +1,2 @@
+reject_thread_scope_escapes.ts:15:11
+A `ThreadScope` can only be the receiver of a `spawn` statement

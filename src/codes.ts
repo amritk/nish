@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 480
+export const RULE_COUNT: i32 = 487
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -60,12 +60,18 @@ export const RULE_COUNT: i32 = 480
  * contains.
  */
 const diagnosticRules = (): string[] => [
+  "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
+  "NL2381",
+  "`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs",
+  "NL2377",
   "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",
   "NL2353",
   "` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out",
   "NL2326",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
+  "` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called",
+  "NL2383",
   " and cannot be the operand of an operator other than `??`, `=== undefined` and `!== undefined`: give it a default with `??` first, or bind it to a `const` and use it where `!== undefined` has narrowed it",
   "NL2367",
   "`, which belongs to the function it is written in: an arrow argument is lifted into a function of its own and sees only its parameters and the module's top-level names, so it can capture nothing",
@@ -90,6 +96,8 @@ const diagnosticRules = (): string[] => [
   "NL2363",
   " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`",
   "NL2361",
+  "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins",
+  "NL2378",
   " and cannot be a template literal hole: there is no `undefined` to print; give it a default with `??`, or bind it to a `const` and print it where `!== undefined` has narrowed it",
   "NL2366",
   "An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own: a function is never a value in ",
@@ -120,8 +128,12 @@ const diagnosticRules = (): string[] => [
   "NL2348",
   "; a class or interface name must be unique across the program whether or not it is exported, because a struct type is identified by its name alone",
   "NL3028",
+  "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block",
+  "NL2380",
   "`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of ",
   "NL2375",
+  "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
+  "NL2379",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
   "NL2346",
   " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
@@ -134,6 +146,8 @@ const diagnosticRules = (): string[] => [
   "NL2327",
   " can only be the iterable of a `for...of`, which walks the entries in insertion order: an iterator is not a value in this version",
   "NL2358",
+  "`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds",
+  "NL2382",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",

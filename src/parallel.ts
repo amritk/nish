@@ -51,6 +51,12 @@ import {
   N_ARROW,
   N_BLOCK,
   N_CALL,
+  N_EXPR_STMT,
+  N_MEMBER,
+  N_PAREN,
+  N_PARAM,
+  N_VAR_DECL,
+  FLAG_USING,
   N_DO,
   N_FALSE,
   N_FOR,
@@ -74,12 +80,25 @@ import {
   PAR_MAP,
   PAR_NONE,
   PAR_REDUCE,
+  PAR_SPAWN,
+  PAR_TASK,
   ParallelCall,
   TemplateInfo,
 } from "./program"
 import { stdModuleName } from "./std-modules"
 import { StringSet } from "./map"
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types"
+
+/** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
+const THREAD_SCOPE: string = "ThreadScope"
+
+/** The name the parser gives a method declared as `[Symbol.dispose]` (WP29 P2). */
+export const DISPOSE_METHOD: string = "[Symbol.dispose]"
+
+/** The refusal of a `[Symbol.dispose]` method anywhere but `nish/threads`'s `ThreadScope`. */
+export const disposeElsewhereMessage = (owner: string): string =>
+  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` from ` +
+  "`nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
@@ -89,13 +108,30 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
  * part of the test: a root-package file that happens to sit at `std/threads.ts`
  * is an ordinary module, and its templates run as they are written.
  */
-const isThreadsModule = (program: CheckedProgram): boolean =>
+export const isThreadsModule = (program: CheckedProgram): boolean =>
   program.packageName === CLI && program.source.path === threadsModuleName()
+
+/** Whether `template` is `ThreadScope.spawn` from `nish/threads` (WP29 P2). */
+export const isSpawnTemplate = (template: TemplateInfo): boolean => {
+  const owner = template.owner
+  return (
+    owner !== null &&
+    owner.name === THREAD_SCOPE &&
+    template.decl.children[0].text === "spawn" &&
+    isThreadsModule(template.home.program)
+  )
+}
 
 /** The `PAR_*` role of an instantiation of `template`. */
 export const parallelRole = (template: TemplateInfo): i32 => {
+  if (isSpawnTemplate(template)) {
+    return PAR_SPAWN
+  }
   if (template.owner !== null || !isThreadsModule(template.home.program)) {
     return PAR_NONE
+  }
+  if (template.sourceName === "runTask") {
+    return PAR_TASK
   }
   const name = template.sourceName
   if (name === "parallelMapInto") {
@@ -122,6 +158,23 @@ export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
   return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0]
 }
 
+/**
+ * The `storeResult` instance a `runTask` instance calls: the store a task's
+ * scope makes when it joins. `runTask`'s body is that one call, and which
+ * instance it reaches is in the instance's own tables.
+ */
+export const taskStoreOf = (task: FunctionSig): FunctionSig | null => {
+  const instance = task.instance
+  const body = task.body()
+  if (instance === null || body === null || body.kind !== N_CALL) {
+    return null
+  }
+  return instance.nodeCallees[body.id]
+}
+
+/** Whether `sig` is an instance of `ThreadScope.spawn` (WP29 P2). */
+export const isSpawnEntry = (sig: FunctionSig): boolean => parallelRoleOf(sig) === PAR_SPAWN
+
 /** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
 export const isParallelEntry = (sig: FunctionSig): boolean => {
   const role = parallelRoleOf(sig)
@@ -134,15 +187,18 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
  * again with the same node and, for the same tuple, the same instance.
  */
 export const recordParallelCall = (program: CheckedProgram, node: Node, sig: FunctionSig): void => {
-  if (!isParallelEntry(sig)) {
+  // WP29 P2: a `spawn` is judged by the same facts, and kept apart because a
+  // task is not an element: nothing about it is scoped per call.
+  const calls = isSpawnEntry(sig) ? program.spawnCalls : program.parallelCalls
+  if (!isParallelEntry(sig) && !isSpawnEntry(sig)) {
     return
   }
-  for (const call of program.parallelCalls) {
+  for (const call of calls) {
     if (call.node === node && call.sig === sig) {
       return
     }
   }
-  program.parallelCalls.push(new ParallelCall(node, sig))
+  calls.push(new ParallelCall(node, sig))
 }
 
 // ---- The rules ---------------------------------------------------------------------------
@@ -154,8 +210,13 @@ const positionIn = (fn: FunctionSig, node: Node): string => {
 }
 
 /** What the template is called in a diagnostic: its source name, without the instance's type arguments. */
-const intrinsicName = (sig: FunctionSig): string =>
-  parallelRoleOf(sig) === PAR_MAP ? "parallelMapInto" : "parallelReduce"
+const intrinsicName = (sig: FunctionSig): string => {
+  const role = parallelRoleOf(sig)
+  if (role === PAR_SPAWN) {
+    return "spawn"
+  }
+  return role === PAR_MAP ? "parallelMapInto" : "parallelReduce"
+}
 
 /**
  * The body writes memory its caller could observe, which two threads running
@@ -616,4 +677,208 @@ const costOf = (node: Node): i32 => {
 export const mapGrain = (fn: FunctionSig): i32 => {
   const body = fn.body()
   return body === null ? REGION_COST : REGION_COST / costOf(body)
+}
+
+// ---- WP29 P2: the scope ------------------------------------------------------------------
+//
+// `using s = scope(); s.spawn(entry, arg, dst, at)`. What keeps a scope free
+// of races is when its tasks run: at the join, not at the spawn
+// (runtime/runtime-parallel.c). While they run, the thread that opened the
+// scope is inside the join and runs nothing else; each task may write nothing
+// another can see (`sharedWriteMessage`, the rule a data-parallel body is held
+// to) and answers a number, a `boolean` or an enum; and each answer is stored
+// into `dst[at]` by the thread that opened the scope, after the last task has
+// finished. So any argument may be handed to a task — nothing writes it while
+// the tasks read it — and the parent may do anything at all between its spawns.
+//
+// What is left to check is that every scope is joined, which the construct
+// guarantees once a scope cannot get away from its block: it is made only by
+// `scope()` as the initialiser of a `using` declaration, which is a statement
+// of a block, and used only as the receiver of a `spawn` statement.
+
+/** One refusal the scope rules make, where it is reported. */
+export class ScopeFinding {
+  node: Node
+  message: string
+
+  constructor(node: Node, message: string) {
+    this.node = node
+    this.message = message
+  }
+}
+
+const usingNotScopeMessage = (): string =>
+  "`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal " +
+  "the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs"
+
+const scopeNotUsingMessage = (): string =>
+  "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that " +
+  "declares it ends, so a scope bound any other way would be one nobody joins"
+
+const scopeEscapesMessage = (): string =>
+  `A \`${THREAD_SCOPE}\` can only be the receiver of a \`spawn\` statement: passed, stored, returned or copied, ` +
+  "it could be given a task after its block has joined it"
+
+const usingPlaceMessage = (): string =>
+  "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, " +
+  "and a single-statement body is not a block"
+
+/** The task given to `spawn` is an arrow. */
+export const taskArrowMessage = (): string =>
+  "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a " +
+  "unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread " +
+  "(declare the arrow as a `const` of the module and pass its name)"
+
+/** The argument of a task is a `Result` the ABI passes as its parts. */
+export const taskArgumentMessage = (table: TypeTable, sig: FunctionSig): string => {
+  const instance = sig.instance
+  if (instance === null || instance.typeArgs.length === 0 || !table.resultByValue(instance.typeArgs[0])) {
+    return ""
+  }
+  return (
+    `The argument of \`spawn\` is \`${table.typeName(instance.typeArgs[0])}\`, which a task cannot be handed: ` +
+    "a `Result` is passed as its parts rather than as one value, so hand the task the value it holds"
+  )
+}
+
+/** Whether `program` loaded `nish/threads`, without which there is no scope to check. */
+const threadsLoaded = (programs: CheckedProgram[]): boolean => {
+  for (const program of programs) {
+    if (isThreadsModule(program)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `call` is `scope()` from `nish/threads`: a call of a free function answering a `ThreadScope`. */
+const isScopeCall = (program: CheckedProgram, call: Node, scopeType: i32): boolean => {
+  if (call.kind !== N_CALL || program.nodeTypes[call.id] !== scopeType) {
+    return false
+  }
+  const callee = program.nodeCallees[call.id]
+  return callee !== null && callee.sourceName === "scope" && callee.instance === null
+}
+
+/**
+ * Whether `node`, a `ThreadScope` identifier under the first `n` of
+ * `parents`, is the receiver of a `spawn` statement: `s.spawn(...)` standing
+ * alone.
+ */
+const isSpawnReceiver = (node: Node, parents: Node[], n: i32): boolean => {
+  if (n < 3) {
+    return false
+  }
+  const member = parents[n - 1]
+  const call = parents[n - 2]
+  const stmt = parents[n - 3]
+  return (
+    member.kind === N_MEMBER &&
+    member.text === "spawn" &&
+    member.children[0] === node &&
+    call.kind === N_CALL &&
+    call.children[0] === member &&
+    stmt.kind === N_EXPR_STMT
+  )
+}
+
+/** Whether `node` is the initialiser of a declarator of a `using` statement, under the first `n` of `parents`. */
+const isUsingInitialiser = (node: Node, parents: Node[], n: i32): boolean => {
+  if (n < 3) {
+    return false
+  }
+  const decl = parents[n - 1]
+  const stmt = parents[n - 3]
+  return (
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === node &&
+    stmt.kind === N_VAR &&
+    (stmt.flags & FLAG_USING) !== 0
+  )
+}
+
+/** The walk: `node` under `parents`, outermost first, with every refusal pushed onto `out`. */
+const walkScopes = (
+  program: CheckedProgram,
+  node: Node,
+  parents: Node[],
+  scopeType: i32,
+  out: ScopeFinding[]
+): void => {
+  const n = parents.length
+  const parent: Node | null = n > 0 ? parents[n - 1] : null
+  if (node.kind === N_VAR && (node.flags & FLAG_USING) !== 0) {
+    // A `case` clause's declarations are refused as every declaration there is.
+    if (parent === null || parent.kind !== N_BLOCK) {
+      out.push(new ScopeFinding(node, usingPlaceMessage()))
+    }
+    for (const decl of node.children[0].children) {
+      const init = unwrapParens(decl.children[2])
+      if (!isScopeCall(program, init, scopeType)) {
+        out.push(new ScopeFinding(decl, usingNotScopeMessage()))
+      }
+    }
+  }
+  const declaresName =
+    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node
+  if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
+    // A parenthesised scope is judged as what it wraps, where it stands.
+    let at = node
+    let depth = n
+    while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+      at = parents[depth - 1]
+      depth = depth - 1
+    }
+    if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
+      if (!isUsingInitialiser(at, parents, depth)) {
+        out.push(new ScopeFinding(node, scopeNotUsingMessage()))
+      }
+    } else if (!(node.kind === N_IDENT && isSpawnReceiver(at, parents, depth))) {
+      out.push(new ScopeFinding(node, scopeEscapesMessage()))
+    }
+  }
+  parents.push(node)
+  for (const child of node.children) {
+    walkScopes(program, child, parents, scopeType, out)
+  }
+  parents.pop()
+}
+
+/**
+ * Every refusal of the scope rules in `program`'s bodies. The bodies of
+ * `nish/threads` itself are the scope's own and are not judged; a generic
+ * body is judged once per instantiation, over that instantiation's tables,
+ * and an arrow inside a body with the body, whose tables it shares.
+ */
+export const scopeFindings = (
+  programs: CheckedProgram[],
+  program: CheckedProgram,
+  table: TypeTable
+): ScopeFinding[] => {
+  const out: ScopeFinding[] = []
+  // Without `nish/threads` there is no scope, and all that can be wrong is a
+  // `using` of something else, which a module that never spells the word
+  // cannot have: the text answers that without a walk.
+  const loaded = threadsLoaded(programs)
+  if (isThreadsModule(program) || (!loaded && program.source.text.indexOf("using") < 0)) {
+    return out
+  }
+  // No node has type -2, so without the module only the `using` rule applies.
+  const scopeType = loaded ? table.structOf(THREAD_SCOPE) : -2
+  for (const sig of program.functions) {
+    const body = sig.body()
+    if (body === null || sig.lifted || !sig.definedIn(program.source)) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const parents: Node[] = []
+    walkScopes(program, body, parents, scopeType, out)
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+  }
+  return out
 }

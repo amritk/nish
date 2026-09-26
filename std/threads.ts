@@ -1,10 +1,16 @@
 /**
- * `std/threads` — data parallelism, and nothing else (docs/wp29-thread-surface.md §4.1).
+ * `std/threads` — data parallelism, and a scope for heterogeneous tasks
+ * (docs/wp29-thread-surface.md §4.1 and §4.2).
  *
- *     import { parallelMapInto, parallelReduce } from "nish/threads";
+ *     import { parallelMapInto, parallelReduce, scope } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
  *     const total = parallelReduce(src, (a, b) => a + b, 0);
+ *     {
+ *       using s = scope();
+ *       s.spawn(sumOf, xs, out, 0);
+ *       s.spawn(maxOf, ys, out, 1);
+ *     } // both tasks have run, and `out` holds both answers
  *
  * **What is written here is the meaning, not the implementation.** Each body
  * below is the sequential program, and it is what runs under Node, what
@@ -165,3 +171,69 @@ export const parallelReduce = <T>(src: T[], f: (acc: T, x: T) => T, identity: T)
   }
   return acc
 }
+
+/**
+ * The panic of a task whose destination slot is not in its array. A function of
+ * its own for the reason `dstTooShort` is one: the message is its allocation.
+ */
+const slotOutOfRange = (at: i32, length: i32): void => {
+  panic(`spawn: destination index ${at} is out of range for an array of ${length} elements`)
+}
+
+/** `dst[at] = r`, checked: what the scope does with a task's answer when it joins. */
+const storeResult = <R>(dst: R[], at: i32, r: R): void => {
+  if (at >= 0 && at < toI32(dst.length)) {
+    dst[at] = r
+  } else {
+    slotOutOfRange(at, toI32(dst.length))
+  }
+}
+
+/**
+ * One task: `entry(arg)`, stored into `dst[at]`. Natively the compiler splits
+ * this call in two (`src/emit-parallel.ts`): `entry(arg)` runs on a thread of its
+ * own when the scope closes, and the store runs on the thread that opened the
+ * scope, once every task of it has finished. Here, under Node, it is the one
+ * call it reads as, made at the spawn.
+ */
+const runTask = <A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void =>
+  storeResult(dst, at, entry(arg))
+
+/**
+ * A scope of tasks, joined when the block that declares it ends
+ * (docs/wp29-thread-surface.md §4.2). It is only ever made by `scope()` in a
+ * `using` declaration, and only ever used as the receiver of `spawn`
+ * (docs/LANGUAGE.md, "Scoped tasks"), so no task can outlive it.
+ */
+export class ThreadScope {
+  /**
+   * How many tasks this scope was given. Nothing reads it: a class has a field
+   * so that each scope is an object of its own, whose address is what the
+   * runtime files its tasks under.
+   */
+  spawned: i32 = 0
+
+  /**
+   * Run `entry(arg)` on a thread of its own and store its answer in `dst[at]`
+   * when the scope closes. `at` is checked here, before the task is taken, and
+   * again when its answer is stored.
+   */
+  spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void {
+    if (at < 0 || at >= toI32(dst.length)) {
+      slotOutOfRange(at, toI32(dst.length))
+    }
+    runTask(entry, arg, dst, at)
+  }
+
+  /**
+   * What `using` calls when the block ends. Natively the compiler emits the
+   * join itself at every exit of the block, and under Node every task has
+   * already run by the time this is reached, so there is nothing left to do.
+   */
+  [Symbol.dispose](): void {
+    // Nothing left to join: see above.
+  }
+}
+
+/** A new scope, for a `using` declaration: `using s = scope()`. */
+export const scope = (): ThreadScope => new ThreadScope()

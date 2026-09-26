@@ -15,6 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
+import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsModule } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import {
@@ -545,6 +546,15 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
 
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
+  // WP29 P2: the method `using` calls is the scope's, and the scope's join is
+  // emitted by the construct rather than called, so the declaration is for
+  // TypeScript and Node and has no signature here.
+  if (name === DISPOSE_METHOD) {
+    if (!isThreadsModule(ctx.program)) {
+      ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
+    }
+    return
+  }
   const what = `Method \`${name}\``
   const shown = spelled(ctx, owner)
   if (owner.hasMember(name)) {

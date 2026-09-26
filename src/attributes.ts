@@ -101,7 +101,7 @@ import {
   Node,
 } from "./nodes"
 import { Options } from "./options"
-import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
+import { isParallelEntry, isSpawnEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
 import { ParentTable } from "./parents"
 import { CheckedProgram, FunctionSig, inlineElementStruct, ROLE_CONSTRUCTOR } from "./program"
 import {
@@ -1704,7 +1704,10 @@ const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isParallelEntry(sig)) {
-    markParallelEntry(facts)
+    markParallelEntry(facts, "nish_parallel_range")
+  }
+  if (isSpawnEntry(sig)) {
+    markParallelEntry(facts, "nish_scope_spawn") // WP29 P2: the payload is kept until the join
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
@@ -1741,10 +1744,16 @@ const collectFacts = (
  *
  * Both are claims LLVM would act on, and what each would buy is nothing: the
  * instance is called once per region, and the loop inside it is the chunk
- * function, whose own facts are unaffected.
+ * function, whose own facts are unaffected. *
+ * A `spawn` instance (WP29 P2) is the same shape with a longer wait: its
+ * payload — the argument and the destination — is copied into the scope's
+ * task and read when the scope joins, after `spawn` has returned. So every
+ * parameter escapes there too, which is also what keeps an argument out of a
+ * stack slot a later pass of a loop would reuse and out of a loop pass the
+ * arena would release before the join.
  */
-const markParallelEntry = (facts: FunctionFacts): void => {
-  facts.callees.add("nish_parallel_range")
+const markParallelEntry = (facts: FunctionFacts, runtime: string): void => {
+  facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
   }
