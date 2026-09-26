@@ -57,6 +57,25 @@ they push code towards `?.` and `**`, which Nish refuses.
 **House style that is already clean** (errors): `useArrowFunction`,
 `useShorthandFunctionType`, `useConsistentArrowReturn`.
 
+**Guards that are errors from the start** (no hits when they were added):
+
+- `noTsIgnore`: a type error you mean to keep gets `@ts-expect-error` and a
+  reason, which fails once the error is gone. `@ts-ignore` stays silent
+  forever.
+- `noExportsInTest`: a test file exports nothing, so no module can come to
+  depend on one.
+- `noGlobalDirnameFilename`: `import.meta.dirname`, never `__dirname`
+  (`typescript.md`).
+- `noBarrelFile` and `noReExportAll`: no module exists only to re-export
+  another. An import names the module that owns the symbol.
+- `useGuardForIn`.
+- `noRestrictedImports`, for `self/` and `std/`: both ship, so neither may
+  import from `tests/`, `scripts/`, `bench/` or `examples/`.
+
+`tsconfig.json` (`npm run check`) adds `noImplicitReturns`,
+`noFallthroughCasesInSwitch` and `allowUnreachableCode: false` to `strict`.
+All three were clean when they were added.
+
 **House style with a backlog** (warn, and error after the cleanup):
 
 | Rule | Why | Found on 2026-09-26 |
@@ -108,6 +127,7 @@ depends on, so it would stay noise however long the cleanup ran:
 | `noNegationElse`, `useSimplifiedLogicExpression` | 111 | Taste. They reorder branches and De Morgan guard conditions, which makes a guard harder to read, not easier. |
 | `noSubstr`, `useAtIndex` | 78 | They suggest methods that are not in the language's string and array surface. |
 | `noInferrableTypes` | 8 | In Nish, `const n: i32 = 0` is not redundant. The annotation picks the width. |
+| tsc `noUncheckedIndexedAccess` | 2,574 | An out-of-range index in Nish panics instead of answering `undefined`, so `T` is the honest element type. |
 
 To propose one of these, measure it again and put the number in the pull
 request.
@@ -163,13 +183,30 @@ Delete this section when it is done.
      formatting a gate
    - `assist.actions.source.organizeImports` goes on, after a check that the
      reorder leaves `self/`'s stage2 IR byte-identical
-6. **Wire in shellcheck**: fix the 8 warnings `shellcheck -S warning` reports
+6. **Add the checks that need the cleaned tree**:
+   - tsc `noUnusedLocals` and `noUnusedParameters` in `tsconfig.json`. There
+     were 27 and 6 hits on 2026-09-26. Biome's unused-variable rules are off
+     for Nish programs, so tsc is what catches them in `self/`.
+   - knip, for unused files and exports (`npm run lint:dead`, and a CI step).
+     On 2026-09-26 it found about 150 names exported from 42 `self/` modules
+     that no other module imports. Before removing the `export`s, measure
+     whether that moves the compiler's own IR: an unexported function can
+     get internal linkage, which LLVM may inline or drop. Its "unused files"
+     are the benchmark programs `bench/run.mjs` runs by name; list them in
+     its `ignore`.
+   - `npm run lint:fix` (`biome check --write .`).
+   - A `PostToolUse` hook in `.claude/settings.json` that runs
+     `biome check --write` on each file an agent edits. This is the
+     same as a lefthook pre-commit step, with no new dependency.
+     It waits for step 4, because before that it would reformat whole files
+     that a change only touched.
+7. **Wire in shellcheck**: fix the 8 warnings `shellcheck -S warning` reports
    today, then add a CI step. Ubuntu runners ship shellcheck, and
    `pip install shellcheck-py` installs it locally.
-7. **Verify** with `npm run check`, an undegraded `npm test` (which includes
+8. **Verify** with `npm run check`, an undegraded `npm test` (which includes
    the self-host fixed point), `docs/cookbook/regen.sh --check` and
    `node docs/check-links.mjs`.
-8. **Keep `git blame` useful.** Put the commit hashes from steps 2 and 4 in a
+9. **Keep `git blame` useful.** Put the commit hashes from steps 2 and 4 in a
    new `.git-blame-ignore-revs`. Land step 1 as its own commit, so that
    `git log --follow` sees pure renames.
 

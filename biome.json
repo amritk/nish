@@ -143,11 +143,19 @@
         "noEmptyBlockStatements": "warn",
         "useAwait": "warn",
         "noEvolvingTypes": "warn",
-        "useErrorMessage": "warn"
+        "useErrorMessage": "warn",
+        "noTsIgnore": "error",
+        "noExportsInTest": "error",
+        "useGuardForIn": "error"
       },
       "correctness": {
         "noUnusedImports": "warn",
-        "noUnusedPrivateClassMembers": "warn"
+        "noUnusedPrivateClassMembers": "warn",
+        "noGlobalDirnameFilename": "error"
+      },
+      "performance": {
+        "noBarrelFile": "error",
+        "noReExportAll": "error"
       }
     }
   },
@@ -227,6 +235,34 @@
                       "camelCase",
                       "snake_case"
                     ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "self/**/*.ts",
+        "std/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**/tests/**",
+                      "**/scripts/**",
+                      "**/bench/**",
+                      "**/examples/**"
+                    ],
+                    "message": "The compiler and the standard library ship; they may not import from tests/, scripts/, bench/ or examples/."
                   }
                 ]
               }

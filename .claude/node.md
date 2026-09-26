@@ -162,6 +162,15 @@ else is noise in the diff. So:
   `tests/link`, `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
-  `trailingCommas: all`; those formatter settings are not carried over.
-  Flipping them would rewrite every file in `self/`, and the formatter is not a
-  gate here anyway.
+  `trailingCommas: all`; those formatter settings are not carried over, for
+  different reasons:
+  - **Semicolons are required.** Nish's parser does not insert them, so
+    `semicolons: "asNeeded"` would format `self/`, `std/` and every example
+    into code the compiler refuses (`expected ';'`). A TypeScript-only
+    codebase can drop them; this one cannot.
+  - **Quotes are only taste.** Nish accepts `'...'`. Double quotes are kept
+    because every snippet in `docs/LANGUAGE.md`, `docs/AI.md` and the
+    cookbook uses them, and so does the text a user copies out of those
+    documents. Switching would be one more rewrite of every file, and there
+    is nothing to gain from it.
+  - **`trailingCommas`** stays `es5`, to match the rest of the tree.
