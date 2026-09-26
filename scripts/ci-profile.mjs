@@ -67,10 +67,11 @@ const takeLine = (line) => {
 
 const onData = (data) => {
   buffered += data;
-  let i;
-  while ((i = buffered.indexOf("\n")) >= 0) {
+  let i = buffered.indexOf("\n");
+  while (i >= 0) {
     takeLine(buffered.slice(0, i));
     buffered = buffered.slice(i + 1);
+    i = buffered.indexOf("\n");
   }
 };
 

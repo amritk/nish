@@ -195,10 +195,15 @@ linted. What still differs:
   PascalCase (`CheckContext`, `FunctionSig`); a module-level constant that is
   a frozen table or a fixed scalar is CONSTANT_CASE (`T_ERROR`,
   `EFFECT_WRITE`, `LANGUAGE`). An acronym keeps its own case rather than being
-  title-cased: `IRBlock`, `IRFunction`, not `IrBlock` or `IrFunction`. File names
-  are the one place that is not camelCase, and Biome enforces it
-  (`useFilenamingConvention`): kebab-case or snake_case, so `emit/strings.ts`
-  and `interop_abi.ts` are both fine and `emitStrings.ts` is not.
+  title-cased: `IRBlock`, `IRFunction`, not `IrBlock` or `IrFunction`. An object key
+  that names an environment variable is CONSTANT_CASE too (`NISH_BOOTSTRAP`).
+- **File and directory names are kebab-case**: `emit-arrays.ts`, not
+  `emit_arrays.ts` or `emitArrays.ts`. Biome's `useFilenamingConvention` checks
+  the files Biome reads, and `scripts/check-filenames.mjs` checks the rest of
+  the tree. ALL-CAPS documents (`README.md`, `docs/LANGUAGE.md`) and the test
+  fixture trees are exempt ([`linting.md`](./linting.md)). Some files still
+  have snake_case names; they are renamed in the cleanup pass, so a new file is
+  kebab-case even when its neighbours are not.
 - **Three kinds of name are exempt, because the spelling is the meaning.**
   A name that is a JavaScript global or builtin keeps that global's exact
   spelling, since the name *is* the identifier being matched — `Proxy` and
@@ -209,13 +214,13 @@ linted. What still differs:
   source program's constants, so `bench/nbody.ts` has `SOLAR_MASS` and `PI` as
   locals. It keeps the source's licence notice too, at the top of the file,
   and is listed in `THIRD_PARTY_NOTICES.md` ([`licensing.md`](./licensing.md)).
-- **This one is prose, not lint, and that is measured.** Biome's
-  `useNamingConvention` was tried over the whole repo: with `strictCase` on
-  it flags 82 places, and with it off (the setting that tolerates `IRBlock`)
-  still 70 — every single one of them in the three exempt classes above,
-  and none of them a name anyone would want changed. A rule whose entire
-  output is false positives is worse than no rule, so the convention lives
-  here and the reviewer is what enforces it.
+- **Biome enforces this**, through `useNamingConvention` with three
+  allowances: `strictCase` off for the acronyms, CONSTANT_CASE for a `const`
+  and for an object key, and snake_case keys where the keys are someone else's
+  ABI (`web/wasi.mjs`, the hook payloads in `.claude/hooks/`). Those
+  allowances exist because the strict rule flagged 86 names, almost all of
+  them in the exempt classes above. With the allowances it flags 5, and those
+  are names that really should change. [`linting.md`](./linting.md) has the details.
 - Be descriptive.
 - Use suffixes appropriately: `check*` for checker handlers, `emit*` for
   emitters, `collect*Facts` for attribute fact collectors, `is*` for

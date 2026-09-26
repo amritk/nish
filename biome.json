@@ -18,6 +18,9 @@
       "bench/**/*.ts",
       "bench/**/*.mjs",
       "web/**/*.mjs",
+      "scripts/**/*.mjs",
+      "scripts/**/*.js",
+      ".claude/hooks/*.mjs",
       "!**/build",
       "!**/node_modules",
       "!tests/cases"
@@ -43,7 +46,10 @@
       "complexity": {
         "noVoid": "error",
         "useOptionalChain": "off",
-        "useArrowFunction": "error"
+        "useArrowFunction": "error",
+        "noForEach": "warn",
+        "noUselessUndefinedInitialization": "warn",
+        "noUselessStringConcat": "warn"
       },
       "style": {
         "noEnum": "error",
@@ -58,13 +64,12 @@
         "useExplicitLengthCheck": "error",
         "useExponentiationOperator": "off",
         "useFilenamingConvention": {
-          "level": "error",
+          "level": "warn",
           "options": {
             "strictCase": false,
             "requireAscii": true,
             "filenameCases": [
-              "kebab-case",
-              "snake_case"
+              "kebab-case"
             ]
           }
         },
@@ -84,11 +89,65 @@
           }
         },
         "useShorthandFunctionType": "error",
-        "useConsistentArrowReturn": "error"
+        "useConsistentArrowReturn": "error",
+        "useNamingConvention": {
+          "level": "warn",
+          "options": {
+            "strictCase": false,
+            "requireAscii": true,
+            "conventions": [
+              {
+                "selector": {
+                  "kind": "const"
+                },
+                "formats": [
+                  "camelCase",
+                  "PascalCase",
+                  "CONSTANT_CASE"
+                ]
+              },
+              {
+                "selector": {
+                  "kind": "objectLiteralProperty"
+                },
+                "formats": [
+                  "camelCase",
+                  "CONSTANT_CASE"
+                ]
+              }
+            ]
+          }
+        },
+        "useBlockStatements": "warn",
+        "useShorthandAssign": "warn",
+        "useConst": "warn",
+        "noUselessElse": "warn",
+        "useCollapsedElseIf": "warn",
+        "noUnusedTemplateLiteral": "warn",
+        "useForOf": "warn",
+        "noNestedTernary": "warn",
+        "useNumberNamespace": "warn",
+        "noYodaExpression": "warn",
+        "useSingleVarDeclarator": "warn",
+        "useThrowNewError": "warn",
+        "useThrowOnlyError": "warn",
+        "noDefaultExport": "warn",
+        "noCommonJs": "warn",
+        "useNodejsImportProtocol": "warn",
+        "noExportedImports": "warn"
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noVar": "error"
+        "noVar": "error",
+        "noShadow": "warn",
+        "noEmptyBlockStatements": "warn",
+        "useAwait": "warn",
+        "noEvolvingTypes": "warn",
+        "useErrorMessage": "warn"
+      },
+      "correctness": {
+        "noUnusedImports": "warn",
+        "noUnusedPrivateClassMembers": "warn"
       }
     }
   },
@@ -122,7 +181,10 @@
           "style": {
             "useConsistentTypeDefinitions": "off",
             "useConsistentMethodSignatures": "off",
-            "noEnum": "off"
+            "noEnum": "off",
+            "useNumberNamespace": "off",
+            "useShorthandAssign": "off",
+            "useForOf": "off"
           }
         }
       }
@@ -133,12 +195,45 @@
         "tests/**/*.js",
         "docs/*.mjs",
         "bench/**/*.mjs",
-      "web/**/*.mjs",
-        "examples/*.mjs"
+        "web/**/*.mjs",
+        "examples/*.mjs",
+        "scripts/**/*.mjs",
+        "scripts/**/*.js",
+        ".claude/hooks/*.mjs"
       ],
       "plugins": [
         "biome-plugins/no-function-declaration.grit"
       ]
+    },
+    {
+      "includes": [
+        "web/wasi.mjs",
+        ".claude/hooks/*.mjs"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": {
+              "level": "warn",
+              "options": {
+                "strictCase": false,
+                "requireAscii": true,
+                "conventions": [
+                  {
+                    "selector": {
+                      "kind": "objectLiteralProperty"
+                    },
+                    "formats": [
+                      "camelCase",
+                      "snake_case"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
