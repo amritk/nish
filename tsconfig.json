@@ -1,6 +1,9 @@
 {
   "compilerOptions": {
     "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnreachableCode": false,
     "noEmit": true,
     "target": "ES2022",
     "lib": ["ES2022"],

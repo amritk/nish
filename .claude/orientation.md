@@ -93,7 +93,7 @@ npm run test:update         # write missing .ll goldens (the whole suite)
 UPDATE_GOLDENS=1 node tests/run.js <case>   # the same, for one case
 scripts/bootstrap.sh --verify   # the fixed point alone; npm test runs it too
 npm run test:cli            # the CLI contract, through the harness in Nish
-npm run lint                # biome, advisory, never a compile gate
+npm run lint                # file names + biome (.claude/linting.md), never a compile gate
 ```
 
 `npm test` needs LLVM 18 on `PATH` (`clang`, `llc`, `llvm-as`, `opt`, `ld.lld`,
@@ -130,6 +130,7 @@ takes `self/` to the fixed point with `scripts/bootstrap.sh --verify`.
 | I am writing a *program*, not the compiler | `docs/AI.md` — the same rules in one pass, examples compiled by `npm test` |
 | What IR does X compile to? | `docs/IR_COOKBOOK.md` |
 | How do I write the code? | [`typescript.md`](./typescript.md) |
+| What does the linter enforce, and why? | [`linting.md`](./linting.md) |
 | How do I test it? | [`testing.md`](./testing.md) |
 | I am copying or porting code from somewhere else | [`licensing.md`](./licensing.md) — the notice it keeps and the licences allowed |
 | What is the plan? | `docs/MASTER_PLAN.md`, `docs/wp14-selfhost.md` |

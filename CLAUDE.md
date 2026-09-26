@@ -14,6 +14,7 @@ Developer guidelines live in the `.claude/` directory:
 - **orientation.md** — start here: what the repo is, where the code is, what to run
 - **selfhost.md** — the `self/` compiler: Nish-0, the seed, the module map, how it is tested
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
+- **linting.md** — What the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, the cleanup pass
 - **typescript.md** — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - **comments.md** — Comment guidelines and JSDoc
 - **testing.md** — The golden-test harness, what every construct ships with

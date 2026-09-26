@@ -15,6 +15,7 @@ For Claude Code the same rules live in
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
 - [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
+- [`.claude/linting.md`](./.claude/linting.md) — what the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, the cleanup pass
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
 - [`.claude/licensing.md`](./.claude/licensing.md) — third-party code: what counts as a copy, the notice it keeps, the licences allowed
@@ -45,7 +46,7 @@ npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
 npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
-npm run lint                # biome, advisory
+npm run lint                # file names + biome; warnings are backlog, errors fail CI
 npm run smoke               # build and run every example with a main
 ```
 
@@ -254,5 +255,8 @@ what is blocking and what you need — and keep watching.
 - Match the surrounding code's style, comment density, and naming. Biome
   (`biome.json`) is the formatter and linter, run with the formatter disabled
   in `npm run lint`; keep new files formatted and do not reformat files you did
-  not otherwise change.
+  not otherwise change. File and directory names are kebab-case, values
+  camelCase, types PascalCase, and new code clears every lint rule, the ones at
+  `warn` included; [`.claude/linting.md`](./.claude/linting.md) has the rule
+  set.
 - Show the exact LLVM IR for every TypeScript snippet a PR adds to the tests.

@@ -20,6 +20,7 @@
     "!scripts/arrow-verify.mjs",
     "!scripts/arrowify.mjs",
     "!scripts/fetch-seed.sh",
+    "!scripts/check-filenames.mjs",
     "!scripts/check-pr-body.mjs",
     "!scripts/check-pr-body.test.mjs",
     "!scripts/changelog-gen.test.mjs",
@@ -45,7 +46,7 @@
     "test:nish": "build/nish tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
     "test:cli": "build/nish tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
     "test:node": "node tests/differential/unmodified.js",
-    "lint": "biome check --formatter-enabled=false .",
+    "lint": "node scripts/check-filenames.mjs --advisory && biome check --formatter-enabled=false .",
     "format": "biome format --write .",
     "prepublishOnly": "npm run check && npm test",
     "changelog": "node scripts/changelog-gen.mjs"
