@@ -12,21 +12,21 @@
 // The accumulator feeds the next input, so the loop has a carried dependency
 // and cannot be closed-formed or vectorised away, and everything is masked to
 // 16 bits so no version relies on signed overflow.
-function half(n: number): Result<number, number> {
+const half = (n: number): Result<number, number> => {
   if (n % 2 !== 0) {
     return Err(n);
   }
   return Ok(n / 2);
-}
+};
 
-function combine(r: Result<number, number>): number {
+const combine = (r: Result<number, number>): number => {
   if (r.isErr()) {
     return -1;
   }
   return r.value;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const N = 200000000; // bench:n
   let acc = 0;
   for (let i = 0; i < N; i++) {
@@ -34,4 +34,4 @@ export function main(): number {
   }
   console.log(acc);
   return 0;
-}
+};

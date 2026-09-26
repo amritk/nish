@@ -34,7 +34,6 @@ import {
   FLAG_CONST,
   N_BLOCK,
   N_BREAK,
-  N_CASE,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
@@ -53,7 +52,7 @@ import {
 } from "./nodes";
 import { caseValue } from "./constants";
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols";
-import { isInteger, T_BOOL, T_ERROR, T_VOID } from "./types";
+import { isInteger, T_ERROR, T_VOID } from "./types";
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
@@ -207,12 +206,10 @@ export const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): 
     // rejected, the variable is still declared with its declared type and
     // later statements do not report it as unknown.
     // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
-    const declared =
-      annotation.kind === N_EMPTY
-        ? -1
-        : isMaybeAnnotation(annotation)
-          ? resolveMaybeAnnotation(ctx, annotation)
-          : resolveType(annotation, ctx);
+    let declared = -1;
+    if (annotation.kind !== N_EMPTY) {
+      declared = isMaybeAnnotation(annotation) ? resolveMaybeAnnotation(ctx, annotation) : resolveType(annotation, ctx);
+    }
     const initializer = decl.children[2];
     if (initializer.kind === N_EMPTY) {
       ctx.error(decl, `Variable \`${name}\` must be initialized`);

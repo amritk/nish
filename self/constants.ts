@@ -350,12 +350,12 @@ const foldBinary = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
     );
   }
   if (op === "===" || op === "!==") {
-    const equal =
-      a.type === T_STRING
-        ? a.textValue === b.textValue
-        : a.type === T_F64
-          ? a.floatValue === b.floatValue
-          : a.intValue === b.intValue;
+    let equal = a.intValue === b.intValue;
+    if (a.type === T_STRING) {
+      equal = a.textValue === b.textValue;
+    } else if (a.type === T_F64) {
+      equal = a.floatValue === b.floatValue;
+    }
     return boolValue(op === "===" ? equal : !equal);
   }
   if (op === "+" && a.type === T_STRING) {

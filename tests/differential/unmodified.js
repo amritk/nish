@@ -49,7 +49,7 @@ const KNOWN = new Map([
 ]);
 
 /** Every f64-mode program with an entry point, from the cases and the corpus. */
-function programs() {
+const programs = () => {
   const dirs = [path.join(root, "tests", "cases"), path.join(root, "tests", "differential", "corpus")];
   const found = [];
   for (const dir of dirs) {
@@ -68,10 +68,10 @@ function programs() {
     }
   }
   return found;
-}
+};
 
 /** Compile and link with `--number-mode f64`, then run the binary. */
-function native({ name, source }, compiler) {
+const native = ({ name, source }, compiler) => {
   const exe = path.join(work, name);
   const built = spawnSync(compiler.cmd, [...compiler.prefix, source, "--number-mode", "f64", "--link", exe], {
     cwd: root,
@@ -80,7 +80,7 @@ function native({ name, source }, compiler) {
   if (built.status !== 0) { return { failed: `compile: ${built.stderr}` }; }
   const ran = spawnSync(exe, [], { cwd: root, encoding: "utf8" });
   return { stdout: ran.stdout, status: ran.status };
-}
+};
 
 /**
  * Run the same source under Node with nothing rewritten — in place, from the
@@ -89,7 +89,7 @@ function native({ name, source }, compiler) {
  * CommonJS and an in-tree `.ts` was read as CommonJS too, making its
  * `export function main` a syntax error before type stripping ever ran.)
  */
-function unmodified({ source }) {
+const unmodified = ({ source }) => {
   const entry = `const m = await import(${JSON.stringify(source)}); process.exit(m.main());`;
   const ran = spawnSync(
     "node",
@@ -97,9 +97,9 @@ function unmodified({ source }) {
     { cwd: root, encoding: "utf8" }
   );
   return { stdout: ran.stdout, status: ran.status };
-}
+};
 
-function runUnmodified({ verbose = false, compiler: spec } = {}) {
+const runUnmodified = ({ verbose = false, compiler: spec } = {}) => {
   const compiler = compilerFor(spec);
   if (compiler.error !== undefined) { return { ok: false, summary: compiler.error, detail: "" }; }
   fs.mkdirSync(work, { recursive: true });
@@ -136,7 +136,7 @@ function runUnmodified({ verbose = false, compiler: spec } = {}) {
       `(${count("KNOWN")} known divergences); ${bad.length} unexpected`,
     detail: bad.map((r) => `${r.outcome} ${r.name}: ${r.detail}`).join("\n"),
   };
-}
+};
 
 export { runUnmodified };
 

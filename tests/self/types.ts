@@ -35,7 +35,7 @@ import {
  * the scalars, two structs, an array of each, a nullable of each pointer, and
  * the nested cases that catch a recursive walk stopping one level early.
  */
-function buildTypes(table: TypeTable): i32[] {
+const buildTypes = (table: TypeTable): i32[] => {
   const scalars: i32[] = [T_I32, T_I64, T_U8, T_U16, T_U32, T_U64, T_F32, T_F64, T_BOOL, T_STRING, T_VOID];
   const types: i32[] = [];
   for (const scalar of scalars) {
@@ -73,9 +73,9 @@ function buildTypes(table: TypeTable): i32[] {
   types.push(table.arrayOf(table.nullableOf(table.structOf("Node"))));
   types.push(table.nullableOf(table.arrayOf(table.arrayOf(T_I32))));
   return types;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const table = new TypeTable();
   const types = buildTypes(table);
   const out: string[] = [];
@@ -131,4 +131,4 @@ export function main(): number {
 
   write(`${out.join("\n")}\n`);
   return 0;
-}
+};

@@ -312,7 +312,8 @@ export class WasiHost {
         if (!open) { return EBADF; }
         const size = (this.fs.files.get(open.path) ?? new Uint8Array(0)).length;
         // whence: 0 set, 1 cur, 2 end — the same order as `lseek`.
-        const from = whence === 0 ? 0 : whence === 1 ? open.position : size;
+        let from = whence === 1 ? open.position : size;
+        if (whence === 0) { from = 0; }
         const next = from + Number(offset);
         if (next < 0) { return EINVAL; }
         open.position = next;
@@ -323,8 +324,8 @@ export class WasiHost {
       fd_fdstat_get: (fd, resultPointer) => {
         const view = this.#view;
         const open = this.fds.get(fd);
-        const filetype =
-          fd <= 2 ? FILETYPE_CHARACTER_DEVICE : open?.directory ? FILETYPE_DIRECTORY : FILETYPE_REGULAR;
+        let filetype = open?.directory ? FILETYPE_DIRECTORY : FILETYPE_REGULAR;
+        if (fd <= 2) { filetype = FILETYPE_CHARACTER_DEVICE; }
         if (fd > 2 && !open) { return EBADF; }
         view.setUint8(resultPointer, filetype);
         view.setUint16(resultPointer + 2, open?.append ? FDFLAG_APPEND : 0, true);

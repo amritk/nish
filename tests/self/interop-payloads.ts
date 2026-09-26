@@ -8,30 +8,30 @@
 // and the wasm loader grows its `f32View` bit-view helpers only when an `f32`
 // payload actually crosses. None of that is reachable from the corpus, so it
 // lives here: four signatures, one per shape, taken and returned.
-export function halfF32(n: f32): Result<f32, u8> {
+export const halfF32 = (n: f32): Result<f32, u8> => {
   if (n < 0.0) {
     return Err(toU8(1));
   }
   return Ok(n / 2.0);
-}
+};
 
-export function widen(r: Result<f32, u8>): f32 {
+export const widen = (r: Result<f32, u8>): f32 => {
   if (r.isErr()) {
     return 0.0;
   }
   return r.value;
-}
+};
 
-export function port(p: u16): Result<void, u16> {
+export const port = (p: u16): Result<void, u16> => {
   if (p === toU16(0)) {
     return Err(p);
   }
   return Ok();
-}
+};
 
-export function flag(b: boolean): Result<boolean, u32> {
+export const flag = (b: boolean): Result<boolean, u32> => {
   if (b) {
     return Ok(true);
   }
   return Err(toU32(7));
-}
+};

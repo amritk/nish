@@ -40,7 +40,7 @@ const NEWLINE: i32 = 10;
 const HASH: i32 = 35;
 
 /** The non-comment, non-blank lines of the case file. */
-function caseLines(text: string): string[] {
+const caseLines = (text: string): string[] => {
   const lines: string[] = [];
   for (const line of splitByte(text, NEWLINE)) {
     if (line.length > 0 && line.charCodeAt(0) !== HASH) {
@@ -48,31 +48,31 @@ function caseLines(text: string): string[] {
     }
   }
   return lines;
-}
+};
 
 /** Every string function, over one case from the `text` section. */
-function reportText(out: string[], value: string): void {
+const reportText = (out: string[], value: string): void => {
   out.push(`json ${jsonQuote(value)}`);
   out.push(`ir ${irEscape(value)}`);
   out.push(`hash ${hashString(value)}`);
   out.push(`split ${jsonQuote(splitByte(value, 47).join("|"))}`);
   out.push(`repeat ${jsonQuote(repeatString(value, 3))}`);
-}
+};
 
 /** Every path function, over one `base<TAB>spec` case. */
-function reportPath(out: string[], base: string, spec: string): void {
+const reportPath = (out: string[], base: string, spec: string): void => {
   out.push(`normalize ${jsonQuote(normalizePath(base))}`);
   out.push(`dirname ${jsonQuote(dirname(base))}`);
   out.push(`basename ${jsonQuote(basename(base))}`);
   out.push(`stem ${jsonQuote(basenameWithout(base, ".ts"))}`);
   out.push(`resolve ${jsonQuote(resolvePath(base, spec))}`);
   out.push(`module ${jsonQuote(resolveModule(base, spec))}`);
-}
+};
 
 /** `relativePath`, over one `from<TAB>to` case; both are rooted at the same base. */
-function reportRelative(out: string[], from: string, to: string): void {
+const reportRelative = (out: string[], from: string, to: string): void => {
   out.push(`relative ${jsonQuote(relativePath(from, to))}`);
-}
+};
 
 /**
  * `self/manifest.ts` and `self/packages.ts`, over one `pkg` or `spec` case
@@ -82,20 +82,20 @@ function reportRelative(out: string[], from: string, to: string): void {
  * under one compiler and not the other is a program that compiles with one and
  * not the other, which no golden of one compiler's own output would catch.
  */
-function reportPackage(out: string[], subpath: string, primary: string, fallback: string, manifest: string): void {
+const reportPackage = (out: string[], subpath: string, primary: string, fallback: string, manifest: string): void => {
   const target = nishExportTarget(manifest, subpath, primary, fallback);
   out.push(`pkg ${target === null ? "null" : jsonQuote(target)}`);
-}
+};
 
 /** `parseBareSpecifier`, over one `spec` case: the name and the `exports` key. */
-function reportSpecifier(out: string[], specifier: string): void {
+const reportSpecifier = (out: string[], specifier: string): void => {
   const parsed = parseBareSpecifier(specifier);
   if (parsed === null) {
     out.push("spec null");
     return;
   }
   out.push(`spec ${jsonQuote(parsed.name)} ${jsonQuote(parsed.subpath)}`);
-}
+};
 
 /**
  * The map, against the same cases: insert in order, look every key up, then
@@ -103,7 +103,7 @@ function reportSpecifier(out: string[], specifier: string): void {
  * what is compared is the iteration order too — the reason for the dense
  * entry list in `self/map.ts`.
  */
-function reportMap(out: string[], keys: string[]): void {
+const reportMap = (out: string[], keys: string[]): void => {
   const map = new StringMap();
   let i = 0;
   while (i < keys.length) {
@@ -135,13 +135,13 @@ function reportMap(out: string[], keys: string[]): void {
     }
   }
   out.push(`set size ${set.size()} added ${added}`);
-}
+};
 
 /**
  * Growth: 300 keys is past four rehashes from the initial 16 buckets, so this
  * is the check that `grow` re-files every entry and keeps insertion order.
  */
-function reportGrowth(out: string[]): void {
+const reportGrowth = (out: string[]): void => {
   const map = new StringMap();
   let i = 0;
   while (i < 300) {
@@ -181,7 +181,7 @@ function reportGrowth(out: string[]): void {
   }
   out.push(`grow size ${big.size()} wrong ${wrong} slots ${big.slots.length} strays ${strays}`);
   out.push(`grow order ${jsonQuote(big.keyAt(0))} ${jsonQuote(big.keyAt(99999))}`);
-}
+};
 
 /**
  * The probe's two filters, each turned away on purpose. The first is a key
@@ -190,7 +190,7 @@ function reportGrowth(out: string[]): void {
  * it on. The second is a real FNV-1a collision, found by a birthday search:
  * the hash matches too, and only the string compare tells the keys apart.
  */
-function reportProbe(out: string[]): void {
+const reportProbe = (out: string[]): void => {
   const resident = toU32(hashString("k0"));
   let i = 1;
   let twin = "";
@@ -233,9 +233,9 @@ function reportProbe(out: string[]): void {
   out.push(
     `probe pack ${toI32(fingerprint(top))} ${entryOf(top)} ${top !== 0 ? 1 : 0} ${toI32(fingerprint(bottom))} ${entryOf(bottom)} ${bottom !== 0 ? 1 : 0}`
   );
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   if (process.argv.length < 2) {
     console.error("usage: support <cases.txt>");
     return 2;
@@ -317,4 +317,4 @@ export function main(): number {
 
   write(`${out.join("\n")}\n`);
   return 0;
-}
+};

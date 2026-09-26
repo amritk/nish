@@ -187,7 +187,7 @@ const skip = (reason) => {
   console.log(`SKIP  ${reason}`);
   skipped.push(reason);
 };
-function check(name, ok, detail) {
+const check = (name, ok, detail) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
   if (ok) { passes++; }
   else {
@@ -202,7 +202,7 @@ function check(name, ok, detail) {
     }
   }
   return ok;
-}
+};
 const has = (tool) => spawnSync("which", [tool]).status === 0;
 const HAS_LLVM_AS = has("llvm-as");
 const HAS_CLANG = has("clang");
@@ -305,18 +305,14 @@ const summarise = () => {
  * correctly. `llvm-as` runs on the emitted file rather than the golden, so the
  * placeholder never reaches a verifier.
  */
-function normaliseProducer(ir) {
-  return ir.replace(/producer: "nish [^"]*"/g, 'producer: "nish <version>"');
-}
+const normaliseProducer = (ir) => ir.replace(/producer: "nish [^"]*"/g, 'producer: "nish <version>"');
 
 /** Module body with the `; ModuleID` / `source_filename` header removed. */
-function stripHeader(ir) {
-  return ir
+const stripHeader = (ir) => ir
     .split("\n")
     .filter((l) => !l.startsWith(";") && !l.startsWith("source_filename"))
     .join("\n")
     .trim();
-}
 
 /**
  * Every `--json` object a compile printed. A line that does not parse is kept
@@ -415,6 +411,31 @@ const cases = fs
 const caseArgs = (name) => {
   const file = path.join(casesDir, `${name}.args`);
   return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : [];
+};
+
+/**
+ * `<name>.env`: one `NAME=value` per line, layered over the environment the
+ * harness inherited. A case that reads the environment (`getenv`, WP19 R1)
+ * cannot pin the answer itself — the language has no `setenv` — so the runner
+ * is the only place the value can come from, and a golden that depended on
+ * the developer's own environment would not be a golden. Blank lines and `#`
+ * comments are ignored; `NAME=` sets an empty value, which is a *set*
+ * variable and not the same as leaving it out, and a bare `NAME` unsets it.
+ */
+const caseEnv = (file) => {
+  if (!fs.existsSync(file)) { return process.env; }
+  const env = { ...process.env };
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.trim();
+    if (text.length === 0 || text.startsWith("#")) { continue; }
+    const eq = text.indexOf("=");
+    // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
+    // empty value is a set variable, and `getenv`'s third answer — unset — is
+    // otherwise only as reliable as the developer's own environment.
+    if (eq < 0) { delete env[text]; }
+    else if (eq > 0) { env[text.slice(0, eq)] = text.slice(eq + 1); }
+  }
+  return env;
 };
 
 const selectedCases = cases.filter((name) => !only || name.includes(only));
@@ -555,31 +576,6 @@ if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes
       ? "(one of the two cases did not compile)"
       : `--- global\n${global}\n--- imported\n${imported}`
   );
-}
-
-/**
- * `<name>.env`: one `NAME=value` per line, layered over the environment the
- * harness inherited. A case that reads the environment (`getenv`, WP19 R1)
- * cannot pin the answer itself — the language has no `setenv` — so the runner
- * is the only place the value can come from, and a golden that depended on
- * the developer's own environment would not be a golden. Blank lines and `#`
- * comments are ignored; `NAME=` sets an empty value, which is a *set*
- * variable and not the same as leaving it out, and a bare `NAME` unsets it.
- */
-function caseEnv(file) {
-  if (!fs.existsSync(file)) { return process.env; }
-  const env = { ...process.env };
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const text = line.trim();
-    if (text.length === 0 || text.startsWith("#")) { continue; }
-    const eq = text.indexOf("=");
-    // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
-    // empty value is a set variable, and `getenv`'s third answer — unset — is
-    // otherwise only as reliable as the developer's own environment.
-    if (eq < 0) { delete env[text]; }
-    else if (eq > 0) { env[text.slice(0, eq)] = text.slice(eq + 1); }
-  }
-  return env;
 }
 
 // ---- WP10: diagnostics ------------------------------------------------------------
@@ -1024,18 +1020,18 @@ if (!only || "performance".includes(only)) {
   // 20, 26, 36, 42, which is the file read top to bottom; with the sort removed
   // the padding pair leads, which is what WP15 §8 said blocked the tenth rule
   // until the order was written down.
-  const passes = compile("diag_order_pass1", "diag_order_pass1_report.ll");
-  const passLines = summaries(passes.stderr);
+  const passReport = compile("diag_order_pass1", "diag_order_pass1_report.ll");
+  const passLines = summaries(passReport.stderr);
   check(
     "performance: a pass-1 warning is reported at its place in source order, not ahead of every pass-2 warning in its file",
-    passes.status === 0 &&
+    passReport.status === 0 &&
       passLines.length === 4 &&
       positions(passLines) === "20:5,26:14,36:5,42:14" &&
       passLines[0].includes("performance: `out` is rebuilt from its own value") &&
       passLines[1].includes("performance: `Slot` is 24 bytes and would be 16") &&
       passLines[2].includes("performance: `s` is rebuilt from its own value") &&
       passLines[3].includes("performance: `Frame` is 24 bytes and would be 16"),
-    passes.stderr
+    passReport.stderr
   );
 
   // The tenth rule (NL9010). §8's hint column asks for three things -- the size
@@ -1047,10 +1043,10 @@ if (!only || "performance".includes(only)) {
   // is what stops an implementer compiling.
   const pad = compile("perf_padding", "perf_padding_report.ll");
   const padLines = summaries(pad.stderr);
-  const padSentence = (name, order) =>
+  const padSentence = (name, report) =>
     `performance: \`${name}\` is 24 bytes and would be 16 with the same fields in a different order, so 8 bytes ` +
     "of every value are padding the alignment rules insert and nothing reads: declare the fields widest first " +
-    `\u2014 \`${order}\``;
+    `\u2014 \`${report}\``;
   const implementersTail =
     " \u2014 here and in any class that `implements` it, since the interface's fields are its implementers' " +
     "first fields";
@@ -1070,10 +1066,10 @@ if (!only || "performance".includes(only)) {
   // two interfaces and the longer one, declared below it, is the prefix.
   const suffix = compile("perf_padding_suffix", "perf_padding_suffix_report.ll");
   const suffixLines = summaries(suffix.stderr);
-  const suffixSentence = (name, iface, order) =>
+  const suffixSentence = (name, iface, report) =>
     `performance: \`${name}\` is 40 bytes and would be 32 with the same fields in a different order, so 8 bytes ` +
     "of every value are padding the alignment rules insert and nothing reads: keep the first 2 fields where " +
-    `\`implements ${iface}\` puts them and declare the rest in this order \u2014 \`${order}\``;
+    `\`implements ${iface}\` puts them and declare the rest in this order \u2014 \`${report}\``;
   check(
     "performance: a class that implements an interface warns when reordering only the fields after the interface's shrinks it",
     suffix.status === 0 &&
@@ -1092,10 +1088,10 @@ if (!only || "performance".includes(only)) {
   // singular.
   const gap = compile("perf_padding_suffix_gap", "perf_padding_suffix_gap_report.ll");
   const gapLines = summaries(gap.stderr);
-  const gapSentence = (name, size, packed, iface, order) =>
+  const gapSentence = (name, size, packed, iface, report) =>
     `performance: \`${name}\` is ${size} bytes and would be ${packed} with the same fields in a different order, ` +
     `so ${size - packed} bytes of every value are padding the alignment rules insert and nothing reads: keep the ` +
-    `first field where \`implements ${iface}\` puts it and declare the rest in this order \u2014 \`${order}\``;
+    `first field where \`implements ${iface}\` puts it and declare the rest in this order \u2014 \`${report}\``;
   check(
     "performance: a class whose interface prefix ends off alignment is told the order that fills the gap, and the size it reaches",
     gap.status === 0 &&
@@ -1694,7 +1690,7 @@ const linkTests = fs.existsSync(linkDir)
 const HAS_OPT = has("opt");
 
 /** Parse `define`/`declare` headers into { name -> { kind, sig, attrs } } with attribute groups resolved. */
-function functionHeaders(ir) {
+const functionHeaders = (ir) => {
   const groups = new Map();
   for (const m of ir.matchAll(/^attributes (#\d+) = \{ (.*) \}$/gm)) { groups.set(m[1], m[2]); }
   const out = new Map();
@@ -1712,7 +1708,7 @@ function functionHeaders(ir) {
     out.set(m[3], { kind: m[1], sig: `${m[2]} (${params})`, attrs: m[5] ? (groups.get(m[5]) ?? m[5]) : "" });
   }
   return out;
-}
+};
 
 for (const name of linkTests) {
   if (only && !name.includes(only)) { continue; }
@@ -1834,13 +1830,16 @@ if (!only || "par_dst_short".includes(only)) {
   const fixture = linkTests.includes("par_dst_short");
   const exe = path.join(buildDir, "link", "par_dst_short", "app");
   const run = fixture && fs.existsSync(exe) ? spawnSync(exe) : null;
+  const missing = fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/par_dst_short";
   check(
     "link/par_dst_short: exits 1 with `parallelMapInto: dst has 2 elements and src has 3` on stderr",
     run !== null &&
       run.status === 1 &&
       String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
       String(run.stdout).trim() === "before",
-    run === null ? (fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/par_dst_short") : `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+    run !== null
+      ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+      : missing
   );
 }
 
@@ -3398,6 +3397,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     // to release, which is what made the missing sites visible in the first place.
     const probeSrc = [
       `export const probe = (${params}): ${returnType} => {`,
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
       "  const label = `probe ${arg0}`;",
       "  console.log(label);",
       `  return ${builtin}(${args});`,
@@ -4031,6 +4031,18 @@ if (!only) {
 }
 
 // ---- WP7: the runtime .text budgets ------------------------------------------------
+/** Why a runtime half's `.text*` budget check failed: the compile, the measurement, or the size. */
+const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
+  if (cc.status !== 0) { return String(cc.stderr); }
+  if (sections.length === 0) { return `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`; }
+  return (
+    `measured ${total} bytes (${breakdown}), budget ${budget}, ` +
+    `over by ${total - budget}.\n` +
+    `Shrink the addition, or raise ${constant} in tests/run.js and add the ` +
+    "measured row to docs/wp7-runtime.md saying why it moved."
+  );
+};
+
 // The C runtime is linked into every native binary, so its machine code is a cost every
 // program that touches the runtime pays. The budget was a row in docs/wp7-runtime.md and
 // a reviewer's memory until this check, which is why nobody noticed the tree drift from
@@ -4193,14 +4205,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       check(
         `${label}: .text* at -Oz fits the ${budget} byte budget`,
         cc.status === 0 && sections.length > 0 && total <= budget,
-        cc.status !== 0
-          ? String(cc.stderr)
-          : sections.length === 0
-            ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
-            : `measured ${total} bytes (${breakdown}), budget ${budget}, ` +
-              `over by ${total - budget}.\n` +
-              `Shrink the addition, or raise ${constant} in tests/run.js and add the ` +
-              "measured row to docs/wp7-runtime.md saying why it moved."
+        sizeFailure(cc, sz, sections, total, breakdown, budget, constant)
       );
     }
   }
@@ -4338,7 +4343,9 @@ if (!only || "interop".includes(only)) {
   let tsc = path.join(root, "node_modules", "typescript", "bin", "tsc");
   try {
     tsc = require.resolve("typescript/bin/tsc");
-  } catch {}
+  } catch {
+    // Not resolvable from here: keep the node_modules path above.
+  }
   /** Compile <src> to build/test/interop/<stem>.ll (or <stem>/ for a multi-module program) plus the requested sidecars. */
   const emit = (src, extra, stem = path.basename(src, ".ts"), multi = false) => {
     const out = multi ? path.join(interopDir, stem) + path.sep : path.join(interopDir, `${stem}.ll`);
@@ -4809,16 +4816,16 @@ if (!only || "interop".includes(only)) {
       ].join("\n")
     );
     const genExe = path.join(interopDir, "interop_generic_fn_driver");
-    const cc = spawnSync(
+    const genCc = spawnSync(
       "clang",
       [...strictC, "-O2", sidecar("interop_generic_fn", "ll"), path.join(runtimeDir, "runtime.c"), genDriver, "-o", genExe],
       { cwd: root }
     );
-    const run = cc.status === 0 ? spawnSync(genExe) : null;
+    const genRun = genCc.status === 0 ? spawnSync(genExe) : null;
     check(
       "a -Werror C driver calls every kind of instantiation through interop_generic_fn.h",
-      run !== null && String(run.stdout).trim() === "41 9 5 1 6",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+      genRun !== null && String(genRun.stdout).trim() === "41 9 5 1 6",
+      String(genCc.stderr) + (genRun ? String(genRun.stdout) + String(genRun.stderr) : "")
     );
   }
 
@@ -4968,16 +4975,16 @@ if (!only || "interop".includes(only)) {
       ].join("\n")
     );
     const methodExe = path.join(interopDir, "gen_method_export_driver");
-    const cc = spawnSync(
+    const methodCc = spawnSync(
       "clang",
       [...strictC, "-O2", sidecar("gen_method_export", "ll"), path.join(runtimeDir, "runtime.c"), methodDriver, "-o", methodExe],
       { cwd: root }
     );
-    const run = cc.status === 0 ? spawnSync(methodExe) : null;
+    const methodRun = methodCc.status === 0 ? spawnSync(methodExe) : null;
     check(
       "a -Werror C driver calls generic-method instantiations through gen_method_export.h",
-      run !== null && String(run.stdout).trim() === "4 22 5 3",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+      methodRun !== null && String(methodRun.stdout).trim() === "4 22 5 3",
+      String(methodCc.stderr) + (methodRun ? String(methodRun.stdout) + String(methodRun.stderr) : "")
     );
   }
   const genMethodDts = genMethodText("d.ts");
@@ -5028,7 +5035,7 @@ if (!only || "interop".includes(only)) {
       ].join("\n")
     );
     const clashExe = path.join(interopDir, "interop_generic_collision_driver");
-    const cc = spawnSync(
+    const clashCc = spawnSync(
       "clang",
       [
         ...strictC,
@@ -5041,11 +5048,11 @@ if (!only || "interop".includes(only)) {
       ],
       { cwd: root }
     );
-    const run = cc.status === 0 ? spawnSync(clashExe) : null;
+    const clashRun = clashCc.status === 0 ? spawnSync(clashExe) : null;
     check(
       "a -pedantic C driver calls both identity_i32 and nish_gen_identity_i32 through one header",
-      run !== null && String(run.stdout).trim() === "41 40",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+      clashRun !== null && String(clashRun.stdout).trim() === "41 40",
+      String(clashCc.stderr) + (clashRun ? String(clashRun.stdout) + String(clashRun.stderr) : "")
     );
   }
 
@@ -5357,9 +5364,9 @@ if (!only || "interop".includes(only)) {
       syn.status === 0,
       String(syn.stderr)
     );
-    const driver = path.join(interopDir, "res_driver.c");
+    const resDriver = path.join(interopDir, "res_driver.c");
     fs.writeFileSync(
-      driver,
+      resDriver,
       [
         "#include <stdio.h>",
         '#include "res_export.h"',
@@ -5384,19 +5391,19 @@ if (!only || "interop".includes(only)) {
         "",
       ].join("\n")
     );
-    const exe = path.join(interopDir, "res_driver");
-    const cc = spawnSync(
+    const resExe = path.join(interopDir, "res_driver");
+    const resCc = spawnSync(
       "clang",
-      [...strictC, "-O2", sidecar("res_export", "ll"), path.join(runtimeDir, "runtime.c"), driver, "-o", exe],
+      [...strictC, "-O2", sidecar("res_export", "ll"), path.join(runtimeDir, "runtime.c"), resDriver, "-o", resExe],
       { cwd: root }
     );
-    const run = cc.status === 0 ? spawnSync(exe) : null;
+    const resRun = resCc.status === 0 ? spawnSync(resExe) : null;
     check(
       "a -Werror C driver calls a by-value Result in and out, and a pointer Result, through res_export.h",
-      run !== null &&
-        String(run.stdout).trim().split("\n").join(" | ") ===
+      resRun !== null &&
+        String(resRun.stdout).trim().split("\n").join(" | ") ===
           "half(8) ok 4 via 4 | half(9) err 9 via -9 | C-built 41 -5 | checkPort 0 0 1 | openFile 0 2",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+      String(resCc.stderr) + (resRun ? String(resRun.stdout) + String(resRun.stderr) : "")
     );
   }
   const resShim = res.status === 0 ? fs.readFileSync(sidecar("res_export", "napi.c"), "utf8") : "";
@@ -5682,12 +5689,12 @@ if (!only || "interop".includes(only)) {
     const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8");
     const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8");
     const exports = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"));
-    const declared = [...exports.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
-    const missing = declared.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs));
+    const declaredExports = [...exports.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
+    const missing = declaredExports.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs));
     check(
       `${stem}.mjs implements every function ${stem}.d.ts declares (${declares})`,
-      declared.length === declares && missing.length === 0,
-      `declared ${declared.length}, expected ${declares}; declared but not loaded: ${missing.join(", ")}`
+      declaredExports.length === declares && missing.length === 0,
+      `declared ${declaredExports.length}, expected ${declares}; declared but not loaded: ${missing.join(", ")}`
     );
   }
   // Both halves of the skip message. No corpus program has a function whose
@@ -5697,6 +5704,7 @@ if (!only || "interop".includes(only)) {
     skipSrc,
     [
       "export function spell(n: i32): string {",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
       "  return `${n}`;",
       "}",
       // WP30's negative half. Adding the unsigned widths to the typed-view
@@ -5721,9 +5729,9 @@ if (!only || "interop".includes(only)) {
       "",
     ].join("\n")
   );
-  const skipped = emit(skipSrc, ["--emit-dts", sidecar("skip_reasons", "d.ts")]);
-  const skipDts = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "d.ts"), "utf8") : "";
-  const skipMjs = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "mjs"), "utf8") : "";
+  const skippedDts = emit(skipSrc, ["--emit-dts", sidecar("skip_reasons", "d.ts")]);
+  const skipDts = skippedDts.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "d.ts"), "utf8") : "";
+  const skipMjs = skippedDts.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "mjs"), "utf8") : "";
   check(
     "a skipped function names the argument or the result, and the type, that stopped it",
     stringsDts.includes(
@@ -5879,9 +5887,9 @@ if (!only || "interop".includes(only)) {
   if (arrays.status === 0) {
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("arrays", "h")]);
     check("arrays.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
-    const driver = path.join(interopDir, "arrays_driver.c");
+    const arraysDriver = path.join(interopDir, "arrays_driver.c");
     fs.writeFileSync(
-      driver,
+      arraysDriver,
       [
         "#include <stdio.h>",
         '#include "arrays.h"',
@@ -5898,18 +5906,18 @@ if (!only || "interop".includes(only)) {
         "",
       ].join("\n")
     );
-    const exe = path.join(interopDir, "arrays_driver");
-    const cc = spawnSync(
+    const arraysExe = path.join(interopDir, "arrays_driver");
+    const arraysCc = spawnSync(
       "clang",
-      [...strictC, "-O2", sidecar("arrays", "ll"), path.join(runtimeDir, "runtime.c"), driver, "-o", exe],
+      [...strictC, "-O2", sidecar("arrays", "ll"), path.join(runtimeDir, "runtime.c"), arraysDriver, "-o", arraysExe],
       { cwd: root }
     );
-    const run = cc.status === 0 ? spawnSync(exe) : null;
+    const arraysRun = arraysCc.status === 0 ? spawnSync(arraysExe) : null;
     check(
       "a -Werror C driver passes a stack-built nish_array through arrays.h and reads a returned one",
-      run !== null &&
-        String(run.stdout).trim() === "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9",
-      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+      arraysRun !== null &&
+        String(arraysRun.stdout).trim() === "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9",
+      String(arraysCc.stderr) + (arraysRun ? String(arraysRun.stdout) + String(arraysRun.stderr) : "")
     );
   }
   if (arrays.status === 0 && (has("wasm-ld") || hasNodeHeaders)) {
@@ -6260,9 +6268,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // whichever happened to come first in the file and say nothing about the others,
     // which is the shape of the defect rather than a check on it.
     const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l));
-    const modules = actual.split(", ");
+    const listedModules = actual.split(", ");
     const holes = gateLines.flatMap((line) =>
-      modules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
+      listedModules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
     );
     check(
       `release.yml's ${gateLines.length} presence gates each name every std module, so none can ship missing (${actual})`,
@@ -7067,7 +7075,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     let missingObject = null;
     try {
       missingObject = JSON.parse(missingJson.stdout.trim());
-    } catch {}
+    } catch {
+      // Not JSON: missingObject stays null and the check below fails on it.
+    }
     check(
       "the self-hosted compiler: an unreadable root exits 1 and --json makes it an object",
       missing.status === 1 &&
@@ -7912,7 +7922,9 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   let tscBin = path.join(root, "node_modules", "typescript", "bin", "tsc");
   try {
     tscBin = require.resolve("typescript/bin/tsc");
-  } catch {}
+  } catch {
+    // Not resolvable from here: keep the node_modules path above.
+  }
   const declarations = path.join(root, "runtime", "nish.d.ts");
   /** Type-check `files` against the ambient declarations with a project of their own. */
   const typeCheck = (name, files) => {
@@ -9141,6 +9153,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       fs.mkdirSync(work, { recursive: true });
       fs.writeFileSync(
         path.join(work, "prog.ts"),
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         'import { trim } from "nish/text";\n\nexport const main = (): number => {\n  write(`[${trim("  padded  ")}]\\n`);\n  return 0;\n};\n'
       );
       const onPath = (args) =>
@@ -9334,9 +9347,12 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
         "    return 1;",
         "  }",
         '  const link = realpathSync("link.txt");',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         '  console.log(`same: ${link !== null && link === target}`);',
         '  const viaDir = realpathSync("sub/up/target.txt");',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         '  console.log(`viaDir: ${viaDir !== null && viaDir === target}`);',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
         '  console.log(`missing: ${realpathSync("absent-6b2f") === null}`);',
         "  return 0;",
         "}",
@@ -9574,9 +9590,9 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
   // asset and a user, so the row it compares against had better be derivable from the
   // triple rather than typed: `aarch64-apple-darwin` is `Darwin-arm64` and nothing else.
   const uname = (triple) => {
-    const [arch, , os] = triple.split("-");
-    const sys = { linux: "Linux", darwin: "Darwin" }[os];
-    const machine = os === "darwin" && arch === "aarch64" ? "arm64" : arch;
+    const [arch, , osName] = triple.split("-");
+    const sys = { linux: "Linux", darwin: "Darwin" }[osName];
+    const machine = osName === "darwin" && arch === "aarch64" ? "arm64" : arch;
     return sys ? `${sys}-${machine}` : undefined;
   };
   const mishosted = rows.filter((t) => t.host !== uname(t.triple));
@@ -10171,21 +10187,21 @@ if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
   const dir = path.join(buildDir, "wp19-verify-binaries");
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const run = (a, b, os) =>
+  const run = (a, b, osName) =>
     spawnSync("bash", [vb, a, b], {
       cwd: root,
       encoding: "utf8",
-      env: os === undefined ? process.env : { ...process.env, NISH_UNAME_S: os },
+      env: osName === undefined ? process.env : { ...process.env, NISH_UNAME_S: osName },
     });
 
   const same1 = path.join(dir, "same1");
   const same2 = path.join(dir, "same2");
   fs.writeFileSync(same1, "the same twenty-eight bytes!");
   fs.writeFileSync(same2, "the same twenty-eight bytes!");
-  for (const os of ["Linux", "Darwin"]) {
-    const r = run(same1, same2, os);
+  for (const osName of ["Linux", "Darwin"]) {
+    const r = run(same1, same2, osName);
     check(
-      `verify-binaries: byte-identical binaries pass on ${os}`,
+      `verify-binaries: byte-identical binaries pass on ${osName}`,
       r.status === 0 && r.stdout.includes("byte-identical"),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     );
@@ -10282,7 +10298,7 @@ if (!only || "verify-binaries".includes(only) || "wp19".includes(only)) {
       const bytes = fs.readFileSync(dbgA);
       // Flip a byte inside the ELF header's padding-free entry point area rather than in
       // the appended debug section, so stripping cannot remove the difference.
-      bytes[0x18] = bytes[0x18] ^ 0xff;
+      bytes[0x18] ^= 0xff;
       fs.writeFileSync(codeB, bytes);
       const caught = run(codeA, codeB, "Darwin");
       check(
@@ -10998,11 +11014,11 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   ]) {
     const spliced = arrowify(source, "splice.ts");
     const reparsed = ts.createSourceFile("splice.ts", spliced.text, ts.ScriptTarget.Latest, true);
-    const rewritten = spliced.changed === 1 && spliced.skipped.length === 0;
+    const wasRewritten = spliced.changed === 1 && spliced.skipped.length === 0;
     const refused = spliced.changed === 0 && spliced.skipped.length === 1 && spliced.text === source;
     check(
       `WP22: the codemod splices from the tree, not from a text search -- ${what}`,
-      reparsed.parseDiagnostics.length === 0 && (expected === "rewritten" ? rewritten : refused),
+      reparsed.parseDiagnostics.length === 0 && (expected === "rewritten" ? wasRewritten : refused),
       `${spliced.changed} rewritten, ${spliced.skipped.length} left alone, ` +
         `${reparsed.parseDiagnostics.length} parse error(s): ${JSON.stringify(spliced.text)}`
     );

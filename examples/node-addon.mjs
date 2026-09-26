@@ -23,13 +23,13 @@ const file = path.resolve(process.argv[2] ?? "build/add.node");
 const addon = require(file);
 
 /** Call `fn`, printing the TypeError the shim throws for a wrong argument. */
-function attempt(label, fn) {
+const attempt = (label, fn) => {
   try {
     console.log(`${label} = ${fn()}`);
   } catch (err) {
     console.log(`${label} throws: ${err.message}`);
   }
-}
+};
 
 if (typeof addon.add === "function") {
   console.log(`add(2, 3) = ${addon.add(2, 3)}`);

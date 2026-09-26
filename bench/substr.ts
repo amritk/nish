@@ -34,7 +34,7 @@
 // Timed in alternating rounds, reported as the minimum of REPS, so a machine
 // drifting under the run lands on both.
 
-function text(bytes: number): string {
+const text = (bytes: number): string => {
   const parts: string[] = [];
   let n = 0;
   while (n < bytes) {
@@ -44,9 +44,9 @@ function text(bytes: number): string {
   // A whole number of 16-byte slices, so the guard never fails and the two
   // scans return the same checksum.
   return parts.join("").substring(0, bytes);
-}
+};
 
-function clampedScan(s: string, rounds: number): number {
+const clampedScan = (s: string, rounds: number): number => {
   let total = 0;
   for (let r = 0; r < rounds; r++) {
     let at = 0;
@@ -59,9 +59,9 @@ function clampedScan(s: string, rounds: number): number {
     }
   }
   return total;
-}
+};
 
-function provenScan(s: string, rounds: number): number {
+const provenScan = (s: string, rounds: number): number => {
   let total = 0;
   for (let r = 0; r < rounds; r++) {
     let at = 0;
@@ -74,9 +74,9 @@ function provenScan(s: string, rounds: number): number {
     }
   }
   return total;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const BYTES = 40960; // 2,560 slices a round, and a multiple of 16
   const ROUNDS = 400;
   const REPS = 15;
@@ -104,4 +104,4 @@ export function main(): number {
   console.log(`clamped  ${clampedUs} us`);
   console.log(`proven   ${provenUs} us`);
   return 0;
-}
+};

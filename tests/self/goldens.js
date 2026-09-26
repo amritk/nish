@@ -74,17 +74,17 @@ const BUILD = path.join(root, "build", "self", "goldens");
 const MAX_LINE = 160;
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
-function firstLine(output) {
+const firstLine = (output) => {
   const line = output.trim().split("\n")[0] ?? "";
   return line.replace(/^[^:]*:\d+:\d+: /, "");
-}
+};
 
 /**
  * One stage1 program, built out of live sources by the seed. The binaries land
  * under `build/` and are rebuilt on every run: a golden compared against a
  * stale binary is a golden comparing itself with yesterday.
  */
-function link(seed, source, stem) {
+const link = (seed, source, stem) => {
   const out = path.join(BUILD, stem);
   fs.mkdirSync(BUILD, { recursive: true });
   const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
@@ -92,7 +92,7 @@ function link(seed, source, stem) {
   return {
     run: (args) => spawnSync(out, args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }),
   };
-}
+};
 
 /**
  * The dump's lines, blanks dropped — `checked_oracle.js`'s normalisation —
@@ -106,25 +106,19 @@ function link(seed, source, stem) {
  * constant in the corpus; only the digits are let go. `tests/run.js` does the
  * same to the DWARF producer, for the same reason.
  */
-function dumpLines(dump) {
-  return dump
+const dumpLines = (dump) => dump
     .split("\n")
     .filter((line) => line.length > 0)
     .map((line) => line.replace(/^(const VERSION: string = )"[^"]*"/, '$1"<version>"'));
-}
 
 /** `tests/cases/add.ts --number-mode f64`: the program as its record names it. */
-function programLabel(named, flags) {
-  return flags.length > 0 ? `${named} ${flags.join(" ")}` : named;
-}
+const programLabel = (named, flags) => flags.length > 0 ? `${named} ${flags.join(" ")}` : named;
 
-function header(what) {
-  return [
+const header = (what) => [
     `# ${what}`,
     "# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).",
     "# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.",
   ];
-}
 
 /**
  * `--emit-checked` over the whole corpus, in two files: the construct corpus
@@ -138,7 +132,7 @@ function header(what) {
  * would multiply one edit to one module by the 57 entries that import it, and
  * a golden nobody can read the diff of is a hash with extra bytes.
  */
-function produceChecked(seed) {
+const produceChecked = (seed) => {
   const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked");
   if (dumper.error !== undefined) { return { error: dumper.error }; }
 
@@ -246,15 +240,14 @@ function produceChecked(seed) {
     ]),
     note: `${outsidePrograms + selfPrograms} programs, ${outsideLines + selfLines} dump lines`,
   };
-}
+};
 
 /**
  * One of the three driver programs the dying oracles run. Their stdout is the
  * whole of what those oracles compare — `types_oracle.js` rebuilds it from
  * `dist/types.js` and diffs it line by line — so the stdout is the golden.
  */
-function produceDriver(name, source, args, what) {
-  return (seed) => {
+const produceDriver = (name, source, args, what) => (seed) => {
     const driver = link(seed, source, name);
     if (driver.error !== undefined) { return { error: driver.error }; }
     const run = driver.run(args);
@@ -265,7 +258,6 @@ function produceDriver(name, source, args, what) {
       note: `${lines.length - 1} lines`,
     };
   };
-}
 
 /**
  * The four goldens, each named for the oracle whose coverage it holds. The
@@ -314,12 +306,14 @@ const GOLDEN_SET = [
 ];
 
 /** The first differences between two texts, bounded, with long lines cut. */
-function diff(want, got, limit) {
+const diff = (want, got, limit) => {
   const a = want.split("\n");
   const b = got.split("\n");
   const out = [];
-  const cut = (line) =>
-    line === undefined ? "<end of file>" : line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line;
+  const cut = (line) => {
+    if (line === undefined) { return "<end of file>"; }
+    return line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line;
+  };
   let total = 0;
   let shown = 0;
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -331,11 +325,9 @@ function diff(want, got, limit) {
     }
   }
   return { total, shown, out };
-}
+};
 
-function goldenPath(file) {
-  return path.join(GOLDENS, file);
-}
+const goldenPath = (file) => path.join(GOLDENS, file);
 
 /**
  * The seed this file's rule allows: `given` (a `--seed` value), then
@@ -356,7 +348,7 @@ const seedWithoutStage0 = (given) => {
 };
 
 /** `--seed` and `--lines` take a value; everything else is a flag or a golden's name. */
-function parse(argv) {
+const parse = (argv) => {
   const options = { update: false, verbose: false, lines: 10, seed: undefined, names: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -367,9 +359,9 @@ function parse(argv) {
     else { options.names.push(arg); }
   }
   return options;
-}
+};
 
-function main(argv) {
+const main = (argv) => {
   const { update, verbose, lines, seed: given, names: named } = parse(argv);
   const limit = verbose ? Number.POSITIVE_INFINITY : lines;
   const wanted = named.length > 0 ? GOLDEN_SET.filter((g) => named.includes(g.name)) : GOLDEN_SET;
@@ -403,7 +395,9 @@ function main(argv) {
       if (update) {
         const before = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null;
         fs.writeFileSync(at, text);
-        summary.push(`${file}: ${before === text ? "unchanged" : before === null ? "written" : "updated"}`);
+        let verb = before === null ? "written" : "updated";
+        if (before === text) { verb = "unchanged"; }
+        summary.push(`${file}: ${verb}`);
         continue;
       }
       if (!fs.existsSync(at)) {
@@ -438,7 +432,7 @@ function main(argv) {
     `${summary.length} goldens ${update ? "written" : "agree"}, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB of goldens (seed ${seed.label})\n`
   );
   return failed === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
-export { GOLDEN_SET, defaultSeedSpec, resolveSeed, seedWithoutStage0 };
+export { GOLDEN_SET, seedWithoutStage0 };

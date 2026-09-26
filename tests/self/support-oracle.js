@@ -58,40 +58,38 @@ const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/;
 // ---- The pieces the driver prints -----------------------------------------------------
 
 /** FNV-1a as an i32, the hash `self/map.ts` uses; `Math.imul` is its wrapping multiply. */
-function hashString(s) {
+const hashString = (s) => {
   let hash = -2128831035;
   for (const byte of Buffer.from(s, "utf8")) {
     hash = Math.imul(hash ^ byte, 16777619);
   }
   return hash;
-}
+};
 
 /**
  * `path.posix.normalize` with the trailing slash `self/paths.ts` drops: a
  * module path names a file, so `a/b/` and `a/b` must be one identity and not
  * two.
  */
-function normalizePath(p) {
+const normalizePath = (p) => {
   const normalized = path.posix.normalize(p);
   return normalized.length > 1 && normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
-}
+};
 
-function resolvePath(base, spec) {
+const resolvePath = (base, spec) => {
   if (spec.startsWith("/")) { return normalizePath(spec); }
   if (base.length === 0) { return normalizePath(spec); }
   return normalizePath(path.posix.join(base, spec));
-}
+};
 
-function resolveModule(base, spec) {
+const resolveModule = (base, spec) => {
   const resolved = resolvePath(base, spec);
   if (resolved.endsWith(".js")) { return `${resolved.slice(0, -3)}.ts`; }
   return resolved.endsWith(".ts") ? resolved : `${resolved}.ts`;
-}
+};
 
 /** `self/paths.ts`'s `dirname` and `basename` are Node's, so Node is the oracle. */
-function dirname(p) {
-  return path.posix.dirname(p);
-}
+const dirname = (p) => path.posix.dirname(p);
 
 /**
  * `basenameWithout` is the one function here that is *not* Node's: this is a
@@ -99,25 +97,23 @@ function dirname(p) {
  * answers `"///"` for `basename("///", ".ts")` and disagrees with itself
  * about `".ts"`. The rule `self/paths.ts` documents is the one below.
  */
-function basenameWithout(p, suffix) {
+const basenameWithout = (p, suffix) => {
   const name = path.posix.basename(p);
   const strip = suffix.length > 0 && suffix.length < name.length && name.endsWith(suffix);
   return strip ? name.slice(0, -suffix.length) : name;
-}
+};
 
 /** The sign of a byte-wise comparison, which is what a sort reads. */
-function compareStrings(a, b) {
-  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
-}
+const compareStrings = (a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 
 /** The growth policy documented in `self/map.ts`, to check the table actually re-filed. */
-function slotsAfter(entries) {
+const slotsAfter = (entries) => {
   let slots = 16;
   for (let i = 1; i <= entries; i++) {
     if (i * 4 > slots * 3) { slots *= 2; }
   }
   return slots;
-}
+};
 
 // ---- The expected output ---------------------------------------------------------------
 
@@ -125,7 +121,7 @@ function slotsAfter(entries) {
  * The lines Node can answer, in the golden's order. The lines recorded from
  * stage0 (`STAGE0_LINE`) are not among them: those are read from the golden.
  */
-function expected(caseText) {
+const expected = (caseText) => {
   const out = [];
   const texts = [];
   for (const line of caseText.split("\n")) {
@@ -236,7 +232,7 @@ function expected(caseText) {
   out.push(`probe pack ${unpack(slotOf(0xffffffff, 0xffffff - 1))} ${unpack(slotOf(0, 0))}`);
 
   return `${out.join("\n")}\n`;
-}
+};
 
 // ---- Running the driver -----------------------------------------------------------------
 
@@ -245,9 +241,7 @@ function expected(caseText) {
  * what this oracle compares against — `node:path`, `JSON.stringify`, `Buffer`,
  * `Map` — outlives stage0's `src/`, so the compiler that builds the driver has to too.
  */
-function build(seed) {
-  return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
-}
+const build = (seed) => linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
 
 /** `want` against `got` line by line: the differing lines, as a report prints them. */
 const differences = (want, got) => {
@@ -274,7 +268,7 @@ const report = (differing, verbose) => {
   for (const line of verbose ? differing : differing.slice(0, 10)) { process.stdout.write(`${line}\n`); }
 };
 
-async function main(argv) {
+const main = (argv) => {
   const verbose = argv.includes("--verbose");
   const update = argv.includes("--update");
   const seed = seedWithoutStage0(namedSeedSpec(argv));
@@ -338,7 +332,7 @@ async function main(argv) {
     `${want.length - differing.length}/${want.length} lines agree (${recorded} recorded from stage0, checked against the golden), seed ${seed.label}\n`
   );
   return differing.length === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(await main(process.argv.slice(2))); }
 export { expected, build };

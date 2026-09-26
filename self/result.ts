@@ -23,7 +23,7 @@ import { checkExpression } from "./expressions";
 import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes";
 import { CheckedProgram, FunctionSig } from "./program";
 import { Scope } from "./symbols";
-import { R_ERR, R_OK, R_UNKNOWN, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
+import { R_ERR, R_OK, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
 
 // ---- Layout ---------------------------------------------------------------
 

@@ -19,7 +19,6 @@
 
 import { isBuiltinFunction } from "./builtins";
 import { Emitter } from "./emit";
-import { emitIndex } from "./emit-arrays";
 import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit-strings";
 import { internalErrorFor } from "./ice";
 import { N_IDENT, Node } from "./nodes";
@@ -101,7 +100,10 @@ export const emitConversion = (emitter: Emitter, value: string, from: i32, to: i
   if (fromTy === toTy) {
     return value; // i32 <-> u32, i64 <-> u64: the same bits, read differently
   }
-  const op = intBits(from) < intBits(to) ? (isUnsigned(from) ? "zext" : "sext") : "trunc";
+  let op = "trunc";
+  if (intBits(from) < intBits(to)) {
+    op = isUnsigned(from) ? "zext" : "sext";
+  }
   return emitter.fn.emitValue(`${op} ${fromTy} ${value} to ${toTy}`);
 };
 

@@ -34,7 +34,7 @@ import { linkWith, namedSeedSpec, withoutSeed } from "./self/seed.js";
 const root = path.resolve(import.meta.dirname, "..");
 
 /** Byte offset of every UTF-16 index, so the two trees can be compared. */
-function byteOffsets(source) {
+const byteOffsets = (source) => {
   const offsets = new Int32Array(source.length + 1);
   let bytes = 0;
   for (let i = 0; i < source.length; i++) {
@@ -51,7 +51,7 @@ function byteOffsets(source) {
   }
   offsets[source.length] = bytes;
   return offsets;
-}
+};
 
 /**
  * Print the `typescript` tree of `source` in `dump_ast`'s format.
@@ -61,7 +61,7 @@ function byteOffsets(source) {
  * unhandled kind raises, which is how a construct Nish-0 has no node for
  * becomes a skip rather than a silent difference.
  */
-function printTypeScriptTree(source, sf) {
+const printTypeScriptTree = (source, sf) => {
   const offsets = byteOffsets(source);
   const lines = [];
   const at = (i) => offsets[i];
@@ -512,8 +512,8 @@ function printTypeScriptTree(source, sf) {
         const implemented = implementsClause?.types ?? [];
         list(depth + 1, implemented, (t, d) => {
           if (!ts.isIdentifier(t.expression)) { unsupported(node); }
-          const [ts_, te] = span(t);
-          emit(d, "TYPE_REF", ts_, te, t.expression.text);
+          const [tStart, tEnd] = span(t);
+          emit(d, "TYPE_REF", tStart, tEnd, t.expression.text);
           list(d + 1, t.typeArguments ?? [], type);
         });
         list(depth + 1, node.members, member);
@@ -684,9 +684,9 @@ function printTypeScriptTree(source, sf) {
   emit(0, "SOURCE_FILE", 0, Buffer.byteLength(source, "utf8"));
   for (const node of sf.statements) { declaration(node, 1); }
   return lines;
-}
+};
 
-function compare(binary, file) {
+const compare = (binary, file) => {
   const source = fs.readFileSync(file, "utf8");
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
   if (sf.parseDiagnostics !== undefined && sf.parseDiagnostics.length > 0) {
@@ -713,9 +713,9 @@ function compare(binary, file) {
     }
   }
   return { nodes: want.length };
-}
+};
 
-function corpus() {
+const corpus = () => {
   const files = [];
   const dirs = [
     path.join(root, "tests", "cases"),
@@ -736,18 +736,16 @@ function corpus() {
     }
   }
   return files;
-}
+};
 
 /**
  * `self/dump-ast.ts`, linked by the seed rather than by stage0 (WP19 G2.3):
  * what this oracle compares against is the `typescript` parser, which outlives
  * stage0's `src/`, so the compiler that builds its subject has to as well.
  */
-function build(seed) {
-  return linkWith(seed, path.join("self", "dump-ast.ts"), path.join(root, "build", "self", "dump_ast"));
-}
+const build = (seed) => linkWith(seed, path.join("self", "dump-ast.ts"), path.join(root, "build", "self", "dump_ast"));
 
-function main(argv) {
+const main = (argv) => {
   const verbose = argv.includes("--verbose");
   const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
   const seed = seedWithoutStage0(namedSeedSpec(argv));
@@ -786,7 +784,7 @@ function main(argv) {
       `${skipped.length} skipped, seed ${seed.label}\n`
   );
   return failed.length === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { printTypeScriptTree, compare, corpus, build };

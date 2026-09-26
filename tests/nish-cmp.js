@@ -1813,7 +1813,7 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
  * The first candidate holding `scripts/build.sh` wins, which is the predicate
  * the compilers use, checked here against the filesystem instead of assumed.
  */
-function packageRootOf(file) {
+const packageRootOf = (file) => {
   const candidates = [path.join(path.dirname(file), "..")];
   try {
     candidates.push(path.join(path.dirname(fs.realpathSync(file)), ".."));
@@ -1825,7 +1825,7 @@ function packageRootOf(file) {
     if (fs.existsSync(path.join(candidate, "scripts", "build.sh"))) { return path.resolve(candidate); }
   }
   return path.resolve(root);
-}
+};
 
 /**
  * `text` with one compiler's own package root removed, so a path under it is
@@ -1836,11 +1836,11 @@ function packageRootOf(file) {
  * begins with the root's — `/opt/nish` against `/opt/nish-old/std/a.ts` — is
  * left alone. Nothing else is rewritten.
  */
-function withoutOwnRoot(text, ownRoot) {
+const withoutOwnRoot = (text, ownRoot) => {
   if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) { return text; }
   const prefix = ownRoot.endsWith(path.sep) ? ownRoot : `${ownRoot}${path.sep}`;
   return text.split(prefix).join("");
-}
+};
 
 /**
  * `withoutOwnRoot` over inputs a corpus cannot produce, on every run.
@@ -1851,7 +1851,7 @@ function withoutOwnRoot(text, ownRoot) {
  * of comparison logic here that can *hide* something, and it costs microseconds.
  * Returns the reason it failed, or null.
  */
-function selfCheckRoots() {
+const selfCheckRoots = () => {
   const sep = path.sep;
   const cases = [
     [`; ModuleID = '${sep}opt${sep}nish${sep}std${sep}text.ts'`, `${sep}opt${sep}nish`, "; ModuleID = 'std/text.ts'".replace(/\//g, sep)],
@@ -1872,7 +1872,7 @@ function selfCheckRoots() {
     }
   }
   return null;
-}
+};
 
 /**
  * `text` with one compiler's own version removed from the DWARF `producer`, so
@@ -1885,10 +1885,10 @@ function selfCheckRoots() {
  * compiler's version, and the same words anywhere but a `producer:` are all
  * left alone. Nothing else is rewritten.
  */
-function withoutOwnVersion(text, ownVersion) {
+const withoutOwnVersion = (text, ownVersion) => {
   if (ownVersion === undefined || ownVersion === null || ownVersion.length === 0) { return text; }
   return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"');
-}
+};
 
 /**
  * `withoutOwnVersion` over inputs a corpus cannot produce, on every run, for
@@ -1896,7 +1896,7 @@ function withoutOwnVersion(text, ownVersion) {
  * here that can make two differing files look equal. Returns the reason it
  * failed, or null.
  */
-function selfCheckVersions() {
+const selfCheckVersions = () => {
   const unit = (producer) =>
     `!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "${producer}", isOptimized: false)`;
   const cases = [
@@ -1919,7 +1919,7 @@ function selfCheckVersions() {
     }
   }
   return null;
-}
+};
 
 /** `git` in the repository, as `spawnSync` answers it: the caller reads the status. */
 const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -2024,7 +2024,7 @@ const selfCheckNotes = () => {
  * hundred compilations later: a binary built for another platform or a `.js`
  * that is not a compiler fails in a way that names the path the caller gave.
  */
-function resolveCompiler(spec, role) {
+const resolveCompiler = (spec, role) => {
   const file = path.resolve(root, spec);
   const refuse = (why) => ({ error: `${role} ${spec} ${why}` });
   if (!fs.existsSync(file)) { return refuse("does not exist"); }
@@ -2042,38 +2042,35 @@ function resolveCompiler(spec, role) {
   const version = compile(compiler, ["--version"]);
   if (version.status !== 0) { return refuse("is not runnable (`--version` failed)"); }
   return { ...compiler, version: (version.stdout ?? "").trim() };
-}
+};
 
 /**
  * The seed `NISH_BOOTSTRAP` names, or null when there is none. An empty value
  * counts as none: `NISH_BOOTSTRAP= npm test` is how a caller turns the seed
  * off for one run, and reading it as a path would refuse to start instead.
  */
-function seedFromEnvironment() {
+const seedFromEnvironment = () => {
   const seed = process.env.NISH_BOOTSTRAP;
   return seed === undefined || seed === "" ? null : seed;
-}
+};
 
 /** Both compilers, or the first error. */
-function resolvePair(referenceSpec, candidateSpec) {
+const resolvePair = (referenceSpec, candidateSpec) => {
   const reference = resolveCompiler(referenceSpec, "reference");
   if (reference.error !== undefined) { return { error: reference.error }; }
   const candidate = resolveCompiler(candidateSpec, "candidate");
   if (candidate.error !== undefined) { return { error: candidate.error }; }
   return { reference, candidate };
-}
+};
 
-function compile(compiler, args) {
-  return spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
+const compile = (compiler, args) => spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-}
 
 /** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
-function sidecarFlags(dir, stem) {
-  return [
+const sidecarFlags = (dir, stem) => [
     "--emit-header",
     path.join(dir, `${stem}.h`),
     "--emit-dts",
@@ -2081,16 +2078,15 @@ function sidecarFlags(dir, stem) {
     "--emit-napi",
     path.join(dir, `${stem}.napi.c`),
   ];
-}
 
-function fresh(dir) {
+const fresh = (dir) => {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   return dir;
-}
+};
 
 /** Every file under `dir` as `relative path -> bytes`, so a missing file is a difference too. */
-function tree(dir) {
+const tree = (dir) => {
   const out = new Map();
   const walk = (at, prefix) => {
     for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
@@ -2102,13 +2098,13 @@ function tree(dir) {
   };
   if (fs.existsSync(dir)) { walk(dir, ""); }
   return out;
-}
+};
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
-function firstLine(output) {
+const firstLine = (output) => {
   const line = output.trim().split("\n")[0] ?? "";
   return line.replace(/^[^:]*:\d+:\d+: /, "");
-}
+};
 
 /**
  * Where two texts differ, as at most `limit` lines with both spellings — the
@@ -2116,7 +2112,7 @@ function firstLine(output) {
  * attribute changes it in every module and the useful part of that report is
  * the first line of it, not the two million after.
  */
-function excerpt(want, got, limit) {
+const excerpt = (want, got, limit) => {
   const wantLines = want.split("\n");
   const gotLines = got.split("\n");
   const total = Math.max(wantLines.length, gotLines.length);
@@ -2135,7 +2131,7 @@ function excerpt(want, got, limit) {
   if (differing === 0) { return { differing, total, text: "the bytes differ but no line does" }; }
   const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : "";
   return { differing, total, text: `${shown.join("\n")}${more}` };
-}
+};
 
 /**
  * Compile one program with both compilers and compare everything they wrote.
@@ -2154,7 +2150,7 @@ function excerpt(want, got, limit) {
  * construct, and a program nobody compiles the way it is meant to be compiled
  * is not in the comparison at all.
  */
-function compare(pair, work, file, options = {}) {
+const compare = (pair, work, file, options = {}) => {
   const limit = options.lines ?? 3;
   const flags = extraArgs(file);
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
@@ -2265,21 +2261,21 @@ function compare(pair, work, file, options = {}) {
   }
   if (differences.length > 0) { return { differences }; }
   return { files: want.size, lines, rooted, versioned };
-}
+};
 
 /**
  * The declaration covering one difference, or null. Keyed on the program and
  * the file, both optional, so a declaration says exactly as much as its author
  * meant it to and no more.
  */
-function declaredFor(program, surface) {
+const declaredFor = (program, surface) => {
   for (const entry of DECLARED) {
     if (entry.program !== undefined && entry.program !== program) { continue; }
     if (entry.file !== undefined && entry.file !== surface) { continue; }
     return entry;
   }
   return null;
-}
+};
 
 /**
  * Every positive whole program of the corpus, plus the whole programs of
@@ -2287,9 +2283,7 @@ function declaredFor(program, surface) {
  * `ir_oracle.js` walks, from the same module, so the successor compares no
  * less than the oracle it replaces.
  */
-function corpus() {
-  return [...programs(), ...linkPrograms().map((program) => program.main)];
-}
+const corpus = () => [...programs(), ...linkPrograms().map((program) => program.main)];
 
 /**
  * The compiler HEAD builds: `self/compile.ts` linked into `build/self/compile`
@@ -2302,7 +2296,7 @@ function corpus() {
  * must never give by accident. Pass `--candidate` to compare a binary you
  * built yourself and skip this.
  */
-function buildCandidate(seedSpec) {
+const buildCandidate = (seedSpec) => {
   const out = path.join(root, "build", "self", "compile");
   const builder = resolveCompiler(seedSpec, "candidate builder");
   if (builder.error !== undefined) { return { error: builder.error }; }
@@ -2310,7 +2304,7 @@ function buildCandidate(seedSpec) {
   const built = compile(builder, [path.join("self", "compile.ts"), "--link", out]);
   if (built.status !== 0) { return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }; }
   return { path: path.relative(root, out) };
-}
+};
 
 const HELP = `nish-cmp — compile the corpus with two compilers and compare every byte.
 
@@ -2338,7 +2332,7 @@ With no programs named, the whole corpus is compared (tests/self/corpus.js).
 exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
 2 usage or a compiler that would not build`;
 
-function main(argv) {
+const main = (argv) => {
   const options = { lines: 3, sidecars: true };
   let referenceSpec = seedFromEnvironment();
   let candidateSpec = null;
@@ -2552,7 +2546,7 @@ function main(argv) {
       `${refusedNote}${dumpNote}${rootedNote}${versionedNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export {

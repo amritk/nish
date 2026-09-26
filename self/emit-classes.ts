@@ -49,7 +49,6 @@ import { internalErrorFor } from "./ice";
 import {
   N_FALSE,
   N_NULL,
-  N_NUMBER,
   N_STRING,
   N_TEMPLATE,
   N_TRUE,

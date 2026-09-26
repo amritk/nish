@@ -17,7 +17,7 @@
 // file that includes this header therefore link with a plain `clang a.ll b.c`.
 
 import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "./branding";
-import { Compilation, ModuleUnit } from "./compilation";
+import { Compilation, } from "./compilation";
 import {
   banner,
   cAliasReason,

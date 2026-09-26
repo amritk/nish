@@ -138,7 +138,7 @@ const KEYWORDS = new Set([
 ]);
 
 /** Byte offset of every UTF-16 index in `source`, so the two streams can be compared. */
-function byteOffsets(source) {
+const byteOffsets = (source) => {
   const offsets = new Int32Array(source.length + 1);
   let bytes = 0;
   for (let i = 0; i < source.length; i++) {
@@ -155,7 +155,7 @@ function byteOffsets(source) {
   }
   offsets[source.length] = bytes;
   return offsets;
-}
+};
 
 /**
  * The token stream of `source` as `dump_tokens` would print it, or
@@ -163,7 +163,7 @@ function byteOffsets(source) {
  * or comment): the two sides recover differently by design, and a file that
  * does not lex is not evidence about a lexer that agrees.
  */
-function scanWithTypeScript(source) {
+const scanWithTypeScript = (source) => {
   const offsets = byteOffsets(source);
   const lines = [];
   let error;
@@ -215,9 +215,9 @@ function scanWithTypeScript(source) {
     if (kind === ts.SyntaxKind.EndOfFileToken) { break; }
   }
   return { lines };
-}
+};
 
-function compare(binary, file) {
+const compare = (binary, file) => {
   const source = fs.readFileSync(file, "utf8");
   const oracle = scanWithTypeScript(source);
   if (oracle.error !== undefined) { return { skipped: oracle.error }; }
@@ -235,9 +235,9 @@ function compare(binary, file) {
     }
   }
   return { tokens: want.length };
-}
+};
 
-function corpus() {
+const corpus = () => {
   const dirs = [path.join(root, "tests", "cases"), path.join(root, "examples"), path.join(root, "self")];
   const files = [];
   for (const dir of dirs) {
@@ -260,7 +260,7 @@ function corpus() {
     }
   }
   return files;
-}
+};
 
 /**
  * Build `self/dump-tokens.ts` natively with the seed; returns the binary path,
@@ -270,11 +270,9 @@ function corpus() {
  * the `typescript` package and outlives stage0's `src/`, so the compiler that links its
  * subject must outlive stage0's `src/` too: `seedWithoutStage0` in `tests/self/goldens.js`.
  */
-function build(seed) {
-  return linkWith(seed, path.join("self", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"));
-}
+const build = (seed) => linkWith(seed, path.join("self", "dump-tokens.ts"), path.join(root, "build", "self", "dump_tokens"));
 
-function main(argv) {
+const main = (argv) => {
   const verbose = argv.includes("--verbose");
   const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
   const seed = seedWithoutStage0(namedSeedSpec(argv));
@@ -308,7 +306,7 @@ function main(argv) {
   }
   process.stdout.write(`${summary}\n`);
   return failed.length === 0 ? 0 : 1;
-}
+};
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) { process.exit(main(process.argv.slice(2))); }
 export { scanWithTypeScript, compare, corpus, build };

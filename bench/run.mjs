@@ -138,11 +138,11 @@ const MAP_MEASURES = [
 const MAP_SIZES = ["65536", "1048576"];
 
 /** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
-function sourceArgs(name) {
+const sourceArgs = (name) => {
   const file = path.join(benchDir, `${name}.args`);
   if (!fs.existsSync(file)) { return []; }
   return fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean);
-}
+};
 
 // ---- Options ------------------------------------------------------------------------
 
@@ -160,6 +160,11 @@ const opts = {
   go: true,
   out: path.join(root, "docs", "BENCHMARKS.md"),
 };
+const fail = (msg) => {
+  console.error(`bench/run.mjs: ${msg}`);
+  process.exit(2);
+};
+
 const argv = nishc.rest;
 for (let i = 2; i < argv.length; i++) {
   const a = argv[i];
@@ -205,28 +210,25 @@ if (opts.instructions) {
   opts.go = false;
 }
 
-function fail(msg) {
-  console.error(`bench/run.mjs: ${msg}`);
-  process.exit(2);
-}
-
 // ---- Toolchain ------------------------------------------------------------------------
 
-function which(tool, extraDirs = []) {
+const which = (tool, extraDirs = []) => {
   for (const dir of [...process.env.PATH.split(path.delimiter), ...extraDirs]) {
     const p = path.join(dir, tool);
     try {
       fs.accessSync(p, fs.constants.X_OK);
       return p;
-    } catch {}
+    } catch {
+      // Not there, or not executable: try the next directory.
+    }
   }
   return null;
-}
+};
 
-function version(cmd, args = ["--version"]) {
+const version = (cmd, args = ["--version"]) => {
   const r = spawnSync(cmd, args, { encoding: "utf8" });
   return r.status === 0 ? r.stdout.split("\n")[0].trim() : `${cmd}: not found`;
-}
+};
 
 const CC = process.env.CC || which("clang") || fail("clang not found (set CC)");
 const RUSTC = opts.rust ? process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")]) : null;
@@ -265,21 +267,21 @@ const prepare = (file, size, dir = srcDir) => {
   return dst;
 };
 
-function run(cmd, args, what) {
+const run = (cmd, args, what) => {
   const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (r.status !== 0) {
     console.error(`${what}: ${cmd} ${args.join(" ")} failed (exit ${r.status})\n${r.stdout}${r.stderr}`);
     process.exit(1);
   }
   return r;
-}
+};
 
 /**
  * Build every variant of one benchmark. A variant is { id, label, exe, cmd,
  * timed, integerOnly }: `timed` variants appear in the time table, the rest
  * (the size-profile binary) only in the size table.
  */
-function build(bench) {
+const build = (bench) => {
   const size = opts.sizes.get(bench.name);
   const ts = prepare(`${bench.name}.ts`, size);
   const c = prepare(`${bench.name}.c`, size);
@@ -329,12 +331,12 @@ function build(bench) {
     variants.push({ id: "go", label: "Go", exe, timed: true, cmd: `go ${args.join(" ")}` });
   }
   return variants;
-}
+};
 
 // ---- Run and compare ------------------------------------------------------------------
 
 /** Run once; returns { ms, stdout }. Exit status other than 0 is a failure. */
-function timeOnce(exe, args = []) {
+const timeOnce = (exe, args = []) => {
   const t0 = process.hrtime.bigint();
   const r = spawnSync(exe, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
@@ -343,15 +345,15 @@ function timeOnce(exe, args = []) {
     process.exit(1);
   }
   return { ms, stdout: r.stdout };
-}
+};
 
 /** Peak resident set in KB (see bench/rss.c), or null when the helper is unavailable. */
-function peakRssKb(exe, args = []) {
+const peakRssKb = (exe, args = []) => {
   if (!RSS_HELPER) { return null; }
   const r = spawnSync(RSS_HELPER, [exe, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   const m = r.stdout.trim();
   return r.status === 0 && /^\d+$/.test(m) ? Number(m) : null;
-}
+};
 
 /**
  * `exe args` run `--warmup` times and then `--runs` times (once under
@@ -376,7 +378,7 @@ const timeRuns = (exe, args = []) => {
 };
 
 /** Token-wise comparison; numbers agree when within 1e-9 relative (or 1e-12 absolute). */
-function sameOutput(a, b) {
+const sameOutput = (a, b) => {
   const ta = a.trim().split(/\s+/);
   const tb = b.trim().split(/\s+/);
   if (ta.length !== tb.length) { return false; }
@@ -389,13 +391,13 @@ function sameOutput(a, b) {
     }
     return x === y;
   });
-}
+};
 
-function median(xs) {
+const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
   const mid = s.length >> 1;
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
+};
 
 // ---- Instruction counts -------------------------------------------------------------------
 
@@ -561,7 +563,10 @@ const runInstructions = () => {
   const num = (x) => x.toLocaleString("en-US");
   // An update reports what it moves; a check reports what it would fail.
   const [above, below, within] = opts.update ? ["raised", "lowered", "kept"] : ["REGRESSED", "below", "ok"];
-  const status = (r) => (r.change > tolerance ? above : r.change < -tolerance ? below : within);
+  const status = (r) => {
+    if (r.change > tolerance) { return above; }
+    return r.change < -tolerance ? below : within;
+  };
   // `npm test` only ever sees this check pass, so the failing side is proved
   // here on every run: a count twice the tolerance above a baseline has to
   // regress, one twice below has to be a gain, and the baseline itself has to
@@ -622,12 +627,12 @@ const runInstructions = () => {
       }
     }
     // One program to a line, so a diff of the file reads as the table above.
-    const { programs, ...header } = baseline;
+    const { programs: baselinePrograms, ...header } = baseline;
     const entry = (p) =>
       `{ ${Object.entries(p)
         .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
         .join(", ")} }`;
-    const body = Object.entries(programs).map(([name, p]) => `    ${JSON.stringify(name)}: ${entry(p)}`);
+    const body = Object.entries(baselinePrograms).map(([name, p]) => `    ${JSON.stringify(name)}: ${entry(p)}`);
     fs.writeFileSync(
       BASELINE_FILE,
       JSON.stringify(header, null, 2).replace(/\n}$/, `,\n  "programs": {\n${body.join(",\n")}\n  }\n}\n`)
@@ -710,7 +715,10 @@ if (opts.only?.has("awfy")) {
 }
 
 /** A time in ms as the report prints it. */
-const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2));
+const fmt = (ms) => {
+  if (ms >= 100) { return ms.toFixed(0); }
+  return ms >= 10 ? ms.toFixed(1) : ms.toFixed(2);
+};
 
 /**
  * The map programs at one size (`undefined` keeps each file's own): build each
@@ -725,7 +733,7 @@ const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.t
  */
 const mapsAtSize = (size) => {
   const rel = (p) => path.relative(root, p);
-  const build = (name) => {
+  const buildMapProgram = (name) => {
     process.stderr.write(`${name}: building`);
     const ts = prepare(`${name}.ts`, size);
     const exe = path.join(outDir, name);
@@ -737,15 +745,15 @@ const mapsAtSize = (size) => {
     process.stderr.write(" ok\n");
     return exe;
   };
-  const protos = MAPS.filter((b) => mapWanted(b.name)).map((b) => ({ ...b, exe: build(b.name) }));
+  const protos = MAPS.filter((b) => mapWanted(b.name)).map((b) => ({ ...b, exe: buildMapProgram(b.name) }));
   const measures = MAP_MEASURES.filter((b) => mapWanted(b.name)).map((b) => ({
     ...b,
-    exe: build(b.name),
+    exe: buildMapProgram(b.name),
     twinFile: prepare(`${b.twin}.mjs`, size),
   }));
   const node = prepare(`${MAPS_NODE}.mjs`, size);
   const reference = run(process.execPath, [node], MAPS_NODE).stdout;
-  const known = new Set(reference.trim().split("\n"));
+  const knownLines = new Set(reference.trim().split("\n"));
 
   let disagree = 0;
   const mismatch = (what, want, wantName, got) => {
@@ -765,7 +773,7 @@ const mapsAtSize = (size) => {
       !out
         .trim()
         .split("\n")
-        .every((l) => known.has(l))
+        .every((l) => knownLines.has(l))
     ) {
       mismatch(m.name, reference, MAPS_NODE, out);
     }
@@ -823,10 +831,10 @@ const mapsAtSize = (size) => {
   };
   const noisy = new Set(); // `column on workload`, once however many tables show the cell
   const lines = [];
-  const table = (title, rows, cols, ratios) => {
+  const table = (title, rows, cols, ratioColumns) => {
     lines.push(`**${title}**`, "");
-    lines.push(`| workload | ${[...cols.map(([, l]) => l), ...ratios.map(([l]) => l)].join(" | ")} |`);
-    lines.push(`| --- | ${[...cols, ...ratios].map(() => "---:").join(" | ")} |`);
+    lines.push(`| workload | ${[...cols.map(([, l]) => l), ...ratioColumns.map(([l]) => l)].join(" | ")} |`);
+    lines.push(`| --- | ${[...cols, ...ratioColumns].map(() => "---:").join(" | ")} |`);
     for (const w of rows) {
       const cells = cols.map(([key]) => {
         const c = cell(key, w);
@@ -834,7 +842,7 @@ const mapsAtSize = (size) => {
         if (c.median > c.min * 1.05) { noisy.add(`${key} on ${w}`); }
         return `${fmt(c.min)} / ${fmt(c.median)}`;
       });
-      const quotients = ratios.map(([, num, den]) => {
+      const quotients = ratioColumns.map(([, num, den]) => {
         const a = cell(num, w);
         const b = cell(den, w);
         return a && b ? `${(a.min / b.min).toFixed(2)}x` : "";
@@ -926,7 +934,8 @@ const runMaps = () => {
       `--n maps=${given}: the map programs draw keys by masking, so the size is a power of two, 16 or more`
     );
   }
-  const sizes = given !== undefined ? [given] : opts.validate ? [undefined] : MAP_SIZES;
+  let sizes = opts.validate ? [undefined] : MAP_SIZES;
+  if (given !== undefined) { sizes = [given]; }
   const lines = sizes.flatMap(mapsAtSize);
   if (lines.length > 0) { console.log(`\n${lines.join("\n")}`); }
   return lines;

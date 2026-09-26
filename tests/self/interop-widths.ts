@@ -9,48 +9,34 @@
 // operation, so a host asserts the value that came back rather than the
 // arithmetic: what is under test is the crossing.
 
-export function echoU8(x: u8): u8 {
-  return x;
-}
+export const echoU8 = (x: u8): u8 => x;
 
-export function echoU16(x: u16): u16 {
-  return x;
-}
+export const echoU16 = (x: u16): u16 => x;
 
-export function echoU32(x: u32): u32 {
-  return x;
-}
+export const echoU32 = (x: u32): u32 => x;
 
-export function echoU64(x: u64): u64 {
-  return x;
-}
+export const echoU64 = (x: u64): u64 => x;
 
-export function echoF32(x: f32): f32 {
-  return x;
-}
+export const echoF32 = (x: f32): f32 => x;
 
 /** All four number-sized widths in one call, widened into the one type that carries them all. */
-export function mixWidths(a: u8, b: u16, c: u32, d: f32): f64 {
-  return toF64(a) + toF64(b) + toF64(c) + toF64(d);
-}
+export const mixWidths = (a: u8, b: u16, c: u32, d: f32): f64 => toF64(a) + toF64(b) + toF64(c) + toF64(d);
 
 /** A `u32` result above 2**31: `napi_create_int32` would hand JavaScript its negative twin. */
-export function highBit(): u32 {
-  return 4294967295;
-}
+export const highBit = (): u32 => 4294967295;
 
 /** A packed `Result` whose arms are both narrower than the getters that read them. */
-export function halve(n: f32): Result<f32, u8> {
+export const halve = (n: f32): Result<f32, u8> => {
   if (n < 0.0) {
     return Err(toU8(255));
   }
   return Ok(n / 2.0);
-}
+};
 
 /** The same `Result` on the way in, so the reader's narrowing runs on both arms. */
-export function orError(r: Result<f32, u8>): f32 {
+export const orError = (r: Result<f32, u8>): f32 => {
   if (r.isErr()) {
     return toF32(r.error);
   }
   return r.value;
-}
+};

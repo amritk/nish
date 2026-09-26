@@ -130,7 +130,6 @@ import {
   N_CASE,
   N_CONDITIONAL,
   N_CONTINUE,
-  N_DEFAULT,
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
@@ -149,7 +148,6 @@ import {
   N_THROW,
   N_UNARY,
   N_VAR,
-  N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes";

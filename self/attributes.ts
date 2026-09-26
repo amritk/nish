@@ -76,7 +76,6 @@ import {
   N_ARROW,
   N_CALL,
   N_CONDITIONAL,
-  N_CONSTRUCTOR,
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
@@ -91,7 +90,6 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
-  N_SUPER,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_THIS,
@@ -107,11 +105,9 @@ import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
 import { ParentTable } from "./parents";
 import {
   CheckedProgram,
-  FieldInfo,
   FunctionSig,
   inlineElementStruct,
   ROLE_CONSTRUCTOR,
-  StructInfo,
 } from "./program";
 import {
   EFFECT_NONE,
@@ -122,7 +118,7 @@ import {
   RuntimeFunction,
   RuntimeTable,
 } from "./runtime";
-import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
+import { Local, STORAGE_PARAM } from "./symbols";
 import { isResultConstructorCall, resultMethodName } from "./emit-result";
 import { resultLayout } from "./result";
 import {

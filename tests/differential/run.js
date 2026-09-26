@@ -42,9 +42,10 @@
  */
 import fs from "node:fs";
 import os from "node:os";
+import { pool } from "../pool.js";
 import * as lib from "./lib.js";
 
-async function main(argv) {
+const main = async (argv) => {
   let only;
   let jobs = Math.min(8, os.cpus().length || 2);
   let updateKnown = false;
@@ -62,7 +63,9 @@ async function main(argv) {
     else if (a === "--verbose") { verbose = true; }
     else if (a === "--corpus-only") { cases = false; }
     else if (a === "--cases-only") { corpus = false; }
-    else if (a === "--frozen") { continue; }
+    else if (a === "--frozen") {
+      // The frozen store is all there is since R6, so this is the default.
+    }
     else if (a === "--live") {
       console.error("--live: the live rewriter drove stage0's checker and was deleted with it (R6)");
       return 2;
@@ -103,7 +106,7 @@ async function main(argv) {
 
   const t0 = Date.now();
   console.log(`native: ${compiler.label}    node: ${rewriter.label}`);
-  const results = await lib.pool(programs, jobs, (p) => lib.runProgram(p, { compiler, rewriter }));
+  const results = await pool(programs, jobs, (p) => lib.runProgram(p, { compiler, rewriter }));
 
   const width = Math.max(...programs.map((p) => p.name.length));
   const pad = (s, n) => s + " ".repeat(Math.max(0, n - s.length));
@@ -187,14 +190,12 @@ async function main(argv) {
     console.log(`wrote ${mismatches.length} entr${mismatches.length === 1 ? "y" : "ies"} to ${lib.knownFile}`);
   }
   return failures === 0 ? 0 : 1;
-}
+};
 
-function indent(s) {
-  return s
+const indent = (s) => s
     .split("\n")
     .map((l) => `      ${l}`)
     .join("\n");
-}
 
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),

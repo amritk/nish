@@ -20,7 +20,6 @@ export const main = (): number => {
     // biome-ignore lint/suspicious/noSelfCompare: NaN is the only value that is not itself; Nish has no Number.isNaN
     const parsed = n === n ? `${n}` : "not a number";
     console.log(`  ${i}: ${arg} -> ${parsed}`);
-    // biome-ignore lint/correctness/useParseIntRadix: Nish parseInt is base 10 only and takes one argument
     sum += parseInt(arg);
   }
   console.log(`sum of the integers: ${sum}`);

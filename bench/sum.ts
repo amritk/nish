@@ -12,18 +12,14 @@
 // to this same expression anyway, LLVM's scalar evolution folds the induction
 // variable at -O3. `sumArray` has to read every element, so it measures a real
 // pass over the buffer on top of the crossing.
-export function add(a: number, b: number): number {
-  return a + b;
-}
+export const add = (a: number, b: number): number => a + b;
 
-export function sumTo(n: number): number {
-  return (n * (n + 1)) / 2;
-}
+export const sumTo = (n: number): number => (n * (n + 1)) / 2;
 
-export function sumArray(xs: Float64Array): number {
+export const sumArray = (xs: Float64Array): number => {
   let total = 0;
   for (const x of xs) {
     total += x;
   }
   return total;
-}
+};

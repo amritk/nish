@@ -28,7 +28,7 @@ import { MemoryFileSystem, WasiHost } from "./wasi.mjs";
 let compiled = null;
 
 /** `WebAssembly.compile` the module once; every later compile reuses it. */
-const load = async (source) => {
+const load = (source) => {
   if (source instanceof WebAssembly.Module) { return source; }
   if (typeof source === "string") { return WebAssembly.compileStreaming(fetch(source)); }
   return WebAssembly.compile(source);

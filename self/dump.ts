@@ -143,8 +143,8 @@ const factsText = (
     );
   }
   let sites = 0;
-  for (const site of facts.stackSites) {
-    if (site) {
+  for (const stackSite of facts.stackSites) {
+    if (stackSite) {
       sites = sites + 1;
     }
   }

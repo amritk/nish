@@ -20,7 +20,9 @@
  * presizes the bucket table, and under Node, which has no such call, it does
  * nothing. A count that is not positive does nothing either way.
  */
-export const reserve = <K, V>(m: Map<K, V>, n: number): void => {};
+export const reserve = <K, V>(m: Map<K, V>, n: number): void => {
+  // Nothing to do here: natively the compiler lowers the call itself, and Node has no table to presize.
+};
 
 /**
  * The value of `key` in `m`; or, when `key` is missing, `value`, after

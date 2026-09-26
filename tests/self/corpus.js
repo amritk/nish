@@ -50,7 +50,7 @@ const CORPUS_DIRS = [
  * The extra CLI flags this program is compiled with, exactly as written where
  * they live. The caller decides which of them it can pass on.
  */
-function extraArgs(file) {
+const extraArgs = (file) => {
   const sidecar = file.replace(/\.ts$/, ".args");
   if (fs.existsSync(sidecar)) { return split(fs.readFileSync(sidecar, "utf8")); }
   const dirArgs = path.join(path.dirname(file), "args");
@@ -59,11 +59,9 @@ function extraArgs(file) {
   }
   const marker = /^\/\/ smoke: args (.*)$/m.exec(fs.readFileSync(file, "utf8"));
   return marker ? split(marker[1]) : [];
-}
+};
 
-function split(text) {
-  return text.trim().split(/\s+/).filter(Boolean);
-}
+const split = (text) => text.trim().split(/\s+/).filter(Boolean);
 
 /**
  * The flags of a program that the *checker* reads, so a dump comparison runs
@@ -74,14 +72,14 @@ function split(text) {
  * to be refused by stage0 and counted as a skip (WP19 G1). Everything else in
  * an `.args` changes the IR and belongs to `ir_oracle.js`.
  */
-function checkerArgs(file) {
+const checkerArgs = (file) => {
   const flags = extraArgs(file);
   const out = [];
   const at = flags.indexOf("--number-mode");
   if (at >= 0) { out.push("--number-mode", flags[at + 1]); }
   if (flags.includes("--wrapping")) { out.push("--wrapping"); }
   return out;
-}
+};
 
 /**
  * Every positive whole program of the corpus. A source with a `.err` sidecar
@@ -98,7 +96,7 @@ function checkerArgs(file) {
  * a reader can point at, and `docs/cookbook/node_modules/` is a package
  * fixture rather than a program.
  */
-function programs() {
+const programs = () => {
   const files = [];
   for (const dir of CORPUS_DIRS) {
     const full = path.join(root, dir);
@@ -119,7 +117,7 @@ function programs() {
     }
   }
   return files;
-}
+};
 
 /**
  * The whole programs of `tests/link/`, which is where the multi-module shapes
@@ -128,7 +126,7 @@ function programs() {
  * the needle `tests/run.js` requires of such a rejection, or null when the
  * program is a positive one.
  */
-function linkPrograms() {
+const linkPrograms = () => {
   const dir = path.join(root, "tests", "link");
   if (!fs.existsSync(dir)) { return []; }
   const out = [];
@@ -143,6 +141,6 @@ function linkPrograms() {
     });
   }
   return out;
-}
+};
 
 export { CORPUS_DIRS, checkerArgs, extraArgs, programs, linkPrograms, root };

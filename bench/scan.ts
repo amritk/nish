@@ -26,7 +26,7 @@ const MAX_DEPTH: i32 = 64;
  * building a tape keeps this honest as a proxy — the tape stores are a handful
  * of `i32` writes on top, and measuring them belongs with the real parser.
  */
-export function scanJson(bytes: u8[]): i32 {
+export const scanJson = (bytes: u8[]): i32 => {
   let tokens = 0;
   let depth = 0;
   let inString = false;
@@ -63,7 +63,7 @@ export function scanJson(bytes: u8[]): i32 {
   }
   if (inString || depth !== 0) { return ERR_UNTERMINATED; }
   return tokens;
-}
+};
 
 /**
  * The same pass, stopping at the first byte that proves the document invalid.
@@ -71,6 +71,4 @@ export function scanJson(bytes: u8[]): i32 {
  * difference at the boundary is that the answer is one `i32` either way, so
  * neither mode marshals anything on the way out.
  */
-export function isJsonShaped(bytes: u8[]): boolean {
-  return scanJson(bytes) >= 0;
-}
+export const isJsonShaped = (bytes: u8[]): boolean => scanJson(bytes) >= 0;

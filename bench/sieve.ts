@@ -3,7 +3,7 @@
 // to time. The marking loop is the hot path: one bounds-checked byte store per
 // composite. The outer loop stops at i*i <= n, so i*i never overflows an i32.
 // Prints the summed prime count.
-function sieve(composite: boolean[], n: number): number {
+const sieve = (composite: boolean[], n: number): number => {
   for (let i = 0; i <= n; i++) {
     composite[i] = false;
   }
@@ -21,9 +21,9 @@ function sieve(composite: boolean[], n: number): number {
     }
   }
   return count;
-}
+};
 
-export function main(): number {
+export const main = (): number => {
   const N = 10000000; // bench:n
   const PASSES = 20;
   const composite = new Array<boolean>(N + 1);
@@ -33,4 +33,4 @@ export function main(): number {
   }
   console.log(total);
   return 0;
-}
+};
