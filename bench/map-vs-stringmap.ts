@@ -1,12 +1,12 @@
 // WP32 comparison (d): the global `Map` against `StringMap`, the compiler's own
 // table, on §2's workloads (docs/wp32-map.md §10).
 //
-// `StringMap` is compiler-internal and a bench program cannot import `self/`,
-// so the block between the two `copy of self/map.ts` rules below is lines 28 to
-// 204 of `self/map.ts` at a748d0b, byte for byte: `fnv1a` to the end of the
+// `StringMap` is compiler-internal and a bench program cannot import `src/`,
+// so the block between the two `copy of src/map.ts` rules below is lines 28 to
+// 204 of `src/map.ts` at a748d0b, byte for byte: `fnv1a` to the end of the
 // class, as S6 left it, with fingerprints and stored hashes. `tests/run.js`'s
 // `bench` check fails when the block is no longer a verbatim part of
-// `self/map.ts`, so the two cannot drift apart; copy it again when that check
+// `src/map.ts`, so the two cannot drift apart; copy it again when that check
 // fires. It is `string -> i32` and has no `delete`, so it runs `insert`, `hit`,
 // `miss` and `count` over string keys, and `Map` runs all five workloads over
 // both key kinds.
@@ -23,7 +23,7 @@
 // the harness times each in a process of its own; `stringmap` alone prints
 // only its four lines.
 
-// ---- copy of self/map.ts ----
+// ---- copy of src/map.ts ----
 /**
  * FNV-1a over the bytes of `key`. The round is a multiply that is *supposed*
  * to overflow, so it is done in `u32`, whose arithmetic is defined as wrapping
@@ -201,7 +201,7 @@ export class StringMap {
     }
   }
 }
-// ---- end of the copy of self/map.ts ----
+// ---- end of the copy of src/map.ts ----
 
 /** A 32-bit LCG (Numerical Recipes); the top 24 bits are the draw. */
 class Rng {

@@ -20,7 +20,7 @@ struct Rows {
   struct { nish_array h; const nish_str *slots[2]; } names;
 };
 
-_Static_assert(sizeof(nish_array) == 24, "the header self/runtime.ts calls { i64, i64, i8* }");
+_Static_assert(sizeof(nish_array) == 24, "the header src/runtime.ts calls { i64, i64, i8* }");
 _Static_assert(offsetof(struct Rows, flags) == 0, "flags");
 _Static_assert(offsetof(struct Rows, count) == 32, "count after 24 + 3 slots, rounded to 8");
 _Static_assert(offsetof(struct Rows, ids) == 40, "ids");

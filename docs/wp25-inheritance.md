@@ -115,7 +115,7 @@ Almost nothing, which is the argument.
 
 | Surface | Count |
 | --- | ---: |
-| `self/` — derived classes declared | **0** |
+| `src/` — derived classes declared | **0** |
 | `examples/`, `bench/` — uses | **0** |
 | `tests/cases/` — positives deleted | 4 |
 | `tests/cases/` — `reject_*` deleted | 16 |
@@ -125,7 +125,7 @@ Almost nothing, which is the argument.
 The self-hosted compiler is 25,911 lines over 57 modules and declares no
 derived class at all. That is not an accident:
 [wp14-selfhost.md](wp14-selfhost.md) §2.1 chose **one `Node` class with a
-`kind: i32` discriminant** over a hierarchy, and Nish-0 — the subset `self/` is
+`kind: i32` discriminant** over a hierarchy, and Nish-0 — the subset `src/` is
 written in — was defined as the language minus "inheritance and downcasts".
 The largest Nish program in existence had already declined the feature.
 
@@ -141,7 +141,7 @@ rewrite.
 - **No IR moved.** Not one golden `.ll` changed except the ones whose programs
   were deleted, and the three layout classes emit the same bytes at the same
   offsets they did as derived classes.
-- **`self/` did not change**, so the bootstrap fixpoint (`IR(stage1) ==
+- **`src/` did not change**, so the bootstrap fixpoint (`IR(stage1) ==
   IR(stage2)`, stage3 byte-identical to stage2) is re-established over the
   same source, and the diagnostic-code registry appended three numbers
   (`NL2277`–`NL2279`) without renumbering one.

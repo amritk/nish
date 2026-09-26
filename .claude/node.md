@@ -3,7 +3,7 @@
 This repo's tooling runs on **Node.js 22.18+ and npm**, not Bun. The sibling
 repos (`mjst`, `mini`, `agent-ummo`) carry a `bun.md` that says "default to
 Bun"; that rule is deliberately not carried here. The compiler itself is not a
-Node program — it is `self/`, a native binary built by the last release — but
+Node program — it is `src/`, a native binary built by the last release — but
 `nish` is published to npm as a tool a user installs with `npm install -g` on a
 machine that has Node and clang and nothing else, the test harness and the
 scripts are JavaScript, and CI (`.github/workflows/ci.yml`) runs the same
@@ -25,7 +25,7 @@ commands a user would.
 - Node built-ins are imported as `node:fs`, `node:path`, `node:child_process`.
   There is no `.env` loading. The compiler reads `PATH` (to find the tools
   `--link` runs) and `NISH_SIMULATE_ICE` (the test hook for the exit-70 path,
-  in `self/ice.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
+  in `src/ice.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
   invokes; the harness reads `UPDATE_GOLDENS` and `NISH_BOOTSTRAP` (the seed).
   A new one is a CLI design decision, not a shortcut.
 - Bun-specific APIs (`Bun.file`, `Bun.$`, `bun:sqlite`, HTML imports) do not
@@ -38,7 +38,7 @@ commands a user would.
 npm install              # install (npm ci in CI)
 bash scripts/fetch-seed.sh   # the last release into build/seed/ (NISH_BOOTSTRAP names another)
 npm run build            # build/nish to keep (scripts/bootstrap.sh); npm test builds its own
-npm run check            # ambient tsc --noEmit over self/, std/, tests/nish against runtime/nish.d.ts
+npm run check            # ambient tsc --noEmit over src/, std/, tests/nish against runtime/nish.d.ts
 npm test                 # tests/run.js: goldens, llvm-as, native round trips, runtime,
                          # layout, memory, interop, exit codes, packaging, bench checksums, differential
 node tests/run.js <sub>  # only cases whose name contains <sub>
@@ -52,8 +52,8 @@ node bench/run.mjs       # rewrite docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks links
 node scripts/arrowify.mjs --check <file.ts>   # WP22: what is still spelled `function`, and why
 node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff every .ll byte for byte
-node scripts/arrow-verify.mjs --applied self  # the same, for a rewrite the tree already carries
-node scripts/gen-diagnostic-codes.mjs --check  # self/codes.ts well formed, every code unique (CI + npm test)
+node scripts/arrow-verify.mjs --applied src/  # the same, for a rewrite the tree already carries
+node scripts/gen-diagnostic-codes.mjs --check  # src/codes.ts well formed, every code unique (CI + npm test)
 node scripts/ci-profile.mjs                  # which check a CI job's wall clock went to
 node scripts/ci-profile.mjs -- npm run test:nish   # ...for any suite command
 ```
@@ -75,18 +75,18 @@ their start-up: a missing or stale key costs time and never changes an answer.
 Two artefacts have a `--check` mode and both are gates: `docs/IR_COOKBOOK.md`,
 and the diagnostic-code registry.
 
-**The registry, `self/codes.ts`, is kept by hand.** Until WP19 R6
+**The registry, `src/codes.ts`, is kept by hand.** Until WP19 R6
 `scripts/gen-diagnostic-codes.mjs` wrote it — and a copy in stage0's `src/` — from a scan
 of the TypeScript compiler's sources; that scan had nothing left to read once
 stage0's `src/` was deleted, so the generator is frozen and only checks. Adding a
-diagnostic means adding its fragment to `self/codes.ts` with the next free
+diagnostic means adding its fragment to `src/codes.ts` with the next free
 number in its band. **A number is never moved, reused or handed out twice**: a
 retired message keeps its entry, and `--check` fails on a duplicate code or an
 entry that does not have the table's shape. It does not know whether a code is
 *reached* — `tests/diagnostic-coverage.js` asks that, one `tests/wordings/`
 program per code, and fails a code no program provokes and no line of
 `tests/wordings/unreachable.txt` explains. In a merge conflict in
-`self/codes.ts`, keep both sides' entries and renumber only the ones this branch
+`src/codes.ts`, keep both sides' entries and renumber only the ones this branch
 added, past `main`'s highest in the band.
 
 ## The toolchain that is not npm
@@ -114,7 +114,7 @@ runs both.
 
 ## Biome
 
-`biome.json` is the formatter and style linter for `self/`, `std/`, `bin/`,
+`biome.json` is the formatter and style linter for `src/`, `std/`, `bin/`,
 `tests/**/*.js`, `examples/**`, `scripts/` and the rest of the JavaScript
 tooling. It never influences compilation. **[`linting.md`](./linting.md) is the
 authority on the rule set**: what each rule is for, and the ones measured and
@@ -150,7 +150,7 @@ on, so an unformatted file fails CI the way a lint error does. So:
   - **No semicolons**, except where JavaScript's insertion rule needs one
     (`semicolons: "asNeeded"`). Nish accepts code without them by that same
     rule (`docs/LANGUAGE.md`, "Lexical rules"), and 0.12.0 is the first
-    release that does, so the seed builds `self/` written that way. The test
+    release that does, so the seed builds `src/` written that way. The test
     fixtures keep theirs, because the formatter does not read them.
   - **Quotes are only taste.** Nish accepts `'...'`. Double quotes are kept
     because every snippet in `docs/LANGUAGE.md`, `docs/AI.md` and the

@@ -1,133 +1,133 @@
 {
   "note": [
-    "The performance warnings self/compile.ts is allowed, per file and per diagnostic code, counted from --json by tests/run.js (the performance ratchet).",
+    "The performance warnings src/compile.ts is allowed, per file and per diagnostic code, counted from --json by tests/run.js (the performance ratchet).",
     "More fails and names the warnings of that file and code; fewer fails until the count here is lowered to match, so the cap only moves down.",
     "std/ and examples/ are not here: they are held to zero. See .claude/testing.md, \"The performance gate\"."
   ],
   "counts": {
-    "self/arrays.ts": {
+    "src/arrays.ts": {
       "NL9011": 3
     },
-    "self/assignment.ts": {
+    "src/assignment.ts": {
       "NL9011": 1
     },
-    "self/ast-text.ts": {
+    "src/ast-text.ts": {
       "NL9002": 1,
       "NL9003": 2
     },
-    "self/attributes.ts": {
+    "src/attributes.ts": {
       "NL9010": 2
     },
-    "self/bounds.ts": {
+    "src/bounds.ts": {
       "NL9010": 1
     },
-    "self/checker.ts": {
+    "src/checker.ts": {
       "NL9007": 1,
       "NL9011": 2
     },
-    "self/compilation.ts": {
+    "src/compilation.ts": {
       "NL9007": 5,
       "NL9011": 7
     },
-    "self/compile.ts": {
+    "src/compile.ts": {
       "NL9007": 1
     },
-    "self/context.ts": {
+    "src/context.ts": {
       "NL9010": 1
     },
-    "self/debug.ts": {
+    "src/debug.ts": {
       "NL9007": 7,
       "NL9011": 3
     },
-    "self/declarations.ts": {
+    "src/declarations.ts": {
       "NL9011": 1
     },
-    "self/diagnostics.ts": {
+    "src/diagnostics.ts": {
       "NL9007": 7
     },
-    "self/dump.ts": {
+    "src/dump.ts": {
       "NL9011": 4
     },
-    "self/emit.ts": {
+    "src/emit.ts": {
       "NL9011": 5
     },
-    "self/emit-arrays.ts": {
+    "src/emit-arrays.ts": {
       "NL9007": 1
     },
-    "self/emit-classes.ts": {
+    "src/emit-classes.ts": {
       "NL9011": 1
     },
-    "self/emit-control.ts": {
+    "src/emit-control.ts": {
       "NL9007": 2
     },
-    "self/escape.ts": {
+    "src/escape.ts": {
       "NL9011": 1
     },
-    "self/expressions.ts": {
+    "src/expressions.ts": {
       "NL9011": 3
     },
-    "self/generics.ts": {
+    "src/generics.ts": {
       "NL9002": 1,
       "NL9007": 5,
       "NL9011": 11
     },
-    "self/ice.ts": {
+    "src/ice.ts": {
       "NL9009": 1
     },
-    "self/interop-abi.ts": {
+    "src/interop-abi.ts": {
       "NL9007": 1,
       "NL9010": 1,
       "NL9011": 4
     },
-    "self/interop-dts.ts": {
+    "src/interop-dts.ts": {
       "NL9011": 3
     },
-    "self/interop-header.ts": {
+    "src/interop-header.ts": {
       "NL9007": 1,
       "NL9011": 6
     },
-    "self/interop-napi.ts": {
+    "src/interop-napi.ts": {
       "NL9010": 1,
       "NL9011": 5
     },
-    "self/interop-wasm.ts": {
+    "src/interop-wasm.ts": {
       "NL9007": 4,
       "NL9011": 1
     },
-    "self/manifest.ts": {
+    "src/manifest.ts": {
       "NL9007": 6,
       "NL9009": 2
     },
-    "self/members.ts": {
+    "src/members.ts": {
       "NL9011": 7
     },
-    "self/options.ts": {
+    "src/options.ts": {
       "NL9010": 1
     },
-    "self/packages.ts": {
+    "src/packages.ts": {
       "NL9007": 2
     },
-    "self/paths.ts": {
+    "src/paths.ts": {
       "NL9007": 2
     },
-    "self/program.ts": {
+    "src/program.ts": {
       "NL9010": 4
     },
-    "self/result.ts": {
+    "src/result.ts": {
       "NL9007": 2,
       "NL9011": 1
     },
-    "self/statements.ts": {
+    "src/statements.ts": {
       "NL9011": 2
     },
-    "self/strings.ts": {
+    "src/strings.ts": {
       "NL9007": 1,
       "NL9009": 1
     },
-    "self/structs.ts": {
+    "src/structs.ts": {
       "NL9011": 10
     },
-    "self/tbaa.ts": {
+    "src/tbaa.ts": {
       "NL9002": 1
     }
   }

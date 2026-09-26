@@ -319,7 +319,7 @@ nish_str *nish_realpath(const nish_str *path) {
    this file is compiled — a cross build compiles the runtime for the target,
    so the answer is the target's — which is why each is a string in constant
    data handed back by address: no allocation and no load, and `readnone` on
-   the declaration (self/runtime.ts) is a fact rather than a hope. The
+   the declaration (src/runtime.ts) is a fact rather than a hope. The
    spellings are Node's, so a program reads the same answer from this runtime
    and from `runtime/shim.mjs`; anything neither branch names is "unknown",
    which is what `--target host` then refuses. Contracts: nish.h.

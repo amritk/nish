@@ -44,7 +44,7 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 ## Lexical rules
 
 Nish source is TypeScript syntax, read by the compiler's own lexer and
-parser (`self/lexer.ts`, `self/parser.ts`), which follow TypeScript's rules for
+parser (`src/lexer.ts`, `src/parser.ts`), which follow TypeScript's rules for
 tokens, comments, and ASI; `tests/lexer-oracle.js` and
 `tests/parser-oracle.js` hold them to the `typescript` package's scanner and
 parser over the test corpus. Syntax errors are reported as `syntax error:` in
@@ -116,7 +116,7 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/reject_bigint_literal`, `reject_regex`).
 - **Reserved prefix.** Function, class, and interface names starting with
   `nish_` are reserved for the runtime: `` Function names starting with `nish_` are reserved for the runtime ``
-  *(CLI only; `self/declarations.ts`)*.
+  *(CLI only; `src/declarations.ts`)*.
 - **Identifiers** that may never appear as values: `eval`, `Function`,
   `Proxy`, `Reflect`, `Symbol`, `globalThis`, `arguments`, `undefined`
   (see [Forbidden constructs](#forbidden-constructs-phase-0-validator)).
@@ -126,7 +126,7 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
 Every Nish type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
-compatible only when their types are identical (`self/types.ts`, where a
+compatible only when their types are identical (`src/types.ts`, where a
 type is interned and two types are the same type exactly when they are the
 same `i32`).
 
@@ -152,8 +152,8 @@ same `i32`).
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
-Sources: `self/types.ts` (`TypeTable.llvmType`, `alignOf`),
-`self/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
+Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
+`src/interop-abi.ts` (`cType`); `tests/cases/i64_basic`, `f64_mode`, `str_literal`, `arr_literal`,
 `cls_point`; the ten-struct layout test `tests/layout/structs.ts` (offsets and
 `sizeof` cross-checked against clang, [wp2-classes.md](wp2-classes.md#layout)).
 
@@ -173,7 +173,7 @@ Type rules:
   ([Type aliases](#type-aliases), [Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
-  (`self/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
+  (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
   array, or string; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
@@ -222,7 +222,7 @@ Type rules:
 
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
-takes that type (`self/expressions.ts`, `checkNumericLiteral`;
+takes that type (`src/expressions.ts`, `checkNumericLiteral`;
 `tests/cases/i64_basic`, `math_i32`, `conversions`):
 
 | Context | Example | Literal type |
@@ -417,7 +417,7 @@ value, so nothing is boxed; `null` takes its type from context.
   each other (`` Cannot compare two `string | null` values; compare each with `null` ``,
   `tests/cases/reject_null_compare_two`), and neither can a nullable and a
   plain `T` *(CLI only)*: narrow first.
-- **Narrowing** (`self/expressions.ts`): inside the region a condition
+- **Narrowing** (`src/expressions.ts`): inside the region a condition
   guards, a nullable *variable* (a local or parameter, never a property
   path) reads as `T`:
 
@@ -581,7 +581,7 @@ spelling that reaches the success payload without deciding what happens to the
 failure, so the success path cannot be written before the error path is
 handled.
 
-Narrowing is the same engine as `T | null` (`self/expressions.ts`) and
+Narrowing is the same engine as `T | null` (`src/expressions.ts`) and
 obeys the same rules: it applies to a **variable**, not a property path; it
 ends at any assignment to that variable; and it is dropped before a loop that
 assigns it. All three spellings compose with `!`, `&&`, `||` and the ternary,
@@ -1023,7 +1023,7 @@ and their `.ll` goldens are byte-identical files.
   is that executable's, not an object for another link; build with `-o` alone,
   or with a sidecar, to hand a host the program. `main` is the one exception:
   the runtime calls it, and it is never assumed anything about. The rule is
-  `hostVisible` in `self/visibility.ts`, and `docs/ARCHITECTURE.md` (the
+  `hostVisible` in `src/visibility.ts`, and `docs/ARCHITECTURE.md` (the
   call-site ranges row of the attribute soundness rules) is why it is sound.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
@@ -2149,7 +2149,7 @@ declare function free(block: CPtr): void;
 - **It gets no pointer attributes.** `dereferenceable`, `align`, `nonnull`,
   `nocapture` and `readonly` are each a claim about memory this compiler laid
   out, and it laid out none of this; `isPointerParam` in
-  `self/attributes.ts` is an allow-list so that a `CPtr` falls out of it
+  `src/attributes.ts` is an allow-list so that a `CPtr` falls out of it
   by construction rather than by a case somebody remembered to write.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
@@ -2355,7 +2355,7 @@ A statement *terminates* when control cannot fall out of it: `return`,
 both terminate; a `switch` with a `default`, no `break` aimed at it and a
 terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
-terminate. Rules (`self/statements.ts`, `checker.ts`):
+terminate. Rules (`src/statements.ts`, `checker.ts`):
 
 - A non-`void` function's body must terminate
   (`must return a value of type i32 on every path`,
@@ -2839,7 +2839,7 @@ program:
   (`tests/cases/arr_repeat_check_call`, `cls_inline_array_order`).
 - **No host can see the class's layout.** The class is not host-visible as
   [`export`](#export-and-import) decides it for a call (`hostVisible` in
-  `self/visibility.ts`): an exported class keeps today's layout in every build
+  `src/visibility.ts`): an exported class keeps today's layout in every build
   that is not a closed-world `--link`. And no build that describes or shares
   layouts with code this compiler did not write inlines anything at all —
   `--emit-header` (whose C structs list every class), `--emit-dts`,
@@ -2857,7 +2857,7 @@ program:
   from a call still makes its array and then copies it, a cost that is about
   the same at 8 slots as at 64. A field reassigned from a call and read fewer
   than a few dozen times per assignment is therefore slower inline; the
-  measurement is in the header of `self/inline-arrays.ts`.
+  measurement is in the header of `src/inline-arrays.ts`.
 
 Why reference semantics are unchanged: the object is still a pointer, so a
 class holding an inline field can be stored in arrays and passed around as
@@ -3238,7 +3238,7 @@ stored in a field would land in the written set and lose the `const` its
 annotation promised (`tests/cases/arr_readonly_escape`). The checker is what
 makes the promise true — no store, no `push`, no `pop`, and no widening back to
 a mutable `T[]` — and it is exact where the fixpoint is not
-(`writtenArrayParams`, `self/interop-abi.ts`).
+(`writtenArrayParams`, `src/interop-abi.ts`).
 
 `process.argv` is read-only under a rule of its own rather than this type
 (`` `process.argv` is read-only ``), because it is a value and not an
@@ -4236,7 +4236,7 @@ by the caller.
   [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
   nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
-  indented `<KIND> <start> <end>` tree — the node kinds of `self/nodes.ts` and
+  indented `<KIND> <start> <end>` tree — the node kinds of `src/nodes.ts` and
   each node's span as byte offsets, identifier and literal text appended — and
   writes no IR (`tests/cases/dump_ast`).
 - **`--emit-checked`** checks the program and prints the side tables the
@@ -4270,7 +4270,7 @@ by the caller.
 
 ## Forbidden constructs (Phase 0 validator)
 
-`self/validator.ts` walks the whole syntax tree before the checker and rejects
+`src/validator.ts` walks the whole syntax tree before the checker and rejects
 everything below on the first hit, regardless of where it appears (even in
 dead code or nested type arguments). Each row gives the exact message
 fragment `tests/run.js` matches and the case that proves it.
@@ -4362,7 +4362,7 @@ property and element access); the checker then requires a numeric type.
 
 Everything the validator lets through but the checker cannot compile. The
 messages are exact for the cases cited; other rows quote the checker
-(`self/checker.ts` and the modules beside it) and `self/types.ts`.
+(`src/checker.ts` and the modules beside it) and `src/types.ts`.
 
 | Situation | Message | Test |
 | --- | --- | --- |

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the self-hosted compiler: `self/`, compiled by `self/`.
+# Build the self-hosted compiler: `src/`, compiled by `src/`.
 #
 #   scripts/bootstrap.sh [-o <exe>] [--stages 1|2|3] [--profile speed|size|debug]
 #                        [--work <dir>] [--verify] [--quiet]
@@ -8,9 +8,9 @@
 # parameter rather than a fixture (docs/wp19-stage0-retirement.md §3, G3):
 #
 #   seed     whatever compiles stage1              NISH_BOOTSTRAP, or build/seed
-#   stage1   self/, built by the seed
-#   stage2   self/, built by stage1                the default output
-#   stage3   self/, built by stage2                --verify only
+#   stage1   src/, built by the seed
+#   stage2   src/, built by stage1                the default output
+#   stage3   src/, built by stage2                --verify only
 #
 # NISH_BOOTSTRAP=<path> names the seed, the way GOROOT_BOOTSTRAP names the Go
 # that builds Go. It is either a released `nish`, executed directly, or a Node
@@ -31,14 +31,14 @@
 #
 # --verify runs the equalities the proof is made of, byte for byte:
 #
-#   IR(seed, self/)   == IR(stage1, self/)     reported, never asserted
-#   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
+#   IR(seed, src/)   == IR(stage1, src/)     reported, never asserted
+#   IR(stage1, src/) == IR(stage2, src/)     the fixed point: self-hosted
 #   stage3 == stage2                           as files, on ELF and on Mach-O
 #                                              alike; see below for what the
 #                                              Mach-O half took
 #
 # The last two are properties of the working tree and of nothing else: whatever
-# built stage1, the compiler `self/` describes has to agree with itself and
+# built stage1, the compiler `src/` describes has to agree with itself and
 # then reproduce itself. Both are asserted whatever the seed is.
 #
 # The third is a raw byte comparison, and on Mach-O two links of the same input
@@ -59,11 +59,11 @@
 # measurement, byte offsets and all.
 #
 # The first one is reported and not asserted. With a released seed it is one
-# implementation at two points in time: the IR HEAD emits for `self/` is the
+# implementation at two points in time: the IR HEAD emits for `src/` is the
 # IR the last release emitted for it. Nothing in that sentence is about
 # bootstrapping. It is a freeze on codegen between releases, and it fails on
 # exactly the changes a release cycle exists to carry: the first improvement to
-# land broke it, when a flow-sensitive bounds analysis proved 46 of `self/`'s
+# land broke it, when a flow-sensitive bounds analysis proved 46 of `src/`'s
 # 1,206 index checks redundant and 20 of 56 modules "differed" because the
 # optimisation worked. So the difference is reported, and the report is
 # information about this release rather than a verdict on the bootstrap.
@@ -73,8 +73,8 @@
 # (docs/wp19-stage0-retirement.md §1, G6). That claim went with stage0's `src/`.
 #
 # What the seeded run buys is not that equality. The rolling freeze — "a
-# construct added in 0.N cannot be used by `self/` until 0.(N+1)" — is enforced
-# by stage1 being built at all: a `self/` that reaches for something the seed
+# construct added in 0.N cannot be used by `src/` until 0.(N+1)" — is enforced
+# by stage1 being built at all: a `src/` that reaches for something the seed
 # has never heard of does not compile, does not link, and never gets as far as
 # a comparison. That failure is loud here whatever the seed is, and it is the
 # whole of what the seeded run proves about the freeze
@@ -115,7 +115,7 @@ usage: scripts/bootstrap.sh [-o <exe>] [--stages 1|2|3] [--profile speed|size|de
 
 Builds the self-hosted compiler. The seed builds stage1, stage1 builds stage2
 (the default output), stage2 builds stage3. --verify compares the IR each stage
-emits for self/ and the stage2/stage3 binaries, byte for byte. The result is
+emits for src/ and the stage2/stage3 binaries, byte for byte. The result is
 the command line itself: -o, --link, --profile and the rest.
 
 IR(seed) == IR(stage1) asks whether codegen has changed since the seed was
@@ -156,10 +156,10 @@ build_to=$stages
 [ "$verify" -eq 1 ] && build_to=3
 
 # The published npm package ships bin/, runtime/, scripts/ and std/ but not
-# self/ -- and, since 0.6.0, no compiler of its own at all -- so say which file
+# src/ -- and, since 0.6.0, no compiler of its own at all -- so say which file
 # is missing rather than failing inside the compiler.
-if [ ! -f self/compile.ts ]; then
-  echo "bootstrap: self/compile.ts is missing; run this from a checkout of the repository" >&2
+if [ ! -f src/compile.ts ]; then
+  echo "bootstrap: src/compile.ts is missing; run this from a checkout of the repository" >&2
   exit 3
 fi
 
@@ -211,7 +211,7 @@ else
   [ -r "$seed" ] || seed_die "is not readable"
   command -v node >/dev/null 2>&1 || seed_die "needs node on PATH, which is not there"
 fi
-# A seed that cannot answer `--version` cannot compile self/ either — a
+# A seed that cannot answer `--version` cannot compile src/ either — a
 # binary built for another platform, a .js that is not a compiler — and
 # finding that out here names the variable and the path the caller set, where
 # finding it out in the stage1 link names a temporary file three stages deep.
@@ -223,7 +223,7 @@ fi
 
 say() { [ "$quiet" -eq 1 ] || printf '%s\n' "$*"; }
 
-# `a` and `b` hold one `.ll` per module of `self/`. Both the module set and
+# `a` and `b` hold one `.ll` per module of `src/`. Both the module set and
 # every byte of every module must match: a stage that emitted one module fewer
 # has not agreed about the rest.
 compare_ir() {
@@ -260,11 +260,11 @@ survey_ir() {
   done
   if [ "$differing" -eq 0 ]; then
     say "  note: IR(seed) vs IR(stage1): all $total modules identical."
-    say "        Not asserted: codegen simply has not moved for self/ since"
+    say "        Not asserted: codegen simply has not moved for src/ since"
     say "        the seed was built."
   else
     say "  note: IR(seed) vs IR(stage1): $differing of $total modules differ."
-    say "        Not a bootstrap failure. Codegen has moved for self/ since the"
+    say "        Not a bootstrap failure. Codegen has moved for src/ since the"
     say "        seed was built, which is what a release carries. See the header"
     say "        of this script and docs/wp19-stage0-retirement.md §3, G3."
   fi
@@ -295,7 +295,7 @@ survey_ir() {
 link_stage() {
   local by="$1" name="$2"
   rm -rf "$work/stage" "$work/stage.modules"
-  "$by" self/compile.ts --link "$work/stage" --profile "$profile" >/dev/null
+  "$by" src/compile.ts --link "$work/stage" --profile "$profile" >/dev/null
   rm -rf "${work:?}/${name:?}" "${work:?}/${name:?}.modules"
   mv "$work/stage" "$work/$name"
   mv "$work/stage.modules" "$work/$name.modules"
@@ -310,28 +310,28 @@ outdir=$(dirname "$out")
 # `scripts/build.sh` itself (docs/wp14-selfhost.md §7a). That leaves each
 # stage's IR in `<exe>.modules/`, which is where the equalities read it, and
 # means the chain exercises the same driver a user does.
-say "stage1: self/ compiled by $seed_label"
+say "stage1: src/ compiled by $seed_label"
 rm -rf "$work/stage1.modules"
 # This is the step the rolling freeze is enforced by, so it says so when it
 # fails rather than leaving a reader with the compiler's own diagnostic and no
 # idea which rule it just met.
-if ! run_seed self/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null; then
-  echo "bootstrap: $seed_label could not build stage1 from self/ (its output is above)" >&2
+if ! run_seed src/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null; then
+  echo "bootstrap: $seed_label could not build stage1 from src/ (its output is above)" >&2
   echo "bootstrap: if it refused the source, that is the freeze doing its job: a construct" >&2
-  echo "bootstrap: added in 0.N cannot be used by self/ until 0.(N+1) (docs/wp12-release.md," >&2
+  echo "bootstrap: added in 0.N cannot be used by src/ until 0.(N+1) (docs/wp12-release.md," >&2
   echo "bootstrap: \"The bootstrap seed\"; docs/wp19-stage0-retirement.md §3, G3)" >&2
   exit 1
 fi
 
 if [ "$build_to" -ge 2 ]; then
-  say "stage2: self/ compiled by stage1"
+  say "stage2: src/ compiled by stage1"
   link_stage "$work/stage1" stage2
   # The seed equality, reported and not asserted.
   [ "$verify" -eq 1 ] && survey_ir "$work/stage1.modules" "$work/stage2.modules"
 fi
 
 if [ "$build_to" -ge 3 ]; then
-  say "stage3: self/ compiled by stage2"
+  say "stage3: src/ compiled by stage2"
   link_stage "$work/stage2" stage3
   [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
   # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical, which

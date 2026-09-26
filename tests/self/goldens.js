@@ -17,7 +17,7 @@
  *
  * So this tool records the same four outputs as goldens and compares stage1's
  * live output against them. It names neither stage0's `src/` nor `dist/` anywhere, and
- * the only compiler it runs is one it builds out of `self/` — which is why it
+ * the only compiler it runs is one it builds out of `src/` — which is why it
  * still works in a tree where stage0 has been deleted. The four oracles keep
  * running beside it for as long as stage0 lives; nothing here replaces them
  * while they can still say something this cannot.
@@ -35,11 +35,11 @@
  * **What each golden holds.**
  *
  *   - `goldens/checked.txt` — `--emit-checked` for every positive program of
- *     the corpus outside `self/`: 262 programs, whole dumps, one after
+ *     the corpus outside `src/`: 262 programs, whole dumps, one after
  *     another. This is where per-construct checker coverage lives, so it is
  *     stored as text a failure can be read as a diff.
  *   - `goldens/checked-self.txt` — the same dump for the 57 programs of
- *     `self/`, stored **deduplicated by module**. A `self/` program is loaded
+ *     `src/`, stored **deduplicated by module**. A `src/` program is loaded
  *     whole, so each of the 57 entries re-dumps every module it imports, and
  *     the raw text is 19.9 MB of which 1.0 MB is distinct. The entry index
  *     records each program's module load order and each module's section is
@@ -98,7 +98,7 @@ const link = (seed, source, stem) => {
 
 /**
  * The dump's lines, blanks dropped — `checked_oracle.js`'s normalisation —
- * with `self/branding.ts`'s folded `VERSION` replaced by a placeholder.
+ * with `src/branding.ts`'s folded `VERSION` replaced by a placeholder.
  *
  * The checker folds module constants, so the dump records `VERSION`'s value,
  * which is the compiler's version and changes at every release. Pinning it
@@ -125,18 +125,18 @@ const header = (what) => [
 
 /**
  * `--emit-checked` over the whole corpus, in two files: the construct corpus
- * as whole dumps, and `self/` deduplicated by module.
+ * as whole dumps, and `src/` deduplicated by module.
  *
- * The split is a measurement rather than a taste. The corpus outside `self/`
+ * The split is a measurement rather than a taste. The corpus outside `src/`
  * dumps 272 KiB over 262 programs and every byte of it is a construct's
  * layout, signature or folded constant — the material a failure has to be
- * readable as. `self/` dumps 19.9 MB over 57 programs and only 1.0 MB of that
+ * readable as. `src/` dumps 19.9 MB over 57 programs and only 1.0 MB of that
  * is distinct, because every entry re-dumps its imports: storing it whole
  * would multiply one edit to one module by the 57 entries that import it, and
  * a golden nobody can read the diff of is a hash with extra bytes.
  */
 const produceChecked = (seed) => {
-  const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked")
+  const dumper = link(seed, path.join("src", "dump-checked.ts"), "dump_checked")
   if (dumper.error !== undefined) {
     return { error: dumper.error }
   }
@@ -153,7 +153,7 @@ const produceChecked = (seed) => {
   for (const file of programs()) {
     const named = path.relative(root, file).split(path.sep).join("/")
     const flags = checkerArgs(file)
-    const isSelf = named.startsWith("self/")
+    const isSelf = named.startsWith("src/")
     const result = dumper.run([...flags, named])
     if (result.status !== 0) {
       // A program the checker refuses has no dump, and the reason it gives is
@@ -218,7 +218,7 @@ const produceChecked = (seed) => {
   }
 
   const selfText = [
-    ...header("`--emit-checked` for the 57 programs of `self/`, deduplicated by module."),
+    ...header("`--emit-checked` for the 57 programs of `src/`, deduplicated by module."),
     "#",
     "# An `entry` line is one program and the modules it loaded, in load order; the",
     "# entry module is the one the line is named for. A `module` section is that",
@@ -236,7 +236,7 @@ const produceChecked = (seed) => {
   }
 
   const outsideText = [
-    ...header("`--emit-checked` for every positive program of the corpus outside `self/`."),
+    ...header("`--emit-checked` for every positive program of the corpus outside `src/`."),
     "#",
     "# One `program` record per program, holding its whole dump: every struct's",
     "# layout with field indices and byte offsets, every signature, every folded",
@@ -295,7 +295,7 @@ const GOLDEN_SET = [
       "types",
       path.join("tests", "self", "types.ts"),
       [],
-      "`self/types.ts` over the type list `tests/self/types.ts` builds: every LLVM type, alignment, printed name, flag and assignable pair."
+      "`src/types.ts` over the type list `tests/self/types.ts` builds: every LLVM type, alignment, printed name, flag and assignable pair."
     ),
   },
   {
@@ -308,7 +308,7 @@ const GOLDEN_SET = [
         path.join("tests", "self", "diagnostics-fixture.txt"),
         path.join("tests", "self", "diagnostics-second.txt"),
       ],
-      "`self/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut."
+      "`src/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut."
     ),
   },
   {
@@ -318,7 +318,7 @@ const GOLDEN_SET = [
       "symbols",
       path.join("tests", "self", "symbols.ts"),
       [],
-      "`self/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops."
+      "`src/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops."
     ),
   },
 ]

@@ -1,7 +1,7 @@
 /**
  * The diagnostic-code registry, read back out of a `codes.ts`.
  *
- * `self/codes.ts` holds the table -- a fragment line, then the `NL####` line
+ * `src/codes.ts` holds the table -- a fragment line, then the `NL####` line
  * that names its rule. Three places in this repository read it back:
  * `scripts/gen-diagnostic-codes.mjs`, which checks the registry's shape, its
  * order and that no number is used twice; `tests/diagnostic-coverage.js`,
@@ -22,7 +22,7 @@
  * Two properties are the whole point of having it, and both are here because
  * they have failed:
  *
- *   - **The indentation is not part of the contract.** `self/codes.ts` lost a
+ *   - **The indentation is not part of the contract.** `src/codes.ts` lost a
  *     level when WP22 stage C rewrote its tables as arrows with concise
  *     bodies, and every reader keyed on four literal spaces then read it as
  *     *empty* rather than as changed. `^\s+` is what a pair is recognised by.

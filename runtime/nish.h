@@ -2,7 +2,7 @@
  *
  * Include this from C drivers, N-API shims, or any other host that links the C
  * runtime next to compiled Nish modules. Everything here is a contract shared
- * with `self/runtime.ts` (the IR side) and the implementation, which is
+ * with `src/runtime.ts` (the IR side) and the implementation, which is
  * two translation units: `runtime/runtime.c` holds the core every program
  * touches — the arena, strings, arrays, number formatting, the panics — and
  * `runtime/runtime-os.c` holds everything that wraps a system call: the file
@@ -181,10 +181,10 @@ void nish_append_file(const nish_str *path, const nish_str *data);
  * A returned array lives in the arena (valid until the next reset/release):
  * copy `len` elements out of `data` before recycling.
  *
- * An array field stored inside its object (`self/inline-arrays.ts`) is this
+ * An array field stored inside its object (`src/inline-arrays.ts`) is this
  * header followed by its `K` slots, `struct { nish_array h; T slots[K]; }`
- * with `h.data == (char *)slots` and `h.cap == K`; `self/runtime.ts`'s
- * `ARRAY_TYPE` and `self/structs.ts`'s `INLINE_HEADER_BYTES` are the same 24
+ * with `h.data == (char *)slots` and `h.cap == K`; `src/runtime.ts`'s
+ * `ARRAY_TYPE` and `src/structs.ts`'s `INLINE_HEADER_BYTES` are the same 24
  * bytes, and `tests/layout/inline-array.c` holds the three to it. It only
  * happens where no header, `.d.ts` or N-API shim describes the class, so a
  * host that includes a generated header never meets one. */

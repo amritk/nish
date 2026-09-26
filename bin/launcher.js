@@ -21,7 +21,7 @@
  * slower. stage0's `src/` was deleted in R6 (`docs/wp19-stage0-retirement.md`), so there
  * is no second compiler in the package to reach for, and the honest answer is
  * the one below: name the platforms a release carries, say there is nothing to
- * fall back to, and exit non-zero. The alternative -- shipping `self/` and
+ * fall back to, and exit non-zero. The alternative -- shipping `src/` and
  * bootstrapping on the user's machine -- was priced in wp12 and turned down,
  * and quietly doing nothing was never on the table: a command that exits 0
  * having compiled nothing is worse than one that refuses.
@@ -126,7 +126,7 @@ const nativeCompiler = (assetName) => {
  * Say why there is no compiler to run, and stop.
  *
  * Under `--json` that is one object on stdout and **nothing on stderr**, which
- * is the shape `self/compile.ts`'s own `reportToolchainFailure` uses for the
+ * is the shape `src/compile.ts`'s own `reportToolchainFailure` uses for the
  * same code: stdout carries objects and nothing else, so a tool reading it does
  * not have to strip a human report out of the stream. Otherwise it is the
  * report on stderr. Either way the status is the same.

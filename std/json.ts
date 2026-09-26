@@ -244,7 +244,7 @@ const jsonHex4 = (text: string, at: i32, end: i32): i32 => {
  * A surrogate pair is **not** recombined: each half becomes its own three-byte
  * sequence, which is what `😀` reads as here. Nothing this module
  * exists to read produces one — `JSON.stringify`, and `jsonQuote` in
- * `self/strings.ts` which matches it byte for byte, escape only the seven short
+ * `src/strings.ts` which matches it byte for byte, escape only the seven short
  * forms and `\u00xx` below `0x20`, and pass every other byte through as itself —
  * so the alternative would be code with no caller to keep it honest.
  */

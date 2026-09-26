@@ -1,5 +1,5 @@
 /**
- * The Wave C oracle: `self/strings.ts`, `self/map.ts` and `self/paths.ts`
+ * The Wave C oracle: `src/strings.ts`, `src/map.ts` and `src/paths.ts`
  * against implementations that already exist (docs/wp14-selfhost.md §3, §6
  * rule 3).
  *
@@ -7,7 +7,7 @@
  *   node tests/self/support-oracle.js --verbose   print every differing line
  *   node tests/self/support-oracle.js --update    rewrite goldens/support.txt
  *
- * The support library is the part of `self/` with no counterpart in stage0's `src/` to
+ * The support library is the part of `src/` with no counterpart in stage0's `src/` to
  * diff against phase by phase, so each function is matched with the thing it
  * has to agree with instead:
  *
@@ -57,7 +57,7 @@ const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ |pkg |spec )/
 
 // ---- The pieces the driver prints -----------------------------------------------------
 
-/** FNV-1a as an i32, the hash `self/map.ts` uses; `Math.imul` is its wrapping multiply. */
+/** FNV-1a as an i32, the hash `src/map.ts` uses; `Math.imul` is its wrapping multiply. */
 const hashString = (s) => {
   let hash = -2128831035
   for (const byte of Buffer.from(s, "utf8")) {
@@ -67,7 +67,7 @@ const hashString = (s) => {
 }
 
 /**
- * `path.posix.normalize` with the trailing slash `self/paths.ts` drops: a
+ * `path.posix.normalize` with the trailing slash `src/paths.ts` drops: a
  * module path names a file, so `a/b/` and `a/b` must be one identity and not
  * two.
  */
@@ -94,14 +94,14 @@ const resolveModule = (base, spec) => {
   return resolved.endsWith(".ts") ? resolved : `${resolved}.ts`
 }
 
-/** `self/paths.ts`'s `dirname` and `basename` are Node's, so Node is the oracle. */
+/** `src/paths.ts`'s `dirname` and `basename` are Node's, so Node is the oracle. */
 const dirname = (p) => path.posix.dirname(p)
 
 /**
  * `basenameWithout` is the one function here that is *not* Node's: this is a
  * spec check rather than an oracle, because `path.posix.basename(p, ext)`
  * answers `"///"` for `basename("///", ".ts")` and disagrees with itself
- * about `".ts"`. The rule `self/paths.ts` documents is the one below.
+ * about `".ts"`. The rule `src/paths.ts` documents is the one below.
  */
 const basenameWithout = (p, suffix) => {
   const name = path.posix.basename(p)
@@ -112,7 +112,7 @@ const basenameWithout = (p, suffix) => {
 /** The sign of a byte-wise comparison, which is what a sort reads. */
 const compareStrings = (a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"))
 
-/** The growth policy documented in `self/map.ts`, to check the table actually re-filed. */
+/** The growth policy documented in `src/map.ts`, to check the table actually re-filed. */
 const slotsAfter = (entries) => {
   let slots = 16
   for (let i = 1; i <= entries; i++) {

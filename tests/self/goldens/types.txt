@@ -1,4 +1,4 @@
-# `self/types.ts` over the type list `tests/self/types.ts` builds: every LLVM type, alignment, printed name, flag and assignable pair.
+# `src/types.ts` over the type list `tests/self/types.ts` builds: every LLVM type, alignment, printed name, flag and assignable pair.
 # Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
 # WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
 type 0 i32 | i32 | 4 01001 32

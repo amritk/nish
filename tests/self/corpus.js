@@ -39,7 +39,7 @@ const root = path.resolve(import.meta.dirname, "..", "..")
 const CORPUS_DIRS = [
   "tests/cases",
   "examples",
-  "self",
+  "src",
   "docs/cookbook",
   "bench",
   "tests/parser",

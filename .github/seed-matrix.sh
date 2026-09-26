@@ -214,7 +214,7 @@ echo "::notice::Seeded from $tag. The rolling freeze is checked on:$checked. Not
   echo
   echo "| Seed | Rolling freeze |"
   echo "| --- | --- |"
-  for asset in $checked; do echo "| \`$asset\` | checked: \`bootstrap ($asset)\` builds \`self/\` with it |"; done
+  for asset in $checked; do echo "| \`$asset\` | checked: \`bootstrap ($asset)\` builds \`src/\` with it |"; done
   for pair in $unchecked; do
     echo "| \`${pair%%:*}\` | **not checked** — not attached until ${pair##*:}, so this release carries no seed |"
   done

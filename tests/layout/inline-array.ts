@@ -2,8 +2,8 @@
 // array fields are stored inline"). tests/layout/inline-array.c declares the
 // same layout in C -- each inline field a `struct { nish_array h; T slots[K]; }`
 // -- asserts its size and offsets with clang, and reads every slot and header
-// through the pointers `make` hands back, so `self/structs.ts`'s arithmetic,
-// `self/runtime.ts`'s `ARRAY_TYPE` and `runtime/nish.h`'s `nish_array` are held
+// through the pointers `make` hands back, so `src/structs.ts`'s arithmetic,
+// `src/runtime.ts`'s `ARRAY_TYPE` and `runtime/nish.h`'s `nish_array` are held
 // to one layout. Compiled with `-o` alone: a header would keep the pointer
 // layout (`tests/cases/cls_inline_array_header`), and `Rows` is not exported,
 // so nothing but this file's own C twin lays it out.

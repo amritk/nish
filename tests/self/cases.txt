@@ -27,7 +27,7 @@ path	relative/dir	nested/deep/../file
 # `rel <from> <to>`: two paths rooted at the same base, which is the contract
 # `relativePath` states. The output stems of a multi-module compilation are
 # built from these, so a module in a subdirectory keeps its own `.ll`.
-rel	self	self/nodes.ts
+rel	src	src/nodes.ts
 rel	tests/link/dup	tests/link/dup/sub/x.ts
 rel	a/b	a/c
 rel	a/b/c	a
@@ -59,7 +59,7 @@ path	/a/b.ts	../lib/util.ts
 path	x	.ts
 path	/a	.ts
 
-# WP21 S2: `self/manifest.ts` against stage0's `src/manifest.ts`, which is the only
+# WP21 S2: `src/manifest.ts` against stage0's `src/manifest.ts`, which is the only
 # implementation either of them has to agree with — the rule is this project's,
 # not Node's, so there is no third opinion to appeal to. Tab separated:
 # `pkg <subpath> <primary condition> <fallback condition> <package.json>`.

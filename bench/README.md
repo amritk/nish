@@ -25,8 +25,8 @@ hold it: the date, the machine, the toolchain versions, and the compiler's own
 `--version` line and commit. The checked-in report therefore reads
 `nish 0.0.0 (commit c72a68f)` — it was measured before the first release moved
 `package.json` off `0.0.0`, and the commit it names is the working commit of
-that run. The numbers are still the current compiler's: nothing in stage0's `src/`,
-`self/`, `runtime/` or `bench/` has changed since that run, only the release
+that run. The numbers are still the current compiler's: nothing in either
+compiler (stage0 or the self-hosted one), `runtime/` or `bench/` has changed since that run, only the release
 plumbing and the version string. Do not correct the header by hand;
 `docs/BENCHMARKS.md` is generated, and a header edited to say something the run
 did not is worse than a stale one. The next `node bench/run.mjs` on a quiet
@@ -116,7 +116,7 @@ they compile on any compiler that builds this tree.
 
 | Name | Layout |
 | --- | --- |
-| `map-proto-ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`self/map.ts`) had before WP32 S6 |
+| `map-proto-ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`src/map.ts`) had before WP32 S6 |
 | `map-proto-ordered-fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
 | `map-proto-ordered-fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
 | `map-proto-unordered` | unordered: hash, key and value in the bucket |
@@ -144,9 +144,9 @@ checksum:
 | `map-vs-stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete` | (d) | `map-node.mjs` |
 
 `StringMap` is compiler-internal, so `map-vs-stringmap.ts` carries a copy of
-it, lines 28 to 204 of `self/map.ts` between two marked rules, and the `bench`
+it, lines 28 to 204 of `src/map.ts` between two marked rules, and the `bench`
 check in `tests/run.js` fails when the copy is no longer a verbatim part of
-`self/map.ts`. Given `time [variant]`, each program prints its workloads'
+`src/map.ts`. Given `time [variant]`, each program prints its workloads'
 elapsed nanoseconds to stderr; naming a variant runs it alone. The runner times
 every variant, and every twin, in a process of its own, because in one process
 the second variant would run on the memory the first left, and under Node on a
@@ -351,7 +351,7 @@ its own elapsed time and the number of digits varies. Turning ASLR off
 measured above, after pinning, is strbuild's 0.006%, so 0.1% leaves a
 sixteenfold margin for anything else that differs between runners, such as a
 glibc patch release or a kernel's vDSO. A looser bound would have cost real
-regressions: switching off the bounds prover in `self/bounds.ts` costs Queens
+regressions: switching off the bounds prover in `src/bounds.ts` costs Queens
 0.858% and changes no other benchmark by more than two instructions. A count below
 its baseline by more than the tolerance does not fail. `--check` prints a note,
 and the next `--update` makes the gain the new bar.
@@ -405,7 +405,7 @@ LLVM, so the check runs there on every push.
   `--link` alone would run it; `-o` keeps the module, which is where `opt -O2`
   shows the `umin` the file header tells you to look for.
 
-  The field shape is `knownAtMost` in [self/bounds.ts](../self/bounds.ts) — the
+  The field shape is `knownAtMost` in [src/bounds.ts](../src/bounds.ts) — the
   file header says why — so the distance between it and the other two is what
   candidate 2 of [docs/wp15-performance.md](../docs/wp15-performance.md) §2c has
   to recover.

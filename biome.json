@@ -8,7 +8,7 @@
   "files": {
     "includes": [
       "bin/**/*.js",
-      "self/**/*.ts",
+      "src/**/*.ts",
       "std/**/*.ts",
       "tests/self/**/*.ts",
       "tests/**/*.js",
@@ -163,7 +163,7 @@
         "examples/**",
         "docs/cookbook/**",
         "bench/**/*.ts",
-        "self/**/*.ts",
+        "src/**/*.ts",
         "std/**/*.ts",
         "tests/self/**/*.ts"
       ],
@@ -191,7 +191,7 @@
     },
     {
       "includes": [
-        "self/**/*.ts",
+        "src/**/*.ts",
         "std/**/*.ts",
         "examples/**/*.ts",
         "docs/cookbook/**/*.ts",
@@ -234,7 +234,7 @@
       }
     },
     {
-      "includes": ["self/**/*.ts", "std/**/*.ts"],
+      "includes": ["src/**/*.ts", "std/**/*.ts"],
       "linter": {
         "rules": {
           "style": {

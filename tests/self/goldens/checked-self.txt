@@ -1,4 +1,4 @@
-# `--emit-checked` for the 57 programs of `self/`, deduplicated by module.
+# `--emit-checked` for the 57 programs of `src/`, deduplicated by module.
 # Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
 # WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
 #
@@ -8,79 +8,79 @@
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
 # 72 programs, 935452 dump lines live, 72 distinct modules.
-entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit-util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit-util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-entry self/ast-text.ts: self/ast-text.ts self/nodes.ts
-entry self/attributes.ts: self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts
-entry self/bounds.ts: self/bounds.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-entry self/branding.ts: self/branding.ts
-entry self/builtins.ts: self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/checker.ts: self/checker.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit-util.ts self/result.ts self/structs.ts self/members.ts self/fusion.ts self/parents.ts self/validator.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/bounds.ts self/constants.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts self/assignment.ts self/statements.ts
-entry self/codes.ts: self/codes.ts
-entry self/compilation.ts: self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
-entry self/compile.ts: self/compile.ts self/ast-text.ts self/nodes.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/dump.ts self/interop-abi.ts self/interop-dts.ts self/interop-wasm.ts self/interop-header.ts self/interop-napi.ts self/run-cache.ts
-entry self/constants.ts: self/constants.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-entry self/context.ts: self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-entry self/debug.ts: self/debug.ts self/branding.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/ice.ts self/ir.ts self/nodes.ts self/program.ts self/context.ts self/symbols.ts self/types.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/result.ts self/builtins.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/declarations.ts: self/declarations.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/members.ts self/emit-util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/diagnostics.ts: self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts
-entry self/dump-ast.ts: self/dump-ast.ts self/ast-text.ts self/nodes.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/parser.ts self/lexer.ts self/tokens.ts
-entry self/dump-checked.ts: self/dump-checked.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/dump.ts
-entry self/dump-tokens.ts: self/dump-tokens.ts self/lexer.ts self/strings.ts self/tokens.ts
-entry self/dump.ts: self/dump.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/compilation.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
-entry self/emit-arrays.ts: self/emit-arrays.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-result.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts
-entry self/emit-builtins.ts: self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/attributes.ts self/emit-strings.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/emit-classes.ts: self/emit-classes.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-map.ts self/emit-strings.ts self/runtime.ts self/tbaa.ts self/emit-result.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/emit-control.ts: self/emit-control.ts self/emit-arrays.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-result.ts self/emit.ts self/debug.ts self/ir.ts self/emit-classes.ts self/tbaa.ts self/emit-ops.ts self/emit-map.ts self/emit-strings.ts self/runtime.ts self/emit-parallel.ts self/options.ts self/target.ts
-entry self/emit-map.ts: self/emit-map.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/emit-ops.ts: self/emit-ops.ts self/ice.ts self/branding.ts self/codes.ts self/constants.ts self/context.ts self/diagnostics.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-map.ts self/runtime.ts self/tbaa.ts self/emit-result.ts self/options.ts self/emit-strings.ts self/ir.ts self/debug.ts self/emit-control.ts self/emit-classes.ts self/emit-parallel.ts self/target.ts
-entry self/emit-parallel.ts: self/emit-parallel.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/debug.ts self/target.ts
-entry self/emit-result.ts: self/emit-result.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/emit-strings.ts: self/emit-strings.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/runtime.ts self/emit-map.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/emit-util.ts: self/emit-util.ts self/program.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts
-entry self/emit.ts: self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/escape.ts: self/escape.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/emit.ts self/debug.ts self/ir.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts
-entry self/expressions.ts: self/expressions.ts self/branding.ts self/annotations.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/fusion.ts: self/fusion.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/emit-util.ts self/generics.ts self/annotations.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/generics.ts: self/generics.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit-util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/ice.ts: self/ice.ts self/branding.ts self/codes.ts
-entry self/inline-arrays.ts: self/inline-arrays.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/emit-util.ts self/structs.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/members.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts self/visibility.ts
-entry self/interop-abi.ts: self/interop-abi.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/compilation.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
-entry self/interop-dts.ts: self/interop-dts.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/interop-abi.ts self/interop-wasm.ts
-entry self/interop-header.ts: self/interop-header.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/interop-abi.ts
-entry self/interop-napi.ts: self/interop-napi.ts self/ice.ts self/branding.ts self/codes.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/interop-abi.ts
-entry self/interop-wasm.ts: self/interop-wasm.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/interop-abi.ts
-entry self/ir.ts: self/ir.ts self/strings.ts self/map.ts
-entry self/lexer.ts: self/lexer.ts self/strings.ts self/tokens.ts
-entry self/manifest.ts: self/manifest.ts self/lexer.ts self/strings.ts self/tokens.ts
-entry self/map.ts: self/map.ts
-entry self/members.ts: self/members.ts self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/declarations.ts self/parents.ts self/emit-util.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/fusion.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/nish-modules.ts: self/nish-modules.ts self/branding.ts
-entry self/nodes.ts: self/nodes.ts
-entry self/options.ts: self/options.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-entry self/packages.ts: self/packages.ts self/strings.ts
-entry self/parallel.ts: self/parallel.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/parents.ts: self/parents.ts self/nodes.ts
-entry self/parser.ts: self/parser.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/lexer.ts self/tokens.ts self/nodes.ts
-entry self/paths.ts: self/paths.ts self/strings.ts
-entry self/program.ts: self/program.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts
-entry self/ranges.ts: self/ranges.ts self/bounds.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/visibility.ts self/options.ts
-entry self/result.ts: self/result.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/run-cache.ts: self/run-cache.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit-control.ts self/emit-ops.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/emit-parallel.ts self/options.ts self/target.ts self/inline-arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
-entry self/runtime.ts: self/runtime.ts self/map.ts
-entry self/statements.ts: self/statements.ts self/branding.ts self/expressions.ts self/annotations.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/validator.ts self/options.ts self/emit-parallel.ts self/target.ts self/parents.ts self/members.ts self/fusion.ts
-entry self/std-modules.ts: self/std-modules.ts self/branding.ts self/paths.ts self/strings.ts
-entry self/strings.ts: self/strings.ts
-entry self/structs.ts: self/structs.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/members.ts self/emit-util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit-builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/emit-classes.ts self/emit-result.ts self/tbaa.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/emit-parallel.ts self/target.ts
-entry self/symbols.ts: self/symbols.ts self/map.ts self/nodes.ts
-entry self/target.ts: self/target.ts
-entry self/tbaa.ts: self/tbaa.ts self/emit.ts self/attributes.ts self/emit-builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit-util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit-arrays.ts self/emit-ops.ts self/emit-control.ts self/ir.ts self/emit-classes.ts self/emit-result.ts self/emit-strings.ts self/runtime.ts self/emit-map.ts self/options.ts self/debug.ts self/emit-parallel.ts self/target.ts
-entry self/tokens.ts: self/tokens.ts
-entry self/types.ts: self/types.ts self/ice.ts self/branding.ts self/codes.ts self/map.ts
-entry self/validator.ts: self/validator.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/emit-util.ts
-entry self/visibility.ts: self/visibility.ts self/options.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish-modules.ts self/branding.ts self/packages.ts self/std-modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
-module self/annotations.ts
+entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+entry src/ast-text.ts: src/ast-text.ts src/nodes.ts
+entry src/attributes.ts: src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts
+entry src/bounds.ts: src/bounds.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+entry src/branding.ts: src/branding.ts
+entry src/builtins.ts: src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/checker.ts: src/checker.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/declarations.ts src/expressions.ts src/arrays.ts src/builtins.ts src/emit-util.ts src/result.ts src/structs.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/constants.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts src/assignment.ts src/statements.ts
+entry src/codes.ts: src/codes.ts
+entry src/compilation.ts: src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts
+entry src/compile.ts: src/compile.ts src/ast-text.ts src/nodes.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/dump.ts src/interop-abi.ts src/interop-dts.ts src/interop-wasm.ts src/interop-header.ts src/interop-napi.ts src/run-cache.ts
+entry src/constants.ts: src/constants.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+entry src/context.ts: src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+entry src/debug.ts: src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/declarations.ts: src/declarations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/diagnostics.ts: src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts
+entry src/dump-ast.ts: src/dump-ast.ts src/ast-text.ts src/nodes.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/parser.ts src/lexer.ts src/tokens.ts
+entry src/dump-checked.ts: src/dump-checked.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/dump.ts
+entry src/dump-tokens.ts: src/dump-tokens.ts src/lexer.ts src/strings.ts src/tokens.ts
+entry src/dump.ts: src/dump.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/compilation.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts
+entry src/emit-arrays.ts: src/emit-arrays.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-result.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts
+entry src/emit-builtins.ts: src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/attributes.ts src/emit-strings.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/emit-classes.ts: src/emit-classes.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-map.ts src/emit-strings.ts src/runtime.ts src/tbaa.ts src/emit-result.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/emit-control.ts: src/emit-control.ts src/emit-arrays.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-result.ts src/emit.ts src/debug.ts src/ir.ts src/emit-classes.ts src/tbaa.ts src/emit-ops.ts src/emit-map.ts src/emit-strings.ts src/runtime.ts src/emit-parallel.ts src/options.ts src/target.ts
+entry src/emit-map.ts: src/emit-map.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/emit-ops.ts: src/emit-ops.ts src/ice.ts src/branding.ts src/codes.ts src/constants.ts src/context.ts src/diagnostics.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-map.ts src/runtime.ts src/tbaa.ts src/emit-result.ts src/options.ts src/emit-strings.ts src/ir.ts src/debug.ts src/emit-control.ts src/emit-classes.ts src/emit-parallel.ts src/target.ts
+entry src/emit-parallel.ts: src/emit-parallel.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/debug.ts src/target.ts
+entry src/emit-result.ts: src/emit-result.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/emit-strings.ts: src/emit-strings.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/emit-util.ts: src/emit-util.ts src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts
+entry src/emit.ts: src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/escape.ts: src/escape.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/emit.ts src/debug.ts src/ir.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts
+entry src/expressions.ts: src/expressions.ts src/branding.ts src/annotations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/fusion.ts: src/fusion.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/emit-util.ts src/generics.ts src/annotations.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/generics.ts: src/generics.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/ice.ts: src/ice.ts src/branding.ts src/codes.ts
+entry src/inline-arrays.ts: src/inline-arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/emit-util.ts src/structs.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts src/visibility.ts
+entry src/interop-abi.ts: src/interop-abi.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/compilation.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts
+entry src/interop-dts.ts: src/interop-dts.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/interop-abi.ts src/interop-wasm.ts
+entry src/interop-header.ts: src/interop-header.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/interop-abi.ts
+entry src/interop-napi.ts: src/interop-napi.ts src/ice.ts src/branding.ts src/codes.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/interop-abi.ts
+entry src/interop-wasm.ts: src/interop-wasm.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts src/interop-abi.ts
+entry src/ir.ts: src/ir.ts src/strings.ts src/map.ts
+entry src/lexer.ts: src/lexer.ts src/strings.ts src/tokens.ts
+entry src/manifest.ts: src/manifest.ts src/lexer.ts src/strings.ts src/tokens.ts
+entry src/map.ts: src/map.ts
+entry src/members.ts: src/members.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/declarations.ts src/parents.ts src/emit-util.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/fusion.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/nish-modules.ts: src/nish-modules.ts src/branding.ts
+entry src/nodes.ts: src/nodes.ts
+entry src/options.ts: src/options.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+entry src/packages.ts: src/packages.ts src/strings.ts
+entry src/parallel.ts: src/parallel.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/parents.ts: src/parents.ts src/nodes.ts
+entry src/parser.ts: src/parser.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts
+entry src/paths.ts: src/paths.ts src/strings.ts
+entry src/program.ts: src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts
+entry src/ranges.ts: src/ranges.ts src/bounds.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/visibility.ts src/options.ts
+entry src/result.ts: src/result.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/run-cache.ts: src/run-cache.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/emit-parallel.ts src/options.ts src/target.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/lexer.ts src/tokens.ts src/manifest.ts
+entry src/runtime.ts: src/runtime.ts src/map.ts
+entry src/statements.ts: src/statements.ts src/branding.ts src/expressions.ts src/annotations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/emit-parallel.ts src/target.ts src/parents.ts src/members.ts src/fusion.ts
+entry src/std-modules.ts: src/std-modules.ts src/branding.ts src/paths.ts src/strings.ts
+entry src/strings.ts: src/strings.ts
+entry src/structs.ts: src/structs.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
+entry src/symbols.ts: src/symbols.ts src/map.ts src/nodes.ts
+entry src/target.ts: src/target.ts
+entry src/tbaa.ts: src/tbaa.ts src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/constants.ts src/declarations.ts src/bounds.ts src/result.ts src/structs.ts src/statements.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/debug.ts src/emit-parallel.ts src/target.ts
+entry src/tokens.ts: src/tokens.ts
+entry src/types.ts: src/types.ts src/ice.ts src/branding.ts src/codes.ts src/map.ts
+entry src/validator.ts: src/validator.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/emit-util.ts
+entry src/visibility.ts: src/visibility.ts src/options.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
+module src/annotations.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import CheckContext from "./context" -> struct CheckContext
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
@@ -299,7 +299,7 @@ function aliasType(info: AliasInfo, ctx: CheckContext): i32 -> @aliasType [expor
   callee 496:5 CheckContext.error -> @CheckContext.error
   local 503:9 resolved: i32 (const)
   callee 503:20 resolveType -> @resolveType
-module self/branding.ts
+module src/branding.ts
 const LANGUAGE: string = "Nish" [exported]
 const CLI: string = "nish" [exported]
 const BUILTIN_SCHEME: string = "nish:" [exported]
@@ -312,7 +312,7 @@ function packageConditionFor(numberMode: string): string -> @packageConditionFor
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-module self/context.ts
+module src/context.ts
 import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
 import SourceFile from "./diagnostics" -> struct SourceFile
 import StringMap from "./map" -> struct StringMap
@@ -531,7 +531,7 @@ function CheckContext.popLoop(this: CheckContext): boolean -> @CheckContext.popL
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 376:11 broke: boolean (const)
-module self/diagnostics.ts
+module src/diagnostics.ts
 import codeFor from "./codes" -> function @codeFor
 import compareStrings from "./strings" -> function @compareStrings
 import jsonQuote from "./strings" -> function @jsonQuote
@@ -857,7 +857,7 @@ function DiagnosticSink.formatWarnings(this: DiagnosticSink, max: i32): string -
   local 535:9 i: i32 (let)
   callee 537:18 Diagnostic.message -> @Diagnostic.message
   local 540:11 hidden: i32 (const)
-module self/codes.ts
+module src/codes.ts
 const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"
 const TOOLCHAIN: string = "NL0002" [exported]
@@ -879,7 +879,7 @@ function codeFor(kind: string, text: string): string -> @codeFor [exported]
   local 1049:9 rules: string[] (const)
   callee 1049:27 diagnosticRules -> @diagnosticRules
   local 1050:7 j: i32 (let)
-module self/strings.ts
+module src/strings.ts
 const HEX_LOWER: string = "0123456789abcdef"
 const HEX_UPPER: string = "0123456789ABCDEF"
 struct StringBuilder (class) size=8 align=8 exported
@@ -1028,7 +1028,7 @@ function repeatString(s: string, count: i32): string -> @repeatString [exported]
   local 214:7 i: i32 (let)
   callee 216:5 StringBuilder.add -> @StringBuilder.add
   callee 219:10 StringBuilder.toText -> @StringBuilder.toText
-module self/map.ts
+module src/map.ts
 const INITIAL_SLOTS: i32 = 16
 const INDEX_CAP: i32 = 16777215
 struct StringMap (class) size=40 align=8 exported
@@ -1219,7 +1219,7 @@ function StringSet.add(this: StringSet, key: string): boolean -> @StringSet.add 
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 232:12 StringMap.add -> @StringMap.add
-module self/nodes.ts
+module src/nodes.ts
 const N_ERROR: i32 = 0 [exported]
 const N_EMPTY: i32 = 1 [exported]
 const N_LIST: i32 = 2 [exported]
@@ -1312,7 +1312,7 @@ function nodeName(kind: i32): string -> @nodeName [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: kind
   stackSites=0 stackLocals=0
-module self/program.ts
+module src/program.ts
 import CheckContext from "./context" -> struct CheckContext
 import SourceFile from "./diagnostics" -> struct SourceFile
 import BuiltinExport from "./nish-modules" -> struct BuiltinExport
@@ -2257,7 +2257,7 @@ function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): 
   local 1629:9 info: StructInfo | null (const)
   callee 1629:16 inlineElementStruct -> @inlineElementStruct
   callee 1630:26 TypeTable.llvmType -> @TypeTable.llvmType
-module self/nish-modules.ts
+module src/nish-modules.ts
 import BUILTIN_SCHEME from "./branding" -> const BUILTIN_SCHEME
 struct BuiltinExport (class) size=32 align=8 exported
   field canonical: string index=0 offset=0
@@ -2297,7 +2297,7 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   callee 103:14 new BuiltinExport -> @BuiltinExport.constructor
   callee 106:14 new BuiltinExport -> @BuiltinExport.constructor
   callee 112:14 new BuiltinExport -> @BuiltinExport.constructor
-module self/packages.ts
+module src/packages.ts
 import splitByte from "./strings" -> function @splitByte
 import StringBuilder from "./strings" -> struct StringBuilder
 const ROOT_PACKAGE: string = "" [exported]
@@ -2394,7 +2394,7 @@ function parseBareSpecifier(specifier: string): BareSpecifier | null -> @parseBa
   callee 219:16 joinSegments -> @joinSegments
   local 220:9 parsed: BareSpecifier (const)
   callee 221:11 joinSegments -> @joinSegments
-module self/std-modules.ts
+module src/std-modules.ts
 import CLI from "./branding" -> const CLI
 import STD_PREFIX from "./branding" -> const STD_PREFIX
 import normalizePath from "./paths" -> function @normalizePath
@@ -2435,7 +2435,7 @@ function isMapExtrasModule(packageName: string, name: string): boolean -> @isMap
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0
   callee 111:35 stdModuleName -> @stdModuleName
-module self/paths.ts
+module src/paths.ts
 import splitByte from "./strings" -> function @splitByte
 import StringBuilder from "./strings" -> struct StringBuilder
 const SLASH: i32 = 47
@@ -2554,7 +2554,7 @@ function joinPath(parts: string[]): string -> @joinPath [exported]
   callee 236:10 StringBuilder.isEmpty -> @StringBuilder.isEmpty
   callee 236:32 normalizePath -> @normalizePath
   callee 236:46 StringBuilder.toText -> @StringBuilder.toText
-module self/symbols.ts
+module src/symbols.ts
 import StringMap from "./map" -> struct StringMap
 import Node from "./nodes" -> struct Node
 const STORAGE_PARAM: i32 = 0 [exported]
@@ -2687,7 +2687,7 @@ function Scope.clearNarrowing(this: Scope, variable: Local): void -> @Scope.clea
   local 191:13 last: i32 (const)
   local 197:11 parent: Scope | null (const)
   callee 199:7 Scope.clearNarrowing -> @Scope.clearNarrowing
-module self/types.ts
+module src/types.ts
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import StringMap from "./map" -> struct StringMap
 const T_ERROR: i32 = 0 [exported]
@@ -3097,7 +3097,7 @@ function TypeTable.widensToReadonlyArray(this: TypeTable, from: i32, to: i32): b
   pointer this: size=72 writesThrough=false captured=false passedTo=TypeTable.isReadonlyArray#0
   stackSites=0 stackLocals=0
   callee 688:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-module self/ice.ts
+module src/ice.ts
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
 import INTERNAL from "./codes" -> const INTERNAL
@@ -3124,7 +3124,7 @@ function internalError(message: string): i32 -> @internalError [exported]
   sharedWrite: via nish_write
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_write
   stackSites=0 stackLocals=0
-module self/generics.ts
+module src/generics.ts
 import resolveType from "./annotations" -> function @resolveType
 import LANGUAGE from "./branding" -> const LANGUAGE
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
@@ -4711,7 +4711,7 @@ function refuseParameterMember(ctx: CheckContext, receiver: Node, receiverType: 
   local 2973:9 kind: string (const)
   callee 2974:3 CheckContext.errorOnce -> @CheckContext.errorOnce
   callee 2977:79 TypeTable.typeName -> @TypeTable.typeName
-module self/checker.ts
+module src/checker.ts
 import aliasType from "./annotations" -> function @aliasType
 import builtinTypeName from "./annotations" -> function @builtinTypeName
 import rejectRangedIntegerName from "./annotations" -> function @rejectRangedIntegerName
@@ -5905,7 +5905,7 @@ function noteAnnotatedNew(decl: Node, program: CheckedProgram, hideMap: boolean,
   local 2339:9 name: string (const)
   local 2340:9 global: boolean (const)
   callee 2344:3 StringMap.set -> @StringMap.set
-module self/arrays.ts
+module src/arrays.ts
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
 import resolveType from "./annotations" -> function @resolveType
 import typedArrayElement from "./annotations" -> function @typedArrayElement
@@ -6367,7 +6367,7 @@ function checkElementReferences(ctx: CheckContext, body: Node): void -> @checkEl
   local 598:9 walk: RefWalk (const)
   callee 598:16 new RefWalk -> @RefWalk.constructor
   callee 599:3 RefWalk.visit -> @RefWalk.visit
-module self/builtins.ts
+module src/builtins.ts
 import CheckContext from "./context" -> struct CheckContext
 import checkExpression from "./expressions" -> function @checkExpression
 import N_CALL from "./nodes" -> const N_CALL
@@ -6711,7 +6711,7 @@ function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean 
   local 627:9 receiver: Node (const)
   callee 632:10 Scope.lookup -> @Scope.lookup
   callee 632:46 CheckedProgram.constant -> @CheckedProgram.constant
-module self/expressions.ts
+module src/expressions.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import nullableOfChecked from "./annotations" -> function @nullableOfChecked
 import resolveType from "./annotations" -> function @resolveType
@@ -7597,7 +7597,7 @@ function clearTarget(target: Node, scope: Scope): void -> @clearTarget
   local 1473:9 local: Local | null (const)
   callee 1473:17 Scope.lookup -> @Scope.lookup
   callee 1475:5 Scope.clearNarrowing -> @Scope.clearNarrowing
-module self/result.ts
+module src/result.ts
 import checkBuiltinArity from "./builtins" -> function @checkBuiltinArity
 import roundUpTo from "./structs" -> function @roundUpTo
 import CheckContext from "./context" -> struct CheckContext
@@ -7894,7 +7894,7 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
   local 470:7 index: i32 (let)
   local 471:14 child: Node (const)
   callee 473:7 markResultReads -> @markResultReads
-module self/structs.ts
+module src/structs.ts
 import CheckContext from "./context" -> struct CheckContext
 import rejectForeignPointer from "./annotations" -> function @rejectForeignPointer
 import resolveType from "./annotations" -> function @resolveType
@@ -8368,7 +8368,7 @@ function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean -> @coerces
   callee 904:18 CheckedProgram.struct -> @CheckedProgram.struct
   callee 904:37 TypeTable.nameOf -> @TypeTable.nameOf
   callee 908:46 implementsDeclaration -> @implementsDeclaration
-module self/declarations.ts
+module src/declarations.ts
 import CheckContext from "./context" -> struct CheckContext
 import isNishSpecifier from "./nish-modules" -> function @isNishSpecifier
 import nishModuleNames from "./nish-modules" -> function @nishModuleNames
@@ -8490,7 +8490,7 @@ function collectImports(ctx: CheckContext, decl: Node): void -> @collectImports 
   local 258:11 importedName: string (const)
   callee 259:30 new ImportBinding -> @ImportBinding.constructor
   callee 263:5 StringSet.add -> @StringSet.add
-module self/members.ts
+module src/members.ts
 import checkArrayMethod from "./arrays" -> function @checkArrayMethod
 import checkArrayProperty from "./arrays" -> function @checkArrayProperty
 import checkNewArray from "./arrays" -> function @checkNewArray
@@ -9013,7 +9013,7 @@ function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: No
   callee 807:9 checkBuiltinArity -> @checkBuiltinArity
   callee 808:7 checkStringArgument -> @checkStringArgument
   callee 812:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-module self/emit-util.ts
+module src/emit-util.ts
 import CheckedProgram from "./program" -> struct CheckedProgram
 import inlineElementStruct from "./program" -> function @inlineElementStruct
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -9152,7 +9152,7 @@ function unwrapStringPassthrough(program: CheckedProgram, expr: Node): Node -> @
   callee 194:9 isTemplateExpression -> @isTemplateExpression
   local 195:13 parts: Node[] (const)
   callee 195:21 templateParts -> @templateParts
-module self/fusion.ts
+module src/fusion.ts
 import CheckContext from "./context" -> struct CheckContext
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import unwrapParens from "./emit-util" -> function @unwrapParens
@@ -9323,7 +9323,7 @@ function isInert(ctx: CheckContext, node: Node, calls: Node[]): boolean -> @isIn
   callee 271:14 CheckedProgram.isEnumMember -> @CheckedProgram.isEnumMember
   callee 273:14 isInert -> @isInert
   callee 273:55 isInert -> @isInert
-module self/parents.ts
+module src/parents.ts
 import Node from "./nodes" -> struct Node
 struct ParentTable (class) size=8 align=8 exported
   field parents: Node | null[] index=0 offset=0
@@ -9355,7 +9355,7 @@ function ParentTable.parentOf(this: ParentTable, node: Node): Node | null -> @Pa
   pointer this: size=8 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-module self/validator.ts
+module src/validator.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import CheckContext from "./context" -> struct CheckContext
 import unwrapParens from "./emit-util" -> function @unwrapParens
@@ -9570,7 +9570,7 @@ function checkNullUnion(ctx: CheckContext, node: Node): void -> @checkNullUnion
   local 421:7 nulls: i32 (let)
   local 422:14 member: Node (const)
   callee 428:5 CheckContext.error -> @CheckContext.error
-module self/assignment.ts
+module src/assignment.ts
 import CheckContext from "./context" -> struct CheckContext
 import StringSet from "./map" -> struct StringSet
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -9797,7 +9797,7 @@ function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void -> @c
   callee 298:19 missingField -> @missingField
   callee 300:5 CheckContext.error -> @CheckContext.error
   callee 302:47 TypeTable.typeName -> @TypeTable.typeName
-module self/constants.ts
+module src/constants.ts
 import CheckContext from "./context" -> struct CheckContext
 import N_BINARY from "./nodes" -> const N_BINARY
 import N_FALSE from "./nodes" -> const N_FALSE
@@ -10166,7 +10166,7 @@ function caseValue(ctx: CheckContext, expr: Node): CaseValue -> @caseValue [expo
   callee 653:5 foldConstant -> @foldConstant
   callee 654:12 new CaseValue -> @CaseValue.constructor
   callee 656:10 new CaseValue -> @CaseValue.constructor
-module self/bounds.ts
+module src/bounds.ts
 import CheckContext from "./context" -> struct CheckContext
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
@@ -12181,7 +12181,7 @@ function walkWithRanges(ctx: CheckContext, params: Local | null[], body: Node, t
   callee 3594:5 seedEntry -> @seedEntry
   callee 3597:5 walkBoundsStatement -> @walkBoundsStatement
   callee 3599:5 walkExpression -> @walkExpression
-module self/statements.ts
+module src/statements.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import checkCondition from "./expressions" -> function @checkCondition
 import checkExpression from "./expressions" -> function @checkExpression
@@ -12566,7 +12566,7 @@ function checkContinue(ctx: CheckContext, stmt: Node): boolean -> @checkContinue
   local 558:7 inLoop: boolean (let)
   local 559:14 kind: i32 (const)
   callee 565:5 CheckContext.error -> @CheckContext.error
-module self/parallel.ts
+module src/parallel.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import stepOf from "./attributes" -> function @stepOf
@@ -12883,7 +12883,7 @@ function mapGrain(fn: FunctionSig): i32 -> @mapGrain [exported]
   local 592:9 body: Node | null (const)
   callee 592:16 FunctionSig.body -> @FunctionSig.body
   callee 593:54 costOf -> @costOf
-module self/attributes.ts
+module src/attributes.ts
 import builtinCallees from "./emit-builtins" -> function @builtinCallees
 import builtinCalleesNamed from "./emit-builtins" -> function @builtinCalleesNamed
 import identifierBuiltinCallees from "./emit-builtins" -> function @identifierBuiltinCallees
@@ -14225,7 +14225,7 @@ function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: b
   callee 2587:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee 2594:21 TypeTable.resultByValue -> @TypeTable.resultByValue
   callee 2613:28 TypeTable.resultByValue -> @TypeTable.resultByValue
-module self/emit-builtins.ts
+module src/emit-builtins.ts
 import isBuiltinFunction from "./builtins" -> function @isBuiltinFunction
 import Emitter from "./emit" -> struct Emitter
 import emitConsoleError from "./emit-strings" -> function @emitConsoleError
@@ -14689,7 +14689,7 @@ function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitN
   callee 707:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee 707:45 Emitter.useRuntime -> @Emitter.useRuntime
   callee 709:16 internalErrorFor -> @internalErrorFor
-module self/emit.ts
+module src/emit.ts
 import functionAttributes from "./attributes" -> function @functionAttributes
 import paramAttributes from "./attributes" -> function @paramAttributes
 import returnAttributes from "./attributes" -> function @returnAttributes
@@ -15696,7 +15696,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   local 1364:9 emitter: Emitter (const)
   callee 1364:19 new Emitter -> @Emitter.constructor
   callee 1365:10 Emitter.emitModule -> @Emitter.emitModule
-module self/debug.ts
+module src/debug.ts
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
 import SourceFile from "./diagnostics" -> struct SourceFile
@@ -16154,7 +16154,7 @@ function DebugInfo.declareLocal(this: DebugInfo, fn: IRFunction, local: Local, s
   callee 627:149 DebugInfo.typeRef -> @DebugInfo.typeRef
   callee 629:5 IRFunction.emit -> @IRFunction.emit
   callee 630:47 TypeTable.llvmType -> @TypeTable.llvmType
-module self/ir.ts
+module src/ir.ts
 import StringBuilder from "./strings" -> struct StringBuilder
 import StringMap from "./map" -> struct StringMap
 struct IRBlock (class) size=16 align=8 exported
@@ -16472,7 +16472,7 @@ function metadataIndex(ref: string): i32 -> @metadataIndex
   stackSites=0 stackLocals=0
   local 438:7 value: i32 (let)
   local 439:7 i: i32 (let)
-module self/escape.ts
+module src/escape.ts
 import classifyUse from "./attributes" -> function @classifyUse
 import constructorOf from "./attributes" -> function @constructorOf
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
@@ -17381,7 +17381,7 @@ function calleeWhere(facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   callee 1660:15 FactsTable.get -> @FactsTable.get
   callee 1660:25 StringSet.at -> @StringSet.at
   callee 1665:37 leavesGarbage -> @leavesGarbage
-module self/emit-arrays.ts
+module src/emit-arrays.ts
 import HoistedHeader from "./attributes" -> struct HoistedHeader
 import isResizeCall from "./attributes" -> function @isResizeCall
 import NO_RECORD from "./bounds" -> const NO_RECORD
@@ -18586,7 +18586,7 @@ function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   callee 1393:48 Emitter.align8 -> @Emitter.align8
   callee 1394:3 IRFunction.emit -> @IRFunction.emit
   callee 1396:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-module self/emit-ops.ts
+module src/emit-ops.ts
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import Emitter from "./emit" -> struct Emitter
@@ -18969,7 +18969,7 @@ function compoundFloatOpcode(op: string, json: boolean): string -> @compoundFloa
   stackSites=0 stackLocals=0
   callee 501:75 floatOpcode -> @floatOpcode
   callee 501:87 withoutEquals -> @withoutEquals
-module self/emit-control.ts
+module src/emit-control.ts
 import closeHeaderScope from "./emit-arrays" -> function @closeHeaderScope
 import openHeaderScope from "./emit-arrays" -> function @openHeaderScope
 import Emitter from "./emit" -> struct Emitter
@@ -19343,7 +19343,7 @@ function emitIncDec(emitter: Emitter, expr: Node): string -> @emitIncDec [export
   callee 408:17 IRFunction.emitValue -> @IRFunction.emitValue
   callee 408:51 Emitter.llvm -> @Emitter.llvm
   callee 409:3 storeLocal -> @storeLocal
-module self/emit-classes.ts
+module src/emit-classes.ts
 import Emitter from "./emit" -> struct Emitter
 import emitPackedResult from "./emit-result" -> function @emitPackedResult
 import emitResultReturningCall from "./emit-result" -> function @emitResultReturningCall
@@ -19749,7 +19749,7 @@ function structFunctions(info: StructInfo): FunctionSig[] -> @structFunctions [e
   local 478:9 out: FunctionSig[] (const)
   local 479:9 ctor: FunctionSig | null (const)
   local 483:14 method: FunctionSig (const)
-module self/emit-result.ts
+module src/emit-result.ts
 import Emitter from "./emit" -> struct Emitter
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import ResultLayout from "./result" -> struct ResultLayout
@@ -20332,7 +20332,7 @@ function resultMethodName(program: CheckedProgram, table: TypeTable, call: Node)
   local 651:9 access: Node (const)
   callee 655:8 TypeTable.isResult -> @TypeTable.isResult
   local 658:9 name: string (const)
-module self/tbaa.ts
+module src/tbaa.ts
 import Emitter from "./emit" -> struct Emitter
 import FieldInfo from "./program" -> struct FieldInfo
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
@@ -20419,7 +20419,7 @@ function headerTbaa(emitter: Emitter, index: i32): string -> @headerTbaa [export
   callee 142:18 Emitter.metadata -> @Emitter.metadata
   local 143:9 access: string (const)
   callee 144:21 Emitter.metadata -> @Emitter.metadata
-module self/emit-strings.ts
+module src/emit-strings.ts
 import Emitter from "./emit" -> struct Emitter
 import emitIndex from "./emit-arrays" -> function @emitIndex
 import emitNumberFromI64 from "./emit-arrays" -> function @emitNumberFromI64
@@ -20767,7 +20767,7 @@ function emitConsoleError(emitter: Emitter, expr: Node): string -> @emitConsoleE
   callee 403:16 emitToString -> @emitToString
   callee 404:3 IRFunction.emit -> @IRFunction.emit
   callee 404:32 Emitter.useRuntime -> @Emitter.useRuntime
-module self/runtime.ts
+module src/runtime.ts
 import StringMap from "./map" -> struct StringMap
 const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8* }" [exported]
 const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }" [exported]
@@ -21050,7 +21050,7 @@ function inlineAllocator(attrGroup: string): string -> @inlineAllocator [exporte
   calls: nish_alloc_struct nish_array_grow nish_str_concat
   stackSites=1 stackLocals=1
   local 612:9 lines: string[] (const)
-module self/emit-map.ts
+module src/emit-map.ts
 import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
 import FactsTable from "./attributes" -> struct FactsTable
@@ -21948,7 +21948,7 @@ function methodsNamed(owner: StructInfo | null, names: string[]): FunctionSig[] 
   local 988:14 name: string (const)
   local 989:11 sig: FunctionSig | null (const)
   callee 989:17 StructInfo.method -> @StructInfo.method
-module self/options.ts
+module src/options.ts
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 struct Options (class) size=96 align=8 exported
   field numberMode: i32 index=0 offset=0
@@ -21975,7 +21975,7 @@ function Options.constructor(this: Options): void -> @Options.constructor [expor
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-module self/emit-parallel.ts
+module src/emit-parallel.ts
 import Emitter from "./emit" -> struct Emitter
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import IRFunction from "./ir" -> struct IRFunction
@@ -22090,7 +22090,7 @@ function chunkTrampoline(emitter: Emitter, name: string, chunk: FunctionSig, ctx
   callee 180:14 IRFunction.emitValue -> @IRFunction.emitValue
   callee 183:3 IRFunction.emit -> @IRFunction.emit
   callee 184:3 IRFunction.emit -> @IRFunction.emit
-module self/target.ts
+module src/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
@@ -22144,7 +22144,7 @@ function targetHeader(target: Target): string[] -> @targetHeader [exported]
   pointer target: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 152:9 lines: string[] (const)
-module self/ast-text.ts
+module src/ast-text.ts
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
 import FLAG_DEFINITE from "./nodes" -> const FLAG_DEFINITE
 import FLAG_EXPORTED from "./nodes" -> const FLAG_EXPORTED
@@ -22193,7 +22193,7 @@ function astText(file: Node, path: string): string -> @astText [exported]
   callee 114:17 nodeName -> @nodeName
   local 115:14 child: Node (const)
   callee 116:5 astLines -> @astLines
-module self/compilation.ts
+module src/compilation.ts
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FactsTable from "./attributes" -> struct FactsTable
@@ -22937,7 +22937,7 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
   local 1582:11 both: string (const)
   callee 1582:29 TypeTable.typeName -> @TypeTable.typeName
   local 1588:9 where: string (const)
-module self/inline-arrays.ts
+module src/inline-arrays.ts
 import CheckContext from "./context" -> struct CheckContext
 import intrinsicType from "./emit-util" -> function @intrinsicType
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
@@ -23397,7 +23397,7 @@ function layoutInlineArrays(contexts: CheckContext[], mode: BuildMode): void -> 
   local 808:9 i: i32 (let)
   local 815:14 info: StructInfo (const)
   callee 816:5 computeLayout -> @computeLayout
-module self/visibility.ts
+module src/visibility.ts
 import Options from "./options" -> struct Options
 import CheckedProgram from "./program" -> struct CheckedProgram
 struct BuildMode (class) size=3 align=1 exported
@@ -23439,7 +23439,7 @@ function hostVisible(mode: BuildMode, exported: boolean, isEntry: boolean): bool
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer mode: size=3 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-module self/ranges.ts
+module src/ranges.ts
 import BoundsWalk from "./bounds" -> struct BoundsWalk
 import CallSummary from "./bounds" -> struct CallSummary
 import EntryFacts from "./bounds" -> struct EntryFacts
@@ -23884,7 +23884,7 @@ function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   stackSites=0 stackLocals=0
   local 923:14 access: Node (const)
   local 924:11 index: Node (const)
-module self/parser.ts
+module src/parser.ts
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import SourceFile from "./diagnostics" -> struct SourceFile
 import Lexer from "./lexer" -> struct Lexer
@@ -25520,7 +25520,7 @@ function Parser.parseIdentifier(this: Parser): Node -> @Parser.parseIdentifier [
   local 2128:11 node: Node (const)
   callee 2128:18 Parser.node -> @Parser.node
   callee 2130:5 Parser.advance -> @Parser.advance
-module self/lexer.ts
+module src/lexer.ts
 import StringBuilder from "./strings" -> struct StringBuilder
 import TOK_AMP from "./tokens" -> const TOK_AMP
 import TOK_AMP_ASSIGN from "./tokens" -> const TOK_AMP_ASSIGN
@@ -26054,7 +26054,7 @@ function columnOf(source: string, offset: i32): i32 -> @columnOf [exported]
   stackSites=0 stackLocals=0
   local 1031:7 start: i32 (let)
   local 1032:7 i: i32 (let)
-module self/tokens.ts
+module src/tokens.ts
 const TOK_END: i32 = 0 [exported]
 const TOK_ERROR: i32 = 1 [exported]
 const TOK_IDENT: i32 = 2 [exported]
@@ -26156,7 +26156,7 @@ function tokenName(kind: i32): string -> @tokenName [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: kind
   stackSites=0 stackLocals=0
-module self/manifest.ts
+module src/manifest.ts
 import isDigit from "./lexer" -> function @isDigit
 import splitByte from "./strings" -> function @splitByte
 const TAB: i32 = 9
@@ -26413,7 +26413,7 @@ function manifestEngineCheck(manifest: string, condition: string, version: strin
   local 643:9 running: i32[] (const)
   callee 643:19 manifestVersionParts -> @manifestVersionParts
   local 647:7 i: i32 (let)
-module self/compile.ts
+module src/compile.ts
 import astText from "./ast-text" -> function @astText
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
@@ -26764,7 +26764,7 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   callee 1035:34 generateNapiShim -> @generateNapiShim
   callee 1039:10 makeDirectoryFor -> @makeDirectoryFor
   callee 1042:39 generateNapiShim -> @generateNapiShim
-module self/dump.ts
+module src/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import Compilation from "./compilation" -> struct Compilation
@@ -26982,7 +26982,7 @@ function checkedText(compilation: Compilation): string -> @checkedText [exported
   local 395:9 out: string[] (const)
   local 396:14 unit: ModuleUnit (const)
   callee 397:5 dumpModule -> @dumpModule
-module self/interop-abi.ts
+module src/interop-abi.ts
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -27518,7 +27518,7 @@ function resultField(table: TypeTable, t: i32, name: string): string -> @resultF
   local 1031:9 note: string (const)
   callee 1031:63 tsKeyword -> @tsKeyword
   callee 1032:17 spaceAfter -> @spaceAfter
-module self/interop-dts.ts
+module src/interop-dts.ts
 import Compilation from "./compilation" -> struct Compilation
 import banner from "./interop-abi" -> function @banner
 import ExternalFunction from "./interop-abi" -> struct ExternalFunction
@@ -27552,7 +27552,7 @@ function generateDts(compilation: Compilation, fns: ExternalFunction[]): string 
   callee 87:47 wasmType -> @wasmType
   callee 93:12 jsExportName -> @jsExportName
   callee 93:59 wasmType -> @wasmType
-module self/interop-wasm.ts
+module src/interop-wasm.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import Compilation from "./compilation" -> struct Compilation
 import banner from "./interop-abi" -> function @banner
@@ -27886,7 +27886,7 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   callee 665:44 tsSignature -> @tsSignature
   local 666:16 line: string (const)
   callee 666:24 wasmWrapper -> @wasmWrapper
-module self/interop-header.ts
+module src/interop-header.ts
 import HEADER_GUARD_PREFIX from "./branding" -> const HEADER_GUARD_PREFIX
 import LANGUAGE from "./branding" -> const LANGUAGE
 import RUNTIME_HEADER from "./branding" -> const RUNTIME_HEADER
@@ -28016,7 +28016,7 @@ function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFi
   local 237:11 alias: string (const)
   callee 237:48 cAliasReason -> @cAliasReason
   callee 238:39 elementNotes -> @elementNotes
-module self/interop-napi.ts
+module src/interop-napi.ts
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import CLI from "./branding" -> const CLI
 import LANGUAGE from "./branding" -> const LANGUAGE
@@ -28526,7 +28526,7 @@ function generateNapiShim(compilation: Compilation, fns: ExternalFunction[], asy
   local 1320:14 p: Plan (const)
   local 1321:11 js: string (const)
   callee 1321:16 jsExportName -> @jsExportName
-module self/run-cache.ts
+module src/run-cache.ts
 import CLI from "./branding" -> const CLI
 import RUNTIME_HEADER from "./branding" -> const RUNTIME_HEADER
 import VERSION from "./branding" -> const VERSION
@@ -28590,7 +28590,7 @@ function runCacheKey(modules: EmittedModule[], root: string, profile: string, de
   callee 107:5 StringBuilder.add -> @StringBuilder.add
   callee 108:5 StringBuilder.add -> @StringBuilder.add
   callee 110:10 StringBuilder.toText -> @StringBuilder.toText
-module self/dump-ast.ts
+module src/dump-ast.ts
 import astLines from "./ast-text" -> function @astLines
 import SourceFile from "./diagnostics" -> struct SourceFile
 import Parser from "./parser" -> struct Parser
@@ -28610,7 +28610,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee 37:3 astLines -> @astLines
   local 40:14 diagnostic: Diagnostic (const)
   callee 41:19 Diagnostic.message -> @Diagnostic.message
-module self/dump-checked.ts
+module src/dump-checked.ts
 import Compilation from "./compilation" -> struct Compilation
 import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
@@ -28635,7 +28635,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee 72:8 Compilation.check -> @Compilation.check
   callee 73:19 DiagnosticSink.format -> @DiagnosticSink.format
   callee 77:9 checkedText -> @checkedText
-module self/dump-tokens.ts
+module src/dump-tokens.ts
 import Lexer from "./lexer" -> struct Lexer
 import TOK_BIGINT from "./tokens" -> const TOK_BIGINT
 import TOK_END from "./tokens" -> const TOK_END

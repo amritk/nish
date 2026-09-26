@@ -60,7 +60,7 @@ const INITIAL_SLOTS: i32 = 8
  * constants are public domain.
  *
  * The body is never emitted. Every call is lowered in place, per key type, by
- * `self/emit-map.ts`; the constant is what the checker and the whole-program
+ * `src/emit-map.ts`; the constant is what the checker and the whole-program
  * facts see, and the facts of the function that calls it are what decide its
  * attributes, because every call is inside a probe that reads the table.
  */

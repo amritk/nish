@@ -11,7 +11,7 @@ For Claude Code the same rules live in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
 - [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the compiler and its seed, the code map, the commands, what is always true
-- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: Nish-0, the seed, the module map, how it is tested
+- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `src/`: Nish-0, the seed, the module map, how it is tested
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
 - [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
@@ -24,9 +24,10 @@ For Claude Code the same rules live in
 
 `nish` (**Nish**) is an ahead-of-time compiler from a strictly static
 subset of TypeScript to LLVM IR. The compiler is written in Nish itself, in
-`self/`, and built by the previous released `nish` — the seed — the way rustc
+`src/`, and built by the previous released `nish` — the seed — the way rustc
 and Go build themselves; the TypeScript implementation that used to seed it
-(`src/`, "stage0") was deleted in WP19 R6. The repository is a **Node.js + npm**
+("stage0", which lived in its own `src/` while this compiler was in `self/`)
+was deleted in WP19 R6. The repository is a **Node.js + npm**
 project for its tooling: the test harness, the scripts and the installer are
 JavaScript, `typescript` is a development dependency for `npm run check`, and
 the published package has no runtime dependency at all — it hands over to a
@@ -42,7 +43,7 @@ plan, with the conventions every agent follows in §7 and a brief template in §
 npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
-npm run check               # ambient tsc --noEmit over self/, std/, tests/nish
+npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
 npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
@@ -88,7 +89,7 @@ Every `--json` object is flat:
   `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
   the registry are documented in
   [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry is
-  `self/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next
+  `src/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next
   free number in its band, and a number is never moved or handed out twice.
   `node scripts/gen-diagnostic-codes.mjs --check` validates its format and that
   every code is unique, and `npm test` runs it. The driver's whole-program
@@ -218,17 +219,17 @@ what is blocking and what you need — and keep watching.
   one negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
   `CHANGELOG.md` line. There is no changesets flow here; the changelog is the
   record.
-- **A construct is implemented once, in `self/`.** There is no second
+- **A construct is implemented once, in `src/`.** There is no second
   implementation to compare it with since WP19 R6
   ([wp19](./docs/wp19-stage0-retirement.md)), so its golden `.ll`, its native
   round trip and `tests/nish-cmp.js` — the last release against this tree —
-  are what prove the lowering. **The rolling freeze** still holds: `self/` may
+  are what prove the lowering. **The rolling freeze** still holds: `src/` may
   not use the construct in its own source until the seed compiles it, which is
   the next release, and CI's `bootstrap` job fails the pull request that
   tries.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
-  the reason in `self/attributes.ts` beside the code.
-- **A struct layout change touches `self/runtime.ts` and `runtime.c` in the same
+  the reason in `src/attributes.ts` beside the code.
+- **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
   commit** and extends a layout test. The C runtime is two translation units
   with a budget each — `runtime.c` for the core and `runtime-os.c` for whatever
   wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
@@ -247,7 +248,7 @@ what is blocking and what you need — and keep watching.
   attributions in commits, code, or PR text. Commit messages: imperative
   subject, body explaining the lowering.
 - **Declare a function as an arrow bound to a `const`**, in the compiler
-  (`self/`, an Nish program) and in the JavaScript tooling alike: the language
+  (`src/`, an Nish program) and in the JavaScript tooling alike: the language
   has arrow functions ([wp22](./docs/wp22-arrow-functions.md)), so a function
   is `const f = (a: i32): i32 => ...` and the `function` keyword is the legacy
   spelling, and the lint rule is an error. Class methods stay methods. A struct is a `class` or an `interface`: a `type` alias only renames

@@ -20,7 +20,7 @@ becomes the release notes), the other docs and CI configuration are not in
 the tarball. Check with `npm pack --dry-run`.
 
 The compiler resolves `scripts/build.sh` and `runtime/runtime.c` from its
-package root (`packageRootCandidates` in `self/compile.ts`): the directory
+package root (`packageRootCandidates` in `src/compile.ts`): the directory
 above the one `argv[0]` names, then the same for its real path when the command
 was reached through a link, and the working directory only last, for a
 compiler sitting in a checkout. The first candidate with `scripts/build.sh` in
@@ -84,7 +84,7 @@ not start is refused with the reason and exit 3. The stub is there on purpose �
 what is under test is whether the launcher gets out of the way, and whether the
 thing it hands to is a correct compiler is `npm run bootstrap`'s question.
 
-`--version` prints `VERSION` from `self/branding.ts`, baked into the binary: a
+`--version` prints `VERSION` from `src/branding.ts`, baked into the binary: a
 compiled compiler has no JSON parser and may have been copied anywhere, so it
 cannot read `package.json` at runtime. `tests/run.js` fails when the two
 disagree, and `release-pr.yml` bumps both.
@@ -170,7 +170,7 @@ It also refuses to run in a checkout, which is not a nicety: this repository is
 its own package, so `npm ci` here installs this package's own
 `optionalDependencies`, and once those are published the first `npm ci` would
 otherwise overwrite the tracked `bin/nish` with a binary and leave the working
-tree dirty. The guard is the presence of `self/compile.ts` — it was
+tree dirty. The guard is the presence of `src/compile.ts` — it was
 stage0's `src/launcher.ts` until the launcher moved into `bin/` and started shipping,
 which made it useless as a landmark — and it is now literally the same check
 `scripts/bootstrap.sh` makes rather than the same shape of one.
@@ -191,13 +191,13 @@ refusal is machine-readable rather than prose only.
 | 1 | a diagnostic from the parser, validator or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); an input or output path that cannot be read or written | `file:line:col: error: ...` with caret excerpt, or one line |
 | 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
 | 3 | toolchain: the C toolchain, or the prebuilt compiler itself, could not be run. `--link` requested but no `scripts/build.sh` beside the compiler; `scripts/build.sh` (and the `clang` or `$CC` it runs) exited non-zero or could not be spawned; or `bin/nish` found no prebuilt compiler for this platform, or one that would not start | `--link: cannot find scripts/build.sh (looked in ...)`; build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...`; or the launcher's refusal naming the platforms a release carries |
-| 70 | internal compiler error: a broken invariant inside the compiler (`EX_SOFTWARE`, `self/ice.ts`) | `nish <version>: internal compiler error`, what broke, and a request to report it at the issue tracker with the input file and the command line. There is no stack to print — the language has no exceptions — and the report says that `NISH_DEBUG=1` adds nothing |
+| 70 | internal compiler error: a broken invariant inside the compiler (`EX_SOFTWARE`, `src/ice.ts`) | `nish <version>: internal compiler error`, what broke, and a request to report it at the issue tracker with the input file and the command line. There is no stack to print — the language has no exceptions — and the report says that `NISH_DEBUG=1` adds nothing |
 
 `--help` is the answer to a question, not a refusal, so it prints on stdout and
 exits 0 — what clang, tsc and git do, and what lets a wrapper ask the compiler
 what it accepts without treating the run as a failure. A usage *error* prints
 the same text on stderr with exit 2. The two are told apart by the stream and
-the code, and `tests/run.js` pins both (`self/compile.ts`).
+the code, and `tests/run.js` pins both (`src/compile.ts`).
 
 Under `--json` every one of these failures is also one JSON object on stdout —
 including exit 3 and exit 70, which have no source position and so carry
@@ -282,7 +282,7 @@ tarball, the per-platform npm package and the main npm package — and all three
 name every standard-library module now. The first two were missing it; the
 third carried `std` through `package.json`'s `files` all along, with nothing
 asserting it. `tests/run.js` derives the list from the same
-directory `self/std-modules.ts`'s literal is already checked against, and
+directory `src/std-modules.ts`'s literal is already checked against, and
 fails when any of the three gates omits a module —
 so the next module added to the library cannot ship in the compiler's list and
 not in the tarball. Each check was watched failing.
@@ -290,7 +290,7 @@ not in the tarball. Each check was watched failing.
 ## The lockfile's copy of the platform pins, and how it went stale
 
 `release-pr.yml` bumps the version in `package.json`, in `package-lock.json`
-(both of its copies), in `self/branding.ts`, and across the
+(both of its copies), in `src/branding.ts`, and across the
 `optionalDependencies` entries that pin the per-platform compiler packages —
 which have to move with the version, or a release installs a compiler that
 resolves the *previous* release's binaries.
@@ -324,7 +324,7 @@ step below is done by hand.
    `.github/workflows/release-pr.yml`, which walks the commits since the last
    tag, computes the next version from their types, and opens or refreshes one
    open **`chore(release): <version>`** pull request carrying the version bump
-   (`package.json`, `package-lock.json` and `self/branding.ts`, which must
+   (`package.json`, `package-lock.json` and `src/branding.ts`, which must
    agree or `tests/run.js` fails), `changelog/<version>.json`, and the
    `CHANGELOG.md` section rendered from it.
 
@@ -372,7 +372,7 @@ step below is done by hand.
 
    `--next` is the one line everything downstream reads --
    `changelog/<version>.json`, the bump of `package.json`, `package-lock.json`
-   and `self/branding.ts`, and the pull request's title -- so the chosen
+   and `src/branding.ts`, and the pull request's title -- so the chosen
    version reaches all of them. The trailer is bookkeeping, so it comes off the
    entry's body the way `Refs:` does. `scripts/changelog-gen.test.mjs`, which
    `npm test` runs, pins every case.
@@ -549,8 +549,8 @@ for it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
 publishes a rule of the same shape; the reason to write ours down now is that a
 policy decided in the abstract costs nobody an argument during a release.
 
-**What that job checks is that the seed can build `self/`.** stage1 compiling
-and linking is the rule above enforced; `self/` reaching for something the seed
+**What that job checks is that the seed can build `src/`.** stage1 compiling
+and linking is the rule above enforced; `src/` reaching for something the seed
 does not have fails there and nowhere else. `--verify` then asserts the two
 equalities that belong to the working tree rather than to the seed —
 `IR(stage1) == IR(stage2)`, the fixed point, and stage3 byte-identical to
@@ -575,12 +575,12 @@ that created the first seed. From 0.2.0 on the seed is the previous line's last
 patch release.
 
 The consequence for contributors: **a construct added in 0.N cannot be used by
-`self/` until 0.(N+1)**. While 0.N is in development the compiler that has to
-compile `self/` is a 0.(N−1) binary, and it has never heard of the construct.
+`src/` until 0.(N+1)**. While 0.N is in development the compiler that has to
+compile `src/` is a 0.(N−1) binary, and it has never heard of the construct.
 Rule 1 of [wp14-selfhost.md](wp14-selfhost.md) §6 — a construct enters the
-language before it enters `self/` — therefore survived stage0's retirement
+language before it enters `src/` — therefore survived stage0's retirement
 unchanged, and only its subject changed, from stage0 to the seed. Add the
-construct to the language, ship the release, then use it in `self/`.
+construct to the language, ship the release, then use it in `src/`.
 
 ## The provenance tag
 
@@ -588,9 +588,9 @@ From WP19 G6 until R6, each release cut `ddc-<version>` at the commit it was
 built from, from a `ddc` job in `release.yml` between the binaries and the
 release. The tag was
 [WP19 G6](wp19-stage0-retirement.md#g6--the-provenance-is-recorded-before-it-is-lost)'s:
-it marks a commit at which `IR(stage0, self/) == IR(stage1, self/)` and the
+it marks a commit at which `IR(stage0, src/) == IR(stage1, src/)` and the
 fixed point both held — two independently written implementations of this
-language emitting identical IR for every module of `self/`, which is the second
+language emitting identical IR for every module of `src/`, which is the second
 half of diverse double-compiling. G6 writes down how to re-verify it from the
 tag: check the tag out, `npm ci`, `npm run build`,
 `node tests/self/bootstrap.js` — commands that mean what they meant at that
@@ -607,13 +607,13 @@ the publish.
 ## The npm name
 
 > The analysis below was written while stage0's `src/` existed and names its files in
-> the present tense; R6 deleted it, and `self/branding.ts` is now the one file
+> the present tense; R6 deleted it, and `src/branding.ts` is now the one file
 > the compiler reads its name from.
 
 **Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
 `nish`.** That is option (a) below, taken without the project rename option (b)
 would have carried. `package.json#name` is the scoped name; `bin.nish` is
-untouched, so [`self/branding.ts`](../self/branding.ts) — the file the whole
+untouched, so [`src/branding.ts`](../src/branding.ts) — the file the whole
 compiler reads its name from (then one of two, with stage0's copy) — does not
 move, and nothing a user reads in a diagnostic changes.
 
@@ -678,13 +678,13 @@ curl -s https://registry.npmjs.org/nish | node -p \
 `package.json#name`, `bin.nish`, every install line in `README.md` and
 [INSTALL.md](INSTALL.md), the `Publish to npm` step at the end of
 `release.yml`, and — if the decision changes the *binary's* name rather than
-only the package's — stage0's `src/branding.ts` and `self/branding.ts`, the two files
+only the package's — stage0's `src/branding.ts` and `src/branding.ts`, the two files
 the whole compiler reads its name from. The options, and what each costs:
 
 | | What it means | What it costs |
 | --- | --- | --- |
 | **(a) a scope**, such as `@amritk/nish` | `package.json#name` becomes the scoped name and `bin.nish` is untouched, so the command a user types is still `nish` | available immediately, uncontestable afterwards, and no rename reaches the compiler. But `npm publish` needs `--access public` on every publish, because a scoped package is private by default and a private publish on a free account fails at the registry rather than in the workflow. The name in the install line and the name on the command line stop being one string, which is one more thing every README has to explain |
-| **(b) a different bare name** | a free name on the registry, and the project renames with it if the binary is to match | one search and it is settled, with no scope to explain and no dispute to wait on. The cost is where the name lives: stage0's `src/branding.ts` and `self/branding.ts` spell it for every diagnostic, the runtime's `nish_*` C symbols are ABI and a rename deliberately does not follow them ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-name-lives)), and `NISH_DEBUG`, `NISH_BOOTSTRAP`, the release asset names and the goldens that record the `--version` line all carry it. Renaming the *package* is cheap; renaming the *project* is not |
+| **(b) a different bare name** | a free name on the registry, and the project renames with it if the binary is to match | one search and it is settled, with no scope to explain and no dispute to wait on. The cost is where the name lives: stage0's `src/branding.ts` and `src/branding.ts` spell it for every diagnostic, the runtime's `nish_*` C symbols are ABI and a rename deliberately does not follow them ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-name-lives)), and `NISH_DEBUG`, `NISH_BOOTSTRAP`, the release asset names and the goldens that record the `--version` line all carry it. Renaming the *package* is cheap; renaming the *project* is not |
 | **(c) npm's dispute process** | npm's package-name dispute policy covers this shape exactly — a name held by a package nobody maintains — and it begins by contacting the owner | slow, and its outcome is npm's to decide rather than ours: it is the only option here that can still fail after the waiting. The courteous first move is the same one it starts with anyway, which is to ask the author directly. Worth opening *in parallel* with (a), never instead of it |
 
 (a) is reversible into (b) or (c) and neither of the others is reversible into
@@ -708,7 +708,7 @@ written out, so the scope is still spelled in a single place.
 **Decided 2026-09-19: (c) for which binary, (b) for delivery, (a) as the
 fallback.** `bin.nish` runs the self-hosted native compiler. `dist/` stays in
 the package and keeps both of the jobs it already has — the bootstrap seed
-every stage starts from, and the differential oracle every phase of `self/` is
+every stage starts from, and the differential oracle every phase of `src/` is
 compared against — and stops being the thing a user runs. The binary reaches
 the machine as per-platform prebuilt packages, the (b) row below, and a
 platform with no binary of its own falls back to (a). The three rows were never
@@ -755,9 +755,9 @@ contact with the work is the third row, and the reason is that (a) was chosen
 as "what (b) does when it has nothing to hand over" without anybody pricing
 that sentence against the alternative sitting in the same tarball.
 
-(a) costs a user a clang and two compilations of `self/` before they have a
+(a) costs a user a clang and two compilations of `src/` before they have a
 compiler, and costs every tarball on every platform the 944,676 bytes of
-`self/` — all of it to serve musl, FreeBSD and 32-bit anything, which is who is
+`src/` — all of it to serve musl, FreeBSD and 32-bit anything, which is who is
 left once `x86_64`/`aarch64` × `linux`/`darwin` is covered. `dist/` is already
 in the package for its own reasons, runs anywhere node does, needs no C
 toolchain, and is the same compiler by every test in this repository. It is
@@ -768,7 +768,7 @@ The sentence this amends is **"`dist/` stops being the thing a user runs"**, and
 it still holds where it was aimed: `dist/` is not what a user on a supported
 platform runs, and `bin.nish` is the native binary there. "Not the default" and
 "never, on any platform, even when there is no binary" are two claims, and the
-row below only ever argued the first. So `files` does not list `self/`, and the
+row below only ever argued the first. So `files` does not list `src/`, and the
 one thing (a) would have bought — a native compiler on an unsupported
 platform — is not bought at all, deliberately: a working compiler is, and
 nothing is compiled on a user's machine on any path.
@@ -836,7 +836,7 @@ installs; `package.json` declares one
 `scripts/platform-package.mjs` turns the directory `release.yml` already stages
 for the release tarball into one of those packages, so the binary a user
 downloads is the binary that job built and smoke-tested rather than a copy of
-it; and the WP12 block drives both paths. `files` does not list `self/`, for the
+it; and the WP12 block drives both paths. `files` does not list `src/`, for the
 reason the amendment gives. What is left of G5 is a person publishing, which is
 "Release procedure" step 4 and not work.
 
@@ -851,14 +851,14 @@ by the compiler stage0 built — compiles the same programs about eight times
 faster than the Node one and needs no Node at all
 ([wp14-selfhost.md](wp14-selfhost.md) §4, D5). That does not retire stage0 and
 cannot: it is the bootstrap seed every stage starts from, and it is the
-differential oracle every phase of `self/` is compared against
+differential oracle every phase of `src/` is compared against
 (`tests/self/`). Its job is to build the binary and to keep it honest, not to
 be the thing installed.
 
 The package does neither cleanly today. `package.json#files` ships `dist/`,
-`runtime/` and `scripts/`, and `self/` is not on the list — so
+`runtime/` and `scripts/`, and `src/` is not on the list — so
 `scripts/bootstrap.sh` travels in the tarball without the source it compiles.
-It checks for `self/compile.ts` before anything else and exits 3 with `run this
+It checks for `src/compile.ts` before anything else and exits 3 with `run this
 from a checkout of the repository`, which means an installed package carries a
 bootstrap script that can never bootstrap. That is not a fault in the script:
 the guard exists so the failure names the missing file instead of happening
@@ -868,7 +868,7 @@ Three ways to close it, and what each costs:
 
 | | What ships | What it costs |
 | --- | --- | --- |
-| **(a) ship `self/`** | the 58 modules of the self-hosted compiler, 944,676 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `self/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.5 MB to about 2.4 MB, and `self/` becomes a published surface rather than a checkout-only one |
+| **(a) ship `src/`** | the 58 modules of the self-hosted compiler, 944,676 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `src/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.5 MB to about 2.4 MB, and `src/` becomes a published surface rather than a checkout-only one |
 | **(b) per-platform prebuilt binaries** | `nish-<os>-<arch>` packages declared as `optionalDependencies` with `os`/`cpu` — the esbuild pattern — with the main package resolving whichever one npm installed | a release build matrix that does not exist. `release.yml` runs one `ubuntu-latest` job and attaches one tarball; every supported triple would need its own runner and its own artefact, macOS needs an answer for both architectures, and each release publishes N+1 packages instead of one. It also needs a fallback for a platform with no binary, and that fallback is (a) |
 | **(c) make stage2 the compiler, stage0 the seed** | `bin.nish` runs the native binary; `dist/` stays, as the seed and the oracle | **all four of the things [wp14-selfhost.md](wp14-selfhost.md) §7a listed as still stage0's have since closed** — `--target host` and `--emit-ast` are answered, `-o <dir>` is stated, and an internal error exits 70 with its own report — so the objection this row recorded no longer stands, and what remains for (c) is [wp19-stage0-retirement.md](wp19-stage0-retirement.md)'s later gates (the seed protocol, oracle succession, distribution) rather than the compiler's own surface. It is also not a delivery mechanism on its own — the binary still arrives by (a) or (b) |
 
@@ -904,7 +904,7 @@ cost rather than what one did.
   this bullet is done, and what remains of G5 is a person publishing rather
   than any work. The bullet stays because it is the position the package was
   built under. What no longer reflects it is the `files` whitelist: it lists
-  neither `self/` nor a binary *nor `dist/`*, which is what (b) with no
+  neither `src/` nor a binary *nor `dist/`*, which is what (b) with no
   fallback at all looks like — the compiler is in the platform packages and the
   tarball is the launcher (amended 2026-09-22, above).
 
@@ -913,4 +913,4 @@ follow-up and have since landed in WP10 itself: every phase that can recover
 hands its errors to one `DiagnosticSink` and the driver prints the first 20 in
 source order, and `--json` writes one object per error on stdout
 (`docs/wp10-ci.md`, "Multi-error reporting" and "`--json`"). The compiler
-answers `--json` in `self/compile.ts`, as it does every other flag it owns.
+answers `--json` in `src/compile.ts`, as it does every other flag it owns.

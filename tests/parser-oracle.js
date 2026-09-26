@@ -1,5 +1,5 @@
 /**
- * The S2 oracle: `self/parser.ts` against the `typescript` parser
+ * The S2 oracle: `src/parser.ts` against the `typescript` parser
  * (docs/wp14-selfhost.md, milestone S2).
  *
  *   node tests/parser-oracle.js              the whole corpus
@@ -8,7 +8,7 @@
  *
  * The same idea as `tests/lexer-oracle.js`: stage0's parser is the
  * `typescript` package's, so walk its tree, print it in the shape and format
- * `self/dump-ast.ts` prints, and diff. What that tests is not "did it parse"
+ * `src/dump-ast.ts` prints, and diff. What that tests is not "did it parse"
  * but "did it build the same tree, with the same spans, out of the same
  * pieces" — over every construct the corpus contains, which is every construct
  * the language has.
@@ -60,7 +60,7 @@ const byteOffsets = (source) => {
  * Print the `typescript` tree of `source` in `dump_ast`'s format.
  *
  * The printer is a pair of mutually recursive emitters — one for the node
- * kinds `self/nodes.ts` models, one for the list wrappers — and every
+ * kinds `src/nodes.ts` models, one for the list wrappers — and every
  * unhandled kind raises, which is how a construct Nish-0 has no node for
  * becomes a skip rather than a silent difference.
  */
@@ -560,7 +560,7 @@ const printTypeScriptTree = (source, sf) => {
         type(node.type, depth + 1)
         block(node.body, depth + 1)
         // WP18: the type parameters are the fifth child, after the body, because
-        // `self/nodes.ts` appends rather than renumbers.
+        // `src/nodes.ts` appends rather than renumbers.
         typeParameters(node.typeParameters, depth + 1)
         return
       }
@@ -596,7 +596,7 @@ const printTypeScriptTree = (source, sf) => {
         })
         list(depth + 1, node.members, member)
         // The type parameters are the fifth child, after the members, because
-        // `self/nodes.ts` appends rather than renumbers (WP18 G5).
+        // `src/nodes.ts` appends rather than renumbers (WP18 G5).
         typeParameters(node.typeParameters, depth + 1)
         return
       }
@@ -714,7 +714,7 @@ const printTypeScriptTree = (source, sf) => {
    * `static` and `readonly` are recorded and `public` / `private` /
    * `protected` are ignored, exactly as Nish does (docs/LANGUAGE.md, Classes):
    * both are flags the checker refuses on rather than syntax the parser turns
-   * down, so `self/ast-text.ts` prints them and this has to print the same
+   * down, so `src/ast-text.ts` prints them and this has to print the same
    * words in the same order. Anything else — `abstract`, `async`, `declare` —
    * is a construct the language does not have, so the file is skipped and
    * counted.
@@ -834,7 +834,7 @@ const corpus = () => {
   const dirs = [
     path.join(root, "tests", "cases"),
     path.join(root, "examples"),
-    path.join(root, "self"),
+    path.join(root, "src"),
     path.join(root, "tests", "differential", "corpus"),
     path.join(root, "docs", "cookbook"),
     path.join(root, "bench"),
@@ -857,12 +857,12 @@ const corpus = () => {
 }
 
 /**
- * `self/dump-ast.ts`, linked by the seed rather than by stage0 (WP19 G2.3):
+ * `src/dump-ast.ts`, linked by the seed rather than by stage0 (WP19 G2.3):
  * what this oracle compares against is the `typescript` parser, which outlives
  * stage0's `src/`, so the compiler that builds its subject has to as well.
  */
 const build = (seed) =>
-  linkWith(seed, path.join("self", "dump-ast.ts"), path.join(root, "build", "self", "dump_ast"))
+  linkWith(seed, path.join("src", "dump-ast.ts"), path.join(root, "build", "self", "dump_ast"))
 
 const main = (argv) => {
   const verbose = argv.includes("--verbose")

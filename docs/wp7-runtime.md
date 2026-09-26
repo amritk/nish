@@ -719,7 +719,7 @@ does not show above the noise (±4 ms between repetitions of either binary).
 **Where the link lines are.** `scripts/build.sh` compiles `runtime-os.c` beside
 any `runtime.c` it is handed, so every caller that names the runtime through it
 is already correct: `nish --link` (stage0's `src/index.ts`), stage1's `--link`
-(`self/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
+(`src/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
 profile builds in `tests/run.js`, `tests/differential/lib.js` (through
 `--link`), and every `--profile` recipe in these documents and in the README. A
 caller that already names both is left alone, since naming one object twice is a

@@ -13,5 +13,5 @@
     "moduleDetection": "force",
     "paths": { "nish/*": ["./std/*"] }
   },
-  "include": ["runtime/nish.d.ts", "self/**/*.ts", "std/**/*.ts", "tests/nish/**/*.ts"]
+  "include": ["runtime/nish.d.ts", "src/**/*.ts", "std/**/*.ts", "tests/nish/**/*.ts"]
 }

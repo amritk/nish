@@ -1,8 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "self/compile.ts",
-    "self/dump-*.ts",
+    "src/compile.ts",
+    "src/dump-*.ts",
     "std/*.ts",
     "tests/nish/*.ts",
     "tests/self/*.ts",

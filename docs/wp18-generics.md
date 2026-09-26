@@ -38,11 +38,11 @@ only one that fits.
 **Both compilers, together.** stage0 (stage0's `src/`) is the bootstrap seed and the
 differential oracle, `tests/self/ir_oracle.js` has no exemption list, and
 `tests/self/bootstrap.js` must still reach a byte-identical fixed point. So
-this lands in stage0's `src/` and `self/` in the same milestones, and the oracles are
+this lands in stage0's `src/` and `src/` in the same milestones, and the oracles are
 what say the two agree — exactly as WP16 and WP17 did
 ([wp17-result-abi.md](wp17-result-abi.md) §6).
 
-**Nish-0 does not adopt them.** `self/` implements generics without
+**Nish-0 does not adopt them.** `src/` implements generics without
 using them. §10 is the argument.
 
 ---
@@ -66,7 +66,7 @@ hand-written `StringMap` of `wp14-selfhost.md` §2.2." Neither half survives
 contact with what shipped in between. §6.1 and §10 give the reasons; the
 short form is that WP16 and WP17 gave `Result` a narrowing engine, an
 early-return operator and a packed-word ABI that no library type can declare,
-and that rewriting `self/map.ts` would put the bootstrap's fixed point at risk
+and that rewriting `src/map.ts` would put the bootstrap's fixed point at risk
 for a readability win.
 
 ---
@@ -128,7 +128,7 @@ Not accepted, each with the reason:
 **Decision: a generic function's type arguments are inferred from the
 argument types, and writing them at a call site is a compile error.**
 
-The reason is the parser, and it is specific. `self/parser.ts` has **one token
+The reason is the parser, and it is specific. `src/parser.ts` has **one token
 of lookahead and no backtracking**: the lexer is a cursor with no save or
 restore, and `advance()`/`peek()` are the whole mechanism (its header comment
 names the two places TypeScript is ambiguous to one token and says one token
@@ -145,7 +145,7 @@ Where the grammar is *not* ambiguous, type arguments are written out and are
 **required**:
 
 - in a type annotation: `const b: Box<i32> = ...` — `<` after a type name is
-  already a type-argument list in `self/parser.ts` (`parseType`), and
+  already a type-argument list in `src/parser.ts` (`parseType`), and
   `expectTypeArgumentEnd` already splits the `>>` the lexer merged, so
   `Box<Box<i32>>` parses today;
 - after `new`: `new Box<i32>(7)` — `parseNew` already reads a type-argument
@@ -286,7 +286,7 @@ different things depending on who asked for it.
 
 ### 3c. The mangling
 
-`mangleType` (stage0's `src/types.ts`) and `TypeTable.mangle` (`self/types.ts`) already
+`mangleType` (stage0's `src/types.ts`) and `TypeTable.mangle` (`src/types.ts`) already
 prefix-code a type — every constructor writes its tag before its operands, so
 `res.res.i32.str.str` can only be read one way. Two additions:
 
@@ -323,7 +323,7 @@ heritage and debug info that a `Result` does not.
 **`$` must be reserved.** `mangleType`'s comment today claims a class name is
 prefixed with `$` "because that character cannot appear in a TypeScript
 identifier". That is not true — `$` is a legal identifier character in
-TypeScript and in Nish (`isIdentStart` in `self/lexer.ts` accepts
+TypeScript and in Nish (`isIdentStart` in `src/lexer.ts` accepts
 `CH_DOLLAR`). The existing encoding survives anyway, because a struct's `$`
 prefix distinguishes it from the bare `res`/`arr`/`opt` constructor tags. The
 new encoding does not: a class literally named `Box$i32` would collide with
@@ -368,7 +368,7 @@ naming precisely because it is not obvious from the outside.
 `CheckedProgram` records the checker's answers in tables **keyed by AST node**:
 `types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues` are
 `WeakMap`s in stage0, and in stage1 they are `Array`s indexed by `Node.id`,
-sized from the parser's `nodeCount` (`self/program.ts`). Monomorphisation
+sized from the parser's `nodeCount` (`src/program.ts`). Monomorphisation
 breaks that key: `identity`'s `return x;` is one node with two types.
 
 Two ways out.
@@ -916,7 +916,7 @@ generic body has N addresses — the same thing gdb does for a C++ template, and
 the reason `dbg_generic` should assert two `DISubprogram`s with distinct
 `linkageName`s and the same `line`.
 
-*As landed (§15.7):* this is what `self/debug.ts` emits. The paragraph that
+*As landed (§15.7):* this is what `src/debug.ts` emits. The paragraph that
 stood here planned for `-g` being stage0's alone; stage1 took `-g` over and WP19
 R6 deleted stage0, so there is one compiler and `tests/cases/dbg_generic` is
 its golden. The debug type cache is keyed on the mangled name, because two
@@ -966,7 +966,7 @@ identifier than a C one, so "export `identity$i32` verbatim" was wrong for any
 array, nullable or `Result` argument. Every sidecar now uses one name,
 `nish_gen_identity_i32`, bound to the symbol with `NISH_SYMBOL` in C. The
 stage0's `src/interop/` paths above are stage0's and historical since WP19 R6; the code
-is `self/interop-*.ts`.
+is `src/interop-*.ts`.
 
 ---
 
@@ -1145,9 +1145,9 @@ change reports its byte count.
 and each instantiation carries a side-table overlay (§3d), so checking is
 O(Σ instantiations × template nodes) rather than O(template nodes).
 `wp14-selfhost.md` §3a D5 measured the baseline the hard way — stage1 compiles
-the whole of `self/` in **86 MB of peak RSS and 91 ms**, against stage0's
+the whole of `src/` in **86 MB of peak RSS and 91 ms**, against stage0's
 178 MB and 786 ms — and that measurement is also this package's regression
-test, because `self/` uses no generics (§10). A program that instantiates
+test, because `src/` uses no generics (§10). A program that instantiates
 nothing must allocate no overlay and cost nothing, and the bootstrap is what
 proves it.
 
@@ -1155,22 +1155,22 @@ proves it.
 
 ## 10. Nish-0 does not adopt them
 
-`self/` implements generics. `self/` is not written with them.
+`src/` implements generics. `src/` is not written with them.
 
 `docs/wp14-selfhost.md` §2 fixes Nish-0 as the subset the self-hosted
 compiler may use, and its first line is "no generics". That line does not
-change. `self/nodes.ts` keeps its one `Node` class, `self/types.ts` keeps its
-interned `i32` ids, and `self/map.ts` keeps its hand-written `StringMap` over
+change. `src/nodes.ts` keeps its one `Node` class, `src/types.ts` keeps its
+interned `i32` ids, and `src/map.ts` keeps its hand-written `StringMap` over
 parallel arrays.
 
 **Why, when the language now has them:**
 
 1. **The fixed point is the project's central proof, and this is the project's
-   largest change.** `IR(stage1, self/) == IR(stage2, self/)` over 51 modules
-   and six megabytes of IR is the claim wp14 exists to make. Rewriting `self/`
+   largest change.** `IR(stage1, src/) == IR(stage2, src/)` over 51 modules
+   and six megabytes of IR is the claim wp14 exists to make. Rewriting `src/`
    in terms of generics in the same package that introduces them would put that
    proof and the feature under test at the same time, so a failure could not be
-   attributed to either. Keeping `self/` monomorphic means the bootstrap stays
+   attributed to either. Keeping `src/` monomorphic means the bootstrap stays
    a *control*: it must produce byte-identical IR before and after this package,
    because none of its input changed.
 2. **wp14 §2.2's argument is spent, not reversed.** It says "resist the urge to
@@ -1178,22 +1178,22 @@ parallel arrays.
    is a work package of its own and is not on the path". That was an argument
    about *sequencing the port*, not about the language never having generics.
    The port is done; the work package is this one; the language gets them. What
-   does not follow is that `self/` must then use them.
+   does not follow is that `src/` must then use them.
 3. **wp14 §6 rule 5 is satisfied precisely because the subset does not grow.**
    "Nish-0 does not grow quietly" fires when a construct is added to the
    subset, because every addition is something stage1 must implement in order
    to compile itself. Nothing is added here, so the rule does not fire — the
    same way WP17 did not fire it (`wp17-result-abi.md` §6: "the packing is
-   shifts, `zext`, `trunc`, `select` and one `bitcast`, all of which `self/`
+   shifts, `zext`, `trunc`, `select` and one `bitcast`, all of which `src/`
    could already express").
 4. **It is the strongest available test of "generics cost nothing when
-   unused".** If the whole of `self/` still compiles to byte-identical IR in
+   unused".** If the whole of `src/` still compiles to byte-identical IR in
    the same time and the same memory after this package, then the instantiation
    machinery is genuinely inert on a program that instantiates nothing.
 
-Whether `self/map.ts` should ever become `Map<K, V>` is a later question with
+Whether `src/map.ts` should ever become `Map<K, V>` is a later question with
 its own note, and §14 records it. It would change the IR of every module of
-`self/`, so it is a package, not a cleanup.
+`src/`, so it is a package, not a cleanup.
 
 ---
 
@@ -1210,14 +1210,14 @@ each row says what proves it.
 
 | | Lands | stage0 | stage1 | Proved by |
 | --- | --- | --- | --- | --- |
-| **G1** | The side-table accessor refactor, and nothing else. Every node-keyed table (`types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues`) moves behind a getter/setter; the parser records each top-level declaration's node-id span. No behaviour change. | stage0's `src/checker/program.ts`, `index.ts`, every `checker/<family>.ts`, `codegen/emit/*`, `codegen/escape.ts`, `codegen/attributes.ts` | `self/program.ts`, `self/checker.ts`, `self/parser.ts`, `self/emit*.ts`, `self/escape.ts`, `self/attributes.ts` | Every golden byte-identical; every oracle unchanged; the bootstrap green. A milestone whose diff is large and whose test output is empty. |
-| **G2** | The template surface. Phase 0 stops rejecting type parameters on functions, classes and interfaces; pass 1 collects templates; **every use is still refused** (`` `Box` is generic and this compiler cannot instantiate it yet ``). `mangleType` gains the instantiation encoding; the `$`-in-a-declared-name rule lands. | stage0's `src/validator.ts`, stage0's `src/types.ts`, stage0's `src/checker/declarations.ts`, `classes.ts`, `program.ts` | `self/validator.ts`, `self/types.ts`, `self/parser.ts` (type-parameter lists), `self/nodes.ts`, `self/declarations.ts`, `self/structs.ts` | `tests/self/types_oracle.js` over the new mangled strings; `reject_generic_dollar_name`; the two old cases `reject_generic_function` / `reject_generic_class` are re-pointed at the new message rather than deleted. |
-| **G3** | Generic **functions**: the instantiation set on the `Compilation`, the FIFO worklist, the overlay, inference from arguments, the mangled symbol, one `define` per instantiation. Single module only. | stage0's `src/checker/generics.ts` (new), stage0's `src/checker/index.ts`, stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `self/generics.ts` (new), `self/checker.ts`, `self/compilation.ts`, `self/emit.ts` | `gen_identity`, `gen_eq_purity`, `gen_infer_two`; the byte-identity check against the hand-written twin; `ir_oracle.js` and `checked_oracle.js` over the new cases. |
-| **G4** | **Termination**, for functions. The template graph (self-edges included), the no-expanding-edge rule with its three argument cases, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | stage0's `src/checker/generics.ts` | `self/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and the two positives `gen_recursive_same_type` and `gen_recursive_ground`; `reject-oracle.js` on both messages. |
-| **G5** | Generic **classes and interfaces**: a `StructInfo` per instantiation, methods, constructor, `new Box<i32>(v)`, fields, layout, the struct half of the template graph, `implements` at the template, `extends` including a generic base. | stage0's `src/checker/classes.ts`, `generics.ts`, stage0's `src/codegen/emit/classes.ts` | `self/structs.ts`, `self/generics.ts`, `self/emit-classes.ts` | `gen_box_i32`, `gen_box_string`, `gen_box_struct`, `gen_nested`, `gen_extends`, `gen_implements`, `gen_stack`; `reject_generic_expanding_field`, `reject_generic_extends_type_param`; `tests/layout/` offsets against clang. |
-| **G6** | **Constraints** (`<T extends Shape>`): member access admitted at the template, satisfaction checked at each instantiation. | stage0's `src/checker/generics.ts`, `classes.ts` | `self/generics.ts`, `self/structs.ts` | `gen_constraint`, `gen_constraint_method`; `reject_generic_unsatisfied_constraint`, `reject_generic_member_unconstrained`. |
-| **G7** | **Whole-program**: a generic exported from one module and instantiated in two others; one definition in the defining module; `declare`s elsewhere; linkage; `--strict-exports`. | stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `self/compilation.ts`, `self/emit.ts` | `tests/link/generic_import/`, `tests/link/generic_two_importers/` (asserting exactly one `define` across the program's modules); `reject-oracle.js` reads the link negatives already. |
-| **G8** | **The peripheries**: `-g` naming, the three interop sidecars, the differential rewrite (§12), the cookbook entries, the LANGUAGE.md rules, the size report, the `CHANGELOG.md` line. | stage0's `src/codegen/debug.ts`, stage0's `src/interop/*` | `self/debug.ts`, `self/interop-*.ts` | `dbg_generic`; `interop_oracle.js`; `npm run test:diff`; `docs/cookbook/regen.sh --check`; `node docs/check-links.mjs`; and the bootstrap, which must still reach its fixed point over an unchanged `self/`. |
+| **G1** | The side-table accessor refactor, and nothing else. Every node-keyed table (`types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues`) moves behind a getter/setter; the parser records each top-level declaration's node-id span. No behaviour change. | stage0's `src/checker/program.ts`, `index.ts`, every `checker/<family>.ts`, `codegen/emit/*`, `codegen/escape.ts`, `codegen/attributes.ts` | `src/program.ts`, `src/checker.ts`, `src/parser.ts`, `src/emit*.ts`, `src/escape.ts`, `src/attributes.ts` | Every golden byte-identical; every oracle unchanged; the bootstrap green. A milestone whose diff is large and whose test output is empty. |
+| **G2** | The template surface. Phase 0 stops rejecting type parameters on functions, classes and interfaces; pass 1 collects templates; **every use is still refused** (`` `Box` is generic and this compiler cannot instantiate it yet ``). `mangleType` gains the instantiation encoding; the `$`-in-a-declared-name rule lands. | stage0's `src/validator.ts`, stage0's `src/types.ts`, stage0's `src/checker/declarations.ts`, `classes.ts`, `program.ts` | `src/validator.ts`, `src/types.ts`, `src/parser.ts` (type-parameter lists), `src/nodes.ts`, `src/declarations.ts`, `src/structs.ts` | `tests/self/types_oracle.js` over the new mangled strings; `reject_generic_dollar_name`; the two old cases `reject_generic_function` / `reject_generic_class` are re-pointed at the new message rather than deleted. |
+| **G3** | Generic **functions**: the instantiation set on the `Compilation`, the FIFO worklist, the overlay, inference from arguments, the mangled symbol, one `define` per instantiation. Single module only. | stage0's `src/checker/generics.ts` (new), stage0's `src/checker/index.ts`, stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `src/generics.ts` (new), `src/checker.ts`, `src/compilation.ts`, `src/emit.ts` | `gen_identity`, `gen_eq_purity`, `gen_infer_two`; the byte-identity check against the hand-written twin; `ir_oracle.js` and `checked_oracle.js` over the new cases. |
+| **G4** | **Termination**, for functions. The template graph (self-edges included), the no-expanding-edge rule with its three argument cases, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | stage0's `src/checker/generics.ts` | `src/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and the two positives `gen_recursive_same_type` and `gen_recursive_ground`; `reject-oracle.js` on both messages. |
+| **G5** | Generic **classes and interfaces**: a `StructInfo` per instantiation, methods, constructor, `new Box<i32>(v)`, fields, layout, the struct half of the template graph, `implements` at the template, `extends` including a generic base. | stage0's `src/checker/classes.ts`, `generics.ts`, stage0's `src/codegen/emit/classes.ts` | `src/structs.ts`, `src/generics.ts`, `src/emit-classes.ts` | `gen_box_i32`, `gen_box_string`, `gen_box_struct`, `gen_nested`, `gen_extends`, `gen_implements`, `gen_stack`; `reject_generic_expanding_field`, `reject_generic_extends_type_param`; `tests/layout/` offsets against clang. |
+| **G6** | **Constraints** (`<T extends Shape>`): member access admitted at the template, satisfaction checked at each instantiation. | stage0's `src/checker/generics.ts`, `classes.ts` | `src/generics.ts`, `src/structs.ts` | `gen_constraint`, `gen_constraint_method`; `reject_generic_unsatisfied_constraint`, `reject_generic_member_unconstrained`. |
+| **G7** | **Whole-program**: a generic exported from one module and instantiated in two others; one definition in the defining module; `declare`s elsewhere; linkage; `--strict-exports`. | stage0's `src/compilation.ts`, stage0's `src/codegen/emitter.ts` | `src/compilation.ts`, `src/emit.ts` | `tests/link/generic_import/`, `tests/link/generic_two_importers/` (asserting exactly one `define` across the program's modules); `reject-oracle.js` reads the link negatives already. |
+| **G8** | **The peripheries**: `-g` naming, the three interop sidecars, the differential rewrite (§12), the cookbook entries, the LANGUAGE.md rules, the size report, the `CHANGELOG.md` line. | stage0's `src/codegen/debug.ts`, stage0's `src/interop/*` | `src/debug.ts`, `src/interop-*.ts` | `dbg_generic`; `interop_oracle.js`; `npm run test:diff`; `docs/cookbook/regen.sh --check`; `node docs/check-links.mjs`; and the bootstrap, which must still reach its fixed point over an unchanged `src/`. |
 
 The ordering constraint that matters: **G4 cannot be later than it is.** The
 moment G3 lands, a program can be written that makes the compiler allocate
@@ -1302,12 +1302,12 @@ belongs in G8 rather than being discovered there. The corpus then wants
 `i32` beside `f64`, `f32` rounding, unsigned `u32` shifts, and string `===`
 (value equality on both sides, which should agree and is worth pinning).
 
-**The `self/` oracles** need no new oracle and one dump change:
+**The `src/` oracles** need no new oracle and one dump change:
 
 - `checked_oracle.js` — `--emit-checked` must print the instantiation set (key,
   template, type arguments, in discovery order) in both compilers, so a
   divergence in *which* instantiations exist is caught before the IR is
-  compared. That is an addition to stage0's `src/dump.ts` and `self/dump.ts`.
+  compared. That is an addition to stage0's `src/dump.ts` and `src/dump.ts`.
 - `reject-oracle.js` — the eleven new negatives, character for character.
 - `ir_oracle.js` — the new cases and the two link programs, byte for byte,
   module set included.
@@ -1349,9 +1349,9 @@ and a `CHANGELOG.md` line.
   layout", because that is what `implements` already means here. A bound that
   said "any type with a method `compare`" would be a trait system, and it is
   not on this path.
-- **Generics in Nish-0.** §10. `self/` implements them and does not use
+- **Generics in Nish-0.** §10. `src/` implements them and does not use
   them, and the hand-written `StringMap` stays.
-- **Any change to the bootstrap's input.** `self/` compiles to byte-identical
+- **Any change to the bootstrap's input.** `src/` compiles to byte-identical
   IR before and after this package, and that is a test, not a hope.
 
 ---
@@ -1368,7 +1368,7 @@ reviewed before code is written.
 2. **Explicit type arguments at a call site.** Refused on a parser-architecture
    ground (§2a), not a language one. If inference proves too weak in practice,
    the price is a restartable lexer and a save/restore parser cursor in
-   `self/parser.ts`, plus whatever `tests/parser-oracle.js` then has to
+   `src/parser.ts`, plus whatever `tests/parser-oracle.js` then has to
    reconcile. Worth revisiting only with evidence.
 3. **The instantiation caps.** 256 per template and 4096 program-wide are
    placeholders (§4). They want a real program behind them before they ship.
@@ -1409,11 +1409,11 @@ reviewed before code is written.
 7. **Generic methods**, deferred in §2. The instantiation key would become
    (receiver instantiation × method arguments). Is there a real want?
    **Answered: added (§15.8).**
-8. **Whether `self/map.ts` should ever become `Map<K, V>`.** §10 says not in
-   this package. It would change the IR of every module of `self/`, so it is a
+8. **Whether `src/map.ts` should ever become `Map<K, V>`.** §10 says not in
+   this package. It would change the IR of every module of `src/`, so it is a
    package with its own note and its own bootstrap risk, gated on the fixed
    point being green for a while with generics in the language and out of
-   `self/`.
+   `src/`.
 9. **Whether the template graph should be built once for the whole program or
    per module.** §4 says once, over templates; a program-wide graph is simpler
    to reason about but means the rule can only fire after every module is
@@ -1450,7 +1450,7 @@ The acceptance test of §9 holds and is checked rather than asserted:
 renamed, and `gen_eq_purity.ll` is `str_eq.ll`'s `@same` beside an `i32`
 comparison, each with its own attribute group. `IR(stage0) == IR(stage1)` holds
 byte for byte over every new case, and the bootstrap still reaches its fixed
-point over an unchanged `self/`.
+point over an unchanged `src/`.
 
 ### 15.1 Four decisions the code made differently
 
@@ -1458,7 +1458,7 @@ point over an unchanged `self/`.
 putting every node-keyed side table behind an accessor so an instantiation
 could answer from its own overlay. The cheaper shape with the same effect is to
 **swap the tables themselves**: `swapTables` in stage0's `src/checker/generics.ts` and
-`CheckedProgram.enterInstance` / `leaveInstance` in `self/program.ts` point the
+`CheckedProgram.enterInstance` / `leaveInstance` in `src/program.ts` point the
 program's seven (stage0) or six (stage1) table fields at the instantiation's
 copies for the duration of one body, so every existing `program.types.get(node)`
 answers for the instantiation without moving. Five call sites bracket a body
@@ -1561,7 +1561,7 @@ instantiation *is* the cost of the function somebody would have written.
 
 The other half is the one that had to be measured and is: a program that
 instantiates nothing pays nothing. No overlay is allocated, no table is swapped,
-and the bootstrap over an unchanged `self/` reaches the same fixed point —
+and the bootstrap over an unchanged `src/` reaches the same fixed point —
 `tests/self/bootstrap.js` reports `IR(stage0) == IR(stage1) == IR(stage2)` and
 stage3 byte-identical to stage2 over **56 modules and 7,617,344 bytes of IR**,
 which is §10's claim tested rather than asserted.
@@ -1662,7 +1662,7 @@ those, compiled under `-Wall -Wextra -Werror -pedantic`.
 monomorphised in the scope it was *declared* in, because that is the only scope
 its annotations and its body mean anything in — `wrap<T>(x: T): Node` names the
 declaring module's `Node`, not the caller's. So `Checker.instantiate` and
-`self/generics.ts`'s `instantiate` forward to `template.home` and keep only the
+`src/generics.ts`'s `instantiate` forward to `template.home` and keep only the
 *site*: the file the call was written in, and the instantiation whose body made
 it. The site is what a termination or cap refusal is reported against, which is
 why it travels rather than being read off the answering module — whose own
@@ -1750,7 +1750,7 @@ and not the origin.
 had a `default` that answered "not from a type parameter", so every expression
 kind it had no case for waved a member of `T` through: `new Box<T>(t).value.x`
 and `[t][0].x` compiled at `T = Point`. So every expression kind of
-`self/nodes.ts` now has a case that either follows the value or says why it
+`src/nodes.ts` now has a case that either follows the value or says why it
 cannot be a `T` — a literal has the type it spells, a unary operator answers a
 number or a boolean, a binary one other than `=` answers its own result type
 (`s + t` at `T = string` is a concatenation, not a `T`), an object literal takes
@@ -1770,7 +1770,7 @@ alternative, an internal error, is not a path the checker has.
 each beside a function that does the same at `Point` and must be accepted. When the receiver's origin comes out as a bare type parameter
 of the body being checked, the member is looked up in that parameter's
 constraint first: no constraint is §8's message 8, and a member the constraint
-lacks is refused in the words `self/members.ts` already uses, with the
+lacks is refused in the words `src/members.ts` already uses, with the
 parameter named beside the constraint. Everything past that is the ordinary
 lookup on the concrete type, which finds the same member at the same index,
 because an implementer's first fields are its interface's. That is why no
@@ -1895,7 +1895,7 @@ implementer by the interface's declaring module together with the name in its
 `implements` clause. That second half is exact only while implementing an
 imported interface stays refused (NL2079); were NL2079 lifted it would refuse
 the newly legal case rather than accept a stranger, and `implementsDeclaration`
-in `self/generics.ts` says so. A request that fails is NL2328 at the call, in
+in `src/generics.ts` says so. A request that fails is NL2328 at the call, in
 its existing words (`tests/link/generic_constraint_same_name`,
 `…_same_name_fields`, `…_same_name_itself`, `…_same_name_class`, and the
 positive `generic_constraint_import_back`).
@@ -2068,7 +2068,7 @@ header would otherwise describe the class and silently leave the method out
 sidecars; `reject_generic_method_unused` for message 9, and the same file
 compiles with no sidecar flag).
 
-**`self/`** does not use generic methods (the rolling freeze), so the bootstrap
+**`src/`** does not use generic methods (the rolling freeze), so the bootstrap
 input is unchanged and its fixed point with it.
 
 ### 15.9 Known issues
@@ -2077,7 +2077,7 @@ Two defects found in review of G8 and generic methods, recorded here rather
 than in §16 because neither is a decision to defer — each is a bug with an
 issue that tracks it:
 
-- `coercesTo` in `self/structs.ts` decided that a class converts to an
+- `coercesTo` in `src/structs.ts` decided that a class converts to an
   interface by comparing the interface's *name* with the names in
   `implementsNames`, the shape #161 fixed for constraints (#173). **Fixed**: it
   asks `implementsDeclaration` now, the test a constraint uses, so a module's
@@ -2106,7 +2106,7 @@ would bring it back.
    a parser ground: one token of lookahead cannot tell `f<i32>(x)` from
    `(f < i32) > (x)`. *Trigger:* evidence that inference is too weak in
    practice, which would pay for a restartable lexer and a save/restore cursor
-   in `self/parser.ts`.
+   in `src/parser.ts`.
 3. **Discriminated unions** (§7). Their own note, with the coupling to
    generics dissolved. *Trigger:* that note.
 4. **The Node-side differential rewrite** (§12). A generic body needs one
@@ -2124,4 +2124,4 @@ would bring it back.
    conversion to that interface.
    *Trigger:* a program that needs it. The same change then has to record the
    resolved `StructInfo` beside each `implements` name, so that
-   `implementsDeclaration` in `self/generics.ts` compares declarations.
+   `implementsDeclaration` in `src/generics.ts` compares declarations.

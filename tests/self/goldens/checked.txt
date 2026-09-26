@@ -1,4 +1,4 @@
-# `--emit-checked` for every positive program of the corpus outside `self/`.
+# `--emit-checked` for every positive program of the corpus outside `src/`.
 # Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
 # WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
 #

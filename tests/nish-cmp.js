@@ -669,13 +669,13 @@ const DECLARED = [
   {
     program: "tests/link/std_json/main.ts",
     file: "json.ll",
-    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet self/",
+    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet src/",
     why: "std/json's reads and `substring` clamps are proven by the guards it now states, through `toI32(w.length)`, which the reference compiler still checks",
   },
   {
     program: "tests/link/std_text_f64/main.ts",
     file: "json.ll",
-    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet self/",
+    changelog: "Hold std/ and examples/ to zero performance warnings and ratchet src/",
     why: "the same std/json proofs under --number-mode f64",
   },
   {
@@ -960,14 +960,14 @@ const DECLARED = [
     changelog: "Generic methods on classes (WP18 §14 q7)",
     why: "a new program: an exported class's generic methods called from two importers, which the reference compiler refuses at the method's type parameter list in lib.ts and HEAD compiles with one `define` per instantiation, in lib.ll",
   },
-  // #106: `self/bounds.ts` proves `h.xs[i]` from `h.xs.length`, so the compiler's
+  // #106: `src/bounds.ts` proves `h.xs[i]` from `h.xs.length`, so the compiler's
   // own accesses through a field lose their checks and every module of it moves,
   // bounds checks and the attributes a dropped panic frees alike. One entry per
-  // `self/` program, read from the corpus rather than listed, because the reason
+  // `src/` program, read from the corpus rather than listed, because the reason
   // is the same for all of them.
   ...programs()
     .map((file) => path.relative(root, file))
-    .filter((program) => program.startsWith("self/"))
+    .filter((program) => program.startsWith("src/"))
     .map((program) => ({
       program,
       changelog: "Key bounds length facts by property path",
@@ -1808,7 +1808,7 @@ const NODE_ENTRY = /\.(?:js|mjs|cjs)$/
  * Derived the way the compilers derive it rather than guessed, because the
  * point of removing it is that it is *their* answer: `<dirname(argv[0])>/..`,
  * then the same for the real path — a compiler reached through a symlink
- * resolves the link (`self/compile.ts`'s `packageRootCandidates`) — and then
+ * resolves the link (`src/compile.ts`'s `packageRootCandidates`) — and then
  * the working directory, which is where `compile` below spawns both of them.
  * The first candidate holding `scripts/build.sh` wins, which is the predicate
  * the compilers use, checked here against the filesystem instead of assumed.
@@ -1892,7 +1892,7 @@ const selfCheckRoots = () => {
  * from a 0.7.0 HEAD both read `producer: "<own version>"`.
  *
  * `ownVersion` is the compiler's whole `--version` line, which is the string
- * `self/debug.ts` writes (`${CLI} ${VERSION}`), and the match carries both
+ * `src/debug.ts` writes (`${CLI} ${VERSION}`), and the match carries both
  * quotes: a version that merely begins with it (`nish 0.6.0-rc.1`), the other
  * compiler's version, and the same words anywhere but a `producer:` are all
  * left alone. Nothing else is rewritten.
@@ -2357,7 +2357,7 @@ const declaredFor = (program, surface) => {
 const corpus = () => [...programs(), ...linkPrograms().map((program) => program.main)]
 
 /**
- * The compiler HEAD builds: `self/compile.ts` linked into `build/self/compile`
+ * The compiler HEAD builds: `src/compile.ts` linked into `build/self/compile`
  * by the seed, which is the arrangement G3 puts in `scripts/bootstrap.sh`.
  * There is no second answer: this is only called with a reference in hand,
  * and the reference is the seed (R6 took out the stage0 fallback that used to
@@ -2374,7 +2374,7 @@ const buildCandidate = (seedSpec) => {
     return { error: builder.error }
   }
   fs.mkdirSync(path.dirname(out), { recursive: true })
-  const built = compile(builder, [path.join("self", "compile.ts"), "--link", out])
+  const built = compile(builder, [path.join("src", "compile.ts"), "--link", out])
   if (built.status !== 0) {
     return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` }
   }
@@ -2388,7 +2388,7 @@ usage: node tests/nish-cmp.js [options] [program.ts ...]
   -r, --reference <compiler>  the compiler that is trusted: the last released
                               nish (default: $NISH_BOOTSTRAP; without one the
                               run skips, because there is nothing to compare to)
-  -c, --candidate <compiler>  the compiler under test (default: self/ built into
+  -c, --candidate <compiler>  the compiler under test (default: src/ built into
                               build/self/compile by the reference)
       --changelog <file>      where a released difference is named (default:
                               CHANGELOG.md); an unreleased one is named by the
@@ -2491,7 +2491,7 @@ const main = (argv) => {
   if (candidateSpec === null) {
     // The seed builds HEAD: that is the arrangement G3 wires into CI, and it
     // is why the reference is what gets passed on here. A seed too old to
-    // compile HEAD's `self/` fails here, naming itself, which is the G4 policy
+    // compile HEAD's `src/` fails here, naming itself, which is the G4 policy
     // being enforced rather than discovered halfway through a comparison.
     const built = buildCandidate(referenceSpec)
     if (built.error !== undefined) {

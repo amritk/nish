@@ -18,7 +18,7 @@ The evidence is of three kinds, and every decision below names its own:
 
 `Map` and `Set` do not exist today: `new Map<string, i32>()` is
 `` Unknown class `Map` `` ([AI.md](AI.md) lists them under "none of these
-exist"). `self/map.ts`'s `StringMap` is the in-house precedent. It keeps its
+exist"). `src/map.ts`'s `StringMap` is the in-house precedent. It keeps its
 entries in insertion order behind a bucket table of entry indices, compares the
 full key at every occupied bucket, and hashes every key again when it grows.
 [wp28-compatibility-mode.md](wp28-compatibility-mode.md) names `Map` the
@@ -319,7 +319,7 @@ not narrow it.
   - **Reused:** the checker's type-level narrowing
     ([LANGUAGE.md → Nullable types](LANGUAGE.md#nullable-types)). The table of
     forms there applies with `undefined` in place of `null`, and so do the
-    region rules. The scope narrowing and stripping in `self/expressions.ts`
+    region rules. The scope narrowing and stripping in `src/expressions.ts`
     are generalised from `null` to `undefined`. A maybe `const` reads as `V`
     where a test proves it present.
   - **New:** what is narrowed. `T | null` exists only for a class, interface,
@@ -389,7 +389,7 @@ program importing `nish/testing` gets this from `nish t.ts -o t.ll`:
 compile: 2 modules would be written (t.ts, std/testing.ts); pass `-o <dir>/` to write one .ll per module
 ```
 
-(`planOutputs`, [`self/compile.ts`](../self/compile.ts) line 127.) An imported
+(`planOutputs`, [`src/compile.ts`](../src/compile.ts) line 127.) An imported
 generic's instances are defined by the module that declares the template and
 `declare`d by every other ([LANGUAGE.md → Generic classes and interfaces](LANGUAGE.md#generic-classes-and-interfaces),
 `tests/link/generic_import`). If `Map` went through that path, a program that
@@ -467,12 +467,12 @@ reason above.
 ### 5.2 Hash and equality per key type
 
 `hashKey<K>` and `sameKey<K>` are intrinsics that S2 lowers per `K` in
-`self/emit-map.ts`, as inline IR. They make no runtime call, because the
+`src/emit-map.ts`, as inline IR. They make no runtime call, because the
 runtime's `.text` budget has no room:
 
 | `K` | `hashKey` | `sameKey` |
 | --- | --- | --- |
-| `string` | FNV-1a, 32-bit, over the UTF-8 bytes, as `hashString` in `self/map.ts` | `nish_str_eq` |
+| `string` | FNV-1a, 32-bit, over the UTF-8 bytes, as `hashString` in `src/map.ts` | `nish_str_eq` |
 | ≤ 32-bit integer, `boolean`, enum | `fmix32` (murmur3's finaliser) of the value, zero-extended | `icmp eq` |
 | `i64`, `u64` | `fmix64`, then the two halves XORed | `icmp eq` |
 | `f64` | normalise, then `f64ToBits`, then as `i64` | SameValueZero: `a == b` (`fcmp oeq`, so −0 equals +0), or both are NaN (`fcmp uno` on each) |
@@ -533,7 +533,7 @@ what any program prints.
 
 `for (const k of m.keys())` and `for (const v of m.values())` walk the entries
 in index order. They skip dead ones, and **re-read the entry count every pass**.
-S4 lowers them in `emitForOf` ([`self/emit-arrays.ts`](../self/emit-arrays.ts)
+S4 lowers them in `emitForOf` ([`src/emit-arrays.ts`](../src/emit-arrays.ts)
 line 1127). **The semantics are JavaScript's exactly**, because an entry never
 moves while a loop is walking the table:
 
@@ -604,7 +604,7 @@ exports only scalars is unaffected.
 
 ### 9.1 The fusion patterns
 
-S5 recognises three patterns in a new `self/fusion.ts`. Each becomes one
+S5 recognises three patterns in a new `src/fusion.ts`. Each becomes one
 `probe` and a write through its packed result. That write is `setValueAt(i,
 v)` when the key was found, and `insertAt(bucket, k, h, v)` when it was not,
 reusing the probe's hash.
@@ -654,7 +654,7 @@ result.
 ### 9.3 A `Map` read inside a parallel body
 
 A wp29 body may not write memory its caller can see, and may allocate only
-temporaries it drops (`self/parallel.ts`'s header). A body can only reach a
+temporaries it drops (`src/parallel.ts`'s header). A body can only reach a
 map through its element, since there are no closures and a module constant
 cannot be a class. For `m.get(k)`, `m.has(k)` and `m.size` in such a body to
 be legal, S2 must make sure of three things:
@@ -662,11 +662,11 @@ be legal, S2 must make sure of three things:
 1. **`probe` writes nothing.** It answers the found entry or the empty bucket
    in its packed result. The prototypes' `found` field, which `delete` reads,
    is exactly what S2 must not copy, because it would make every `get` a
-   shared write (`FunctionFacts.sharedWrite`, [`self/attributes.ts`](../self/attributes.ts)
+   shared write (`FunctionFacts.sharedWrite`, [`src/attributes.ts`](../src/attributes.ts)
    line 276). Hashing a string allocates nothing, so a `get` is no NL9012
    either.
 2. **The `dst` reachability rule sees through the table's private arrays.** The
-   rule judges by type (`reachingPath`, [`self/parallel.ts`](../self/parallel.ts)
+   rule judges by type (`reachingPath`, [`src/parallel.ts`](../src/parallel.ts)
    line 286). A `Row { index: Map<string, i32> }` element would "reach an
    `i32[]` through `r.index.values`", and a `dst: i32[]` would be refused.
    Those arrays are never handed out, so no `dst` can be one of them. The rule
@@ -714,7 +714,7 @@ describes them:
 Each program prints lines that `bench/map-node.mjs` prints, and `--validate`
 requires that. So every row is the same work, over the same keys, as the
 unordered prototype's row beside it. `StringMap` is compiler-internal, so the
-program carries a verbatim copy of it from `self/map.ts`. `tests/run.js` fails
+program carries a verbatim copy of it from `src/map.ts`. `tests/run.js` fails
 when the copy drifts, and `StringMap`, being `string -> i32` with no `delete`,
 runs the four string workloads it can.
 

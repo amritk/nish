@@ -1,4 +1,4 @@
-// The driver for `self/types.ts` (docs/wp14-selfhost.md, milestone S3),
+// The driver for `src/types.ts` (docs/wp14-selfhost.md, milestone S3),
 // checked against stage0 until R6; `tests/self/goldens/types.txt` is its output.
 //
 // The model is stage0's, written differently: stage0 compared types
@@ -28,7 +28,7 @@ import {
   T_U8,
   T_VOID,
   TypeTable,
-} from "../../self/types"
+} from "../../src/types"
 
 /**
  * Every type the two models can both build, in an order the oracle repeats:

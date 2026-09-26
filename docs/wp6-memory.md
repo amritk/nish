@@ -596,13 +596,13 @@ a pointer. §2d widens it to every function and narrows it to the loops a pass
 scope does not reclaim either.
 
 Both halves are whole-program facts, so it is found after the attribute
-fixpoint (`arenaLoopFindings`, `self/escape.ts`) and reported by
+fixpoint (`arenaLoopFindings`, `src/escape.ts`) and reported by
 `Compilation.check` into the same sink as the checker's warnings, before the
 driver prints them. The emitter still reports nothing. As first written it
 also fired in pointer-returning functions and on callees that store what they
-allocate, and over `self/compile.ts` that was 514 warnings, most of them loops
+allocate, and over `src/compile.ts` that was 514 warnings, most of them loops
 that were building a table on purpose, plus one in `std/json.ts`. Narrowed to
-the two conditions above it is 51 over `self/` and none in `std/` or
+the two conditions above it is 51 over `src/` and none in `std/` or
 `examples/`; the 51 are recorded in `tests/perf-baseline.json`.
 
 ### Measured
@@ -651,7 +651,7 @@ loop in one still grows by every pass until then. This brackets the pass.
 
 A loop's body is bracketed when nothing it allocates, itself or through a
 callee, is reachable once the pass is over except through a number, a
-`boolean` or an `enum` (`decideLoopScopes`, `self/escape.ts`, after
+`boolean` or an `enum` (`decideLoopScopes`, `src/escape.ts`, after
 `settleCalleeScopes`), and it allocates something (profit, not proof: a direct
 arena site in the body, a `push`, a printed number, or a callee that leaves
 memory behind). The clauses, one per way out of a pass:
@@ -678,7 +678,7 @@ the escape flow used to treat it as a read of `xs`, which let a function store
 `xs[n - 1]` into its parameter's object, count as contained under §2c and
 release the block it pointed into; `mem_loop_scope_interior` printed `8 16`
 instead of `49 98`. Both now follow such an element as the array itself
-(`yieldsInteriorPointer`, `self/attributes.ts`), `isOld` asks for an inline
+(`yieldsInteriorPointer`, `src/attributes.ts`), `isOld` asks for an inline
 element's array, and a `for...of` over an inline array flows into its variable.
 
 ### Lowering
@@ -767,7 +767,7 @@ IR is byte-identical before and after.
 scope nor a function scope reclaims the call's memory, and names what refused
 each. It stays silent in a loop whose pass can `return` what it allocated,
 since no bracket, written or automatic, could release that pass (`std/json.ts`'s
-`jsonField` is that loop). Over `self/compile.ts` that is 82 warnings, from 51.
+`jsonField` is that loop). Over `src/compile.ts` that is 82 warnings, from 51.
 
 ### Left out
 

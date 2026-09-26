@@ -152,7 +152,7 @@ declare function writeError(s: string): void;
  * `message` and a newline to stderr, then exit 1. Terminates control flow, so
  * it is `never`: that is what lets `tsc` agree that a function ending in a
  * `panic` returns, and that `x` is not null after `if (x === null) { panic(...); }`
- * — the guard-then-panic shape `self/` uses everywhere in place of an assert.
+ * — the guard-then-panic shape `src/` uses everywhere in place of an assert.
  */
 declare function panic(message: string): never;
 /**

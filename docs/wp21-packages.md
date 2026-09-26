@@ -73,7 +73,7 @@ says why those two are the one pair this compiler ranks itself rather than
 leaving to the order the manifest wrote them in.
 
 `"nish"` is what it ended up being, and it is a spelling of the project's name,
-so it lives in stage0's `src/branding.ts` and `self/branding.ts` with the rest of them
+so it lives in stage0's `src/branding.ts` and `src/branding.ts` with the rest of them
 (orientation rule 5) as `PACKAGE_CONDITION` — where both compilers read it, which
 is what makes them agree about which file a package offers.
 
@@ -374,7 +374,7 @@ things, neither of them a resolution failure:
 The third, **package identity**, is done: a package is its real directory, so
 a symlinked package is one package (`tests/link/package_symlink` compiles), and
 one name at two real directories is refused with its own code, `NL3029`
-(`tests/link/package_two_dirs`). The `TODO(WP21 S3)` in `self/compilation.ts`
+(`tests/link/package_two_dirs`). The `TODO(WP21 S3)` in `src/compilation.ts`
 is gone, replaced by the rule it asked for, and §10d says why the real directory
 rather than the manifest.
 
@@ -414,7 +414,7 @@ function are untouched. A prefix appears only where a second package does,
 which is a program that did not compile at all until now.
 
 The qualification happens in one place per compiler, at the end of pass 1
-(`Checker.qualifySymbols` in stage0's `src/checker/index.ts` and `self/checker.ts`),
+(`Checker.qualifySymbols` in stage0's `src/checker/index.ts` and `src/checker.ts`),
 after every signature exists — so a free function, a method and a constructor
 are scoped by the same line of code and nothing added later can forget to be.
 
@@ -584,7 +584,7 @@ answer from each (§10e).
 
 ### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
 
-stage0's `src/manifest.ts` and `self/manifest.ts` are the same narrow scan rather than a
+stage0's `src/manifest.ts` and `src/manifest.ts` are the same narrow scan rather than a
 parser and a hand-rolled twin. That is the one design decision in this stage
 worth arguing about, so it is written down: stage1 has no `JSON.parse`, the two
 compilers must select the *same file* for the same manifest, and a program that
@@ -708,7 +708,7 @@ disappeared and `packages.ts` says so.
   reach a host is a re-export from the root package — `export { f } from "pkg"`,
   which the language does not have and which `docs/LANGUAGE.md` rejects by name.
   It waits on that construct rather than on a stage here, and
-  stage0's `src/interop/abi.ts` and `self/interop-abi.ts` say so at the line that
+  stage0's `src/interop/abi.ts` and `src/interop-abi.ts` say so at the line that
   skips a dependency's module.
 
 ### 10e. What proves it
@@ -777,7 +777,7 @@ reading the prose — which was the point of a code in the first place.
 `tests/nish/cli.ts` compiles each case with `--json` and holds its code, and
 `tests/link/package_engines_met` is the floor that is met and compiles. The
 boundary itself is tested at this compiler's own version rather than at a
-number written down: `cli.ts` reads `VERSION` from `self/branding.ts`, writes
+number written down: `cli.ts` reads `VERSION` from `src/branding.ts`, writes
 one package whose floor is that version, which must compile, and one whose
 floor is a patch above it, which must be refused as `NL3018` naming both the
 floor and the version — so the test still sits on the boundary after the next
@@ -805,7 +805,7 @@ tilde, an upper bound, a `||`, a bare version, a value that is not a string —
 rather than read it as met. A floor the compiler cannot read is one it cannot
 claim to meet, and treating an unreadable one as satisfied is the silent
 acceptance §5c exists to prevent. The version it compares against is
-`VERSION` in `self/branding.ts`, the constant `--version` prints, with any
+`VERSION` in `src/branding.ts`, the constant `--version` prints, with any
 prerelease tag on it ignored.
 
 **The mode mismatch is recognised by the other mode's condition alone.** The

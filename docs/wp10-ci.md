@@ -15,12 +15,12 @@ comment above the `on:` block has the details.
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `build/nish` built with the seed, `npm test`, then the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
-| `bootstrap (x86_64-linux)` | Ubuntu | builds `self/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
+| `bootstrap (x86_64-linux)` | Ubuntu | builds `src/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
 | `nish-cmp (x86_64-linux)` | Ubuntu, LLVM 18 | WP19 G2.1: the corpus compiled with the **last released** compiler and with the one HEAD builds, every byte compared. One row per Linux seed a release carries, and no row at all until a release carries a seed that can compile the corpus — `cmpSince` in `.github/seed-targets.json` decides which, and its note says why that is not the first release |
 | `runner` | Ubuntu, LLVM 18 | fetches the seed, then the golden corpus again, through `tests/nish/run.ts` — the harness written in Nish (`npm run test:nish`). A compiler regression fails here and in `test`; a regression in the *runner*, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`), and `node docs/check-links.mjs` |
 
-Every job that compiles anything compiles it with `self/`, built from the
+Every job that compiles anything compiles it with `src/`, built from the
 seed: there is no other compiler in the repository. Until WP19 R6 deleted
 stage0's `src/`, the workflow also carried the jobs that compared the two
 implementations — `batch-parity`, `parity-select` and `parity-changed` in this
@@ -252,7 +252,7 @@ Neither stops the row now, and neither is what the failures above are.
 
 ### The seeded build, and what a missing seed reports
 
-`bootstrap` builds `self/` with the **last released** binary — the seed, and
+`bootstrap` builds `src/` with the **last released** binary — the seed, and
 since R6 the only compiler that exists to build it with — which is the only
 thing that checks WP19's rolling freeze
 ([G3](wp19-stage0-retirement.md#g3--the-seed-protocol-exists-and-ci-uses-it)).
@@ -271,7 +271,7 @@ with a warning inside it. Read the pair:
 | `seeds` green, no row for a platform | the freeze was *not* checked there, and nothing is wrong: no release carries a seed for it yet. The `seeds` summary names every platform in both states |
 | `seeds` green, `bootstrap` **skipped** | the same for every platform at once: there is no release at all |
 | `seeds` **red** | a seed that should exist does not — a release missing an asset `release.yml` attaches |
-| a `bootstrap` row **red** | `self/` does not build with the last release. That is the rolling freeze broken, and it is what this pair exists to catch |
+| a `bootstrap` row **red** | `src/` does not build with the last release. That is the rolling freeze broken, and it is what this pair exists to catch |
 
 An absent row, and a grey job where there is nothing at all, are the
 distinctions the gate could not draw while it was one job. It has now been
@@ -319,7 +319,7 @@ a regression.
 `.github/seed-targets.json` is also where the *asset name* is spelled, once.
 `release.yml` looks its own up rather than writing it out, and the same block
 of `tests/run.js` checks every row against the compiler's own target table:
-that each `triple` is one `self/target.ts` calls canonical, and that
+that each `triple` is one `src/target.ts` calls canonical, and that
 each `asset` is that triple with the vendor and the ABI dropped
 (`x86_64-unknown-linux-gnu` → `x86_64-linux`, `aarch64-apple-darwin` →
 `aarch64-darwin`). The four spellings used to live in two comments calling each
@@ -453,7 +453,7 @@ Measured on 2026-09-18, run 474 on `main` (`a89bee7`), six jobs on
 | `batch-parity` | **18 m 21 s** | the corpus compiled both ways, 18 m 05 s |
 | `test` | 15 m 42 s | `npm test`, 14 m 44 s |
 | `runner` | 6 m 08 s | the corpus through the Nish runner, 5 m 49 s |
-| `bootstrap` | 1 m 11 s | `self/` built with the seed, 51 s |
+| `bootstrap` | 1 m 11 s | `src/` built with the seed, 51 s |
 | `lint` | 10 s | — |
 | `seeds` | 8 s | — |
 
@@ -487,15 +487,15 @@ runner's 14 m 44 s, so that box was about 1.34x a `ubuntu-latest`:
 
 | Check | Cost |
 | --- | --- |
-| `self/emit.ts emits the IR stage0 emits` (420 programs, 1,805 modules) | 90.1 s |
+| `src/emit.ts emits the IR stage0 emits` (420 programs, 1,805 modules) | 90.1 s |
 | `codes: every registry code is provoked by a program or explained` | 80.0 s |
-| `self/checker.ts agrees with stage0 on what it accepts` (396 files) | 70.5 s |
+| `src/checker.ts agrees with stage0 on what it accepts` (396 files) | 70.5 s |
 | `differential` (4 checks, 173 programs) | 51.1 s |
-| `self/ compiles self/: the bootstrap reaches a fixed point` (61 modules) | 46.1 s |
-| `self/emit.ts` over random programs (fuzz) | 22.4 s |
-| `self/ writes the interop sidecars stage0 writes` | 21.6 s |
-| `self/ refuses what stage0 refuses` (377 fragments) | 18.4 s |
-| `self/ prints what tests/self/goldens/ records` | 17.0 s |
+| `src/ compiles src/: the bootstrap reaches a fixed point` (61 modules) | 46.1 s |
+| `src/emit.ts` over random programs (fuzz) | 22.4 s |
+| `src/ writes the interop sidecars stage0 writes` | 21.6 s |
+| `src/ refuses what stage0 refuses` (377 fragments) | 18.4 s |
+| `src/ prints what tests/self/goldens/ records` | 17.0 s |
 | `the bootstrap script: a stage0 seed asserts IR(stage0) == IR(stage1)` | 16.3 s |
 
 The ten of them were 70% of the run. The five that name stage0 were
@@ -548,16 +548,16 @@ export PATH="$(brew --prefix llvm@18)/bin:$PATH"
 
 npm ci
 bash scripts/fetch-seed.sh   # the last release's nish into build/seed/ (or set NISH_BOOTSTRAP)
-npm run check           # tsc --noEmit over self/, std/ and tests/nish/
+npm run check           # tsc --noEmit over src/, std/ and tests/nish/
 npm run build           # the seeded bootstrap: build/nish
 npm test                # stage1 from the seed + tests/run.js (goldens, llvm-as, native, runtime, size, wasm)
 npm run lint            # only if package.json defines it
 npm run size-report     # the plain table; add --markdown via scripts/size-report.sh
 ```
 
-There is no compiler to build with `tsc`: `npm run check` type-checks `self/`
+There is no compiler to build with `tsc`: `npm run check` type-checks `src/`
 against `runtime/nish.d.ts` and emits nothing, and every compiler the steps
-above run is `self/`, built by the seed.
+above run is `src/`, built by the seed.
 
 `scripts/build.sh` and `scripts/size-report.sh` branch on `uname`: on macOS
 they use ld64's `-dead_strip` / `-x` instead of `--gc-sections` / `-s`, skip
@@ -570,7 +570,7 @@ with a message.
 ## Diagnostic format
 
 Every error the compiler reports, whether from the parser or the checker, is a
-`Diagnostic` (`self/diagnostics.ts`) and is printed to stderr in this shape:
+`Diagnostic` (`src/diagnostics.ts`) and is printed to stderr in this shape:
 
 ```
 tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two operands of the same numeric type, got i32 and boolean
@@ -587,7 +587,7 @@ tests/cases/reject_type_mismatch.ts:1:40: error: Operator `+` requires two opera
   marked only on its first line). Tabs in the source are reproduced in the
   caret line so the markers stay aligned in a terminal.
 
-Syntax errors from the parser (`self/parser.ts`) use the same layout with the
+Syntax errors from the parser (`src/parser.ts`) use the same layout with the
 `syntax error:` prefix — the same `Diagnostic`, with `syntax error` as the word
 before the text:
 
@@ -606,16 +606,16 @@ Tests for the format live in the `// ---- WP10: diagnostics` block of
 ## Multi-error reporting
 
 The compiler does not stop at the first error. Every phase that can recover
-reports into one `DiagnosticSink` (`self/diagnostics.ts`) owned by the
-`Compilation` (`self/compilation.ts`):
+reports into one `DiagnosticSink` (`src/diagnostics.ts`) owned by the
+`Compilation` (`src/compilation.ts`):
 
 | Phase | Recovery unit | Where |
 | --- | --- | --- |
-| Parser | every parse diagnostic of the file | `parse` (`self/parser.ts`) |
-| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validate` (`self/validator.ts`) |
+| Parser | every parse diagnostic of the file | `parse` (`src/parser.ts`) |
+| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validate` (`src/validator.ts`) |
 | Pass 1 (signatures) | per declaration: class/interface (marked `poisoned`, its layout checks skipped), import, function signature, module resolution | `Checker.collectSignatures`, `Compilation.load` |
 | Pass 1b/1c | per import binding; every symbol clash | `Checker.bindImports`, `Compilation.rejectSymbolClashes` |
-| Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` (`self/statements.ts`) |
+| Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` (`src/statements.ts`) |
 
 The language has no exceptions, so a phase reports into the sink and returns a
 sentinel, and the sink is asked at the end of the phase whether to stop
@@ -652,13 +652,13 @@ on. Syntax errors keep the `syntax error: ` prefix in `message`.
 
 `code` is the stable identifier for the rule that was broken, and it is the
 field to key on: the prose in `message` is allowed to improve between releases
-and the code is not. The registry is `self/codes.ts`, the one copy, and it is
+and the code is not. The registry is `src/codes.ts`, the one copy, and it is
 **kept by hand**. Adding a diagnostic is adding its entry there with the next
 free number in its band; a code is never renumbered, and a retired rule keeps
 its number reserved rather than handing it to another.
 
 `scripts/gen-diagnostic-codes.mjs` generated the registry while there were two
-compilers to keep in step (stage0's `src/codes.ts` and `self/codes.ts`, from the
+compilers to keep in step (stage0's `src/codes.ts` and `src/codes.ts`, from the
 diagnostic sites of stage0's `src/`). It is frozen now: it scans nothing and writes
 nothing, and `--check`, which CI runs, validates the file's format and that
 every code in it is unique. What stops a diagnostic shipping without a real
@@ -674,7 +674,7 @@ The band says which phase refused the program:
 | `NL0001` | a syntax error; every one of them shares one code, a convention from when the text was the `typescript` package's |
 | `NL0002` | the C toolchain `--link` needs could not be used (exit 3) |
 | `NL0003` | an internal compiler error (exit 70) |
-| `NL1xxx` | Phase 0, the forbidden-syntax sweep (`self/validator.ts`) |
+| `NL1xxx` | Phase 0, the forbidden-syntax sweep (`src/validator.ts`) |
 | `NL2xxx` | the checker: signatures, bodies, types |
 | `NL3xxx` | the driver and module loading |
 | `NL4xxx` | the interop sidecar generators |
@@ -722,10 +722,10 @@ fails the same way.
 | What | Held to | Read from |
 | --- | --- | --- |
 | every `std/*.ts`, `examples/*.ts` and `examples/*/main.ts`, discovered from the directory | **zero**, in both number modes where the program compiles | `--json`, `severity` `"performance"`; a failure names `file:line:col` and the `NL9xxx` code |
-| `self/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2), 89 once constrained type parameters (#157) added four NL9007 in `self/generics.ts` | the `--json` of the compile the self-hosting section already makes |
+| `src/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2), 89 once constrained type parameters (#157) added four NL9007 in `src/generics.ts` | the `--json` of the compile the self-hosting section already makes |
 
-**Lowering the baseline.** When a change proves a `self/` warning away, the
-ratchet's second check fails with `self/<file>.ts NL9xxx: N, the baseline says
+**Lowering the baseline.** When a change proves a `src/` warning away, the
+ratchet's second check fails with `src/<file>.ts NL9xxx: N, the baseline says
 M; set it to N in tests/perf-baseline.json`. Make that edit in the same change
 (and delete an entry that reaches zero). A count above the baseline fails the
 first check, which prints every warning of that file and code; the fix is the
@@ -734,7 +734,7 @@ rest, including how a program written for one number mode is recorded.
 
 ## `--emit-ast` and `--emit-checked`
 
-Both write to stdout instead of IR (`self/ast-text.ts` and `self/dump.ts`);
+Both write to stdout instead of IR (`src/ast-text.ts` and `src/dump.ts`);
 file names are printed relative to the working directory.
 
 - `--emit-ast`: the syntax tree of every module after Phase 0, one node per
@@ -754,7 +754,7 @@ Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
 
 ## `-g` debug info
 
-`self/debug.ts` builds the DWARF metadata; `IRFunction` (`self/ir.ts`) carries a
+`src/debug.ts` builds the DWARF metadata; `IRFunction` (`src/ir.ts`) carries a
 `subprogram` (`define ... !dbg !N`) and a current location that `emit`
 appends as `, !dbg !N`, set by the emitter around every statement and
 expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
@@ -793,9 +793,9 @@ A `DILocation` column is a **byte** offset into its line, plus one — what
 units, which differ from it for every position after a non-ASCII character on
 the same line (`tests/cases/dbg_utf8`). Diagnostic columns are a separate
 question and are code units: the consumer there is an editor
-(`self/diagnostics.ts`, `columnOf` against `byteColumnOf`).
+(`src/diagnostics.ts`, `columnOf` against `byteColumnOf`).
 
-`-g` is a flag of `self/compile.ts`, and the `dbg_*` goldens in `tests/cases/`
+`-g` is a flag of `src/compile.ts`, and the `dbg_*` goldens in `tests/cases/`
 pin the bytes it emits, metadata numbering included.
 
 `--link -g` passes `-g` to `scripts/build.sh`, which adds `-g` for every

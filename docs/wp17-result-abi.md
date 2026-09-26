@@ -45,7 +45,7 @@ little-endian (all six begin `e-`), so bit 0 of the word is byte 0 of the
 struct and the encoding is exact rather than approximately right.
 
 `resultByValue` in stage0's `src/types.ts` (and `TypeTable.resultByValue` in
-`self/types.ts`) is the one place that decides, and the payload predicate is
+`src/types.ts`) is the one place that decides, and the payload predicate is
 the whole of it: `void`,
 `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`. `i64`, `u64` and `f64` are four
 bytes too many; a `string`, an array, a class, a nullable or a nested
@@ -428,18 +428,18 @@ still emits `i64` for all four of its shapes.
   at the return boundary: the callee packs where it would have allocated, and
   the caller unpacks into the entry-block object the rest of the lowering
   already understands. That is what kept the change to the emitter small
-  enough to mirror into `self/` in one go.
+  enough to mirror into `src/` in one go.
 
 ## 6. Both compilers
 
 Same rule as WP16 and for the same reason: stage0 is frozen as the bootstrap
 seed and the differential oracle, not retired, and `tests/self/ir_oracle.js`
 requires stage1 to compile every program in the corpus with no exemption
-list. So this lands in stage0's `src/` and `self/` together — stage0's `src/types.ts` /
-`self/types.ts` (the predicate and the return slot),
-stage0's `src/codegen/emit/result.ts` / `self/emit-result.ts` (the pack and the
+list. So this lands in stage0's `src/` and `src/` together — stage0's `src/types.ts` /
+`src/types.ts` (the predicate and the return slot),
+stage0's `src/codegen/emit/result.ts` / `src/emit-result.ts` (the pack and the
 unpack), stage0's `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
-and `emit/classes.ts` / `self/emit.ts` and `self/emit-classes.ts` (the
+and `emit/classes.ts` / `src/emit.ts` and `src/emit-classes.ts` (the
 `define`, the `declare`, the `ret`, the prologue and the two call sites), plus
 `escape.ts` and `attributes.ts` on each side (the allocation moved to whichever
 side unpacks, so the sites, the reported allocator call and the new
@@ -447,12 +447,12 @@ side unpacks, so the sites, the reported allocator call and the new
 agree, byte for byte, before the bootstrap is allowed to reach its fixed
 point: **274 of 274 programs, 941 modules, 1,286,495 lines of IR**, with
 `IR(stage1) == IR(stage2)` and stage3 byte-identical to stage2 still holding
-over the 43 modules of `self/`.
+over the 43 modules of `src/`.
 
 **Nish-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
-§6 — the subset `self/` is written in does not grow quietly — did not fire:
+§6 — the subset `src/` is written in does not grow quietly — did not fire:
 the packing is shifts, `zext`, `trunc`, `select` and one `bitcast`, all of
-which `self/` could already express, and no construct entered the language
+which `src/` could already express, and no construct entered the language
 either. What this package adds to Nish is a *lowering* of a type that was
 already there, which is why it ships no new surface syntax and its `reject_*`
 case pins that the WP16 rules still hold on the new shape rather than a new
@@ -462,9 +462,9 @@ rule of its own.
 had been since WP14 §4: stage1 had no DWARF builder and no header generator,
 and the driver reported those flags by name rather than ignoring them. (3) was
 therefore a stage0-only change, and the IR oracle skipped the `-g` corpus
-exactly as it had before. Both have since been ported to `self/` — the
+exactly as it had before. Both have since been ported to `src/` — the
 sidecars in [wp14-selfhost.md](wp14-selfhost.md) §7, the DWARF in
-`self/debug.ts` ([§`-g` on both sides](wp14-selfhost.md#-g-on-both-sides)) —
+`src/debug.ts` ([§`-g` on both sides](wp14-selfhost.md#-g-on-both-sides)) —
 so the two compilers now write the C shapes above byte for byte alike, and
 `tests/cases/dbg_result` is compared between them rather than skipped: how a
 packed `Result` is described in DWARF is a two-sided change like every other.

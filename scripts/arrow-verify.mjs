@@ -3,10 +3,10 @@
  * before and after it and comparing every emitted byte.
  *
  *   node scripts/arrow-verify.mjs                       the whole corpus
- *   node scripts/arrow-verify.mjs self                  only programs under self/
+ *   node scripts/arrow-verify.mjs src/                  only programs under src/
  *   node scripts/arrow-verify.mjs --concise docs        hunt WP22 §8a's bug class
  *   node scripts/arrow-verify.mjs --debug tests/cases   add `-g` to every compile
- *   node scripts/arrow-verify.mjs --applied self        verify the rewrite already
+ *   node scripts/arrow-verify.mjs --applied src/        verify the rewrite already
  *                                                       applied to the working tree
  *
  * WP22 §2 is the reason this is the right check rather than a proxy for one:
@@ -30,7 +30,7 @@
  * a revision (`--rev`, default `HEAD`) and runs no codemod at all, which asks
  * "was the rewrite that is sitting in my tree safe?" — of a file the index can
  * see, so add a module the rewrite created before asking. The second is the one
- * §8b's recipe needs: after `arrowify` has rewritten `self/` in place there is
+ * §8b's recipe needs: after `arrowify` has rewritten `src/` in place there is
  * nothing left for a derived rewrite to do, so a derived run would compile the
  * same source twice and report a reassuring zero. This tool therefore refuses
  * to report success over ground it did not check: a derived run that rewrites
@@ -369,7 +369,7 @@ const speaks = (run) =>
  *
  * **A successful compile has diagnostics too**, and they were read on neither
  * side: `readRefusals` asked only where the status was non-zero, so a
- * `performance:` warning — 76 corpus programs emit one, most of `self/` among
+ * `performance:` warning — 76 corpus programs emit one, most of `src/` among
  * them — could move, change or disappear under a rewrite and the sweep would
  * report `0 difference(s)`. That is precisely the half this tool's own header
  * claims to cover: "a declaration that changes shape can move [a line and a
@@ -579,7 +579,7 @@ export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touc
 export const verdict = (a, b) => {
   // Absence first: a subject that exists on one side only has no before-and-after
   // to compare, and the sweep may not call that agreement. It is the shape a
-  // module *added* by a rewrite has — Phase 2 splitting a `self/` module is the
+  // module *added* by a rewrite has — Phase 2 splitting a `src/` module is the
   // obvious one — so the message says which side it was missing from rather than
   // leaving a migrator with a stack trace where a verdict should be.
   if (a.absent === true || b.absent === true) {

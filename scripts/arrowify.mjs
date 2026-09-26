@@ -3,9 +3,9 @@
  * an arrow, which is how the language declares a function
  * (`docs/wp22-arrow-functions.md` §1).
  *
- *   node scripts/arrowify.mjs self/lexer.ts ...     rewrite in place
- *   node scripts/arrowify.mjs --stdout self/map.ts  print the rewrite, change nothing
- *   node scripts/arrowify.mjs --check self/*.ts     report what is left, exit 1 if any
+ *   node scripts/arrowify.mjs src/lexer.ts ...     rewrite in place
+ *   node scripts/arrowify.mjs --stdout src/map.ts  print the rewrite, change nothing
+ *   node scripts/arrowify.mjs --check src/*.ts     report what is left, exit 1 if any
  *   node scripts/arrowify.mjs --concise tests/cases/fn_arrow.ts
  *
  * The rewrite is **textual, driven by the parse tree**. `typescript` locates
@@ -41,7 +41,7 @@
  * `useConsistentArrowReturn` is an **error** in `biome.json`, so a block-bodied
  * arrow whose body is one `return` fails `npm run lint` in every directory
  * Biome reads — which is every Nish surface except the test fixtures. A
- * block-only rewrite of `self/` would therefore land hundreds of lint errors,
+ * block-only rewrite of `src/` would therefore land hundreds of lint errors,
  * and this is the pass that clears them.
  *
  * It is still a second step rather than the default, and the order matters: a
@@ -78,7 +78,7 @@ const SKIP_REASONS = {
  * the same way and became an ordinary function, and `export default function f`
  * became `export default const f = ...`, which is not a sentence.
  *
- * None of the three can appear in `self/`, so none of them would have been
+ * None of the three can appear in `src/`, so none of them would have been
  * caught by the rewrite that matters; all three are in `tests/cases`, which
  * stage C still has to convert. A codemod that silently makes a rejected
  * program compile is the worst thing one can do, because every gate downstream
