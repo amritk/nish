@@ -402,9 +402,8 @@ export class Parser {
    * which TypeScript counts as one too.
    */
   newlineBefore(): boolean {
-    const source = this.lexer.source;
     for (let i: i32 = this.previousEnd; i < this.start; i++) {
-      const c = source.charCodeAt(i);
+      const c = this.lexer.at(i);
       if (c === CH_LF || c === CH_CR) return true;
     }
     return false;
