@@ -1,8 +1,8 @@
 // A surrogate escape with no partner is not joined to anything: it keeps its
 // three WTF-8 bytes, as it did before pairs were joined (docs/LANGUAGE.md,
-// "Encoding"). A low surrogate before a high one is two lone surrogates, and
-// the pair is joined only in the literal, so concatenating two halves at run
-// time is six bytes where JavaScript would see one code point.
+// "String literals"). A low surrogate before a high one is two lone
+// surrogates, and the pair is joined only in the literal, so concatenating two
+// halves at run time is six bytes where JavaScript would see one code point.
 export const main = (): i32 => {
   const high = "\uD83D";
   console.log(`${high.length} ${high.charCodeAt(0)} ${high.charCodeAt(1)} ${high.charCodeAt(2)}`);

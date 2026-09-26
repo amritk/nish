@@ -699,7 +699,8 @@ export class Lexer {
       }
       // A high surrogate written right before a low one is the one code point
       // the pair spells, as it is in JavaScript's UTF-16. A surrogate left on
-      // its own keeps its three WTF-8 bytes (docs/LANGUAGE.md, "Encoding").
+      // its own keeps its three WTF-8 bytes (docs/LANGUAGE.md, "String
+      // literals").
       const next = this.escapeEnd
       if (
         value >= 0xd800 &&
