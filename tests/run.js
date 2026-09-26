@@ -7488,6 +7488,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-napi-async",
     "--target",
     "--profile",
+    "run [flags] <file.ts> [args ...]",
   ];
   const undocumented = documented.filter((f) => !help.stdout.includes(f));
   check(
@@ -7632,6 +7633,230 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
       fs.existsSync(path.join(wp12Dir, "badbuild.modules", "main.ll")),
     badBuild.stderr
   );
+}
+
+// ---- `nish run`: a script built into a cache and started ----------------------------
+// `nish run [flags] <file.ts> [args ...]` compiles every time, links only when the
+// IR (or the recipe, or the runtime) is new, and answers the program's own exit
+// status. Each check drives the real command with its own XDG_CACHE_HOME, so what
+// a check finds in the cache is what that run put there. A hit is proved by a run
+// that could not have linked: PATH is emptied, and neither `bash` nor `clang` is
+// reachable.
+if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("nish run: clang not on PATH, so no script can be linked");
+  } else {
+    const runDir = path.join(buildDir, "nish-run");
+    fs.rmSync(runDir, { recursive: true, force: true });
+    fs.mkdirSync(runDir, { recursive: true });
+    const cache = path.join(runDir, "cache");
+    const entries = () => {
+      const dir = path.join(cache, "nish", "run");
+      return fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [];
+    };
+    const nishRun = (args, env = {}, input = undefined) =>
+      spawnSync(NISH, ["run", ...args], {
+        cwd: root,
+        encoding: "utf8",
+        input,
+        env: { ...process.env, XDG_CACHE_HOME: cache, ...env },
+      });
+    const argvExample = path.join("examples", "argv.ts");
+
+    const first = nishRun([argvExample, "3", "4", "five"]);
+    check(
+      "nish run: the arguments after the file reach the program, and its exit status is the run's",
+      first.status === 3 &&
+        first.stdout.includes("3 argument(s)") &&
+        first.stdout.includes("  3: five -> not a number") &&
+        first.stdout.includes("sum of the integers: 7"),
+      first.stdout + first.stderr
+    );
+    check(
+      "nish run: stderr is the program's alone -- no `wrote` or `linked` line from the build",
+      first.status === 3 && first.stderr === "",
+      first.stderr
+    );
+    const afterFirst = entries();
+    const entryDir = afterFirst.length === 1 ? path.join(cache, "nish", "run", afterFirst[0]) : "";
+    check(
+      "nish run: a miss leaves one entry, named by 16 hex digits, holding the binary and its key and nothing else",
+      afterFirst.length === 1 &&
+        /^[0-9a-f]{16}$/.test(afterFirst[0]) &&
+        fs.readdirSync(entryDir).sort().join(",") === "argv,key",
+      afterFirst.join(", ")
+    );
+
+    const hit = nishRun([argvExample, "3", "4", "five"], { PATH: path.join(runDir, "no-tools") });
+    check(
+      "nish run: a second run of the same program is a hit -- it runs with no C compiler and no shell on PATH",
+      hit.status === 3 && hit.stdout === first.stdout && hit.stderr === "" && entries().length === 1,
+      hit.stdout + hit.stderr
+    );
+
+    const flagsToProgram = nishRun([argvExample, "--link", "-o", "--help"]);
+    check(
+      "nish run: flags after the file are the program's, not the compiler's",
+      flagsToProgram.status === 3 &&
+        flagsToProgram.stdout.includes("1: --link") &&
+        flagsToProgram.stdout.includes("3: --help"),
+      flagsToProgram.stdout + flagsToProgram.stderr
+    );
+
+    // An edit is a new program: the IR changes, so the key does, and the old
+    // entry is left where it is rather than overwritten under a running copy.
+    const script = path.join(runDir, "script.ts");
+    fs.writeFileSync(script, 'export const main = (): number => {\n  console.log("one");\n  return 0;\n};\n');
+    const before = nishRun([script]);
+    fs.writeFileSync(script, 'export const main = (): number => {\n  console.log("two");\n  return 5;\n};\n');
+    const after = nishRun([script]);
+    check(
+      "nish run: an edited script is rebuilt, and the run answers the new program",
+      before.status === 0 && before.stdout === "one\n" && after.status === 5 && after.stdout === "two\n",
+      before.stdout + before.stderr + after.stdout + after.stderr
+    );
+    check("nish run: each program has its own entry", entries().length === 3, entries().join(", "));
+
+    const stdin = path.join(runDir, "stdin.ts");
+    fs.writeFileSync(
+      stdin,
+      'export const main = (): number => {\n  const text = readFileSync("/dev/stdin");\n  console.log(text.length);\n  return 0;\n};\n'
+    );
+    const stdinFile = fs.openSync(path.join(root, "examples", "add.ts"), "r");
+    const piped = spawnSync(NISH, ["run", stdin], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: [stdinFile, "pipe", "pipe"],
+      env: { ...process.env, XDG_CACHE_HOME: cache },
+    });
+    fs.closeSync(stdinFile);
+    const addBytes = fs.statSync(path.join(root, "examples", "add.ts")).size;
+    check(
+      "nish run: stdin is the program's",
+      piped.status === 0 && piped.stdout === `${addBytes}\n`,
+      piped.stdout + piped.stderr
+    );
+
+    const panics = path.join(runDir, "panics.ts");
+    fs.writeFileSync(panics, 'export const main = (): number => {\n  panic("stopped");\n};\n');
+    const panicked = nishRun([panics]);
+    check(
+      "nish run: a program that panics answers its own exit 1 and its own message",
+      panicked.status === 1 && panicked.stderr === "stopped\n",
+      panicked.stderr
+    );
+
+    const f64 = nishRun(["--number-mode", "f64", path.join("examples", "nbody.ts")]);
+    check(
+      "nish run: compiler flags go before the file",
+      f64.status === 0 && f64.stdout.startsWith("-0.16907516382852447\n"),
+      f64.stdout + f64.stderr
+    );
+
+    const countBefore = entries().length;
+    const broken = path.join(runDir, "broken.ts");
+    fs.writeFileSync(broken, 'export const main = (): number => "x";\n');
+    const refused = nishRun([broken]);
+    check(
+      "nish run: a program that does not compile is reported as a compile is, exit 1, and nothing is cached",
+      refused.status === 1 &&
+        refused.stderr.includes("Return type mismatch") &&
+        refused.stdout === "" &&
+        entries().length === countBefore,
+      refused.stderr
+    );
+    const library = path.join(runDir, "library.ts");
+    fs.writeFileSync(library, "export const twice = (n: number): number => n * 2;\n");
+    const noMain = nishRun([library]);
+    check(
+      "nish run: an entry with no `main` is refused before anything is linked, exit 1",
+      noMain.status === 1 && noMain.stderr.includes("run: the entry module") && noMain.stderr.includes("export const main"),
+      noMain.stderr
+    );
+
+    for (const flags of [["--link", "x"], ["-o", "x.ll"], ["--emit-header", "x.h"], ["--emit-checked"], ["--target", "host"]]) {
+      const r = nishRun([...flags, argvExample]);
+      check(
+        `nish run: \`${flags[0]}\` writes a product \`run\` keeps to itself, so it is a usage error (exit 2)`,
+        r.status === 2 && r.stderr.includes(`\`${flags[0]}\` cannot be used with \`nish run\``) && r.stdout === "",
+        r.stderr
+      );
+    }
+    const wasi = nishRun(["--profile", "wasi", argvExample]);
+    check(
+      "nish run: --profile wasi is a usage error, since the run starts a native binary",
+      wasi.status === 2 && wasi.stderr.includes("cannot use --profile wasi"),
+      wasi.stderr
+    );
+    const noFile = nishRun([]);
+    check(
+      "nish run: no file is the usage on stderr, exit 2",
+      noFile.status === 2 && noFile.stderr.includes("nish run [flags] <file.ts> [args ...]"),
+      noFile.stderr
+    );
+
+    // No HOME and no XDG_CACHE_HOME: the run refuses rather than keeping a
+    // binary in a directory another user could write to.
+    const homeless = spawnSync(NISH, ["run", "--json", argvExample], {
+      cwd: root,
+      encoding: "utf8",
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([k]) => k !== "HOME" && k !== "XDG_CACHE_HOME")
+      ),
+    });
+    const homelessObj = homeless.stdout.trim().length > 0 ? JSON.parse(homeless.stdout.trim()) : null;
+    check(
+      "nish run: with neither HOME nor XDG_CACHE_HOME set, an NL0002 refusal under --json, exit 3",
+      homeless.status === 3 &&
+        homelessObj !== null &&
+        homelessObj.code === "NL0002" &&
+        homelessObj.message.includes("set HOME or XDG_CACHE_HOME"),
+      homeless.stdout + homeless.stderr
+    );
+    const home = path.join(runDir, "home");
+    const viaHome = spawnSync(NISH, ["run", argvExample], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== "XDG_CACHE_HOME")),
+        HOME: home,
+      },
+    });
+    check(
+      "nish run: without XDG_CACHE_HOME the cache is $HOME/.cache/nish/run",
+      viaHome.status === 0 && fs.readdirSync(path.join(home, ".cache", "nish", "run")).length === 1,
+      viaHome.stdout + viaHome.stderr
+    );
+
+    // The same stub `scripts/build.sh` failure the WP12 block drives, through a
+    // miss: the link's own report, exit 3, and no key -- so the next run
+    // tries again instead of starting a binary that is not there.
+    const stubDir = path.join(runDir, "stub");
+    fs.mkdirSync(stubDir, { recursive: true });
+    const stub = path.join(stubDir, "stub-cc");
+    fs.writeFileSync(
+      stub,
+      '#!/bin/sh\ncase "$1" in --version) exit 0 ;; esac\necho "stub-cc: refusing to link" >&2\nexit 1\n',
+      { mode: 0o755 }
+    );
+    const stubCache = path.join(runDir, "stub-cache");
+    const badLink = spawnSync(NISH, ["run", argvExample], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: stubCache, CC: stub },
+    });
+    const stubEntries = fs.existsSync(path.join(stubCache, "nish", "run"))
+      ? fs.readdirSync(path.join(stubCache, "nish", "run"))
+      : [];
+    check(
+      "nish run: a failed link is the link's report, exit 3, and leaves no key and no scratch directory behind",
+      badLink.status === 3 &&
+        badLink.stderr.includes("stub-cc: refusing to link") &&
+        stubEntries.length === 1 &&
+        fs.readdirSync(path.join(stubCache, "nish", "run", stubEntries[0])).length === 0,
+      badLink.stderr + stubEntries.join(", ")
+    );
+  }
 }
 
 // ---- WP16: the ambient declarations -------------------------------------------------

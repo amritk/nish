@@ -156,6 +156,7 @@ reject_param_destructured	expected a name, found `{`
 reject_param_rest	expected a name, found `...`
 reject_regex	expected an expression, found `/`
 reject_satisfies	expected `;`, found `IDENT`
+reject_shebang_not_first	'#!' can only be used at the start of a file
 reject_side_effect_import	expected `{`, found `STRING`
 reject_top_level_stmt	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_try_catch	expected `;`, found `{`

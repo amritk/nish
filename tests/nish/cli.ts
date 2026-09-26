@@ -88,6 +88,7 @@ const advertisedFlags = (): string[] => [
   "--emit-napi-async",
   "--target",
   "--profile",
+  "run [flags] <file.ts> [args ...]",
 ];
 
 /** One completed run of the compiler: the status, and both streams as text. */

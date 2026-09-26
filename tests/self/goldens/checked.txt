@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 669 programs, 44928 dump lines.
+# 671 programs, 44940 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -5777,6 +5777,13 @@ function main(): void -> @nish_main [exported entry]
   calls: side
   stackSites=0 stackLocals=0
   callee 6:3 side -> @side
+program tests/cases/entry_shebang.ts
+module tests/cases/entry_shebang.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print
+  stackSites=0 stackLocals=0
 program tests/cases/enum_expanded.ts
 module tests/cases/enum_expanded.ts (entry)
 const KIND_IF: i32 = 1
@@ -38070,6 +38077,13 @@ function describe(sq: Square): i32 -> @describe
   stackSites=0 stackLocals=0
   callee 24:42 originDistance -> @originDistance
   callee 24:63 Square.area -> @Square.area
+program docs/cookbook/decl-shebang.ts
+module docs/cookbook/decl-shebang.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print
+  stackSites=0 stackLocals=0
 program docs/cookbook/decl_const.ts
 module docs/cookbook/decl_const.ts (entry)
 const WIDTH: i32 = 8

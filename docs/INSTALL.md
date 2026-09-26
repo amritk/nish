@@ -446,6 +446,21 @@ Other build profiles: `--profile size` (smallest binary), `--profile debug`
 (no optimisation, symbols kept). Run `nish --help` for every flag, and
 see the [README](../README.md) for the language subset.
 
+To use a program as a script rather than keep the binary, run it:
+
+```bash
+nish run hello.ts
+# hello from Nish
+```
+
+`nish run [options] <file.ts> [args ...]` compiles the file, links it into
+`$XDG_CACHE_HOME/nish/run` (or `~/.cache/nish/run`) when that program has not
+been linked before, and starts it with the arguments after the file. The first
+run of a new edit pays for one link, and later runs start the cached binary.
+It needs clang only for that link. It needs `HOME` or `XDG_CACHE_HOME` set,
+and refuses the run without them rather than keep a binary in a shared
+directory.
+
 ## 4. Exit codes
 
 | Code | Meaning |
@@ -454,6 +469,7 @@ see the [README](../README.md) for the language subset.
 | 1 | the program was rejected: compile error (`file:line:col: error: ...`), missing input file, or an `-o` layout that does not fit the module count |
 | 2 | usage error: unknown flag, missing argument, no input files |
 | 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) — or the `nish` command found no prebuilt compiler for this platform, or one that would not start. Under `--json` all of these are one `NL0002` object |
+| | `nish run` answers these codes until the program starts, and the program's own exit status (`128 + n` for a signal) after that. With neither `HOME` nor `XDG_CACHE_HOME` set it answers 3 |
 | 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/nish/issues> with the input and command line; `NISH_DEBUG=1` prints the stack trace |
 
 ## Troubleshooting

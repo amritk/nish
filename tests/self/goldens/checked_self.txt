@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 71 programs, 910330 dump lines live, 71 distinct modules.
+# 72 programs, 937064 dump lines live, 72 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/options.ts self/emit_parallel.ts self/target.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/expressions.ts self/builtins.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts self/fusion.ts self/parents.ts self/validator.ts self/assignment.ts self/constants.ts self/bounds.ts self/statements.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/options.ts self/emit_parallel.ts self/target.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
@@ -19,7 +19,7 @@ entry self/builtins.ts: self/builtins.ts self/context.ts self/diagnostics.ts sel
 entry self/checker.ts: self/checker.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/declarations.ts self/expressions.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/result.ts self/structs.ts self/members.ts self/fusion.ts self/parents.ts self/validator.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/bounds.ts self/constants.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/options.ts self/emit_parallel.ts self/target.ts self/assignment.ts self/statements.ts
 entry self/codes.ts: self/codes.ts
 entry self/compilation.ts: self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit_arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit_control.ts self/emit_ops.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/emit_parallel.ts self/options.ts self/target.ts self/inline_arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
-entry self/compile.ts: self/compile.ts self/ast_text.ts self/nodes.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit_arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit_control.ts self/emit_ops.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/emit_parallel.ts self/options.ts self/target.ts self/inline_arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/dump.ts self/interop_abi.ts self/interop_dts.ts self/interop_wasm.ts self/interop_header.ts self/interop_napi.ts
+entry self/compile.ts: self/compile.ts self/ast_text.ts self/nodes.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit_arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit_control.ts self/emit_ops.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/emit_parallel.ts self/options.ts self/target.ts self/inline_arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts self/dump.ts self/interop_abi.ts self/interop_dts.ts self/interop_wasm.ts self/interop_header.ts self/interop_napi.ts self/run-cache.ts
 entry self/constants.ts: self/constants.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/context.ts: self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/debug.ts: self/debug.ts self/branding.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/ice.ts self/ir.ts self/nodes.ts self/program.ts self/context.ts self/symbols.ts self/types.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/result.ts self/builtins.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/options.ts self/emit_parallel.ts self/target.ts
@@ -67,6 +67,7 @@ entry self/paths.ts: self/paths.ts self/strings.ts
 entry self/program.ts: self/program.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts
 entry self/ranges.ts: self/ranges.ts self/bounds.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/visibility.ts self/options.ts
 entry self/result.ts: self/result.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/options.ts self/emit_parallel.ts self/target.ts
+entry self/run-cache.ts: self/run-cache.ts self/branding.ts self/compilation.ts self/attributes.ts self/emit_builtins.ts self/builtins.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/expressions.ts self/annotations.ts self/generics.ts self/checker.ts self/arrays.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/statements.ts self/validator.ts self/members.ts self/fusion.ts self/parents.ts self/parallel.ts self/escape.ts self/emit_arrays.ts self/emit.ts self/debug.ts self/ir.ts self/emit_control.ts self/emit_ops.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/emit_parallel.ts self/options.ts self/target.ts self/inline_arrays.ts self/visibility.ts self/ranges.ts self/parser.ts self/lexer.ts self/tokens.ts self/manifest.ts
 entry self/runtime.ts: self/runtime.ts self/map.ts
 entry self/statements.ts: self/statements.ts self/branding.ts self/expressions.ts self/annotations.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/std_modules.ts self/paths.ts self/symbols.ts self/types.ts self/ice.ts self/generics.ts self/checker.ts self/arrays.ts self/builtins.ts self/emit_util.ts self/assignment.ts self/constants.ts self/declarations.ts self/bounds.ts self/result.ts self/structs.ts self/parallel.ts self/attributes.ts self/emit_builtins.ts self/emit.ts self/debug.ts self/ir.ts self/escape.ts self/emit_arrays.ts self/emit_ops.ts self/emit_control.ts self/emit_classes.ts self/emit_result.ts self/tbaa.ts self/emit_strings.ts self/runtime.ts self/emit_map.ts self/validator.ts self/options.ts self/emit_parallel.ts self/target.ts self/parents.ts self/members.ts self/fusion.ts
 entry self/std_modules.ts: self/std_modules.ts self/branding.ts self/paths.ts self/strings.ts
@@ -24186,7 +24187,7 @@ function isAssignment(kind: i32): boolean -> @isAssignment [exported]
   stackSites=0 stackLocals=0
 function Parser.constructor(this: Parser, file: SourceFile): void -> @Parser.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via Parser.advance
+  sharedWrite: via Lexer.constructor
   escaping: file
   calls: Lexer.constructor Parser.advance nish_alloc_struct
   pointer this: size=80 writesThrough=true captured=false passedTo=Parser.advance#0
@@ -24484,7 +24485,7 @@ function Parser.parseTypeParameters(this: Parser): Node -> @Parser.parseTypePara
   callee 639:12 Parser.closeList -> @Parser.closeList
 function Parser.startsArrowDeclaration(this: Parser): boolean -> @Parser.startsArrowDeclaration [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  sharedWrite: via Lexer.constructor
   calls: Lexer.constructor Lexer.next
   pointer this: size=80 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -24750,7 +24751,7 @@ function Parser.parseTypeAlias(this: Parser, start: i32): Node -> @Parser.parseT
   callee 1050:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.startsConstEnum(this: Parser): boolean -> @Parser.startsConstEnum [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  sharedWrite: via Lexer.constructor
   calls: Lexer.constructor Lexer.next nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -24900,7 +24901,7 @@ function Parser.parsePrimaryType(this: Parser): Node -> @Parser.parsePrimaryType
   callee 1211:24 Parser.closeList -> @Parser.closeList
 function Parser.startsFunctionType(this: Parser): boolean -> @Parser.startsFunctionType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.next
+  sharedWrite: via Lexer.constructor
   calls: Lexer.constructor Lexer.next
   pointer this: size=80 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -25731,6 +25732,7 @@ struct Lexer (class) size=56 align=8 exported
   field escapeEnd: i32 index=7 offset=40
   field literal: StringBuilder index=8 offset=48
   constructor -> @Lexer.constructor
+  method skipShebang -> @Lexer.skipShebang
   method at -> @Lexer.at
   method skipTrivia -> @Lexer.skipTrivia
   method emit -> @Lexer.emit
@@ -25776,32 +25778,43 @@ function utf8Encode(cp: i32): string -> @utf8Encode [exported]
   calls: nish_str_concat nish_str_new
   stackSites=0 stackLocals=0
 function Lexer.constructor(this: Lexer, source: string): void -> @Lexer.constructor [exported constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via Lexer.skipShebang
   escaping: source
-  calls: StringBuilder.constructor nish_alloc_struct
-  pointer this: size=56 writesThrough=true captured=false
+  calls: Lexer.skipShebang StringBuilder.constructor nish_alloc_struct
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.skipShebang#0
   stackSites=0 stackLocals=0
   callee 329:20 new StringBuilder -> @StringBuilder.constructor
+  callee 330:5 Lexer.skipShebang -> @Lexer.skipShebang
+function Lexer.skipShebang(this: Lexer): void -> @Lexer.skipShebang [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 346:7
+  calls: Lexer.at
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0
+  stackSites=0 stackLocals=0
+  callee 342:9 Lexer.at -> @Lexer.at
+  callee 342:35 Lexer.at -> @Lexer.at
+  callee 345:45 Lexer.at -> @Lexer.at
 function Lexer.at(this: Lexer, i: i32): i32 -> @Lexer.at [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Lexer.skipTrivia(this: Lexer): void -> @Lexer.skipTrivia [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 343:9
+  sharedWrite: 361:9
   calls: Lexer.at
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0
   stackSites=0 stackLocals=0
-  local 341:13 c: i32 (const)
-  callee 341:17 Lexer.at -> @Lexer.at
-  callee 344:36 Lexer.at -> @Lexer.at
-  callee 346:49 Lexer.at -> @Lexer.at
-  callee 347:36 Lexer.at -> @Lexer.at
-  callee 350:15 Lexer.at -> @Lexer.at
-  callee 350:48 Lexer.at -> @Lexer.at
+  local 359:13 c: i32 (const)
+  callee 359:17 Lexer.at -> @Lexer.at
+  callee 362:36 Lexer.at -> @Lexer.at
+  callee 364:49 Lexer.at -> @Lexer.at
+  callee 365:36 Lexer.at -> @Lexer.at
+  callee 368:15 Lexer.at -> @Lexer.at
+  callee 368:48 Lexer.at -> @Lexer.at
 function Lexer.emit(this: Lexer, kind: i32, end: i32, value: string): void -> @Lexer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 364:5
+  sharedWrite: 382:5
   escaping: end kind value
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -25812,7 +25825,7 @@ function Lexer.emitPlain(this: Lexer, kind: i32, width: i32): void -> @Lexer.emi
   calls: Lexer.emit
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emit#0
   stackSites=0 stackLocals=0
-  callee 372:5 Lexer.emit -> @Lexer.emit
+  callee 390:5 Lexer.emit -> @Lexer.emit
 function Lexer.error(this: Lexer, message: string, end: i32): void -> @Lexer.error [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
@@ -25820,267 +25833,270 @@ function Lexer.error(this: Lexer, message: string, end: i32): void -> @Lexer.err
   calls: Lexer.emit
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emit#0
   stackSites=0 stackLocals=0
-  callee 376:5 Lexer.emit -> @Lexer.emit
+  callee 394:5 Lexer.emit -> @Lexer.emit
 function Lexer.next(this: Lexer): void -> @Lexer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 386:5
+  sharedWrite: 404:5
   calls: Lexer.at Lexer.emit Lexer.scanName Lexer.scanNumber Lexer.scanPunctuation Lexer.scanString Lexer.scanTemplate Lexer.skipTrivia isDigit isIdentStart
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.skipTrivia#0 Lexer.emit#0 Lexer.at#0 Lexer.scanName#0 Lexer.at#0 Lexer.scanNumber#0 Lexer.scanString#0 Lexer.scanTemplate#0 Lexer.scanPunctuation#0
   stackSites=0 stackLocals=0
-  callee 385:5 Lexer.skipTrivia -> @Lexer.skipTrivia
-  callee 388:7 Lexer.emit -> @Lexer.emit
-  local 391:11 c: i32 (const)
-  callee 391:15 Lexer.at -> @Lexer.at
-  callee 392:9 isIdentStart -> @isIdentStart
-  callee 393:7 Lexer.scanName -> @Lexer.scanName
-  callee 396:9 isDigit -> @isDigit
-  callee 396:40 isDigit -> @isDigit
-  callee 396:48 Lexer.at -> @Lexer.at
-  callee 397:7 Lexer.scanNumber -> @Lexer.scanNumber
-  callee 401:7 Lexer.scanString -> @Lexer.scanString
-  callee 405:7 Lexer.scanTemplate -> @Lexer.scanTemplate
-  callee 408:5 Lexer.scanPunctuation -> @Lexer.scanPunctuation
+  callee 403:5 Lexer.skipTrivia -> @Lexer.skipTrivia
+  callee 406:7 Lexer.emit -> @Lexer.emit
+  local 409:11 c: i32 (const)
+  callee 409:15 Lexer.at -> @Lexer.at
+  callee 410:9 isIdentStart -> @isIdentStart
+  callee 411:7 Lexer.scanName -> @Lexer.scanName
+  callee 414:9 isDigit -> @isDigit
+  callee 414:40 isDigit -> @isDigit
+  callee 414:48 Lexer.at -> @Lexer.at
+  callee 415:7 Lexer.scanNumber -> @Lexer.scanNumber
+  callee 419:7 Lexer.scanString -> @Lexer.scanString
+  callee 423:7 Lexer.scanTemplate -> @Lexer.scanTemplate
+  callee 426:5 Lexer.scanPunctuation -> @Lexer.scanPunctuation
 function Lexer.scanPrivateName(this: Lexer): void -> @Lexer.scanPrivateName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isIdentPart nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 413:9 end: i32 (let)
-  callee 414:40 isIdentPart -> @isIdentPart
-  callee 414:52 Lexer.at -> @Lexer.at
-  callee 415:5 Lexer.emit -> @Lexer.emit
+  local 431:9 end: i32 (let)
+  callee 432:40 isIdentPart -> @isIdentPart
+  callee 432:52 Lexer.at -> @Lexer.at
+  callee 433:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanName(this: Lexer): void -> @Lexer.scanName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isIdentPart keywordKind nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 419:9 end: i32 (let)
-  callee 420:40 isIdentPart -> @isIdentPart
-  callee 420:52 Lexer.at -> @Lexer.at
-  local 421:11 word: string (const)
-  local 422:11 keyword: i32 (const)
-  callee 422:21 keywordKind -> @keywordKind
-  callee 423:5 Lexer.emit -> @Lexer.emit
+  local 437:9 end: i32 (let)
+  callee 438:40 isIdentPart -> @isIdentPart
+  callee 438:52 Lexer.at -> @Lexer.at
+  local 439:11 word: string (const)
+  local 440:11 keyword: i32 (const)
+  callee 440:21 keywordKind -> @keywordKind
+  callee 441:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanNumber(this: Lexer): void -> @Lexer.scanNumber [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isDigit isIdentPart nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.emit#0 Lexer.emit#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.emit#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 433:9 end: i32 (let)
-  local 434:11 second: i32 (const)
-  callee 434:20 Lexer.at -> @Lexer.at
-  callee 436:7 Lexer.at -> @Lexer.at
-  callee 445:43 isIdentPart -> @isIdentPart
-  callee 445:55 Lexer.at -> @Lexer.at
-  callee 445:72 Lexer.at -> @Lexer.at
-  callee 448:11 Lexer.at -> @Lexer.at
-  callee 449:9 Lexer.emit -> @Lexer.emit
-  callee 452:7 Lexer.emit -> @Lexer.emit
-  callee 455:41 isDigit -> @isDigit
-  callee 455:49 Lexer.at -> @Lexer.at
-  callee 455:66 Lexer.at -> @Lexer.at
-  callee 458:9 Lexer.at -> @Lexer.at
-  callee 460:43 isDigit -> @isDigit
-  callee 460:51 Lexer.at -> @Lexer.at
-  callee 460:68 Lexer.at -> @Lexer.at
-  local 464:11 exponent: i32 (const)
-  callee 464:22 Lexer.at -> @Lexer.at
-  local 466:11 after: i32 (let)
-  callee 467:11 Lexer.at -> @Lexer.at
-  callee 467:41 Lexer.at -> @Lexer.at
-  callee 468:11 isDigit -> @isDigit
-  callee 468:19 Lexer.at -> @Lexer.at
-  callee 470:44 isDigit -> @isDigit
-  callee 470:52 Lexer.at -> @Lexer.at
+  local 451:9 end: i32 (let)
+  local 452:11 second: i32 (const)
+  callee 452:20 Lexer.at -> @Lexer.at
+  callee 454:7 Lexer.at -> @Lexer.at
+  callee 463:43 isIdentPart -> @isIdentPart
+  callee 463:55 Lexer.at -> @Lexer.at
+  callee 463:72 Lexer.at -> @Lexer.at
+  callee 466:11 Lexer.at -> @Lexer.at
+  callee 467:9 Lexer.emit -> @Lexer.emit
+  callee 470:7 Lexer.emit -> @Lexer.emit
+  callee 473:41 isDigit -> @isDigit
+  callee 473:49 Lexer.at -> @Lexer.at
+  callee 473:66 Lexer.at -> @Lexer.at
   callee 476:9 Lexer.at -> @Lexer.at
-  callee 477:7 Lexer.emit -> @Lexer.emit
-  callee 480:5 Lexer.emit -> @Lexer.emit
+  callee 478:43 isDigit -> @isDigit
+  callee 478:51 Lexer.at -> @Lexer.at
+  callee 478:68 Lexer.at -> @Lexer.at
+  local 482:11 exponent: i32 (const)
+  callee 482:22 Lexer.at -> @Lexer.at
+  local 484:11 after: i32 (let)
+  callee 485:11 Lexer.at -> @Lexer.at
+  callee 485:41 Lexer.at -> @Lexer.at
+  callee 486:11 isDigit -> @isDigit
+  callee 486:19 Lexer.at -> @Lexer.at
+  callee 488:44 isDigit -> @isDigit
+  callee 488:52 Lexer.at -> @Lexer.at
+  callee 494:9 Lexer.at -> @Lexer.at
+  callee 495:7 Lexer.emit -> @Lexer.emit
+  callee 498:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanString(this: Lexer, quote: i32): void -> @Lexer.scanString [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.reset
   calls: Lexer.at Lexer.emit Lexer.error Lexer.literalText Lexer.takeEscape StringBuilder.reset
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.error#0 Lexer.takeEscape#0
   stackSites=0 stackLocals=0
-  local 495:9 at: i32 (let)
-  local 496:9 chunk: i32 (let)
-  callee 497:5 StringBuilder.reset -> @StringBuilder.reset
-  callee 500:9 Lexer.error -> @Lexer.error
-  local 503:13 c: i32 (const)
-  callee 503:17 Lexer.at -> @Lexer.at
-  callee 505:9 Lexer.emit -> @Lexer.emit
-  callee 505:39 Lexer.literalText -> @Lexer.literalText
-  callee 509:9 Lexer.error -> @Lexer.error
-  callee 513:14 Lexer.takeEscape -> @Lexer.takeEscape
+  local 513:9 at: i32 (let)
+  local 514:9 chunk: i32 (let)
+  callee 515:5 StringBuilder.reset -> @StringBuilder.reset
+  callee 518:9 Lexer.error -> @Lexer.error
+  local 521:13 c: i32 (const)
+  callee 521:17 Lexer.at -> @Lexer.at
+  callee 523:9 Lexer.emit -> @Lexer.emit
+  callee 523:39 Lexer.literalText -> @Lexer.literalText
+  callee 527:9 Lexer.error -> @Lexer.error
+  callee 531:14 Lexer.takeEscape -> @Lexer.takeEscape
 function Lexer.takeEscape(this: Lexer, chunk: i32, at: i32): i32 -> @Lexer.takeEscape [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.scanEscape
   calls: Lexer.error Lexer.scanEscape StringBuilder.add nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.scanEscape#0 Lexer.error#0
   stackSites=0 stackLocals=0
-  local 529:11 decoded: string (const)
-  callee 529:21 Lexer.scanEscape -> @Lexer.scanEscape
-  callee 531:7 Lexer.error -> @Lexer.error
-  callee 534:21 StringBuilder.add -> @StringBuilder.add
-  callee 535:5 StringBuilder.add -> @StringBuilder.add
+  local 547:11 decoded: string (const)
+  callee 547:21 Lexer.scanEscape -> @Lexer.scanEscape
+  callee 549:7 Lexer.error -> @Lexer.error
+  callee 552:21 StringBuilder.add -> @StringBuilder.add
+  callee 553:5 StringBuilder.add -> @StringBuilder.add
 function Lexer.literalText(this: Lexer, chunk: i32, at: i32): string -> @Lexer.literalText [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   calls: StringBuilder.add StringBuilder.isEmpty StringBuilder.toText nish_str_new
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 553:9 StringBuilder.isEmpty -> @StringBuilder.isEmpty
-  callee 554:21 StringBuilder.add -> @StringBuilder.add
-  callee 555:12 StringBuilder.toText -> @StringBuilder.toText
+  callee 571:9 StringBuilder.isEmpty -> @StringBuilder.isEmpty
+  callee 572:21 StringBuilder.add -> @StringBuilder.add
+  callee 573:12 StringBuilder.toText -> @StringBuilder.toText
 function Lexer.scanEscape(this: Lexer, at: i32): string -> @Lexer.scanEscape [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 559:5
+  sharedWrite: 577:5
   escaping: at
   calls: Lexer.at Lexer.scanHex hexValue nish_str_new utf8Encode
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.scanHex#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanHex#0
   stackSites=0 stackLocals=0
-  local 560:11 c: i32 (const)
-  callee 560:15 Lexer.at -> @Lexer.at
-  local 569:13 value: i32 (const)
-  callee 569:21 Lexer.scanHex -> @Lexer.scanHex
-  callee 575:14 utf8Encode -> @utf8Encode
-  callee 578:11 Lexer.at -> @Lexer.at
-  local 579:13 end: i32 (let)
-  local 580:13 value: i32 (let)
-  callee 581:44 hexValue -> @hexValue
-  callee 581:53 Lexer.at -> @Lexer.at
-  callee 582:32 hexValue -> @hexValue
-  callee 582:41 Lexer.at -> @Lexer.at
-  callee 585:31 Lexer.at -> @Lexer.at
-  callee 590:16 utf8Encode -> @utf8Encode
-  local 592:13 value: i32 (const)
-  callee 592:21 Lexer.scanHex -> @Lexer.scanHex
-  callee 598:14 utf8Encode -> @utf8Encode
+  local 578:11 c: i32 (const)
+  callee 578:15 Lexer.at -> @Lexer.at
+  local 587:13 value: i32 (const)
+  callee 587:21 Lexer.scanHex -> @Lexer.scanHex
+  callee 593:14 utf8Encode -> @utf8Encode
+  callee 596:11 Lexer.at -> @Lexer.at
+  local 597:13 end: i32 (let)
+  local 598:13 value: i32 (let)
+  callee 599:44 hexValue -> @hexValue
+  callee 599:53 Lexer.at -> @Lexer.at
+  callee 600:32 hexValue -> @hexValue
+  callee 600:41 Lexer.at -> @Lexer.at
+  callee 603:31 Lexer.at -> @Lexer.at
+  callee 608:16 utf8Encode -> @utf8Encode
+  local 610:13 value: i32 (const)
+  callee 610:21 Lexer.scanHex -> @Lexer.scanHex
+  callee 616:14 utf8Encode -> @utf8Encode
 function Lexer.scanHex(this: Lexer, at: i32, count: i32): i32 -> @Lexer.scanHex [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.at hexValue
   pointer this: size=56 writesThrough=false captured=false passedTo=Lexer.at#0
   stackSites=0 stackLocals=0
-  local 611:9 value: i32 (let)
-  local 612:9 i: i32 (let)
-  local 614:13 digit: i32 (const)
-  callee 614:21 hexValue -> @hexValue
-  callee 614:30 Lexer.at -> @Lexer.at
+  local 629:9 value: i32 (let)
+  local 630:9 i: i32 (let)
+  local 632:13 digit: i32 (const)
+  callee 632:21 hexValue -> @hexValue
+  callee 632:30 Lexer.at -> @Lexer.at
 function Lexer.scanTemplate(this: Lexer, at: i32, whole: i32, opening: i32): void -> @Lexer.scanTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 643:9
+  sharedWrite: 661:9
   escaping: at opening whole
   calls: Lexer.at Lexer.emit Lexer.error Lexer.literalText Lexer.takeEscape StringBuilder.reset nish_array_grow
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.takeEscape#0
   stackSites=0 stackLocals=0
-  local 629:9 i: i32 (let)
-  local 630:9 chunk: i32 (let)
-  callee 631:5 StringBuilder.reset -> @StringBuilder.reset
-  callee 634:9 Lexer.error -> @Lexer.error
-  local 637:13 c: i32 (const)
-  callee 637:17 Lexer.at -> @Lexer.at
-  callee 639:9 Lexer.emit -> @Lexer.emit
-  callee 639:33 Lexer.literalText -> @Lexer.literalText
-  callee 642:30 Lexer.at -> @Lexer.at
-  callee 644:9 Lexer.emit -> @Lexer.emit
-  callee 644:35 Lexer.literalText -> @Lexer.literalText
-  callee 648:13 Lexer.takeEscape -> @Lexer.takeEscape
+  local 647:9 i: i32 (let)
+  local 648:9 chunk: i32 (let)
+  callee 649:5 StringBuilder.reset -> @StringBuilder.reset
+  callee 652:9 Lexer.error -> @Lexer.error
+  local 655:13 c: i32 (const)
+  callee 655:17 Lexer.at -> @Lexer.at
+  callee 657:9 Lexer.emit -> @Lexer.emit
+  callee 657:33 Lexer.literalText -> @Lexer.literalText
+  callee 660:30 Lexer.at -> @Lexer.at
+  callee 662:9 Lexer.emit -> @Lexer.emit
+  callee 662:35 Lexer.literalText -> @Lexer.literalText
+  callee 666:13 Lexer.takeEscape -> @Lexer.takeEscape
 function Lexer.scanBrace(this: Lexer, c: i32): void -> @Lexer.scanBrace [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 661:21
+  sharedWrite: 679:21
   calls: Lexer.emitPlain Lexer.scanTemplate nish_panic_index
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emitPlain#0 Lexer.scanTemplate#0 Lexer.emitPlain#0
   stackSites=0 stackLocals=0
-  local 659:11 open: i32 (const)
-  callee 662:7 Lexer.emitPlain -> @Lexer.emitPlain
-  local 666:13 depth: i32 (const)
-  callee 669:9 Lexer.scanTemplate -> @Lexer.scanTemplate
-  callee 674:5 Lexer.emitPlain -> @Lexer.emitPlain
+  local 677:11 open: i32 (const)
+  callee 680:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 684:13 depth: i32 (const)
+  callee 687:9 Lexer.scanTemplate -> @Lexer.scanTemplate
+  callee 692:5 Lexer.emitPlain -> @Lexer.emitPlain
 function Lexer.scanPunctuation(this: Lexer, c: i32): void -> @Lexer.scanPunctuation [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.scanBrace
   escaping: c
   calls: Lexer.at Lexer.emitPlain Lexer.error Lexer.scanBrace Lexer.scanPrivateName isDigit nish_str_concat nish_str_new
-  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanBrace#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.scanPrivateName#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.error#0
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanBrace#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.at#0 Lexer.error#0 Lexer.scanPrivateName#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.error#0
   stackSites=0 stackLocals=0
-  local 678:11 next1: i32 (const)
-  callee 678:19 Lexer.at -> @Lexer.at
-  local 679:11 next2: i32 (const)
-  callee 679:19 Lexer.at -> @Lexer.at
-  local 680:11 next3: i32 (const)
-  callee 680:19 Lexer.at -> @Lexer.at
-  callee 682:7 Lexer.scanBrace -> @Lexer.scanBrace
-  callee 687:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 690:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 693:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 696:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 699:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 702:9 Lexer.emitPlain -> @Lexer.emitPlain
+  local 696:11 next1: i32 (const)
+  callee 696:19 Lexer.at -> @Lexer.at
+  local 697:11 next2: i32 (const)
+  callee 697:19 Lexer.at -> @Lexer.at
+  local 698:11 next3: i32 (const)
+  callee 698:19 Lexer.at -> @Lexer.at
+  callee 700:7 Lexer.scanBrace -> @Lexer.scanBrace
   callee 705:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 709:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 716:30 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 717:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 718:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 722:31 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 723:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 724:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 728:49 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 729:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 735:32 isDigit -> @isDigit
-  callee 735:48 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 736:62 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 737:39 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 738:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 742:7 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 746:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
-  callee 750:53 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 751:35 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 752:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 753:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 757:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 758:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 762:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 763:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 767:55 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 768:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 769:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 770:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 774:55 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 775:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 776:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 780:51 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 781:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 782:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 783:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 789:70 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 790:52 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 791:56 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 792:33 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 793:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 794:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 798:52 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 799:34 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 800:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 801:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 805:53 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 806:35 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 807:37 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 808:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 812:32 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 813:12 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 816:5 Lexer.error -> @Lexer.error
+  callee 708:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 711:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 714:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 717:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 720:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 723:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 727:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 734:30 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 735:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 736:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 740:31 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 741:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 742:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 746:49 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 747:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 753:32 isDigit -> @isDigit
+  callee 753:48 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 754:62 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 755:39 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 756:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 760:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 768:13 end: i32 (let)
+  callee 769:44 Lexer.at -> @Lexer.at
+  callee 772:9 Lexer.error -> @Lexer.error
+  callee 775:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
+  callee 779:53 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 780:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 781:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 782:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 786:32 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 787:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 791:32 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 792:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 796:55 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 797:33 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 798:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 799:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 803:55 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 804:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 805:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 809:51 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 810:33 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 811:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 812:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 818:70 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 819:52 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 820:56 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 821:33 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 822:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 823:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 827:52 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 828:34 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 829:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 830:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 834:53 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 835:35 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 836:37 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 837:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 841:32 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 842:12 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 845:5 Lexer.error -> @Lexer.error
 function lineOf(source: string, offset: i32): i32 -> @lineOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 822:7 line: i32 (let)
-  local 823:7 i: i32 (let)
+  local 851:7 line: i32 (let)
+  local 852:7 i: i32 (let)
 function columnOf(source: string, offset: i32): i32 -> @columnOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 832:7 start: i32 (let)
-  local 833:7 i: i32 (let)
+  local 861:7 start: i32 (let)
+  local 862:7 i: i32 (let)
 module self/tokens.ts
 const TOK_END: i32 = 0 [exported]
 const TOK_ERROR: i32 = 1 [exported]
@@ -26450,6 +26466,7 @@ import astText from "./ast_text" -> function @astText
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
 import Compilation from "./compilation" -> struct Compilation
+import EmittedModule from "./compilation" -> struct EmittedModule
 import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import checkedText from "./dump" -> function @checkedText
@@ -26463,7 +26480,9 @@ import napiBridges from "./interop_napi" -> function @napiBridges
 import generateWasmLoader from "./interop_wasm" -> function @generateWasmLoader
 import wasmLoaderPath from "./interop_wasm" -> function @wasmLoaderPath
 import Options from "./options" -> struct Options
+import basenameWithout from "./paths" -> function @basenameWithout
 import dirname from "./paths" -> function @dirname
+import hexOfI64 from "./strings" -> function @hexOfI64
 import jsonQuote from "./strings" -> function @jsonQuote
 import splitByte from "./strings" -> function @splitByte
 import codeFor from "./codes" -> function @codeFor
@@ -26472,6 +26491,9 @@ import internalErrorFor from "./ice" -> function @internalErrorFor
 import simulatedInternalError from "./ice" -> function @simulatedInternalError
 import resolveTarget from "./target" -> function @resolveTarget
 import supportedTargets from "./target" -> function @supportedTargets
+import fnv1a64Hex from "./run-cache" -> function @fnv1a64Hex
+import runCacheKey from "./run-cache" -> function @runCacheKey
+import runCacheRoot from "./run-cache" -> function @runCacheRoot
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 const COLON: i32 = 58
 function usageText(): string -> @usageText
@@ -26488,231 +26510,289 @@ function makeDirectory(dir: string): boolean -> @makeDirectory
   escaping: dir
   calls: dirname makeDirectory nish_arena_mark nish_arena_release nish_mkdir nish_str_eq
   stackSites=0 stackLocals=0
-  local 90:9 parent: string (const)
-  callee 90:18 dirname -> @dirname
-  callee 91:26 makeDirectory -> @makeDirectory
+  local 91:9 parent: string (const)
+  callee 91:18 dirname -> @dirname
+  callee 92:26 makeDirectory -> @makeDirectory
 function makeDirectoryFor(file: string): boolean -> @makeDirectoryFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via makeDirectory
   escaping: file
   calls: dirname makeDirectory nish_arena_mark nish_arena_release nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  local 99:9 dir: string (const)
-  callee 99:15 dirname -> @dirname
-  callee 100:7 makeDirectory -> @makeDirectory
+  local 100:9 dir: string (const)
+  callee 100:15 dirname -> @dirname
+  callee 101:7 makeDirectory -> @makeDirectory
 function planOutputs(stems: string[], paths: string[], output: string, link: string): string[] -> @planOutputs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 137:7
+  sharedWrite: 138:7
   escaping: output
   calls: nish_alloc_struct nish_array_grow nish_is_dir nish_str_at nish_str_concat nish_str_from_i32 nish_str_new nish_write perModule
   pointer stems: size=0 writesThrough=false captured=false passedTo=perModule#0 perModule#0 perModule#0
   pointer paths: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 128:9 out: string[] (const)
-  callee 131:14 perModule -> @perModule
-  callee 134:14 perModule -> @perModule
-  callee 151:12 perModule -> @perModule
-  local 153:14 path: string (const)
+  local 129:9 out: string[] (const)
+  callee 132:14 perModule -> @perModule
+  callee 135:14 perModule -> @perModule
+  callee 152:12 perModule -> @perModule
+  local 154:14 path: string (const)
 function perModule(stems: string[], dir: string): string[] -> @perModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 162:5
+  sharedWrite: 163:5
   calls: nish_array_grow nish_str_concat
   pointer stems: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 160:9 out: string[] (const)
-  local 161:14 stem: string (const)
+  local 161:9 out: string[] (const)
+  local 162:14 stem: string (const)
 function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: Diagnostic.json DiagnosticSink.format DiagnosticSink.sorted nish_print nish_str_concat nish_write
   pointer compilation: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 175:19 DiagnosticSink.format -> @DiagnosticSink.format
-  local 178:14 diagnostic: Diagnostic (const)
-  callee 178:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 179:17 Diagnostic.json -> @Diagnostic.json
+  callee 176:19 DiagnosticSink.format -> @DiagnosticSink.format
+  local 179:14 diagnostic: Diagnostic (const)
+  callee 179:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 180:17 Diagnostic.json -> @Diagnostic.json
 function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void -> @reportPerformance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: Diagnostic.json DiagnosticSink.formatWarnings nish_print nish_str_concat nish_write
   pointer compilation: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 202:16 warning: Diagnostic (const)
-  callee 203:19 Diagnostic.json -> @Diagnostic.json
-  callee 207:17 DiagnosticSink.formatWarnings -> @DiagnosticSink.formatWarnings
+  local 203:16 warning: Diagnostic (const)
+  callee 204:19 Diagnostic.json -> @Diagnostic.json
+  callee 208:17 DiagnosticSink.formatWarnings -> @DiagnosticSink.formatWarnings
 function reportRootFailure(message: string, json: boolean): void -> @reportRootFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   escaping: message
   calls: codeFor jsonQuote nish_arena_mark nish_arena_release nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 218:48 codeFor -> @codeFor
-  callee 218:88 jsonQuote -> @jsonQuote
+  callee 219:48 codeFor -> @codeFor
+  callee 219:88 jsonQuote -> @jsonQuote
 function reportToolchainFailure(message: string, json: boolean): void -> @reportToolchainFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   escaping: message
   calls: jsonQuote nish_arena_mark nish_arena_release nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 232:72 jsonQuote -> @jsonQuote
+  callee 233:72 jsonQuote -> @jsonQuote
 function toolchainInstallHint(): string -> @toolchainInstallHint
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow nish_str_concat platformMark
   stackSites=1 stackLocals=1
-  local 244:9 lines: string[] (const)
-  callee 245:17 platformMark -> @platformMark
+  local 245:9 lines: string[] (const)
   callee 246:17 platformMark -> @platformMark
   callee 247:17 platformMark -> @platformMark
   callee 248:17 platformMark -> @platformMark
+  callee 249:17 platformMark -> @platformMark
 function platformMark(platform: string): string -> @platformMark
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_platform nish_str_eq
   stackSites=0 stackLocals=0
-function missingToolchain(): string -> @missingToolchain
+function cCompiler(): string -> @cCompiler
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_getenv
+  stackSites=0 stackLocals=0
+  local 258:9 fromEnvironment: string | null (const)
+function missingToolchain(asker: string): string -> @missingToolchain
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 266:3
-  calls: nish_alloc_struct nish_array_grow nish_getenv nish_spawn_to nish_str_concat nish_str_from_i32 toolchainInstallHint
+  sharedWrite: 273:3
+  calls: cCompiler nish_alloc_struct nish_array_grow nish_spawn_to nish_str_concat nish_str_from_i32 toolchainInstallHint
   stackSites=1 stackLocals=1
-  local 263:9 fromEnvironment: string | null (const)
-  local 264:9 cc: string (const)
-  local 265:9 probe: string[] (const)
-  local 268:9 status: i32 (const)
-  local 272:9 why: string (const)
-  local 273:9 lines: string[] (const)
-  callee 278:14 toolchainInstallHint -> @toolchainInstallHint
+  local 271:9 cc: string (const)
+  callee 271:14 cCompiler -> @cCompiler
+  local 272:9 probe: string[] (const)
+  local 275:9 status: i32 (const)
+  local 279:9 why: string (const)
+  local 280:9 lines: string[] (const)
+  callee 285:14 toolchainInstallHint -> @toolchainInstallHint
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 291:3
-  calls: Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.load DiagnosticSink.hasErrors Options.constructor acceptsSidecars astText cDeclared checkedText externalFunctions internalErrorFor isProfile linkProgram makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file packageRoot planOutputs report reportPerformance reportRootFailure reportToolchainFailure resolveTarget simulatedInternalError supportedTargets usageText writeSidecars
+  sharedWrite: 298:3
+  calls: Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.load DiagnosticSink.hasErrors Options.constructor acceptsSidecars astText basenameWithout cDeclared checkedText externalFunctions internalErrorFor isProfile linkProgram makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file packageRoot planOutputs report reportPerformance reportRootFailure reportToolchainFailure resolveTarget runProgram simulatedInternalError supportedTargets usageText writeSidecars
   stackSites=4 stackLocals=4
-  callee 285:19 usageText -> @usageText
-  local 288:9 opts: Options (const)
-  callee 288:16 new Options -> @Options.constructor
-  callee 291:22 packageRoot -> @packageRoot
-  local 292:9 roots: string[] (const)
-  local 293:7 output: string (let)
-  local 294:7 link: string (let)
-  local 295:7 profile: string (let)
-  local 296:7 json: boolean (let)
-  local 297:7 emitChecked: boolean (let)
-  local 298:7 emitAst: boolean (let)
-  local 301:7 warnPerformance: boolean (let)
-  local 302:7 arg: i32 (let)
-  local 304:11 value: string (const)
-  local 311:13 mode: string (const)
-  callee 341:12 isProfile -> @isProfile
-  local 353:13 spec: string (const)
-  local 354:13 resolved: Target | null (const)
-  callee 354:24 resolveTarget -> @resolveTarget
-  callee 357:72 supportedTargets -> @supportedTargets
-  callee 430:19 usageText -> @usageText
-  callee 439:60 usageText -> @usageText
-  callee 450:19 usageText -> @usageText
-  local 475:11 problem: string (const)
-  callee 475:21 missingToolchain -> @missingToolchain
-  callee 477:7 reportToolchainFailure -> @reportToolchainFailure
-  callee 486:7 simulatedInternalError -> @simulatedInternalError
-  callee 487:12 internalErrorFor -> @internalErrorFor
-  local 490:9 compilation: Compilation (const)
-  callee 490:23 new Compilation -> @Compilation.constructor
-  local 494:7 loaded: boolean (let)
-  local 495:14 root: string (const)
-  callee 499:10 Compilation.load -> @Compilation.load
-  callee 510:7 reportRootFailure -> @reportRootFailure
-  callee 511:16 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee 512:7 report -> @report
-  local 529:16 unit: ModuleUnit (const)
-  callee 530:13 astText -> @astText
-  callee 534:8 Compilation.check -> @Compilation.check
-  callee 535:5 report -> @report
-  callee 538:3 reportPerformance -> @reportPerformance
-  callee 542:11 checkedText -> @checkedText
-  callee 548:26 Compilation.entry -> @Compilation.entry
-  callee 550:35 Compilation.entry -> @Compilation.entry
-  local 557:9 anySidecar: boolean (const)
-  local 559:9 fns: ExternalFunction[] (const)
-  callee 559:48 externalFunctions -> @externalFunctions
-  callee 560:22 acceptsSidecars -> @acceptsSidecars
-  callee 560:51 cDeclared -> @cDeclared
-  callee 561:5 report -> @report
-  local 564:9 emitted: EmittedModule[] (const)
-  callee 564:19 Compilation.emit -> @Compilation.emit
-  local 565:9 stems: string[] (const)
-  local 566:9 paths: string[] (const)
-  local 569:14 module: EmittedModule (const)
-  local 573:9 outputs: string[] (const)
-  callee 573:19 planOutputs -> @planOutputs
-  local 578:7 i: i32 (let)
-  local 580:11 file: string (const)
-  callee 581:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 590:22 writeSidecars -> @writeSidecars
-  callee 596:10 linkProgram -> @linkProgram
+  callee 292:19 usageText -> @usageText
+  local 295:9 opts: Options (const)
+  callee 295:16 new Options -> @Options.constructor
+  callee 298:22 packageRoot -> @packageRoot
+  local 303:9 runMode: boolean (const)
+  local 306:7 notForRun: string (let)
+  local 307:7 runArgsFrom: i32 (let)
+  local 308:9 roots: string[] (const)
+  local 309:7 output: string (let)
+  local 310:7 link: string (let)
+  local 311:7 profile: string (let)
+  local 312:7 json: boolean (let)
+  local 313:7 emitChecked: boolean (let)
+  local 314:7 emitAst: boolean (let)
+  local 317:7 warnPerformance: boolean (let)
+  local 318:7 arg: i32 (let)
+  local 320:11 value: string (const)
+  local 327:13 mode: string (const)
+  callee 359:12 isProfile -> @isProfile
+  local 372:13 spec: string (const)
+  local 373:13 resolved: Target | null (const)
+  callee 373:24 resolveTarget -> @resolveTarget
+  callee 376:72 supportedTargets -> @supportedTargets
+  callee 455:19 usageText -> @usageText
+  callee 464:60 usageText -> @usageText
+  callee 481:19 usageText -> @usageText
+  local 529:11 problem: string (const)
+  callee 529:21 missingToolchain -> @missingToolchain
+  callee 531:7 reportToolchainFailure -> @reportToolchainFailure
+  callee 540:7 simulatedInternalError -> @simulatedInternalError
+  callee 541:12 internalErrorFor -> @internalErrorFor
+  local 544:9 compilation: Compilation (const)
+  callee 544:23 new Compilation -> @Compilation.constructor
+  local 548:7 loaded: boolean (let)
+  local 549:14 root: string (const)
+  callee 553:10 Compilation.load -> @Compilation.load
+  callee 564:7 reportRootFailure -> @reportRootFailure
+  callee 565:16 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee 566:7 report -> @report
+  local 583:16 unit: ModuleUnit (const)
+  callee 584:13 astText -> @astText
+  callee 588:8 Compilation.check -> @Compilation.check
+  callee 589:5 report -> @report
+  callee 592:3 reportPerformance -> @reportPerformance
+  callee 596:11 checkedText -> @checkedText
+  callee 602:39 Compilation.entry -> @Compilation.entry
+  callee 604:58 Compilation.entry -> @Compilation.entry
+  local 611:9 anySidecar: boolean (const)
+  local 613:9 fns: ExternalFunction[] (const)
+  callee 613:48 externalFunctions -> @externalFunctions
+  callee 614:22 acceptsSidecars -> @acceptsSidecars
+  callee 614:51 cDeclared -> @cDeclared
+  callee 615:5 report -> @report
+  local 618:9 emitted: EmittedModule[] (const)
+  callee 618:19 Compilation.emit -> @Compilation.emit
+  callee 620:12 runProgram -> @runProgram
+  callee 620:32 basenameWithout -> @basenameWithout
+  local 622:9 stems: string[] (const)
+  local 623:9 paths: string[] (const)
+  local 626:14 module: EmittedModule (const)
+  local 630:9 outputs: string[] (const)
+  callee 630:19 planOutputs -> @planOutputs
+  local 635:7 i: i32 (let)
+  local 637:11 file: string (const)
+  callee 638:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 647:22 writeSidecars -> @writeSidecars
+  callee 653:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv nish_read_file_or_null nish_str_concat splitByte
   stackSites=0 stackLocals=0
-  local 623:9 pathVar: string | null (const)
-  local 627:9 entries: string[] (const)
-  callee 627:19 splitByte -> @splitByte
-  local 628:7 i: i32 (let)
-  local 630:11 entry: string (const)
-  local 631:11 dir: string (const)
-  local 632:11 candidate: string (const)
+  local 680:9 pathVar: string | null (const)
+  local 684:9 entries: string[] (const)
+  callee 684:19 splitByte -> @splitByte
+  local 685:7 i: i32 (let)
+  local 687:11 entry: string (const)
+  local 688:11 dir: string (const)
+  local 689:11 candidate: string (const)
 function packageRootCandidates(): string[] -> @packageRootCandidates
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 693:5
+  sharedWrite: 750:5
   calls: dirname nish_array_grow nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq programOnPath
   stackSites=0 stackLocals=0
-  local 688:9 candidates: string[] (const)
-  local 689:9 program: string (const)
-  local 690:9 invoked: string (const)
-  callee 690:46 programOnPath -> @programOnPath
-  local 692:11 asInvoked: string (const)
-  callee 692:26 dirname -> @dirname
-  local 697:11 real: string | null (const)
-  local 699:13 throughLink: string (const)
-  callee 699:30 dirname -> @dirname
+  local 745:9 candidates: string[] (const)
+  local 746:9 program: string (const)
+  local 747:9 invoked: string (const)
+  callee 747:46 programOnPath -> @programOnPath
+  local 749:11 asInvoked: string (const)
+  callee 749:26 dirname -> @dirname
+  local 754:11 real: string | null (const)
+  local 756:13 throughLink: string (const)
+  callee 756:30 dirname -> @dirname
 function packageRoot(): string -> @packageRoot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packageRootCandidates
   calls: nish_read_file_or_null nish_str_concat packageRootCandidates
   stackSites=0 stackLocals=0
-  local 710:9 candidates: string[] (const)
-  callee 710:22 packageRootCandidates -> @packageRootCandidates
-  local 711:7 i: i32 (let)
-  local 713:11 root: string (const)
-function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @linkProgram
+  local 767:9 candidates: string[] (const)
+  callee 767:22 packageRootCandidates -> @packageRootCandidates
+  local 768:7 i: i32 (let)
+  local 770:11 root: string (const)
+function runProgram(emitted: EmittedModule[], name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 758:3
+  sharedWrite: 819:3
+  escaping: argsFrom debugInfo json name profile threads
+  calls: buildIntoCache cCompiler fnv1a64Hex nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file packageRoot reportToolchainFailure runCacheKey runCacheRoot
+  pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
+  stackSites=0 stackLocals=0
+  local 800:9 cacheRoot: string (const)
+  callee 800:21 runCacheRoot -> @runCacheRoot
+  callee 802:5 reportToolchainFailure -> @reportToolchainFailure
+  local 805:9 key: string (const)
+  callee 805:15 runCacheKey -> @runCacheKey
+  callee 805:36 packageRoot -> @packageRoot
+  callee 805:80 cCompiler -> @cCompiler
+  local 806:9 cacheEntry: string (const)
+  callee 806:38 fnv1a64Hex -> @fnv1a64Hex
+  local 807:9 binary: string (const)
+  local 808:9 keyFile: string (const)
+  local 809:9 stored: string | null (const)
+  local 811:11 status: i32 (const)
+  callee 811:20 buildIntoCache -> @buildIntoCache
+  local 818:9 argv: string[] (const)
+  local 820:7 i: i32 (let)
+  local 825:9 status: i32 (const)
+  callee 827:5 reportToolchainFailure -> @reportToolchainFailure
+function buildIntoCache(emitted: EmittedModule[], cacheEntry: string, name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @buildIntoCache
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via missingToolchain
+  escaping: debugInfo json profile threads
+  calls: hexOfI64 linkProgram makeDirectory missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_str_concat nish_write nish_write_file reportToolchainFailure
+  pointer emitted: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 851:9 problem: string (const)
+  callee 851:19 missingToolchain -> @missingToolchain
+  callee 853:5 reportToolchainFailure -> @reportToolchainFailure
+  local 856:9 work: string (const)
+  callee 856:37 hexOfI64 -> @hexOfI64
+  callee 857:8 makeDirectory -> @makeDirectory
+  local 861:9 outputs: string[] (const)
+  local 862:14 module: EmittedModule (const)
+  local 863:11 file: string (const)
+  local 867:9 built: string (const)
+  local 868:7 status: i32 (let)
+  callee 868:16 linkProgram -> @linkProgram
+  local 870:11 move: string[] (const)
+  callee 872:7 reportToolchainFailure -> @reportToolchainFailure
+  local 876:9 clean: string[] (const)
+function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 920:3
   escaping: json link profile
   calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 742:9 root: string (const)
-  callee 742:16 packageRoot -> @packageRoot
-  callee 744:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 745:58 packageRootCandidates -> @packageRootCandidates
-  callee 750:8 makeDirectoryFor -> @makeDirectoryFor
-  local 753:9 script: string (const)
-  local 757:9 argv: string[] (const)
-  local 764:14 file: string (const)
-  local 784:9 status: i32 (const)
-  local 786:11 why: string (const)
-  callee 787:5 reportToolchainFailure -> @reportToolchainFailure
-  local 790:9 binary: string | null (const)
+  local 904:9 root: string (const)
+  callee 904:16 packageRoot -> @packageRoot
+  callee 906:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 907:58 packageRootCandidates -> @packageRootCandidates
+  callee 912:8 makeDirectoryFor -> @makeDirectoryFor
+  local 915:9 script: string (const)
+  local 919:9 argv: string[] (const)
+  local 926:14 file: string (const)
+  local 946:9 status: i32 (const)
+  local 948:11 why: string (const)
+  callee 949:5 reportToolchainFailure -> @reportToolchainFailure
+  local 955:9 binary: string | null (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 813:7
+  sharedWrite: 978:7
   escaping: fns
   calls: napiBridges nish_array_grow
   pointer compilation: size=112 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 803:9 opts: Options (const)
-  local 810:9 out: ExternalFunction[] (const)
-  local 811:14 fn: ExternalFunction (const)
-  callee 812:9 napiBridges -> @napiBridges
+  local 968:9 opts: Options (const)
+  local 975:9 out: ExternalFunction[] (const)
+  local 976:14 fn: ExternalFunction (const)
+  callee 977:9 napiBridges -> @napiBridges
 function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
@@ -26720,18 +26800,18 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   pointer compilation: size=112 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
-  local 832:9 opts: Options (const)
-  callee 834:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 837:36 generateHeader -> @generateHeader
-  callee 841:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 844:33 generateDts -> @generateDts
-  local 846:11 loader: string (const)
-  callee 846:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 847:27 generateWasmLoader -> @generateWasmLoader
-  callee 851:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 854:34 generateNapiShim -> @generateNapiShim
-  callee 858:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 861:39 generateNapiShim -> @generateNapiShim
+  local 997:9 opts: Options (const)
+  callee 999:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1002:36 generateHeader -> @generateHeader
+  callee 1006:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1009:33 generateDts -> @generateDts
+  local 1011:11 loader: string (const)
+  callee 1011:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 1012:27 generateWasmLoader -> @generateWasmLoader
+  callee 1016:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1019:34 generateNapiShim -> @generateNapiShim
+  callee 1023:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1026:39 generateNapiShim -> @generateNapiShim
 module self/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -28496,6 +28576,70 @@ function generateNapiShim(compilation: Compilation, fns: ExternalFunction[], asy
   local 1302:14 p: Plan (const)
   local 1303:11 js: string (const)
   callee 1303:16 jsExportName -> @jsExportName
+module self/run-cache.ts
+import CLI from "./branding" -> const CLI
+import RUNTIME_HEADER from "./branding" -> const RUNTIME_HEADER
+import VERSION from "./branding" -> const VERSION
+import EmittedModule from "./compilation" -> struct EmittedModule
+import hexDigitLower from "./strings" -> function @hexDigitLower
+import StringBuilder from "./strings" -> struct StringBuilder
+function runCacheRoot(): string -> @runCacheRoot [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_getenv nish_str_concat
+  stackSites=0 stackLocals=0
+  local 31:9 xdg: string | null (const)
+  local 35:9 home: string | null (const)
+function fnv1a64Hex(text: string): string -> @fnv1a64Hex [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.add
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText hexDigitLower
+  stackSites=1 stackLocals=1
+  local 50:9 high: u64 (const)
+  local 51:9 low: u64 (const)
+  local 52:9 prime: u64 (const)
+  local 53:9 thirtyTwo: u64 (const)
+  local 54:7 hash: u64 (let)
+  local 55:9 n: i32 (const)
+  local 56:7 i: i32 (let)
+  local 62:9 out: StringBuilder (const)
+  callee 62:15 new StringBuilder -> @StringBuilder.constructor
+  local 63:7 shift: i32 (let)
+  callee 65:5 StringBuilder.add -> @StringBuilder.add
+  callee 65:13 hexDigitLower -> @hexDigitLower
+  callee 68:10 StringBuilder.toText -> @StringBuilder.toText
+function fileFingerprint(path: string): string -> @fileFingerprint
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file_or_null
+  calls: fnv1a64Hex nish_read_file_or_null
+  stackSites=0 stackLocals=0
+  local 78:9 text: string | null (const)
+  callee 79:32 fnv1a64Hex -> @fnv1a64Hex
+function runCacheKey(modules: EmittedModule[], root: string, profile: string, debugInfo: boolean, threads: boolean, cc: string): string -> @runCacheKey [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.add
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
+  pointer modules: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 97:9 key: StringBuilder (const)
+  callee 97:15 new StringBuilder -> @StringBuilder.constructor
+  callee 98:3 StringBuilder.add -> @StringBuilder.add
+  callee 99:3 StringBuilder.add -> @StringBuilder.add
+  callee 100:3 StringBuilder.add -> @StringBuilder.add
+  callee 101:3 StringBuilder.add -> @StringBuilder.add
+  callee 101:23 fileFingerprint -> @fileFingerprint
+  callee 102:3 StringBuilder.add -> @StringBuilder.add
+  callee 102:24 fileFingerprint -> @fileFingerprint
+  callee 103:3 StringBuilder.add -> @StringBuilder.add
+  callee 103:27 fileFingerprint -> @fileFingerprint
+  callee 104:3 StringBuilder.add -> @StringBuilder.add
+  callee 104:33 fileFingerprint -> @fileFingerprint
+  callee 105:3 StringBuilder.add -> @StringBuilder.add
+  callee 105:32 fileFingerprint -> @fileFingerprint
+  local 106:14 module: EmittedModule (const)
+  callee 107:5 StringBuilder.add -> @StringBuilder.add
+  callee 108:5 StringBuilder.add -> @StringBuilder.add
+  callee 110:10 StringBuilder.toText -> @StringBuilder.toText
 module self/dump_ast.ts
 import astLines from "./ast_text" -> function @astLines
 import SourceFile from "./diagnostics" -> struct SourceFile
