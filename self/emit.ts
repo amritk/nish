@@ -134,7 +134,15 @@ import {
 } from "./nodes";
 import { Options } from "./options";
 
-import { CheckedProgram, FUSE_NONE, FunctionSig, MAP_NONE, MAP_STORED_KEY, ROLE_CONSTRUCTOR, StructInfo } from "./program";
+import {
+  CheckedProgram,
+  FUSE_NONE,
+  FunctionSig,
+  MAP_NONE,
+  MAP_STORED_KEY,
+  ROLE_CONSTRUCTOR,
+  StructInfo,
+} from "./program";
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,

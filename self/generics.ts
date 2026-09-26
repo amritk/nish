@@ -182,9 +182,9 @@ const isInterfaceType = (ctx: CheckContext, type: i32): boolean => {
 
 /**
  * WP32: the `MAP_*` role of an instantiation of `template`: `hashKey`,
- * `sameKey` and `storedKey` in `std/collections.ts`, and `reserve` and `getOrInsert` in
- * `std/map.ts`, are lowered in place by the emitter (`self/emit_map.ts`), and
- * every other template is what it says.
+ * `sameKey` and `storedKey` in `std/collections.ts`, and `reserve` and
+ * `getOrInsert` in `std/map.ts`, are lowered in place by the emitter
+ * (`self/emit_map.ts`), and every other template is what it says.
  */
 export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
   if (template.owner === null && template.home.program.isMapExtras()) {

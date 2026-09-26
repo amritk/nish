@@ -16,8 +16,9 @@
 //   - **`hashKey<K>`, `sameKey<K>` and `storedKey<K>` are intrinsics.** Their
 //     Nish bodies are what the checker and the fact fixpoint read; a call to one
 //     is lowered here, in place, per key type, and the instance itself is never
-//     emitted (`emitMapIntrinsic`). No runtime function is added: the runtime's `.text`
-//     budget has no room, and `nish_str_eq` is the one symbol reached.
+//     emitted (`emitMapIntrinsic`, `emitStoredKey`). No runtime function is
+//     added: the runtime's `.text` budget has no room, and `nish_str_eq` is the
+//     one symbol reached.
 //
 // The hashes are §5.2's, and a hash of 0 is moved to 1 because a stored hash
 // of 0 marks a deleted entry:

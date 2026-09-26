@@ -206,7 +206,7 @@ export const MAP_SAME_KEY: i32 = 2;
 export const MAP_RESERVE: i32 = 3;
 /** `getOrInsert` from `nish/map`: every call is one `probe` and a write or a read through its answer. */
 export const MAP_GET_OR_INSERT: i32 = 4;
-/** `storedKey<K>` from `std/collections.ts`: every call is the key as an entry stores it, lowered in place. */
+/** `storedKey<K>` from `std/collections.ts`: every call is the key an entry stores, lowered in place. */
 export const MAP_STORED_KEY: i32 = 5;
 
 // WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
