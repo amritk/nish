@@ -152,8 +152,21 @@ jobs:
               // packages[""], so a bump that reads only the top level moves
               // package.json and leaves the lockfile pinned to the PREVIOUS
               // release. That is exactly what 0.4.0 shipped with, and npm ci
-              // tolerates the disagreement, so nothing was red -- npm install
+              // tolerates a stale root pin, so nothing was red -- npm install
               // simply rewrote the file under whoever ran it next.
+              //
+              // What this script does NOT move, and cannot: the lockfile
+              // entries for the platform packages themselves, under
+              // packages["node_modules/<scope>-<asset>"]. Their version,
+              // resolved URL and integrity hash describe a tarball that does
+              // not exist yet -- release.yml builds it from the tag this pull
+              // request leads to, and its npm job publishes it. So those
+              // entries stay at the PREVIOUS release here, and npm ci does NOT
+              // tolerate that: once the new version is on the registry it
+              // refuses the lockfile outright, which is how main broke after
+              // 0.11.0. The lockfile job in release.yml regenerates them after
+              // the publish and opens a pull request with the result, and the
+              // lint job in ci.yml keeps main red until that merges.
               const scope=`${j.name??""}-`;
               const pinned=[j.optionalDependencies];
               if (j.packages&&j.packages[""]) pinned.push(j.packages[""].optionalDependencies);
