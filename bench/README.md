@@ -111,12 +111,12 @@ number to it.
 Four more programs are the WP32 layout prototypes
 ([docs/wp32-map.md](../docs/wp32-map.md) §2). Each is a monomorphic
 `string → i32` and `i32 → i32` hash table written by hand in one candidate
-layout. None of them uses `Map`, which does not exist yet, so they compile on
-any compiler that builds this tree.
+layout. None of them uses `Map`, which did not exist when they were written, so
+they compile on any compiler that builds this tree.
 
 | Name | Layout |
 | --- | --- |
-| `map_proto_ordered` | insertion-ordered, a bucket per entry index: `StringMap`'s shape (`self/map.ts`) |
+| `map_proto_ordered` | insertion-ordered, a bucket per entry index: the shape `StringMap` (`self/map.ts`) had before WP32 S6 |
 | `map_proto_ordered_fp` | insertion-ordered, an `i64` bucket holding the full hash above the entry index |
 | `map_proto_ordered_fp32` | insertion-ordered, a `u32` bucket holding eight fingerprint bits above a 24-bit entry index, the layout WP32 chose |
 | `map_proto_unordered` | unordered: hash, key and value in the bucket |
@@ -129,23 +129,53 @@ must print the same ten lines. Given `time` as its first argument, each program
 also prints every workload's elapsed nanoseconds to stderr. It measures around
 the workload alone, so the table is not process wall time.
 
+### The global `Map`, measured
+
+Three more programs time the `Map` that shipped ([docs/wp32-map.md](../docs/wp32-map.md)
+§10) on the same workloads, so every checksum line they print is one of the
+ten `map_node.mjs` prints, and the unordered prototype's row is the same work.
+Each runs two variants, and checks in the program that both reach the same
+checksum:
+
+| Name | Variants | Comparison | Node twin |
+| --- | --- | --- | --- |
+| `map_wordcount` | `fused`: `counts.set(w, (counts.get(w) ?? 0) + 1)`, one probe a word; `double`: a `get` into a `const`, then the `set`, which §9.1 leaves unfused, two probes a word | (b), on §2's `count` | `map_wordcount.mjs` |
+| `map_presize` | `grow`, and `reserve`: `reserve(m, n)` from `nish/map` before the first insert | (c), on §2's `insert` | `map_presize.mjs`, where `reserve` is `nish/map`'s own body and does nothing |
+| `map_vs_stringmap` | `map`: all ten workloads on `Map`; `stringmap`: `insert`, `hit`, `miss` and `count` on `StringMap`, which is `string -> i32` and has no `delete` | (d) | `map_node.mjs` |
+
+`StringMap` is compiler-internal, so `map_vs_stringmap.ts` carries a copy of
+it, lines 28 to 204 of `self/map.ts` between two marked rules, and the `bench`
+check in `tests/run.js` fails when the copy is no longer a verbatim part of
+`self/map.ts`. Given `time [variant]`, each program prints its workloads'
+elapsed nanoseconds to stderr; naming a variant runs it alone. The runner times
+every variant, and every twin, in a process of its own, because in one process
+the second variant would run on the memory the first left, and under Node on a
+warm JIT. `map_presize grow` and `map_presize reserve` are also each run once
+for their peak RSS.
+
 ```bash
-node bench/run.mjs --only maps                      # build, check, time; the table goes to stdout
-node bench/run.mjs --only maps --n maps=1048576     # 2^20 keys: tables larger than the cache
+node bench/run.mjs                                  # everything; the map tables go to docs/BENCHMARKS.md
+node bench/run.mjs --only maps                      # the seven map programs at 2^16 and 2^20; tables to stdout
+node bench/run.mjs --only maps --n maps=1048576     # one size
 node bench/run.mjs --validate --only maps           # checksums only, against Node's Map
 ```
 
-`maps` runs only when `--only` names it (or names one of the four). It writes
-nothing to `docs/BENCHMARKS.md`: the numbers and what they decided are in the
-design note. `--n maps=<n>` resizes all five at once. `n` is the key count and
-must be a power of two, because the workloads draw a key index by masking.
-`tests/run.js` validates the five at `n = 1024` in its `bench` check.
+The full run times the seven programs and their twins at two sizes, 2^16 keys,
+inside the last-level cache, and 2^20, outside it, and writes comparisons (a)
+to (d) to `docs/BENCHMARKS.md`, each cell `min / median`, with the cells whose
+median is more than 5% above their minimum named under the tables. The columns
+take turns round by round, so a slow stretch of a shared machine falls on all
+of them. `--only maps` prints the same tables and writes nothing. `--n
+maps=<n>` picks one size for all of them: `n` is the key count and must be a
+power of two, because the workloads draw a key index by masking.
+`tests/run.js` validates all seven at `n = 1024` in its `bench` check, and
+holds the three measurements to no performance warning.
 
 **They are in the instruction-count gate**, at `n = 16384`. They are
 single-threaded, and they read the clock only when timing. `--instructions
 --runs 3` counted each three times with a spread of 0. They are the only
-hash-table code the gate holds, so a codegen regression in a probe loop moves
-their counts and no other program's.
+hash-table code the gate holds, so a codegen regression in a probe loop, or in
+`std/collections.ts`, moves their counts and no other program's.
 
 ## Rules
 
@@ -261,12 +291,13 @@ Wall time on a virtual machine moves by more than a codegen regression of a few
 percent, so a regression can hide in the noise of the table above. What the
 compiler emits is also caught by a number that does not move:
 the instructions each program executes, counted by valgrind's cachegrind.
-`bench/instructions.json` holds one count for each of the eighteen programs: the
-seven above, the four map layout prototypes and the seven AWFY ports. `npm test`
+`bench/instructions.json` holds one count for each of the twenty-one programs: the
+seven above, the four map layout prototypes, the three `Map` measurements and
+the seven AWFY ports. `npm test`
 fails when any of them runs more than 0.1% above its count.
 
 ```bash
-node bench/run.mjs --instructions            # count all eighteen and print them against the baseline
+node bench/run.mjs --instructions            # count all twenty-one and print them against the baseline
 node bench/run.mjs --instructions --check    # ...and exit 1 when one is more than the tolerance above it
 node bench/run.mjs --instructions --update   # rewrite the counts in bench/instructions.json
 node bench/run.mjs --instructions --runs 3   # count each three times; the spread column should read 0
@@ -335,7 +366,7 @@ If one does not, it exits 2 and names the count it misread.
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
 version and the commit, and leaves the sizes and the tolerance alone. The
 file-level `commit` and `valgrind` describe every count, so only an update of
-all eighteen restamps them. `--update --only Queens` stamps a `commit` and
+all twenty-one restamps them. `--update --only Queens` stamps a `commit` and
 `valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and
