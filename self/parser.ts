@@ -191,6 +191,10 @@ import {
   tokenName,
 } from "./tokens";
 
+/** The line terminators semicolon insertion looks for, spelled as `self/lexer.ts` spells them. */
+const CH_LF: i32 = 10;
+const CH_CR: i32 = 13;
+
 /**
  * Binding power of a binary operator, or 0 when the token is not one. The
  * levels are JavaScript's, so that a program means here what it means there:
@@ -390,8 +394,34 @@ export class Parser {
     return false;
   }
 
-  /** A semicolon, which this grammar requires: the language has no insertion rule. */
+  /**
+   * Whether a line break separates the current token from the one before it,
+   * which is what TypeScript's automatic semicolon insertion keys on. Only
+   * whitespace and comments sit between `previousEnd` and `start`, so a CR or
+   * LF found there is a line break, including one inside a block comment,
+   * which TypeScript counts as one too.
+   */
+  newlineBefore(): boolean {
+    for (let i: i32 = this.previousEnd; i < this.start; i++) {
+      const c = this.lexer.at(i);
+      if (c === CH_LF || c === CH_CR) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The `;` that ends a statement, or the place TypeScript would insert one:
+   * before a `}`, at the end of the file, or where the next token starts a new
+   * line. The rule is TypeScript's so that a program without semicolons means
+   * what it means under Node, which is also why a template on the next line is
+   * not a new statement: TypeScript reads it as a tagged template, and so it is
+   * the same `expected ';'` it is on one line.
+   */
   expectSemicolon(): void {
+    if (this.eat(TOK_SEMICOLON)) return;
+    if (this.at(TOK_RBRACE) || this.at(TOK_END)) return;
+    const template = this.at(TOK_TEMPLATE) || this.at(TOK_TEMPLATE_HEAD);
+    if (!template && this.newlineBefore()) return;
     this.expect(TOK_SEMICOLON);
   }
 
@@ -777,10 +807,11 @@ export class Parser {
    * (docs/wp19-stage0-retirement.md R3).
    *
    * **What that move costs, deliberately.** A rule the checker owns is a rule a
-   * member has to *parse* to reach, and six shapes do not: `static x;` (no
-   * annotation), `static` alone, `static x: i32 = 0` with no `;` before the
-   * `}` (there is no ASI here), `static m(): i32;` (no body), `static m() { }`
-   * (no return type) and `static { }` (a static block). Each used to hear
+   * member has to *parse* to reach, and five shapes do not: `static x;` (no
+   * annotation), `static` alone, `static m(): i32;` (no body), `static m() { }`
+   * (no return type) and `static { }` (a static block). A sixth,
+   * `static x: i32 = 0` with no `;` before the `}`, parses since semicolon
+   * insertion, and so it reaches the rule. Each used to hear
    * `static` from this function and now hears the syntax error about its other
    * defect instead, while stage0 names the static member — and the same is true
    * of `m?()` with no return type and `x? = 5` with no annotation, which never
@@ -1380,9 +1411,9 @@ export class Parser {
   parseForRest(start: i32, initializer: Node): Node {
     const node = this.node(N_FOR, start, this.end);
     node.children.push(initializer);
-    this.expectSemicolon();
+    this.expect(TOK_SEMICOLON);
     node.children.push(this.at(TOK_SEMICOLON) ? this.empty() : this.parseExpression());
-    this.expectSemicolon();
+    this.expect(TOK_SEMICOLON);
     node.children.push(this.at(TOK_RPAREN) ? this.empty() : this.parseExpression());
     this.expect(TOK_RPAREN);
     node.children.push(this.parseStatement());
@@ -1434,7 +1465,10 @@ export class Parser {
   parseReturn(start: i32): Node {
     this.advance();
     const node = this.node(N_RETURN, start, this.end);
-    node.children.push(this.at(TOK_SEMICOLON) ? this.empty() : this.parseExpression());
+    // `return` then a line break returns nothing, as it does in TypeScript; the
+    // value on the next line is then unreachable code, which the checker refuses.
+    const bare = this.at(TOK_SEMICOLON) || this.at(TOK_RBRACE) || this.at(TOK_END) || this.newlineBefore();
+    node.children.push(bare ? this.empty() : this.parseExpression());
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
@@ -1451,7 +1485,7 @@ export class Parser {
 
   parseJump(start: i32, kind: i32): Node {
     this.advance();
-    if (this.at(TOK_IDENT)) {
+    if (this.at(TOK_IDENT) && !this.newlineBefore()) {
       this.report("a label is not supported", this.start, this.end);
       this.advance();
     }
@@ -1587,7 +1621,8 @@ export class Parser {
   parsePostfix(): Node {
     const start = this.start;
     const operand = this.parseCallOrMember(this.parsePrimary(), start);
-    if (this.at(TOK_PLUS_PLUS) || this.at(TOK_MINUS_MINUS)) {
+    // A `++` or `--` on the next line is a prefix operator of a new statement.
+    if ((this.at(TOK_PLUS_PLUS) || this.at(TOK_MINUS_MINUS)) && !this.newlineBefore()) {
       const operator = tokenName(this.kind);
       this.advance();
       const node = this.node(N_UNARY, start, this.previousEnd);

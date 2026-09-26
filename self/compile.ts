@@ -61,7 +61,7 @@ import { hexOfI64, jsonQuote, splitByte } from "./strings";
 import { codeFor, TOOLCHAIN } from "./codes";
 import { internalErrorFor, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
-import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run_cache";
+import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run-cache";
 
 const usageText = (): string =>
   `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`;

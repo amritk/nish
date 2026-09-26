@@ -136,9 +136,11 @@ validator refuses, so that the compiler's own source and the example programs
 read like the language: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
 `noVoid`, `noParameterAssign` (parameters are immutable in Nish),
 `useExplicitLengthCheck` (there is no truthiness), `useConsistentArrayType`
-(`T[]`), and `useFilenamingConvention` (kebab-case for the compiler, snake_case
-for Nish programs). Two recommended rules are turned *off* because they
-push code towards constructs Nish rejects: `useOptionalChain` (`?.`) and
+(`T[]`), and `useFilenamingConvention` (kebab-case everywhere, with
+`scripts/check-filenames.mjs` covering the files Biome does not read;
+`.claude/linting.md` has the rest of the house-style rules). Two recommended
+rules are turned *off* because they push code towards constructs Nish rejects:
+`useOptionalChain` (`?.`) and
 `useExponentiationOperator` (`**`). `useImportType`, `useTemplate` and
 `noNonNullAssertion` are off as a matter of house style.
 

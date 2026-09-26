@@ -119,6 +119,29 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end fn_add_function -->
 
+### The same function without semicolons
+
+A semicolon is optional wherever TypeScript would insert one: at a line break,
+before a `}` and at the end of the file ([Lexical rules](LANGUAGE.md#lexical-rules)).
+The parser drops a `;` whether it was written or inserted, so nothing after it
+can tell the two apart, and this is `fn_add`'s module byte for byte.
+
+<!-- cookbook:begin fn_add_no_semicolons -->
+```ts
+const add = (a: number, b: number): number => a + b
+```
+
+```llvm
+define internal noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = add nsw i32 %a, %b
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end fn_add_no_semicolons -->
+
 ### The same function with `--plain`
 
 <!-- cookbook:begin fn_add_plain -->
@@ -6422,7 +6445,7 @@ the entry wrapper above and nothing else. The line is for the kernel: with it,
 compiles it and links it into a cache the first time. A later run of the same
 program starts the cached binary.
 
-<!-- cookbook:begin decl_shebang -->
+<!-- cookbook:begin decl-shebang -->
 ```ts
 #!/usr/bin/env -S nish run
 export const main = (): number => {
@@ -6453,7 +6476,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
-<!-- cookbook:end decl_shebang -->
+<!-- cookbook:end decl-shebang -->
 
 ### Linkage: `export`, and `--no-strict-exports`
 

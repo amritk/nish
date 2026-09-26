@@ -7720,7 +7720,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
     const stdin = path.join(runDir, "stdin.ts");
     fs.writeFileSync(
       stdin,
-      'export const main = (): number => {\n  const text = readFileSync("/dev/stdin");\n  write(`${text.length}\\n`);\n  return 0;\n};\n'
+      'export const main = (): number => {\n  const text = readFileSync("/dev/stdin");\n  console.log(text.length);\n  return 0;\n};\n'
     );
     const stdinFile = fs.openSync(path.join(root, "examples", "add.ts"), "r");
     const piped = spawnSync(NISH, ["run", stdin], {

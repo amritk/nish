@@ -61,6 +61,8 @@ cases/arr_range_call_rebind added after R6: no rewriter to freeze it with
 cases/arr_range_call_rebind_callee added after R6: no rewriter to freeze it with
 cases/arr_range_call_two_sites added after R6: no rewriter to freeze it with
 cases/arr_range_call_wrap added after R6: no rewriter to freeze it with
+cases/asi_continuation added after R6: no rewriter to freeze it with
+cases/asi_statements added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with

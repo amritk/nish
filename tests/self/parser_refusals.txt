@@ -79,6 +79,9 @@ reject_arrow_let	a module holds no top-level `let`; use `const`
 reject_arrow_return_type	a return type annotation is required
 reject_as_any	expected `;`, found `IDENT`
 reject_as_unknown	expected an expression, found `<`
+reject_asi_for_header	expected `;`, found `IDENT`
+reject_asi_same_line	expected `;`, found `const`
+reject_asi_template	expected `;`, found `TEMPLATE`
 reject_async_function	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_await	expected `;`, found `NUMBER`
 reject_cls_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`

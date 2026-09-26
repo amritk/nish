@@ -342,7 +342,9 @@ export class Lexer {
     if (this.at(0) !== CH_HASH || this.at(1) !== CH_BANG) {
       return;
     }
-    while (this.pos < this.source.length && this.at(this.pos) !== CH_LF) this.pos = this.pos + 1;
+    while (this.pos < this.source.length && this.at(this.pos) !== CH_LF) {
+      this.pos = this.pos + 1;
+    }
   }
 
   /** The byte at `i`, or -1 past the end. Every read goes through here. */
@@ -764,7 +766,9 @@ export class Lexer {
         // line, in the `typescript` scanner's words, rather than one per token
         // of a path the parser was never going to read.
         let end = this.pos;
-        while (end < this.source.length && this.at(end) !== CH_LF) end = end + 1;
+        while (end < this.source.length && this.at(end) !== CH_LF) {
+          end = end + 1;
+        }
         this.error("'#!' can only be used at the start of a file", end);
         return;
       }

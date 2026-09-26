@@ -130,9 +130,24 @@ const DECLARED = [
     why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
   },
   {
-    program: "docs/cookbook/decl_shebang.ts",
+    program: "docs/cookbook/decl-shebang.ts",
     changelog: "shebang line",
     why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
+  },
+  {
+    program: "tests/cases/asi_statements.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
+  },
+  {
+    program: "tests/cases/asi_continuation.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
+  },
+  {
+    program: "docs/cookbook/fn_add_no_semicolons.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
   },
   {
     program: "tests/cases/map_fused_generic.ts",
