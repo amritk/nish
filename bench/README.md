@@ -248,7 +248,12 @@ it. `--validate` runs one outer and one inner iteration of each and fails when
 any exits non-zero, and `tests/run.js` runs it in its `WP9: bench` check with
 `fib` and `sieve`. The numbers against 0.10.0 and the profile of the gap to
 C++ are in
-[docs/wp9-optimisation.md](../docs/wp9-optimisation.md#are-we-fast-yet).
+[docs/wp9-optimisation.md](../docs/wp9-optimisation.md#are-we-fast-yet), and
+[round 2](../docs/wp9-optimisation.md#are-we-fast-yet-round-2) re-measures
+them after #217, with the reason a benchmark can move by 5 to 20% on one
+virtual machine when neither its code nor its instruction count has: wall time
+on this suite is sensitive to where the hot loop falls against 64-byte lines.
+Read a timing change here against its instruction count first.
 
 ## Instruction counts
 

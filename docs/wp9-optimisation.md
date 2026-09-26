@@ -838,6 +838,8 @@ the benchmarks the arena-scope, repeated-check and element-TBAA changes were
 made for (#210, #209, #208). This section is their before and after, measured
 once those three had merged, and the profile of what still separates Queens
 and Towers from C++.
+[Round 2](#are-we-fast-yet-round-2), below, re-measures all seven after the
+fixes this profile proposed.
 
 ### How it was measured
 
@@ -1024,6 +1026,249 @@ Two steps, in the order they pay:
    when the callee allocates the array, and what a `push` on such a field
    means). It is the fix the plan names, and it is the only one that closes
    Queens' distance to C++.
+
+## Are We Fast Yet, round 2
+
+Round 2 (#217) was the four fixes the profile above proposed or pointed to:
+header TBAA (#220), loop-body arena scopes (#221), call-site index ranges
+(#222, trimmed in #236) and inline fixed-length array fields (#230), with
+the instruction-count guard (#218) landing first. This section re-measures all
+seven ports against 0.10.0 after they merged, beside round 1's table, and
+root-causes the rows that moved without the code moving.
+
+### How it was measured
+
+The round-1 protocol above, with three differences, all stated here:
+
+- **Builds.** **0.10.0** is the seed from `scripts/fetch-seed.sh 0.10.0`;
+  **main** is `build/nish` built from `06d01f4`, the merge of #236 and the
+  last compiler change of round 2; **`4fed2b7`**, the main round 2 started
+  from, is built from its own tree by the same seed, so each round-2 change
+  can be told from round 1's. `--unchecked-indexing` is the main build with
+  that flag, and C++ is the fork's port at
+  [`8c2ac1b`](https://github.com/amritk/are-we-fast-yet/tree/8c2ac1b035674fc08541365a9c9349306dc45bdd/benchmarks/C%2B%2B),
+  `clang++ -O3 -flto -march=native -ffp-contract=off -std=c++17` as its
+  `build.sh` does. All five build the same `bench/awfy` sources.
+- **Fifteen rounds instead of five.** This machine drifts between speed
+  states on a scale of seconds: one `Mandelbrot 30 500` run of a single binary
+  sits at 29.5 ms for twenty iterations and then at 37 ms for the rest, and
+  every build of Mandelbrot, whose code is the same in all of them, spans
+  29.4–38.0 ms across rounds. Three rounds, as the lead asked, gave medians
+  that moved by up to 20% between two sessions. So the table is fifteen
+  rounds, the builds alternating order each round. Each figure is the median
+  of the fifteen round medians, with the lowest and highest in brackets.
+- **Paired change.** Each round runs every build of a benchmark back to back,
+  so the drift mostly hits them together. The "vs" columns are the median of
+  the fifteen per-round ratios, with the interquartile range in brackets, and
+  a change inside that range is not claimed.
+
+`taskset -c 3`, `<Name> 30 <inner>` at the suite's inner counts, and the
+median of the last 20 iterations, as in round 1. One machine only: an x86-64,
+4-core Intel Xeon @ 2.10 GHz (family 6, model 207, an Emerald Rapids part), a
+cloud virtual machine otherwise idle, Linux 6.18, Ubuntu clang 18.1.3,
+2026-09-26. **The plan's second machine was skipped**, so #217's "on two
+machines" is measured on one; the lead's interim numbers on a second VM are
+quoted below for comparison, not re-measured.
+
+### Wall time (ms)
+
+| Benchmark | inner | 0.10.0 | main | main vs 0.10.0 | `4fed2b7` | main vs `4fed2b7` | main `--unchecked-indexing` | C++ `-O3 -flto` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Permute | 1000 | 55.5 (47.0–58.1) | 18.3 (15.4–19.8) | **−67.0%** (−68.9 to −65.5) | 37.7 (31.6–40.9) | −51.2% (−53.2 to −50.9) | 18.4 (15.4–20.5) | 18.2 (14.7–19.6) |
+| Queens | 1000 | 13.6 (11.2–16.8) | 10.1 (8.5–11.4) | **−25.6%** (−27.2 to −24.3) | 13.0 (11.0–14.4) | −22.8% (−23.7 to −22.4) | 7.3 (6.2–7.8) | 7.2 (6.0–8.1) |
+| Towers | 600 | 23.2 (19.2–26.0) | 14.5 (12.0–15.6) | **−37.9%** (−41.1 to −37.5) | 18.0 (15.2–19.3) | −19.9% (−22.2 to −17.2) | 18.9 (15.9–20.3) | 15.9 (13.4–17.0) |
+| List | 1500 | 18.3 (15.3–19.7) | 17.9 (15.0–18.9) | −2.5% (−10.4 to −2.2) | 18.2 (14.8–19.0) | −1.2% (−4.4 to −0.1) | 18.2 (14.8–21.3) | 17.9 (14.9–21.3) |
+| Bounce | 1500 | 13.2 (11.4–14.7) | 11.0 (9.4–12.1) | **−17.4%** (−23.4 to −13.9) | 13.3 (11.2–15.3) | −15.9% (−23.9 to −13.2) | 13.9 (11.5–20.8) | 11.6 (9.6–16.1) |
+| Mandelbrot | 500 | 35.5 (29.5–37.7) | 35.5 (29.5–37.1) | −0.1% (−5.5 to +5.1) | 35.5 (29.5–38.0) | +0.1% (−4.0 to +2.4) | 35.9 (29.4–37.1) | 35.5 (29.5–37.9) |
+| Storage | 1000 | 234.4 (212.8–242.2) | 100.5 (83.6–106.8) | **−56.8%** (−58.5 to −56.2) | 101.1 (84.4–107.2) | −0.3% (−4.0 to +1.1) | 101.1 (82.4–103.6) | 212.9 (169.6–224.4) |
+
+Geometric mean against C++, over the seven: **main 0.92×** checked, 0.95×
+`--unchecked-indexing`, and 0.10.0 1.40×. The lead's interim run on another
+VM put main at about 0.99× checked.
+
+**Nothing is slower than at `4fed2b7`.** Every "main vs `4fed2b7`" median is
+negative or inside its own interquartile range (Mandelbrot +0.1%, whose code
+did not change). This is the no-regressions gate for the round as a whole, and
+it passes on this machine.
+
+The `--unchecked-indexing` column is slower than the checked one for Towers
+and Bounce. It is a different binary, so a different layout, and
+cachegrind counts it at the same or fewer instructions. It is the effect
+explained in "Layout, not work" below, not a cost of removing checks.
+
+The lead's interim numbers from a second VM, for comparison (ms, one session):
+
+| Benchmark | 0.10.0 | main | change |
+| --- | ---: | ---: | ---: |
+| Permute | 28.6 | 18.4 | −35.7% |
+| Queens | 18.7 | 12.8 | −31.6% |
+| Towers | 19.3 | 14.0 | −27.5% |
+| Bounce | 15.4 | 13.3 | −13.6% |
+| Storage | 252 | 128 | −49.2% |
+| Mandelbrot | 58.5 | 58.4 | −0.2% |
+| List | 21.8 | 23.4 | **+7.3%** |
+
+The two agree on main, within the drift, and disagree most on 0.10.0's
+Permute, 55.5 ms here against 28.6 there. That is 0.10.0's own layout on
+this front end, not main's.
+
+### Instructions executed (cachegrind)
+
+`valgrind --tool=cachegrind --cache-sim=no <harness> <Name> 1 <inner>`, one
+outer iteration, whole process, with `bench/run.mjs`'s pinned libc tunables
+and an empty environment:
+
+| Benchmark | 0.10.0 | `4fed2b7` | main | main vs 0.10.0 | main unchecked | C++ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Permute | 339,657,763 | 286,429,781 | 152,407,778 | −55.1% | 152,406,979 | 158,022,518 |
+| Queens | 264,145,491 | 229,686,515 | 191,116,490 | −27.6% | 70,745,677 | 86,491,025 |
+| Towers | 267,982,174 | 263,067,605 | 223,694,386 | −16.5% | 168,403,601 | 222,085,685 |
+| List | 298,236,485 | 298,271,747 | 298,271,759 | +0.0% | 298,270,960 | 340,837,248 |
+| Bounce | 183,761,601 | 183,683,639 | 183,763,134 | +0.0% | 183,762,321 | 196,003,283 |
+| Mandelbrot | 152,510,697 | 152,510,725 | 152,510,712 | 0.0% | 152,509,927 | 129,111,249 |
+| Storage | 426,811,273 | 427,258,808 | 413,608,809 | −3.1% | 413,608,010 | 1,879,011,182 |
+
+Permute's checked and unchecked counts are now the same to 800 instructions:
+#222 proved every index in `swap`, which is where the 20% target came from.
+Queens still executes 2.7 times its unchecked count. Its checks are not what
+the call-site ranges reach, and #230 took the header hop out of each access,
+not the compare. Against `4fed2b7`, Bounce executes 79,495 more instructions
+(+0.043%), which takes it back to 0.10.0's count, inside the guard's 0.1%
+tolerance. List executes twelve more.
+
+### Peak resident memory (KB)
+
+`ru_maxrss` through `bench/rss.c`:
+
+| Run | 0.10.0 | `4fed2b7` | main | main `--unchecked-indexing` | C++ |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `Storage 1 1000` | 390,192 | 1,844 | 1,840 | 1,844 | 4,380 |
+| `List 1 100000` | 49,968 | 1,460 | 1,460 | 1,460 | 4,000 |
+| `List 1 10` | 1,456 | 1,460 | 1,460 | 1,460 | 3,948 |
+
+Round 1's #210 did this, and round 2 keeps it.
+
+#216's probe, the shape of `tests/cases/mem_loop_scope`: `summarise(rounds):
+Box` calling an allocating `build(i)` and keeping only `.length`. The light
+`build` pushes 64 to 70 numbers and the heavy one 2000. Each program prints
+the same total on all three builds:
+
+| rounds | 0.10.0 | `4fed2b7` | main | 0.10.0, heavy | `4fed2b7`, heavy | main, heavy |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 1,444 | 1,444 | 1,316 | 2,852 | 2,852 | 1,316 |
+| 1000 | 2,212 | 2,212 | 1,316 | 17,572 | 17,568 | 1,316 |
+| 4000 | 5,028 | 5,028 | 1,316 | 66,468 | 66,468 | 1,312 |
+
+Flat on main, at the process's floor, which is #221's loop scope.
+
+### Against #217's targets
+
+- **Permute at least 20% faster than 0.10.0: met.** −67.0% here, and −35.7%
+  on the lead's VM.
+- **No benchmark more than 5% slower than 0.10.0, Bounce and Queens
+  included: met on this machine, not on the lead's.** Here the worst row is
+  Mandelbrot at −0.1%, and Bounce and Queens are 17% and 26% faster. On the
+  lead's VM, **List is 7.3% slower**, and was 18% slower in an earlier
+  session there, with a `.ll` byte-identical to `4fed2b7`'s. That is the
+  layout effect root-caused below. No code change in this round's lane
+  removes it.
+- **On two machines: not met.** One machine was measured, for rate-limit
+  reasons, and the second machine is the lead's interim session, not this
+  protocol.
+- **The Queens and Towers gap to C++.** Towers is now faster than C++
+  checked (0.91×). Queens is 1.40× checked and 1.01× unchecked, so its whole
+  remaining gap is its checks.
+
+### Layout, not work
+
+List's `.ll` is byte-identical between `4fed2b7` and main, and its
+instruction count is the same to twelve instructions. Yet on the lead's VM its
+wall time against 0.10.0 moved from about +7% to +18% between sessions. Round
+1's Bounce (+19.2%) and Queens (+5.2%) slowdowns were the same shape:
+cachegrind counted the same instructions or fewer. `perf` is not available in
+this container, so there are no cycle or front-end counters. The evidence is
+the machine code of each benchmark's hot loop in every build.
+
+Method:
+- Each build was relinked with its exact `--link` command minus `-s`. Its
+  `.text` is byte-identical to the stripped binary that was timed, so the
+  addresses are the timed ones.
+- Callgrind's per-instruction counts (`--dump-instr=yes`) pick out the hot
+  instructions, each one above 0.5% of the run, which together make up 90% of
+  the run for Bounce and List.
+- For those instructions, the table counts the 64-byte lines and 32-byte
+  windows they occupy, and the hot branches that cross or end on a 32-byte
+  boundary (the Skylake JCC-erratum rule).
+
+**List: the same instructions, moved.** Its hot code is `List.tail`, with
+`isShorterThan` inlined: 33 instructions. Between `4fed2b7` and main they
+are the same instructions in the same order, with the same relative jumps.
+Only the RIP-relative displacements differ. What moved is the function. The
+only code linked before it is `main`, the harness, with Bounce and
+the other benchmarks' drivers inlined. Round 2 shrank `main` by 1,065 bytes,
+through changes to those other benchmarks, and everything after it shifted. `List.tail`
+went from `0x4390` (16 mod 64) to `0x3f60` (32 mod 64). The same 170 or so bytes of
+hot code now cover **four 64-byte lines instead of three**, and five 32-byte
+windows instead of four.
+
+**Round 1's slowdowns are the same thing.** The same measurement for every
+build that has a number:
+
+| Hot loop | 0.10.0 | round 1 (`ce0fe99`) | `4fed2b7` | main |
+| --- | --- | --- | --- | --- |
+| Bounce (29 insns, inlined into `main`) | 3 lines / 5 windows | **4 / 6** | 4 / 6 | 3 / 5 |
+| Queens `placeQueen` | 2 / 4 | **3 / 4** | 3 / 4 | 7 / 12 (#230's larger, unrolled body) |
+| List `tail` | 3 / 4 | 3 / 4 | 3 / 4 | **4 / 5** |
+| Hot branches crossing or ending on a 32 B boundary: Bounce | none | 1 | 1 | 2 |
+| … Queens | none | 1 | 1 | 2 |
+| … List | none | none | none | none |
+
+On the reference VMs, every slowdown against 0.10.0 with no extra work
+matches one extra 64-byte line under the hot loop:
+- round 1's Bounce (+19.2%) and Queens (+5.2%), each on one more line;
+- round 2's List (+7% to +18%), on one more line.
+
+Main's Bounce is back to 0.10.0's three lines and is faster on both VMs.
+
+The JCC rule does not fit: main's Bounce has two such branches and is still
+faster, and List has none in any build. Nor does it apply here, because this
+Emerald Rapids part does not have that erratum. The line count is the
+predictor that holds in every row.
+
+On this machine the extra line costs nothing measurable. List is −1.2%
+(−4.4 to −0.1) against `4fed2b7`. So the penalty depends on the front end,
+which is why round 1 saw Bounce and Queens slow on one VM and not the other.
+The lead's VM is the one that pays. What this does not prove, without
+counters, is the mechanism inside the front end: uop-cache lines, fetch
+windows or loop-stream-detector capacity.
+
+**Not a fix: branch padding.** Padding branches away from 32-byte
+boundaries (`-mbranches-within-32B-boundaries`) was already tried during round
+2 and made List slower. That fits the table above: List has no boundary
+branches to fix, and padding only grows the code and moves it again. It is
+recorded here as a negative result and not repeated.
+
+**No compiler-side fix fits this round's lane.** The code is already as short
+as it gets, and the instruction counts show no extra work. What moves a hot
+loop across a line is any size change anywhere earlier in the binary, even in
+another benchmark's code. Every fix is a code-placement flag, which the plan
+rules out for shipping, so these are proposals for the owner:
+
+1. **`-falign-functions=64`** in `scripts/build.sh`'s speed profile. A
+   function's internal layout then no longer depends on the size of the code
+   before it. `List.tail` would start at 0 mod 64 in every build, so round 2
+   could not have moved it. It does not align loops inside a function, so a
+   change to the function itself can still move them. It costs up to 63 bytes
+   of padding per function, which `npm run size-report` would have to show.
+2. **`-mllvm -align-loops=64`**, the diagnostic round 1 ran. It made main's
+   Bounce 13.9% faster than 0.10.0 on the round-1 VM. It pins every loop
+   head, costs more padding than (1), and pads inside hot functions.
+3. **Neither, and read wall time on this suite through cachegrind.** That is
+   what #218's guard already does for regressions. The wall-time tables stay
+   as evidence of the direction of change, with the drift stated.
+
+Either flag changes every binary `nish --link` produces, not only the
+benchmarks, which is why it is the owner's call. This PR ships neither.
 
 ## Left out, and why
 
