@@ -60,7 +60,7 @@ import {
   StructInfo,
 } from "./program";
 import { isMapOwner } from "./generics";
-import { Local } from "./symbols";
+import { Local, STORAGE_PARAM } from "./symbols";
 import { isUndefined } from "./validator";
 import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING, TypeTable } from "./types";
 
@@ -94,14 +94,20 @@ export const emitMapIntrinsic = (emitter: Emitter, sig: FunctionSig, values: str
 
 /**
  * A call of `storedKey`, lowered in place: `fadd` of +0 for a float key, and
- * the key itself for every other. The argument is lowered at the call's own
- * debug location, so under `-g` a key that is not a float adds no metadata
- * either, and its golden is the one it was before the intrinsic existed.
+ * the key itself for every other. The argument must be a parameter, which
+ * lowers to no instruction and needs no coercion: it is lowered at the call's
+ * own debug location, so under `-g` a key that is not a float adds no metadata
+ * either, and its golden is the one it was before the intrinsic existed. Any
+ * other argument would lose its own location, so it is an internal error.
  */
 export const emitStoredKey = (emitter: Emitter, sig: FunctionSig, arg: Node): string => {
   const instance = sig.instance;
   if (instance === null || instance.typeArgs.length !== 1) {
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a key intrinsic`, emitter.opts.json));
+  }
+  const local: Local | null = arg.kind === N_IDENT ? emitter.program.nodeLocals[arg.id] : null;
+  if (local === null || local.storage !== STORAGE_PARAM || emitter.program.nodeCoercions[arg.id] >= 0) {
+    process.exit(internalErrorFor(`emitter: \`${sig.name}\` takes a parameter`, emitter.opts.json));
   }
   const key = instance.typeArgs[0];
   const value = emitter.emitRawExpression(arg);

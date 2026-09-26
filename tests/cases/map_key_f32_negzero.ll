@@ -6,11 +6,15 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"map \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"set \00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Set: no entry at this index\00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Set maximum size exceeded\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"update \00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"guarded set \00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"guarded add \00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"getOrInsert \00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Set: no entry at this index\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Set maximum size exceeded\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
@@ -51,6 +55,68 @@ slow:
   ret i8* %grown
 }
 
+define internal void @count(%struct.Map$f32$i32* noundef nonnull align 8 dereferenceable(56) %m, float noundef %k) #0 {
+entry:
+  %0 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %m, float %k)
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %nullish.value, label %nullish.default
+
+nullish.value:
+  %2 = trunc i64 %0 to i32
+  %3 = call i32 @nish.Map$f32$i32.valueAt(%struct.Map$f32$i32* %m, i32 %2)
+  br label %nullish.end
+
+nullish.default:
+  br label %nullish.end
+
+nullish.end:
+  %4 = phi i32 [ %3, %nullish.value ], [ 0, %nullish.default ]
+  %5 = add nsw i32 %4, 1
+  br i1 %1, label %set.found, label %set.insert
+
+set.found:
+  %6 = trunc i64 %0 to i32
+  call void @nish.Map$f32$i32.setValueAt(%struct.Map$f32$i32* %m, i32 %6, i32 %5)
+  br label %set.end
+
+set.insert:
+  call void @nish.Map$f32$i32.insertAt(%struct.Map$f32$i32* %m, i64 %0, float %k, i32 %5)
+  br label %set.end
+
+set.end:
+  ret void
+}
+
+define internal void @firstValue(%struct.Map$f32$i32* noundef nonnull align 8 dereferenceable(56) %m, float noundef %k, i32 noundef %v) #0 {
+entry:
+  %0 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %m, float %k)
+  %1 = icmp sge i64 %0, 0
+  %2 = xor i1 %1, true
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  call void @nish.Map$f32$i32.insertAt(%struct.Map$f32$i32* %m, i64 %0, float %k, i32 %v)
+  br label %if.end
+
+if.end:
+  ret void
+}
+
+define internal void @firstOnly(%struct.Set$f32* noundef nonnull align 8 dereferenceable(48) %s, float noundef %k) #0 {
+entry:
+  %0 = call i64 @nish.Set$f32.probe(%struct.Set$f32* %s, float %k)
+  %1 = icmp sge i64 %0, 0
+  %2 = xor i1 %1, true
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  call void @nish.Set$f32.insertAt(%struct.Set$f32* %s, i64 %0, float %k)
+  br label %if.end
+
+if.end:
+  ret void
+}
+
 define noundef i32 @nish_main() #0 {
 entry:
   %zero.addr = alloca float, align 4
@@ -61,6 +127,19 @@ entry:
   %s.addr = alloca %struct.Set$f32*, align 8
   %v.addr = alloca float, align 4
   %walk.idx.1 = alloca i32, align 4
+  %counts.addr = alloca %struct.Map$f32$i32*, align 8
+  %k.addr.1 = alloca float, align 4
+  %walk.idx.2 = alloca i32, align 4
+  %firsts.addr = alloca %struct.Map$f32$i32*, align 8
+  %k.addr.2 = alloca float, align 4
+  %walk.idx.3 = alloca i32, align 4
+  %seen.addr = alloca %struct.Set$f32*, align 8
+  %v.addr.1 = alloca float, align 4
+  %walk.idx.4 = alloca i32, align 4
+  %ids.addr = alloca %struct.Map$f32$i32*, align 8
+  %id.addr = alloca i32, align 4
+  %k.addr.3 = alloca float, align 4
+  %walk.idx.5 = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store float 0x0000000000000000, float* %zero.addr, align 4
   store float 0x3FF0000000000000, float* %one.addr, align 4
@@ -223,6 +302,338 @@ walk.inc.1:
 
 walk.end.1:
   call void @nish.Set$f32.walkClose(%struct.Set$f32* %54)
+  %88 = call i8* @nish_alloc_struct(i64 56)
+  %89 = bitcast i8* %88 to %struct.Map$f32$i32*
+  call void @nish.Map$f32$i32.constructor(%struct.Map$f32$i32* %89)
+  store %struct.Map$f32$i32* %89, %struct.Map$f32$i32** %counts.addr, align 8
+  %90 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %counts.addr, align 8
+  %91 = load float, float* %zero.addr, align 4
+  %92 = fneg float %91
+  call void @count(%struct.Map$f32$i32* %90, float %92)
+  %93 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %counts.addr, align 8
+  %94 = load float, float* %zero.addr, align 4
+  call void @count(%struct.Map$f32$i32* %93, float %94)
+  %95 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %counts.addr, align 8
+  call void @nish.Map$f32$i32.walkOpen(%struct.Map$f32$i32* %95)
+  %96 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %95, i32 0)
+  store i32 %96, i32* %walk.idx.2, align 4
+  br label %walk.cond.2
+
+walk.cond.2:
+  %97 = load i32, i32* %walk.idx.2, align 4
+  %98 = icmp sge i32 %97, 0
+  br i1 %98, label %walk.body.2, label %walk.end.2
+
+walk.body.2:
+  %99 = call float @nish.Map$f32$i32.keyAt(%struct.Map$f32$i32* %95, i32 %97)
+  store float %99, float* %k.addr.1, align 4
+  %100 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %101 = load i8*, i8** %100, align 8
+  %102 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %103 = load i64, i64* %102, align 8
+  %104 = load float, float* %one.addr, align 4
+  %105 = load float, float* %k.addr.1, align 4
+  %106 = fdiv float %104, %105
+  %107 = fpext float %106 to double
+  %108 = call i8* @nish_str_from_f64(double %107)
+  %109 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.3 to i8*), i8* %108)
+  %110 = call i8* @nish_str_concat(i8* %109, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %111 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %counts.addr, align 8
+  %112 = load float, float* %k.addr.1, align 4
+  %113 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %111, float %112)
+  %114 = icmp sge i64 %113, 0
+  br i1 %114, label %nullish.value.1, label %nullish.default.1
+
+nullish.value.1:
+  %115 = trunc i64 %113 to i32
+  %116 = call i32 @nish.Map$f32$i32.valueAt(%struct.Map$f32$i32* %111, i32 %115)
+  br label %nullish.end.1
+
+nullish.default.1:
+  %117 = sub nsw i32 0, 1
+  br label %nullish.end.1
+
+nullish.end.1:
+  %118 = phi i32 [ %116, %nullish.value.1 ], [ %117, %nullish.default.1 ]
+  %119 = call i8* @nish_str_from_i32(i32 %118)
+  %120 = call i8* @nish_str_concat(i8* %110, i8* %119)
+  call void @nish_print(i8* %120)
+  %121 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %122 = load i8*, i8** %121, align 8
+  %123 = icmp eq i8* %122, %101
+  br i1 %123, label %pass.rewind.2, label %pass.free.2
+
+pass.rewind.2:
+  %124 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %103, i64* %124, align 8
+  br label %pass.done.2
+
+pass.free.2:
+  %125 = ptrtoint i8* %101 to i64
+  %126 = add i64 %125, %103
+  call void @nish_arena_release(i64 %126)
+  br label %pass.done.2
+
+pass.done.2:
+  br label %walk.inc.2
+
+walk.inc.2:
+  %127 = add i32 %97, 1
+  %128 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %95, i32 %127)
+  store i32 %128, i32* %walk.idx.2, align 4
+  br label %walk.cond.2
+
+walk.end.2:
+  call void @nish.Map$f32$i32.walkClose(%struct.Map$f32$i32* %95)
+  %129 = call i8* @nish_alloc_struct(i64 56)
+  %130 = bitcast i8* %129 to %struct.Map$f32$i32*
+  call void @nish.Map$f32$i32.constructor(%struct.Map$f32$i32* %130)
+  store %struct.Map$f32$i32* %130, %struct.Map$f32$i32** %firsts.addr, align 8
+  %131 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %firsts.addr, align 8
+  %132 = load float, float* %zero.addr, align 4
+  %133 = fneg float %132
+  call void @firstValue(%struct.Map$f32$i32* %131, float %133, i32 7)
+  %134 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %firsts.addr, align 8
+  %135 = load float, float* %zero.addr, align 4
+  call void @firstValue(%struct.Map$f32$i32* %134, float %135, i32 8)
+  %136 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %firsts.addr, align 8
+  call void @nish.Map$f32$i32.walkOpen(%struct.Map$f32$i32* %136)
+  %137 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %136, i32 0)
+  store i32 %137, i32* %walk.idx.3, align 4
+  br label %walk.cond.3
+
+walk.cond.3:
+  %138 = load i32, i32* %walk.idx.3, align 4
+  %139 = icmp sge i32 %138, 0
+  br i1 %139, label %walk.body.3, label %walk.end.3
+
+walk.body.3:
+  %140 = call float @nish.Map$f32$i32.keyAt(%struct.Map$f32$i32* %136, i32 %138)
+  store float %140, float* %k.addr.2, align 4
+  %141 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %142 = load i8*, i8** %141, align 8
+  %143 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %144 = load i64, i64* %143, align 8
+  %145 = load float, float* %one.addr, align 4
+  %146 = load float, float* %k.addr.2, align 4
+  %147 = fdiv float %145, %146
+  %148 = fpext float %147 to double
+  %149 = call i8* @nish_str_from_f64(double %148)
+  %150 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.4 to i8*), i8* %149)
+  %151 = call i8* @nish_str_concat(i8* %150, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %152 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %firsts.addr, align 8
+  %153 = load float, float* %k.addr.2, align 4
+  %154 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %152, float %153)
+  %155 = icmp sge i64 %154, 0
+  br i1 %155, label %nullish.value.2, label %nullish.default.2
+
+nullish.value.2:
+  %156 = trunc i64 %154 to i32
+  %157 = call i32 @nish.Map$f32$i32.valueAt(%struct.Map$f32$i32* %152, i32 %156)
+  br label %nullish.end.2
+
+nullish.default.2:
+  %158 = sub nsw i32 0, 1
+  br label %nullish.end.2
+
+nullish.end.2:
+  %159 = phi i32 [ %157, %nullish.value.2 ], [ %158, %nullish.default.2 ]
+  %160 = call i8* @nish_str_from_i32(i32 %159)
+  %161 = call i8* @nish_str_concat(i8* %151, i8* %160)
+  call void @nish_print(i8* %161)
+  %162 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %163 = load i8*, i8** %162, align 8
+  %164 = icmp eq i8* %163, %142
+  br i1 %164, label %pass.rewind.3, label %pass.free.3
+
+pass.rewind.3:
+  %165 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %144, i64* %165, align 8
+  br label %pass.done.3
+
+pass.free.3:
+  %166 = ptrtoint i8* %142 to i64
+  %167 = add i64 %166, %144
+  call void @nish_arena_release(i64 %167)
+  br label %pass.done.3
+
+pass.done.3:
+  br label %walk.inc.3
+
+walk.inc.3:
+  %168 = add i32 %138, 1
+  %169 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %136, i32 %168)
+  store i32 %169, i32* %walk.idx.3, align 4
+  br label %walk.cond.3
+
+walk.end.3:
+  call void @nish.Map$f32$i32.walkClose(%struct.Map$f32$i32* %136)
+  %170 = call i8* @nish_alloc_struct(i64 48)
+  %171 = bitcast i8* %170 to %struct.Set$f32*
+  call void @nish.Set$f32.constructor(%struct.Set$f32* %171)
+  store %struct.Set$f32* %171, %struct.Set$f32** %seen.addr, align 8
+  %172 = load %struct.Set$f32*, %struct.Set$f32** %seen.addr, align 8
+  %173 = load float, float* %zero.addr, align 4
+  %174 = fneg float %173
+  call void @firstOnly(%struct.Set$f32* %172, float %174)
+  %175 = load %struct.Set$f32*, %struct.Set$f32** %seen.addr, align 8
+  %176 = load float, float* %zero.addr, align 4
+  call void @firstOnly(%struct.Set$f32* %175, float %176)
+  %177 = load %struct.Set$f32*, %struct.Set$f32** %seen.addr, align 8
+  call void @nish.Set$f32.walkOpen(%struct.Set$f32* %177)
+  %178 = call i32 @nish.Set$f32.walkNext(%struct.Set$f32* %177, i32 0)
+  store i32 %178, i32* %walk.idx.4, align 4
+  br label %walk.cond.4
+
+walk.cond.4:
+  %179 = load i32, i32* %walk.idx.4, align 4
+  %180 = icmp sge i32 %179, 0
+  br i1 %180, label %walk.body.4, label %walk.end.4
+
+walk.body.4:
+  %181 = call float @nish.Set$f32.keyAt(%struct.Set$f32* %177, i32 %179)
+  store float %181, float* %v.addr.1, align 4
+  %182 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %183 = load i8*, i8** %182, align 8
+  %184 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %185 = load i64, i64* %184, align 8
+  %186 = load float, float* %one.addr, align 4
+  %187 = load float, float* %v.addr.1, align 4
+  %188 = fdiv float %186, %187
+  %189 = fpext float %188 to double
+  %190 = call i8* @nish_str_from_f64(double %189)
+  %191 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.5 to i8*), i8* %190)
+  %192 = call i8* @nish_str_concat(i8* %191, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %193 = load %struct.Set$f32*, %struct.Set$f32** %seen.addr, align 8
+  %194 = getelementptr inbounds %struct.Set$f32, %struct.Set$f32* %193, i32 0, i32 0
+  %195 = load i32, i32* %194, align 4, !tbaa !5
+  %196 = call i8* @nish_str_from_i32(i32 %195)
+  %197 = call i8* @nish_str_concat(i8* %192, i8* %196)
+  call void @nish_print(i8* %197)
+  %198 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %199 = load i8*, i8** %198, align 8
+  %200 = icmp eq i8* %199, %183
+  br i1 %200, label %pass.rewind.4, label %pass.free.4
+
+pass.rewind.4:
+  %201 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %185, i64* %201, align 8
+  br label %pass.done.4
+
+pass.free.4:
+  %202 = ptrtoint i8* %183 to i64
+  %203 = add i64 %202, %185
+  call void @nish_arena_release(i64 %203)
+  br label %pass.done.4
+
+pass.done.4:
+  br label %walk.inc.4
+
+walk.inc.4:
+  %204 = add i32 %179, 1
+  %205 = call i32 @nish.Set$f32.walkNext(%struct.Set$f32* %177, i32 %204)
+  store i32 %205, i32* %walk.idx.4, align 4
+  br label %walk.cond.4
+
+walk.end.4:
+  call void @nish.Set$f32.walkClose(%struct.Set$f32* %177)
+  %206 = call i8* @nish_alloc_struct(i64 56)
+  %207 = bitcast i8* %206 to %struct.Map$f32$i32*
+  call void @nish.Map$f32$i32.constructor(%struct.Map$f32$i32* %207)
+  store %struct.Map$f32$i32* %207, %struct.Map$f32$i32** %ids.addr, align 8
+  %208 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %ids.addr, align 8
+  %209 = load float, float* %zero.addr, align 4
+  %210 = fneg float %209
+  %211 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %208, float %210)
+  %212 = icmp sge i64 %211, 0
+  br i1 %212, label %get.found, label %get.insert
+
+get.found:
+  %213 = trunc i64 %211 to i32
+  %214 = call i32 @nish.Map$f32$i32.valueAt(%struct.Map$f32$i32* %208, i32 %213)
+  br label %get.end
+
+get.insert:
+  call void @nish.Map$f32$i32.insertAt(%struct.Map$f32$i32* %208, i64 %211, float %210, i32 5)
+  br label %get.end
+
+get.end:
+  %215 = phi i32 [ %214, %get.found ], [ 5, %get.insert ]
+  %216 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %ids.addr, align 8
+  %217 = load float, float* %zero.addr, align 4
+  %218 = call i64 @nish.Map$f32$i32.probe(%struct.Map$f32$i32* %216, float %217)
+  %219 = icmp sge i64 %218, 0
+  br i1 %219, label %get.found.1, label %get.insert.1
+
+get.found.1:
+  %220 = trunc i64 %218 to i32
+  %221 = call i32 @nish.Map$f32$i32.valueAt(%struct.Map$f32$i32* %216, i32 %220)
+  br label %get.end.1
+
+get.insert.1:
+  call void @nish.Map$f32$i32.insertAt(%struct.Map$f32$i32* %216, i64 %218, float %217, i32 6)
+  br label %get.end.1
+
+get.end.1:
+  %222 = phi i32 [ %221, %get.found.1 ], [ 6, %get.insert.1 ]
+  %223 = add nsw i32 %215, %222
+  store i32 %223, i32* %id.addr, align 4
+  %224 = load %struct.Map$f32$i32*, %struct.Map$f32$i32** %ids.addr, align 8
+  call void @nish.Map$f32$i32.walkOpen(%struct.Map$f32$i32* %224)
+  %225 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %224, i32 0)
+  store i32 %225, i32* %walk.idx.5, align 4
+  br label %walk.cond.5
+
+walk.cond.5:
+  %226 = load i32, i32* %walk.idx.5, align 4
+  %227 = icmp sge i32 %226, 0
+  br i1 %227, label %walk.body.5, label %walk.end.5
+
+walk.body.5:
+  %228 = call float @nish.Map$f32$i32.keyAt(%struct.Map$f32$i32* %224, i32 %226)
+  store float %228, float* %k.addr.3, align 4
+  %229 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %230 = load i8*, i8** %229, align 8
+  %231 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %232 = load i64, i64* %231, align 8
+  %233 = load float, float* %one.addr, align 4
+  %234 = load float, float* %k.addr.3, align 4
+  %235 = fdiv float %233, %234
+  %236 = fpext float %235 to double
+  %237 = call i8* @nish_str_from_f64(double %236)
+  %238 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.6 to i8*), i8* %237)
+  %239 = call i8* @nish_str_concat(i8* %238, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %240 = load i32, i32* %id.addr, align 4
+  %241 = call i8* @nish_str_from_i32(i32 %240)
+  %242 = call i8* @nish_str_concat(i8* %239, i8* %241)
+  call void @nish_print(i8* %242)
+  %243 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %244 = load i8*, i8** %243, align 8
+  %245 = icmp eq i8* %244, %230
+  br i1 %245, label %pass.rewind.5, label %pass.free.5
+
+pass.rewind.5:
+  %246 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %232, i64* %246, align 8
+  br label %pass.done.5
+
+pass.free.5:
+  %247 = ptrtoint i8* %230 to i64
+  %248 = add i64 %247, %232
+  call void @nish_arena_release(i64 %248)
+  br label %pass.done.5
+
+pass.done.5:
+  br label %walk.inc.5
+
+walk.inc.5:
+  %249 = add i32 %226, 1
+  %250 = call i32 @nish.Map$f32$i32.walkNext(%struct.Map$f32$i32* %224, i32 %249)
+  store i32 %250, i32* %walk.idx.5, align 4
+  br label %walk.cond.5
+
+walk.end.5:
+  call void @nish.Map$f32$i32.walkClose(%struct.Map$f32$i32* %224)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -789,7 +1200,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.7 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -834,7 +1245,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.7 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -934,7 +1345,7 @@ lor.end:
   br i1 %19, label %if.then.1, label %if.end.1
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.4 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.8 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -1268,7 +1679,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.5 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.9 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -1335,7 +1746,7 @@ lor.end:
   br i1 %19, label %if.then.1, label %if.end.1
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.6 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.10 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -1679,7 +2090,7 @@ if.end.1:
   br label %while.cond
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.7 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.11 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 }
