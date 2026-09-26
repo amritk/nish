@@ -47,7 +47,7 @@
 
 import { astText } from "./ast_text";
 import { CLI, VERSION } from "./branding";
-import { Compilation } from "./compilation";
+import { Compilation, EmittedModule } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { checkedText } from "./dump";
 import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop_abi";
@@ -56,14 +56,15 @@ import { generateHeader } from "./interop_header";
 import { generateNapiShim, napiBridges } from "./interop_napi";
 import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
-import { dirname } from "./paths";
-import { jsonQuote, splitByte } from "./strings";
+import { basenameWithout, dirname } from "./paths";
+import { hexOfI64, jsonQuote, splitByte } from "./strings";
 import { codeFor, TOOLCHAIN } from "./codes";
 import { internalErrorFor, simulatedInternalError } from "./ice";
 import { resolveTarget, supportedTargets } from "./target";
+import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run_cache";
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} -v, --version | -h, --help`;
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`;
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -252,16 +253,22 @@ const toolchainInstallHint = (): string => {
 /** `>` beside the install line for the platform this compiler is running on. */
 const platformMark = (platform: string): string => (process.platform === platform ? ">" : " ");
 
+/** The C compiler `scripts/build.sh` runs: `CC` when it is set and not empty, `clang` otherwise. */
+const cCompiler = (): string => {
+  const fromEnvironment = getenv("CC");
+  return fromEnvironment !== null && fromEnvironment.length > 0 ? fromEnvironment : "clang";
+};
+
 /**
  * Whether the C compiler `scripts/build.sh` will use can be run at all: `CC`
  * when it is set and not empty, `clang` otherwise -- the rule the script itself
  * follows -- asked for `--version` with both streams discarded. Empty when it
  * answers 0, and otherwise the whole report, which names what was run, what it
- * answered, and how to install one.
+ * answered, and how to install one. `asker` is the flag or command that
+ * needed it, which opens the report.
  */
-const missingToolchain = (): string => {
-  const fromEnvironment = getenv("CC");
-  const cc = fromEnvironment !== null && fromEnvironment.length > 0 ? fromEnvironment : "clang";
+const missingToolchain = (asker: string): string => {
+  const cc = cCompiler();
   const probe: string[] = [];
   probe.push(cc);
   probe.push("--version");
@@ -271,7 +278,7 @@ const missingToolchain = (): string => {
   }
   const why = status < 0 ? `${cc} could not be run` : `\`${cc} --version\` exited with ${status}`;
   const lines: string[] = [];
-  lines.push(`--link: no usable C compiler found (${why}).`);
+  lines.push(`${asker}: no usable C compiler found (${why}).`);
   lines.push(
     `${CLI} needs clang (LLVM 18 recommended) on PATH, or CC=<compiler>, to build a binary. Install it with:`
   );
@@ -289,17 +296,26 @@ export const main = (): number => {
   // Where `nish/<module>` is resolved from, worked out once here because this
   // is the only place `process.argv` is legal (`packageRoot`).
   opts.packageRoot = packageRoot();
+  // `nish run [flags] <file.ts> [args ...]`: the flags before the file are the
+  // compiler's and everything after it is the program's, so a script is run by
+  // the same line a shebang writes. The debug recipe is the default because a
+  // script is relinked on every edit, and its link is the fast one.
+  const runMode = process.argv.length >= 2 && process.argv[1] === "run";
+  // The first flag seen that writes a product `run` keeps to itself, refused
+  // once the whole line is read rather than wherever it happened to appear.
+  let notForRun = "";
+  let runArgsFrom = process.argv.length;
   const roots: string[] = [];
   let output = "";
   let link = "";
-  let profile = "speed";
+  let profile = runMode ? "debug" : "speed";
   let json = false;
   let emitChecked = false;
   let emitAst = false;
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true;
-  let arg = 1;
+  let arg = runMode ? 2 : 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
     if (value === "--number-mode") {
@@ -318,6 +334,7 @@ export const main = (): number => {
       }
       opts.numberMode = mode === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32;
     } else if (value === "-o" || value === "--output") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: -o needs a file or a directory");
@@ -325,6 +342,7 @@ export const main = (): number => {
       }
       output = process.argv[arg];
     } else if (value === "--link") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --link needs an output name");
@@ -345,6 +363,7 @@ export const main = (): number => {
         return 2;
       }
     } else if (value === "--target") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --target needs a triple");
@@ -363,6 +382,7 @@ export const main = (): number => {
       // own flag loop, so the emitter never asks the machine anything.
       opts.target = resolved.triple;
     } else if (value === "--emit-header") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --emit-header needs a file");
@@ -370,6 +390,7 @@ export const main = (): number => {
       }
       opts.emitHeader = process.argv[arg];
     } else if (value === "--emit-dts") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --emit-dts needs a file");
@@ -377,6 +398,7 @@ export const main = (): number => {
       }
       opts.emitDts = process.argv[arg];
     } else if (value === "--emit-napi") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --emit-napi needs a file");
@@ -384,6 +406,7 @@ export const main = (): number => {
       }
       opts.emitNapi = process.argv[arg];
     } else if (value === "--emit-napi-async") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       arg = arg + 1;
       if (arg >= process.argv.length) {
         console.error("compile: --emit-napi-async needs a file");
@@ -419,8 +442,10 @@ export const main = (): number => {
       json = true;
       opts.json = true;
     } else if (value === "--emit-checked") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       emitChecked = true;
     } else if (value === "--emit-ast") {
+      notForRun = notForRun.length === 0 ? value : notForRun;
       emitAst = true;
     } else if (value === "-h" || value === "--help") {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
@@ -443,6 +468,12 @@ export const main = (): number => {
       // modules do not all reach the entry by `import` is named by listing
       // them. The first one is the entry.
       roots.push(value);
+      if (runMode) {
+        // `run` takes one file, and what follows it is the program's argv,
+        // flags included: `nish run tool.ts --help` asks the tool.
+        runArgsFrom = arg + 1;
+        break;
+      }
     }
     arg = arg + 1;
   }
@@ -450,9 +481,29 @@ export const main = (): number => {
     console.error(usageText());
     return 2;
   }
+  if (runMode) {
+    if (notForRun.length > 0) {
+      console.error(
+        `run: \`${notForRun}\` cannot be used with \`${CLI} run\`, which builds the program into its cache and runs it; compile with \`${CLI} <file.ts>\` to write it`
+      );
+      return 2;
+    }
+    if (profile === "wasi") {
+      console.error(`run: \`${CLI} run\` builds a native binary, so it cannot use --profile wasi`);
+      return 2;
+    }
+    // Advice about the IR is for the compile a reader asked for; a script
+    // prints it on every run, into the stream the script's own errors use.
+    warnPerformance = false;
+  }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `self/visibility.ts`), so the checker is told.
-  opts.link = link;
+  //
+  // `run` links the program itself as surely as `--link` does, and the binary
+  // is only ever started by the run, so it is a closed build too. The path is
+  // not known until the IR is, because the IR is what names the cache entry,
+  // and the checker only asks whether there is one.
+  opts.link = runMode ? `${CLI} run` : link;
   opts.profile = profile;
   // WP24 A1: an asynchronous export allocates on a libuv worker while the JS
   // thread keeps going, so the arena has to be thread-local on both sides --
@@ -471,8 +522,11 @@ export const main = (): number => {
   // rather than with the program, so it is found out before anything is
   // compiled or written: one clear sentence with the install line for this
   // platform, instead of `scripts/build.sh` failing after the IR is on disk.
+  // `run` asks the same question only when it has a link to do
+  // (`buildIntoCache`): a cached binary needs no C compiler, and the probe is
+  // most of what a run that finds one costs.
   if (link.length > 0) {
-    const problem = missingToolchain();
+    const problem = missingToolchain("--link");
     if (problem.length > 0) {
       reportToolchainFailure(problem, json);
       return 3;
@@ -545,9 +599,9 @@ export const main = (): number => {
   // `--link` needs an entry point, and stage0 says so before it emits
   // anything rather than letting the linker answer `undefined reference to
   // main` two steps later.
-  if (link.length > 0 && compilation.entry().checker.program.entryMain === null) {
+  if ((link.length > 0 || runMode) && compilation.entry().checker.program.entryMain === null) {
     console.error(
-      `--link: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
+      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     );
     return 1;
   }
@@ -562,6 +616,9 @@ export const main = (): number => {
     return 1;
   }
   const emitted = compilation.emit();
+  if (runMode) {
+    return runProgram(emitted, basenameWithout(roots[0], ".ts"), profile, opts.debugInfo, opts.threads, json, runArgsFrom);
+  }
   const stems: string[] = [];
   const paths: string[] = [];
   // One entry per module that writes a `.ll`: `std/collections.ts` writes
@@ -593,7 +650,7 @@ export const main = (): number => {
   if (link.length === 0) {
     return 0;
   }
-  return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json);
+  return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json, false);
 };
 
 /** `:`, the byte `$PATH` is cut on. */
@@ -720,6 +777,108 @@ const packageRoot = (): string => {
 };
 
 /**
+ * `nish run`: the program's binary out of the cache, built into it first when
+ * this IR has not been linked with this recipe before, then started with the
+ * arguments that followed the file. Answers the program's own exit status, or
+ * `128 + n` when a signal ended it, which is what a shell reports for either;
+ * a status from before the program started is one of the compiler's bands.
+ *
+ * The binary is started as a child rather than exec'd in place, because the
+ * language has no `exec` and `self/` may only use what the last release has.
+ * Its stdin, stdout and stderr are this process's, so a pipe into or out of
+ * the run reaches the program unchanged.
+ */
+const runProgram = (
+  emitted: EmittedModule[],
+  name: string,
+  profile: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean,
+  argsFrom: i32
+): number => {
+  const cacheRoot = runCacheRoot();
+  if (cacheRoot.length === 0) {
+    reportToolchainFailure("run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME", json);
+    return 3;
+  }
+  const key = runCacheKey(emitted, packageRoot(), profile, debugInfo, threads, cCompiler());
+  const cacheEntry = `${cacheRoot}/${fnv1a64Hex(key)}`;
+  const binary = `${cacheEntry}/${name}`;
+  const keyFile = `${cacheEntry}/key`;
+  const stored = readFileSyncOrNull(keyFile);
+  if (stored === null || stored !== key) {
+    const status = buildIntoCache(emitted, cacheEntry, name, profile, debugInfo, threads, json);
+    if (status !== 0) {
+      return status;
+    }
+    // Last, so that a key on disk always stands beside a whole binary.
+    writeFileSync(keyFile, key);
+  }
+  const argv: string[] = [];
+  argv.push(binary);
+  let i = argsFrom;
+  while (i < process.argv.length) {
+    argv.push(process.argv[i]);
+    i = i + 1;
+  }
+  const status = spawnSync(argv);
+  if (status < 0) {
+    reportToolchainFailure(`run: could not start ${binary}; remove ${cacheEntry} to build it again`, json);
+    return 3;
+  }
+  return status;
+};
+
+/**
+ * One cache miss: the IR written and linked in a scratch directory of the
+ * entry's own, and the binary moved into place with `mv`, which is one
+ * `rename` inside a directory. Two runs that miss on the same program at once
+ * therefore never write the file the other is linking or starting, and
+ * whichever renames last leaves the same bytes behind. The scratch directory
+ * goes either way, and a failed link is reported by `linkProgram` in its own
+ * words, since that is the failure it is.
+ */
+const buildIntoCache = (
+  emitted: EmittedModule[],
+  cacheEntry: string,
+  name: string,
+  profile: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean
+): number => {
+  const problem = missingToolchain("run");
+  if (problem.length > 0) {
+    reportToolchainFailure(problem, json);
+    return 3;
+  }
+  const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`;
+  if (!makeDirectory(work)) {
+    console.error(`run: cannot create directory ${work}`);
+    return 1;
+  }
+  const outputs: string[] = [];
+  for (const module of emitted) {
+    const file = `${work}/${module.stem}.ll`;
+    writeFileSync(file, module.ir);
+    outputs.push(file);
+  }
+  const built = `${work}/${name}`;
+  let status = linkProgram(outputs, built, profile, debugInfo, threads, json, true);
+  if (status === 0) {
+    const move: string[] = ["mv", "-f", built, `${cacheEntry}/${name}`];
+    if (spawnSync(move) !== 0) {
+      reportToolchainFailure(`run: could not move the binary into ${cacheEntry}`, json);
+      status = 3;
+    }
+  }
+  const clean: string[] = ["rm", "-rf", work];
+  spawnSync(clean);
+  return status;
+};
+
+/**
  * `--link`: hand the emitted IR and `runtime/runtime.c` to
  * `scripts/build.sh`, which is the same script `src/index.ts` spawns and the
  * only place either compiler knows what `uname` says or what `-O3 -flto` is
@@ -729,7 +888,9 @@ const packageRoot = (): string => {
  * to `/dev/null` and re-emitted here with stage0's `linked ` prefix, from the
  * size of the file it just wrote, so both compilers print the same line on the
  * same stream. Its stderr is inherited, so a clang diagnostic reaches the
- * caller as it happens rather than after the link has finished.
+ * caller as it happens rather than after the link has finished. `quiet` drops
+ * that line for `run`, whose stderr belongs to the program it is about to
+ * start.
  */
 const linkProgram = (
   outputs: string[],
@@ -737,7 +898,8 @@ const linkProgram = (
   profile: string,
   debugInfo: boolean,
   threads: boolean,
-  json: boolean
+  json: boolean,
+  quiet: boolean
 ): number => {
   const root = packageRoot();
   if (root.length === 0) {
@@ -786,6 +948,9 @@ const linkProgram = (
     const why = status < 0 ? "could not run bash" : `exit ${status}`;
     reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json);
     return 3;
+  }
+  if (quiet) {
+    return 0;
   }
   const binary = readFileSyncOrNull(link);
   if (binary !== null) {
