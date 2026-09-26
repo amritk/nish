@@ -677,7 +677,7 @@ const VALUED = ["--rev", "--compiler"];
 const flagName = (word) => VALUED.find((name) => word.startsWith(`${name}=`)) ?? word;
 
 /** The value a valued flag was given, or undefined when it is absent or last. */
-const valueOf = (argv, name) => {
+const flagValue = (argv, name) => {
   const inline = argv.find((a) => a.startsWith(`${name}=`));
   if (inline !== undefined) return inline.slice(name.length + 1);
   const at = argv.indexOf(name);
@@ -687,8 +687,8 @@ const valueOf = (argv, name) => {
 const main = (argv) => {
   const words = argv.filter((a) => a.startsWith("-"));
   const flags = new Set(words.map(flagName));
-  const revArg = valueOf(argv, "--rev");
-  const compilerArg = valueOf(argv, "--compiler");
+  const revArg = flagValue(argv, "--rev");
+  const compilerArg = flagValue(argv, "--compiler");
   const rev = flags.has("--rev") ? revArg : "HEAD";
   // A separated value is a word after its flag, not a filter.
   const values = new Set(VALUED.filter((name) => argv.includes(name)).map((name) => argv[argv.indexOf(name) + 1]));

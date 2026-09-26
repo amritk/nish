@@ -44,7 +44,7 @@ npm test                 # tests/run.js: goldens, llvm-as, native round trips, r
 node tests/run.js <sub>  # only cases whose name contains <sub>
 npm run test:update      # write missing .ll goldens
 npm run test:diff        # the full differential set, against the frozen rewrites under Node
-npm run lint             # biome check, formatter disabled (advisory, never a compile gate)
+npm run lint             # file names + biome check, formatter disabled (.claude/linting.md)
 npm run format           # biome format --write
 npm run smoke            # build and run every example with a main
 npm run size-report      # binary size table for examples/add.ts
@@ -115,22 +115,31 @@ runs both.
 ## Biome
 
 `biome.json` is the formatter and style linter for `self/`, `std/`, `bin/`,
-`tests/**/*.js`, `examples/**` and the rest of the JavaScript tooling. It never influences compilation. `npm run lint` runs the checks
-with the formatter **disabled**, because not every file has been formatted to
+`tests/**/*.js`, `examples/**`, `scripts/` and the rest of the JavaScript
+tooling. It never influences compilation. **[`linting.md`](./linting.md) is the
+authority on the rule set**: what each rule is for, which are `warn` until the
+cleanup pass, the ones measured and left off, and the runbook for that pass.
+`npm run lint` first runs `scripts/check-filenames.mjs --advisory`, which checks
+that every tracked path is kebab-case, and then runs Biome with the formatter
+**disabled**. The formatter is off because not every file has been formatted to
 the shared style yet, and reformatting a file in a PR that is about something
 else is noise in the diff. So:
 
 - Keep new code in Biome's style (double quotes, semicolons, 110 columns,
   two-space indent) and run `npm run format` on the files you created.
 - Do not reformat a file you did not otherwise change.
-- The rule set is the recommended preset plus the rules that mirror what the
+- The rule set is the recommended preset, plus the rules that mirror what the
   validator refuses (`noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
   `noVoid`, `noParameterAssign`, `useExplicitLengthCheck`,
-  `useConsistentArrayType`, `useFilenamingConvention`), with `useOptionalChain`
-  and `useExponentiationOperator` turned *off* because they push code towards
-  `?.` and `**`, which Nish rejects. `useImportType`, `useTemplate` and
-  `noNonNullAssertion` are off as house style. The full reasoning is in
-  `docs/wp0-validator.md` ("Biome").
+  `useConsistentArrayType`), plus the house style in `linting.md`: kebab-case
+  file names, `useNamingConvention`, braces on every block, `noShadow` and the
+  rest. `useOptionalChain` and `useExponentiationOperator` are turned *off*
+  because they push code towards `?.` and `**`, which Nish rejects.
+  `useImportType`, `useTemplate` and `noNonNullAssertion` are off as house
+  style. The language-mirroring half is explained in `docs/wp0-validator.md`
+  ("Biome").
+- New code follows every rule, including the ones at `warn`. A warning is a
+  backlog for the cleanup pass to clear, and new code should not add to it.
 - Two house-style rules are `warn` rather than `error` because the source
   predates them: `useConsistentTypeDefinitions` (`type`, never `interface`)
   and the `biome-plugins/no-function-declaration.grit` plugin (an arrow bound
@@ -153,6 +162,16 @@ else is noise in the diff. So:
   `tests/link`, `tests/differential/corpus`) are not linted at all, because a `reject_*` case
   exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
-  `trailingCommas: all`; those formatter settings are not carried over.
-  Flipping them would rewrite every file in `self/`, and the formatter is not a
-  gate here anyway.
+  `trailingCommas: all`; those formatter settings are not carried over, for
+  different reasons:
+  - **Semicolons stay for now.** Nish accepts code without them, by
+    TypeScript's insertion rule (`docs/LANGUAGE.md`, "Lexical rules"). But
+    `self/` is built by the last release, and until a release accepts them
+    too, `semicolons: "asNeeded"` would format the compiler into code its
+    seed refuses. The switch is a step of the cleanup pass in `linting.md`.
+  - **Quotes are only taste.** Nish accepts `'...'`. Double quotes are kept
+    because every snippet in `docs/LANGUAGE.md`, `docs/AI.md` and the
+    cookbook uses them, and so does the text a user copies out of those
+    documents. Switching would be one more rewrite of every file, and there
+    is nothing to gain from it.
+  - **`trailingCommas`** stays `es5`, to match the rest of the tree.
