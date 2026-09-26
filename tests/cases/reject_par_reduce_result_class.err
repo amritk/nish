@@ -1,0 +1,1 @@
+`pick` answers `Box`, and `parallelReduce` hands back only a number, a `boolean` or an enum

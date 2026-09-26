@@ -73,14 +73,31 @@ const reduceRange = <T>(src: T[], f: (acc: T, x: T) => T, identity: T, lo: i32, 
   return acc
 }
 
-/** How many blocks a reduce over `n` elements is split into: `min(MAX_BLOCKS, ceil(n / BLOCK))`. */
+/**
+ * How many blocks a reduce over `n` elements is split into: `min(MAX_BLOCKS, ceil(n / BLOCK))`.
+ *
+ * This and `reduceBlockStart` compute in `f64` rather than `i64`, because this
+ * file is also what runs under Node (docs/RUN_UNDER_NODE.md), where `toI64`
+ * answers a BigInt that throws the moment it meets the `1` of a `+ 1`. A double
+ * holds every value either function reaches exactly: `n` is below 2^31 and
+ * dividing by `BLOCK`, a power of two, loses nothing.
+ */
 const reduceBlockCount = (n: i32): i32 => {
-  const wanted: i32 = toI32((toI64(n) + toI64(BLOCK) - 1) / toI64(BLOCK))
+  const wanted: i32 = toI32(Math.ceil(toF64(n) / toF64(BLOCK)))
   return wanted < MAX_BLOCKS ? wanted : MAX_BLOCKS
 }
 
-/** Where block `k` of `blocks` over `n` elements starts; block `blocks` starts at `n`. */
-const reduceBlockStart = (n: i32, blocks: i32, k: i32): i32 => toI32((toI64(n) * toI64(k)) / toI64(blocks))
+/**
+ * Where block `k` of `blocks` over `n` elements starts, `floor(n * k / blocks)`;
+ * block `blocks` starts at `n`. `n * k` is below 2^37, past `i32` but exact in
+ * a double, and the rounded quotient floors to the true one: when `n * k` is
+ * not a multiple of `blocks` the true quotient is at least `1 / blocks` below
+ * the next integer, and the rounding error is under 2^37 * 2^-53, far less than
+ * `1 / MAX_BLOCKS`. So these are the same blocks the `i64` form computed, which
+ * the determinism of a reduce depends on (`tests/link/par_reduce_blocks`).
+ */
+const reduceBlockStart = (n: i32, blocks: i32, k: i32): i32 =>
+  toI32(Math.floor((toF64(n) * toF64(k)) / toF64(blocks)))
 
 /** Folds blocks `[lo, hi)` of `src` into `partials`, one result per block: one thread's share of a reduce. */
 const reduceBlocks = <T>(
