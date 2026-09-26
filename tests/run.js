@@ -3907,6 +3907,30 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
   }
 }
 
+// ---- Ranged integers (WP31) ------------------------------------------------------
+// A value that leaves `integer<Lo, Hi>` at an entry panics (exit 1) with the range
+// on stderr, before the line after it prints. The f64 twin is the one the
+// unmodified Node runner compares, where the same program runs to the end.
+if (!only || only.startsWith("rng")) {
+  for (const name of ["rng_entry_panic", "rng_entry_panic_f64"]) {
+    const ll = path.join(buildDir, `${name}.ll`)
+    if (!fs.existsSync(ll)) {
+      continue
+    }
+    const exe = path.join(buildDir, name)
+    const cc = linkNative(exe, ll)
+    const run = cc.status === 0 ? spawnSync(exe) : null
+    check(
+      `${name}: exits 1 with "value out of range: expected integer<0, 255>" on stderr`,
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("value out of range: expected integer<0, 255>") &&
+        String(run.stdout).trim() === "",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    )
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 // The two runtime unit tests below name the runtime's sources rather than the
 // prebuilt objects, deliberately: what they assert *is* that the two

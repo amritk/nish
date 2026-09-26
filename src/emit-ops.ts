@@ -21,6 +21,7 @@
 import { internalErrorFor } from "./ice"
 import { parseIntegerLiteral } from "./constants"
 import { Emitter } from "./emit"
+import { emitRangedStore } from "./emit-builtins"
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit-control"
 import { emitElementAssignment } from "./emit-arrays"
 import { emitFieldAssignment } from "./emit-classes"
@@ -486,6 +487,7 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0])
   const old = loadLocal(emitter, local)
   const value = emitBitwiseCombine(emitter, expr.text, local.type, old, expr.children[1])
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value
 }

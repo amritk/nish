@@ -32,7 +32,7 @@ import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression } from "./expressions"
+import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
 import { StringMap, StringSet } from "./map"
 import { parallelRole, recordParallelCall } from "./parallel"
 import {
@@ -1282,7 +1282,8 @@ export const checkGenericCall = (
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
     later.push(deferred)
-    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, -1))
+    // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
+    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE))
     i = i + 1
   }
   i = 0
@@ -1386,6 +1387,7 @@ export const checkGenericCall = (
     if (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
+      !recordRangeEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
       const want = ctx.table.typeName(sig.paramTypes[i + offset])

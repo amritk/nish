@@ -40,6 +40,7 @@
 // analysis are WP16's, unchanged.
 
 import { Emitter } from "./emit"
+import { emitPanicTail } from "./emit-builtins"
 import { internalErrorFor } from "./ice"
 import { ResultLayout, resultLayout } from "./result"
 import { N_CALL, N_MEMBER, Node } from "./nodes"
@@ -607,10 +608,7 @@ const emitExpect = (emitter: Emitter, expr: Node, receiver: i32): string => {
   emitter.fn.emit(`br i1 ${flag}, label %${okBlock.label}, label %${errBlock.label}`)
 
   emitter.fn.placeBlock(errBlock)
-  const message = emitter.emitExpression(expr.children[1].children[0])
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`)
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`)
-  emitter.fn.emit("unreachable")
+  emitPanicTail(emitter, emitter.emitExpression(expr.children[1].children[0]))
 
   emitter.fn.placeBlock(okBlock)
   if (!layout.hasValue) {

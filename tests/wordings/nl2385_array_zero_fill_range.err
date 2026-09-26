@@ -1,0 +1,1 @@
+`new Array<integer<1, 12>>(n)` would zero-fill with 0, which is outside the range; build it with `[]` and `push` instead

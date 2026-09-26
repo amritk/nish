@@ -12,7 +12,17 @@
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
 import { CheckedProgram, inlineElementStruct } from "./program"
-import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_PAREN, N_TEMPLATE, N_TEMPLATE_TEXT, Node } from "./nodes"
+import {
+  N_BINARY,
+  N_CALL,
+  N_IDENT,
+  N_MEMBER,
+  N_PAREN,
+  N_TEMPLATE,
+  N_TEMPLATE_TEXT,
+  N_UNARY,
+  Node,
+} from "./nodes"
 import { T_STRING, TypeTable } from "./types"
 
 /** Through `(e)`, which is transparent to every rule here. */
@@ -54,6 +64,24 @@ export const receiverIsValue = (program: CheckedProgram, receiver: Node): boolea
 export const intrinsicType = (program: CheckedProgram, expr: Node): i32 => {
   const coerced = program.nodeCoercions[expr.id]
   return coerced >= 0 ? coerced : program.nodeTypes[expr.id]
+}
+
+/**
+ * The range a compound assignment or an increment writes back into, or -1
+ * (WP31 §7). The arithmetic is `i32`'s, so the result enters the range again;
+ * the checker leaves the target's range on the target's node, and this reads
+ * it there for the emitter and the attribute pass alike.
+ */
+export const rangedStoreOf = (program: CheckedProgram, table: TypeTable, node: Node): i32 => {
+  const writesBack =
+    node.kind === N_UNARY
+      ? node.text === "++" || node.text === "--"
+      : node.kind === N_BINARY && node.text !== "=" && isAssignmentOperator(node.text)
+  if (!writesBack) {
+    return -1
+  }
+  const target = program.nodeTypes[node.children[0].id]
+  return table.isRanged(target) ? target : -1
 }
 
 /** Whether an operator writes its left operand: `=` and every `op=`. */
