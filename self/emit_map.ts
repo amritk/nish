@@ -39,10 +39,24 @@ import { internalErrorFor } from "./ice";
 import { intrinsicType, unwrapParens } from "./emit_util";
 import { StringSet } from "./map";
 import { N_CALL, N_FALSE, N_IDENT, N_NULL, N_NUMBER, N_STRING, N_TRUE, Node } from "./nodes";
-import { CheckedProgram, FunctionSig, MAP_HASH_KEY, MAP_NONE } from "./program";
+import {
+  CheckedProgram,
+  FUSE_NONE,
+  FUSE_PROBE,
+  FUSE_UPDATE,
+  FUSE_USE,
+  FUSE_WRITE_FOUND,
+  FunctionSig,
+  MAP_GET_OR_INSERT,
+  MAP_HASH_KEY,
+  MAP_NONE,
+  MAP_RESERVE,
+  StructInfo,
+} from "./program";
+import { isMapOwner } from "./fusion";
 import { Local } from "./symbols";
 import { isUndefined } from "./validator";
-import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types";
+import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING, TypeTable } from "./types";
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
 export const mapIntrinsicOf = (sig: FunctionSig): i32 => {
@@ -55,6 +69,10 @@ export const mapIntrinsicOf = (sig: FunctionSig): i32 => {
  * arguments. The key type is the instantiation's one type argument.
  */
 export const emitMapIntrinsic = (emitter: Emitter, sig: FunctionSig, values: string[]): string => {
+  const role = mapIntrinsicOf(sig);
+  if (role === MAP_RESERVE || role === MAP_GET_OR_INSERT) {
+    return emitMapRoute(emitter, sig, values);
+  }
   const instance = sig.instance;
   if (instance === null || instance.typeArgs.length !== 1 || values.length === 0) {
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a key intrinsic`, emitter.opts.json));
@@ -336,6 +354,12 @@ export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
   const local = emitter.program.nodeLocals[expr.id];
   if (expr.kind === N_IDENT && local !== null) {
     return emitter.maybeParts[maybeLocalIndex(emitter, local)];
+  }
+  // WP32 S5: the `get` of a fused update reads the update's probe.
+  const fusion = emitter.program.fusion;
+  if (fusion.roleOf(expr.id) === FUSE_USE) {
+    const probe = fusedProbeOf(emitter, fusion.partnerOf(expr.id));
+    return new MaybeParts(probe.found, "", probe.receiver, probe.packed, tableMethod(emitter, probe.owner, "valueAt"));
   }
   const probe = emitter.program.nodeCallees[expr.id];
   if (expr.kind !== N_CALL || probe === null) {
@@ -625,4 +649,266 @@ export const emitWalkExits = (emitter: Emitter): void => {
       emitter.fn.emit(close);
     }
   }
+};
+
+// ---- Fused lookups, and `nish/map` ----------------------------------------------
+
+/**
+ * One probe a fused call made, kept for the write that goes through it: the
+ * table and the key as lowered, the packed answer and its found bit, and the
+ * table's class, whose `setValueAt` and `insertAt` the write calls. `id` is
+ * the call that made it, which is what the write's recorded partner names.
+ */
+export class FusedProbe {
+  id: i32;
+  receiver: string;
+  key: string;
+  packed: string;
+  found: string;
+  owner: StructInfo;
+
+  constructor(id: i32, receiver: string, key: string, packed: string, found: string, owner: StructInfo) {
+    this.id = id;
+    this.receiver = receiver;
+    this.key = key;
+    this.packed = packed;
+    this.found = found;
+    this.owner = owner;
+  }
+}
+
+/** `name`, a method of the table class `owner`, which every instance of the global `Map` or `Set` has. */
+const tableMethod = (emitter: Emitter, owner: StructInfo, name: string): FunctionSig => {
+  const sig = owner.method(name);
+  if (sig === null) {
+    process.exit(internalErrorFor(`emitter: the global \`Map\` or \`Set\` has no \`${name}\``, emitter.opts.json));
+  }
+  return sig;
+};
+
+/** The probe the call `id` made earlier in this function; the checker only fuses a write its probe dominates. */
+const fusedProbeOf = (emitter: Emitter, id: i32): FusedProbe => {
+  for (let i = emitter.fusedProbes.length - 1; i >= 0; i--) {
+    if (emitter.fusedProbes[i].id === id) {
+      return emitter.fusedProbes[i];
+    }
+  }
+  process.exit(internalErrorFor("emitter: a fused write before its probe", emitter.opts.json));
+};
+
+/**
+ * A call the checker fused (`self/fusion.ts`, docs/wp32-map.md §9.1), by its
+ * role:
+ *
+ *     has, a guard's condition    probe(m, k), kept; the found bit
+ *     has, inside an update       the update's found bit, and no call at all
+ *     set, an update              probe(m, k), kept; then E; then the write below
+ *     set, first under has        setValueAt(m, index, E)
+ *     set or add, first under !has   insertAt(m, packed, k, E), or insertAt(m, packed, x)
+ *
+ * An update's write branches on its found bit, and a guarded write does not
+ * need to: the guard already did. `insertAt` reuses the probe's hash and the
+ * empty bucket it stopped at, which nothing between the two may have moved.
+ * A `set` or `add` answers its receiver.
+ */
+export const emitFusedCall = (emitter: Emitter, call: Node): string => {
+  const fusion = emitter.program.fusion;
+  const role = fusion.roleOf(call.id);
+  const args = call.children[1].children;
+  if (role === FUSE_USE) {
+    return fusedProbeOf(emitter, fusion.partnerOf(call.id)).found;
+  }
+  if (role === FUSE_PROBE || role === FUSE_UPDATE) {
+    const probe = emitFusedProbe(emitter, call);
+    if (role === FUSE_PROBE) {
+      return probe.found;
+    }
+    emitFoundOrInsert(emitter, probe, emitter.emitExpression(args[1]));
+    return probe.receiver;
+  }
+  const probe = fusedProbeOf(emitter, fusion.partnerOf(call.id));
+  if (role === FUSE_WRITE_FOUND) {
+    emitSetValueAt(emitter, probe, emitter.emitExpression(args[1]));
+  } else if (isMapOwner(probe.owner)) {
+    emitInsertAt(emitter, probe, emitter.emitExpression(args[1]));
+  } else {
+    emitInsertAt(emitter, probe, "");
+  }
+  return probe.receiver;
+};
+
+/** The one probe of a fused `has` or `set`, kept for its write: the receiver and key are evaluated once, here. */
+const emitFusedProbe = (emitter: Emitter, call: Node): FusedProbe => {
+  const recorded = emitter.program.nodeCallees[call.id];
+  if (recorded === null) {
+    process.exit(internalErrorFor("emitter: a fused call on no table", emitter.opts.json));
+  }
+  const owner = recorded.owner;
+  if (owner === null) {
+    process.exit(internalErrorFor("emitter: a fused call on no table", emitter.opts.json));
+  }
+  const probe = tableMethod(emitter, owner, "probe");
+  const fn = emitter.fn;
+  const receiver = emitter.emitExpression(call.children[0].children[0]);
+  const key = emitter.emitExpression(call.children[1].children[0]);
+  const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
+  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
+  const found = fn.emitValue(`icmp sge i64 ${packed}, 0`);
+  const kept = new FusedProbe(call.id, receiver, key, packed, found, owner);
+  emitter.fusedProbes.push(kept);
+  return kept;
+};
+
+/** An update's write: `setValueAt` of the entry found, or `insertAt` the bucket the probe stopped at. */
+const emitFoundOrInsert = (emitter: Emitter, probe: FusedProbe, value: string): void => {
+  const fn = emitter.fn;
+  const found = fn.newBlock("set.found");
+  const insert = fn.newBlock("set.insert");
+  const done = fn.newBlock("set.end");
+  fn.emit(`br i1 ${probe.found}, label %${found.label}, label %${insert.label}`);
+  fn.placeBlock(found);
+  emitSetValueAt(emitter, probe, value);
+  fn.emit(`br label %${done.label}`);
+  fn.placeBlock(insert);
+  emitInsertAt(emitter, probe, value);
+  fn.emit(`br label %${done.label}`);
+  fn.placeBlock(done);
+};
+
+/** `setValueAt(m, index, value)`, the index in the low half of a found probe's answer. */
+const emitSetValueAt = (emitter: Emitter, probe: FusedProbe, value: string): void => {
+  const write = tableMethod(emitter, probe.owner, "setValueAt");
+  const index = emitter.fn.emitValue(`trunc i64 ${probe.packed} to i32`);
+  const operands = `${emitter.llvm(write.paramTypes[0])} ${probe.receiver}, i32 ${index}, ${emitter.llvm(write.paramTypes[2])} ${value}`;
+  emitter.fn.emit(`call void @${write.name}(${operands})`);
+};
+
+/** `insertAt(m, packed, key, value)` for a `Map`, and `insertAt(s, packed, key)` for a `Set` (`value` is `""`). */
+const emitInsertAt = (emitter: Emitter, probe: FusedProbe, value: string): void => {
+  const insert = tableMethod(emitter, probe.owner, "insertAt");
+  const types = insert.paramTypes;
+  const operands = `${emitter.llvm(types[0])} ${probe.receiver}, i64 ${probe.packed}, ${emitter.llvm(types[2])} ${probe.key}`;
+  const stored = types.length > 3 ? `, ${emitter.llvm(types[3])} ${value}` : "";
+  emitter.fn.emit(`call void @${insert.name}(${operands}${stored})`);
+};
+
+/**
+ * `reserve(m, n)` and `getOrInsert(m, k, v)` from `nish/map`, lowered at the
+ * call with their arguments already evaluated, in order (docs/wp32-map.md
+ * §9.2). `reserve` is `reserveSlots(m, n)`. `getOrInsert` is one probe, then
+ * `valueAt` where the key was found and `insertAt` of `v` where it was not:
+ *
+ *     packed = probe(m, k)
+ *     br packed >= 0, get.found, get.insert
+ *   get.found:   found = valueAt(m, index)
+ *   get.insert:  insertAt(m, packed, k, v)
+ *   get.end:     phi [found], [v]
+ */
+const emitMapRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): string => {
+  const owner = routeOwnerOf(emitter.table, sig);
+  if (owner === null || values.length < 2) {
+    process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not called on a \`Map\``, emitter.opts.json));
+  }
+  const fn = emitter.fn;
+  const table = `${emitter.llvm(sig.paramTypes[0])} ${values[0]}`;
+  if (mapIntrinsicOf(sig) === MAP_RESERVE) {
+    const reserve = tableMethod(emitter, owner, "reserveSlots");
+    fn.emit(`call void @${reserve.name}(${table}, ${emitter.llvm(reserve.paramTypes[1])} ${values[1]})`);
+    return "void";
+  }
+  if (values.length !== 3) {
+    process.exit(internalErrorFor("emitter: `getOrInsert` takes a table, a key and a value", emitter.opts.json));
+  }
+  const probe = tableMethod(emitter, owner, "probe");
+  const packed = fn.emitValue(`call i64 @${probe.name}(${table}, ${emitter.llvm(probe.paramTypes[1])} ${values[1]})`);
+  const kept = new FusedProbe(-1, values[0], values[1], packed, fn.emitValue(`icmp sge i64 ${packed}, 0`), owner);
+  const ty = emitter.llvm(sig.returnType);
+  const found = fn.newBlock("get.found");
+  const insert = fn.newBlock("get.insert");
+  const done = fn.newBlock("get.end");
+  fn.emit(`br i1 ${kept.found}, label %${found.label}, label %${insert.label}`);
+  fn.placeBlock(found);
+  const read = tableMethod(emitter, owner, "valueAt");
+  const index = fn.emitValue(`trunc i64 ${packed} to i32`);
+  const value = fn.emitValue(`call ${ty} @${read.name}(${table}, i32 ${index})`);
+  const foundEdge = fn.currentBlock().label;
+  fn.emit(`br label %${done.label}`);
+  fn.placeBlock(insert);
+  emitInsertAt(emitter, kept, values[2]);
+  const insertEdge = fn.currentBlock().label;
+  fn.emit(`br label %${done.label}`);
+  fn.placeBlock(done);
+  return fn.emitValue(`phi ${ty} [ ${value}, %${foundEdge} ], [ ${values[2]}, %${insertEdge} ]`);
+};
+
+/**
+ * The `Map` instance a `nish/map` call is on: its first parameter's class, as
+ * `std/map.ts` itself resolved it when the call instantiated the template, so
+ * it is found whether or not the calling module names `Map`.
+ */
+const routeOwnerOf = (table: TypeTable, sig: FunctionSig): StructInfo | null => {
+  const instance = sig.instance;
+  if (instance === null || sig.paramTypes.length === 0 || !table.isStruct(sig.paramTypes[0])) {
+    return null;
+  }
+  const template = instance.template;
+  return template === null ? null : template.home.program.struct(table.nameOf(sig.paramTypes[0]));
+};
+
+/**
+ * What a call the checker fused, or a `nish/map` call, calls instead of what
+ * it was checked as: the table functions `emitFusedCall` and `emitMapRoute`
+ * write calls of, for the whole-program facts to count as the caller's callees
+ * and for `libraryReach` to copy. `null` for every other call, which calls what
+ * it was checked as.
+ */
+export const fusedCalleesOf = (program: CheckedProgram, table: TypeTable, call: Node): FunctionSig[] | null => {
+  const sig = program.nodeCallees[call.id];
+  if (sig === null) {
+    return null;
+  }
+  if (isMapRoute(sig)) {
+    return routeCalleesOf(table, sig);
+  }
+  const role = program.fusion.roleOf(call.id);
+  const owner = sig.owner;
+  if (role === FUSE_NONE || owner === null) {
+    return null;
+  }
+  if (role === FUSE_PROBE) {
+    return methodsNamed(owner, ["probe"]);
+  }
+  if (role === FUSE_USE) {
+    const reads: string[] = call.children[0].text === "get" ? ["valueAt"] : [];
+    return methodsNamed(owner, reads);
+  }
+  if (role === FUSE_UPDATE) {
+    return methodsNamed(owner, ["probe", "setValueAt", "insertAt"]);
+  }
+  return methodsNamed(owner, [role === FUSE_WRITE_FOUND ? "setValueAt" : "insertAt"]);
+};
+
+/** Whether `sig` is an instance of `nish/map`'s `reserve` or `getOrInsert`, lowered at every call. */
+export const isMapRoute = (sig: FunctionSig): boolean => {
+  const route = mapIntrinsicOf(sig);
+  return route === MAP_RESERVE || route === MAP_GET_OR_INSERT;
+};
+
+/** The table functions a call of the `nish/map` instance `sig` is lowered to (`emitMapRoute`). */
+export const routeCalleesOf = (table: TypeTable, sig: FunctionSig): FunctionSig[] =>
+  methodsNamed(routeOwnerOf(table, sig), mapIntrinsicOf(sig) === MAP_RESERVE ? ["reserveSlots"] : ["probe", "valueAt", "insertAt"]);
+
+/** The methods of `owner` called `names`, those it has. */
+const methodsNamed = (owner: StructInfo | null, names: string[]): FunctionSig[] => {
+  const out: FunctionSig[] = [];
+  if (owner === null) {
+    return out;
+  }
+  for (const name of names) {
+    const sig = owner.method(name);
+    if (sig !== null) {
+      out.push(sig);
+    }
+  }
+  return out;
 };

@@ -2239,6 +2239,49 @@ if (!only || "map_fingerprint_miss".includes(only)) {
   }
 }
 
+// ---- WP32 S5: one probe per fused lookup, counted in the goldens ----------------
+// docs/wp32-map.md §9, acceptance criterion 3: word count and `getOrInsert` are
+// one hash and one search per iteration. The loop is the whole of one function
+// in each fixture, so the function's IR is the loop's, and counting in the
+// golden — which section A has already compared with what the compiler writes —
+// proves it without trusting anyone's eye: exactly one call of the table's
+// `probe`, whose hash is inside it, no hash loop of its own (`hash.test` is the
+// block FNV-1a is lowered to), and no call of `get`, `set`, `has` or of
+// `getOrInsert` itself. The negative is counted too, so the rule is proven on
+// both sides: a call in the value leaves a `probe` for the `get` and a `set`
+// that probes again. A golden that is not there reads as no function at all,
+// which fails the check, so a renamed fixture fails here rather than dropping it.
+if (!only || "map_fused".includes(only) || "map_extras".includes(only) || "probe".includes(only)) {
+  /** The `define` of `fn` in the golden `name.ll`, up to its closing brace. */
+  const goldenFunction = (name, fn) => {
+    const golden = path.join(casesDir, `${name}.ll`);
+    const ir = fs.existsSync(golden) ? fs.readFileSync(golden, "utf8") : "";
+    return ir.match(new RegExp(`define[^\\n]*@${fn}\\([\\s\\S]*?\\n}`))?.[0] ?? "";
+  };
+  const countOf = (ir, pattern) => (ir.match(pattern) ?? []).length;
+  const onePass = [
+    ["map_fused_wordcount", "count", "counts.set(w, (counts.get(w) ?? 0) + 1)"],
+    ["map_extras_get_or_insert", "firstSeen", "getOrInsert(at, words[i], i)"],
+  ];
+  for (const [name, fn, spelled] of onePass) {
+    const ir = goldenFunction(name, fn);
+    const probes = countOf(ir, /call i64 @[\w.$]+\.probe\(/g);
+    const hashes = countOf(ir, /hash\.test/g);
+    const others = countOf(ir, /call [^@\n]*@[\w.$]+\.(?:get|set|has)\(|@[\w.$]*getOrInsert/g);
+    check(
+      `${name}: \`${spelled}\` in \`${fn}\` is one probe per iteration (${probes} probe, ${hashes} hash loops, ${others} get/set/has calls)`,
+      ir.length > 0 && probes === 1 && hashes === 0 && others === 0,
+      ir || `no \`define\` of @${fn} in tests/cases/${name}.ll`
+    );
+  }
+  const unfused = goldenFunction("map_fused_no_call", "touch");
+  check(
+    "map_fused_no_call: a call in the value leaves the `get` its probe and the `set` its own",
+    countOf(unfused, /call i64 @[\w.$]+\.probe\(/g) === 1 && countOf(unfused, /call [^@\n]*@[\w.$]+\.set\(/g) === 1,
+    unfused || "no `define` of @touch in tests/cases/map_fused_no_call.ll"
+  );
+}
+
 // ---- WP4: arrays ------------------------------------------------------------------
 // 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
 // 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.

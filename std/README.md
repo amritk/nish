@@ -1,8 +1,8 @@
 # `std/` — the standard library
 
 Nish modules written in Nish, for Nish programs to import. There is no magic
-here and — with two exceptions, `threads.ts` and `collections.ts` — nothing
-the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
+here and — with three exceptions, `threads.ts`, `collections.ts` and `map.ts` —
+nothing the compiler knows about: a module in this directory is an ordinary Nish source file, compiled as part of
 whatever program imports it, and subject to the same rules as `examples/` or
 `self/` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md) is the style guide).
 
@@ -13,6 +13,7 @@ whatever program imports it, and subject to the same rules as `examples/` or
 | [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
 | [`pair.ts`](./pair.ts) | `Pair<A, B>`: an interface with `first` and `second`, for a function that answers two values from one call. A type and nothing else — the caller writes an object literal at the return — and for returning two values rather than storing them side by side |
 | [`collections.ts`](./collections.ts) | the global `Map<K, V>` and `Set<T>`: insertion-ordered tables whose buckets carry a hash fingerprint beside the entry index and whose entries keep their full hash, so every `get`, `set`, `add`, `has` and `delete` is one probe. `get` is not a method here: its `V | undefined` never crosses a call, so the compiler lowers it to `probe` and, where the key was found, `valueAt`. Nor are `keys()` and `values()`: an iterator is not a value, so a `for...of` over one is lowered to `walkOpen`, `walkNext`, `keyAt` or `valueAt`, and `walkClose`, and a count of live walks defers compaction until no loop is walking the table. A program never imports it: naming `Map` or `Set` loads it, and the compiler emits what a module uses of it into that module ([`docs/wp32-map.md`](../docs/wp32-map.md), [`docs/LANGUAGE.md`](../docs/LANGUAGE.md#map-and-set)). Its `hashKey` and `sameKey` are lowered by the compiler per key type |
+| [`map.ts`](./map.ts) | `reserve(m, n)` and `getOrInsert(m, k, v)` for the global `Map`. Their bodies are the meaning, and what runs under Node: `reserve` does nothing, and `getOrInsert` is a `get`, and a `set` of `v` when the key was missing. Natively the compiler lowers every call in place — `reserve` to the table's `reserveSlots`, which grows the buckets once so that `n` entries fit without a rebuild, and `getOrInsert` to one `probe` and a `valueAt` or an `insertAt` through its answer — so, like `collections.ts`, it writes no `.ll` of its own ([`docs/wp32-map.md`](../docs/wp32-map.md) §9.2, [`docs/LANGUAGE.md`](../docs/LANGUAGE.md#map-and-set)) |
 | [`threads.ts`](./threads.ts) | `parallelMapInto(src, dst, f)` and `parallelReduce(src, f, identity)`: a function over every element of an array, on as many threads as the length is worth. Its bodies are the sequential meaning, which is what runs under Node; the compiler recognises the two templates by module and name, lowers the one loop in each onto `nish_parallel_range`, holds the function to the rules that make that safe, and compiles an importing program with `--threads` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#data-parallelism-nishthreads)). `tests/link/par_*` are its programs |
 
 ## How a program imports it
@@ -64,12 +65,16 @@ reasons that are only true of it:
   package and is versioned with it, so "the `std/` beside this binary" is not a
   guess a resolver makes — it is the only `std/` that can be correct for the
   compiler reading it. No version can be skewed against it.
-- It **is** what Node resolves. `package.json` declares
-  `"./*": "./std/*.ts"` in `exports`, so `nish/text` is a package
-  self-reference: `import.meta.resolve("nish/text")` answers `std/text.ts`, and
-  `tsc` under `moduleResolution: node16` resolves it to the same file, which is
-  what gives an editor go-to-definition into the real source. The compiler
-  short-circuits to that answer rather than walking `node_modules` to reach it.
+- It **is** what Node and `tsc` resolve. The package is published as
+  `@amritk/nish`, so a bare `nish/text` is not a package self-reference on its
+  own; `runtime/nish.mjs`, the prelude a program runs under Node with
+  (`node --experimental-strip-types --import ./runtime/nish.mjs`), resolves
+  `nish/<module>` to `std/<module>.ts` beside itself, and the repository's
+  `tsconfig.json` maps `nish/*` to `./std/*`, which is what gives `tsc` and an
+  editor go-to-definition into the real source. `package.json` still declares
+  `"./*": "./std/*.ts"` in `exports`, so `@amritk/nish/text` reaches the same
+  file. The compiler short-circuits to that answer rather than walking
+  `node_modules` to reach it.
 
 So this is WP21's first slice rather than a detour around it: the spelling is
 the one WP21 specifies, and what is still missing is resolution for specifiers

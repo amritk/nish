@@ -85,8 +85,10 @@ import {
   FunctionSig,
   ImportBinding,
   Instantiation,
+  MAP_GET_OR_INSERT,
   MAP_HASH_KEY,
   MAP_NONE,
+  MAP_RESERVE,
   MAP_SAME_KEY,
   ROLE_FUNCTION,
   STRUCT_CLASS,
@@ -179,10 +181,18 @@ const isInterfaceType = (ctx: CheckContext, type: i32): boolean => {
 
 /**
  * WP32: the `MAP_*` role of an instantiation of `template`: `hashKey` and
- * `sameKey` in `std/collections.ts` are lowered in place by the emitter
- * (`self/emit_map.ts`), and every other template is what it says.
+ * `sameKey` in `std/collections.ts`, and `reserve` and `getOrInsert` in
+ * `std/map.ts`, are lowered in place by the emitter (`self/emit_map.ts`), and
+ * every other template is what it says.
  */
 export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
+  if (template.owner === null && template.home.program.isMapExtras()) {
+    // WP32 S5: `nish/map`'s two, whose bodies are what Node runs (§9.2).
+    if (template.sourceName === "reserve") {
+      return MAP_RESERVE;
+    }
+    return template.sourceName === "getOrInsert" ? MAP_GET_OR_INSERT : MAP_NONE;
+  }
   if (template.owner !== null || !template.home.program.isCollections()) {
     return MAP_NONE;
   }
@@ -1038,7 +1048,9 @@ export const instantiate = (
   const home = template.home;
   const sig = instantiateHere(home, template, args, functions, at, new RequestSite(ctx));
   // The definition is the declaring module's; this module links against it.
-  if (sig !== null && home !== ctx) {
+  // WP32 S5: except `nish/map`'s two, which are lowered at every call and
+  // never called, so there is nothing to link against or declare.
+  if (sig !== null && home !== ctx && mapIntrinsicRole(template) === MAP_NONE) {
     useExternalInstance(ctx, sig);
   }
   return sig;
@@ -1290,7 +1302,8 @@ export const checkGenericCall = (
         k = k + 1;
       }
       const named = at < 0 ? 0 : at;
-      const shown = at < 0 ? "T" : ctx.textOf(parameters.children[named].children[1]);
+      // The annotation is the template's, so its text is in the module that declares it.
+      const shown = at < 0 ? "T" : template.home.textOf(parameters.children[named].children[1]);
       const got = ctx.table.typeName(argTypes[named]);
       const where = at < 0 ? expr : args.children[named];
       return ctx.errorType(

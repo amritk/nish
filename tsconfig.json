@@ -5,7 +5,8 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "types": [],
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "paths": { "nish/*": ["./std/*"] }
   },
   "include": ["runtime/nish.d.ts", "self/**/*.ts", "std/**/*.ts", "tests/nish/**/*.ts"]
 }

@@ -23,7 +23,7 @@ import { BuiltinExport } from "./nish_modules";
 import { StringMap, StringSet } from "./map";
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
 import { packageSymbolPrefix } from "./packages";
-import { isCollectionsModule } from "./std_modules";
+import { isCollectionsModule, isMapExtrasModule } from "./std_modules";
 import { Local } from "./symbols";
 import { TypeTable } from "./types";
 
@@ -202,6 +202,71 @@ export const MAP_NONE: i32 = 0;
 export const MAP_HASH_KEY: i32 = 1;
 /** `sameKey<K>`: every call is SameValueZero on two keys, lowered in place. */
 export const MAP_SAME_KEY: i32 = 2;
+/** `reserve` from `nish/map`: every call is the table's `reserveSlots`. */
+export const MAP_RESERVE: i32 = 3;
+/** `getOrInsert` from `nish/map`: every call is one `probe` and a write or a read through its answer. */
+export const MAP_GET_OR_INSERT: i32 = 4;
+
+// WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
+// checker decides (`self/fusion.ts`), and the attribute pass and the emitter
+// read (`fusedCalleesOf` and `emitFusedCall` in `self/emit_map.ts`).
+
+/** An ordinary call. */
+export const FUSE_NONE: i32 = 0;
+/** `m.has(k)`, the condition of a guarded write: the probe, whose answer the write reuses. */
+export const FUSE_PROBE: i32 = 1;
+/** `m.get(k)` or `m.has(k)` inside an update's value: read from the update's probe, not a probe of its own. */
+export const FUSE_USE: i32 = 2;
+/** `m.set(k, E)` whose `E` reads `k`: the probe, then `E`, then a write through the probe's answer. */
+export const FUSE_UPDATE: i32 = 3;
+/** `m.set(k, E)` first in `if (m.has(k))`: the key is there, so it is `setValueAt`. */
+export const FUSE_WRITE_FOUND: i32 = 4;
+/** `m.set(k, E)` first in `if (!m.has(k))`, or `s.add(x)` first in `if (!s.has(x))`: it is not, so it is `insertAt`. */
+export const FUSE_WRITE_ABSENT: i32 = 5;
+
+/**
+ * The fused calls of one body, by node id: each one's `FUSE_*` role, and the
+ * id of the call whose probe it reads (its own, for a probe or an update).
+ * Kept per instantiation, as every side table is, and sparse rather than a
+ * slot per node: a body has a handful at most.
+ */
+export class FusionTable {
+  ids: StringMap;
+  roles: i32[];
+  partners: i32[];
+
+  constructor() {
+    this.ids = new StringMap();
+    this.roles = [];
+    this.partners = [];
+  }
+
+  record(id: i32, role: i32, partner: i32): void {
+    const key = `${id}`;
+    const at = this.ids.get(key, -1);
+    if (at >= 0 && at < this.roles.length && at < this.partners.length) {
+      this.roles[at] = role;
+      this.partners[at] = partner;
+      return;
+    }
+    this.ids.set(key, this.roles.length);
+    this.roles.push(role);
+    this.partners.push(partner);
+  }
+
+  roleOf(id: i32): i32 {
+    if (this.roles.length === 0) {
+      return FUSE_NONE;
+    }
+    const at = this.ids.get(`${id}`, -1);
+    return at >= 0 && at < this.roles.length ? this.roles[at] : FUSE_NONE;
+  }
+
+  partnerOf(id: i32): i32 {
+    const at = this.ids.get(`${id}`, -1);
+    return at >= 0 && at < this.partners.length ? this.partners[at] : -1;
+  }
+}
 
 /**
  * One call of `parallelMapInto` or `parallelReduce`, recorded where it was
@@ -459,6 +524,8 @@ export class Instantiation {
    */
   nodeProvenIndex: boolean[];
   nodeProvenClamp: boolean[];
+  /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
+  fusion: FusionTable;
   /**
    * The instantiation whose body asked for this one, or `null` for one
    * requested from ordinary code. The chain is what the termination rule walks
@@ -497,6 +564,7 @@ export class Instantiation {
     this.nodeCaseValues = new Array<i64>(nodeCount);
     this.nodeProvenIndex = new Array<boolean>(nodeCount);
     this.nodeProvenClamp = new Array<boolean>(nodeCount);
+    this.fusion = new FusionTable();
     this.from = null;
     let i = 0;
     while (i < nodeCount) {
@@ -523,6 +591,7 @@ export class Instantiation {
     this.nodeCaseValues = outer.nodeCaseValues;
     this.nodeProvenIndex = outer.nodeProvenIndex;
     this.nodeProvenClamp = outer.nodeProvenClamp;
+    this.fusion = outer.fusion;
   }
 }
 
@@ -1041,6 +1110,7 @@ export class CheckedProgram {
   savedNodeCaseValues: i64[];
   savedNodeProvenIndex: boolean[];
   savedNodeProvenClamp: boolean[];
+  savedFusion: FusionTable;
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
   enums: StringMap;
   enumList: EnumInfo[];
@@ -1068,6 +1138,8 @@ export class CheckedProgram {
   newTypeArguments: Node[];
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean;
+  /** `isMapExtras()`, decided once, as `collectionsLibrary` is. */
+  mapExtrasLibrary: boolean;
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[];
@@ -1132,6 +1204,12 @@ export class CheckedProgram {
    * intrinsic calls without a guard being written anywhere.
    */
   nodeProvenClamp: boolean[];
+  /**
+   * WP32 S5: the calls of this module's bodies that are one fused lookup
+   * (docs/wp32-map.md §9.1). Inside a generic's body it is the
+   * instantiation's own, which `enterInstance` installs.
+   */
+  fusion: FusionTable;
 
   constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source;
@@ -1174,6 +1252,8 @@ export class CheckedProgram {
     this.savedNodeCaseValues = [];
     this.savedNodeProvenIndex = [];
     this.savedNodeProvenClamp = [];
+    this.fusion = new FusionTable();
+    this.savedFusion = this.fusion;
     this.enums = new StringMap();
     this.enumList = [];
     this.entryMain = null;
@@ -1183,6 +1263,7 @@ export class CheckedProgram {
     this.newTypeArgumentIds = new StringMap();
     this.newTypeArguments = [];
     this.collectionsLibrary = isCollectionsModule(packageName, source.path);
+    this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path);
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
     this.nodeLocals = new Array<Local | null>(nodeCount);
@@ -1219,6 +1300,20 @@ export class CheckedProgram {
   /** Whether this module is the standard library's `std/collections.ts` (WP32). */
   isCollections(): boolean {
     return this.collectionsLibrary;
+  }
+
+  /** Whether this module is the standard library's `std/map.ts`, `nish/map` (WP32 S5). */
+  isMapExtras(): boolean {
+    return this.mapExtrasLibrary;
+  }
+
+  /**
+   * Whether this module writes no `.ll` of its own: `std/collections.ts`, whose
+   * code is copied into each module that uses it, and `std/map.ts`, whose every
+   * call is lowered in place at the call (docs/wp32-map.md §4.1, §9.2).
+   */
+  writesNoOutput(): boolean {
+    return this.collectionsLibrary || this.mapExtrasLibrary;
   }
 
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */
@@ -1410,6 +1505,7 @@ export class CheckedProgram {
     this.savedNodeCaseValues = this.nodeCaseValues;
     this.savedNodeProvenIndex = this.nodeProvenIndex;
     this.savedNodeProvenClamp = this.nodeProvenClamp;
+    this.savedFusion = this.fusion;
     this.nodeTypes = info.nodeTypes;
     this.nodeLocals = info.nodeLocals;
     this.nodeConstants = info.nodeConstants;
@@ -1418,6 +1514,7 @@ export class CheckedProgram {
     this.nodeCaseValues = info.nodeCaseValues;
     this.nodeProvenIndex = info.nodeProvenIndex;
     this.nodeProvenClamp = info.nodeProvenClamp;
+    this.fusion = info.fusion;
     this.activeInstance = info;
   }
 
@@ -1431,6 +1528,7 @@ export class CheckedProgram {
     this.nodeCaseValues = this.savedNodeCaseValues;
     this.nodeProvenIndex = this.savedNodeProvenIndex;
     this.nodeProvenClamp = this.savedNodeProvenClamp;
+    this.fusion = this.savedFusion;
     this.activeInstance = null;
   }
 

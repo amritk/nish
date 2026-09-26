@@ -23,6 +23,7 @@ import {
   refuseParameterMember,
 } from "./generics";
 import { assignInto, checkExpression, linkedParent } from "./expressions";
+import { recordUpdateFusion } from "./fusion";
 import {
   N_ARRAY,
   N_ARROW,
@@ -226,6 +227,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   checkMethodArguments(ctx, expr, method, args, `${ctx.table.typeName(info.type)}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
+  if (access.text === "set" && isCollectionStruct(info)) {
+    recordUpdateFusion(ctx, expr); // WP32 S5: one probe for `m.set(k, (m.get(k) ?? 0) + 1)`
+  }
   return method.returnType;
 };
 

@@ -26,6 +26,7 @@ import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { declaredOrigin, elementOrigin, isCollectionStruct } from "./generics";
 import { structOf, walkReaderOf } from "./members";
+import { recordGuardFusion } from "./fusion";
 import { unwrapParens } from "./emit_util";
 import { terminatesControlFlow } from "./builtins";
 import { rejectDiscardedResult } from "./result";
@@ -281,6 +282,7 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const thenScope = scope.child();
   narrow(ctx, stmt.children[0], thenScope, true);
   const thenTerminates = checkStatement(ctx, stmt.children[1], thenScope);
+  recordGuardFusion(ctx, stmt); // WP32 S5: `if (!s.has(x)) { s.add(x); ... }` is one probe
   const otherwise = stmt.children[2];
   if (otherwise.kind === N_EMPTY) {
     // `if (p === null) return;` leaves `p` narrowed for everything after it.
