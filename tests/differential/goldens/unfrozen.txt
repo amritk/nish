@@ -102,6 +102,7 @@ cases/map_iter_clear added after R6: no rewriter to freeze it with
 cases/map_iter_compaction_deferred added after R6: no rewriter to freeze it with
 cases/map_iter_delete_ahead added after R6: no rewriter to freeze it with
 cases/map_iter_delete_reset added after R6: no rewriter to freeze it with
+cases/map_iter_exit_edges added after R6: no rewriter to freeze it with
 cases/map_iter_generic added after R6: no rewriter to freeze it with
 cases/map_iter_growth added after R6: no rewriter to freeze it with
 cases/map_iter_keys added after R6: no rewriter to freeze it with

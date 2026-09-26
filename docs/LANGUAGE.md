@@ -3488,7 +3488,10 @@ export const main = (): i32 => {
     warm, which is a compacting table (`map_iter_break`, `map_iter_return`,
     `map_iter_or_return`). Walks are lexical loops, so nested walks of one
     table and a walk in a function called from a walk are counted exactly
-    (`map_iter_nested`, `map_iter_callee`). It costs two stores a loop and
+    (`map_iter_nested`, `map_iter_callee`). A `break` out of a `switch` inside
+    a walk leaves the switch and not the walk, a `return` from inside it closes
+    the walk, and a receiver reassigned mid-loop does not change the table the
+    walk closes, which is the one it opened (`map_iter_exit_edges`). It costs two stores a loop and
     none an entry. A walk never counts as a bounded loop: a body that sets a
     new key every pass never ends, as in JavaScript. An insert that would pass
     the 2^24 - 1 entry cap while a loop walks the table panics rather than
@@ -3496,7 +3499,8 @@ export const main = (): i32 => {
   - **The walk is four calls of the table's own code**: `walkOpen` where the
     loop is entered, `walkNext` for the first live entry and after each pass,
     `keyAt` or `valueAt` for the variable, and `walkClose` on each edge out,
-    all emitted `internal` into the module like the rest of the table
+    all emitted `internal` into each module that walks, like the rest of the
+    table (`tests/link/map_walk_two_modules`)
     ([IR_COOKBOOK.md](IR_COOKBOOK.md#map-and-set-iteration)). Under `-g` the
     variable is described in its slot like any `for...of` variable
     (`dbg_map_iter`).

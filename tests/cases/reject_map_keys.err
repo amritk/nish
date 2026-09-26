@@ -1,1 +1,1 @@
-`keys()` of `Map<string, i32>` cannot be stored
+`keys()` of `Map<string, i32>` cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`

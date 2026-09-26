@@ -125,6 +125,16 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/map_iter_exit_edges.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
+    program: "tests/link/map_walk_two_modules/main.ts",
+    changelog: "For...of over Map keys() and values() and over a Set",
+    why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
+  },
+  {
     program: "tests/cases/map_iter_generic.ts",
     changelog: "For...of over Map keys() and values() and over a Set",
     why: "a new program: it walks the global `Map` or `Set` with `for...of`, which the reference compiler refuses",
