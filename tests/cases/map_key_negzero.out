@@ -1,0 +1,9 @@
+set 0 Infinity
+add 0 Infinity 1
+plus first Infinity minus
+minus first Infinity plus
+update Infinity 2
+guarded add Infinity 1
+guarded set Infinity 7
+getOrInsert Infinity 6
+nan NaN 1

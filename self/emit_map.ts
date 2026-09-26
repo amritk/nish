@@ -13,10 +13,10 @@
 //     program-wide, so the copies agree on it. `internal` is also what gives the
 //     copies this compiler's private calling convention, and LLVM deletes one
 //     that nothing calls.
-//   - **`hashKey<K>` and `sameKey<K>` are intrinsics.** Their Nish bodies are
-//     what the checker and the fact fixpoint read; a call to one is lowered here,
-//     in place, per key type, and the instance itself is never emitted
-//     (`emitMapIntrinsic`). No runtime function is added: the runtime's `.text`
+//   - **`hashKey<K>`, `sameKey<K>` and `storedKey<K>` are intrinsics.** Their
+//     Nish bodies are what the checker and the fact fixpoint read; a call to one
+//     is lowered here, in place, per key type, and the instance itself is never
+//     emitted (`emitMapIntrinsic`). No runtime function is added: the runtime's `.text`
 //     budget has no room, and `nish_str_eq` is the one symbol reached.
 //
 // The hashes are §5.2's, and a hash of 0 is moved to 1 because a stored hash
@@ -32,6 +32,11 @@
 // and equality is SameValueZero: `nish_str_eq` for a string, `icmp eq` for
 // every integer, boolean, enum and pointer, and for a float `a == b`
 // (`fcmp oeq`, so -0 equals +0) or both NaN.
+//
+// An entry stores a float key as JavaScript's `Map.prototype.set` and
+// `Set.prototype.add` do, with -0 made +0 (`fadd 0.0`, as the hash does), so a
+// walk yields +0 whichever zero was inserted. Every other key is stored as it
+// is, and its `storedKey` emits nothing.
 
 import { Emitter, LoopTarget } from "./emit";
 import { FactsTable } from "./attributes";
@@ -84,6 +89,22 @@ export const emitMapIntrinsic = (emitter: Emitter, sig: FunctionSig, values: str
     process.exit(internalErrorFor(`emitter: \`${sig.name}\` compares two keys`, emitter.opts.json));
   }
   return sameKeyOf(emitter, key, values[0], values[1]);
+};
+
+/**
+ * A call of `storedKey`, lowered in place: `fadd` of +0 for a float key, and
+ * the key itself for every other. The argument is lowered at the call's own
+ * debug location, so under `-g` a key that is not a float adds no metadata
+ * either, and its golden is the one it was before the intrinsic existed.
+ */
+export const emitStoredKey = (emitter: Emitter, sig: FunctionSig, arg: Node): string => {
+  const instance = sig.instance;
+  if (instance === null || instance.typeArgs.length !== 1) {
+    process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not a key intrinsic`, emitter.opts.json));
+  }
+  const key = instance.typeArgs[0];
+  const value = emitter.emitRawExpression(arg);
+  return isFloat(key) ? emitter.fn.emitValue(`fadd ${emitter.llvm(key)} ${value}, 0.000000e+00`) : value;
 };
 
 /** The 32-bit hash of `value`, a key of type `key`; it may still be 0. */
@@ -217,7 +238,7 @@ const sameKeyOf = (emitter: Emitter, key: i32, a: string, b: string): string => 
 
 /**
  * Every function of `library` that a function `emitter`'s module defines
- * reaches through calls, in `library`'s own order, less the two intrinsics.
+ * reaches through calls, in `library`'s own order, less the intrinsics.
  * The call graph is the fixpoint's (`FunctionFacts.callees`), which lists every
  * user function a body calls by symbol, constructors and methods included.
  */
