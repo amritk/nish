@@ -26,6 +26,31 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-26
+
+### Added
+
+- codegen: One probe for has/get/set on one key, and nish/map's reserve and getOrInsert ([#239](https://github.com/amritk/nish/pull/239))
+- self: Make semicolons optional, by TypeScript's insertion rule ([#242](https://github.com/amritk/nish/pull/242))
+- cli: Nish run, and a shebang line so a program runs as a script ([#245](https://github.com/amritk/nish/pull/245))
+
+### Fixed
+
+- codegen: Store a -0 Map key or Set element as +0, as JavaScript does ([#247](https://github.com/amritk/nish/pull/247))
+
+### Documentation
+
+- bench: Measure Map and Set against Node and the unordered layout ([#244](https://github.com/amritk/nish/pull/244))
+
+### CI
+
+- release: Regenerate the lockfile after publishing the platform packages ([#240](https://github.com/amritk/nish/pull/240))
+
+### Internal
+
+- Set the lint rules and the runbook for the naming cleanup ([#243](https://github.com/amritk/nish/pull/243))
+
+
 ## [0.11.0] - 2026-09-26
 
 ### Added
@@ -439,3 +464,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.9.0]: https://github.com/amritk/nish/releases/tag/v0.9.0
 [0.10.0]: https://github.com/amritk/nish/releases/tag/v0.10.0
 [0.11.0]: https://github.com/amritk/nish/releases/tag/v0.11.0
+[0.12.0]: https://github.com/amritk/nish/releases/tag/v0.12.0
