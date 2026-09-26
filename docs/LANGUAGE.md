@@ -1949,7 +1949,10 @@ export const main = (): i32 => {
   the block results are combined left to right. `std/threads.ts` does the same
   blocking on one thread, so an `f64` sum is the same bits on one core or
   sixty-four, compiled or under Node — which is not the bits of a plain left
-  fold over the array (`tests/link/par_reduce`). An empty `src` answers
+  fold over the array (`tests/link/par_reduce`). The blocks are part of the
+  answer, so where block `k` starts, `floor(n * k / blocks)`, is computed
+  exactly even where `n * k` passes 2^31 (`tests/link/par_reduce_blocks`, 64
+  blocks over 70,000,001 elements). An empty `src` answers
   `identity`. For that to be the fold it looks like, `f` has to be associative
   and `identity` its identity. An arrow whose whole body is one operator on its
   two parameters is held to both: a non-associative one is
@@ -1999,7 +2002,12 @@ from the whole-program facts, and each rule is reported there:
   reduce — because the element's memory is released before the result is
   stored, and a worker's arena is freed when its thread exits:
   `` `name` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
-  (`tests/cases/reject_par_result_type`).
+  (`tests/cases/reject_par_result_type`). A reduce's `T` is its element and
+  its identity as well, so a reduce over strings or objects is refused at the
+  call with the same rule, before `std/threads.ts` is instantiated for it:
+  `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  (`tests/cases/reject_par_reduce_result_type`, and
+  `reject_par_reduce_result_class` for a class).
 - **`dst` is not reachable from an element of `src`.** A function that only
   reads can still read `dst` through its argument while another thread writes
   it, so an array of `dst`'s element type reachable from `T`, through fields,
