@@ -1,4 +1,4 @@
-# Cases for tests/self/support.ts and tests/self/support_oracle.js, one per
+# Cases for tests/self/support.ts and tests/self/support-oracle.js, one per
 # line, tab separated: `text <string>`, `path <base> <spec>`, `num <literal>`.
 # Blank lines and lines starting with `#` are skipped, so a case cannot begin
 # with `#` — nothing here needs to.

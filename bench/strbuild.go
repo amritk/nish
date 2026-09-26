@@ -1,6 +1,6 @@
 // Go twin of strbuild.ts: the same 32-way join tree over immutable strings.
 // Go strings are immutable, so `s = s + piece(i)` allocates a fresh one per
-// concatenation and drops its inputs, the same work as strbuild_naive.c and
+// concatenation and drops its inputs, the same work as strbuild-naive.c and
 // the Rust twin; the garbage collector, not an arena, reclaims them.
 // (`strings.Builder` would grow one buffer in place instead and is O(n).)
 // `strconv.Itoa(i) + ","` is the direct transliteration of the `${i},`

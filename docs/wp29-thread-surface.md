@@ -206,7 +206,7 @@ decided, beyond what is written above:
   types — and the compiler recognises the two templates by module and name.
   It replaces one call in each instance, the chunk loop over the whole range,
   with a context block and a call to `nish_parallel_range`
-  (`self/emit_parallel.ts`), so the length check and its message, the reduce's
+  (`self/emit-parallel.ts`), so the length check and its message, the reduce's
   blocking and its combine are the module's code, and the chunk loop keeps its
   bounds proofs and TBAA. There is no `declare global`, no `Disposable` and no
   `using` in P1.
@@ -417,7 +417,7 @@ and there are four arguments, of which only the first is the measurement:
 2. **It is the smallest stage, not the largest.** It needs no handle type, no
    join analysis, no `reject_thread_unjoined`, no `reject_thread_handle_escapes`,
    and no capture rule. What it needs is the runtime partitioner — **which has
-   landed**, as `nish_parallel_range` in `runtime/runtime_parallel.c` (wp20
+   landed**, as `nish_parallel_range` in `runtime/runtime-parallel.c` (wp20
    §8d) — plus wp23 §6's known callee and the purity check the fixpoint already
    performs. T1 and T2 are strictly more machinery for strictly less measured
    benefit.
@@ -487,10 +487,10 @@ the loop and as the map):
 
 | kernel | loop | `parallelMapInto` | speedup |
 | --- | ---: | ---: | ---: |
-| `par_compute`: 64 square roots per element, 2^21 elements | 780 ms | 210 ms | **3.71x** |
-| `par_nbody`: 1024 bodies, 16 steps, 3n probes per step | 171 ms | 49.0 ms | 3.49x |
-| `par_alloc`: a string built and summed per element, 2^22 elements | 167 ms | 74.9 ms | 2.23x |
-| `par_short`: an 8-element map, 2^20 calls | 54.7 ms | 56.1 ms | 0.97x |
+| `par-compute`: 64 square roots per element, 2^21 elements | 780 ms | 210 ms | **3.71x** |
+| `par-nbody`: 1024 bodies, 16 steps, 3n probes per step | 171 ms | 49.0 ms | 3.49x |
+| `par-alloc`: a string built and summed per element, 2^22 elements | 167 ms | 74.9 ms | 2.23x |
+| `par-short`: an 8-element map, 2^20 calls | 54.7 ms | 56.1 ms | 0.97x |
 
 Minimum of five runs after one warm-up. The compute kernel clears the 3x the
 stage was held to. The allocating kernel's peak memory is 33,956 KB as the loop

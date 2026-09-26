@@ -172,7 +172,7 @@ is written; refuse in the phase that owns the rule", so `const x: 5 = 5` parses
 and is refused by the checker with a message that names the rule. The
 `typescript` parser reads the same text as a `LiteralType` whose child is a
 `NumericLiteral` or, for `-5`, a `PrefixUnaryExpression`.
-`tests/parser_oracle.js` maps both to the new kind, span for span. No
+`tests/parser-oracle.js` maps both to the new kind, span for span. No
 speculative parse is needed, because a number cannot start a type today. The
 one-token parser that forbids type arguments at a call site
 ([wp18-generics.md](wp18-generics.md#2a-inference-and-why-there-are-no-type-arguments-at-a-call-site)
@@ -205,7 +205,7 @@ canonical decimal value. The encoding is prefix-coded like the rest of
 `TypeTable.mangle`: `rng.` is a tag no other constructor starts with, a class
 called `rng` mangles as `$rng`, and a run of digits ends at the first
 non-digit. `cStructName`'s
-escape in `self/interop_abi.ts` is injective because "a digit can never follow
+escape in `self/interop-abi.ts` is injective because "a digit can never follow
 one of the mangling's separators", so a `_0` in a C name is always the `_` the
 user wrote. `rng.0.255` would break that argument, and `rng.p0.p255` keeps it.
 So `Box<integer<0, 255>>` is `%struct.Box$rng.p0.p255`,
@@ -284,7 +284,7 @@ ordinary type error. The entry then compiles to one of three things:
    and a range that is all of `i32` needs no check at all. The blocks are
    `rng.ok` and `rng.fail`. The failure path is `panic`'s: W1 factors the
    `nish_write` + `nish_exit` + `unreachable` tail that `emitPanic`
-   (`self/emit_builtins.ts`) and `emitExpect` (`self/emit_result.ts`) each
+   (`self/emit-builtins.ts`) and `emitExpect` (`self/emit-result.ts`) each
    spell out into one helper, and `self/attributes.ts` records the same two
    callees for it that it records for `expect`. No runtime symbol is added,
    so `runtime.c`'s budget, 3,515 of 3,584 bytes per
@@ -476,9 +476,9 @@ Every spelling here is one G8 already chose, as
 
 **Where the check lives at an ABI boundary: the linkage condition.** A caller
 can prove an entry only if every caller is visible, which is exactly
-`privateResultAbi` in `self/emit_result.ts` (`strictExports && !exported`,
+`privateResultAbi` in `self/emit-result.ts` (`strictExports && !exported`,
 wp15 §7b). W3 renames it `privateAbi`, since it now decides more than the
-`Result` ABI, and the inline copy of the test in `self/interop_abi.ts` calls
+`Result` ABI, and the inline copy of the test in `self/interop-abi.ts` calls
 it too. Where it holds, ranged parameters are checked at each call site,
 where the facts are. Anywhere else the callee checks them in its prologue and
 its callers skip theirs. The two bridges check again before the
@@ -492,7 +492,7 @@ is in range. `RangeError` is also what JavaScript throws for
 host writes, and nothing checks it on entry. Such a function gets the
 existing header line, "not declared; no C spelling for one of its types", and
 the matching omission in the other sidecars. That is a skip already in
-`self/interop_header.ts`, so no new refusal is needed. **A `declare function`
+`self/interop-header.ts`, so no new refusal is needed. **A `declare function`
 may not mention a ranged type** at all. The range would be a promise the C
 side never made, which is [wp27-ffi.md](wp27-ffi.md)'s objection to every
 attribute on a foreign callee. W1 refuses it.

@@ -4,7 +4,7 @@
 // twice, stops import cycles terminating, and invents duplicate-symbol
 // errors — three failures that all look like a checker bug and none of which
 // is one. So this file matches `node:path`'s POSIX behaviour exactly, and
-// `tests/self/support_oracle.js` compares it with `path.posix` over the
+// `tests/self/support-oracle.js` compares it with `path.posix` over the
 // awkward cases rather than trusting the reading.
 //
 // POSIX only: `self/` is built and tested on Linux and macOS, and a backslash
@@ -182,7 +182,7 @@ export const resolveModule = (importerDir: string, specifier: string): string =>
  * and stage1 has none (docs/wp14-selfhost.md §3a D4).
  *
  * Inside the contract the answers are identical, which is what
- * `tests/self/support_oracle.js` checks: the common prefix of segments is
+ * `tests/self/support-oracle.js` checks: the common prefix of segments is
  * dropped, one `..` is emitted per segment left in `from`, and the rest of
  * `to` follows.
  */

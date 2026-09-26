@@ -277,7 +277,7 @@ caller can see, so the runtime function is neither `readonly` nor
 string parameter is still `readonly nocapture`, so passing a parameter to a
 parser keeps `nocapture` on it (`show` in `parse_numbers.ll`).
 
-The unit test in `tests/runtime_test.c` checks 45 inputs against
+The unit test in `tests/runtime-test.c` checks 45 inputs against
 `node -p "String(x)"` (plus the documented deviations), and
 `tests/differential/corpus/parse_strings.ts` / `parse_argv_sum.ts` run the
 same forms through the differential harness, whose shim (`runtime/shim.mjs`)
@@ -372,7 +372,7 @@ The algorithm, in `runtime/runtime.c`:
    `0.000ddd` when `-6 < n <= 0`; otherwise `d.ddde+X` / `de-X` with the
    JavaScript exponent syntax (sign always present, no zero padding).
 
-Checked against Node in `tests/runtime_test.c` (expected strings are
+Checked against Node in `tests/runtime-test.c` (expected strings are
 `node -p "String(x)"`):
 
 | Value | Node | `nish_str_from_f64` |
@@ -414,9 +414,9 @@ round added `nish_argv` / `nish_argv_init` and `nish_parse_number`; the
 2026-09-12 column adds `nish_readdir`, `nish_spawn_to`,
 `nish_monotonic_nanos` and the shared `nish_spawn_impl` that `nish_spawn`
 delegates to; the last column is the same runtime after those three moved out
-of `runtime.c` into `runtime/runtime_os.c`, which is why it reads as a sum.
+of `runtime.c` into `runtime/runtime-os.c`, which is why it reads as a sum.
 Measured with `clang -Oz -c runtime/runtime.c && size -A runtime.o`, per
-section, and from the split onwards `clang -Oz -c runtime/runtime_os.c` as
+section, and from the split onwards `clang -Oz -c runtime/runtime-os.c` as
 well; the `text` column of plain `size` is the same code plus the read-only
 constants and the `.eh_frame` unwind entries that the `size` build profile
 strips:
@@ -491,7 +491,7 @@ length-carrying `memcpy`, and the `0x` guard in `parseFloat` was dropped
 (documented deviation). Three bytes of headroom remain; the next runtime
 feature has to pay for itself.
 
-`tests/runtime_test.c` covers the integer and double formatting cases above,
+`tests/runtime-test.c` covers the integer and double formatting cases above,
 1,000 draws of `nish_random` in `[0, 1)`, a write/append/read/truncate cycle
 on `build/test/runtime_test.txt`, `nish_argv_init` (an empty argument, a UTF-8
 one, survival of `nish_reset_arena`, `argc == 0`), and the 45 parsing inputs.
@@ -508,13 +508,13 @@ after. The *measurement* was the thing that had not caught up, because one
 translation unit can only have one ceiling.
 
 So the operating-system half is now its own translation unit,
-`runtime/runtime_os.c`, with its own measured ceiling. **The criterion is
+`runtime/runtime-os.c`, with its own measured ceiling. **The criterion is
 whether the function wraps a system call** — whether the operating system is its
 subject, rather than memory this process already owns — because that is the same
 criterion that decides whether a builtin has to be written in C at all, and it
 is exactly the surface that grows as the language reaches further out:
 
-| Moved to `runtime_os.c` | Stayed in `runtime.c` |
+| Moved to `runtime-os.c` | Stayed in `runtime.c` |
 | --- | --- |
 | `nish_exit`, `nish_io_fail` | the arena: `nish_arena_grow`, `nish_alloc_struct`, `nish_reset_arena`, `nish_free_arena`, `nish_arena_mark` / `release` / `used` / `keep` |
 | `nish_read_file`, `nish_read_file_or_null`, `nish_put_file`, `nish_write_file`, `nish_append_file` | the strings: `nish_str_new`, `nish_str_concat`, `nish_str_eq`, `nish_str_len`, `nish_str_at`, `nish_str_index_of`, `nish_write`, `nish_print` |
@@ -554,11 +554,11 @@ section summed, clang 18.1.3 on linux-x64:
 | File | `.text` | `.text.unlikely.` | Total | Budget | Headroom |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `runtime/runtime.c` | 3,484 | 31 (`nish_die`) | **3,515** | **3,584** | 69 |
-| `runtime/runtime_os.c` | 1,216 | 35 (`nish_io_fail`) | **1,251** | **1,280** | 29 |
+| `runtime/runtime-os.c` | 1,216 | 35 (`nish_io_fail`) | **1,251** | **1,280** | 29 |
 | both | 4,700 | 66 | 4,766 | 4,864 | 98 |
 | `runtime.c -DNISH_THREADS=1` | 3,609 | 31 | **3,640** | **3,840** | 200 |
 
-`runtime_os.c` was 1,190 until WP21 S2 put an `fstat`/`S_ISDIR` guard in
+`runtime-os.c` was 1,190 until WP21 S2 put an `fstat`/`S_ISDIR` guard in
 `nish_read_file_or_null`, which is 61 bytes and buys the answer `null` for a
 directory: `open(O_RDONLY)` accepts one, `lseek` then answers `LONG_MAX`, and
 the arena was asked for that many bytes. The ceiling did not move for it — 29
@@ -615,13 +615,13 @@ where the 256-byte boundaries fall and not a constraint on either.
 
 ### 2026-09-18: a third file, for the same reason as the second
 
-`runtime/runtime_parallel.c` — the half that divides a range of work across
+`runtime/runtime-parallel.c` — the half that divides a range of work across
 threads (WP20 T1, the stage under
 [wp29-thread-surface.md](wp29-thread-surface.md)'s surface) — is a third
 translation unit with a ceiling of its own, and it is a third file for exactly
 the reason the second one exists.
 
-`runtime_os.c` had **29 bytes** of its 1,280-byte ceiling left. The partitioner
+`runtime-os.c` had **29 bytes** of its 1,280-byte ceiling left. The partitioner
 is **482**: `pthread_create` and `pthread_join`, the chunk arithmetic, the
 worker trampoline that frees its own arena, the thread-local nesting guard, and
 the cached CPU count.
@@ -634,7 +634,7 @@ mistake the 2026-09-12 split was made to stop making.
 Two budgets, because the file compiles in two configurations and they are not
 the same file:
 
-| `clang -Oz -c runtime/runtime_parallel.c` | measured | budget |
+| `clang -Oz -c runtime/runtime-parallel.c` | measured | budget |
 | --- | ---: | ---: |
 | default — the sequential fallback, and WASI, where there are no threads | **49** | **256** |
 | `-DNISH_THREADS=1` — the build `--threads` links | **482** | **512** |
@@ -650,7 +650,7 @@ byte.** `examples/hello.ts` at the `size` profile is 4,680 bytes with the file
 linked and 4,680 without, and `cmp` says the two binaries are identical —
 `-ffunction-sections -Wl,--gc-sections` drops every function no program calls,
 whichever translation unit defined it. `scripts/build.sh` pairs the file with
-the `runtime.c` a caller names, as it already pairs `runtime_os.c`, so there is
+the `runtime.c` a caller names, as it already pairs `runtime-os.c`, so there is
 no link line anywhere that has to learn about it.
 
 
@@ -663,7 +663,7 @@ stories. Recorded here as a decision rather than left as an inference:
 
 **The budgets measure what ships in every binary, and a foreign call does not.**
 The two numbers above are the `.text*` of `runtime/runtime.c` and
-`runtime/runtime_os.c` — the two translation units `scripts/build.sh` compiles
+`runtime/runtime-os.c` — the two translation units `scripts/build.sh` compiles
 into every program whether or not the program uses a byte of them. A
 `declare function` adds a `declare` line to one program's IR and a symbol to one
 program's link line; it adds nothing to either translation unit, and a program
@@ -716,7 +716,7 @@ Which is what a cold path means: the time is in `getdents` and in the `strcmp`
 of the insertion sort, not in the bump allocator, and a runtime call per entry
 does not show above the noise (±4 ms between repetitions of either binary).
 
-**Where the link lines are.** `scripts/build.sh` compiles `runtime_os.c` beside
+**Where the link lines are.** `scripts/build.sh` compiles `runtime-os.c` beside
 any `runtime.c` it is handed, so every caller that names the runtime through it
 is already correct: `nish --link` (stage0's `src/index.ts`), stage1's `--link`
 (`self/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
@@ -726,15 +726,15 @@ caller that already names both is left alone, since naming one object twice is a
 duplicate-symbol error. Direct `clang` lines name both: `tests/run.js`
 (`RUNTIME_C` there, used by the golden round trips, the panic cases, the layout
 driver and the runtime unit test) and `tests/nish/run.ts`. Nothing in
-`runtime.c` calls into `runtime_os.c`, so an older line naming `runtime.c` alone
+`runtime.c` calls into `runtime-os.c`, so an older line naming `runtime.c` alone
 still links a program that touches no files, directories, subprocesses,
 environment or clock — which is most of `tests/cases` and every example except
 `argv`.
 
-**The freestanding and wasi profiles.** `runtime/runtime_wasm.c` is untouched: it
+**The freestanding and wasi profiles.** `runtime/runtime-wasm.c` is untouched: it
 defines none of the moved functions and the `wasm` profile never names
 `runtime.c`. The `wasi` profile compiles `runtime.c` and therefore
-`runtime_os.c` too; both files compile clean under `-std=c11 -Wall -Wextra
+`runtime-os.c` too; both files compile clean under `-std=c11 -Wall -Wextra
 -Werror` with the `__wasi__` branches taken (`nish_readdir` answers NULL,
 `nish_spawn_impl` answers -1, `spawn.h` and `wait.h` are not included, and the
 entry bridge stayed in `runtime.c`). The end-to-end wasi check still needs a

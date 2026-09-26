@@ -195,7 +195,7 @@ const hasStackFrame = (text: string): boolean => {
  * The compiler under test, as something spawnable.
  *
  * A `.js` entry is run under `node` and anything else directly, which is the
- * distinction `tests/diagnostic_coverage.js` and `tests/nish-cmp.js` both make.
+ * distinction `tests/diagnostic-coverage.js` and `tests/nish-cmp.js` both make.
  */
 class Cli {
   /** The argv prefix that runs it: `["node", "<entry>.js"]`, or just the binary. */
@@ -466,7 +466,7 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
  * the tree the parser built and the side tables the checker recorded.
  *
  * Their *content* is pinned by the goldens (`tests/cases/dump_ast.stdout`,
- * `tests/self/dump_ast.golden`), so what is asked here is the contract: the dump is on stdout, the exit code is
+ * `tests/self/dump-ast.golden`), so what is asked here is the contract: the dump is on stdout, the exit code is
  * 0, and no IR is written, because a dump is a question about a program and not a
  * request to compile it.
  */

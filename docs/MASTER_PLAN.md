@@ -53,7 +53,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │             emit*.ts        AST -> LLVM IR text                  │
 │             runtime.ts      runtime ABI, inline allocator        │
 │    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
-│    runtime/runtime_os.c            files, spawn, env (C, 1.2 KB) │
+│    runtime/runtime-os.c            files, spawn, env (C, 1.2 KB) │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -67,15 +67,15 @@ Design rules that every WP must respect:
   checker has proved it. A wrong attribute is undefined behaviour.
 - **ABI is a contract.** Struct layouts in `self/runtime.ts` and
   `runtime/runtime.c` must match byte for byte, and a test must prove it
-  (see `tests/ir/alloc_smoke.ll`).
+  (see `tests/ir/alloc-smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
 - **Runtime stays tiny.** Two budgets, one per translation unit: `runtime.c`,
   the core every program touches, under 3,584 bytes of compiled code, and
-  `runtime_os.c`, the half whose subject is the operating system, under 1,280 —
+  `runtime-os.c`, the half whose subject is the operating system, under 1,280 —
   counted as every `.text*` section summed
   (`clang -Oz -c runtime/runtime.c && size -A runtime.o`, and the same for
-  `runtime_os.c`). No stdio on hot paths. The split is what makes the core's
+  `runtime-os.c`). No stdio on hot paths. The split is what makes the core's
   ceiling mean something: it can come down over time and never up, because
   nothing in the language roadmap adds an arena or a second string
   representation, while the OS-facing half is exactly the surface that grows as
@@ -167,23 +167,23 @@ ninety-second map; the table below is the inventory.
 | CLI and driver: `-o <file>` / `-o <dir>/`, `--link`, `--profile`, `--number-mode`, `--target`, `--nsw`, `--strict-exports`, `--unchecked-indexing`, `--no-stack-alloc`, `-g`, `--json`, the dumps, `--version`, exit codes 0/1/2/3/70 | done (WP5, WP9, WP10, WP12) | `self/compile.ts`, `self/compilation.ts`, `self/ice.ts`, `self/branding.ts` |
 | Phase A parse and Phase 0 validate: the forbidden-syntax sweep, with the message and the `reject_*` case for every rule | done (WP0) | `self/lexer.ts`, `self/parser.ts`, `self/validator.ts` |
 | Checker, pass 1 signatures / pass 1b imports / pass 2 bodies, one `switch` on the node kind per category, side tables indexed by node id in `program.ts` | done | `self/checker.ts` and its families (`declarations`, `structs`, `statements`, `expressions`, `members`, `arrays`, `builtins`, `result`, `generics`, `bounds`, ...) |
-| Emitter: SSA temps, hoisted allocas, control flow, structs, arrays, strings, `Result`, builtins, one module per source file | done | `self/emit.ts`, `ir.ts`, `emit_*.ts` |
+| Emitter: SSA temps, hoisted allocas, control flow, structs, arrays, strings, `Result`, builtins, one module per source file | done | `self/emit.ts`, `ir.ts`, `emit-*.ts` |
 | Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `self/attributes.ts`, `escape.ts` |
 | Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `self/debug.ts` |
 | Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `self/interop_{abi,header,dts,wasm,napi}.ts` |
-| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime_os.c` (290 lines, the system-call half), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
+| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime-os.c` (290 lines, the system-call half), `runtime-wasm.c`, `nish.h`, `shim.mjs` |
 | Inline `alwaysinline` bump allocator in IR, the runtime ABI table the compiler and the C runtime agree on | done | `self/runtime.ts` |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
 | The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` — built from the released seed | done (WP14, WP19) | `self/`, `scripts/bootstrap.sh`, `scripts/fetch-seed.sh` |
 | Tests: 382 golden cases (229 of them `reject_*`), 24 `tests/link/` programs, `llvm-as`, native round trips, runtime unit tests, IR/C layout smoke, size and wasm builds, interop, exit codes, packaging, bench checksums | done | `tests/run.js` and `tests/cases/`, `link/`, `ir/`, `layout/` |
 | Differential testing against Node: 50 corpus programs plus `tests/cases`, each run natively and as its frozen JavaScript rewrite, and a fuzzer that prints its seed | done (WP13) | `tests/differential/`, `runtime/shim.mjs` |
-| The compiler's own tests: the bootstrap from the seed, the goldens that succeeded the stage0 oracles, the lexer, parser, support and rejection oracles, and the comparison with the last release | done (WP14, WP19) | `tests/self/`, `tests/lexer_oracle.js`, `tests/parser_oracle.js`, `tests/nish-cmp.js` |
+| The compiler's own tests: the bootstrap from the seed, the goldens that succeeded the stage0 oracles, the lexer, parser, support and rejection oracles, and the comparison with the last release | done (WP14, WP19) | `tests/self/`, `tests/lexer-oracle.js`, `tests/parser-oracle.js`, `tests/nish-cmp.js` |
 | Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
 and the runtime costs 4,670 bytes of `.text*` across its two translation units
-— 3,480 of `runtime.c`'s 3,584-byte budget and 1,190 of `runtime_os.c`'s 1,280
+— 3,480 of `runtime.c`'s 3,584-byte budget and 1,190 of `runtime-os.c`'s 1,280
 (`docs/wp7-runtime.md` §"Runtime additions and budget") — beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
@@ -697,13 +697,13 @@ it left. What the diagram would show for them is a line.
    stage1 from the released seed, is what checks that. A new diagnostic is an
    entry added by hand to `self/codes.ts` with the next free number in its
    band, never a renumbered or reused one, and it needs a case that *reaches
-   its words* (`tests/diagnostic_coverage.js`, inside `npm test`), not only a
+   its words* (`tests/diagnostic-coverage.js`, inside `npm test`), not only a
    code.
 3. Do not emit an attribute you cannot cite a checker proof for. Write the
    reason in `self/attributes.ts` alongside the code.
 4. Any change to a struct layout touches `self/runtime.ts` and `runtime.c` in
    the same commit and adds/extends a layout smoke test.
-5. Keep `runtime.c` and `runtime_os.c` within their budgets (§2). Report the
+5. Keep `runtime.c` and `runtime-os.c` within their budgets (§2). Report the
    size of whichever you changed in the PR.
 6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added, and add a
    line to `CHANGELOG.md`. The cookbook is regenerated by

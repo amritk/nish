@@ -41,8 +41,8 @@ import {
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
   isSpawnCall,
-} from "./emit_builtins";
-import { stringifyCallee, stringConstructCallees } from "./emit_strings";
+} from "./emit-builtins";
+import { stringifyCallee, stringConstructCallees } from "./emit-strings";
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -67,7 +67,7 @@ import {
   storesInlineElements,
   templateParts,
   unwrapParens,
-} from "./emit_util";
+} from "./emit-util";
 import { StringMap, StringSet } from "./map";
 import {
   N_ARRAY,
@@ -123,7 +123,7 @@ import {
   RuntimeTable,
 } from "./runtime";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
-import { isResultConstructorCall, resultMethodName } from "./emit_result";
+import { isResultConstructorCall, resultMethodName } from "./emit-result";
 import { resultLayout } from "./result";
 import {
   isInteger,
@@ -137,7 +137,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types";
-import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit_map";
+import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map";
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -236,7 +236,7 @@ export class LoopScope {
  * array: the header pointer, its `len` and its `data`, and the path they were
  * read through.
  *
- * It lives here rather than in `emit_arrays.ts` because `FunctionFacts` is the
+ * It lives here rather than in `emit-arrays.ts` because `FunctionFacts` is the
  * per-function record the emitter already carries (`Emitter.current`), and the
  * language has no module-level mutable state for a scope stack to live in --
  * which is how stage0's `src/codegen/emit/arrays.ts` holds the same thing.
@@ -422,7 +422,7 @@ export class FunctionFacts {
    * WP15 section 2c: the array headers the enclosing loops lifted into their
    * preheaders, innermost scope last, with `hoistedScopeStarts` marking where
    * each open scope begins. Emission scratch rather than an analysis result:
-   * `emit_arrays.ts` fills it when a loop opens and truncates it when the loop
+   * `emit-arrays.ts` fills it when a loop opens and truncates it when the loop
    * closes, and it is empty outside one.
    */
   hoistedHeaders: HoistedHeader[];
@@ -766,7 +766,7 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE);
   }
   // An inline array field's slots are bytes of the object itself, so writing
-  // an element of `p.f` writes through `p` (`self/inline_arrays.ts`). The
+  // an element of `p.f` writes through `p` (`self/inline-arrays.ts`). The
   // pointer layout's slots are an allocation of their own, and there the
   // same store is only a read of `p`.
   if (above !== null && above.kind === N_INDEX && above.children[0] === access && isInlineField(program, table, access)) {
@@ -1269,7 +1269,7 @@ class FactCollector {
   /**
    * What a string construct does to memory: the runtime symbols it calls and
    * the header reads `.length` and the byte methods perform. Mirrors
-   * `self/emit_strings.ts` exactly; an omission here is a wrong attribute.
+   * `self/emit-strings.ts` exactly; an omission here is a wrong attribute.
    */
   collectStringFacts(node: Node): void {
     const program = this.unit.program;
@@ -1372,7 +1372,7 @@ class FactCollector {
   }
 
   /**
-   * `Result` constructs (WP16), mirroring `self/emit_result.ts`:
+   * `Result` constructs (WP16), mirroring `self/emit-result.ts`:
    *   a call answering a packed `Result`   the caller's own object (WP17)
    *   Ok / Err                write, calls the allocator unless it is a stack site
    *   r.ok / .value / .error  read
@@ -1440,7 +1440,7 @@ class FactCollector {
     }
   }
 
-  /** Array constructs, mirroring `self/emit_arrays.ts`. */
+  /** Array constructs, mirroring `self/emit-arrays.ts`. */
   collectArrayFacts(node: Node): void {
     const program = this.unit.program;
     const table = this.table;
@@ -1707,7 +1707,7 @@ export const collectFacts = (
 /**
  * WP29 P1: the facts of a `parallelMapInto` or `parallelReduce` instance are
  * its source walk's, plus what the region the emitter builds in place of one
- * call does (`self/emit_parallel.ts`). The walk sees a direct call to the
+ * call does (`self/emit-parallel.ts`). The walk sees a direct call to the
  * chunk loop with the parameters as arguments; the IR stores them into a
  * context block and hands its address to `nish_parallel_range`, which passes
  * it to other threads. So the runtime entry is a callee — it is a shared

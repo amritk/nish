@@ -12,7 +12,7 @@ Every builtin in this language bottoms out in a C function. `print` reaches
 `readdirSync` reaches `nish_readdir`. That is not an implementation detail a
 reader can ignore, because it is also the *only* way the language reaches the
 operating system: a Nish program cannot name a foreign function, so a capability
-that needs a syscall can only be added by someone editing `runtime/runtime_os.c`
+that needs a syscall can only be added by someone editing `runtime/runtime-os.c`
 and the compiler together.
 
 This note is about removing that restriction, and about being honest that doing
@@ -197,7 +197,7 @@ rather than left as an inference.
 
 **It is written down now**, in `wp7-runtime.md` under "What FFI does and does
 not do to the budget": the budgets measure `runtime/runtime.c` and
-`runtime/runtime_os.c`, the two translation units linked into *every* binary,
+`runtime/runtime-os.c`, the two translation units linked into *every* binary,
 and a `declare function` adds a `declare` to one program's IR and a symbol to
 one program's link line. So the closed set stayed closed and the sentence that
 describes it gained the clause it was missing. The honest half of the reviewer's
@@ -315,10 +315,10 @@ while `main` keeps only `nounwind`. It is a link test against real libc, so a
 pointer that did not round-trip would abort rather than merely differ.
 
 Nine `reject_ffi_pointer_*` cases pin the refusals,
-`docs/cookbook/decl_ffi_pointer.ts` pins the lowering, and
+`docs/cookbook/decl-ffi-pointer.ts` pins the lowering, and
 `tests/cases/dbg_cptr` pins what `-g` says about it (§7e). Both compilers implement
 it: `tests/self/ir_oracle.js` compares the emitted IR byte for byte and
-`tests/self/reject_oracle.js` compares every refusal's wording, which is the
+`tests/self/reject-oracle.js` compares every refusal's wording, which is the
 strongest thing this repository can say about a lowering.
 
 A wording is not a span, though, and the reject oracle compares only wordings:

@@ -6,7 +6,7 @@
  * Every check that runs stage1 has to *have* a stage1 first, and building one
  * takes a compiler. That compiler is the **seed**, the last released `nish`
  * (WP19 G2.3): `tests/run.js` builds the compiler under test with it, and the
- * oracles build their binaries with it (`reject_oracle.js` through this
+ * oracles build their binaries with it (`reject-oracle.js` through this
  * module, the others through `seedWithoutStage0` in `tests/self/goldens.js`).
  *
  * **The order, and why it is this one.**

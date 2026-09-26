@@ -27,7 +27,7 @@ import { resolveType } from "./annotations";
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics";
 import { structOf, walkReaderOf } from "./members";
 import { recordGuardFusion } from "./fusion";
-import { unwrapParens } from "./emit_util";
+import { unwrapParens } from "./emit-util";
 import { terminatesControlFlow } from "./builtins";
 import { rejectDiscardedResult } from "./result";
 import {

@@ -197,7 +197,7 @@ Two shape decisions are worth carrying forward:
   disagrees with itself about `".ts"`, and a module's name is not the place
   to inherit that.
 
-The test is `tests/self/support_oracle.js`, and rule 3 holds for it without a
+The test is `tests/self/support-oracle.js`, and rule 3 holds for it without a
 stage0's `src/` phase to diff against: every line has an implementation on the other
 side that was written first — stage0's own `escapeBytes` and `f64Constant`
 for the IR escapes (a disagreement there *is* stage1 emitting a different
@@ -302,8 +302,8 @@ compiler compiles itself.
 equalities hold over the whole of `self/` — 54 modules, 6,977,900 bytes of IR
 (41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
 on DWARF, the interop sidecars, its own link step and WP19 R1's parity work).
-Fewer than the files in `self/`, because `dump_tokens.ts`, `dump_ast.ts` and
-`dump_checked.ts` are the oracles' own entry points and reach the same
+Fewer than the files in `self/`, because `dump-tokens.ts`, `dump-ast.ts` and
+`dump-checked.ts` are the oracles' own entry points and reach the same
 modules from their own roots:
 
 ```
@@ -388,17 +388,17 @@ All three now measure what they say they measure:
 | Oracle | Before | When they closed |
 | --- | --- | --- |
 | `checked_oracle.js` | 225 agree, 48 skipped (42 imports, 6 stage0 rejects) | **272 agree**, 1 skipped |
-| `reject_oracle.js` | 181 agree, 44 skipped (39 parser, 5 imports) | **194 agree**, 42 refused by the parser, 1 skipped |
+| `reject-oracle.js` | 181 agree, 44 skipped (39 parser, 5 imports) | **194 agree**, 42 refused by the parser, 1 skipped |
 | `ir_oracle.js` | 275 agree, 22 skipped (17 stage0 rejects) | **280 agree**, 6 skipped, 11 negatives |
 
 What changed:
 
-- `self/dump_checked.ts` drives `self/compilation.ts` instead of one `Checker`,
+- `self/dump-checked.ts` drives `self/compilation.ts` instead of one `Checker`,
   so `--emit-checked` is compared over **whole programs**: every module in load
   order, what pass 1b bound each import to, and each module's own constants,
   structs and functions. The 42 modules of `self/` are compared against stage0
   by the dump as well as by their IR.
-- `reject_oracle.js` reads the `tests/link/` negatives too, because a rejection
+- `reject-oracle.js` reads the `tests/link/` negatives too, because a rejection
   that needs more than one module — a name imported twice, `main` outside the
   entry — cannot be provoked by a single file. Two rules were missing from
   stage1's pass 1b and are ported: "`f` is already imported from `./a`" and
@@ -420,7 +420,7 @@ accepts, and `tests/link/no_main` is refused by `--link`, which is stage0's
 from its skips, as dumps, because those write no IR on either side; the two
 that ask for `-g` it compares like any other program, now that stage1 emits
 DWARF too ("`-g` on both sides", below). It names the 11 `tests/link`
-negatives as negatives rather than skips, since `reject_oracle.js` compares
+negatives as negatives rather than skips, since `reject-oracle.js` compares
 them in full.
 
 **The same equality now also runs on programs nobody wrote.** That corpus is
@@ -464,7 +464,7 @@ Four things are worth carrying into S5:
    registers into — which became one collector class in `self/attributes.ts`.
    D2 predicted exactly that, and predicted the cost: the `BuiltinCall
    { emit, callees }` pairing is no longer enforced by locality, so the two
-   halves sit side by side in `self/emit_builtins.ts` and the IR oracle is
+   halves sit side by side in `self/emit-builtins.ts` and the IR oracle is
    what keeps them honest.
 2. **The escape analysis wanted parent links, and got a side table.** S3's "no
    parent pointers" is a statement about the checker, which threads the
@@ -507,7 +507,7 @@ half a dump cannot see:
   every folded constant, and every body's locals and resolved callees. The 30
   skips are 24 files that need the S5 module driver and 6 that stage0 itself
   rejects without the flags the harness passes.
-- **What it refuses.** `tests/self/reject_oracle.js` runs every `reject_*`
+- **What it refuses.** `tests/self/reject-oracle.js` runs every `reject_*`
   case through stage1 and requires the fragments the case's own `.err` file
   pins — the same assertion the suite already makes of stage0: **165 of 165
   agree over 168 fragments.** The 44 skips are 39 cases the S2 parser refuses
@@ -532,7 +532,7 @@ Three decisions are worth carrying into S4:
 
 ### What S1 cost, and what it says
 
-`self/tokens.ts`, `self/lexer.ts` and `self/dump_tokens.ts` are **1,222 lines
+`self/tokens.ts`, `self/lexer.ts` and `self/dump-tokens.ts` are **1,222 lines
 of Nish**, and the four numbers the gate wants are already forming:
 
 - **Nish-0 held.** The lexer needed no language addition beyond the ones
@@ -540,7 +540,7 @@ of Nish**, and the four numbers the gate wants are already forming:
   `push`/`pop`, `join`, the bitwise operators and module constants — that is,
   with wave A, which is the first evidence that the census measured the right
   thing.
-- **It agrees with the oracle exactly.** `tests/lexer_oracle.js` runs the
+- **It agrees with the oracle exactly.** `tests/lexer-oracle.js` runs the
   `typescript` scanner over `tests/cases/`, `examples/`, `self/`,
   `docs/cookbook/`, the differential corpus and `tests/lexer/`, prints the
   token stream in `dump_tokens`' format and diffs it: **482 of 482 files,
@@ -566,8 +566,8 @@ of Nish**, and the four numbers the gate wants are already forming:
 
 ### What S2 cost, and the gate's four numbers
 
-`self/nodes.ts`, `self/parser.ts` and `self/dump_ast.ts` bring `self/` to
-**2,817 lines of Nish**. `tests/parser_oracle.js` is the lexer oracle one
+`self/nodes.ts`, `self/parser.ts` and `self/dump-ast.ts` bring `self/` to
+**2,817 lines of Nish**. `tests/parser-oracle.js` is the lexer oracle one
 level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
 diffs, so what is compared is not "did it parse" but "is it the same tree, out
 of the same pieces, with the same spans".
@@ -689,7 +689,7 @@ work an oracle can check line by line.
 a register ([wp17-result-abi.md](wp17-result-abi.md)) — is an *ABI* change
 rather than a construct, and that turned out to be the cheaper kind to
 mirror. It touched the same five files on each side (`types.ts`,
-`result.ts`/`emit_result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
+`result.ts`/`emit-result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
 `attributes.ts`), added nothing to Nish-0 — rule 5 of §6 did not fire, and
 `self/` is written in exactly the subset it was written in before — and the
 IR oracle caught the divergences the same way: the two sides have to agree on
@@ -903,11 +903,11 @@ the same lines, which is the same trade D2 made for the dispatch tables.
 **`--emit-ast` is stage0's by design, not by backlog.** Its dump prints the
 `typescript` package's node names and line:column spans; stage1's tree is the
 flattened single-`Node` one of §2.1, with its own vocabulary and byte offsets,
-and `tests/parser_oracle.js` translates TypeScript *into* that vocabulary
+and `tests/parser-oracle.js` translates TypeScript *into* that vocabulary
 rather than the reverse. Matching stage0's dump would mean carrying a mirror of
 `ts.SyntaxKind` inside the self-hosted compiler to imitate an implementation
 detail of the seed — the opposite of what §1 means by the two being the same
-compiler. `self/dump_ast.ts` keeps the shape its own oracle compares.
+compiler. `self/dump-ast.ts` keeps the shape its own oracle compares.
 `--emit-checked` is the other way about, and that is why it *is* stage1's: the
 dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
 proves stage1 writes them byte for byte as stage0 does over 279 whole
@@ -1114,8 +1114,8 @@ own words, for the input file and the command line, which is the half stage0
 was echoing anyway. `tests/self/ice.ts` and the WP14 block of `tests/run.js`
 pin the lines and the 70.
 
-Seven sites still call `panic` and still exit 1: the four in `self/emit_ops.ts`
-and the three in `self/interop_napi.ts`. The conversion there is the same one
+Seven sites still call `panic` and still exit 1: the four in `self/emit-ops.ts`
+and the three in `self/interop-napi.ts`. The conversion there is the same one
 line for one line, and it is the only thing between this and every internal
 error in stage1 answering 70.
 

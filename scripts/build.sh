@@ -4,9 +4,9 @@
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
 #
 # The C runtime is three translation units and is named as one: an input
-# <dir>/runtime.c also compiles <dir>/runtime_os.c, the half that wraps the
+# <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
-# and <dir>/runtime_parallel.c, the half that divides a range of work across
+# and <dir>/runtime-parallel.c, the half that divides a range of work across
 # threads. Each of those files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -15,7 +15,7 @@
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function;
-#          load it from Node. Add runtime/runtime_wasm.c to the inputs when a
+#          load it from Node. Add runtime/runtime-wasm.c to the inputs when a
 #          function uses arrays (the arena and the array cold paths, no libc);
 #          strings and I/O still need a WASI runtime and are not available.
 #   wasm   wasm32 freestanding module exporting every non-internal function
@@ -84,7 +84,7 @@ done
 [ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is three translation units, and a caller names one: whoever passes
-# <dir>/runtime.c gets <dir>/runtime_os.c and <dir>/runtime_parallel.c compiled
+# <dir>/runtime.c gets <dir>/runtime-os.c and <dir>/runtime-parallel.c compiled
 # beside it. They were one file until the operating-system half was split out
 # for its own size budget, and the parallel half followed for the same reason
 # (each file's header comment says why), and a link line is where those splits
@@ -97,7 +97,7 @@ done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
-      for half in runtime_os.c runtime_parallel.c; do
+      for half in runtime-os.c runtime-parallel.c; do
         side="${i%runtime.c}$half"
         have=0
         for j in "${inputs[@]}"; do
@@ -158,7 +158,7 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # own command line instead of using `common`; it is empty on every ordinary
 # build, hence the bash 3.2 expansion spelling explained below.
 #
-# -pthread is for runtime_parallel.c, the translation unit that divides a range
+# -pthread is for runtime-parallel.c, the translation unit that divides a range
 # of work across threads: it is compiled in either configuration and only spawns
 # under this macro, so this is the build where the flag has to be on the command
 # line. On a current glibc the library half is already inside libc and the link
@@ -167,7 +167,7 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 #
 # It is deliberately in `common` and not in `tls`: `tls` is the wasm and wasi
 # command lines, which have no threads to link against, and where
-# runtime_parallel.c compiles to its sequential fallback because it tests
+# runtime-parallel.c compiles to its sequential fallback because it tests
 # __wasi__ and __wasm__ as well as the macro.
 tls=()
 if [ "$threads" = 1 ]; then

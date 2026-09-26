@@ -16,7 +16,7 @@
  * was frozen with the table it last wrote and `self/codes.ts` became the
  * registry. A new diagnostic gets its code by hand: append a fragment and the
  * next free number in its band (the second mode above prints those), at the
- * position the ordering rule below puts it. `tests/diagnostic_coverage.js`
+ * position the ordering rule below puts it. `tests/diagnostic-coverage.js`
  * is what notices a diagnostic that has no code, by counting `NL0000`.
  *
  * What `--check` still holds, because each is what makes a code worth keying
@@ -127,7 +127,7 @@ const problems = (text) => {
 
   // The tables are the whole registry: a pair the reader finds outside them is
   // one the compilers never match, and one of theirs the reader misses is one
-  // `tests/diagnostic_coverage.js` never asks about.
+  // `tests/diagnostic-coverage.js` never asks about.
   let whole = [];
   try {
     whole = parseCodesRegistry(text, "self/codes.ts");

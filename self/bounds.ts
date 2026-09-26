@@ -17,7 +17,7 @@
 // than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
 // analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
 // clamp is dead code: `program.nodeProvenClamp` says which bounds those are
-// and `self/emit_strings.ts` writes them through.
+// and `self/emit-strings.ts` writes them through.
 //
 // Where LLVM finds this by itself, and where it does not. It needs the
 // receiver's length to be one value it can reason about: give it a string
@@ -1612,7 +1612,7 @@ const isCharCodeAt = (ctx: CheckContext, call: Node): boolean => {
 
 /**
  * `r.unwrapOr(d)` or `r.expect(m)` on a `Result`, whose one argument
- * `self/emit_result.ts` evaluates on the `Err` path only, or "" for any other
+ * `self/emit-result.ts` evaluates on the `Err` path only, or "" for any other
  * call. The names are the checker's (`checkResultMethod` in `self/result.ts`);
  * they are matched here rather than through the emitter's `resultMethodName`,
  * because a checker module does not reach into the emitter.
@@ -2061,7 +2061,7 @@ const applyDecrement = (walk: BoundsWalk, state: State, v: Local, c: i32): void 
 
 /**
  * Whether an operator writes its left operand: `=` and every `op=`. The same
- * rule `self/emit_util.ts` states, spelled again here rather than imported,
+ * rule `self/emit-util.ts` states, spelled again here rather than imported,
  * because a checker module that reaches into the emitter is a dependency
  * neither compiler has.
  */
@@ -2092,7 +2092,7 @@ export const ANY_RECORD: i32 = -2;
  * element whose type the checker did not record, because nothing says it is a
  * pointer.
  *
- * The header hoist in `self/emit_arrays.ts` (`storedFields`) asks the same
+ * The header hoist in `self/emit-arrays.ts` (`storedFields`) asks the same
  * question about a field load it would lift out of a loop, and reads this
  * answer rather than a copy of it (#180).
  */
@@ -2112,7 +2112,7 @@ export const recordStoreType = (program: CheckedProgram, table: TypeTable, acces
  * inline copy, and interfaces are nominal, so no other declared type is ever
  * bound to it. A path whose every link is read off something else — a class,
  * above all, which is never inline — keeps its facts, and its header hoist.
- * The proof here and the hoist in `self/emit_arrays.ts` ask this one question.
+ * The proof here and the hoist in `self/emit-arrays.ts` ask this one question.
  */
 export const recordReaches = (stored: i32, holder: i32): boolean =>
   stored === ANY_RECORD || holder < 0 || (stored !== NO_RECORD && stored === holder);

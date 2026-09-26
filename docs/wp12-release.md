@@ -10,7 +10,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | Path | Why it ships |
 | --- | --- |
 | `bin/` | `nish`, the command, and the launcher behind it — `bin/launcher.js` and `bin/packaging.js`, plain JavaScript that needs no build step. A node shim in the tarball; the native compiler after postinstall (see "What the launcher costs") |
-| `runtime/` | `runtime.c` and `runtime_os.c` (the two translation units of the C runtime, both linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
+| `runtime/` | `runtime.c` and `runtime-os.c` (the two translation units of the C runtime, both linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
@@ -282,7 +282,7 @@ tarball, the per-platform npm package and the main npm package — and all three
 name every standard-library module now. The first two were missing it; the
 third carried `std` through `package.json`'s `files` all along, with nothing
 asserting it. `tests/run.js` derives the list from the same
-directory `self/std_modules.ts`'s literal is already checked against, and
+directory `self/std-modules.ts`'s literal is already checked against, and
 fails when any of the three gates omits a module —
 so the next module added to the library cannot ship in the compiler's list and
 not in the tarball. Each check was watched failing.

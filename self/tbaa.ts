@@ -88,7 +88,7 @@ export const fieldTbaa = (emitter: Emitter, info: StructInfo, field: FieldInfo):
  * overlap: a data block is an arena bump, an entry-block alloca, a
  * `nish_alloc_array` block or the tail of `nish_argv_init`'s `malloc`, and a
  * class object is a `nish_alloc_struct` bump or an alloca of its own. An
- * inline array field (`self/inline_arrays.ts`) does put slots inside a class
+ * inline array field (`self/inline-arrays.ts`) does put slots inside a class
  * object, but never where a field access goes: the field is never loaded or
  * stored as a field, and `structNode` leaves it out of the class's path. The one
  * kind of object that does live inside element storage is an inline record
@@ -120,7 +120,7 @@ export const elementTbaa = (emitter: Emitter, elem: i32): string => {
  *
  * It is sound because every write of a header's bytes is one of two things.
  * Either it is Nish IR, and then it goes through `storeHeaderField` in
- * `self/emit_arrays.ts` and carries this tag: `new Array`, a literal, `push`
+ * `self/emit-arrays.ts` and carries this tag: `new Array`, a literal, `push`
  * and `pop`, whether the header is an arena bump or an entry-block alloca. Or
  * it is C behind a call: `nish_array_grow`, `nish_alloc_array`,
  * `nish_readdir`, `nish_argv_init`, a C caller's stack header or the N-API

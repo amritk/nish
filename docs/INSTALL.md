@@ -218,7 +218,7 @@ routes are
   # in the glibc container, where build/nish runs
   build/nish app.ts -o app.ll
   # on the musl host, with its own clang and the runtime from this repository
-  clang app.ll runtime/runtime.c runtime/runtime_os.c -lm -o app
+  clang app.ll runtime/runtime.c runtime/runtime-os.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -326,7 +326,7 @@ release exists, take its version from
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
 it: `--link` runs `scripts/build.sh` and compiles the C runtime
-(`runtime/runtime.c` and `runtime/runtime_os.c`, the system-call half), and the
+(`runtime/runtime.c` and `runtime/runtime-os.c`, the system-call half), and the
 compiler finds all of them relative to its own location — `bin/nish` alone in a
 directory can still emit IR with `-o`, but `--link` will tell you it cannot
 find `scripts/build.sh`.
@@ -367,17 +367,17 @@ Building the IR yourself rather than through `--link` means naming the runtime
 on the `clang` line, and it is two files:
 
 ```bash
-clang app.ll runtime/runtime.c runtime/runtime_os.c -lm -o app
+clang app.ll runtime/runtime.c runtime/runtime-os.c -lm -o app
 ```
 
 `runtime.c` is the half every program touches — the arena, strings, arrays,
-number formatting, the panics — and `runtime_os.c` is the half that wraps the
+number formatting, the panics — and `runtime-os.c` is the half that wraps the
 system calls: files, directories, subprocesses, `getenv`, the monotonic clock.
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 system-call half, so an older line that names `runtime.c` alone still links a
 program that reads no files and spawns nothing. `scripts/build.sh` compiles
-`runtime_os.c` beside any `runtime.c` it is handed, so a build that goes
+`runtime-os.c` beside any `runtime.c` it is handed, so a build that goes
 through it — every `--link`, and every `--profile` recipe in these documents —
 needs to name only the one.
 

@@ -362,7 +362,7 @@ export class DebugInfo {
     for (const f of info.fields) {
       const line = this.lineOf(info.origin, f.decl);
       if (f.inline()) {
-        // An array stored in the object (`self/inline_arrays.ts`): the member
+        // An array stored in the object (`self/inline-arrays.ts`): the member
         // is the header itself, whose `data` points at the slots after it.
         const header = this.arrayHeader(this.table.refOf(f.type), this.table.typeName(f.type));
         members.push(this.member(f.name, ref, header, 192, f.offset * 8, file, line));

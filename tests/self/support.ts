@@ -1,7 +1,7 @@
 // The driver for the Wave C support library (docs/wp14-selfhost.md §3): it
 // prints what `self/strings.ts`, `self/map.ts` and `self/paths.ts` compute for
 // every case in `tests/self/cases.txt` plus the ranges generated below, and
-// `tests/self/support_oracle.js` prints the same thing from Node — from
+// `tests/self/support-oracle.js` prints the same thing from Node — from
 // its golden for the answers recorded from stage0, from `node:path` for
 // the path functions, and from `JSON.stringify`, `Buffer.compare` and `Map`
 // for the rest — and diffs.

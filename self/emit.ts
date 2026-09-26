@@ -17,8 +17,8 @@
 //   - **One central `switch` per syntactic category** instead of the
 //     `ts.SyntaxKind` tables, which is D2's decision carried from the checker.
 //     `emitStatement` and `emitExpression` name every construct; the family
-//     modules (`emit_control.ts`, `emit_strings.ts`, `emit_arrays.ts`,
-//     `emit_classes.ts`, `emit_builtins.ts`) hold the lowerings.
+//     modules (`emit-control.ts`, `emit-strings.ts`, `emit-arrays.ts`,
+//     `emit-classes.ts`, `emit-builtins.ts`) hold the lowerings.
 //   - **The emitter is a class the families are given**, not an interface with
 //     a table of closures. `Emitter` is `EmitContext` and `Emitter` at once,
 //     because the language has no function values to separate them with.
@@ -40,8 +40,8 @@ import {
 } from "./attributes";
 import { DebugInfo } from "./debug";
 import { marksTailCall, reclaimsReturnedString } from "./escape";
-import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit_arrays";
-import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit_builtins";
+import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays";
+import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit-builtins";
 import {
   emitBreak,
   emitConditional,
@@ -52,7 +52,7 @@ import {
   emitSwitch,
   emitThrow,
   emitWhile,
-} from "./emit_control";
+} from "./emit-control";
 import {
   emitConstructorPrologue,
   emitMethodCall,
@@ -61,8 +61,8 @@ import {
   emitPropertyAccess,
   structFunctions,
   structTypeDeclarations,
-} from "./emit_classes";
-import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit_ops";
+} from "./emit-classes";
+import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit-ops";
 import {
   declareResultTypes,
   emitPackedResult,
@@ -74,7 +74,7 @@ import {
   isResultConstructorCall,
   privateResultAbi,
   unpackReturnedResult,
-} from "./emit_result";
+} from "./emit-result";
 import {
   emitFusedCall,
   emitLibraryCopies,
@@ -87,10 +87,10 @@ import {
   FusedProbe,
   maybeLocalIndex,
   MaybeParts,
-} from "./emit_map";
-import { emitParallelRegion, isParallelRegionCall } from "./emit_parallel";
-import { addStringConstant, emitTemplate } from "./emit_strings";
-import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
+} from "./emit-map";
+import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel";
+import { addStringConstant, emitTemplate } from "./emit-strings";
+import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util";
 import { internalErrorFor } from "./ice";
 import { IRBlock, IRFunction, IRModule, IRParam } from "./ir";
 import { StringMap, StringSet } from "./map";
@@ -223,7 +223,7 @@ export class Emitter {
   slotNames: string[];
   /**
    * WP32: each maybe `const` of the function being emitted, and its found bit
-   * and value, which are SSA values rather than a slot (`self/emit_map.ts`).
+   * and value, which are SSA values rather than a slot (`self/emit-map.ts`).
    */
   maybeLocals: Local[];
   maybeParts: MaybeParts[];
@@ -241,7 +241,7 @@ export class Emitter {
   debug: DebugInfo | null;
   /**
    * WP32: `std/collections.ts`, whose functions this module's code reaches are
-   * emitted into this module as `internal` copies (`self/emit_map.ts`), or
+   * emitted into this module as `internal` copies (`self/emit-map.ts`), or
    * `null` when the program never named `Map` or `Set`.
    */
   library: CheckedProgram | null;

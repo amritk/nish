@@ -598,7 +598,7 @@ directly or the binding of a `for (const x of a)`. That is **54 operators on
 | `self/attributes.ts` | 13 | 13 |
 | `self/escape.ts` | 11 | 11 |
 | `self/checker.ts` | 4 | 4 |
-| `emit.ts`, `emit_util.ts`, `assignment.ts`, `symbols.ts`, `dump.ts`, `interop_abi.ts` | 1 each | 1 each |
+| `emit.ts`, `emit-util.ts`, `assignment.ts`, `symbols.ts`, `dump.ts`, `interop-abi.ts` | 1 each | 1 each |
 
 ```ts
 if (state.belowIndex[k] === i && state.belowHolder[k] === w) { ... }  // self/bounds.ts
@@ -893,7 +893,7 @@ These rows are the program above, on the box this section opens with: x86-64,
 Ubuntu clang 18.1.3, four cores under a load average around 25, **CPU time
 (user + sys), min of 15 after 3 warm-ups**. The 2.48x is its 756 ms against the
 parameter shape's 305 ms in the table before it. The program that re-derives
-the pair is **`bench/hoist_field.ts`**, committed after this measurement so that
+the pair is **`bench/hoist-field.ts`**, committed after this measurement so that
 the figure would not have to be quoted from this note: it times the parameter,
 field and hand-hoisted shapes against each other in one process, and
 `bench/README.md` gives its protocol. It reports wall time, not CPU time, and
@@ -1147,7 +1147,7 @@ Candidate 2 landed in two halves, and only the second one moved the clock.
 **The hoist (#104)** lifts a field-held array's header into the preheader
 wherever `FunctionFacts.resizesArray` says nothing the loop reaches can grow it,
 with one `len` feeding the condition and the bounds check. It did its job —
-three header reloads left `fieldScan`'s loop — and `bench/hoist_field.ts` did
+three header reloads left `fieldScan`'s loop — and `bench/hoist-field.ts` did
 not move (755 ms against 753 ms with loop alignment pinned). What was left was
 a second *compare*: `self/bounds.ts` kept its length facts by variable only, so
 `const xs = h.xs` proved `xs[i]` and `h.xs.length` proved nothing about
@@ -1180,7 +1180,7 @@ path, and a loop that calls something keeps its checks, as it does for a local
 array. The loops that matter here are the ones that call nothing:
 `fieldScan`, and `knownAtMost` below.
 
-Measured on `bench/hoist_field.ts`: x86-64, Intel Xeon @ 2.80GHz, clang 18,
+Measured on `bench/hoist-field.ts`: x86-64, Intel Xeon @ 2.80GHz, clang 18,
 `--profile speed`, both binaries linked with
 `-Wl,-mllvm,-align-all-nofallthru-blocks=4` (the loop-alignment pin #104
 used), `taskset -c 0`, and the minimum of 7 rounds inside each run, taken over
@@ -1212,13 +1212,13 @@ the compiler before and after with `--profile speed`, then `opt -O2` on
 its loop, and it has one check where it had two. The `atMostIndex[k]` read is
 proven by the loop condition. `atMostHolder[k]` keeps its check, because the
 condition says nothing about that path. Across the whole of `self/`, 15
-functions change their recorded facts in `tests/self/goldens/checked_self.txt`:
+functions change their recorded facts in `tests/self/goldens/checked-self.txt`:
 a function whose last check was proven loses its `nish_panic_index` callee,
 and so gains `willreturn` or `readonly` wherever nothing else stood in the way.
 
 One finding came out of the soundness tests and is not fixed here. #104's
 hoist has the same gap as the whole-record rule above. `storedFields` in
-`self/emit_arrays.ts` does not count `rs[0] = other` over an array of records.
+`self/emit-arrays.ts` does not count `rs[0] = other` over an array of records.
 So a loop over `r.xs`, where `r` is a `const` bound to `rs[0]`, reads the
 replaced array after the store: it prints `1 2 3` where `--plain` panics.
 `arr_path_record_store` binds `r` with `let` so that it tests the proof
@@ -1763,7 +1763,7 @@ measurement closed says so and says why.
    **Update: done, in two halves** (§2c, "Candidate 2 shipped"). #104
    shipped the hoist and `FunctionFacts.resizesArray`, and measured it neutral
    on its own. #106 keys the bounds proof's length facts by property path, which
-   removes the second compare. On `bench/hoist_field.ts` the field scan goes from
+   removes the second compare. On `bench/hoist-field.ts` the field scan goes from
    577 ms to 242 ms with loop alignment pinned. That is **2.38x**, level with
    the parameter and hand-hoisted shapes, and it closes the whole gap. §2c's
    2.48x was the same gap measured on another box.

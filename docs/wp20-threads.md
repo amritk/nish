@@ -1,7 +1,7 @@
 # WP20: Threads
 
 **T0 is built, and so is the partitioner under T4 —
-`runtime/runtime_parallel.c`, which has no language surface and costs a program
+`runtime/runtime-parallel.c`, which has no language surface and costs a program
 that does not use it nothing, byte for byte (§8d). T1 to T4's *language*
 surface is proposed, not implemented, and
 [wp29-thread-surface.md](wp29-thread-surface.md) is what it is.** The payoff T4
@@ -86,7 +86,7 @@ Unusually much, and all of it by accident of other decisions.
 | **A whole-program compiler with the analysis already in the right shape** | `Compilation` loads every import transitively and runs stage0's `src/codegen/attributes.ts` over all modules at once; stage0's `src/codegen/escape.ts` already classifies each allocation site as `local` / `returned` / `leaks`, and the `pointerParams` / `escaping` fixpoints already answer "does this callee capture this pointer" | A `Send`-shaped judgment is the same fixpoint with one new flow class, not a new subsystem. This is why §4 does not propose a trait system: with the whole program in hand, one is not needed for the cases threads care about. |
 | **Immutability that is already checked** | strings are immutable, shared by pointer and never individually freed; `readonly T[]` is a checker-enforced promise of no store, no `push`, no `pop`, and no widening back (LANGUAGE.md, "Readonly arrays") | The shareable-type set of §4 T2 is not built from nothing. Strings and `readonly` arrays of shareable elements are safe to share the day the arena question is settled. |
 | **Nothing unwinds** | functions are `nounwind`; a failure is a `Result` and `throw` is gone (WP16) | A thread trampoline has one exit and no cleanup path. Compare the care a language with exceptions needs at a thread boundary. |
-| **Two targets already separated** | `runtime/runtime.c` and the freestanding `runtime/runtime_wasm.c` | The wasm story (§6) can be deferred without a fork, because the split already exists. |
+| **Two targets already separated** | `runtime/runtime.c` and the freestanding `runtime/runtime-wasm.c` | The wasm story (§6) can be deferred without a fork, because the split already exists. |
 
 ## 3. What blocks it, in the order it bites
 
@@ -185,7 +185,7 @@ plan.**
 `runtime.c` was under a hard budget of 4 KB of `.text` at `-Oz` when this note
 was written, and stood at 2,544 then (MASTER_PLAN §2). The live ceilings are
 two, one per translation unit and each counted over every `.text*` section:
-3,584 bytes for the core `runtime.c` and 1,280 for `runtime_os.c`, the half
+3,584 bytes for the core `runtime.c` and 1,280 for `runtime-os.c`, the half
 whose subject is the operating system — which is the half a thread API would
 land in. `docs/wp7-runtime.md` §"Runtime additions and budget" carries both and
 the current measurements. `pthread_create`, a mutex and a condition variable do
@@ -262,7 +262,7 @@ object spends from glibc's static TLS surplus rather than allocating on demand;
 40 bytes of arena and seed is far inside it, and an addon built this way was
 checked to `require()` into Node and answer correctly.
 
-On the C side `runtime/runtime.c`, `runtime/nish.h` and `runtime/runtime_wasm.c`
+On the C side `runtime/runtime.c`, `runtime/nish.h` and `runtime/runtime-wasm.c`
 each define the same `NISH_TLS` macro, empty unless `-DNISH_THREADS`, and it
 sits on `nish_arena` and on the RNG seed. `nish_argv` deliberately does not have
 it (§3.2). `scripts/build.sh --threads` passes the macro, and
@@ -321,14 +321,14 @@ it into (§3.5).
   another thread — is not implemented and does not need to be until something
   can spawn. Until T1, an object crossing a thread boundary is the host's
   problem, exactly as a raw pointer handed to C has always been.
-- **Nothing for wasm.** `runtime_wasm.c` mirrors the macro so a `--threads`
+- **Nothing for wasm.** `runtime-wasm.c` mirrors the macro so a `--threads`
   build still links, but a wasm module has one thread and `_Thread_local` in a
   non-shared memory is one ordinary block of linear memory. §6 still defers
   wasm threads in full.
 - **Not a distinct random stream per thread**, only an untorn one; see §3.2.
 
 Tests: `tests/cases/mem_threads_arena` (the golden that pins the declaration
-and the output), the `-DNISH_THREADS` half of `tests/runtime_test.c` (a worker
+and the output), the `-DNISH_THREADS` half of `tests/runtime-test.c` (a worker
 thread's arena is its own, empty at entry, disjoint, and released without the
 parent losing a byte), and three pipeline checks in `tests/run.js` — the
 thread-local allocator linking and running on two threads through
@@ -452,7 +452,7 @@ and it must name the field that disqualified the type rather than the type.
 ## 6. Not in this plan
 
 - **wasm threads.** Shared memory plus the `atomics` and `bulk-memory`
-  features, per-thread regions carved out of `runtime_wasm.c`'s
+  features, per-thread regions carved out of `runtime-wasm.c`'s
   arena-over-linear-memory, and workers on the JavaScript side. Deferred past
   all five stages; the runtime split already exists, so deferring costs
   nothing structurally.
@@ -527,7 +527,7 @@ program before committing to the surface".
 
 §4 T4 and §7 both asked for this before T1's surface was designed. It has been
 measured twice: first on an ad-hoc pthreads driver, and then again through
-`runtime/runtime_parallel.c`, the runtime entry point that landed as the stage
+`runtime/runtime-parallel.c`, the runtime entry point that landed as the stage
 under [wp29-thread-surface.md](wp29-thread-surface.md)'s surface. **The second
 measurement corrected the first**, and §8c is that correction written out
 rather than quietly folded in, because the first is what this note said for a
@@ -637,7 +637,7 @@ Four, and none of them is a number:
    arena before returning and leaves the parent's untouched — the thread-local
    storage class does that for free — so the partitioner needed no new runtime
    entry point for cleanup, which removes the thing §3.5's 69-byte budget was
-   most likely to be spent on. `runtime_parallel.c` does exactly this and the
+   most likely to be spent on. `runtime-parallel.c` does exactly this and the
    unit test asserts the parent comes through the join byte for byte.
 2. **A `parallelFor` still wants an arena story, on memory rather than on
    speed.** §8b retires the scaling argument for this, but §8a's RSS table
@@ -659,7 +659,7 @@ Four, and none of them is a number:
 
 ### 8d. The partitioner, as built
 
-`runtime/runtime_parallel.c` is the third translation unit and the stage every
+`runtime/runtime-parallel.c` is the third translation unit and the stage every
 row above now runs through:
 
 ```c
@@ -682,7 +682,7 @@ where there are no threads, the same entry point runs the whole range on the
 calling thread, so the flag decides whether the work is divided and never
 whether the function exists. Its own `.text*` budget is in `tests/run.js` —
 **49 bytes** without the macro and **482** with it, against ceilings of 256 and
-512 — and it is a third file rather than a third of `runtime_os.c` precisely
+512 — and it is a third file rather than a third of `runtime-os.c` precisely
 because 482 bytes of partitioner does not fit in the 29 bytes that file had
 left, and borrowing the room would have moved the number a reader sees for "the
 operating-system surface" for a reason that has nothing to do with the
@@ -741,7 +741,7 @@ nothing in either compiler changed.
 §8's measurements are the facts this note rests on, so the programs are here
 rather than only reported, by the convention
 [wp24-async.md](wp24-async.md) §11 follows. Nothing below is a test case — the
-partitioner's own tests are in `tests/runtime_test.c` — and nothing here uses a
+partitioner's own tests are in `tests/runtime-test.c` — and nothing here uses a
 language feature that does not exist.
 
 The kernels, compiled with `--no-stack-alloc` so that the two allocating ones
@@ -800,7 +800,7 @@ and it knows it only by naming `nish_parallel_range`:
 
 ```c
 /* The wp20 §8 kernels again, driven by the real runtime entry point instead of
-   an ad-hoc pthreads loop: if runtime_parallel.c is the thing the prototype
+   an ad-hoc pthreads loop: if runtime-parallel.c is the thing the prototype
    predicted, these numbers are the prototype's. */
 #include <stdint.h>
 #include <stdio.h>
@@ -860,6 +860,6 @@ rss ./par 200000000 alloc 4
 # by 65535.
 ```
 
-`scripts/build.sh` pairs `runtime_os.c` and `runtime_parallel.c` with the
+`scripts/build.sh` pairs `runtime-os.c` and `runtime-parallel.c` with the
 `runtime.c` the command line names, which is why the driver links against a
 partitioner it never mentions compiling.

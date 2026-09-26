@@ -1,7 +1,7 @@
 // The one place stage1 spells the project's own name; stage0's `src/branding.ts` is the
 // stage0 twin and holds the same language name. The two must agree: every
 // diagnostic the two compilers produce is compared byte for byte by
-// `tests/self/reject_oracle.js`, so a name changed on one side and not the
+// `tests/self/reject-oracle.js`, so a name changed on one side and not the
 // other fails the suite.
 //
 // The driver still calls itself `compile` (`self/compile.ts`), so the CLI name

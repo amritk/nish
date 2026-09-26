@@ -29,7 +29,7 @@ runtime dependency.
 
 ```
 TypeScript source ──▶ AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
-              (self/parser.ts)  (self/checker.ts)      (self/emit*.ts)         + runtime/runtime.c + runtime_os.c
+              (self/parser.ts)  (self/checker.ts)      (self/emit*.ts)         + runtime/runtime.c + runtime-os.c
 ```
 
 If it compiles, every value has one fixed, known memory layout; binaries are
@@ -347,7 +347,7 @@ safe. `-o`, `--link`, `--target`, the `--emit-*` sidecars and
 errors there, and performance warnings are not printed, because stderr belongs
 to the program.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime_os.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime-os.c -o app`
 (the `overriding the module target triple` warning is harmless: the IR is
 target-neutral unless you pass `--target`; `-Wno-override-module` silences
 it), or step by step with `llvm-as`, `llc -O2 -filetype=obj`, and
@@ -365,7 +365,7 @@ with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
 Rust-class output is the goal: no GC, no embedded engine, aliasing and
 purity facts handed to LLVM up front, and a link step that strips everything
 unused. `examples/add.ts` + `examples/main.c` + the two runtime translation units
-(`runtime/runtime.c` and `runtime/runtime_os.c`), x86_64 Linux, glibc
+(`runtime/runtime.c` and `runtime/runtime-os.c`), x86_64 Linux, glibc
 dynamically linked (`npm run size-report`):
 
 | Profile | Bytes | What it does |
@@ -382,7 +382,7 @@ core does not grow every time the language reaches further into the operating
 system: `runtime.c` is the 3,480 bytes every program touches (one chunked bump
 arena with O(1) reset and mark/release, strings, JavaScript-exact number
 formatting, string parsing, `Math.random`, `process.argv`, array growth, the
-panic paths), and `runtime_os.c` the 1,190 bytes that wrap a system call (exit,
+panic paths), and `runtime-os.c` the 1,190 bytes that wrap a system call (exit,
 files, directories, subprocesses, the environment, the clock) — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for both
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
@@ -424,7 +424,7 @@ The supported direction is Node importing Nish:
 
 - `scripts/build.sh --profile wasm` produces a module `WebAssembly.instantiate`
   loads directly (`examples/node-host.mjs`); exports use the plain C ABI.
-  Add `runtime/runtime_wasm.c` (arena + arrays, no libc) when a function
+  Add `runtime/runtime-wasm.c` (arena + arrays, no libc) when a function
   takes or returns an array.
 - `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
   with argument type checks (`examples/node-addon.mjs`).

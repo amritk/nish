@@ -4,7 +4,7 @@
 // `std/threads.ts` is ordinary Nish: its two exported templates carry the
 // sequential meaning, and the compiler recognises them by module and name and
 // replaces one call inside each instance with a region over
-// `nish_parallel_range` (`self/emit_parallel.ts`). Everything that makes the
+// `nish_parallel_range` (`self/emit-parallel.ts`). Everything that makes the
 // region safe to run on several threads is judged here, at the user's call,
 // from the whole-program facts — which is why it runs after the fixpoint,
 // from `Compilation.checkParallel`, rather than while the call is checked:
@@ -45,7 +45,7 @@
 import { FactsTable, FunctionFacts, stepOf } from "./attributes";
 import { CLI, STD_PREFIX } from "./branding";
 import { isScalarArgument } from "./escape";
-import { isTemplateExpression, unwrapParens } from "./emit_util";
+import { isTemplateExpression, unwrapParens } from "./emit-util";
 import {
   N_ARRAY,
   N_ARROW,
@@ -77,7 +77,7 @@ import {
   ParallelCall,
   TemplateInfo,
 } from "./program";
-import { stdModuleName } from "./std_modules";
+import { stdModuleName } from "./std-modules";
 import { StringSet } from "./map";
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types";
 

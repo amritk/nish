@@ -74,7 +74,7 @@ export const INLINE_HEADER_BYTES: i32 = 24;
  * array field (`FieldInfo.inlineCapacity`) the header and `K` slots, rounded
  * up to the header's alignment as the LLVM literal struct
  * `{ %struct.nish_array, [K x T] }` is. The slots are values, never records:
- * `self/inline_arrays.ts` refuses a record element type.
+ * `self/inline-arrays.ts` refuses a record element type.
  */
 export const fieldWidth = (table: TypeTable, field: FieldInfo): i32 => {
   if (!field.inline()) {

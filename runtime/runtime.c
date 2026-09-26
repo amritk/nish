@@ -4,13 +4,13 @@
  * it is also the half with the tighter size budget: the arena, strings, number
  * formatting, the array cold paths, `process.argv`, `Math.random`, and the two
  * panics. Files, directories, subprocesses, the environment and the clock are
- * in runtime_os.c — every one of those wraps a system call, so that surface
+ * in runtime-os.c — every one of those wraps a system call, so that surface
  * grows as the language reaches further into the operating system, and a
  * program that reaches nowhere should not pay for it or be measured with it.
- * runtime_os.c's header comment has the reasoning; tests/run.js gates the two
+ * runtime-os.c's header comment has the reasoning; tests/run.js gates the two
  * `.text*` budgets separately and docs/wp7-runtime.md records both.
  *
- * Nothing here calls into runtime_os.c, which is why an old link line that
+ * Nothing here calls into runtime-os.c, which is why an old link line that
  * names runtime.c alone still builds a program that uses none of that surface.
  * The other direction does happen: `nish_readdir` allocates through
  * `nish_alloc_struct` and `nish_str_new`, so those calls no longer inline into
@@ -50,7 +50,7 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
    definition. Off by default so the ordinary build pays nothing.
 
    The same definition is in runtime/nish.h (for a host that includes it) and
-   runtime/runtime_wasm.c; they are one contract and move together. */
+   runtime/runtime-wasm.c; they are one contract and move together. */
 #ifdef NISH_THREADS
 #define NISH_TLS _Thread_local
 #else
@@ -59,7 +59,7 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
 
 /* ---- Arena: %struct.nish_arena = type { i8*, i64, i64, i8* }
 
-   The widths are fixed rather than `size_t` for the reason runtime_wasm.c
+   The widths are fixed rather than `size_t` for the reason runtime-wasm.c
    gives for its own copy: every compiled function inlines the bump allocator
    and reads these fields directly, so the IR's `i64` is what `off` and `cap`
    have to be on every target, not just the 64-bit ones. With `size_t` they

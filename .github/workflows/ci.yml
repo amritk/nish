@@ -59,7 +59,7 @@ permissions:
 # Node version, and Node falls back to compiling normally when the key misses --
 # a stale or absent cache costs time and can never change an answer. Measured on
 # this repository: 412 ms -> 315 ms for one compiler spawn (-24%), and
-# `tests/diagnostic_coverage.js --require-coverage --strict-refusals` 77.0 s ->
+# `tests/diagnostic-coverage.js --require-coverage --strict-refusals` 77.0 s ->
 # 65.5 s (-15%).
 #
 # The path is outside the checkout on purpose. A cache directory inside
@@ -250,7 +250,7 @@ jobs:
 
       # The other half of WP19 G2.4 -- every code provoked by a program, not
       # only every diagnostic given a code -- is not a step here: it is inside
-      # `npm test`, which runs `tests/diagnostic_coverage.js` with
+      # `npm test`, which runs `tests/diagnostic-coverage.js` with
       # `--require-coverage` and `--strict-refusals`.
 
       - name: Size report
@@ -260,7 +260,7 @@ jobs:
           {
             echo "### Binary size (${{ matrix.os }}, LLVM 18)"
             echo
-            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime_os.c`'
+            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime-os.c`'
             echo
             cat build/size-report.md
           } >> "$GITHUB_STEP_SUMMARY"

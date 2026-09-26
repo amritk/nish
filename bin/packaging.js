@@ -120,7 +120,7 @@ export const platformPackageName = (packageName, asset) => `${packageName}-${ass
  * thing that could not be run is a binary rather than the input. Reusing it
  * keeps the launcher out of the diagnostic registry entirely -- a code minted
  * here would be one `self/codes.ts` mirrors for a message the compiler can
- * never print, and `tests/diagnostic_coverage.js` would then want a case
+ * never print, and `tests/diagnostic-coverage.js` would then want a case
  * provoking a rule that does not exist.
  */
 export const NO_COMPILER_CODE = "NL0002";

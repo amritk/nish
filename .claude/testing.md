@@ -20,7 +20,7 @@ test is **data, not code**: a source file next to the output it must produce.
     fail with exit 1 and every fragment must appear. No `.ll` is needed.
   - `<name>.out` — expected stdout once the case is linked with `<name>.c`
     (or `tests/driver.c`, which prints `test()`) and both runtime `.c` files
-    (`runtime/runtime.c` and `runtime/runtime_os.c`) and run. A source with
+    (`runtime/runtime.c` and `runtime/runtime-os.c`) and run. A source with
     `export const main` (or the legacy `export function main`) is linked without
     the driver.
   - `<name>.args` — extra CLI flags, whitespace separated.
@@ -44,7 +44,7 @@ test is **data, not code**: a source file next to the output it must produce.
   `--link` path, linkage, or `--strict-exports`: expected exit code, stdout,
   and `expected.ir` fragments.
 - **The pipeline checks are code**, in `tests/run.js` itself and
-  `tests/runtime_test.c`, `tests/layout/`, `tests/ir/`: runtime unit tests,
+  `tests/runtime-test.c`, `tests/layout/`, `tests/ir/`: runtime unit tests,
   the inline allocator against the C arena layout, size and wasm profiles,
   interop, exit codes, packaging. Add one there only when a golden cannot
   express the property (a byte budget, a vectorisation check, an ABI
@@ -75,7 +75,7 @@ test is **data, not code**: a source file next to the output it must produce.
   under the repository (`build/`), because `self/compile.ts` finds
   `scripts/build.sh` and `std/` by climbing from its own path.
 - **The C a case links against is built once per run, not once per case.**
-  `runtime/runtime.c`, `runtime/runtime_os.c` and `tests/driver.c` become object
+  `runtime/runtime.c`, `runtime/runtime-os.c` and `tests/driver.c` become object
   files on their first use and every `.out` case links against those: measured,
   470 ms a link became 91 ms, with 362 ms paid once. `runtimeObjects(defines)`
   owns them and `linkNative` is the one place a case is linked.
@@ -125,7 +125,7 @@ PR adding a construct is not finished without all of them:
    entry carries). `self/` may not use the construct in its own source until the
    next release (the rolling freeze, `.claude/selfhost.md`).
 7. A case that *reaches* each new wording, not only a code for it.
-   `tests/diagnostic_coverage.js` compiles the negatives, the `perf_*`
+   `tests/diagnostic-coverage.js` compiles the negatives, the `perf_*`
    positives and `tests/wordings/`, reads the code out of every `--json`
    object, and requires each registry code to be provoked or named in
    `tests/wordings/unreachable.txt` with a reason. A wording no case reaches is
@@ -144,7 +144,7 @@ construct is a regression until proven otherwise.
 
 Structural guards (the runtime's two `.text*` budgets — every `.text*` section
 of `clang -Oz -c runtime/runtime.c` summed, and the same for
-`runtime/runtime_os.c`, which is neither file's source size and neither is
+`runtime/runtime-os.c`, which is neither file's source size and neither is
 `size`'s text column; they are separate so that a new syscall wrapper cannot
 move the core's ceiling — the runtime symbol table agreeing across
 `self/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
@@ -434,15 +434,15 @@ wording gets proved only where somebody happened to write one down — when the
 gap was measured, 176 of the registry's 351 codes were reached by nothing that
 outlived stage0 (WP19 §2B, "The wording gap"). The registry grows, so the
 number to trust is the one the tool prints, not one written down here.
-`tests/diagnostic_coverage.js` runs it, and requires every registry code to be
+`tests/diagnostic-coverage.js` runs it, and requires every registry code to be
 **provoked by a program or named in `tests/wordings/unreachable.txt` with a
 reason**, so a new diagnostic arrives with a case or with a sentence saying why
 it cannot have one.
 
 ```bash
-node tests/diagnostic_coverage.js --compiler build/nish --require-coverage
-node tests/diagnostic_coverage.js --report              # every code, covered or not
-node tests/diagnostic_coverage.js --update              # rewrite the .err pins
+node tests/diagnostic-coverage.js --compiler build/nish --require-coverage
+node tests/diagnostic-coverage.js --report              # every code, covered or not
+node tests/diagnostic-coverage.js --update              # rewrite the .err pins
 ```
 
 Take the counts from the summary line the tool prints rather than from here —

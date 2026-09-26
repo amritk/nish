@@ -523,8 +523,8 @@ export class RuntimeTable {
     );
     panicDiv.noreturn = true;
     this.addWrites(WRITES_PANIC, panicDiv);
-    // WP29 P1, runtime/runtime_parallel.c: how a `parallelMapInto` or a
-    // `parallelReduce` becomes several threads (`self/emit_parallel.ts`). It
+    // WP29 P1, runtime/runtime-parallel.c: how a `parallelMapInto` or a
+    // `parallelReduce` becomes several threads (`self/emit-parallel.ts`). It
     // calls `body(lo, hi, ctx)` once per chunk, so it does whatever the body
     // does: a shared write, which is the chunk loop's own `dst[i]`, and not
     // `willreturn`, because neither `pthread_join` nor an arbitrary body is

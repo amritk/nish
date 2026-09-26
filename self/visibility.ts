@@ -58,7 +58,7 @@ export class BuildMode {
    * layouts, whatever `export` says: a header lists every class's C struct, a
    * wasm module or an N-API shim is driven by a host through the declarations
    * written for it, and a declared C function may be handed an object. A
-   * layout decision that is only this program's to make (`self/inline_arrays.ts`)
+   * layout decision that is only this program's to make (`self/inline-arrays.ts`)
    * keeps the declared layout in such a build, for every class.
    */
   layoutsShared: boolean;

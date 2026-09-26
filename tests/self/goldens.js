@@ -38,7 +38,7 @@
  *     the corpus outside `self/`: 262 programs, whole dumps, one after
  *     another. This is where per-construct checker coverage lives, so it is
  *     stored as text a failure can be read as a diff.
- *   - `goldens/checked_self.txt` — the same dump for the 57 programs of
+ *   - `goldens/checked-self.txt` — the same dump for the 57 programs of
  *     `self/`, stored **deduplicated by module**. A `self/` program is loaded
  *     whole, so each of the 57 entries re-dumps every module it imports, and
  *     the raw text is 19.9 MB of which 1.0 MB is distinct. The entry index
@@ -139,7 +139,7 @@ function header(what) {
  * a golden nobody can read the diff of is a hash with extra bytes.
  */
 function produceChecked(seed) {
-  const dumper = link(seed, path.join("self", "dump_checked.ts"), "dump_checked");
+  const dumper = link(seed, path.join("self", "dump-checked.ts"), "dump_checked");
   if (dumper.error !== undefined) return { error: dumper.error };
 
   const outside = [];
@@ -242,7 +242,7 @@ function produceChecked(seed) {
   return {
     files: new Map([
       ["checked.txt", `${outsideText.join("\n")}\n`],
-      ["checked_self.txt", `${selfText.join("\n")}\n`],
+      ["checked-self.txt", `${selfText.join("\n")}\n`],
     ]),
     note: `${outsidePrograms + selfPrograms} programs, ${outsideLines + selfLines} dump lines`,
   };
@@ -295,8 +295,8 @@ const GOLDEN_SET = [
       "diagnostics",
       path.join("tests", "self", "diagnostics.ts"),
       [
-        path.join("tests", "self", "diagnostics_fixture.txt"),
-        path.join("tests", "self", "diagnostics_second.txt"),
+        path.join("tests", "self", "diagnostics-fixture.txt"),
+        path.join("tests", "self", "diagnostics-second.txt"),
       ],
       "`self/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut."
     ),
@@ -340,8 +340,8 @@ function goldenPath(file) {
 /**
  * The seed this file's rule allows: `given` (a `--seed` value), then
  * `NISH_BOOTSTRAP`, then `build/nish`, and no fourth answer. Exported because
- * the oracles that outlive stage0 (`lexer_oracle.js`, `parser_oracle.js`,
- * `support_oracle.js`) follow the same rule since R6 took their stage0
+ * the oracles that outlive stage0 (`lexer-oracle.js`, `parser-oracle.js`,
+ * `support-oracle.js`) follow the same rule since R6 took their stage0
  * fallback away, and one spelling of it is enough.
  */
 const seedWithoutStage0 = (given) => {

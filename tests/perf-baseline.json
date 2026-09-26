@@ -11,7 +11,7 @@
     "self/assignment.ts": {
       "NL9011": 1
     },
-    "self/ast_text.ts": {
+    "self/ast-text.ts": {
       "NL9002": 1,
       "NL9003": 2
     },
@@ -51,13 +51,13 @@
     "self/emit.ts": {
       "NL9011": 5
     },
-    "self/emit_arrays.ts": {
+    "self/emit-arrays.ts": {
       "NL9007": 1
     },
-    "self/emit_classes.ts": {
+    "self/emit-classes.ts": {
       "NL9011": 1
     },
-    "self/emit_control.ts": {
+    "self/emit-control.ts": {
       "NL9007": 2
     },
     "self/escape.ts": {
@@ -74,23 +74,23 @@
     "self/ice.ts": {
       "NL9009": 1
     },
-    "self/interop_abi.ts": {
+    "self/interop-abi.ts": {
       "NL9007": 1,
       "NL9010": 1,
       "NL9011": 4
     },
-    "self/interop_dts.ts": {
+    "self/interop-dts.ts": {
       "NL9011": 3
     },
-    "self/interop_header.ts": {
+    "self/interop-header.ts": {
       "NL9007": 1,
       "NL9011": 6
     },
-    "self/interop_napi.ts": {
+    "self/interop-napi.ts": {
       "NL9010": 1,
       "NL9011": 5
     },
-    "self/interop_wasm.ts": {
+    "self/interop-wasm.ts": {
       "NL9007": 4,
       "NL9011": 1
     },

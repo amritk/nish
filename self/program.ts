@@ -19,11 +19,11 @@
 
 import { CheckContext } from "./context";
 import { SourceFile } from "./diagnostics";
-import { BuiltinExport } from "./nish_modules";
+import { BuiltinExport } from "./nish-modules";
 import { StringMap, StringSet } from "./map";
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
 import { packageSymbolPrefix } from "./packages";
-import { isCollectionsModule, isMapExtrasModule } from "./std_modules";
+import { isCollectionsModule, isMapExtrasModule } from "./std-modules";
 import { Local } from "./symbols";
 import { TypeTable } from "./types";
 
@@ -182,7 +182,7 @@ export class FunctionSig {
 }
 
 // WP29 P1: what an instantiation is to the data-parallel lowering
-// (`self/parallel.ts` decides, `self/emit_parallel.ts` reads).
+// (`self/parallel.ts` decides, `self/emit-parallel.ts` reads).
 
 /** An ordinary instantiation, lowered as its body is written. */
 export const PAR_NONE: i32 = 0;
@@ -194,7 +194,7 @@ export const PAR_REDUCE: i32 = 2;
 export const PAR_CHUNK: i32 = 3;
 
 // WP32: what an instantiation is to the emitter's `Map` lowering
-// (`mapIntrinsicRole` in `self/generics.ts` decides, `self/emit_map.ts` reads).
+// (`mapIntrinsicRole` in `self/generics.ts` decides, `self/emit-map.ts` reads).
 
 /** An ordinary instantiation. */
 export const MAP_NONE: i32 = 0;
@@ -211,7 +211,7 @@ export const MAP_STORED_KEY: i32 = 5;
 
 // WP32 S5: what a call is to a fused lookup (docs/wp32-map.md §9.1). The
 // checker decides (`self/fusion.ts`), and the attribute pass and the emitter
-// read (`fusedCalleesOf` and `emitFusedCall` in `self/emit_map.ts`).
+// read (`fusedCalleesOf` and `emitFusedCall` in `self/emit-map.ts`).
 
 /** An ordinary call. */
 export const FUSE_NONE: i32 = 0;
@@ -620,7 +620,7 @@ export class FieldInfo {
   /**
    * The number of element slots an array field holds inside its object, or -1
    * for a field laid out as it always was. Decided once the whole program is
-   * checked (`self/inline_arrays.ts`): an inline field is the array header and
+   * checked (`self/inline-arrays.ts`): an inline field is the array header and
    * `inlineCapacity` slots, one LLVM member `{ %struct.nish_array, [K x T] }`,
    * so `index` does not move and `offset` is recomputed.
    */
@@ -1132,7 +1132,7 @@ export class CheckedProgram {
   parallelCalls: ParallelCall[];
   /**
    * Every `x.f = e;` in this module's bodies whose field is stored inline, with
-   * the length `e` is known to have (`self/inline_arrays.ts`). Parallel lists
+   * the length `e` is known to have (`self/inline-arrays.ts`). Parallel lists
    * rather than a table by node id: there are a handful per program, and a
    * per-node array would cost every module a slot per node for them.
    */
@@ -1203,7 +1203,7 @@ export class CheckedProgram {
    * end of an `s.substring(0, n)` is usually proven and the other is not.
    *
    * This is not a bounds *check*. JavaScript's `substring` clamps each end into
-   * `[0, len]`, which `self/emit_strings.ts` writes as an `llvm.smin` /
+   * `[0, len]`, which `self/emit-strings.ts` writes as an `llvm.smin` /
    * `llvm.smax` pair, and that clamp is the semantics rather than a safety net
    * — `--unchecked-indexing` does not remove it and must not. What the proof
    * buys is that a bound the clamp cannot move needs no clamp, so the emitter

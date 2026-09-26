@@ -7,11 +7,11 @@
 //
 // Each path segment is split on `.` and every part must be lowercase letters and
 // digits joined by single hyphens, so `no-attribution.test.mjs`, `nish.d.ts` and
-// `changelog/0.10.0.json` pass and `emit_arrays.ts` and `emitArrays.ts` do not.
+// `changelog/0.10.0.json` pass and `emit-arrays.ts` and `emitArrays.ts` do not.
 // A leading dot (`.github`, `.gitignore`) and a leading `@` (an npm scope) are
 // dropped before the check.
 //
-// Two kinds of name are exempt, because the spelling carries meaning:
+// Three kinds of name are exempt, because the spelling carries meaning:
 //   - An ALL-CAPS file is a document convention every reader knows to look for:
 //     `README.md`, `LICENSE`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`,
 //     `docs/LANGUAGE.md`.
@@ -20,6 +20,8 @@
 //     wordings register and the goldens, and the family prefix before its first
 //     underscore is how `.claude/testing.md` groups the suite. Renaming 3,000
 //     fixtures would move all of that for no reader's benefit.
+//   - A `node_modules` directory: package resolution looks for that name, so
+//     the cookbook's package example has to live under one.
 //
 //   node scripts/check-filenames.mjs             exit 1 on any violation
 //   node scripts/check-filenames.mjs --advisory  print them, exit 0
@@ -49,7 +51,7 @@ const offendingSegments = (file) => {
   const segments = file.split("/");
   const base = segments[segments.length - 1];
   const dirs = segments.slice(0, -1);
-  const bad = dirs.filter((dir) => !isKebabSegment(dir));
+  const bad = dirs.filter((dir) => dir !== "node_modules" && !isKebabSegment(dir));
   if (!SHOUTED_DOCUMENT.test(base) && !isKebabSegment(base)) {
     bad.push(base);
   }
@@ -67,7 +69,7 @@ const main = (argv) => {
   const lines = violations.map((file) => `  ${file}  (${offendingSegments(file).join(", ")})\n`);
   process.stderr.write(
     `${violations.length} path(s) are not kebab-case:\n${lines.join("")}` +
-      "\nRename to kebab-case (`emit_arrays.ts` -> `emit-arrays.ts`); see .claude/linting.md.\n"
+      "\nRename to kebab-case (`emit-arrays.ts` -> `emit-arrays.ts`); see .claude/linting.md.\n"
   );
   return advisory ? 0 : 1;
 };

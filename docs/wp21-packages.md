@@ -119,7 +119,7 @@ conversion. Prebuilding therefore means prebuilding the cross product:
 {i32, f64} × {x86_64, aarch64, wasm32} × {speed, size, debug}
 ```
 
-and the wasm column is not even the same runtime (`runtime_wasm.c` is
+and the wasm column is not even the same runtime (`runtime-wasm.c` is
 freestanding: no strings, no I/O). Eighteen artifacts per release, for a
 language whose source is sitting right there and compiles in milliseconds.
 
@@ -700,7 +700,7 @@ disappeared and `packages.ts` says so.
   `open(O_RDONLY)` accepts a directory and `lseek` then answers `LONG_MAX`, so
   `nish_read_file_or_null` asked the arena for that and stage1 died with
   `out of memory` where stage0 reported a module. It guards with `S_ISREG` now
-  (`runtime/runtime_os.c`, 61 bytes, inside the same ceiling).
+  (`runtime/runtime-os.c`, 61 bytes, inside the same ceiling).
 - **A dependency's exports are not the program's C ABI**, and no stage of this
   note makes them one. `--emit-header`, `--emit-dts` and `--emit-napi` declare
   the *root package's* functions (§4: a package's artifact rows are the
@@ -708,7 +708,7 @@ disappeared and `packages.ts` says so.
   reach a host is a re-export from the root package — `export { f } from "pkg"`,
   which the language does not have and which `docs/LANGUAGE.md` rejects by name.
   It waits on that construct rather than on a stage here, and
-  stage0's `src/interop/abi.ts` and `self/interop_abi.ts` say so at the line that
+  stage0's `src/interop/abi.ts` and `self/interop-abi.ts` say so at the line that
   skips a dependency's module.
 
 ### 10e. What proves it
@@ -754,7 +754,7 @@ what is being pinned is not which answer they give but that it is the same one
 npm package, with `import`, `require` and `default` rows and no `nish` one.
 `tests/cases/reject_bare_package` is the package that is not installed at all,
 and `tests/cases/reject_bare_import` is a specifier that is neither relative nor
-a package name. `docs/cookbook/mod_package.ts` is the lowering, and it shows the
+a package name. `docs/cookbook/mod-package.ts` is the lowering, and it shows the
 only thing a package changes about the IR: the prefix on the imported symbol.
 
 ## 11. S3 as built: the resolution diagnostics

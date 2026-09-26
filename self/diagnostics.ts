@@ -160,7 +160,7 @@ export class SourceFile {
         // stage0 counts the overshoot as characters — its
         // `getLineAndCharacterOfPosition` answers `position - lineStart` with no
         // line to bound it — so each one is a column
-        // (`tests/self/diagnostics_fixture.txt`, `error at 325`).
+        // (`tests/self/diagnostics-fixture.txt`, `error at 325`).
         units = units + 1;
       } else {
         const byte = this.text.charCodeAt(i);

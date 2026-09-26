@@ -12,7 +12,7 @@
 // into the module's arena and copies results out; when that companion sits
 // next to the .wasm file this script uses it instead of the plain loader:
 //
-//   scripts/build.sh build/arrays.ll runtime/runtime_wasm.c -o build/arrays.wasm --profile wasm
+//   scripts/build.sh build/arrays.ll runtime/runtime-wasm.c -o build/arrays.wasm --profile wasm
 //   node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(...) = 2, 4, 6
 //   node examples/node-host.mjs build/arrays.wasm sumI64 i64:1,2,3      # sumI64(...) = 6n
 //

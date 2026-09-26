@@ -62,14 +62,14 @@ Each kernel is one Nish binary, run as the loop a program writes without `nish/t
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par_compute | 64 square roots per element, 2^21 elements (f64) | 775 / 800 | 218 / 222 | 3.55x | 33,972 / 34,612 |
-| par_alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 137 / 175 | 78.2 / 80.5 | 1.75x | 33,960 / 34,600 |
-| par_nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 168 / 172 | 49.7 / 52.3 | 3.38x | 1,592 / 2,104 |
-| par_short | an 8-element map called 2^20 times, each call fed by the last | 46.1 / 58.4 | 46.1 / 58.4 | 1.00x | 1,320 / 1,320 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 775 / 800 | 218 / 222 | 3.55x | 33,972 / 34,612 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 137 / 175 | 78.2 / 80.5 | 1.75x | 33,960 / 34,600 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 168 / 172 | 49.7 / 52.3 | 3.38x | 1,592 / 2,104 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 46.1 / 58.4 | 46.1 / 58.4 | 1.00x | 1,320 / 1,320 |
 
 ## Map and Set (WP32)
 
-Each workload is timed by the program around the workload alone, not as process wall time, and every column is its own process, the columns taking turns round by round: 9 timed runs after 1 warm-up, min / median in ms. The workloads are [docs/wp32-map.md](wp32-map.md) §2's, over the same keys, and every program prints checksum lines `bench/map_node.mjs` prints from Node's `Map`. `unordered` is the S1 prototype with keys and values in the buckets, the layout the language does not ship; the ratios divide minimums. The programs are built with `nish bench/<name>.ts --link <exe> --profile speed`, and bench/README.md describes them; §10 of the note reads the numbers.
+Each workload is timed by the program around the workload alone, not as process wall time, and every column is its own process, the columns taking turns round by round: 9 timed runs after 1 warm-up, min / median in ms. The workloads are [docs/wp32-map.md](wp32-map.md) §2's, over the same keys, and every program prints checksum lines `bench/map-node.mjs` prints from Node's `Map`. `unordered` is the S1 prototype with keys and values in the buckets, the layout the language does not ship; the ratios divide minimums. The programs are built with `nish bench/<name>.ts --link <exe> --profile speed`, and bench/README.md describes them; §10 of the note reads the numbers.
 
 ### n = 65,536
 
@@ -102,7 +102,7 @@ Each workload is timed by the program around the workload alone, not as process 
 | insert str | 14.7 / 17.5 | 10.8 / 11.8 | 17.3 / 21.0 | 33.0 / 39.8 | 36.2 / 40.6 | 1.36x | 0.62x | 0.33x |
 | insert int | 12.0 / 13.8 | 6.25 / 7.82 | 13.0 / 16.3 | 18.0 / 21.8 | 21.2 / 23.0 | 1.91x | 0.48x | 0.35x |
 
-Peak RSS of `map_presize` running one variant alone (whole process, both key sets included): growing 33,588 KB, `reserve` 29,108 KB.
+Peak RSS of `map-presize` running one variant alone (whole process, both key sets included): growing 33,588 KB, `reserve` 29,108 KB.
 
 **(d) the global `Map` against `StringMap`**
 
@@ -119,7 +119,7 @@ Peak RSS of `map_presize` running one variant alone (whole process, both key set
 | count int | 5.46 / 5.81 |  | 4.36 / 4.76 | 24.9 / 29.8 |  | 1.25x | 0.22x |
 | churn int | 23.4 / 24.6 |  | 27.9 / 29.4 | 48.6 / 61.0 |  | 0.84x | 0.48x |
 
-Of 15 columns by their workloads, 70 cell(s) have a median more than 5% above their minimum: map_proto_ordered_fp on insert str, map_proto_unordered on insert str, map_node on insert str, map_proto_ordered on hit str, map_proto_ordered_fp on hit str, map_proto_unordered on hit str, map_node on hit str, map_proto_ordered on miss str, map_proto_ordered_fp on miss str, map_proto_ordered_fp32 on miss str, map_proto_unordered on miss str, map_node on miss str, map_proto_ordered on count str, map_proto_ordered_fp on count str, map_proto_unordered on count str, map_node on count str, map_proto_ordered on churn str, map_proto_ordered_fp on churn str, map_proto_ordered_fp32 on churn str, map_proto_unordered on churn str, map_node on churn str, map_proto_ordered on insert int, map_proto_ordered_fp on insert int, map_proto_unordered on insert int, map_node on insert int, map_proto_ordered on hit int, map_proto_ordered_fp32 on hit int, map_proto_unordered on hit int, map_node on hit int, map_proto_ordered on miss int, map_proto_ordered_fp on miss int, map_proto_ordered_fp32 on miss int, map_node on miss int, map_proto_ordered on count int, map_proto_ordered_fp on count int, map_proto_ordered_fp32 on count int, map_proto_unordered on count int, map_node on count int, map_proto_ordered on churn int, map_proto_ordered_fp on churn int, map_proto_ordered_fp32 on churn int, map_proto_unordered on churn int, map_node on churn int, map_wordcount:fused on count str, map_wordcount:double on count str, map_wordcount.mjs:double on count str, map_wordcount:fused on count int, map_wordcount:double on count int, map_wordcount.mjs:fused on count int, map_wordcount.mjs:double on count int, map_presize:grow on insert str, map_presize:reserve on insert str, map_presize.mjs:grow on insert str, map_presize.mjs:reserve on insert str, map_presize:grow on insert int, map_presize:reserve on insert int, map_presize.mjs:grow on insert int, map_presize.mjs:reserve on insert int, map_vs_stringmap:stringmap on insert str, map_vs_stringmap:map on hit str, map_vs_stringmap:stringmap on hit str, map_vs_stringmap:map on miss str, map_vs_stringmap:stringmap on miss str, map_vs_stringmap:map on count str, map_vs_stringmap:stringmap on count str, map_vs_stringmap:map on churn str, map_vs_stringmap:map on hit int, map_vs_stringmap:map on miss int, map_vs_stringmap:map on count int, map_vs_stringmap:map on churn int.
+Of 15 columns by their workloads, 70 cell(s) have a median more than 5% above their minimum: map-proto-ordered-fp on insert str, map-proto-unordered on insert str, map-node on insert str, map-proto-ordered on hit str, map-proto-ordered-fp on hit str, map-proto-unordered on hit str, map-node on hit str, map-proto-ordered on miss str, map-proto-ordered-fp on miss str, map-proto-ordered-fp32 on miss str, map-proto-unordered on miss str, map-node on miss str, map-proto-ordered on count str, map-proto-ordered-fp on count str, map-proto-unordered on count str, map-node on count str, map-proto-ordered on churn str, map-proto-ordered-fp on churn str, map-proto-ordered-fp32 on churn str, map-proto-unordered on churn str, map-node on churn str, map-proto-ordered on insert int, map-proto-ordered-fp on insert int, map-proto-unordered on insert int, map-node on insert int, map-proto-ordered on hit int, map-proto-ordered-fp32 on hit int, map-proto-unordered on hit int, map-node on hit int, map-proto-ordered on miss int, map-proto-ordered-fp on miss int, map-proto-ordered-fp32 on miss int, map-node on miss int, map-proto-ordered on count int, map-proto-ordered-fp on count int, map-proto-ordered-fp32 on count int, map-proto-unordered on count int, map-node on count int, map-proto-ordered on churn int, map-proto-ordered-fp on churn int, map-proto-ordered-fp32 on churn int, map-proto-unordered on churn int, map-node on churn int, map-wordcount:fused on count str, map-wordcount:double on count str, map-wordcount.mjs:double on count str, map-wordcount:fused on count int, map-wordcount:double on count int, map-wordcount.mjs:fused on count int, map-wordcount.mjs:double on count int, map-presize:grow on insert str, map-presize:reserve on insert str, map-presize.mjs:grow on insert str, map-presize.mjs:reserve on insert str, map-presize:grow on insert int, map-presize:reserve on insert int, map-presize.mjs:grow on insert int, map-presize.mjs:reserve on insert int, map-vs-stringmap:stringmap on insert str, map-vs-stringmap:map on hit str, map-vs-stringmap:stringmap on hit str, map-vs-stringmap:map on miss str, map-vs-stringmap:stringmap on miss str, map-vs-stringmap:map on count str, map-vs-stringmap:stringmap on count str, map-vs-stringmap:map on churn str, map-vs-stringmap:map on hit int, map-vs-stringmap:map on miss int, map-vs-stringmap:map on count int, map-vs-stringmap:map on churn int.
 
 ### n = 1,048,576
 
@@ -152,7 +152,7 @@ Of 15 columns by their workloads, 70 cell(s) have a median more than 5% above th
 | insert str | 350 / 402 | 252 / 297 | 357 / 448 | 1002 / 1089 | 936 / 1086 | 1.39x | 0.71x | 0.25x |
 | insert int | 265 / 323 | 197 / 223 | 326 / 377 | 492 / 575 | 542 / 580 | 1.34x | 0.60x | 0.40x |
 
-Peak RSS of `map_presize` running one variant alone (whole process, both key sets included): growing 510,388 KB, `reserve` 444,340 KB.
+Peak RSS of `map-presize` running one variant alone (whole process, both key sets included): growing 510,388 KB, `reserve` 444,340 KB.
 
 **(d) the global `Map` against `StringMap`**
 
@@ -169,7 +169,7 @@ Peak RSS of `map_presize` running one variant alone (whole process, both key set
 | count int | 194 / 231 |  | 144 / 183 | 762 / 928 |  | 1.35x | 0.25x |
 | churn int | 762 / 869 |  | 878 / 936 | 1633 / 1971 |  | 0.87x | 0.47x |
 
-Of 15 columns by their workloads, 74 cell(s) have a median more than 5% above their minimum: map_proto_ordered on insert str, map_proto_ordered_fp32 on insert str, map_proto_unordered on insert str, map_node on insert str, map_proto_ordered on hit str, map_proto_ordered_fp on hit str, map_proto_ordered_fp32 on hit str, map_proto_ordered on miss str, map_proto_ordered_fp on miss str, map_proto_unordered on miss str, map_proto_ordered on count str, map_proto_ordered_fp on count str, map_proto_ordered_fp32 on count str, map_proto_unordered on count str, map_node on count str, map_proto_ordered on churn str, map_proto_ordered_fp on churn str, map_proto_ordered_fp32 on churn str, map_proto_unordered on churn str, map_node on churn str, map_proto_ordered on insert int, map_proto_ordered_fp on insert int, map_proto_ordered_fp32 on insert int, map_proto_unordered on insert int, map_node on insert int, map_proto_ordered on hit int, map_proto_ordered_fp on hit int, map_proto_ordered_fp32 on hit int, map_proto_unordered on hit int, map_node on hit int, map_proto_ordered on miss int, map_proto_ordered_fp on miss int, map_proto_ordered_fp32 on miss int, map_proto_unordered on miss int, map_node on miss int, map_proto_ordered on count int, map_proto_ordered_fp on count int, map_proto_ordered_fp32 on count int, map_proto_unordered on count int, map_node on count int, map_proto_ordered on churn int, map_proto_ordered_fp on churn int, map_proto_ordered_fp32 on churn int, map_proto_unordered on churn int, map_node on churn int, map_wordcount:fused on count str, map_wordcount:double on count str, map_wordcount.mjs:fused on count str, map_wordcount.mjs:double on count str, map_wordcount:fused on count int, map_wordcount:double on count int, map_wordcount.mjs:fused on count int, map_presize:grow on insert str, map_presize:reserve on insert str, map_presize.mjs:grow on insert str, map_presize.mjs:reserve on insert str, map_presize:grow on insert int, map_presize:reserve on insert int, map_presize.mjs:grow on insert int, map_presize.mjs:reserve on insert int, map_vs_stringmap:map on insert str, map_vs_stringmap:stringmap on insert str, map_vs_stringmap:map on hit str, map_vs_stringmap:stringmap on hit str, map_vs_stringmap:map on miss str, map_vs_stringmap:stringmap on miss str, map_vs_stringmap:map on count str, map_vs_stringmap:stringmap on count str, map_vs_stringmap:map on churn str, map_vs_stringmap:map on insert int, map_vs_stringmap:map on hit int, map_vs_stringmap:map on miss int, map_vs_stringmap:map on count int, map_vs_stringmap:map on churn int.
+Of 15 columns by their workloads, 74 cell(s) have a median more than 5% above their minimum: map-proto-ordered on insert str, map-proto-ordered-fp32 on insert str, map-proto-unordered on insert str, map-node on insert str, map-proto-ordered on hit str, map-proto-ordered-fp on hit str, map-proto-ordered-fp32 on hit str, map-proto-ordered on miss str, map-proto-ordered-fp on miss str, map-proto-unordered on miss str, map-proto-ordered on count str, map-proto-ordered-fp on count str, map-proto-ordered-fp32 on count str, map-proto-unordered on count str, map-node on count str, map-proto-ordered on churn str, map-proto-ordered-fp on churn str, map-proto-ordered-fp32 on churn str, map-proto-unordered on churn str, map-node on churn str, map-proto-ordered on insert int, map-proto-ordered-fp on insert int, map-proto-ordered-fp32 on insert int, map-proto-unordered on insert int, map-node on insert int, map-proto-ordered on hit int, map-proto-ordered-fp on hit int, map-proto-ordered-fp32 on hit int, map-proto-unordered on hit int, map-node on hit int, map-proto-ordered on miss int, map-proto-ordered-fp on miss int, map-proto-ordered-fp32 on miss int, map-proto-unordered on miss int, map-node on miss int, map-proto-ordered on count int, map-proto-ordered-fp on count int, map-proto-ordered-fp32 on count int, map-proto-unordered on count int, map-node on count int, map-proto-ordered on churn int, map-proto-ordered-fp on churn int, map-proto-ordered-fp32 on churn int, map-proto-unordered on churn int, map-node on churn int, map-wordcount:fused on count str, map-wordcount:double on count str, map-wordcount.mjs:fused on count str, map-wordcount.mjs:double on count str, map-wordcount:fused on count int, map-wordcount:double on count int, map-wordcount.mjs:fused on count int, map-presize:grow on insert str, map-presize:reserve on insert str, map-presize.mjs:grow on insert str, map-presize.mjs:reserve on insert str, map-presize:grow on insert int, map-presize:reserve on insert int, map-presize.mjs:grow on insert int, map-presize.mjs:reserve on insert int, map-vs-stringmap:map on insert str, map-vs-stringmap:stringmap on insert str, map-vs-stringmap:map on hit str, map-vs-stringmap:stringmap on hit str, map-vs-stringmap:map on miss str, map-vs-stringmap:stringmap on miss str, map-vs-stringmap:map on count str, map-vs-stringmap:stringmap on count str, map-vs-stringmap:map on churn str, map-vs-stringmap:map on insert int, map-vs-stringmap:map on hit int, map-vs-stringmap:map on miss int, map-vs-stringmap:map on count int, map-vs-stringmap:map on churn int.
 
 ## Checksums
 
@@ -182,10 +182,10 @@ Every binary of a benchmark printed the same output (numeric tokens compared to 
 - **strbuild** (string building, 131072 template pieces joined into 806 KB): `806394`
 - **vec3** (Vec3 class with methods, 5e7 iterations (f64)): `5.0374790893186878 -2.5000002511859338 14.987437525871041 308333374.98446459`
 - **result** (Result<number, number> returned and passed, 2e8 calls (WP17 packing)): `15873`
-- **par_compute** (loop and map): `1875749.772460931`
-- **par_alloc** (loop and map): `2105701356`
-- **par_nbody** (loop and map): `-534915.1104460816 -536673.7291541903`
-- **par_short** (loop and map): `4569990`
+- **par-compute** (loop and map): `1875749.772460931`
+- **par-alloc** (loop and map): `2105701356`
+- **par-nbody** (loop and map): `-534915.1104460816 -536673.7291541903`
+- **par-short** (loop and map): `4569990`
 
 ## Commands
 
@@ -244,7 +244,7 @@ nish build/bench/src/strbuild.ts --link build/bench/strbuild-nish --profile spee
 nish build/bench/src/strbuild.ts --nsw --link build/bench/strbuild-nish-nsw --profile speed
 nish build/bench/src/strbuild.ts --link build/bench/strbuild-nish-size --profile size
 clang -O3 -s build/bench/src/strbuild.c -lm -o build/bench/strbuild-c
-clang -O3 -s build/bench/src/strbuild_naive.c -lm -o build/bench/strbuild-c-naive
+clang -O3 -s build/bench/src/strbuild-naive.c -lm -o build/bench/strbuild-c-naive
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/strbuild.rs -o build/bench/strbuild-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/strbuild.rs -o build/bench/strbuild-rust-native
 go build -trimpath -ldflags=-s -w -o build/bench/strbuild-go build/bench/src/strbuild.go
@@ -273,28 +273,28 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 go build -trimpath -ldflags=-s -w -o build/bench/result-go build/bench/src/result.go
 ```
 
-### par_compute
+### par-compute
 
 ```
-nish build/bench/src/par_compute.ts --link build/bench/par_compute --profile speed
+nish build/bench/src/par-compute.ts --link build/bench/par-compute --profile speed
 ```
 
-### par_alloc
+### par-alloc
 
 ```
-nish build/bench/src/par_alloc.ts --link build/bench/par_alloc --profile speed
+nish build/bench/src/par-alloc.ts --link build/bench/par-alloc --profile speed
 ```
 
-### par_nbody
+### par-nbody
 
 ```
-nish build/bench/src/par_nbody.ts --link build/bench/par_nbody --profile speed
+nish build/bench/src/par-nbody.ts --link build/bench/par-nbody --profile speed
 ```
 
-### par_short
+### par-short
 
 ```
-nish build/bench/src/par_short.ts --link build/bench/par_short --profile speed
+nish build/bench/src/par-short.ts --link build/bench/par-short --profile speed
 ```
 
 Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols`, plus `-C target-cpu=native` for the native column. Go has no optimisation level to choose: `-trimpath` and `-ldflags=-s -w` only strip the binary. `nish --link` runs `scripts/build.sh --profile speed` (`clang -O3 -flto` with section GC and stripping; see the README) over the module and `runtime/runtime.c`.

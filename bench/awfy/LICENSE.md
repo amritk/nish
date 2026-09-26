@@ -60,8 +60,8 @@ and a copy of `mandelbrot.ts` would start with
 | `tests/link/range_export/permute.ts` | `permute.ts` (upstream `permute.js`): the whole `Permute` class | MIT |
 | `tests/cases/arr_field_reload.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
 | `tests/cases/arr_repeat_check.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
-| `docs/cookbook/arr_repeat_check.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
-| `docs/cookbook/arr_field_element.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `docs/cookbook/arr-repeat-check.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
+| `docs/cookbook/arr-field-element.ts` | `permute.ts` (upstream `permute.js`): `swap` | MIT |
 | `tests/cases/arr_header_tbaa.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
 | `tests/cases/arr_header_tbaa_threads.ts` | `towers.ts` (upstream `towers.js`): `TowersDisk`, `pushDisk`, `popDiskFrom` and `moveTopDisk` | MIT |
 | `tests/cases/cls_inline_array_call.ts` | `queens.ts` (upstream `queens.js`): `queens` filling a field from `filledBooleans(8)` / `filledBooleans(16)`, with the helper | MIT |

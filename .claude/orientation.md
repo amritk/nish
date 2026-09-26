@@ -66,10 +66,10 @@ self/               the compiler, in Nish — see .claude/selfhost.md
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
   checker.ts …      pass 1 signatures, pass 1b imports, pass 2 bodies
   emit*.ts ir.ts    runtime.ts, target.ts, escape.ts, attributes.ts, debug.ts
-  interop_*.ts      C header, wasm .d.ts, N-API shim
+  interop-*.ts      C header, wasm .d.ts, N-API shim
 std/                the standard library, in Nish — testing.ts, text.ts, json.ts,
                     std/README.md
-runtime/            runtime.c, runtime_os.c, nish.h, nish.d.ts, runtime_wasm.c,
+runtime/            runtime.c, runtime-os.c, nish.h, nish.d.ts, runtime-wasm.c,
                     shim.mjs
 bin/                the npm command: hands over to the prebuilt native compiler
 tests/              run.js + cases/ (goldens), link/, ir/, layout/,

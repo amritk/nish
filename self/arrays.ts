@@ -6,7 +6,7 @@ import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotati
 import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
-import { unwrapParens } from "./emit_util";
+import { unwrapParens } from "./emit-util";
 import {
   N_BLOCK,
   N_CALL,

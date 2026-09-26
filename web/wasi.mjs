@@ -134,7 +134,7 @@ class OpenFile {
  *
  * One host runs one instance once: the arena never shrinks and `proc_exit`
  * ends the instance, so a second compile gets a fresh instance rather than a
- * reset. That is the same trade `runtime/runtime_wasm.c` describes for the
+ * reset. That is the same trade `runtime/runtime-wasm.c` describes for the
  * freestanding profile, and instantiation of an already-compiled module is
  * cheap enough that a playground does not notice.
  */

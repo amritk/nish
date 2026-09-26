@@ -28,7 +28,7 @@ import {
   checkNamespaceProperty,
   isBuiltinFunction,
 } from "./builtins";
-import { BuiltinExport } from "./nish_modules";
+import { BuiltinExport } from "./nish-modules";
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result";
 import {
   checkMember,
@@ -73,7 +73,7 @@ import {
   Node,
 } from "./nodes";
 import { ParentTable } from "./parents";
-import { unwrapParens } from "./emit_util";
+import { unwrapParens } from "./emit-util";
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program";
 import { coercesTo } from "./structs";
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator";

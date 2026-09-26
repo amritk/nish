@@ -30,7 +30,7 @@ stage0's `src/codegen/emit/{expressions,classes}.ts` (the bracket) and
 `nish_arena_keep`. Tests: `tests/cases/mem_*`,
 `tests/cases/reject_null_*`, `reject_nullable_scalar`,
 `reject_arena_release_type`, the `WP6: memory` block in `tests/run.js`, and
-the scope checks in `tests/runtime_test.c`.
+the scope checks in `tests/runtime-test.c`.
 
 ## 1. Stack allocation
 
@@ -304,7 +304,7 @@ offset in one `i64`. `nish_arena_release(mark)`:
   rule below): nothing happens.
 
 Scopes nest LIFO with the call stack, so a scoped function calling another
-scoped function is always released innermost first. `tests/runtime_test.c`
+scoped function is always released innermost first. `tests/runtime-test.c`
 exercises all four cases and a 100000-iteration mark/release loop.
 
 ## 2a. The call-site reclaim (WP9)
@@ -382,10 +382,10 @@ three refusals:
   unchanged.
 
 Refusing is always safe — it reclaims less — which is why every uncertain case
-takes that branch. `tests/runtime_test.c` exercises both outcomes and all three
+takes that branch. `tests/runtime-test.c` exercises both outcomes and all three
 refusals.
 
-`runtime/runtime_wasm.c` does not provide it, and does not need to: the
+`runtime/runtime-wasm.c` does not provide it, and does not need to: the
 freestanding wasm profile has no strings at all (WP8), and the bracket is only
 ever emitted around a call that returns one.
 
@@ -713,7 +713,7 @@ twice its time; `nish_arena_grow` only ever pushes a chunk in front of the
 others and moves `buf` to it, so an unchanged `buf` means rewinding `off` is
 the whole release, and otherwise `nish_arena_release(buf + off)` is exactly
 the runtime's own mark and release (`0` for an arena with no chunk yet, which
-releases everything). `runtime_wasm.c` rewinds `off` the same way.
+releases everything). `runtime-wasm.c` rewinds `off` the same way.
 
 The mark is the first instruction of the body, so it dominates every release.
 The body falling through releases before the back-edge; `continue` and `break`
