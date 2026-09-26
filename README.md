@@ -2,6 +2,8 @@
 
 # Nish
 
+**Native Instruction Static Host AKA Turbo Typescript. A fast subset of typescript without the encumbrance of javascript.**
+
 **An ahead-of-time compiler for a strictly static subset of TypeScript — LLVM IR in the middle, native binaries at the end. No interpreter, no garbage collector, nothing to ship beside the executable.**
 
 ![status](https://img.shields.io/badge/status-pre--alpha-ef4444?style=flat-square)
