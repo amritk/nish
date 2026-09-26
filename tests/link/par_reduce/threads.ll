@@ -6,11 +6,11 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i32 @add(i32 noundef, i32 noundef) #2
-declare noundef i32 @nish_main$arrow0(i32 noundef, i32 noundef) #2
-declare noundef double @nish_main$arrow1(double noundef, double noundef) #2
-declare noundef double @nish_main$arrow2(double noundef, double noundef) #2
-declare noundef i32 @nish_main$arrow3(i32 noundef, i32 noundef) #2
+declare noundef i32 @add(i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_main$arrow0(i32 noundef, i32 noundef) #0
+declare noundef double @nish_main$arrow1(double noundef, double noundef) #0
+declare noundef double @nish_main$arrow2(double noundef, double noundef) #0
+declare noundef i32 @nish_main$arrow3(i32 noundef, i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #4
 declare void @nish_arena_release(i64 noundef) #4
@@ -19,8 +19,10 @@ declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 nou
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #4
 declare void @nish_exit(i32 noundef) #5
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare void @nish_panic_div(i1 noundef zeroext) #6
-declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #0
+declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #1
+declare double @llvm.floor.f64(double) #0
+declare double @llvm.ceil.f64(double) #0
+declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -49,66 +51,41 @@ slow:
 define internal noundef i32 @nish.reduceBlockCount(i32 noundef %n) #0 {
 entry:
   %wanted.addr = alloca i32, align 4
-  %0 = sext i32 %n to i64
-  %1 = sext i32 1048576 to i64
-  %2 = add nsw i64 %0, %1
-  %3 = sub nsw i64 %2, 1
-  %4 = sext i32 1048576 to i64
-  %5 = icmp eq i64 %4, 0
-  %6 = icmp eq i64 %3, -9223372036854775808
-  %7 = icmp eq i64 %4, -1
-  %8 = and i1 %6, %7
-  %9 = or i1 %5, %8
-  br i1 %9, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %5)
-  unreachable
-
-div.ok:
-  %10 = sdiv i64 %3, %4
-  %11 = trunc i64 %10 to i32
-  store i32 %11, i32* %wanted.addr, align 4
-  %12 = load i32, i32* %wanted.addr, align 4
-  %13 = icmp slt i32 %12, 64
-  br i1 %13, label %cond.true, label %cond.false
+  %0 = sitofp i32 %n to double
+  %1 = sitofp i32 1048576 to double
+  %2 = fdiv double %0, %1
+  %3 = call double @llvm.ceil.f64(double %2)
+  %4 = call i32 @llvm.fptosi.sat.i32.f64(double %3)
+  store i32 %4, i32* %wanted.addr, align 4
+  %5 = load i32, i32* %wanted.addr, align 4
+  %6 = icmp slt i32 %5, 64
+  br i1 %6, label %cond.true, label %cond.false
 
 cond.true:
-  %14 = load i32, i32* %wanted.addr, align 4
+  %7 = load i32, i32* %wanted.addr, align 4
   br label %cond.end
 
 cond.false:
   br label %cond.end
 
 cond.end:
-  %15 = phi i32 [ %14, %cond.true ], [ 64, %cond.false ]
-  ret i32 %15
+  %8 = phi i32 [ %7, %cond.true ], [ 64, %cond.false ]
+  ret i32 %8
 }
 
 define internal noundef i32 @nish.reduceBlockStart(i32 noundef %n, i32 noundef %blocks, i32 noundef %k) #0 {
 entry:
-  %0 = sext i32 %n to i64
-  %1 = sext i32 %k to i64
-  %2 = mul nsw i64 %0, %1
-  %3 = sext i32 %blocks to i64
-  %4 = icmp eq i64 %3, 0
-  %5 = icmp eq i64 %2, -9223372036854775808
-  %6 = icmp eq i64 %3, -1
-  %7 = and i1 %5, %6
-  %8 = or i1 %4, %7
-  br i1 %8, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %4)
-  unreachable
-
-div.ok:
-  %9 = sdiv i64 %2, %3
-  %10 = trunc i64 %9 to i32
-  ret i32 %10
+  %0 = sitofp i32 %n to double
+  %1 = sitofp i32 %k to double
+  %2 = fmul double %0, %1
+  %3 = sitofp i32 %blocks to double
+  %4 = fdiv double %2, %3
+  %5 = call double @llvm.floor.f64(double %4)
+  %6 = call i32 @llvm.fptosi.sat.i32.f64(double %5)
+  ret i32 %6
 }
 
-define internal void @nish.dstTooShort(i32 noundef %have, i32 noundef %want) #0 {
+define internal void @nish.dstTooShort(i32 noundef %have, i32 noundef %want) #1 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_str_from_i32(i32 %have)
@@ -121,7 +98,7 @@ entry:
   unreachable
 }
 
-define internal void @nish.parallelReduce$i32$fn.3.add$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelReduce$i32$fn.3.add$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, i32, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, i32, %struct.nish_array* }, { %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 0
@@ -136,7 +113,7 @@ entry:
   ret void
 }
 
-define noundef i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #0 {
+define noundef i32 @nish.parallelReduce$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -248,7 +225,7 @@ for.end:
   ret i32 %49
 }
 
-define internal void @nish.parallelReduce$i32$fn.16.nish_main$arrow0$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelReduce$i32$fn.16.nish_main$arrow0$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, i32, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, i32, %struct.nish_array* }, { %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 0
@@ -263,7 +240,7 @@ entry:
   ret void
 }
 
-define noundef i32 @nish.parallelReduce$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #0 {
+define noundef i32 @nish.parallelReduce$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -375,7 +352,7 @@ for.end:
   ret i32 %49
 }
 
-define internal void @nish.parallelReduce$f64$fn.16.nish_main$arrow1$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelReduce$f64$fn.16.nish_main$arrow1$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, double, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, double, %struct.nish_array* }, { %struct.nish_array*, double, %struct.nish_array* }* %0, i32 0, i32 0
@@ -390,7 +367,7 @@ entry:
   ret void
 }
 
-define noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, double noundef %identity) #0 {
+define noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, double noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -502,7 +479,7 @@ for.end:
   ret double %49
 }
 
-define internal void @nish.parallelReduce$f64$fn.16.nish_main$arrow2$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelReduce$f64$fn.16.nish_main$arrow2$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, double, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, double, %struct.nish_array* }, { %struct.nish_array*, double, %struct.nish_array* }* %0, i32 0, i32 0
@@ -517,7 +494,7 @@ entry:
   ret void
 }
 
-define noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, double noundef %identity) #0 {
+define noundef double @nish.parallelReduce$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, double noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -629,7 +606,7 @@ for.end:
   ret double %49
 }
 
-define internal void @nish.parallelReduce$i32$fn.16.nish_main$arrow3$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #0 {
+define internal void @nish.parallelReduce$i32$fn.16.nish_main$arrow3$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
 entry:
   %0 = bitcast i8* %ctx to { %struct.nish_array*, i32, %struct.nish_array* }*
   %1 = getelementptr inbounds { %struct.nish_array*, i32, %struct.nish_array* }, { %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 0
@@ -644,7 +621,7 @@ entry:
   ret void
 }
 
-define noundef i32 @nish.parallelReduce$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #0 {
+define noundef i32 @nish.parallelReduce$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src, i32 noundef %identity) #1 {
 entry:
   %blocks.addr = alloca i32, align 4
   %partials.addr = alloca %struct.nish_array*, align 8
@@ -756,7 +733,7 @@ for.end:
   ret i32 %49
 }
 
-define internal void @nish.reduceBlocks$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.reduceBlocks$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -840,7 +817,7 @@ for.end:
   ret void
 }
 
-define internal void @nish.reduceBlocks$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.reduceBlocks$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -924,7 +901,7 @@ for.end:
   ret void
 }
 
-define internal void @nish.reduceBlocks$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.reduceBlocks$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -1008,7 +985,7 @@ for.end:
   ret void
 }
 
-define internal void @nish.reduceBlocks$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.reduceBlocks$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -1092,7 +1069,7 @@ for.end:
   ret void
 }
 
-define internal void @nish.reduceBlocks$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal void @nish.reduceBlocks$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %partials, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %blocks.addr = alloca i32, align 4
@@ -1176,7 +1153,7 @@ for.end:
   ret void
 }
 
-define internal noundef i32 @nish.reduceRange$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef i32 @nish.reduceRange$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
   %acc.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -1234,7 +1211,7 @@ for.end:
   ret i32 %22
 }
 
-define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
   %acc.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -1292,7 +1269,7 @@ for.end:
   ret i32 %22
 }
 
-define internal noundef double @nish.reduceRange$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef double @nish.reduceRange$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
   %acc.addr = alloca double, align 8
   %i.addr = alloca i32, align 4
@@ -1350,7 +1327,7 @@ for.end:
   ret double %22
 }
 
-define internal noundef double @nish.reduceRange$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef double @nish.reduceRange$f64$fn.16.nish_main$arrow2(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, double noundef %identity, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
   %acc.addr = alloca double, align 8
   %i.addr = alloca i32, align 4
@@ -1408,7 +1385,7 @@ for.end:
   ret double %22
 }
 
-define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow3(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #2 {
 entry:
   %acc.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -1466,9 +1443,9 @@ for.end:
   ret i32 %22
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn }
 attributes #5 = { noreturn nounwind }
