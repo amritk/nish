@@ -3,8 +3,9 @@
 **Design note (S1 of seven; decided, nothing built).** This decides every
 question the global `Map<K, V>` and `Set<T>` raise, so that stages S2 to S7
 build rather than decide. [LANGUAGE.md](LANGUAGE.md) stays normative, and this
-note adds no rule to it; where they disagree, LANGUAGE.md wins. §10 is S7's,
-and is left as a stub that says what S7 measures.
+note adds no rule to it; where they disagree, LANGUAGE.md wins. §10 is S7's:
+it measures the `Map` that S2 to S6 built and records whether an unordered map
+is ever needed.
 
 The evidence is of three kinds, and every decision below names its own:
 
@@ -678,17 +679,179 @@ must already name.
 
 ## 10. Is an unordered map ever needed? (S7)
 
-*Stub: S7 writes this section.*
+**No, not for v1.** The ordered `Map` is 1.5x to 5.0x ahead of Node's on every
+workload, at both sizes. The unordered layout is ahead of it on lookups, by
+1.06x to 1.25x in the cache and 1.11x to 1.38x out of it, and on integer insert
+out of the cache by 1.04x. The ordered `Map` is ahead on every other insert and
+on churn. Fusion (1.42x to 1.63x on word count) and `reserve` (1.47x to 1.88x
+on insert) are each worth more than the largest gap. So the gap is not worth a
+second table with a different iteration order. The shape that would reopen the question is at the end of this section.
 
-S7 measures three comparisons, each natively and under Node, and each against
-the unordered prototype of §2:
+### 10.1 How it was measured
 
-- **(b)** fused against double lookup on word count;
-- **(c)** a map presized with `reserve` against one that grows;
-- **(d)** the new `Map` against `StringMap`.
+Three programs time the shipped `Map` on §2's workloads, each beside a Node
+twin. [`bench/README.md`](../bench/README.md#the-global-map-measured)
+describes them:
 
-It regenerates `docs/BENCHMARKS.md` on a quiet machine and then decides here
-whether an unordered map is ever needed, and on what numbers. Comparison (a),
-§2.5, leaves the question open on one shape only: integer keys in a table
-larger than the cache, where the ordered layout's second dependent load costs
-1.3x to 1.4x.
+- **(b)** [`map_wordcount`](../bench/map_wordcount.ts) is fused against double
+  lookup on word count.
+- **(c)** [`map_presize`](../bench/map_presize.ts) is `reserve` against growing
+  on insert.
+- **(d)** [`map_vs_stringmap`](../bench/map_vs_stringmap.ts) is `Map` against
+  `StringMap` on all ten workloads.
+
+Each program prints lines that `bench/map_node.mjs` prints, and `--validate`
+requires that. So every row is the same work, over the same keys, as the
+unordered prototype's row beside it. `StringMap` is compiler-internal, so the
+program carries a verbatim copy of it from `self/map.ts`. `tests/run.js` fails
+when the copy drifts, and `StringMap`, being `string -> i32` with no `delete`,
+runs the four string workloads it can.
+
+The **double lookup** reads the count into a `const`, then sets it:
+`const c = counts.get(w); counts.set(w, (c ?? 0) + 1);`. The `get` is not in
+the `set`'s value, so §9.1 leaves the pair unfused, with no call and no
+allocation added. In the IR the fused loop calls `probe` once per word, then
+`setValueAt` or `insertAt`. The double loop calls `probe` for the `get` and then
+`Map.set`, which probes again.
+
+The numbers are the regenerated [BENCHMARKS.md](BENCHMARKS.md#map-and-set-wp32),
+from `node bench/run.mjs --runs 9`. Each column is its own process, and the
+columns take turns round by round. Each cell is the minimum and the median of 9
+timed runs after one warm-up, at `n` = 65,536 (in cache) and 1,048,576 (out of
+cache). The machine is the same four-core shared VM as §2, with clang 18 and
+Node 22.22.2, `--profile speed`, checks on. A 5-run pass before it is the
+cross-check quoted below as "first pass".
+
+**How noisy it was.** The noise was worse than in S1. In the committed run, 49
+of the 80 cells at 65,536 and 70 of 80 at 2^20 have a median more than 5%
+above their minimum. At 2^20 string `hit` and `miss` medians sit 10% to 25%
+above their minimums in every column, Node's included. The 5-run first pass had
+10 and 51 such cells. A second, longer run did not make it quieter, because the
+noise is the host's. So every ratio below divides minimums, and a claim rests
+only on a ratio that held in both passes. A single cell of the tables is worth
+about ±10%.
+
+The **instruction counts** do not move. `--instructions` counts the three
+programs at `n` = 16,384 with a spread of 0 over three runs: `map_wordcount`
+111,693,790, `map_presize` 56,609,708 and `map_vs_stringmap` 330,510,892
+(`bench/instructions.json`). Each variant alone was counted the same way, with
+the gate's pinned libc and `./<program> <variant>`, and the counts below are
+less the 8.3 million that building the keys costs.
+
+### 10.2 (b) Fused against double lookup
+
+| `n` | | `Map` fused | `Map` double | unordered | Node fused | Node double | double / fused | fused / unordered | fused / Node |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 65,536 | count str | 14.9 | 21.2 | 13.9 | 54.9 | 57.5 | **1.42x** | 1.07x | 0.27x |
+| 65,536 | count int | 6.21 | 9.32 | 5.21 | 39.1 | 41.0 | **1.50x** | 1.19x | 0.16x |
+| 2^20 | count str | 466 | 759 | 410 | 1270 | 1249 | **1.63x** | 1.14x | 0.37x |
+| 2^20 | count int | 158 | 236 | 121 | 873 | 839 | **1.49x** | 1.31x | 0.18x |
+
+Fusion pays everywhere, and more out of cache, where the second probe is a
+second trip to memory. The first pass read 1.42x, 1.41x, 1.67x and 1.50x for
+the same four ratios. In instructions the double lookup runs 66.8 million where
+the fused count runs 36.7 million, 1.82x. Under Node the two spellings are
+within noise of each other (0.96x to 1.05x), so the difference is the
+compiler's, not the program's.
+
+Even fused, the ordered `Map` trails the unordered prototype on word count, by
+1.07x to 1.31x. The largest gap is integer keys at 2^20, the shape §2.5 left
+open.
+
+### 10.3 (c) Presized against growing
+
+| `n` | | `Map` growing | `Map` `reserve` | unordered | Node | growing / reserve | reserve / unordered | reserve / Node |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 65,536 | insert str | 19.2 | 12.4 | 23.4 | 39.7 | **1.55x** | 0.53x | 0.31x |
+| 65,536 | insert int | 14.9 | 7.91 | 17.5 | 21.9 | **1.88x** | 0.45x | 0.36x |
+| 2^20 | insert str | 381 | 258 | 416 | 1016 | **1.47x** | 0.62x | 0.25x |
+| 2^20 | insert int | 299 | 189 | 297 | 513 | **1.58x** | 0.64x | 0.37x |
+
+`reserve` is measurably faster at both sizes. The first pass read 1.49x, 1.65x,
+1.34x and 1.65x. In instructions a grown insert runs 28.3 million and a presized
+one 20.0 million, 1.41x. Both end at the same bucket count, so what presizing
+saves is the rebuilds: eighteen doublings at 2^20, from 8 buckets to 2^21, each re-filing every bucket
+from `hashes`.
+
+It **saves memory as well as time**, contrary to the trade the plan expected.
+Each abandoned bucket array stays in the arena until its scope ends, and the
+presized table never abandons one. Peak RSS of `map_presize` running one variant
+alone (the whole process, with both key sets) was 33,588 KB growing and 29,108
+KB presized at 65,536 (−13%), and 510,260 KB and 444,340 KB at 2^20 (−13%).
+Node has no `reserve`, and its column shows `nish/map`'s empty body costs
+nothing there.
+
+A grown ordered `Map` is already level with the unordered prototype on insert,
+at 0.82x (65,536) to 1.01x (2^20). A presized one is 1.6x to 2.2x ahead of it.
+
+### 10.4 (d) The new `Map` against `StringMap`, and against the unordered layout
+
+| workload | `Map` / `StringMap` 65,536 | 2^20 | `Map` / unordered 65,536 | 2^20 | `Map` / Node 65,536 | 2^20 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| insert str | 1.03x | 0.97x | 0.84x | 0.90x | 0.64x | 0.39x |
+| hit str | 1.06x | 1.19x | 1.12x | **1.38x** | 0.42x | 0.48x |
+| miss str | 1.12x | 1.14x | 1.09x | 1.21x | 0.45x | 0.35x |
+| count str | 1.09x | 1.13x | 1.06x | 1.13x | 0.40x | 0.40x |
+| churn str | — | — | 0.82x | 0.83x | 0.53x | 0.37x |
+| insert int | — | — | 0.89x | 1.04x | 0.62x | 0.68x |
+| hit int | — | — | 1.13x | **1.33x** | 0.23x | 0.28x |
+| miss int | — | — | 1.11x | 1.11x | 0.35x | 0.28x |
+| count int | — | — | **1.25x** | **1.31x** | 0.20x | 0.22x |
+| churn int | — | — | 0.86x | 0.89x | 0.48x | 0.37x |
+
+- **Against `StringMap`,** the generic `Map` is level on insert and 1.06x to 1.19x behind on lookups. It is the same layout, and the gap is what
+  genericity and JavaScript's semantics cost. `probe` answers a packed `i64`
+  that `get` unpacks, `hashKey` and `sameKey` are per-`K` intrinsics, and
+  `delete` needs a dead-entry test that `StringMap`, with no `delete`, does
+  without. The first pass read 1.01x to 1.07x on the lookups at 65,536, so
+  treat the single 1.19x (string hit at 2^20, a cell whose median is 24% above
+  its minimum) as the noisy end of that range.
+- **Against Node,** `Map` is ahead on every workload at both sizes: 1.5x
+  (integer insert at 2^20) to 5.0x (integer count at 65,536).
+- **Against the unordered layout, the ordered `Map` wins churn at both sizes
+  and insert everywhere except integer keys at 2^20 (1.04x), and loses every
+  lookup.** In the cache that is by 1.06x to 1.13x,
+  and integer count by 1.25x. Out of the cache it is 1.11x to 1.38x.
+  Integer hit (1.33x) and integer count (1.31x) are the shape §2.5 predicted,
+  held in both passes (1.26x and 1.28x in the first). String hit at 1.38x joins
+  them now, and the `u32` fingerprint prototype reads 1.26x there too, so it is
+  the layout's second dependent load, not the generic code: bucket, then entry
+  hash, then key. In S1's run it read 1.03x, and both passes here read 1.37x to
+  1.38x. That also puts the number in the tables' noisiest rows.
+- **In instructions,** the ten workloads on `Map` run 251,616,455 against the
+  unordered prototype's 206,997,262, 1.22x, and the `u32` fingerprint
+  prototype's 237,755,219, 1.06x. So about a third of the instruction gap to
+  the unordered layout, 13.9 of 44.6 million, is the generic `Map` over its hand-written monomorphic
+  twin, and the rest is the layout.
+
+### 10.5 The decision
+
+**An unordered map is not needed for v1.**
+
+- **The ordered layout loses on lookups, and by at most 1.38x.** It loses
+  1.06x to 1.25x in the cache and 1.11x to 1.38x out of it, and it is ahead on
+  churn and on every insert but one (integer keys at 2^20, 1.04x behind). JavaScript fixes iteration order, so an unordered `Map` could
+  not be the global `Map` at all. It would be a second type with a different
+  contract, and a program would have to choose it by hand.
+- **The two levers the language already has are each worth more than that gap.**
+  - Fusion is 1.42x to 1.63x on word count.
+  - `reserve` is 1.47x to 1.88x on insert, with 13% less peak memory.
+
+  A program that wants the unordered layout's lookup speed has these first,
+  and they need no second type.
+- **Node is not close.** The ordered `Map` is 1.5x to 5.0x ahead of Node's on
+  all ten workloads at both sizes. The unordered layout would widen a lead, not
+  close a gap.
+
+**What would reopen it.** A program whose time goes to lookups of integer keys
+in a table larger than the cache, where the ordered `Map` trails by 1.31x
+(count) to 1.33x (hit) at 2^20 keys and neither fusion nor `reserve` applies.
+String lookups at 2^20 (1.13x to 1.38x) are the same shape. A table with more
+than about 2^20 entries, read far more often than it is written, and never
+iterated, is the one workload where an unordered `nish/` table would pay. It
+would be an opt-in library type beside `Map`, never a replacement. The
+measurement to repeat before building it is (d)'s `hit int` and `count int`
+rows at 2^20, and at 2^22 if the tables grow further. The trigger is a gap
+above 1.3x that holds in every pass. Before that, the cheaper thing to try is
+the generic code: the 1.06x of instructions between `Map` and the hand-written
+fingerprint prototype.

@@ -835,9 +835,12 @@ major. Whether it happens at all is still wp22 §10's open question.
    defaulted with `??`. Each instance is emitted into the module that uses it.
    Measured against Node's `Map` on the same workloads, the chosen layout is
    1.7x to 4.9x ahead at 2^20 keys, and within 10% of an unordered table on
-   eight of ten workloads. S2 to S5 build it in order, S6 moves `StringMap` to
-   the same slot, and S7 measures what is left and decides whether an unordered
-   map is ever needed.
+   eight of ten workloads. S2 to S6 built it, and S7 measured it: the shipped
+   `Map` is 1.5x to 5.0x ahead of Node's on all ten workloads at 2^16 and 2^20
+   keys, fusion is 1.42x to 1.63x on word count, `reserve` 1.47x to 1.88x on
+   insert with 13% less peak memory, and an unordered map is not needed for v1
+   (wp32 §10: it would win lookups by at most 1.38x, integer keys out of cache
+   being the shape that would reopen it).
 
 #### Additive and unscheduled
 
