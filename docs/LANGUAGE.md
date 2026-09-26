@@ -3444,7 +3444,8 @@ export const main = (): i32 => {
   `Set.prototype.keys` *is* `values` ([wp32-map.md](wp32-map.md) §6.2, §6.3;
   `tests/cases/map_iter_keys`, `map_iter_values`, `set_iter`, `set_iter_keys`,
   `set_iter_values`). The variable takes `K` or `V`, and a deleted key is not
-  visited.
+  visited. A walk in a generic function or method is checked per
+  instantiation like the rest of its body (`map_iter_generic`).
 
   ```typescript
   export const main = (): i32 => {
