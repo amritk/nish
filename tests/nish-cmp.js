@@ -1782,6 +1782,24 @@ const DECLARED = [
     changelog: "Prove an index in range from what every call site guarantees",
     why: "call-site ranges and callee summaries prove accesses the reference compiler checks, across the corpus, so those modules drop `nish_panic_index` calls and the attributes they cost",
   },
+  // Issue #246: a high-surrogate escape before a low one is now the one code
+  // point it spells, four UTF-8 bytes, where the reference encodes each half
+  // on its own. Only the three cases that spell a surrogate escape move.
+  {
+    program: "tests/cases/str_surrogate_pair.ts",
+    changelog: "A surrogate-pair escape is the code point it spells",
+    why: "its pair escapes are the four bytes of U+1F600 and share the emoji's constant, where the reference writes six bytes of two lone surrogates",
+  },
+  {
+    program: "tests/cases/str_surrogate_map_key.ts",
+    changelog: "A surrogate-pair escape is the code point it spells",
+    why: "its pair-escape key is the four bytes of U+1F600 and shares the emoji's constant, where the reference writes six bytes of two lone surrogates",
+  },
+  {
+    program: "tests/cases/str_surrogate_lone.ts",
+    changelog: "A surrogate-pair escape is the code point it spells",
+    why: "the one pair escape it compares against is the four bytes of U+1F600, where the reference writes six bytes of two lone surrogates; its lone surrogates are the reference's bytes",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

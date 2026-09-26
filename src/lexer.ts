@@ -692,26 +692,27 @@ export class Lexer {
       return utf8Encode(value)
     }
     if (c === CH_U_LOWER) {
-      if (this.at(at + 1) === CH_LBRACE) {
-        let end = at + 2
-        let value = 0
-        while (end < this.source.length && hexValue(this.at(end)) >= 0) {
-          value = value * 16 + hexValue(this.at(end))
-          end = end + 1
-        }
-        if (end === at + 2 || this.at(end) !== CH_RBRACE) {
-          this.escapeEnd = -1
-          return ""
-        }
-        this.escapeEnd = end + 1
-        return utf8Encode(value)
-      }
-      const value = this.scanHex(at + 1, 4)
+      const value = this.scanUnicode(at + 1)
       if (value < 0) {
         this.escapeEnd = -1
         return ""
       }
-      this.escapeEnd = at + 5
+      // A high surrogate written right before a low one is the one code point
+      // the pair spells, as it is in JavaScript's UTF-16. A surrogate left on
+      // its own keeps its three WTF-8 bytes (docs/LANGUAGE.md, "Encoding").
+      const next = this.escapeEnd
+      if (
+        value >= 0xd800 &&
+        value <= 0xdbff &&
+        this.at(next) === CH_BACKSLASH &&
+        this.at(next + 1) === CH_U_LOWER
+      ) {
+        const low = this.scanUnicode(next + 2)
+        if (low >= 0xdc00 && low <= 0xdfff) {
+          return utf8Encode(0x10000 + ((value - 0xd800) << 10) + (low - 0xdc00))
+        }
+        this.escapeEnd = next
+      }
       return utf8Encode(value)
     }
     if (c === CH_LF) {
@@ -723,6 +724,31 @@ export class Lexer {
     }
     // `\\`, `\"`, `\'`, `` \` ``, `\$` and anything else: the character itself.
     return this.source.substring(at, at + 1)
+  }
+
+  /**
+   * The code point of a `\u` escape whose `u` is just before `at` — four hex
+   * digits or a braced run of them — with `escapeEnd` set past it, or -1.
+   */
+  scanUnicode(at: i32): i32 {
+    if (this.at(at) === CH_LBRACE) {
+      let end = at + 1
+      let value = 0
+      while (end < this.source.length && hexValue(this.at(end)) >= 0) {
+        value = value * 16 + hexValue(this.at(end))
+        end = end + 1
+      }
+      if (end === at + 1 || this.at(end) !== CH_RBRACE) {
+        return -1
+      }
+      this.escapeEnd = end + 1
+      return value
+    }
+    const value = this.scanHex(at, 4)
+    if (value >= 0) {
+      this.escapeEnd = at + 4
+    }
+    return value
   }
 
   /** The value of exactly `count` hex digits at `at`, or -1. */

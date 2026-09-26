@@ -106,6 +106,24 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/str_literal`, `str_template`). TypeScript escapes (`\n`,
   `\"`, `\\`, `\u...`) are decoded by the parser and re-encoded as UTF-8
   (`tests/cases/str_escape`).
+  - **A surrogate pair is the code point it spells.** A high-surrogate escape
+    (`\uD800`–`\uDBFF`) written immediately before a low-surrogate escape
+    (`\uDC00`–`\uDFFF`) is one code point and encodes as its four UTF-8
+    bytes, so `"\uD83D\uDE00"`, `"\u{1F600}"` and `"😀"` are the same string:
+    `===` holds, `length` is 4, and a `Map` key set by one spelling is found
+    by the others. Either half may be written `\uXXXX` or `\u{...}`, as in
+    JavaScript (`tests/cases/str_surrogate_pair`, `str_surrogate_map_key`).
+  - **A lone surrogate keeps its WTF-8 bytes.** A surrogate escape without
+    that partner — a high one not followed by a low one, a low one not after
+    a high one, or a low one before a high one — is not refused: it encodes on
+    its own as the three bytes UTF-8's pattern gives it (`"\uD83D"` is
+    `ED A0 BD`), which is WTF-8 and not valid UTF-8. The pair is joined only
+    inside one literal, so concatenating two halves at run time gives six
+    bytes, and `"\uD83D" + "\uDE00" === "\uD83D\uDE00"` is `false` where
+    JavaScript says `true` (`tests/cases/str_surrogate_lone`). A string is
+    a sequence of bytes, and `String.fromCharCode` already makes ones that
+    are not UTF-8, so a literal may too; refusing it would withdraw a
+    construct that compiles today.
 - **Boolean literals** `true`, `false` (`tests/cases/cf_logical`).
 - **`null`** is a value only where a `T | null` type is expected (see
   [Nullable types](#nullable-types)); with no contextual type it is
