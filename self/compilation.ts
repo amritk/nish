@@ -1343,9 +1343,9 @@ export class Compilation {
     return -1;
   }
 
-  /** Whether `unit` writes a `.ll` of its own: every module but the collections library. */
+  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts` and `std/map.ts`. */
   writesOutput(unit: ModuleUnit): boolean {
-    return !unit.checker.program.isCollections();
+    return !unit.checker.program.writesNoOutput();
   }
 
   /** Program-wide attribute analysis, then one IR module per source module. */

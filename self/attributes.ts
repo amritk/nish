@@ -137,7 +137,7 @@ import {
   T_VOID,
   TypeTable,
 } from "./types";
-import { valueReaderOf, walkMethodsOf } from "./emit_map";
+import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit_map";
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -1211,7 +1211,12 @@ class FactCollector {
     if (node.kind === N_THROW) {
       this.facts.hasTrap = true;
     }
-    if (node.kind === N_CALL) {
+    // WP32 S5: a fused lookup, and a `nish/map` call, call the table's
+    // pieces rather than what they were checked as (`fusedCalleesOf`).
+    const fused: FunctionSig[] | null = node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null;
+    if (fused !== null) {
+      this.addSigs(fused);
+    } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id];
       if (callee !== null) {
         this.facts.callees.add(callee.name);
@@ -1246,6 +1251,12 @@ class FactCollector {
     this.collectIdentifierBuiltinFacts(node);
     for (const child of node.children) {
       this.visit(child);
+    }
+  }
+
+  addSigs(sigs: FunctionSig[]): void {
+    for (const sig of sigs) {
+      this.facts.callees.add(sig.name);
     }
   }
 
@@ -1676,6 +1687,9 @@ export const collectFacts = (
   if (isParallelEntry(sig)) {
     markParallelEntry(facts);
   }
+  if (isMapRoute(sig)) {
+    markMapRoute(table, sig, facts);
+  }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used");
   facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark");
@@ -1718,6 +1732,31 @@ const markParallelEntry = (facts: FunctionFacts): void => {
   for (const pp of facts.pointerParams) {
     pp.captured = true;
     pp.writesThrough = true;
+  }
+};
+
+/**
+ * WP32 S5: the body of a `nish/map` instance is what Node runs, and natively
+ * it never does: every call of it is lowered to the table's own code instead
+ * (`emitMapRoute`), and that code is what its callers' facts have to see.
+ * `reserve`'s body in particular does nothing, where `reserveSlots` writes the
+ * table and allocates a bucket array the table keeps, so facts read off the
+ * body would let a caller's map be `readonly` and a loop that presizes one
+ * reclaim the new buckets at the end of its pass. So the routed functions are
+ * this instance's callees too, and the table is handed to each as its
+ * receiver, which the fixpoint resolves against their own parameter facts.
+ * `getOrInsert`'s body already reads, writes and keeps what its routed code
+ * does, so for it this changes nothing but the order the facts are found in.
+ */
+const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts): void => {
+  const routed = routeCalleesOf(table, sig);
+  const receiver: PointerParamFacts | null = sig.paramNames.length > 0 ? facts.pointerParam(sig.paramNames[0]) : null;
+  for (const callee of routed) {
+    facts.callees.add(callee.name);
+    if (receiver !== null) {
+      receiver.passedToCallees.push(callee.name);
+      receiver.passedToIndices.push(0);
+    }
   }
 };
 

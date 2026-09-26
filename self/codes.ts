@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 479;
+export const RULE_COUNT: i32 = 480;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -779,6 +779,8 @@ export const diagnosticRules = (): string[] => [
   "NL1004",
   " (no interpreter at runtime)",
   "NL1005",
+  "` has no exported function `",
+  "NL2376",
   "` is already imported from `",
   "NL2315",
   "` must be an integer literal",

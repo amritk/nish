@@ -19,10 +19,12 @@ import {
   checkGenericCall,
   instantiateWritten,
   isCollectionStruct,
+  isMapOwner,
   isCollectionTemplate,
   refuseParameterMember,
 } from "./generics";
 import { assignInto, checkExpression, linkedParent } from "./expressions";
+import { recordUpdateFusion } from "./fusion";
 import {
   N_ARRAY,
   N_ARROW,
@@ -226,6 +228,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   checkMethodArguments(ctx, expr, method, args, `${ctx.table.typeName(info.type)}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
+  if (access.text === "set" && isCollectionStruct(info)) {
+    recordUpdateFusion(ctx, expr); // WP32 S5: one probe for `m.set(k, (m.get(k) ?? 0) + 1)`
+  }
   return method.returnType;
 };
 
@@ -273,9 +278,7 @@ const isWalkIterable = (ctx: CheckContext, info: StructInfo, call: Node, access:
  * JavaScript (docs/wp32-map.md §6.3).
  */
 export const walkReaderOf = (ctx: CheckContext, info: StructInfo, name: string): FunctionSig => {
-  const instance = info.instance;
-  const isMap = instance !== null && instance.template.sourceName === "Map";
-  const read = info.method(isMap && name === "values" ? "valueAt" : "keyAt");
+  const read = info.method(isMapOwner(info) && name === "values" ? "valueAt" : "keyAt");
   if (read === null || info.method("walkOpen") === null) {
     process.exit(internalErrorFor("checker: the global `Map` or `Set` has no walk", ctx.table.json));
   }
@@ -587,8 +590,7 @@ const refuseCollectionMember = (ctx: CheckContext, info: StructInfo, at: Node, c
     return false;
   }
   const name = at.text;
-  const instance = info.instance;
-  const isMap = instance !== null && instance.template.sourceName === "Map";
+  const isMap = isMapOwner(info);
   if (name === "size" || name === "has" || name === "delete" || name === "clear") {
     return false;
   }
