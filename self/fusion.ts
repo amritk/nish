@@ -35,7 +35,7 @@
 
 import { CheckContext } from "./context";
 import { isAssignmentOperator, unwrapParens } from "./emit_util";
-import { isCollectionStruct } from "./generics";
+import { isCollectionStruct, isMapOwner } from "./generics";
 import {
   N_BINARY,
   N_BLOCK,
@@ -160,12 +160,6 @@ const collectionOwnerOf = (program: CheckedProgram, call: Node, name: string): S
   return owner;
 };
 
-/** Whether `owner` is an instance of `Map`, rather than of `Set`. */
-export const isMapOwner = (owner: StructInfo): boolean => {
-  const instance = owner.instance;
-  return instance !== null && instance.template.sourceName === "Map";
-};
-
 /** The call a branch starts with, when its first statement is one: `{ m.set(k, E); ... }` or `m.set(k, E);`. */
 const firstCallOf = (branch: Node): Node | null => {
   let first = branch;
@@ -190,15 +184,8 @@ const sameCallTarget = (program: CheckedProgram, call: Node, receiver: Node, key
   samePlace(program, call.children[1].children[0], key);
 
 /** A receiver both calls evaluate to the same table: a local or parameter, or a `this.<field>` path. */
-const isFusablePlace = (program: CheckedProgram, node: Node): boolean => {
-  if (node.kind === N_IDENT) {
-    return program.nodeLocals[node.id] !== null;
-  }
-  if (node.kind === N_THIS) {
-    return true;
-  }
-  return node.kind === N_MEMBER && isThisPath(node);
-};
+const isFusablePlace = (program: CheckedProgram, node: Node): boolean =>
+  node.kind === N_IDENT ? program.nodeLocals[node.id] !== null : isThisPath(node);
 
 /** `this.a.b`: a chain of field reads that starts at `this`. */
 const isThisPath = (node: Node): boolean => {

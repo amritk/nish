@@ -1215,9 +1215,7 @@ class FactCollector {
     // pieces rather than what they were checked as (`fusedCalleesOf`).
     const fused: FunctionSig[] | null = node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null;
     if (fused !== null) {
-      for (const sig of fused) {
-        this.facts.callees.add(sig.name);
-      }
+      this.addSigs(fused);
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id];
       if (callee !== null) {
@@ -1253,6 +1251,12 @@ class FactCollector {
     this.collectIdentifierBuiltinFacts(node);
     for (const child of node.children) {
       this.visit(child);
+    }
+  }
+
+  addSigs(sigs: FunctionSig[]): void {
+    for (const sig of sigs) {
+      this.facts.callees.add(sig.name);
     }
   }
 

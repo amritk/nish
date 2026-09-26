@@ -227,43 +227,50 @@ export const FUSE_WRITE_ABSENT: i32 = 5;
 /**
  * The fused calls of one body, by node id: each one's `FUSE_*` role, and the
  * id of the call whose probe it reads (its own, for a probe or an update).
- * Kept per instantiation, as every side table is, and sparse rather than a
- * slot per node: a body has a handful at most.
+ * Kept per instantiation, as every side table is, and as three short parallel
+ * lists searched in order rather than a slot per node: a body has a handful
+ * at most, and most have none, which costs nothing to ask.
  */
 export class FusionTable {
-  ids: StringMap;
+  ids: i32[];
   roles: i32[];
   partners: i32[];
 
   constructor() {
-    this.ids = new StringMap();
+    this.ids = [];
     this.roles = [];
     this.partners = [];
   }
 
+  /** Where `id` is in the lists, or -1. */
+  find(id: i32): i32 {
+    for (let i = 0; i < this.ids.length; i++) {
+      if (this.ids[i] === id) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   record(id: i32, role: i32, partner: i32): void {
-    const key = `${id}`;
-    const at = this.ids.get(key, -1);
+    const at = this.find(id);
     if (at >= 0 && at < this.roles.length && at < this.partners.length) {
       this.roles[at] = role;
       this.partners[at] = partner;
       return;
     }
-    this.ids.set(key, this.roles.length);
+    this.ids.push(id);
     this.roles.push(role);
     this.partners.push(partner);
   }
 
   roleOf(id: i32): i32 {
-    if (this.roles.length === 0) {
-      return FUSE_NONE;
-    }
-    const at = this.ids.get(`${id}`, -1);
+    const at = this.find(id);
     return at >= 0 && at < this.roles.length ? this.roles[at] : FUSE_NONE;
   }
 
   partnerOf(id: i32): i32 {
-    const at = this.ids.get(`${id}`, -1);
+    const at = this.find(id);
     return at >= 0 && at < this.partners.length ? this.partners[at] : -1;
   }
 }

@@ -24,7 +24,7 @@ import {
 import { isMaybeAnnotation } from "./validator";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
-import { declaredOrigin, elementOrigin, isCollectionStruct } from "./generics";
+import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics";
 import { structOf, walkReaderOf } from "./members";
 import { recordGuardFusion } from "./fusion";
 import { unwrapParens } from "./emit_util";
@@ -422,8 +422,7 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
   if (info === null || !isCollectionStruct(info) || ctx.program.isCollections()) {
     return false;
   }
-  const instance = info.instance;
-  if (instance !== null && instance.template.sourceName === "Map") {
+  if (isMapOwner(info)) {
     ctx.error(
       stmt.children[1],
       `\`for...of\` over \`${ctx.table.typeName(iterable)}\` needs \`entries()\`, whose \`[key, value]\` pairs need destructuring, which this version does not have: walk \`keys()\` or \`values()\` instead, as in \`for (const k of ${ctx.textOf(unwrapParens(stmt.children[1]))}.keys())\``

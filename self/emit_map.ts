@@ -53,7 +53,7 @@ import {
   MAP_RESERVE,
   StructInfo,
 } from "./program";
-import { isMapOwner } from "./fusion";
+import { isMapOwner } from "./generics";
 import { Local } from "./symbols";
 import { isUndefined } from "./validator";
 import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING, TypeTable } from "./types";
@@ -69,8 +69,7 @@ export const mapIntrinsicOf = (sig: FunctionSig): i32 => {
  * arguments. The key type is the instantiation's one type argument.
  */
 export const emitMapIntrinsic = (emitter: Emitter, sig: FunctionSig, values: string[]): string => {
-  const role = mapIntrinsicOf(sig);
-  if (role === MAP_RESERVE || role === MAP_GET_OR_INSERT) {
+  if (isMapRoute(sig)) {
     return emitMapRoute(emitter, sig, values);
   }
   const instance = sig.instance;
@@ -365,12 +364,10 @@ export const emitMaybe = (emitter: Emitter, maybe: Node): MaybeParts => {
   if (expr.kind !== N_CALL || probe === null) {
     process.exit(internalErrorFor(`emitter: a maybe that is neither \`get\` nor a \`const\``, emitter.opts.json));
   }
-  const fn = emitter.fn;
   const receiver = emitter.emitExpression(expr.children[0].children[0]);
   const key = emitter.emitExpression(expr.children[1].children[0]);
-  const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
-  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
-  return new MaybeParts(fn.emitValue(`icmp sge i64 ${packed}, 0`), "", receiver, packed, valueReaderOf(probe));
+  const parts = emitProbeCall(emitter, -1, probe, receiver, key);
+  return new MaybeParts(parts.found, "", receiver, parts.packed, valueReaderOf(probe));
 };
 
 /**
@@ -623,15 +620,8 @@ export const emitWalk = (emitter: Emitter, stmt: Node): void => {
  */
 export const walkMethodsOf = (read: FunctionSig): FunctionSig[] => {
   const out: FunctionSig[] = [read];
-  const owner = read.owner;
-  if (owner === null) {
-    return out;
-  }
-  for (const name of ["walkOpen", "walkNext", "walkClose"]) {
-    const sig = owner.method(name);
-    if (sig !== null) {
-      out.push(sig);
-    }
+  for (const sig of methodsNamed(read.owner, ["walkOpen", "walkNext", "walkClose"])) {
+    out.push(sig);
   }
   return out;
 };
@@ -743,20 +733,32 @@ const emitFusedProbe = (emitter: Emitter, call: Node): FusedProbe => {
   if (recorded === null) {
     process.exit(internalErrorFor("emitter: a fused call on no table", emitter.opts.json));
   }
-  const owner = recorded.owner;
-  if (owner === null) {
-    process.exit(internalErrorFor("emitter: a fused call on no table", emitter.opts.json));
-  }
-  const probe = tableMethod(emitter, owner, "probe");
-  const fn = emitter.fn;
   const receiver = emitter.emitExpression(call.children[0].children[0]);
   const key = emitter.emitExpression(call.children[1].children[0]);
-  const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
-  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
-  const found = fn.emitValue(`icmp sge i64 ${packed}, 0`);
-  const kept = new FusedProbe(call.id, receiver, key, packed, found, owner);
+  const kept = emitProbeCall(emitter, call.id, tableMethod(emitter, ownerOf(emitter, recorded), "probe"), receiver, key);
   emitter.fusedProbes.push(kept);
   return kept;
+};
+
+/** The table class a method of the global `Map` or `Set` belongs to. */
+const ownerOf = (emitter: Emitter, method: FunctionSig): StructInfo => {
+  const owner = method.owner;
+  if (owner === null) {
+    process.exit(internalErrorFor(`emitter: \`${method.name}\` is not a table's method`, emitter.opts.json));
+  }
+  return owner;
+};
+
+/**
+ * One call of a table's `probe` on `receiver` and `key`, already lowered, and
+ * its found bit: the packed answer is `>= 0` exactly when the key is there.
+ * Every lookup is this, fused or not; `id` is the call a fused write names.
+ */
+const emitProbeCall = (emitter: Emitter, id: i32, probe: FunctionSig, receiver: string, key: string): FusedProbe => {
+  const fn = emitter.fn;
+  const operands = `${emitter.llvm(probe.paramTypes[0])} ${receiver}, ${emitter.llvm(probe.paramTypes[1])} ${key}`;
+  const packed = fn.emitValue(`call i64 @${probe.name}(${operands})`);
+  return new FusedProbe(id, receiver, key, packed, fn.emitValue(`icmp sge i64 ${packed}, 0`), ownerOf(emitter, probe));
 };
 
 /** An update's write: `setValueAt` of the entry found, or `insertAt` the bucket the probe stopped at. */
@@ -819,18 +821,14 @@ const emitMapRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): str
   if (values.length !== 3) {
     process.exit(internalErrorFor("emitter: `getOrInsert` takes a table, a key and a value", emitter.opts.json));
   }
-  const probe = tableMethod(emitter, owner, "probe");
-  const packed = fn.emitValue(`call i64 @${probe.name}(${table}, ${emitter.llvm(probe.paramTypes[1])} ${values[1]})`);
-  const kept = new FusedProbe(-1, values[0], values[1], packed, fn.emitValue(`icmp sge i64 ${packed}, 0`), owner);
+  const kept = emitProbeCall(emitter, -1, tableMethod(emitter, owner, "probe"), values[0], values[1]);
   const ty = emitter.llvm(sig.returnType);
   const found = fn.newBlock("get.found");
   const insert = fn.newBlock("get.insert");
   const done = fn.newBlock("get.end");
   fn.emit(`br i1 ${kept.found}, label %${found.label}, label %${insert.label}`);
   fn.placeBlock(found);
-  const read = tableMethod(emitter, owner, "valueAt");
-  const index = fn.emitValue(`trunc i64 ${packed} to i32`);
-  const value = fn.emitValue(`call ${ty} @${read.name}(${table}, i32 ${index})`);
+  const value = loadMaybeValue(emitter, new MaybeParts(kept.found, "", values[0], kept.packed, tableMethod(emitter, owner, "valueAt")));
   const foundEdge = fn.currentBlock().label;
   fn.emit(`br label %${done.label}`);
   fn.placeBlock(insert);
@@ -879,8 +877,13 @@ export const fusedCalleesOf = (program: CheckedProgram, table: TypeTable, call: 
     return methodsNamed(owner, ["probe"]);
   }
   if (role === FUSE_USE) {
-    const reads: string[] = call.children[0].text === "get" ? ["valueAt"] : [];
-    return methodsNamed(owner, reads);
+    // A `get` is a maybe, and reads its value only where it was found; a `has` reads nothing.
+    const read: FunctionSig | null = table.isMaybe(program.nodeTypes[call.id]) ? valueReaderOf(sig) : null;
+    const out: FunctionSig[] = [];
+    if (read !== null) {
+      out.push(read);
+    }
+    return out;
   }
   if (role === FUSE_UPDATE) {
     return methodsNamed(owner, ["probe", "setValueAt", "insertAt"]);

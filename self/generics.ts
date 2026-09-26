@@ -202,6 +202,12 @@ export const mapIntrinsicRole = (template: TemplateInfo): i32 => {
   return template.sourceName === "sameKey" ? MAP_SAME_KEY : MAP_NONE;
 };
 
+/** Whether an instantiated struct is an instance of the global `Map`, rather than of `Set` or of anything else. */
+export const isMapOwner = (info: StructInfo): boolean => {
+  const instance = info.instance;
+  return instance !== null && instance.template.sourceName === "Map";
+};
+
 /** The same question about an instantiated struct: `Map$str$i32` is one, and so is `Set$i32`. */
 export const isCollectionStruct = (info: StructInfo): boolean => {
   const instance = info.instance;
