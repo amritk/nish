@@ -1,2 +1,2 @@
-`Result<Result<i32, string>, string>` must be handled, not discarded
+reject_result_generic_discarded.ts:10:3: error: `Result<Result<i32, string>, string>` must be handled, not discarded
 reject_result_generic_discarded.ts:11:3: error: `Result<i32, string>` must be handled, not discarded

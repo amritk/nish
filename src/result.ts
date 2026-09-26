@@ -21,9 +21,9 @@ import { roundUpTo } from "./structs"
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
 import { isParameterValue } from "./generics"
-import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
+import { N_BINARY, N_CALL, N_EMPTY, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
 import { CheckedProgram } from "./program"
-import { Scope } from "./symbols"
+import { Local, Scope } from "./symbols"
 import { R_ERR, R_OK, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 // ---- Layout ---------------------------------------------------------------
@@ -439,6 +439,83 @@ export const checkResultLocalsHandled = (ctx: CheckContext, body: Node): void =>
     }
     i = i + 1
   }
+  const unread: boolean[] = []
+  while (unread.length < declarations.length) {
+    unread.push(false)
+  }
+  rejectUnreadOverwrites(ctx, body, declarations, unread)
+}
+
+/**
+ * Refuse `r = v` where `r` is a `Result` local whose value has not been read
+ * since it was last written (#233). An assignment moves a `Result` rather than
+ * dropping it, but the value it replaces is dropped, so the rule above would
+ * otherwise accept `let r = f(); r = g(); r.isErr()` with `f()`'s failure
+ * gone. `unread[i]` is whether `declarations[i]`'s current value has been
+ * written and not read since, walked in source order: the right-hand side of
+ * an assignment before its target, so `r = wrap(r)` reads `r` first. It is
+ * not a control-flow graph: a read in either branch of an `if` counts for the
+ * assignment after it. An element or a field is not a local and is not
+ * tracked, so `rs[0] = rs[1]` is never refused here.
+ */
+const rejectUnreadOverwrites = (
+  ctx: CheckContext,
+  node: Node,
+  declarations: Node[],
+  unread: boolean[]
+): void => {
+  if (node.kind === N_VAR_DECL) {
+    const initializer = node.children[2]
+    rejectUnreadOverwrites(ctx, initializer, declarations, unread)
+    const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
+    if (at >= 0) {
+      unread[at] = initializer.kind !== N_EMPTY
+    }
+    return
+  }
+  if (node.kind === N_IDENT) {
+    const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
+    if (at >= 0) {
+      unread[at] = false
+    }
+    return
+  }
+  if (node.kind === N_BINARY && node.text === "=" && node.children[0].kind === N_IDENT) {
+    const target = node.children[0]
+    rejectUnreadOverwrites(ctx, node.children[1], declarations, unread)
+    const local = ctx.program.nodeLocals[target.id]
+    const at = declarationIndex(ctx.program, declarations, local)
+    if (at < 0 || local === null) {
+      return
+    }
+    if (unread[at]) {
+      ctx.error(
+        target,
+        `\`${local.name}\` is assigned again before its \`${ctx.table.typeName(local.type)}\` is inspected, and the value it replaces is dropped: test it first with \`${local.name}.isErr()\`, or hand the old value on before assigning another`
+      )
+    }
+    unread[at] = true
+    return
+  }
+  for (const child of node.children) {
+    rejectUnreadOverwrites(ctx, child, declarations, unread)
+  }
+}
+
+/** The position in `declarations` of the declaration of `local`, or -1. */
+const declarationIndex = (program: CheckedProgram, declarations: Node[], local: Local | null): i32 => {
+  if (local === null) {
+    return -1
+  }
+  let i = 0
+  while (i < declarations.length) {
+    const declared = program.nodeLocals[declarations[i].id]
+    if (declared !== null && declared === local) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
 }
 
 /** Every `Result`-typed `let`/`const` declared anywhere in `node`, in source order. */
@@ -467,16 +544,9 @@ const markResultReads = (
   read: boolean[]
 ): void => {
   if (node.kind === N_IDENT) {
-    const local = program.nodeLocals[node.id]
-    if (local !== null) {
-      let i = 0
-      while (i < declarations.length) {
-        const declared = program.nodeLocals[declarations[i].id]
-        if (declared !== null && declared === local) {
-          read[i] = true
-        }
-        i = i + 1
-      }
+    const at = declarationIndex(program, declarations, program.nodeLocals[node.id])
+    if (at >= 0) {
+      read[at] = true
     }
     return
   }

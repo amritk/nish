@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 480
+export const RULE_COUNT: i32 = 481
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -284,6 +284,8 @@ const diagnosticRules = (): string[] => [
   "NL2175",
   "Empty array literal needs a type annotation, e.g. `const xs: number[] = []`",
   "NL2199",
+  "` is inspected, and the value it replaces is dropped: test it first with `",
+  "NL2377",
   "`, which only its body could bind, and a block body's type is not inferred",
   "NL2343",
   ": `static` members are not supported (use a top-level function or const)",
