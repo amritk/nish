@@ -1,0 +1,187 @@
+{
+  "version": "0.12.0",
+  "date": "2026-09-26",
+  "tag": "v0.12.0",
+  "range": {
+    "from": "v0.11.0",
+    "to": "ba2334b"
+  },
+  "entries": [
+    {
+      "id": "regenerate-the-lockfile-after-publishing-the-platform-packages",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "regenerate the lockfile after publishing the platform packages",
+      "body": "Every release left main with a `package-lock.json` that `npm ci` refuses:\n\n    Invalid: lock file's @amritk/nish-aarch64-darwin@0.10.0 does not satisfy @amritk/nish-aarch64-darwin@0.11.0\n\nThe Release PR bumps the platform packages' pins in `package.json` and in the\nlockfile's root entry. It cannot also move their `node_modules/...` entries:\ntheir `resolved` URL and `integrity` hash belong to tarballs that only exist\nonce `release.yml` has built them from the tag and published them. So after\n0.11.0 (#206), main pinned 0.11.0 and locked 0.10.0.\n\nThe release commit's own CI was green anyway. It ran before the publish, and\n`npm ci` drops an optional dependency whose pinned version is not on the\nregistry yet instead of refusing it. Once the publish landed, `npm ci` on main\nfailed, but nothing ran on main again to show it. The first sign was the next\npull request that merged main, and that PR had to carry the regenerated\nlockfile by hand.\n\n- `release.yml` has a new `lockfile` job after `publish to npm`. It checks out\n  main and waits, with a limit, until the registry serves this version of\n  every platform package and of the main package. The names come from the\n  matrix rows and `package.json`, the same way the publish order gets them.\n  It then runs `npm install --package-lock-only --ignore-scripts` and opens\n  `build: regenerate package-lock.json for vX.Y.Z` from\n  `release/lockfile-vX.Y.Z`. It uses the Release PR's token arrangement and\n  its warning when GitHub Actions may not open pull requests. It holds only\n  `contents: write` and `pull-requests: write`. Running it again is safe: a\n  main that already agrees, or a PR that is already open, is a success.\n- The `lint` job in `ci.yml` now runs `npm ls --package-lock-only --all`.\n  Unlike `npm ci`, it never asks the registry, so it fails on the release\n  commit's own push to main. Main stays red until the lockfile pull request\n  merges. It is skipped on the Release PR and on a tag, where the mismatch is\n  expected: a red check there would block the publish that fixes it.\n- The comment in `release-pr.yml` said `npm ci` \"tolerates the disagreement\".\n  That is true of the root pin and false of the platform entries, and it now\n  says which is which.\n- `package-lock.json` is regenerated for 0.11.0, as the new check requires.\n  It is the same 12-line change #239 carries.",
+      "metrics": [],
+      "refs": [
+        ".github/workflows/release.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release-pr.yml"
+      ],
+      "tests": [],
+      "commits": [
+        "0ce8b92"
+      ],
+      "pr": 240,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "one-probe-for-has-get-set-on-one",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "one probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
+      "body": "Asking the global `Map` or `Set` about one key twice is now one lookup. The compiler keeps the first probe's packed answer and writes through it:\n\n- where the key was found, the answer is the entry, and the write is `setValueAt`;\n- where it was not, the answer is the empty bucket and the key's hash, and the write is `insertAt`.\n\nThere is no second hash and no second search.\n\n**Three patterns are fused** (`docs/wp32-map.md` §9.1):\n\n- **update:** `counts.set(w, (counts.get(w) ?? 0) + 1)`, a `set` whose value asks about the key exactly once, with `get` or `has`. The `??` default still runs only when the key is missing;\n- **guarded write:** `if (m.has(k)) { m.set(k, E); … }` and `if (!m.has(k)) { m.set(k, E); … }`, the `set` first in the branch;\n- **insert if absent:** `if (!s.has(x)) { s.add(x); … }`.\n\nThe receiver and key must be spelled the same in both calls, each a local, a parameter or a `this.<field>` path (the key may be a literal), and nothing in between may call, allocate or assign. Anything else compiles as the separate calls it is, one probe each: an alias of the receiver, two reads of the key, a read of another map, a `set` in the `else` branch. Fusion is recorded per instantiation, so generic code is fused too, and a fused insert inside a `for...of` walk behaves as the unfused one does.\n\n**`nish/map`** adds `reserve(m, n)` and `getOrInsert(m, k, v)`. Their bodies are what runs under Node: `reserve` does nothing, and `getOrInsert` is a `get`, then a `set` when the key is missing. Natively the compiler lowers each call in place:\n\n- `reserve` becomes the table's new `reserveSlots`, which grows the buckets once and moves no entry;\n- `getOrInsert` becomes one probe and a `valueAt` or an `insertAt`.\n\nThe routing is keyed to the `nish/map` module, so a program's own `reserve` or `getOrInsert` runs its own body. Under Node, `runtime/nish.mjs` resolves `nish/<module>` to `std/<module>.ts`, and `tsconfig.json` maps `nish/*` for `tsc`, so `examples/wordcount.ts` runs unmodified and type-checks.\n\n**Also:**\n\n- importing a name a module does not export now carries a code, NL2376, so the uncoded backlog drops to one;\n- NL2301 quotes an imported template's parameter type from its declaring module;\n- `package-lock.json` is regenerated for the 0.11.0 platform packages, which the release left at 0.10.0.",
+      "metrics": [
+        "one probe call and no hash loop per iteration in the word-count and getOrInsert loops, pinned by tests/run.js; examples/wordcount.ts prints what Node prints and passes tsc --strict"
+      ],
+      "refs": [
+        "docs/wp32-map.md#91-the-fusion-patterns",
+        "docs/LANGUAGE.md#map-and-set"
+      ],
+      "tests": [
+        "tests/cases/map_fused_*",
+        "tests/cases/map_extras_*",
+        "tests/cases/reject_map_extras_*",
+        "tests/link/map_extras_two_modules",
+        "tests/link/map_extras_user_names"
+      ],
+      "commits": [
+        "a748d0b"
+      ],
+      "pr": 239,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-25"
+    },
+    {
+      "id": "make-semicolons-optional-by-typescript-s-insertion-rule",
+      "type": "feat",
+      "scope": "self",
+      "breaking": false,
+      "title": "make semicolons optional, by TypeScript's insertion rule",
+      "body": "A statement may now end without `;` wherever TypeScript would insert one:\nat a line break, before a `}`, and at the end of the file. A written `;`\nand an inserted one parse to the same tree, so the IR is identical byte\nfor byte, and a program without semicolons means what it means under Node.\n\nThe rule is TypeScript's, not \"semicolons are ignored\", because the looser\nversion changes what programs mean. With it, `return` followed by a line\nbreak and then `42` would return 42 where Node returns `undefined`, and\n`b = a` followed by `++b` on the next line would increment `a`. So:\n\n- a line starting with `(` or `[` continues the expression before it;\n- a `++` or `--` at the start of a line is a prefix operator of a new\n  statement;\n- `return` followed by a line break returns nothing. The value left on\n  the next line is `Unreachable code after return`, a compile error where\n  TypeScript would run it silently;\n- two statements on one line still need a `;`, and so does a `for`\n  header. A template at the start of a line is not a new statement,\n  because TypeScript reads it as a tagged template.\n\nThe compiler's own source keeps its semicolons until the next release,\nsince the last release builds it and does not accept code without them.",
+      "metrics": [
+        "asi_statements compiles to IR identical to its semicolon twin; asi_statements and asi_continuation print what Node prints"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#lexical-rules",
+        "docs/IR_COOKBOOK.md#the-same-function-without-semicolons"
+      ],
+      "tests": [
+        "tests/cases/asi_statements",
+        "tests/cases/asi_continuation",
+        "tests/cases/reject_asi_return_newline",
+        "tests/cases/reject_asi_same_line",
+        "tests/cases/reject_asi_for_header",
+        "tests/cases/reject_asi_template"
+      ],
+      "commits": [
+        "ac32aa6"
+      ],
+      "pr": 242,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "set-the-lint-rules-and-the-runbook-for",
+      "type": "chore",
+      "breaking": false,
+      "title": "set the lint rules and the runbook for the naming cleanup",
+      "body": "This sets the lint rules for a one-time cleanup pass that runs once the\nopen pull requests have merged, and writes down how to run it. New rules\ngo in as `warn`, so `npm run lint` and CI stay green, and the warning\ncount is the backlog the cleanup clears. Rules the tree already satisfies\ngo in as errors.\n\n- **File names are kebab-case.** `useFilenamingConvention` no longer\n  accepts snake_case, and the new `scripts/check-filenames.mjs` checks\n  every tracked path Biome does not read: C, shell, Markdown and\n  directories. ALL-CAPS documents and the test fixture trees are exempt.\n  It runs with `--advisory` until the renames land.\n- **Values are camelCase, types PascalCase** (`useNamingConvention`). A\n  `const` may also be UPPER_SNAKE_CASE, an object key may be CONSTANT_CASE,\n  and WASI's import names and the hook payload keys keep their snake_case.\n- **More Biome rules at `warn`**: `useBlockStatements`, `noShadow`,\n  `noUnusedImports`, `noNestedTernary`, `noUnusedTemplateLiteral`,\n  `useForOf` and a set of guards. `useShorthandAssign`, `useForOf` and\n  `useNumberNamespace` are off for Nish programs, because their fixes\n  produce code the compiler refuses or compiles worse.\n- **Errors from the start**: `noTsIgnore`, `noExportsInTest`,\n  `noGlobalDirnameFilename`, `noBarrelFile`, `noReExportAll`,\n  `useGuardForIn`, and `noRestrictedImports`, which stops `self/` and\n  `std/` importing from `tests/`, `scripts/`, `bench/` or `examples/`.\n  `tsconfig.json` adds `noImplicitReturns`, `noFallthroughCasesInSwitch`\n  and `allowUnreachableCode: false`.\n- `scripts/` and `.claude/hooks/` are now linted.\n\n`.claude/linting.md` records the rule set, the rules measured and left\noff, and the runbook for the cleanup pass, including dropping semicolons\nonce a release accepts code without them.",
+      "metrics": [
+        "0 hits for every new error rule; 1349 warnings of backlog; 173 paths not kebab-case"
+      ],
+      "refs": [
+        ".claude/linting.md"
+      ],
+      "tests": [],
+      "commits": [
+        "023caeb"
+      ],
+      "pr": 243,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "nish-run-and-a-shebang-line-so-a",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "nish run, and a shebang line so a program runs as a script",
+      "body": "A Nish program can now be used as a script, with no interpreter involved:\n\n```bash\nnish run tool.ts input.txt --verbose       # compile, link into a cache, run\nchmod +x tool.ts && ./tool.ts input.txt    # the same, through its shebang line\n```\n\n```ts\n#!/usr/bin/env -S nish run\nexport const main = (): number => {\n  console.log(`args: ${process.argv.length - 1}`);\n  return 0;\n};\n```\n\n**`nish run [options] <file.ts> [args ...]`** compiles the program, links it into a cache, and starts it with the arguments that followed the file. What runs is the same native binary `--link` builds.\n\n- **Compile and link.** Every run compiles, which takes milliseconds. It links only when the result is new: the cache is keyed on what the link consumes, which is the IR of every module, the recipe (profile, `-g`, `--threads`, `CC`), and fingerprints of `scripts/build.sh` and the runtime sources.\n- **Collisions.** An entry is named by a 64-bit FNV-1a of that key. A hit requires the stored key to be byte-equal to this run's key, so a collision costs a relink and never runs the wrong program.\n- **Concurrent misses.** A miss links in a scratch directory and moves the binary into place with one `rename`.\n- **Arguments.** Options before the file are the compiler's, and everything after it goes to the program, so `nish run tool.ts --help` asks the tool.\n- **Streams and exit status.** Stdin, stdout and stderr belong to the program. The compiler's exit bands apply until the program starts, and after that the run returns the program's own status, or `128 + n` for a signal.\n- **Cache location.** `$XDG_CACHE_HOME/nish/run`, or `~/.cache/nish/run`. With neither variable set, the run is refused with NL0002 rather than keeping a binary in a directory another user could write to.\n- **Defaults and refusals.** The default profile is `debug`, because a script is relinked on every edit and that link is the fast one. `-o`, `--link`, `--target`, the `--emit-*` sidecars and `--profile wasi` are usage errors, since each writes something the run keeps to itself.\n\n**A shebang line** at byte 0 is now skipped, as TypeScript and Node skip it. Its newline is kept, so every line and column after it is the file's own, and the IR is identical to the IR of the same file without it. A `#!` anywhere else is one syntax error covering the line, `'#!' can only be used at the start of a file`, where before it was one error per token of the path after it.",
+      "metrics": [
+        "examples/hello.ts, 5 runs each: first run 252-342 ms (debug link), cached run 6-7 ms, the binary started directly 3-5 ms. Moving the C-compiler probe to the miss path took a cached run from 29 ms to 6 ms"
+      ],
+      "refs": [
+        "README.md#command-line",
+        "docs/LANGUAGE.md#lexical-rules",
+        "docs/IR_COOKBOOK.md#a-shebang-line-and-nish-run"
+      ],
+      "tests": [
+        "tests/run.js (the `nish run` section)",
+        "tests/nish/cli.ts",
+        "tests/cases/entry_shebang",
+        "tests/cases/reject_shebang_not_first",
+        "tests/cases/reject_shebang_keeps_lines"
+      ],
+      "commits": [
+        "3205c64"
+      ],
+      "pr": 245,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "measure-map-and-set-against-node-and-the",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "measure Map and Set against Node and the unordered layout",
+      "body": "The global `Map` is now measured against Node's own `Map` and against the unordered prototype, on the same workloads with the same checksums. The results are written to a new `## Map and Set (WP32)` section of `docs/BENCHMARKS.md`. `docs/wp32-map.md` §10 records the decision they support: **an unordered map is not needed for v1.**\n\n- **(b) Fusion.** `counts.set(w, (counts.get(w) ?? 0) + 1)` is one probe per word, and the double lookup is two. The fused loop runs 1.82x fewer instructions: 36,652,275 against 66,777,903 at n = 16384. In wall time it is about 1.2x to 1.7x faster. Under Node the two spellings cost the same.\n- **(c) `reserve`.** `reserve(m, n)` from `nish/map` saves the rebuilds.\n  - Insert runs 1.41x fewer instructions, and peak memory is 13% lower at both sizes, because a presized table never abandons a bucket array to the arena.\n  - In wall time it is 1.36x to 1.91x faster while the table fits in the cache.\n  - Out of the cache it is not reliably faster for either key kind. Hashing and cache misses dominate there, and independent passes disagreed within the machine's noise.\n- **(d) The global `Map` against `StringMap`,** the compiler's own table. They are level within noise on the string workloads. Against Node, the shipped `Map` is 1.47x to 4.5x ahead on all ten workloads at 2^16 and 2^20 keys.\n- **The unordered layout** wins only integer lookups, by 1.13x (hit) to 1.35x (count), and runs the ten workloads in 1.22x fewer instructions. JavaScript fixes iteration order, so it could only be a second type with a different contract. Integer keys, read far more than written, in a table larger than the cache, with no iteration, is the shape that would reopen the question.\n\n`bench/run.mjs` times each variant in its own process, with the columns taking turns, and names every cell whose median is more than 5% above its minimum. The three new programs join the instruction gate (21 programs), the zero-performance-warning check and `--validate`. `bench/map_vs_stringmap.ts` carries a verbatim copy of `StringMap`, and a check fails if the copy drifts from `self/map.ts`.",
+      "metrics": [
+        "fused vs double 1.82x fewer instructions, 1.2x–1.7x wall time; reserve vs growing 1.41x fewer instructions, 1.3x–1.9x wall time in cache, not reliably faster out of cache, peak RSS −13%; Map vs StringMap level within noise; Map 1.47x–4.5x ahead of Node on all ten workloads; Map vs unordered 1.13x–1.35x on integer hit and count, 1.22x in instructions over all ten"
+      ],
+      "refs": [
+        "docs/wp32-map.md#10-is-an-unordered-map-ever-needed-s7",
+        "docs/BENCHMARKS.md"
+      ],
+      "tests": [
+        "tests/run.js bench"
+      ],
+      "commits": [
+        "6e49621"
+      ],
+      "pr": 244,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "store-a-0-map-key-or-set-element",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "store a -0 Map key or Set element as +0, as JavaScript does",
+      "body": "A `Map` or `Set` now stores a `-0` float key as `+0`, as ECMA-262 `Map.prototype.set` and `Set.prototype.add` do. Before, the table normalised a float key only to hash and compare it, and stored it as written. Lookups were already right, because -0 and +0 are one key, but a `for...of` over `keys()` or over a `Set` yielded `-0`. So `1 / k` printed `-Infinity` where Node prints `Infinity`. It happened for `f64` keys and for `f32` keys.\n\nThe table's `insertAt`, which every insert goes through, now stores `storedKey(key)`. That includes plain `set` and `add`, the fused update and guarded inserts, and `getOrInsert` from `nish/map`. `storedKey` is a new compiler intrinsic beside `hashKey` and `sameKey`, lowered in place per key type:\n\n- **Float key:** it is `fadd <ty> %key, 0.0`. That turns -0 into +0, leaves every other value, NaN included, unchanged, and is not folded by LLVM.\n- **Any other key:** it emits nothing. Every string-, integer-, boolean-, enum- and class-keyed golden is byte-identical, `dbg_map_get` under `-g` included.\n\nIts argument must be a parameter, and anything else is an internal error. Only the 18 float-keyed goldens move, each by one `fadd` per float `insertAt` instance.",
+      "metrics": [
+        "the lead's acceptance program (f64 mode) now prints exactly what Node prints; all six insert paths store +0 for f64 and for f32 (Infinity where main printed -Infinity); one fadd per float insertAt instance, 0 instructions for any other key type"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#map-and-set",
+        "docs/wp32-map.md#52-hash-and-equality-per-key-type"
+      ],
+      "tests": [
+        "tests/cases/map_key_negzero",
+        "tests/cases/map_key_f32_negzero"
+      ],
+      "commits": [
+        "ba2334b"
+      ],
+      "pr": 247,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    }
+  ]
+}
