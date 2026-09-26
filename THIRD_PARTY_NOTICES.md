@@ -56,7 +56,9 @@ The ports live in [`bench/awfy/`](bench/awfy/): the SOM-derived programs are
 under the MIT licence of the SOM benchmarks (Copyright (c) 2015-2016 Stefan
 Marr), and `mandelbrot.ts` under an earlier version of the Benchmarks Game's
 Revised BSD licence. [`bench/awfy/LICENSE.md`](bench/awfy/LICENSE.md)
-reproduces both notices verbatim, gives the header each copy carries, and lists
+reproduces both notices verbatim, and the fork's own `LICENSE.md`; it names
+the fork commit (`8c2ac1b`) where each port carries its upstream header in
+full, gives the header each copy carries, and lists
 in its section "Copies outside this directory" every test program and cookbook
 snippet elsewhere in the repository that reproduces part of a port.
 [`bench/awfy/AUTHORS.md`](bench/awfy/AUTHORS.md) lists the people behind SOM.

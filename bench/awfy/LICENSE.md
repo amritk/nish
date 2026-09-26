@@ -5,9 +5,20 @@ the [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks,
 taken from the Nish port in `benchmarks/Nish/` of
 [amritk/are-we-fast-yet](https://github.com/amritk/are-we-fast-yet) (commit
 `b4d09d4`). They are not covered by this repository's own licence. That
-repository's `LICENSE.md` notes that its benchmarks come from different
-sources under different licences; the two that cover the programs here are
-reproduced below, verbatim from the upstream sources.
+repository's `LICENSE.md`, reproduced at the end of this file, notes that its
+benchmarks come from different sources under different licences; the two that
+cover the programs here are reproduced below, verbatim from the upstream
+sources.
+
+**Provenance.** In the fork, each Nish port carries the full upstream header
+of the JavaScript file it was ported from: the MIT copyright and permission
+notice for the SOM-derived programs, and the Revised BSD notice with its
+contributor list for `mandelbrot.ts`. Those headers are at commit
+[`8c2ac1b`](https://github.com/amritk/are-we-fast-yet/commit/8c2ac1b035674fc08541365a9c9349306dc45bdd),
+in `benchmarks/Nish/`, whose
+`README.md` has a Licence section saying which notice covers which file. The
+copies here keep the short header of `b4d09d4` and point to this file, which
+holds the same two notices in full.
 
 - `bounce.ts`, `list.ts`, `permute.ts`, `queens.ts`, `som.ts`, `storage.ts`,
   `towers.ts` and `main.ts` (upstream `harness.ts`, from `harness.js`) are
@@ -141,6 +152,54 @@ http://benchmarksgame.alioth.debian.org/u64q/program.php?test=mandelbrot&lang=ya
 And the section of the upstream `LICENSE.md` that covers it:
 
 ```
+$Id: LICENSE,v 1.1 2012-12-29 19:28:50 igouy-guest Exp $
+
+Revised BSD license
+
+This is a specific instance of the Open Source Initiative (OSI) BSD license template
+http://www.opensource.org/licenses/bsd-license.php
+
+
+Copyright 2008-2012 Isaac Gouy
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+   Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+   Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+   Neither the name of "The Computer Language Benchmarks Game" nor the name of "The Computer Language Shootout Benchmarks" nor the name "bencher" nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## The fork's `LICENSE.md`
+
+The whole of [`LICENSE.md`](https://github.com/amritk/are-we-fast-yet/blob/master/LICENSE.md)
+at the root of amritk/are-we-fast-yet, verbatim. It holds no MIT text of its
+own: the MIT licence of the SOM-derived programs is in the header of each
+JavaScript file, reproduced under "SOM benchmarks" above. Richards and
+DeltaBlue, which it names first, are not among the programs here.
+
+```
+# Overview
+
+The benchmarks in this repository are from different sources and have different
+licenses.
+
+## Richards and DeltaBlue
+
+These benchmark are derived from the Smalltalk sources provided by Mario Wolczko.
+
+License details are available at:
+  http://web.archive.org/web/20050825101121/http://www.sunlabs.com/people/mario/java_benchmarking/index.html
+
+Further information:
+  http://www.wolczko.com/java_benchmarking.html
+
+## Computer Language Benchmarks Game
+
 $Id: LICENSE,v 1.1 2012-12-29 19:28:50 igouy-guest Exp $
 
 Revised BSD license
