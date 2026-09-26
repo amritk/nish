@@ -125,6 +125,16 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/entry_shebang.ts",
+    changelog: "shebang line",
+    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
+  },
+  {
+    program: "docs/cookbook/decl_shebang.ts",
+    changelog: "shebang line",
+    why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
+  },
+  {
     program: "tests/cases/map_fused_generic.ts",
     changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
     why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",

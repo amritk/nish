@@ -52,6 +52,15 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
 
 - **Encoding.** Source is UTF-8. String contents are stored as UTF-8 bytes
   (`tests/cases/str_escape`).
+- **A shebang line.** A `#!` line at the very start of a file (byte 0) is
+  skipped, as TypeScript and Node skip it, so a program can be made
+  executable and run as a script through `#!/usr/bin/env -S nish run`
+  (`tests/cases/entry_shebang`). The line's newline is kept, so every line
+  and column after it is the file's own (`reject_shebang_keeps_lines`).
+  Anywhere else, after a blank line or a comment included, `#!` is
+  `` '#!' can only be used at the start of a file ``
+  (`tests/cases/reject_shebang_not_first`), as it is to TypeScript and to
+  the kernel.
 - **A diagnostic column counts UTF-16 code units**, 1-based, from the start of
   the line — so `é` is one column and two bytes, and an emoji is two columns
   and four. That is the unit an editor indexes a line by, and an editor is who

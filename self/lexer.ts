@@ -327,6 +327,22 @@ export class Lexer {
     this.braceDepth = [];
     this.escapeEnd = 0;
     this.literal = new StringBuilder();
+    this.skipShebang();
+  }
+
+  /**
+   * A `#!` line at the very start of the file is trivia, as it is to the
+   * `typescript` scanner and to Node: it is what makes a program runnable as
+   * `./tool.ts` through `#!/usr/bin/env -S nish run`. Only at offset 0 — a `#!`
+   * anywhere else, after a blank line or a space included, is not a shebang
+   * to the kernel either, and lexes as the `#` it is. The newline stays, so
+   * the line count and every offset after it are the file's own.
+   */
+  skipShebang(): void {
+    if (this.at(0) !== CH_HASH || this.at(1) !== CH_BANG) {
+      return;
+    }
+    while (this.pos < this.source.length && this.at(this.pos) !== CH_LF) this.pos = this.pos + 1;
   }
 
   /** The byte at `i`, or -1 past the end. Every read goes through here. */
@@ -743,6 +759,15 @@ export class Lexer {
       return;
     }
     if (c === CH_HASH) {
+      if (next1 === CH_BANG) {
+        // A shebang anywhere but offset 0 (`skipShebang`). One error for the
+        // line, in the `typescript` scanner's words, rather than one per token
+        // of a path the parser was never going to read.
+        let end = this.pos;
+        while (end < this.source.length && this.at(end) !== CH_LF) end = end + 1;
+        this.error("'#!' can only be used at the start of a file", end);
+        return;
+      }
       this.scanPrivateName();
       return;
     }

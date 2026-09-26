@@ -72,6 +72,7 @@ cases/cls_inline_array_push added after R6: no rewriter to freeze it with
 cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
+cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/fnarg_arrow added after R6: no rewriter to freeze it with
 cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
