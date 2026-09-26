@@ -320,8 +320,18 @@ regressions: switching off the bounds prover in `self/bounds.ts` costs Queens
 its baseline by more than the tolerance does not fail. `--check` prints a note,
 and the next `--update` makes the gain the new bar.
 
+**The check checks itself.** `npm test` only ever sees `--check` pass, which
+would not notice a comparison turned the wrong way round. So before it compares
+anything, `--check` runs its own comparison on three made-up counts against a
+baseline of 100 million: twice the tolerance above has to read `REGRESSED`,
+twice below has to read as a gain, and the baseline itself has to read `ok`.
+If one does not, it exits 2 and names the count it misread.
+
 **Raising a baseline.** `--update` writes the counts it measured, the valgrind
-version and the commit, and leaves the sizes and the tolerance alone. Those two
+version and the commit, and leaves the sizes and the tolerance alone. The
+file-level `commit` and `valgrind` describe every count, so only an update of
+all eighteen restamps them. `--update --only Queens` stamps a `commit` and
+`valgrind` on the Queens entry alone, and the next full update clears them. Those two
 are edited by hand. A pull request that runs `--update` shows the table it
 printed, the old count against the new one for every benchmark it moves, and
 says in its body **why** each count went up: what the compiler now does that it

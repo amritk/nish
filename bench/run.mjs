@@ -153,8 +153,7 @@ for (let i = 2; i < argv.length; i++) {
   if (a === "--runs") {
     opts.runs = Number(next());
     opts.runsGiven = true;
-  }
-  else if (a === "--warmup") opts.warmup = Number(next());
+  } else if (a === "--warmup") opts.warmup = Number(next());
   else if (a === "--only") opts.only = new Set(next().split(",").filter(Boolean));
   else if (a === "--n") {
     for (const pair of next().split(",")) {
@@ -234,7 +233,7 @@ const SPEED = ["-C", "opt-level=3", "-C", "panic=abort", "-C", "codegen-units=1"
  * Copy a source into `dir` (build/bench/src), rewriting the number on its
  * `bench:n` line when a size override is given.
  */
-function prepare(file, size, dir = srcDir) {
+const prepare = (file, size, dir = srcDir) => {
   let text = fs.readFileSync(path.join(benchDir, file), "utf8");
   if (size !== undefined) {
     const lines = text.split("\n");
@@ -246,7 +245,7 @@ function prepare(file, size, dir = srcDir) {
   const dst = path.join(dir, file);
   fs.writeFileSync(dst, text);
   return dst;
-}
+};
 
 function run(cmd, args, what) {
   const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -420,6 +419,9 @@ const PINNED_LIBC = [
   "glibc.cpu.x86_rep_stosb_threshold=0x0fffffffffffffff",
 ].join(":");
 
+/** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
+const change = (count, base) => (count - base) / base;
+
 /**
  * The instructions one run executes, counted by cachegrind over the whole
  * process: the dynamic loader and libc's start-up included, because nothing
@@ -522,13 +524,8 @@ const runInstructions = () => {
     for (let i = 0; i < runs; i++) counts.push(countInstructions(valgrind, job.exe, job.args, job.name));
     const count = median(counts);
     const base = baseline.programs[job.name].instructions;
-    rows.push({
-      ...job,
-      count,
-      spread: Math.max(...counts) - Math.min(...counts),
-      base,
-      change: (count - base) / base,
-    });
+    const spread = Math.max(...counts) - Math.min(...counts);
+    rows.push({ ...job, count, spread, base, change: change(count, base) });
     process.stderr.write(".");
   }
   process.stderr.write("\n");
@@ -539,6 +536,25 @@ const runInstructions = () => {
   // An update reports what it moves; a check reports what it would fail.
   const [above, below, within] = opts.update ? ["raised", "lowered", "kept"] : ["REGRESSED", "below", "ok"];
   const status = (r) => (r.change > tolerance ? above : r.change < -tolerance ? below : within);
+  // `npm test` only ever sees this check pass, so the failing side is proved
+  // here on every run: a count twice the tolerance above a baseline has to
+  // regress, one twice below has to be a gain, and the baseline itself has to
+  // pass. An inverted comparison would otherwise stay green for ever.
+  if (opts.check) {
+    const base = 100_000_000;
+    const off = Math.ceil(base * tolerance * 2);
+    const probes = [
+      [base + off, above],
+      [base - off, below],
+      [base, within],
+    ];
+    for (const [count, want] of probes) {
+      const got = status({ change: change(count, base) });
+      if (got !== want) {
+        fail(`--check's own comparison is broken: ${count} against ${base} reads ${got}, not ${want}`);
+      }
+    }
+  }
   console.log(
     `instructions: ${version(valgrind)} cachegrind, whole process, --profile speed; tolerance ${pct(tolerance)}`
   );
@@ -554,12 +570,31 @@ const runInstructions = () => {
   }
 
   if (opts.update) {
-    for (const r of rows) baseline.programs[r.name].instructions = r.count;
-    baseline.valgrind = version(valgrind);
-    baseline.commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    const commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: root,
       encoding: "utf8",
     }).trim();
+    const valgrindVersion = version(valgrind);
+    // The file's `commit` and `valgrind` say where every count was measured, so
+    // only an update of all eighteen restamps them. An `--only` update stamps
+    // the programs it counted instead, and a later full update clears those.
+    const partial = rows.length < names.length;
+    for (const r of rows) {
+      const p = baseline.programs[r.name];
+      p.instructions = r.count;
+      if (partial) {
+        p.commit = commit;
+        p.valgrind = valgrindVersion;
+      }
+    }
+    if (!partial) {
+      baseline.valgrind = valgrindVersion;
+      baseline.commit = commit;
+      for (const p of Object.values(baseline.programs)) {
+        delete p.commit;
+        delete p.valgrind;
+      }
+    }
     // One program to a line, so a diff of the file reads as the table above.
     const { programs, ...header } = baseline;
     const entry = (p) =>

@@ -304,7 +304,7 @@ jobs:
           for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the fifteen that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the fourteen that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
