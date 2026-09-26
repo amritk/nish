@@ -1,10 +1,10 @@
 ---
 name: Clear the open bugs, then threads P2 (scope) and ranged integers W1–W4
-overview: Fix the six open compiler bugs (#224 #225 #233 #234 #235 #246), then build wp29 P2 — using s = scope(); s.spawn(fn, arg), joined on every exit of the block — and wp31 W1–W4, the integer<Lo, Hi> type with checked entry, the proofs that drop the check, the host-boundary RangeError, and the measurement.
+overview: Fix the six open compiler bugs (issues 224, 225, 233, 234, 235 and 246), then build wp29 P2 — using s = scope(); s.spawn(fn, arg), joined on every exit of the block — and wp31 W1–W4, the integer<Lo, Hi> type with checked entry, the proofs that drop the check, the host-boundary RangeError, and the measurement.
 stages:
   - id: threads-reduce-fixes
     title: fix(interop) — parallelReduce under Node, and NL2348 at the call for a non-scalar reduce
-    goal: A parallelReduce program prints the same natively and under Node's documented prelude path, and a reduce over string or class elements is refused with one NL2348 at the user's call naming the type (#224, #225).
+    goal: A parallelReduce program prints the same natively and under Node's documented prelude path, and a reduce over string or class elements is refused with one NL2348 at the user's call naming the type (issues 224 and 225).
     verification: npm run check && node tests/run.js par_ && node tests/run.js threads && npm test (zero non-environmental skips)
     todos:
       - id: b1-node
@@ -18,7 +18,7 @@ stages:
         status: pending
   - id: result-must-handle
     title: fix(checker) — a stored Result is not a discard, and Map of Result compiles
-    goal: An assignment of a Result is not NL2025, a discard of a T in a generic body is judged against the template, and new Map<string, Result<i32, string>>() compiles and runs, including get, delete and compaction (#233).
+    goal: An assignment of a Result is not NL2025, a discard of a T in a generic body is judged against the template, and new Map<string, Result<i32, string>>() compiles and runs, including get, delete and compaction (issue 233).
     verification: npm run check && node tests/run.js result && node tests/run.js map_value_result && npm test (zero non-environmental skips)
     todos:
       - id: b2-assign
@@ -32,7 +32,7 @@ stages:
         status: pending
   - id: narrowing-soundness
     title: fix(checker) — a proof never leaves a proof consumer, and an assignment ends a narrowing in an && chain
-    goal: The #234 ternary, array-literal and let programs and the #235 && chain program are all refused with stable codes, for T | null and Result alike.
+    goal: The issue-234 ternary, array-literal and let programs and the issue-235 && chain program are all refused with stable codes, for T | null and Result alike.
     verification: npm run check && node tests/run.js reject_result_ && node tests/run.js reject_null_ && node tests/run.js narrow && npm test (zero non-environmental skips)
     todos:
       - id: b3-canon
@@ -46,7 +46,7 @@ stages:
         status: pending
   - id: lexer-surrogates
     title: fix(checker) — a surrogate-pair escape is the code point it spells
-    goal: A high-surrogate escape followed by a low-surrogate escape encodes as one 4-byte UTF-8 code point, so the #246 program prints true 4 4 natively, and a lone surrogate has a written rule and a case.
+    goal: A high-surrogate escape followed by a low-surrogate escape encodes as one 4-byte UTF-8 code point, so the issue-246 program prints true 4 4 natively, and a lone surrogate has a written rule and a case.
     verification: npm run check && node tests/run.js str_ && node tests/run.js lex && npm test (zero non-environmental skips)
     todos:
       - id: b4-join
