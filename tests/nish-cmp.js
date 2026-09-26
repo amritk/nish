@@ -125,6 +125,21 @@ import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
  */
 const DECLARED = [
   {
+    program: "tests/cases/asi_statements.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
+  },
+  {
+    program: "tests/cases/asi_continuation.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
+  },
+  {
+    program: "docs/cookbook/fn_add_no_semicolons.ts",
+    changelog: "Make semicolons optional, by TypeScript's insertion rule",
+    why: "it leaves out semicolons TypeScript would insert, which the reference refuses as a syntax error",
+  },
+  {
     program: "tests/cases/map_fused_generic.ts",
     changelog: "One probe for has/get/set on one key, and nish/map's reserve and getOrInsert",
     why: "it asks the global `Map` or `Set` about one key twice, which is now one probe and a write through its answer where the reference makes two",
