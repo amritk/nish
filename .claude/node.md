@@ -164,10 +164,11 @@ else is noise in the diff. So:
 - The sibling repos' Biome configs use single quotes, no semicolons and
   `trailingCommas: all`; those formatter settings are not carried over, for
   different reasons:
-  - **Semicolons are required.** Nish's parser does not insert them, so
-    `semicolons: "asNeeded"` would format `self/`, `std/` and every example
-    into code the compiler refuses (`expected ';'`). A TypeScript-only
-    codebase can drop them; this one cannot.
+  - **Semicolons stay for now.** Nish accepts code without them, by
+    TypeScript's insertion rule (`docs/LANGUAGE.md`, "Lexical rules"). But
+    `self/` is built by the last release, and until a release accepts them
+    too, `semicolons: "asNeeded"` would format the compiler into code its
+    seed refuses. The switch is a step of the cleanup pass in `linting.md`.
   - **Quotes are only taste.** Nish accepts `'...'`. Double quotes are kept
     because every snippet in `docs/LANGUAGE.md`, `docs/AI.md` and the
     cookbook uses them, and so does the text a user copies out of those

@@ -200,13 +200,21 @@ Delete this section when it is done.
      same as a lefthook pre-commit step, with no new dependency.
      It waits for step 4, because before that it would reformat whole files
      that a change only touched.
-7. **Wire in shellcheck**: fix the 8 warnings `shellcheck -S warning` reports
+7. **Drop the semicolons**, once the seed is a release that accepts code
+   without them: set `javascript.formatter.semicolons` to `"asNeeded"` and
+   run `npm run format`. On 2026-09-26 that was about 16,700 lines in `self/`,
+   3,300 across `std/`, `examples/`, `docs/cookbook/` and `tests/nish/`, 1,700
+   in `bench/`, and 6,700 in the tooling. The fixtures in `tests/cases/` keep
+   theirs, because the formatter does not read them. Run the
+   `docs/cookbook/regen.sh` and the stage2 IR check from step 5 again after
+   it. If the release has not happened yet, leave this step for a second pass.
+8. **Wire in shellcheck**: fix the 8 warnings `shellcheck -S warning` reports
    today, then add a CI step. Ubuntu runners ship shellcheck, and
    `pip install shellcheck-py` installs it locally.
-8. **Verify** with `npm run check`, an undegraded `npm test` (which includes
+9. **Verify** with `npm run check`, an undegraded `npm test` (which includes
    the self-host fixed point), `docs/cookbook/regen.sh --check` and
    `node docs/check-links.mjs`.
-9. **Keep `git blame` useful.** Put the commit hashes from steps 2 and 4 in a
+10. **Keep `git blame` useful.** Put the commit hashes from steps 2, 4 and 7 in a
    new `.git-blame-ignore-revs`. Land step 1 as its own commit, so that
    `git log --follow` sees pure renames.
 
