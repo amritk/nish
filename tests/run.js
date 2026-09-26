@@ -825,17 +825,18 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // Two, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`: an import of a name a module does not export
-  // (`tests/link/unknown_export`) is uncoded and always was, and stage1 answers
-  // the empty statement of `tests/wordings/nl2260_empty_statement` with
-  // ``Unsupported statement `;` ``, which quotes the statement and has no words
-  // of its own. It was five until #174 gave the duplicate-symbol wordings --
-  // a duplicate export, the same one reached through an import, and a
-  // duplicate internal name -- codes of their own (NL3024, NL3026). They are
-  // named on stdout by the run, so shrinking this backlog means giving one of
-  // those messages a registry entry, or a literal run of its own first.
-  const UNCODED_BACKLOG = 2;
+  // One, because the tool walks the `tests/link/` negatives as well as
+  // `tests/cases/reject_*`, and stage1 answers the empty statement of
+  // `tests/wordings/nl2260_empty_statement` with ``Unsupported statement `;` ``,
+  // which quotes the statement and has no words of its own. It was five until
+  // #174 gave the duplicate-symbol wordings -- a duplicate export, the same one
+  // reached through an import, and a duplicate internal name -- codes of their
+  // own (NL3024, NL3026), and two until WP32 S5 gave an import of a name a
+  // module does not export (`tests/link/unknown_export`,
+  // `reject_map_extras_unknown_export`) NL2376. The remainder is named on
+  // stdout by the run, so shrinking this backlog means giving that message a
+  // registry entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 1;
   const wordings = spawnSync(
     "node",
     [
@@ -2237,6 +2238,72 @@ if (!only || "map_fingerprint_miss".includes(only)) {
       );
     }
   }
+}
+
+// ---- WP32 S5: one probe per fused lookup, counted in the goldens ----------------
+// docs/wp32-map.md §9, acceptance criterion 3: word count and `getOrInsert` are
+// one hash and one search per iteration. The loop is the whole of one function
+// in each fixture, so the function's IR is the loop's, and counting in the
+// golden — which section A has already compared with what the compiler writes —
+// proves it without trusting anyone's eye: exactly one call of the table's
+// `probe`, whose hash is inside it, no hash loop of its own (`hash.test` is the
+// block FNV-1a is lowered to), and no call of `get`, `set`, `has` or of
+// `getOrInsert` itself. The negatives are counted too, so the rule is proven
+// on both sides. A golden that is not there reads as no function at all,
+// which fails the check, so a renamed fixture fails here rather than dropping it.
+if (!only || "map_fused".includes(only) || "map_extras".includes(only) || "probe".includes(only)) {
+  /** The `define` of `fn` in the golden `name.ll`, up to its closing brace. */
+  const goldenFunction = (name, fn) => {
+    const golden = path.join(casesDir, `${name}.ll`);
+    const ir = fs.existsSync(golden) ? fs.readFileSync(golden, "utf8") : "";
+    return ir.match(new RegExp(`define[^\\n]*@${fn}\\([\\s\\S]*?\\n}`))?.[0] ?? "";
+  };
+  const countOf = (ir, pattern) => (ir.match(pattern) ?? []).length;
+  const onePass = [
+    ["map_fused_wordcount", "count", "counts.set(w, (counts.get(w) ?? 0) + 1)"],
+    ["map_extras_get_or_insert", "firstSeen", "getOrInsert(at, words[i], i)"],
+  ];
+  for (const [name, fn, spelled] of onePass) {
+    const ir = goldenFunction(name, fn);
+    const probes = countOf(ir, /call i64 @[\w.$]+\.probe\(/g);
+    const hashes = countOf(ir, /hash\.test/g);
+    const others = countOf(ir, /call [^@\n]*@[\w.$]+\.(?:get|set|has)\(|@[\w.$]*getOrInsert/g);
+    check(
+      `${name}: \`${spelled}\` in \`${fn}\` is one probe per iteration (${probes} probe, ${hashes} hash loops, ${others} get/set/has calls)`,
+      ir.length > 0 && probes === 1 && hashes === 0 && others === 0,
+      ir || `no \`define\` of @${fn} in tests/cases/${name}.ll`
+    );
+  }
+  // Each shape that must stay unfused keeps a probe for every `get` and a
+  // `set` that probes again: a call in the value, an alias of the receiver
+  // (the rule compares the places, not what they hold), two reads of the key,
+  // and a read of another map.
+  const unfusedShapes = [
+    ["map_fused_no_call", "touch", 1, "a call in the value"],
+    ["map_fused_no_alias", "bump", 1, "a receiver alias"],
+    ["map_fused_no_two_gets", "twice", 2, "two reads of the key"],
+    ["map_fused_no_other_map", "merge", 2, "a read of another map"],
+  ];
+  for (const [name, fn, gets, shape] of unfusedShapes) {
+    const unfused = goldenFunction(name, fn);
+    const probes = countOf(unfused, /call i64 @[\w.$]+\.probe\(/g);
+    const sets = countOf(unfused, /call [^@\n]*@[\w.$]+\.set\(/g);
+    check(
+      `${name}: ${shape} is not fused (${probes} probe for the get(s), ${sets} set that probes again)`,
+      probes === gets && sets === 1,
+      unfused || `no \`define\` of @${fn} in tests/cases/${name}.ll`
+    );
+  }
+  // A guard fuses the write that starts its then-branch and nothing else: the
+  // `else` branch's `set` is a call with a probe of its own.
+  const guarded = goldenFunction("map_fused_no_else_branch", "put");
+  check(
+    "map_fused_no_else_branch: the then-branch write goes through the guard's probe, the else-branch `set` does not",
+    countOf(guarded, /call i64 @[\w.$]+\.probe\(/g) === 1 &&
+      countOf(guarded, /call void @[\w.$]+\.setValueAt\(/g) === 1 &&
+      countOf(guarded, /call [^@\n]*@[\w.$]+\.set\(/g) === 1,
+    guarded || "no `define` of @put in tests/cases/map_fused_no_else_branch.ll"
+  );
 }
 
 // ---- WP4: arrays ------------------------------------------------------------------

@@ -54,6 +54,7 @@
  * harness already uses, so the two cannot drift apart: a semantic fixed there
  * is fixed here in the same commit.
  */
+import { registerHooks } from "node:module";
 import * as shim from "./shim.mjs";
 
 /** Install `value` as a global unless the program declared its own. */
@@ -140,4 +141,16 @@ provide("Arena", {
   release: shim.arenaRelease,
   reset: shim.arenaReset,
   used: shim.arenaUsed,
+});
+
+// The standard library. A program imports it as `nish/<module>`, which the
+// compiler resolves to `std/<module>.ts` beside itself; this does the same for
+// Node, relative to this file rather than to the program, so the same
+// specifier works from any directory. Only the `nish/` package is answered
+// here, and every other specifier goes to Node as it was written.
+registerHooks({
+  resolve: (specifier, context, next) =>
+    specifier.startsWith("nish/")
+      ? next(new URL(`../std/${specifier.slice("nish/".length)}.ts`, import.meta.url).href, context)
+      : next(specifier, context),
 });

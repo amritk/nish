@@ -34,6 +34,8 @@
  * only as the iterable of a `for...of`, and `get`'s `V | undefined` only as a
  * `const`'s initialiser, the left of `??` or an operand of `=== undefined`,
  * none of which `tsc` can know (docs/LANGUAGE.md -> `Map` and `Set`).
+ * `nish/map`'s `reserve` and `getOrInsert` are not declared here either: they
+ * are ordinary source, `std/map.ts`, which `tsconfig.json` maps `nish/*` to.
  */
 
 // ---- Numeric widths (docs/LANGUAGE.md -> Types) ------------------------------

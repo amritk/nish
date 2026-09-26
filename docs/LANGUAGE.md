@@ -1036,8 +1036,9 @@ and their `.ll` goldens are byte-identical files.
   (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
-  `` Module `nish/toml` is not part of the standard library (it has: json,
-  pair, testing, text) `` (`reject_std_unknown_module`), and one that would leave the
+  `` Module `nish/toml` is not part of the standard library (it has:
+  collections, json, map, pair, testing, text, threads) ``
+  (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
   standard library; a `nish/` specifier names a module inside it, so no segment
@@ -3324,6 +3325,96 @@ export const main = (): i32 => {
   away dead entries, and when there are none it panics with
   `Map maximum size exceeded` (or `Set …`) *(CLI only: the case takes 16 million
   inserts)*.
+- **Asking about one key twice is one probe** ([wp32-map.md](wp32-map.md)
+  §9.1). Three patterns keep the first probe's answer — the entry it found, or
+  the empty bucket it stopped at and the key's hash — and write through it:
+  `setValueAt` of the entry where the key was found, and `insertAt` the bucket
+  with the hash already computed where it was not. The second hash and the
+  second search are never made:
+
+  | Pattern | Written | Case |
+  | --- | --- | --- |
+  | update | `counts.set(w, (counts.get(w) ?? 0) + 1)`: the value asks about the key exactly once, with `get` or `has` | `map_fused_wordcount`, `map_fused_update_has` |
+  | guarded write | `if (m.has(k)) { m.set(k, E); … }` or `if (!m.has(k)) { m.set(k, E); … }`, the `set` first in the branch | `map_fused_guard_has`, `map_fused_guard_not_has` |
+  | insert if absent | `if (!s.has(x)) { s.add(x); … }`, the `add` first in the branch; the rest of the branch runs only where it inserted | `map_fused_set_insert` |
+
+  The receiver and the key are spelled the same way in both calls, and each is
+  a local, a parameter or a `this.<field>` path; the key may also be a literal
+  (`map_fused_this_field`, `map_fused_literal_key`). Between the probe and the
+  write — inside the value, and between the `has` and the branch's first
+  statement — there is no call of any kind, no `new`, array or object literal,
+  template literal or string `+`, and no assignment, `++`, `--` or compound
+  assignment; `&&`, `||`, `??` and the ternary may stay, and a `??` default
+  still runs only where the key is missing. A pattern outside these rules is
+  not an error: it compiles as the separate calls it is, one probe each, and
+  prints what they print (`map_fused_no_call`, `map_fused_no_assign`,
+  `map_fused_no_key_spelling`, `map_fused_no_element_receiver`,
+  `map_fused_no_template`, `map_fused_no_statement_before`). The places are
+  compared, not what they hold, so an alias of the receiver is not fused
+  (`map_fused_no_alias`), and neither is a value that reads the key twice or
+  reads another map (`map_fused_no_two_gets`, `map_fused_no_other_map`); a
+  guard fuses the write that starts its then-branch, and a `set` in its `else`
+  is an ordinary call (`map_fused_no_else_branch`). A pattern in a
+  generic function or method is fused in every instantiation
+  (`map_fused_generic`), and one inside a walk of the table it writes does
+  what the separate calls do: a key it inserts is appended past the cursor and
+  visited (`map_fused_walk`). `tests/run.js` counts one call of `probe`, no
+  hash of its own and no `get`, `set` or `has` in the loop of
+  `map_fused_wordcount`'s golden
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#fused-lookups-one-probe-for-a-key-asked-about-twice)).
+- **`nish/map` adds `reserve(m, n)` and `getOrInsert(m, k, v)`**, the two
+  things a program asks of a table that JavaScript's `Map` has no call for
+  ([wp32-map.md](wp32-map.md) §9.2). Their bodies in
+  [`std/map.ts`](../std/map.ts) are what runs under Node — `reserve` does
+  nothing, and `getOrInsert` is a `get`, and a `set` of `v` when the key was
+  missing, answering the value either way — so a program that uses them runs
+  unmodified there (`examples/wordcount.ts`). Natively neither body is called:
+  every call is lowered in place, so `std/map.ts` writes no `.ll` of its own
+  and a one-file program importing it is still one module.
+
+  ```typescript
+  import { getOrInsert, reserve } from "nish/map";
+
+  export const main = (): i32 => {
+    const first = new Map<string, i32>();
+    reserve(first, 64);                        // no rebuild until 64 entries
+    const a = getOrInsert(first, "a", 1);      // 1, inserted
+    const b = getOrInsert(first, "a", 2);      // 1, found: 2 is not stored
+    return a + b + first.size;                 // 3
+  };
+  ```
+
+  - **`getOrInsert` is one probe**: the value of the entry found, or `insertAt`
+    of `v` through the bucket the probe stopped at. `v` is evaluated either way,
+    as every argument is (`tests/cases/map_extras_get_or_insert`, whose loop
+    `tests/run.js` counts as one `probe` and no `getOrInsert` call).
+  - **`reserve` is the table's `reserveSlots`**, which doubles the bucket table
+    until `n` entries, dead ones included, fit under the three-quarters bound,
+    and re-files the buckets from the stored hashes. It never shrinks a table,
+    a count that is not positive does nothing, and one past the 2^24 - 1 entry
+    cap is the cap (`map_extras_reserve`). It moves no entry, so like
+    `getOrInsert` it may be called during a walk of the table
+    (`map_extras_walk`), and both are lowered in each instantiation of a
+    generic caller (`map_extras_generic`) and in each module that calls them
+    (`tests/link/map_extras_two_modules`). Only speed depends on it: each case
+    prints under Node what it prints compiled
+    (`tests/differential/unmodified.js`).
+  - **They are generic functions, checked as one**: a first argument that is
+    not a `Map`, or a key or value of the wrong type, is
+    `` Argument 1 of `getOrInsert<i32, i32>`: expected Map<i32, i32>, got i32[] ``
+    (`reject_map_extras_not_map`, `reject_map_extras_key_type`,
+    `reject_map_extras_value_type`, and `reject_map_extras_reserve_count` for a
+    count that is not a `number`); a missing argument is
+    `` `getOrInsert` expects 3 argument(s), got 2 `` (`reject_map_extras_arity`);
+    and a `Set` is not a table `reserve` takes:
+    `` Cannot infer `K` for `reserve`: argument 1 is Set<string>, which does not match the declared `Map<K, V>` ``
+    (`reject_map_extras_reserve_set`). The module has those two and nothing
+    else: `` Module `nish/map` has no exported function `peek` ``
+    (`reject_map_extras_unknown_export`, NL2376, the code any module's missing export now carries).
+  - **The lowering belongs to `nish/map`'s two functions**, found by the module
+    that declares them and not by their names: a program's own `reserve`, or a
+    `getOrInsert` from its own module `./map`, is an ordinary function whose
+    body runs (`tests/link/map_extras_user_names`).
 - **`std/collections.ts` writes no `.ll` of its own.** What a module uses of it
   is emitted into that module, `internal`, after the module's own functions,
   so a one-file program that names `Map` is still one module for

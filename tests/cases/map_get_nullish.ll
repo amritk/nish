@@ -162,122 +162,131 @@ push.store:
 if.end:
   %47 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
   %48 = load i8*, i8** %w.addr, align 8
-  %49 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
-  %50 = load i8*, i8** %w.addr, align 8
-  %51 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %49, i8* %50)
-  %52 = icmp sge i64 %51, 0
-  br i1 %52, label %nullish.value, label %nullish.default
+  %49 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %47, i8* %48)
+  %50 = icmp sge i64 %49, 0
+  br i1 %50, label %nullish.value, label %nullish.default
 
 nullish.value:
-  %53 = trunc i64 %51 to i32
-  %54 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %49, i32 %53)
+  %51 = trunc i64 %49 to i32
+  %52 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %47, i32 %51)
   br label %nullish.end
 
 nullish.default:
   br label %nullish.end
 
 nullish.end:
-  %55 = phi double [ %54, %nullish.value ], [ 0x0000000000000000, %nullish.default ]
-  %56 = fadd double %55, 0x3FF0000000000000
-  %57 = call %struct.Map$str$f64* @nish.Map$str$f64.set(%struct.Map$str$f64* %47, i8* %48, double %56)
+  %53 = phi double [ %52, %nullish.value ], [ 0x0000000000000000, %nullish.default ]
+  %54 = fadd double %53, 0x3FF0000000000000
+  br i1 %50, label %set.found, label %set.insert
+
+set.found:
+  %55 = trunc i64 %49 to i32
+  call void @nish.Map$str$f64.setValueAt(%struct.Map$str$f64* %47, i32 %55, double %54)
+  br label %set.end
+
+set.insert:
+  call void @nish.Map$str$f64.insertAt(%struct.Map$str$f64* %47, i64 %49, i8* %48, double %54)
+  br label %set.end
+
+set.end:
   br label %forof.inc
 
 forof.inc:
-  %58 = load i64, i64* %forof.idx, align 8
-  %59 = add i64 %58, 1
-  store i64 %59, i64* %forof.idx, align 8
+  %56 = load i64, i64* %forof.idx, align 8
+  %57 = add i64 %56, 1
+  store i64 %57, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %60 = load %struct.nish_array*, %struct.nish_array** %order.addr, align 8
+  %58 = load %struct.nish_array*, %struct.nish_array** %order.addr, align 8
   store i64 0, i64* %forof.idx.1, align 8
   br label %forof.cond.1
 
 forof.cond.1:
-  %61 = load i64, i64* %forof.idx.1, align 8
-  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %60, i64 0, i32 0
-  %63 = load i64, i64* %62, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %64 = icmp ult i64 %61, %63
-  br i1 %64, label %forof.body.1, label %forof.end.1
+  %59 = load i64, i64* %forof.idx.1, align 8
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %58, i64 0, i32 0
+  %61 = load i64, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %62 = icmp ult i64 %59, %61
+  br i1 %62, label %forof.body.1, label %forof.end.1
 
 forof.body.1:
-  %65 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %60, i64 0, i32 2
-  %66 = load i8*, i8** %65, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %67 = bitcast i8* %66 to i8**
-  %68 = getelementptr inbounds i8*, i8** %67, i64 %61
-  %69 = load i8*, i8** %68, align 8, !alias.scope !4, !noalias !3, !tbaa !14
-  store i8* %69, i8** %w.addr.1, align 8
-  %70 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %71 = load i8*, i8** %70, align 8
-  %72 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %73 = load i64, i64* %72, align 8
-  %74 = load i8*, i8** %w.addr.1, align 8
-  %75 = call i8* @nish_str_concat(i8* %74, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
-  %76 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
-  %77 = load i8*, i8** %w.addr.1, align 8
-  %78 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %76, i8* %77)
-  %79 = icmp sge i64 %78, 0
-  br i1 %79, label %nullish.value.1, label %nullish.default.1
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %58, i64 0, i32 2
+  %64 = load i8*, i8** %63, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %65 = bitcast i8* %64 to i8**
+  %66 = getelementptr inbounds i8*, i8** %65, i64 %59
+  %67 = load i8*, i8** %66, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store i8* %67, i8** %w.addr.1, align 8
+  %68 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %69 = load i8*, i8** %68, align 8
+  %70 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %71 = load i64, i64* %70, align 8
+  %72 = load i8*, i8** %w.addr.1, align 8
+  %73 = call i8* @nish_str_concat(i8* %72, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
+  %74 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
+  %75 = load i8*, i8** %w.addr.1, align 8
+  %76 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %74, i8* %75)
+  %77 = icmp sge i64 %76, 0
+  br i1 %77, label %nullish.value.1, label %nullish.default.1
 
 nullish.value.1:
-  %80 = trunc i64 %78 to i32
-  %81 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %76, i32 %80)
+  %78 = trunc i64 %76 to i32
+  %79 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %74, i32 %78)
   br label %nullish.end.1
 
 nullish.default.1:
-  %82 = fneg double 0x3FF0000000000000
+  %80 = fneg double 0x3FF0000000000000
   br label %nullish.end.1
 
 nullish.end.1:
-  %83 = phi double [ %81, %nullish.value.1 ], [ %82, %nullish.default.1 ]
-  %84 = call i8* @nish_str_from_f64(double %83)
-  %85 = call i8* @nish_str_concat(i8* %75, i8* %84)
-  call void @nish_print(i8* %85)
-  %86 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %87 = load i8*, i8** %86, align 8
-  %88 = icmp eq i8* %87, %71
-  br i1 %88, label %pass.rewind, label %pass.free
+  %81 = phi double [ %79, %nullish.value.1 ], [ %80, %nullish.default.1 ]
+  %82 = call i8* @nish_str_from_f64(double %81)
+  %83 = call i8* @nish_str_concat(i8* %73, i8* %82)
+  call void @nish_print(i8* %83)
+  %84 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %85 = load i8*, i8** %84, align 8
+  %86 = icmp eq i8* %85, %69
+  br i1 %86, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %89 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %73, i64* %89, align 8
+  %87 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %71, i64* %87, align 8
   br label %pass.done
 
 pass.free:
-  %90 = ptrtoint i8* %71 to i64
-  %91 = add i64 %90, %73
-  call void @nish_arena_release(i64 %91)
+  %88 = ptrtoint i8* %69 to i64
+  %89 = add i64 %88, %71
+  call void @nish_arena_release(i64 %89)
   br label %pass.done
 
 pass.done:
   br label %forof.inc.1
 
 forof.inc.1:
-  %92 = load i64, i64* %forof.idx.1, align 8
-  %93 = add i64 %92, 1
-  store i64 %93, i64* %forof.idx.1, align 8
+  %90 = load i64, i64* %forof.idx.1, align 8
+  %91 = add i64 %90, 1
+  store i64 %91, i64* %forof.idx.1, align 8
   br label %forof.cond.1
 
 forof.end.1:
-  %94 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
-  %95 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %94, i8* bitcast ({ i64, [4 x i8] }* @.str.9 to i8*))
-  %96 = icmp sge i64 %95, 0
-  br i1 %96, label %nullish.value.2, label %nullish.default.2
+  %92 = load %struct.Map$str$f64*, %struct.Map$str$f64** %counts.addr, align 8
+  %93 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %92, i8* bitcast ({ i64, [4 x i8] }* @.str.9 to i8*))
+  %94 = icmp sge i64 %93, 0
+  br i1 %94, label %nullish.value.2, label %nullish.default.2
 
 nullish.value.2:
-  %97 = trunc i64 %95 to i32
-  %98 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %94, i32 %97)
+  %95 = trunc i64 %93 to i32
+  %96 = call double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* %92, i32 %95)
   br label %nullish.end.2
 
 nullish.default.2:
-  %99 = fneg double 0x3FF0000000000000
+  %97 = fneg double 0x3FF0000000000000
   br label %nullish.end.2
 
 nullish.end.2:
-  %100 = phi double [ %98, %nullish.value.2 ], [ %99, %nullish.default.2 ]
-  %101 = call i8* @nish_str_from_f64(double %100)
-  %102 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.8 to i8*), i8* %101)
-  call void @nish_print(i8* %102)
+  %98 = phi double [ %96, %nullish.value.2 ], [ %97, %nullish.default.2 ]
+  %99 = call i8* @nish_str_from_f64(double %98)
+  %100 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.8 to i8*), i8* %99)
+  call void @nish_print(i8* %100)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -734,30 +743,6 @@ entry:
   %0 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %this, i8* %key)
   %1 = icmp sge i64 %0, 0
   ret i1 %1
-}
-
-define internal noundef nonnull align 8 dereferenceable(56) %struct.Map$str$f64* @nish.Map$str$f64.set(%struct.Map$str$f64* noundef nonnull align 8 dereferenceable(56) %this, i8* noundef nonnull noalias readonly align 8 %key, double noundef %value) #0 {
-entry:
-  %found.addr = alloca i64, align 8
-  %0 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %this, i8* %key)
-  store i64 %0, i64* %found.addr, align 8
-  %1 = load i64, i64* %found.addr, align 8
-  %2 = icmp sge i64 %1, 0
-  br i1 %2, label %if.then, label %if.else
-
-if.then:
-  %3 = load i64, i64* %found.addr, align 8
-  %4 = trunc i64 %3 to i32
-  call void @nish.Map$str$f64.setValueAt(%struct.Map$str$f64* %this, i32 %4, double %value)
-  br label %if.end
-
-if.else:
-  %5 = load i64, i64* %found.addr, align 8
-  call void @nish.Map$str$f64.insertAt(%struct.Map$str$f64* %this, i64 %5, i8* %key, double %value)
-  br label %if.end
-
-if.end:
-  ret %struct.Map$str$f64* %this
 }
 
 define internal noundef double @nish.Map$str$f64.valueAt(%struct.Map$str$f64* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 {

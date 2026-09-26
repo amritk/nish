@@ -1,0 +1,3 @@
+user reserve 7
+user getOrInsert a
+got 300 size 0

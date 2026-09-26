@@ -1,0 +1,5 @@
+define internal noundef i64 @nish.Map$str$i32.probe(
+define internal noundef i32 @nish.Map$str$i32.valueAt(
+define internal void @nish.Map$str$i32.setValueAt(
+define internal void @nish.Map$str$i32.insertAt(
+define internal void @nish.Map$str$i32.reserveSlots(

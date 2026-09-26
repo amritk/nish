@@ -78,7 +78,7 @@ export const isStdModuleName = (name: string): boolean => {
  * arrangement that keeps `VERSION` in `branding.ts` honest against
  * `package.json`.
  */
-export const stdModuleNames = (): string => "collections, json, pair, testing, text, threads";
+export const stdModuleNames = (): string => "collections, json, map, pair, testing, text, threads";
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -97,3 +97,15 @@ export const COLLECTIONS_SPECIFIER: string = "nish/collections";
  */
 export const isCollectionsModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(COLLECTIONS_SPECIFIER);
+
+/**
+ * `nish/map`: `reserve` and `getOrInsert` (docs/wp32-map.md §9.2). Their
+ * bodies are what runs under Node; natively every call is lowered in place,
+ * to the table's `reserveSlots` and to one `probe` and a write through its
+ * answer, so like `nish/collections` it writes no `.ll` of its own.
+ */
+export const MAP_EXTRAS_SPECIFIER: string = "nish/map";
+
+/** Whether a module is the standard library's `std/map.ts`: the package is part of the test, as for `isCollectionsModule`. */
+export const isMapExtrasModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER);

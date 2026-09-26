@@ -427,6 +427,33 @@ export class Map<K, V> {
     this.mask = toI32(slots.length) - 1;
     refile(slots, this.entryHashes);
   }
+
+  /**
+   * `reserve(m, n)` from `nish/map` (docs/wp32-map.md §9.2): grow the bucket
+   * table until `n` entries, dead ones included, fit under the load bound, so
+   * that the inserts up to `n` rebuild nothing. It only ever grows the buckets
+   * and re-files them from the stored hashes, so no entry moves and it is as
+   * safe under a walk as the doubling a walk already allows (§6.2). A count
+   * that is not positive, or not a number, does nothing, as `reserve` does
+   * under Node; one past the entry cap is the cap.
+   */
+  reserveSlots(n: number): void {
+    if (!(n > 0)) {
+      return;
+    }
+    const want: i32 = n >= 16777215 ? INDEX_CAP : toI32(n);
+    const have = toI32(this.slots.length);
+    let size = have;
+    while (want * 4 > size * 3) {
+      size = size * 2;
+    }
+    if (size > have) {
+      const slots = new Array<u32>(size);
+      this.slots = slots;
+      this.mask = size - 1;
+      refile(slots, this.entryHashes);
+    }
+  }
 }
 
 /** A set of keys in insertion order: `Map`'s table with no values, and the same probe. */

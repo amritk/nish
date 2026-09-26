@@ -675,7 +675,7 @@ export const main = (): i32 => {
 threads as the array is long enough for. `f` is a [function parameter](#function-parameters).
 Importing the module compiles the program with `--threads`; there is nothing
 else to switch on and no thread count to choose. (A plain block: a program
-importing a `nish/` module writes two `.ll` files, so this one is compiled by
+importing `nish/threads` writes two `.ll` files, so this one is compiled by
 `tests/link/par_map` and `tests/link/par_reduce` instead.)
 
 ```ts
@@ -1157,6 +1157,37 @@ console.log(`${total}`);                 // 121
 const m = new Map<string, i32>();
 for (const e of m) {
 }
+```
+
+Asking about one key twice costs one probe when the second call writes
+through the first: `m.set(k, E)` whose `E` reads `m.get(k)` or `m.has(k)`
+once, and `if (m.has(k)) { m.set(k, E); … }`, `if (!m.has(k)) { m.set(k, E); … }`
+or `if (!s.has(x)) { s.add(x); … }` with the write first in the branch. The
+receiver and key must be a local, a parameter or a `this.<field>` path (the key
+may be a literal), spelled the same in both calls, and nothing in between may
+call anything, allocate (`new`, a literal array or object, a template, a
+string `+`) or assign. Anything else still compiles, as one probe per call.
+`nish/map` adds `getOrInsert(m, k, v)` — the value of `k`, or `v` after
+inserting it — and `reserve(m, n)`, which sizes the table for `n` entries; both
+are one module with the program and run unchanged under Node.
+
+```ts nish:ok
+import { getOrInsert, reserve } from "nish/map";
+
+export const main = (): i32 => {
+  const words = ["to", "be", "or", "not", "to", "be"];
+  const counts = new Map<string, i32>();
+  reserve(counts, words.length);
+  for (const w of words) {
+    counts.set(w, (counts.get(w) ?? 0) + 1);   // one probe per word
+  }
+  const first = new Map<string, i32>();
+  for (let i = 0; i < words.length; i++) {
+    getOrInsert(first, words[i], i);           // one probe; inserts only the first time
+  }
+  console.log(`${counts.get("to") ?? 0} ${first.get("be") ?? -1}`);   // 2 1
+  return 0;
+};
 ```
 
 ## Memory

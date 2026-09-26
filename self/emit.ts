@@ -76,12 +76,14 @@ import {
   unpackReturnedResult,
 } from "./emit_result";
 import {
+  emitFusedCall,
   emitLibraryCopies,
   emitMapIntrinsic,
   emitMaybeLocal,
   emitWalkExits,
   libraryReach,
   mapIntrinsicOf,
+  FusedProbe,
   maybeLocalIndex,
   MaybeParts,
 } from "./emit_map";
@@ -131,7 +133,7 @@ import {
 } from "./nodes";
 import { Options } from "./options";
 
-import { CheckedProgram, FunctionSig, MAP_NONE, ROLE_CONSTRUCTOR, StructInfo } from "./program";
+import { CheckedProgram, FUSE_NONE, FunctionSig, MAP_NONE, ROLE_CONSTRUCTOR, StructInfo } from "./program";
 import {
   ARENA_GLOBAL,
   ARENA_GLOBAL_TLS,
@@ -216,6 +218,8 @@ export class Emitter {
    */
   maybeLocals: Local[];
   maybeParts: MaybeParts[];
+  /** WP32 S5: each fused probe of the function being emitted, by the id of its call, for the write that reuses it. */
+  fusedProbes: FusedProbe[];
   /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
   paramObjectNames: string[];
   paramObjectValues: string[];
@@ -258,6 +262,7 @@ export class Emitter {
     this.slotNames = [];
     this.maybeLocals = [];
     this.maybeParts = [];
+    this.fusedProbes = [];
     this.paramObjectNames = [];
     this.paramObjectValues = [];
     this.usedRuntime = new StringSet();
@@ -394,6 +399,7 @@ export class Emitter {
     this.slotNames = [];
     this.maybeLocals = [];
     this.maybeParts = [];
+    this.fusedProbes = [];
     this.loops = [];
     this.current = facts;
     this.currentSig = sig;
@@ -1149,6 +1155,9 @@ export class Emitter {
       const receiver = this.typeOf(callee.children[0]);
       if (this.table.isResult(receiver)) {
         return emitResultMethod(this, expr, receiver); // WP16
+      }
+      if (this.program.fusion.roleOf(expr.id) !== FUSE_NONE) {
+        return emitFusedCall(this, expr); // WP32 S5: a fused `has`, `set` or `add`
       }
       return emitMethodCall(this, expr);
     }

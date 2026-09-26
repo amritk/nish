@@ -62,7 +62,9 @@ on:
 # job needs it. Every other job narrows to `contents: read` at the job level,
 # which takes the write token away from the jobs that do not publish -- and
 # `binaries` is the one worth taking it from, being `npm ci` and `brew install`
-# on as many machines as there are targets.
+# on as many machines as there are targets. The one exception is `lockfile`,
+# which pushes a branch and opens a pull request from it against main, so it
+# asks for `contents: write` and `pull-requests: write` and nothing else.
 #
 # What this does NOT do is keep third-party install code away from the write
 # token, because `release` still runs `npm ci` under it. What it no longer has
@@ -301,7 +303,7 @@ jobs:
         run: |
           tar -tzf "${{ steps.binary.outputs.asset }}" |
             sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts LICENSE INSTALL.md; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
           done
           echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the fourteen that have to be there"
@@ -389,7 +391,7 @@ jobs:
           # which is louder and no less broken. No smoke test of the unpacked
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts package.json; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -506,7 +508,7 @@ jobs:
           # packages the matrix above built. The three `bin/` paths are the command
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime_os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
@@ -673,3 +675,149 @@ jobs:
           while IFS= read -r tgz; do
             npm publish "$tgz" --access public --provenance
           done < build/npm/todo.txt
+
+  # The lockfile half of the release, which can only be written once the
+  # registry has the packages it points at.
+  #
+  # release-pr.yml bumps the version and the platform packages' pins in
+  # package.json and in package-lock.json's `packages[""]`, but it cannot move
+  # the lockfile's `node_modules/<scope>-<asset>` entries: their `resolved` and
+  # `integrity` are the URL and the hash of a tarball that does not exist until
+  # the `binaries` job above builds it from the tag and `npm` publishes it. So
+  # every release commit lands on main with those entries still at the previous
+  # release, and `npm ci` rejects main from the moment the publish lands:
+  #
+  #   Invalid: lock file's <scope>-<asset>@0.10.0 does not satisfy <scope>-<asset>@0.11.0
+  #
+  # That is what 0.11.0 did. The release commit's own CI was green, because it
+  # ran before the publish and `npm ci` quietly drops an optional dependency
+  # whose version the registry does not have yet; the next pull request to
+  # merge main was the first thing to go red, and it carried the regenerated
+  # lockfile by hand. This job opens that pull request instead, and ci.yml's
+  # `lint` job keeps main red until it merges.
+  #
+  # Checked out at main rather than at the tag, because main is where the stale
+  # lockfile is and where the pull request goes. The token arrangement and the
+  # refusal handling are release-pr.yml's, for the same reasons given there.
+  # Idempotent: a re-run whose lockfile already agrees succeeds without doing
+  # anything, and one whose pull request is already open refreshes the branch
+  # and succeeds without opening a second.
+  lockfile:
+    name: regenerate package-lock.json
+    needs: [targets, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the release/lockfile-v<version> branch
+      pull-requests: write # open the pull request from it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Only a main that is still on this release is this job's to fix. Main
+      # can have moved on by the time a re-run gets here, and a main on a later
+      # version has that release's own run to regenerate its lockfile.
+      - name: Main is still on this release
+        id: main
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$version" ]; then
+            echo "::notice::main is on $pkg, not $version, so its lockfile is not this release's to regenerate"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The package names are derived the way `npm`'s publish order derives
+      # them, from the matrix rows and package.json's name, so this job names
+      # no platform either. The main package is asked about too: it is
+      # published last, so seeing it means the whole publish finished.
+      #
+      # The `npm` job finishing is not the registry serving: a version can
+      # take a while to appear in the metadata an install reads. So each name is
+      # asked for with a bounded wait (30 tries, 10 seconds apart), and a
+      # version still missing after that fails the job rather than writing a
+      # lockfile that leaves it out. "Re-run failed jobs" retries this alone.
+      - name: The registry serves every package of this release
+        if: steps.main.outputs.current == 'true'
+        env:
+          ROWS: ${{ needs.targets.outputs.rows }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="$(node -p "require('./package.json').name")"
+          : > "$RUNNER_TEMP/packages.txt"
+          while read -r asset; do
+            [ -n "$asset" ] || continue
+            echo "$name-$asset" >> "$RUNNER_TEMP/packages.txt"
+          done < <(printf '%s' "$ROWS" | jq -r '.[].asset')
+          echo "$name" >> "$RUNNER_TEMP/packages.txt"
+          while IFS= read -r pkg; do
+            seen=""
+            for _ in $(seq 1 30); do
+              seen="$(npm view "$pkg@$version" version --prefer-online 2>/dev/null || true)"
+              [ "$seen" = "$version" ] && break
+              sleep 10
+            done
+            if [ "$seen" != "$version" ]; then
+              echo "::error::the registry does not serve $pkg@$version after 5 minutes; re-run this job once it does"
+              exit 1
+            fi
+            echo "$pkg@$version is on the registry"
+          done < "$RUNNER_TEMP/packages.txt"
+
+      # `--package-lock-only` resolves and writes the lockfile without
+      # installing anything, and `--ignore-scripts` keeps third-party install
+      # code away from a job holding a write token. `npm ls` then reads the
+      # result back with no registry involved, the check ci.yml's `lint` job
+      # makes, so a lockfile that still disagrees fails here and not on main.
+      - name: Regenerate the lockfile
+        if: steps.main.outputs.current == 'true'
+        run: |
+          npm install --package-lock-only --ignore-scripts --prefer-online --no-audit --no-fund
+          npm ls --package-lock-only --all > /dev/null
+          git diff --stat -- package-lock.json
+
+      - name: Open the lockfile pull request
+        if: steps.main.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+        run: |
+          v="$GITHUB_REF_NAME"
+          branch="release/lockfile-$v"
+          # The squash-merge subject, so a conventional commit that pr-title.yml
+          # accepts; it lands under "Build" in the next release notes.
+          title="build: regenerate package-lock.json for $v"
+          if git diff --quiet -- package-lock.json; then
+            echo "::notice::package-lock.json on main already agrees with $v; nothing to open"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add package-lock.json
+          git commit -m "$title"
+          git push --force origin "$branch"
+
+          body="$(printf 'The platform packages for **%s** are on the registry now, so `package-lock.json` can point at them.\n\nThe release commit bumped the pins in `package.json` and in the lockfile root, but it could not move the lockfile entries for the platform packages: their `resolved` URL and `integrity` hash belong to tarballs that only exist once `release.yml` has built them from the tag and published them. Until this merges, `npm ci` on main fails with `lock file ... does not satisfy ...`, and so does the `lint` job in CI.\n\nGenerated by the `lockfile` job in `release.yml` with `npm install --package-lock-only --ignore-scripts`.\n' "$v")"
+
+          if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
+            echo "::notice::the lockfile pull request for $v is already open: #$existing"
+          elif out="$(gh pr create --head "$branch" --base main --title "$title" --body "$body" 2>&1)"; then
+            echo "$out"
+            echo "::notice::opened the lockfile pull request for $v"
+          elif printf '%s' "$out" | grep -qF 'not permitted to create or approve pull requests'; then
+            # The same repository switch release-pr.yml explains: the branch is
+            # pushed, only the pull request is missing, and a release that has
+            # already published is not a reason to go red here.
+            echo "$out"
+            url="${{ github.server_url }}/${{ github.repository }}/compare/main...$branch?expand=1"
+            echo "::warning title=Lockfile pull request not opened::Pushed $branch for $v, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
+          else
+            echo "$out" >&2
+            exit 1
+          fi
