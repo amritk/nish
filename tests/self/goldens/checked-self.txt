@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 72 programs, 936288 dump lines live, 72 distinct modules.
+# 72 programs, 936663 dump lines live, 72 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/constants.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -25709,7 +25709,9 @@ struct Lexer (class) size=56 align=8 exported
   field value: string index=5 offset=24
   field braceDepth: i32[] index=6 offset=32
   field escapeEnd: i32 index=7 offset=40
-  field literal: StringBuilder index=8 offset=48
+  field escapeTooLarge: boolean index=8 offset=44
+  field literalTooLarge: boolean index=9 offset=45
+  field literal: StringBuilder index=10 offset=48
   constructor -> @Lexer.constructor
   method skipShebang -> @Lexer.skipShebang
   method at -> @Lexer.at
@@ -25723,8 +25725,10 @@ struct Lexer (class) size=56 align=8 exported
   method scanNumber -> @Lexer.scanNumber
   method scanString -> @Lexer.scanString
   method takeEscape -> @Lexer.takeEscape
+  method emitLiteral -> @Lexer.emitLiteral
   method literalText -> @Lexer.literalText
   method scanEscape -> @Lexer.scanEscape
+  method scanUnicode -> @Lexer.scanUnicode
   method scanHex -> @Lexer.scanHex
   method scanTemplate -> @Lexer.scanTemplate
   method scanBrace -> @Lexer.scanBrace
@@ -25763,37 +25767,37 @@ function Lexer.constructor(this: Lexer, source: string): void -> @Lexer.construc
   calls: Lexer.skipShebang StringBuilder.constructor nish_alloc_struct
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.skipShebang#0
   stackSites=0 stackLocals=0
-  callee 394:20 new StringBuilder -> @StringBuilder.constructor
-  callee 395:5 Lexer.skipShebang -> @Lexer.skipShebang
+  callee 405:20 new StringBuilder -> @StringBuilder.constructor
+  callee 406:5 Lexer.skipShebang -> @Lexer.skipShebang
 function Lexer.skipShebang(this: Lexer): void -> @Lexer.skipShebang [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 411:7
+  sharedWrite: 422:7
   calls: Lexer.at
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0
   stackSites=0 stackLocals=0
-  callee 407:9 Lexer.at -> @Lexer.at
-  callee 407:35 Lexer.at -> @Lexer.at
-  callee 410:45 Lexer.at -> @Lexer.at
+  callee 418:9 Lexer.at -> @Lexer.at
+  callee 418:35 Lexer.at -> @Lexer.at
+  callee 421:45 Lexer.at -> @Lexer.at
 function Lexer.at(this: Lexer, i: i32): i32 -> @Lexer.at [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Lexer.skipTrivia(this: Lexer): void -> @Lexer.skipTrivia [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 428:9
+  sharedWrite: 439:9
   calls: Lexer.at
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0
   stackSites=0 stackLocals=0
-  local 426:13 c: i32 (const)
-  callee 426:17 Lexer.at -> @Lexer.at
-  callee 429:36 Lexer.at -> @Lexer.at
-  callee 431:49 Lexer.at -> @Lexer.at
-  callee 434:36 Lexer.at -> @Lexer.at
-  callee 437:15 Lexer.at -> @Lexer.at
-  callee 437:48 Lexer.at -> @Lexer.at
+  local 437:13 c: i32 (const)
+  callee 437:17 Lexer.at -> @Lexer.at
+  callee 440:36 Lexer.at -> @Lexer.at
+  callee 442:49 Lexer.at -> @Lexer.at
+  callee 445:36 Lexer.at -> @Lexer.at
+  callee 448:15 Lexer.at -> @Lexer.at
+  callee 448:48 Lexer.at -> @Lexer.at
 function Lexer.emit(this: Lexer, kind: i32, end: i32, value: string): void -> @Lexer.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 451:5
+  sharedWrite: 462:5
   escaping: end kind value
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -25804,7 +25808,7 @@ function Lexer.emitPlain(this: Lexer, kind: i32, width: i32): void -> @Lexer.emi
   calls: Lexer.emit
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emit#0
   stackSites=0 stackLocals=0
-  callee 459:5 Lexer.emit -> @Lexer.emit
+  callee 470:5 Lexer.emit -> @Lexer.emit
 function Lexer.error(this: Lexer, message: string, end: i32): void -> @Lexer.error [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
@@ -25812,184 +25816,205 @@ function Lexer.error(this: Lexer, message: string, end: i32): void -> @Lexer.err
   calls: Lexer.emit
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emit#0
   stackSites=0 stackLocals=0
-  callee 463:5 Lexer.emit -> @Lexer.emit
+  callee 474:5 Lexer.emit -> @Lexer.emit
 function Lexer.next(this: Lexer): void -> @Lexer.next [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 473:5
+  sharedWrite: 484:5
   calls: Lexer.at Lexer.emit Lexer.scanName Lexer.scanNumber Lexer.scanPunctuation Lexer.scanString Lexer.scanTemplate Lexer.skipTrivia isDigit isIdentStart
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.skipTrivia#0 Lexer.emit#0 Lexer.at#0 Lexer.scanName#0 Lexer.at#0 Lexer.scanNumber#0 Lexer.scanString#0 Lexer.scanTemplate#0 Lexer.scanPunctuation#0
   stackSites=0 stackLocals=0
-  callee 472:5 Lexer.skipTrivia -> @Lexer.skipTrivia
-  callee 475:7 Lexer.emit -> @Lexer.emit
-  local 478:11 c: i32 (const)
-  callee 478:15 Lexer.at -> @Lexer.at
-  callee 479:9 isIdentStart -> @isIdentStart
-  callee 480:7 Lexer.scanName -> @Lexer.scanName
-  callee 483:9 isDigit -> @isDigit
-  callee 483:40 isDigit -> @isDigit
-  callee 483:48 Lexer.at -> @Lexer.at
-  callee 484:7 Lexer.scanNumber -> @Lexer.scanNumber
-  callee 488:7 Lexer.scanString -> @Lexer.scanString
-  callee 492:7 Lexer.scanTemplate -> @Lexer.scanTemplate
-  callee 495:5 Lexer.scanPunctuation -> @Lexer.scanPunctuation
+  callee 483:5 Lexer.skipTrivia -> @Lexer.skipTrivia
+  callee 486:7 Lexer.emit -> @Lexer.emit
+  local 489:11 c: i32 (const)
+  callee 489:15 Lexer.at -> @Lexer.at
+  callee 490:9 isIdentStart -> @isIdentStart
+  callee 491:7 Lexer.scanName -> @Lexer.scanName
+  callee 494:9 isDigit -> @isDigit
+  callee 494:40 isDigit -> @isDigit
+  callee 494:48 Lexer.at -> @Lexer.at
+  callee 495:7 Lexer.scanNumber -> @Lexer.scanNumber
+  callee 499:7 Lexer.scanString -> @Lexer.scanString
+  callee 503:7 Lexer.scanTemplate -> @Lexer.scanTemplate
+  callee 506:5 Lexer.scanPunctuation -> @Lexer.scanPunctuation
 function Lexer.scanPrivateName(this: Lexer): void -> @Lexer.scanPrivateName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isIdentPart nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 500:9 end: i32 (let)
-  callee 501:40 isIdentPart -> @isIdentPart
-  callee 501:52 Lexer.at -> @Lexer.at
-  callee 504:5 Lexer.emit -> @Lexer.emit
+  local 511:9 end: i32 (let)
+  callee 512:40 isIdentPart -> @isIdentPart
+  callee 512:52 Lexer.at -> @Lexer.at
+  callee 515:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanName(this: Lexer): void -> @Lexer.scanName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isIdentPart keywordKind nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 508:9 end: i32 (let)
-  callee 509:40 isIdentPart -> @isIdentPart
-  callee 509:52 Lexer.at -> @Lexer.at
-  local 512:11 word: string (const)
-  local 513:11 keyword: i32 (const)
-  callee 513:21 keywordKind -> @keywordKind
-  callee 514:5 Lexer.emit -> @Lexer.emit
+  local 519:9 end: i32 (let)
+  callee 520:40 isIdentPart -> @isIdentPart
+  callee 520:52 Lexer.at -> @Lexer.at
+  local 523:11 word: string (const)
+  local 524:11 keyword: i32 (const)
+  callee 524:21 keywordKind -> @keywordKind
+  callee 525:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanNumber(this: Lexer): void -> @Lexer.scanNumber [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.emit
   calls: Lexer.at Lexer.emit isDigit isIdentPart nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.emit#0 Lexer.emit#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.emit#0 Lexer.emit#0
   stackSites=0 stackLocals=0
-  local 524:9 end: i32 (let)
-  local 525:11 second: i32 (const)
-  callee 525:20 Lexer.at -> @Lexer.at
-  callee 527:7 Lexer.at -> @Lexer.at
-  callee 536:43 isIdentPart -> @isIdentPart
-  callee 536:55 Lexer.at -> @Lexer.at
-  callee 536:72 Lexer.at -> @Lexer.at
-  callee 539:11 Lexer.at -> @Lexer.at
-  callee 540:9 Lexer.emit -> @Lexer.emit
-  callee 543:7 Lexer.emit -> @Lexer.emit
-  callee 546:41 isDigit -> @isDigit
-  callee 546:49 Lexer.at -> @Lexer.at
-  callee 546:66 Lexer.at -> @Lexer.at
-  callee 549:9 Lexer.at -> @Lexer.at
-  callee 551:43 isDigit -> @isDigit
-  callee 551:51 Lexer.at -> @Lexer.at
-  callee 551:68 Lexer.at -> @Lexer.at
-  local 555:11 exponent: i32 (const)
-  callee 555:22 Lexer.at -> @Lexer.at
-  local 557:11 after: i32 (let)
-  callee 558:11 Lexer.at -> @Lexer.at
-  callee 558:41 Lexer.at -> @Lexer.at
-  callee 561:11 isDigit -> @isDigit
-  callee 561:19 Lexer.at -> @Lexer.at
-  callee 563:44 isDigit -> @isDigit
-  callee 563:52 Lexer.at -> @Lexer.at
-  callee 571:9 Lexer.at -> @Lexer.at
-  callee 572:7 Lexer.emit -> @Lexer.emit
-  callee 575:5 Lexer.emit -> @Lexer.emit
+  local 535:9 end: i32 (let)
+  local 536:11 second: i32 (const)
+  callee 536:20 Lexer.at -> @Lexer.at
+  callee 538:7 Lexer.at -> @Lexer.at
+  callee 547:43 isIdentPart -> @isIdentPart
+  callee 547:55 Lexer.at -> @Lexer.at
+  callee 547:72 Lexer.at -> @Lexer.at
+  callee 550:11 Lexer.at -> @Lexer.at
+  callee 551:9 Lexer.emit -> @Lexer.emit
+  callee 554:7 Lexer.emit -> @Lexer.emit
+  callee 557:41 isDigit -> @isDigit
+  callee 557:49 Lexer.at -> @Lexer.at
+  callee 557:66 Lexer.at -> @Lexer.at
+  callee 560:9 Lexer.at -> @Lexer.at
+  callee 562:43 isDigit -> @isDigit
+  callee 562:51 Lexer.at -> @Lexer.at
+  callee 562:68 Lexer.at -> @Lexer.at
+  local 566:11 exponent: i32 (const)
+  callee 566:22 Lexer.at -> @Lexer.at
+  local 568:11 after: i32 (let)
+  callee 569:11 Lexer.at -> @Lexer.at
+  callee 569:41 Lexer.at -> @Lexer.at
+  callee 572:11 isDigit -> @isDigit
+  callee 572:19 Lexer.at -> @Lexer.at
+  callee 574:44 isDigit -> @isDigit
+  callee 574:52 Lexer.at -> @Lexer.at
+  callee 582:9 Lexer.at -> @Lexer.at
+  callee 583:7 Lexer.emit -> @Lexer.emit
+  callee 586:5 Lexer.emit -> @Lexer.emit
 function Lexer.scanString(this: Lexer, quote: i32): void -> @Lexer.scanString [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringBuilder.reset
-  calls: Lexer.at Lexer.emit Lexer.error Lexer.literalText Lexer.takeEscape StringBuilder.reset
-  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.error#0 Lexer.takeEscape#0
+  sharedWrite: 604:5
+  calls: Lexer.at Lexer.emitLiteral Lexer.error Lexer.takeEscape StringBuilder.reset
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emitLiteral#0 Lexer.error#0 Lexer.takeEscape#0
   stackSites=0 stackLocals=0
-  local 590:9 at: i32 (let)
-  local 591:9 chunk: i32 (let)
-  callee 592:5 StringBuilder.reset -> @StringBuilder.reset
-  callee 595:9 Lexer.error -> @Lexer.error
-  local 598:13 c: i32 (const)
-  callee 598:17 Lexer.at -> @Lexer.at
-  callee 600:9 Lexer.emit -> @Lexer.emit
-  callee 600:39 Lexer.literalText -> @Lexer.literalText
-  callee 604:9 Lexer.error -> @Lexer.error
-  callee 608:14 Lexer.takeEscape -> @Lexer.takeEscape
+  local 601:9 at: i32 (let)
+  local 602:9 chunk: i32 (let)
+  callee 603:5 StringBuilder.reset -> @StringBuilder.reset
+  callee 607:9 Lexer.error -> @Lexer.error
+  local 610:13 c: i32 (const)
+  callee 610:17 Lexer.at -> @Lexer.at
+  callee 612:9 Lexer.emitLiteral -> @Lexer.emitLiteral
+  callee 616:9 Lexer.error -> @Lexer.error
+  callee 620:14 Lexer.takeEscape -> @Lexer.takeEscape
 function Lexer.takeEscape(this: Lexer, chunk: i32, at: i32): i32 -> @Lexer.takeEscape [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Lexer.scanEscape
+  sharedWrite: 640:7
   calls: Lexer.error Lexer.scanEscape StringBuilder.add nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.scanEscape#0 Lexer.error#0
   stackSites=0 stackLocals=0
-  local 626:11 decoded: string (const)
-  callee 626:21 Lexer.scanEscape -> @Lexer.scanEscape
-  callee 628:7 Lexer.error -> @Lexer.error
-  callee 632:7 StringBuilder.add -> @StringBuilder.add
-  callee 634:5 StringBuilder.add -> @StringBuilder.add
+  local 638:11 decoded: string (const)
+  callee 638:21 Lexer.scanEscape -> @Lexer.scanEscape
+  callee 643:7 Lexer.error -> @Lexer.error
+  callee 647:7 StringBuilder.add -> @StringBuilder.add
+  callee 649:5 StringBuilder.add -> @StringBuilder.add
+function Lexer.emitLiteral(this: Lexer, kind: i32, end: i32, chunk: i32, at: i32): void -> @Lexer.emitLiteral [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Lexer.error
+  escaping: at chunk end kind
+  calls: Lexer.emit Lexer.error Lexer.literalText
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.emit#0 Lexer.literalText#0
+  stackSites=0 stackLocals=0
+  callee 659:7 Lexer.error -> @Lexer.error
+  callee 662:5 Lexer.emit -> @Lexer.emit
+  callee 662:26 Lexer.literalText -> @Lexer.literalText
 function Lexer.literalText(this: Lexer, chunk: i32, at: i32): string -> @Lexer.literalText [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   calls: StringBuilder.add StringBuilder.isEmpty StringBuilder.toText nish_str_new
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 652:9 StringBuilder.isEmpty -> @StringBuilder.isEmpty
-  callee 656:7 StringBuilder.add -> @StringBuilder.add
-  callee 658:12 StringBuilder.toText -> @StringBuilder.toText
+  callee 679:9 StringBuilder.isEmpty -> @StringBuilder.isEmpty
+  callee 683:7 StringBuilder.add -> @StringBuilder.add
+  callee 685:12 StringBuilder.toText -> @StringBuilder.toText
 function Lexer.scanEscape(this: Lexer, at: i32): string -> @Lexer.scanEscape [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 662:5
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 689:5
   escaping: at
-  calls: Lexer.at Lexer.scanHex hexValue nish_str_new utf8Encode
-  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.scanHex#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanHex#0
+  calls: Lexer.at Lexer.scanHex Lexer.scanUnicode nish_str_new utf8Encode
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.scanHex#0 Lexer.scanUnicode#0 Lexer.at#0 Lexer.at#0 Lexer.scanUnicode#0
   stackSites=0 stackLocals=0
-  local 663:11 c: i32 (const)
-  callee 663:15 Lexer.at -> @Lexer.at
-  local 686:13 value: i32 (const)
-  callee 686:21 Lexer.scanHex -> @Lexer.scanHex
-  callee 692:14 utf8Encode -> @utf8Encode
-  callee 695:11 Lexer.at -> @Lexer.at
-  local 696:13 end: i32 (let)
-  local 697:13 value: i32 (let)
-  callee 698:44 hexValue -> @hexValue
-  callee 698:53 Lexer.at -> @Lexer.at
-  callee 699:32 hexValue -> @hexValue
-  callee 699:41 Lexer.at -> @Lexer.at
-  callee 702:31 Lexer.at -> @Lexer.at
-  callee 707:16 utf8Encode -> @utf8Encode
-  local 709:13 value: i32 (const)
-  callee 709:21 Lexer.scanHex -> @Lexer.scanHex
-  callee 715:14 utf8Encode -> @utf8Encode
+  local 691:11 c: i32 (const)
+  callee 691:15 Lexer.at -> @Lexer.at
+  local 714:13 value: i32 (const)
+  callee 714:21 Lexer.scanHex -> @Lexer.scanHex
+  callee 720:14 utf8Encode -> @utf8Encode
+  local 723:13 value: i32 (const)
+  callee 723:21 Lexer.scanUnicode -> @Lexer.scanUnicode
+  local 735:13 next: i32 (const)
+  callee 739:9 Lexer.at -> @Lexer.at
+  callee 740:9 Lexer.at -> @Lexer.at
+  local 742:15 low: i32 (const)
+  callee 742:21 Lexer.scanUnicode -> @Lexer.scanUnicode
+  callee 744:18 utf8Encode -> @utf8Encode
+  callee 750:14 utf8Encode -> @utf8Encode
+function Lexer.scanUnicode(this: Lexer, at: i32): i32 -> @Lexer.scanUnicode [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 783:7
+  escaping: at
+  calls: Lexer.at Lexer.scanHex hexValue
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanHex#0
+  stackSites=0 stackLocals=0
+  callee 771:9 Lexer.at -> @Lexer.at
+  local 772:11 end: i32 (let)
+  local 773:11 value: i32 (let)
+  callee 774:42 hexValue -> @hexValue
+  callee 774:51 Lexer.at -> @Lexer.at
+  callee 776:32 hexValue -> @hexValue
+  callee 776:41 Lexer.at -> @Lexer.at
+  callee 780:29 Lexer.at -> @Lexer.at
+  local 787:11 value: i32 (const)
+  callee 787:19 Lexer.scanHex -> @Lexer.scanHex
 function Lexer.scanHex(this: Lexer, at: i32, count: i32): i32 -> @Lexer.scanHex [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Lexer.at hexValue
   pointer this: size=56 writesThrough=false captured=false passedTo=Lexer.at#0
   stackSites=0 stackLocals=0
-  local 730:9 value: i32 (let)
-  local 731:9 i: i32 (let)
-  local 733:13 digit: i32 (const)
-  callee 733:21 hexValue -> @hexValue
-  callee 733:30 Lexer.at -> @Lexer.at
+  local 796:9 value: i32 (let)
+  local 797:9 i: i32 (let)
+  local 799:13 digit: i32 (const)
+  callee 799:21 hexValue -> @hexValue
+  callee 799:30 Lexer.at -> @Lexer.at
 function Lexer.scanTemplate(this: Lexer, at: i32, whole: i32, opening: i32): void -> @Lexer.scanTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 764:9
+  sharedWrite: 819:5
   escaping: at opening whole
-  calls: Lexer.at Lexer.emit Lexer.error Lexer.literalText Lexer.takeEscape StringBuilder.reset nish_array_grow
-  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.at#0 Lexer.emit#0 Lexer.literalText#0 Lexer.takeEscape#0
+  calls: Lexer.at Lexer.emitLiteral Lexer.error Lexer.takeEscape StringBuilder.reset nish_array_grow
+  pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.error#0 Lexer.at#0 Lexer.emitLiteral#0 Lexer.at#0 Lexer.emitLiteral#0 Lexer.takeEscape#0
   stackSites=0 stackLocals=0
-  local 750:9 i: i32 (let)
-  local 751:9 chunk: i32 (let)
-  callee 752:5 StringBuilder.reset -> @StringBuilder.reset
-  callee 755:9 Lexer.error -> @Lexer.error
-  local 758:13 c: i32 (const)
-  callee 758:17 Lexer.at -> @Lexer.at
-  callee 760:9 Lexer.emit -> @Lexer.emit
-  callee 760:33 Lexer.literalText -> @Lexer.literalText
-  callee 763:30 Lexer.at -> @Lexer.at
-  callee 765:9 Lexer.emit -> @Lexer.emit
-  callee 765:35 Lexer.literalText -> @Lexer.literalText
-  callee 769:13 Lexer.takeEscape -> @Lexer.takeEscape
+  local 816:9 i: i32 (let)
+  local 817:9 chunk: i32 (let)
+  callee 818:5 StringBuilder.reset -> @StringBuilder.reset
+  callee 822:9 Lexer.error -> @Lexer.error
+  local 825:13 c: i32 (const)
+  callee 825:17 Lexer.at -> @Lexer.at
+  callee 827:9 Lexer.emitLiteral -> @Lexer.emitLiteral
+  callee 830:30 Lexer.at -> @Lexer.at
+  callee 832:9 Lexer.emitLiteral -> @Lexer.emitLiteral
+  callee 836:13 Lexer.takeEscape -> @Lexer.takeEscape
 function Lexer.scanBrace(this: Lexer, c: i32): void -> @Lexer.scanBrace [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 785:9
+  sharedWrite: 852:9
   calls: Lexer.emitPlain Lexer.scanTemplate nish_panic_index
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.emitPlain#0 Lexer.scanTemplate#0 Lexer.emitPlain#0
   stackSites=0 stackLocals=0
-  local 782:11 open: i32 (const)
-  callee 787:7 Lexer.emitPlain -> @Lexer.emitPlain
-  local 791:13 depth: i32 (const)
-  callee 794:9 Lexer.scanTemplate -> @Lexer.scanTemplate
-  callee 799:5 Lexer.emitPlain -> @Lexer.emitPlain
+  local 849:11 open: i32 (const)
+  callee 854:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 858:13 depth: i32 (const)
+  callee 861:9 Lexer.scanTemplate -> @Lexer.scanTemplate
+  callee 866:5 Lexer.emitPlain -> @Lexer.emitPlain
 function Lexer.scanPunctuation(this: Lexer, c: i32): void -> @Lexer.scanPunctuation [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.scanBrace
@@ -25997,85 +26022,85 @@ function Lexer.scanPunctuation(this: Lexer, c: i32): void -> @Lexer.scanPunctuat
   calls: Lexer.at Lexer.emitPlain Lexer.error Lexer.scanBrace Lexer.scanPrivateName isDigit nish_str_concat nish_str_new
   pointer this: size=56 writesThrough=true captured=false passedTo=Lexer.at#0 Lexer.at#0 Lexer.at#0 Lexer.scanBrace#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.at#0 Lexer.error#0 Lexer.scanPrivateName#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.emitPlain#0 Lexer.error#0
   stackSites=0 stackLocals=0
-  local 803:11 next1: i32 (const)
-  callee 803:19 Lexer.at -> @Lexer.at
-  local 804:11 next2: i32 (const)
-  callee 804:19 Lexer.at -> @Lexer.at
-  local 805:11 next3: i32 (const)
-  callee 805:19 Lexer.at -> @Lexer.at
-  callee 807:7 Lexer.scanBrace -> @Lexer.scanBrace
-  callee 812:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 815:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 818:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 821:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 824:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 827:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 830:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 834:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 842:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 844:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 846:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 852:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 854:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 856:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 862:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 864:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 871:32 isDigit -> @isDigit
-  callee 872:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 874:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 876:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 878:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 883:7 Lexer.emitPlain -> @Lexer.emitPlain
-  local 891:13 end: i32 (let)
-  callee 892:44 Lexer.at -> @Lexer.at
-  callee 895:9 Lexer.error -> @Lexer.error
-  callee 898:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
-  callee 903:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 905:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 907:9 Lexer.emitPlain -> @Lexer.emitPlain
+  local 870:11 next1: i32 (const)
+  callee 870:19 Lexer.at -> @Lexer.at
+  local 871:11 next2: i32 (const)
+  callee 871:19 Lexer.at -> @Lexer.at
+  local 872:11 next3: i32 (const)
+  callee 872:19 Lexer.at -> @Lexer.at
+  callee 874:7 Lexer.scanBrace -> @Lexer.scanBrace
+  callee 879:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 882:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 885:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 888:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 891:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 894:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 897:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 901:9 Lexer.emitPlain -> @Lexer.emitPlain
   callee 909:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 915:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 917:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 911:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 913:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 919:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 921:9 Lexer.emitPlain -> @Lexer.emitPlain
   callee 923:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 925:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 929:9 Lexer.emitPlain -> @Lexer.emitPlain
   callee 931:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 933:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 935:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 937:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 938:32 isDigit -> @isDigit
+  callee 939:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 941:9 Lexer.emitPlain -> @Lexer.emitPlain
   callee 943:9 Lexer.emitPlain -> @Lexer.emitPlain
   callee 945:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 947:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 953:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 955:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 957:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 959:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 967:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 969:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 971:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 973:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 975:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 977:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 983:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 985:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 987:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 989:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 995:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 997:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 999:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 1001:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 1007:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 1009:9 Lexer.emitPlain -> @Lexer.emitPlain
-  callee 1013:5 Lexer.error -> @Lexer.error
+  callee 950:7 Lexer.emitPlain -> @Lexer.emitPlain
+  local 958:13 end: i32 (let)
+  callee 959:44 Lexer.at -> @Lexer.at
+  callee 962:9 Lexer.error -> @Lexer.error
+  callee 965:7 Lexer.scanPrivateName -> @Lexer.scanPrivateName
+  callee 970:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 972:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 974:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 976:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 982:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 984:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 990:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 992:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 998:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1000:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1002:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1004:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1010:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1012:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1014:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1020:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1022:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1024:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1026:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1034:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1036:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1038:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1040:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1042:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1044:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1050:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1052:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1054:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1056:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1062:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1064:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1066:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1068:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1074:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1076:9 Lexer.emitPlain -> @Lexer.emitPlain
+  callee 1080:5 Lexer.error -> @Lexer.error
 function lineOf(source: string, offset: i32): i32 -> @lineOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1019:7 line: i32 (let)
-  local 1020:7 i: i32 (let)
+  local 1086:7 line: i32 (let)
+  local 1087:7 i: i32 (let)
 function columnOf(source: string, offset: i32): i32 -> @columnOf [exported]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 1031:7 start: i32 (let)
-  local 1032:7 i: i32 (let)
+  local 1098:7 start: i32 (let)
+  local 1099:7 i: i32 (let)
 module src/tokens.ts
 const TOK_END: i32 = 0 [exported]
 const TOK_ERROR: i32 = 1 [exported]

@@ -106,6 +106,26 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/str_literal`, `str_template`). TypeScript escapes (`\n`,
   `\"`, `\\`, `\u...`) are decoded by the parser and re-encoded as UTF-8
   (`tests/cases/str_escape`).
+  - **A surrogate pair is the code point it spells.** A high-surrogate escape
+    (`\uD800`–`\uDBFF`) written immediately before a low-surrogate escape
+    (`\uDC00`–`\uDFFF`) is one code point and encodes as its four UTF-8
+    bytes, so `"\uD83D\uDE00"`, `"\u{1F600}"` and `"😀"` are the same string:
+    `===` holds, `length` is 4, and a `Map` key set by one spelling is found
+    by the others. Either half may be written `\uXXXX` or `\u{...}`, in a
+    string or in a template's own text, as in JavaScript
+    (`tests/cases/str_surrogate_pair`, `str_surrogate_map_key`).
+  - **A lone surrogate keeps its WTF-8 bytes.** A surrogate escape without
+    that partner is not refused: it encodes on its own as the three bytes
+    UTF-8's pattern gives it (`"\uD83D"` is `ED A0 BD`), which is WTF-8 and
+    not valid UTF-8. The pair is joined only inside one literal, so
+    `"\uD83D" + "\uDE00" === "\uD83D\uDE00"` is `false` where JavaScript says
+    `true` (`tests/cases/str_surrogate_lone`).
+  - **A `\u{...}` escape is at most `0x10FFFF`**, the last code point. A
+    larger one is refused with TypeScript's words, `` An extended Unicode
+    escape value must be between 0x0 and 0x10FFFF inclusive ``
+    (`tests/cases/reject_surrogate_escape_too_large`), however many digits it
+    has, so that no value can wrap round into a surrogate and join the escape
+    after it (`reject_surrogate_escape_wraps`).
 - **Boolean literals** `true`, `false` (`tests/cases/cf_logical`).
 - **`null`** is a value only where a `T | null` type is expected (see
   [Nullable types](#nullable-types)); with no contextual type it is
