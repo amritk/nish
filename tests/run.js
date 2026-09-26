@@ -7242,7 +7242,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // have no twins, so `awfy` builds their harness and runs each one once, which panics
 // when a port's own `verifyResult` fails. `maps` builds the four WP32 map layout
 // prototypes and requires each to print what bench/map_node.mjs prints from
-// Node's `Map`. Also: `--target host` pins a module to a
+// Node's `Map`, and the three `Map` measurements of docs/wp32-map.md §10 to print
+// what their Node twins print, lines of that same output. Those three are held
+// to the performance gate's zero warnings, and map_vs_stringmap's copy of
+// `StringMap` to being a verbatim part of self/map.ts. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
 // every user-level integer add/sub/mul but nothing else.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
@@ -7263,14 +7266,41 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     { cwd: root, encoding: "utf8" }
   );
   check(
-    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc), the seven AWFY ports verify, and the four map prototypes agree with Node's Map",
+    "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc), the seven AWFY ports verify, and the four map prototypes and three Map measurements agree with Node's Map",
     v.status === 0 &&
       v.stdout.includes("awfy: 7 benchmarks verified") &&
-      v.stdout.includes("maps: 4 prototype(s) agree with Node's Map over 10 workloads") &&
+      v.stdout.includes("maps: 4 prototype(s) and 3 measurement(s) agree with Node's Map over 10 workloads") &&
       v.stdout.includes("checksums agree") &&
       v.stdout.includes("fib: 75025") &&
       v.stdout.includes("sieve: 191840"),
     `${v.stdout}${v.stderr}`
+  );
+  // The measurements are programs a reader copies from, so they are held where
+  // std/ and examples/ are: no performance warning, built as the bench builds
+  // them (they spell their integers `i32` and have no `.args`).
+  for (const name of ["map_wordcount", "map_presize", "map_vs_stringmap"]) {
+    const r = spawnSync(
+      NISH,
+      [path.join("bench", `${name}.ts`), "--json", "-o", path.join(buildDir, `bench_${name}.ll`)],
+      { cwd: root, encoding: "utf8" }
+    );
+    const warnings = diagnosticsOf(r.stdout).filter((d) => d.severity === "performance");
+    check(
+      `bench: bench/${name}.ts compiles with no performance warning`,
+      r.status === 0 && warnings.length === 0,
+      `${warnings.map(diagnosticLine).join("\n")}${r.stdout}${r.stderr}`
+    );
+  }
+  // map_vs_stringmap.ts cannot import the compiler, so it carries a copy of
+  // StringMap between two rules; the copy must still be self/map.ts's code.
+  const vsSource = fs.readFileSync(path.join(root, "bench", "map_vs_stringmap.ts"), "utf8");
+  const copied = vsSource.match(/\/\/ ---- copy of self\/map\.ts ----\n([\s\S]*?)\/\/ ---- end of the copy of self\/map\.ts ----/);
+  check(
+    "bench: map_vs_stringmap.ts's copy of StringMap is a verbatim part of self/map.ts",
+    copied !== null &&
+      copied[1].includes("export class StringMap") &&
+      fs.readFileSync(path.join(root, "self", "map.ts"), "utf8").includes(copied[1]),
+    copied === null ? "the two `copy of self/map.ts` rules are missing" : "copy the block from self/map.ts again"
   );
   const targetLl = path.join(buildDir, "opt_target_triple.ll");
   if (has("opt") && fs.existsSync(targetLl)) {
@@ -7396,9 +7426,9 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
-// noise is bigger than that. An instruction count is exact, so the eighteen
-// benchmark programs (bench/*.ts, the four WP32 map layout prototypes and the
-// seven AWFY ports) are built as the timing
+// noise is bigger than that. An instruction count is exact, so the twenty-one
+// benchmark programs (bench/*.ts, the four WP32 map layout prototypes, the three
+// `Map` measurements and the seven AWFY ports) are built as the timing
 // mode builds them and run once each under cachegrind, and a count above
 // bench/instructions.json by more than its tolerance fails. The counts are x86-64
 // Linux's, so anywhere else, or without valgrind, the check is a counted skip.
@@ -7421,7 +7451,7 @@ if (!only || "instructions".includes(only)) {
     });
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 18 within /m.test(counted.stdout),
+      counted.status === 0 && /^instructions: all 21 within /m.test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     );
   }
