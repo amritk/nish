@@ -42,7 +42,8 @@ import { K_ARRAY, TypeTable } from "./types"
 
 /**
  * ` -- xs: double elements, returns int32_t elements`: what an `nish_array`
- * holds, per array in the signature.
+ * holds, per array in the signature, and the range a ranged parameter is
+ * checked against (` -- day: panics outside [1, 7]`).
  *
  * WP15 §2a made this two answers rather than one. A record element type (an
  * `interface`) is stored *inline*: `data` is a C array of the structs
@@ -56,9 +57,15 @@ const elementNotes = (table: TypeTable, fn: ExternalFunction): string => {
   const program = fn.unit.checker.program
   let i = 0
   while (i < fn.sig.paramNames.length) {
-    const elem = elementNote(program, table, fn.sig.paramTypes[i])
+    const t = fn.sig.paramTypes[i]
+    const elem = elementNote(program, table, t)
     if (elem.length > 0) {
       notes.push(`${fn.sig.paramNames[i]}: ${elem}`)
+    }
+    // WP31 §9: the function checks a ranged argument on entry, and a C host
+    // has no exception to catch, so the note says what leaving the range does.
+    if (table.isRanged(t)) {
+      notes.push(`${fn.sig.paramNames[i]}: panics outside [${table.rangeLo(t)}, ${table.rangeHi(t)}]`)
     }
     i = i + 1
   }
@@ -147,8 +154,9 @@ const structDefinitions = (compilation: Compilation): string[] => {
       const t = cFieldType(table, f.type)
       // A C keyword as a field name gets the same `_` suffix as a parameter.
       const name = cParamName(f.name)
+      // An array names its element type, and a ranged field (WP31) its range.
       const note =
-        table.kindOf(f.type) === K_ARRAY || name !== f.name
+        table.kindOf(f.type) === K_ARRAY || table.isRanged(f.type) || name !== f.name
           ? ` /* ${f.name}: ${tsKeyword(table, f.type)} */`
           : ""
       lines.push(`  ${t}${spaceAfter(t)}${name};${note}`)
@@ -228,7 +236,7 @@ export const generateHeader = (
       )
       continue
     }
-    const proto = cPrototype(table, fn.sig, fn.writtenParams)
+    const proto = cPrototype(table, fn)
     if (proto.length === 0) {
       lines.push(`/* ${source}: not declared; no C spelling for one of its types. */`)
       continue

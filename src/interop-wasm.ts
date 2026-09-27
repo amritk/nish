@@ -45,6 +45,7 @@ import {
   TypedView,
   typedView,
 } from "./interop-abi"
+import { takesRange } from "./emit-builtins"
 import { basename } from "./paths"
 import { FunctionSig } from "./program"
 import {
@@ -72,7 +73,11 @@ export const wasmLoaderPath = (dtsFile: string): string => {
 export class WasmBridge {
   /** Functions JS can call: every type is a scalar or a typed view. */
   bridged: ExternalFunction[]
-  /** True when some bridged function passes an array, so the module must link runtime-wasm.c. */
+  /**
+   * True when some bridged function passes an array, or some function checks a
+   * ranged parameter on entry (WP31 §9), so the module must link runtime-wasm.c:
+   * the arena for the one, the panic's `nish_write` and `nish_exit` for the other.
+   */
   needsRuntime: boolean
 
   constructor(bridged: ExternalFunction[], needsRuntime: boolean) {
@@ -98,6 +103,11 @@ export class WasmBridge {
  * (see `wasmUnsignedIn` / `wasmUnsignedOut`).
  */
 export const wasmType = (table: TypeTable, t: i32, position: i32): string => {
+  // WP31 §9: a ranged integer is an `i32`, so a `number`; the loader checks
+  // an argument against the range (`wasmRangeIn`), and a result is already in it.
+  if (table.isRanged(t)) {
+    return "number"
+  }
   switch (table.kindOf(t)) {
     // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
     // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
@@ -392,7 +402,15 @@ export const wasmBridged = (table: TypeTable, fns: ExternalFunction[]): WasmBrid
       bridged.push(fn)
     }
   }
+  // Every function in the module, bridged or not, is linked into it, and one
+  // whose prologue checks a range (every external one that takes a range)
+  // calls the panic's two runtime symbols.
   let needsRuntime = false
+  for (const fn of fns) {
+    if (takesRange(table, fn.sig)) {
+      needsRuntime = true
+    }
+  }
   for (const fn of bridged) {
     if (typedView(table, fn.sig.returnType) !== null) {
       needsRuntime = true
@@ -416,6 +434,7 @@ const wasmIsLoaderLocal = (name: string): boolean =>
   name === "arrayIn" ||
   name === "arrayOut" ||
   name === "copyBack" ||
+  name === "rangeIn" ||
   name === "scoped" ||
   name === "result" ||
   name === "instance" ||
@@ -423,11 +442,37 @@ const wasmIsLoaderLocal = (name: string): boolean =>
 
 const wasmJsParam = (name: string): string => (wasmIsLoaderLocal(name) ? `${name}_` : name)
 
-/** One non-array argument: packed, masked to its unsigned width, or as it came. */
+/**
+ * The check a ranged *argument* gets before the call (WP31 §9), or `""` for
+ * any other type. The compiled function checks it too, on entry, but its
+ * failure is a panic, which in the freestanding build is a trap: a host would
+ * see a `RuntimeError` from inside the module and an instance that cannot be
+ * trusted afterwards. So the loader throws the `RangeError` JavaScript itself
+ * throws for `new Uint8Array(-1)`, naming the function, the parameter and the
+ * range, and the module is never entered.
+ *
+ * The value is judged as the number it is. The wasm call would convert it with
+ * ToInt32 first, which wraps 4294967301 to 5, a value inside `[0, 255]`, and
+ * truncates 2.5 to 2; neither is what the caller passed.
+ */
+const wasmRangeIn = (table: TypeTable, sig: FunctionSig, param: string, i: i32): string => {
+  const t = sig.paramTypes[i]
+  if (!table.isRanged(t)) {
+    return ""
+  }
+  const what = `${jsExportName(sig)}: argument ${i + 1} (${sig.paramNames[i]})`
+  return `rangeIn(${param}, ${table.rangeLo(t)}, ${table.rangeHi(t)}, "${what}")`
+}
+
+/** One non-array argument: packed, masked to its unsigned width, checked against its range, or as it came. */
 const wasmOperand = (table: TypeTable, sig: FunctionSig, params: string[], i: i32): string => {
   const t = sig.paramTypes[i]
   if (table.resultByValue(t)) {
     return wasmResultPack(table, params[i], t)
+  }
+  const checked = wasmRangeIn(table, sig, params[i], i)
+  if (checked.length > 0) {
+    return checked
   }
   const mask = wasmUnsignedIn(table, t)
   return mask.length > 0 ? `${params[i]} & ${mask}` : params[i]
@@ -458,12 +503,13 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
   const raw = wasmRaw(sig)
   const ret = typedView(table, sig.returnType)
   const views: (TypedView | null)[] = []
-  let anyMask = false
+  let anyConverted = false
   let i = 0
   while (i < sig.paramTypes.length) {
     views.push(typedView(table, sig.paramTypes[i]))
-    if (wasmUnsignedIn(table, sig.paramTypes[i]).length > 0) {
-      anyMask = true
+    // A narrow unsigned argument is masked and a ranged one checked (WP31).
+    if (wasmUnsignedIn(table, sig.paramTypes[i]).length > 0 || table.isRanged(sig.paramTypes[i])) {
+      anyConverted = true
     }
     i = i + 1
   }
@@ -484,10 +530,10 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
     }
   }
   if (!anyView) {
-    // WP17/WP15: a packed `Result` and an unsigned width both need converting
-    // but no arena scope — nothing was copied into the module for the call, so
+    // WP17/WP15: a packed `Result` and an unsigned width both need converting,
+    // and a ranged argument checking (WP31), but no arena scope — nothing was copied into the module for the call, so
     // there is nothing to release.
-    if (packed || out || anyMask) {
+    if (packed || out || anyConverted) {
       const operands: string[] = []
       i = 0
       while (i < sig.paramTypes.length) {
@@ -543,6 +589,33 @@ const wasmWrapper = (table: TypeTable, fn: ExternalFunction): string[] => {
     lines.push(`  ${line}`)
   }
   lines.push("}),")
+  return lines
+}
+
+/**
+ * `rangeIn`, the loader's half of WP31 §9 (`wasmRangeIn` says why it runs
+ * before the call). A value that is not a number is the `TypeError` the N-API
+ * shim throws for one, and a number that is not an integer in the range is the
+ * `RangeError`, with both messages worded as the shim words them.
+ */
+const wasmRangeHelper = (table: TypeTable, bridged: ExternalFunction[]): string[] => {
+  const lines: string[] = []
+  let any = false
+  for (const fn of bridged) {
+    if (takesRange(table, fn.sig)) {
+      any = true
+    }
+  }
+  if (!any) {
+    return lines
+  }
+  lines.push("  /** A ranged argument, judged as the number it is rather than after ToInt32 wraps it. */")
+  lines.push("  const rangeIn = (value, lo, hi, what) => {")
+  lines.push('    if (typeof value !== "number") throw new TypeError(what + " must be a number");')
+  lines.push("    if (!Number.isInteger(value) || value < lo || value > hi)")
+  lines.push('      throw new RangeError(what + " must be an integer in [" + lo + ", " + hi + "]");')
+  lines.push("    return value;")
+  lines.push("  };")
   return lines
 }
 
@@ -652,12 +725,14 @@ export const generateWasmLoader = (
     lines.push("    }")
     lines.push("  };")
     pushAll(lines, wasmResultHelpers(table, bridge.bridged))
+    pushAll(lines, wasmRangeHelper(table, bridge.bridged))
     lines.push("  return {")
     lines.push("    memory,")
     lines.push("    nish_reset_arena: raw.nish_reset_arena,")
     lines.push("    nish_free_arena: raw.nish_free_arena,")
   } else {
     pushAll(lines, wasmResultHelpers(table, bridge.bridged))
+    pushAll(lines, wasmRangeHelper(table, bridge.bridged))
     lines.push("  return {")
     lines.push("    memory: raw.memory,")
   }

@@ -162,7 +162,7 @@ import {
   Node,
 } from "./nodes"
 import { StringMap } from "./map"
-import { CheckedProgram, FunctionSig, ROLE_METHOD, inlineElementStruct } from "./program"
+import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { DeclaredRange, T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
 
@@ -1970,6 +1970,38 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   }
 }
 
+/**
+ * Argument `index` of a call to `callee` (`null` when the checker recorded
+ * none). When the callee checks that ranged parameter in its own prologue
+ * (WP31 §9: it is outside the linkage condition `privateAbi` states, read here
+ * from the context), the emitter writes no check at the call, so a warning
+ * that one survives in this loop would name a guard that removes nothing.
+ */
+const walkArgument = (
+  walk: BoundsWalk,
+  state: State,
+  arg: Node,
+  callee: FunctionSig | null,
+  index: i32
+): void => {
+  walkExpression(walk, state, arg)
+  const count = walk.unprovenRanges.length
+  if (callee === null || count === 0 || walk.unprovenRanges[count - 1] !== arg) {
+    return
+  }
+  // Only the argument's own entry goes; one inside it (a nested call's) stands.
+  // A method's or a constructor's `this` is parameter 0 and no argument.
+  const param = callee.role === ROLE_FUNCTION ? index : index + 1
+  const ctx = walk.ctx
+  const inPrologue =
+    param < callee.paramTypes.length &&
+    ctx.table.isRanged(callee.paramTypes[param]) &&
+    !(ctx.strictExports && !callee.visibleOutside())
+  if (inPrologue) {
+    walk.unprovenRanges.pop()
+  }
+}
+
 /** `walkExpression` without the range judge: what an expression does, and the accesses inside it. */
 const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
   // A leaf — a name, a literal, `this` — changes nothing and proves nothing.
@@ -2023,8 +2055,11 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (clamped) {
       holder = lengthHolder(ctx, callee.children[0])
     }
+    const target = ctx.program.nodeCallees[e.id]
+    let at = 0
     for (const arg of e.children[1].children) {
-      walkExpression(walk, state, arg)
+      walkArgument(walk, state, arg, target, at)
+      at = at + 1
       if (clamped) {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null
@@ -2051,8 +2086,11 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
   }
 
   if (e.kind === N_NEW) {
+    const target = ctx.program.nodeCallees[e.id]
+    let at = 0
     for (const arg of e.children[2].children) {
-      walkExpression(walk, state, arg)
+      walkArgument(walk, state, arg, target, at)
+      at = at + 1
     }
     applyCallEffects(walk, state, e) // a constructor body is a callee like any other
     return

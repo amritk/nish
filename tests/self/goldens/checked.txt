@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 708 programs, 50816 dump lines.
+# 712 programs, 50932 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -7371,6 +7371,112 @@ function identity<i32[]>(x: i32[]): i32[] -> @identity$arr.i32 [exported instanc
   escaping: x
   pointer x: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+program tests/cases/interop_rng_host.ts
+module tests/cases/interop_rng_host.ts (entry)
+struct Slot (class) size=4 align=4 exported
+  field day: integer<1, 7> index=0 offset=0 initialized
+  constructor -> @Slot.constructor
+function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: i
+  calls: nish_exit nish_panic_index nish_write
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function pick(base: i32, day: integer<1, 7>): i32 -> @pick [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function low(x: integer<-128, 127>): i32 -> @low [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function labelLength(name: string, day: integer<1, 7>): i32 -> @labelLength [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function lastDigit(n: i32): integer<0, 9> -> @lastDigit [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_panic_div nish_write
+  stackSites=0 stackLocals=0
+function count(xs: integer<0, 9>[]): i32 -> @count [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Slot.constructor(this: Slot): void -> @Slot.constructor [exported constructor]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function slotDay(s: Slot): i32 -> @slotDay [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer s: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/interop_rng_loop.ts
+module tests/cases/interop_rng_loop.ts (entry)
+function pick(base: i32, day: integer<0, 6>): i32 -> @pick [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function twice(d: integer<0, 9>): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via pick
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_from_i32 nish_write pick twice
+  stackSites=1 stackLocals=1
+  local 11:9 xs: i32[] (const)
+  local 12:7 total: i32 (let)
+  local 13:12 k: i32 (let)
+  callee 14:21 pick -> @pick
+  callee 14:38 twice -> @twice
+program tests/cases/interop_rng_param.ts
+module tests/cases/interop_rng_param.ts (entry)
+struct Clock (class) size=4 align=4 exported
+  field hours: i32 index=0 offset=0 initialized
+  constructor -> @Clock.constructor
+  method set -> @Clock.set
+function pick(base: i32, day: integer<1, 7>): i32 -> @pick [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function twice(d: integer<0, 9>): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function Clock.constructor(this: Clock): void -> @Clock.constructor [exported constructor]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Clock.set(this: Clock, h: integer<0, 23>): i32 -> @Clock.set [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:5
+  escaping: h
+  calls: nish_exit nish_write
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function run(n: i32): i32 -> @run [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick
+  escaping: n
+  calls: Clock.constructor Clock.set nish_exit nish_write pick twice
+  stackSites=1 stackLocals=1
+  local 22:9 clock: Clock (const)
+  callee 22:17 new Clock -> @Clock.constructor
+  callee 23:10 pick -> @pick
+  callee 23:23 twice -> @twice
+  callee 23:34 Clock.set -> @Clock.set
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via run
+  calls: run
+  stackSites=0 stackLocals=0
+  callee 26:32 run -> @run
 program tests/cases/io_files.ts
 module tests/cases/io_files.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -44432,6 +44538,20 @@ function storeResult<i32>(dst: i32[], at: i32, r: i32): void -> @nish.storeResul
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee 188:5 slotOutOfRange -> @nish.slotOutOfRange
+program docs/cookbook/type-ranged-export.ts
+module docs/cookbook/type-ranged-export.ts (entry)
+function pick(base: i32, day: integer<1, 7>): i32 -> @pick [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_exit nish_write
+  stackSites=0 stackLocals=0
+function weekly(n: i32): i32 -> @weekly [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pick
+  escaping: n
+  calls: nish_exit nish_write pick
+  stackSites=0 stackLocals=0
+  callee 3:40 pick -> @pick
 program docs/cookbook/type-ranged-proven.ts
 module docs/cookbook/type-ranged-proven.ts (entry)
 function lookup(table: i32[], i: integer<0, 255>): i32 -> @lookup

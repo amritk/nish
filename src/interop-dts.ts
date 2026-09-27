@@ -18,6 +18,9 @@
 //                     the pointer, copies a result back out, and releases the
 //                     arena to where it was, so the declared signature is the
 //                     one a host actually calls.
+//   integer<Lo, Hi> -> number, as an i32 is (WP31 §9). The comment above the
+//                     declaration gives the range, and the loader throws a
+//                     RangeError for an argument outside it, before the call.
 //   string         -> not available: strings need a WASI runtime, and the wasm
 //                     profile is freestanding. Those functions are listed as
 //                     comments so the reader knows what is missing.
@@ -33,6 +36,24 @@
 import { Compilation } from "./compilation"
 import { banner, ExternalFunction, jsExportName, POS_PARAM, POS_RETURN, tsSignature } from "./interop-abi"
 import { wasmBridged, wasmSkipReason, wasmType } from "./interop-wasm"
+import { TypeTable } from "./types"
+
+/**
+ * ` Throws a RangeError unless day is an integer in [1, 7].`: the ranges the
+ * loader checks before the call (WP31 §9), since `number` cannot say them.
+ */
+const rangeNote = (table: TypeTable, fn: ExternalFunction): string => {
+  const ranges: string[] = []
+  let i = 0
+  while (i < fn.sig.paramTypes.length) {
+    const t = fn.sig.paramTypes[i]
+    if (table.isRanged(t)) {
+      ranges.push(`${fn.sig.paramNames[i]} is an integer in [${table.rangeLo(t)}, ${table.rangeHi(t)}]`)
+    }
+    i = i + 1
+  }
+  return ranges.length > 0 ? `. Throws a RangeError unless ${ranges.join(" and ")}.` : ""
+}
 
 export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): string => {
   const table = compilation.table
@@ -88,7 +109,7 @@ export const generateDts = (compilation: Compilation, fns: ExternalFunction[]): 
       i = i + 1
     }
     count = count + 1
-    lines.push(`  /** ${fn.unit.name}: ${source} */`)
+    lines.push(`  /** ${fn.unit.name}: ${source}${rangeNote(table, fn)} */`)
     lines.push(
       `  ${jsExportName(fn.sig)}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
     )
