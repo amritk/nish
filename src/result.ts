@@ -20,9 +20,10 @@ import { checkBuiltinArity } from "./builtins"
 import { roundUpTo } from "./structs"
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
-import { N_BINARY, N_CALL, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
+import { isParameterValue } from "./generics"
+import { N_BINARY, N_CALL, N_EMPTY, N_IDENT, N_MEMBER, N_VAR_DECL, Node } from "./nodes"
 import { CheckedProgram } from "./program"
-import { Scope } from "./symbols"
+import { Local, Scope } from "./symbols"
 import { R_ERR, R_OK, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 // ---- Layout ---------------------------------------------------------------
@@ -139,7 +140,10 @@ export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Sco
   // f64 mode `Ok(3)` for a `Result<i32, E>` is an f64 meeting an i32. Passing
   // `payload` down made stage1 compile what stage0 refuses, which
   // `tests/run.js --parity` found (WP19 G1) and `reject_res_ok_f64` pins.
-  const got = checkExpression(ctx, args.children[0], scope, -1)
+  // WP31 §6: a ranged payload is the exception, because a range is a sink the
+  // value enters rather than a width a literal might take: it is passed down
+  // so a literal is checked against it and anything else enters it checked.
+  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isRanged(payload) ? payload : -1)
   if (!ctx.table.assignable(got, payload)) {
     ctx.error(
       args.children[0],
@@ -273,7 +277,8 @@ const checkUnwrapOr = (ctx: CheckContext, call: Node, args: Node, receiver: i32,
   // is refused. Threading `ok` down here made stage1 accept it, which
   // `tests/run.js --parity` found (WP19 G1) and
   // `reject_res_unwrap_or_f64` pins.
-  const got = checkExpression(ctx, args.children[0], scope, -1)
+  // A ranged `ok` is passed down, for `checkResultConstructor`'s reason (WP31 §6).
+  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isRanged(ok) ? ok : -1)
   if (!ctx.table.assignable(got, ok)) {
     ctx.error(
       args.children[0],
@@ -383,9 +388,22 @@ export const narrowResultTest = (cond: Node, scope: Scope, table: TypeTable, whe
  * Called for every expression statement. A bare call that answers a `Result`
  * is the one shape where a failure would vanish without a trace, so it is the
  * shape this rule names.
+ *
+ * Two statements answer a `Result` without dropping one (#233). An assignment
+ * (`rs[0] = rs[1]`, `r2 = r1`) moves the value into its target, whose own
+ * rules follow it: a local must still be inspected
+ * (`checkResultLocalsHandled`). And in a generic body the value is judged by
+ * the type the template declared, not by the instantiation's: a `T` dropped by
+ * `items.pop()` is not a `Result` to its author, even at `T = Result`.
  */
-export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32): void => {
+export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32, scope: Scope): void => {
   if (!ctx.table.isResult(type)) {
+    return
+  }
+  if (expr.kind === N_BINARY && expr.text === "=") {
+    return
+  }
+  if (isParameterValue(ctx, expr, scope)) {
     return
   }
   ctx.error(
@@ -425,6 +443,83 @@ export const checkResultLocalsHandled = (ctx: CheckContext, body: Node): void =>
     }
     i = i + 1
   }
+  const unread: boolean[] = []
+  while (unread.length < declarations.length) {
+    unread.push(false)
+  }
+  rejectUnreadOverwrites(ctx, body, declarations, unread)
+}
+
+/**
+ * Refuse `r = v` where `r` is a `Result` local whose value has not been read
+ * since it was last written (#233). An assignment moves a `Result` rather than
+ * dropping it, but the value it replaces is dropped, so the rule above would
+ * otherwise accept `let r = f(); r = g(); r.isErr()` with `f()`'s failure
+ * gone. `unread[i]` is whether `declarations[i]`'s current value has been
+ * written and not read since, walked in source order: the right-hand side of
+ * an assignment before its target, so `r = wrap(r)` reads `r` first. It is
+ * not a control-flow graph: a read in either branch of an `if` counts for the
+ * assignment after it. An element or a field is not a local and is not
+ * tracked, so `rs[0] = rs[1]` is never refused here.
+ */
+const rejectUnreadOverwrites = (
+  ctx: CheckContext,
+  node: Node,
+  declarations: Node[],
+  unread: boolean[]
+): void => {
+  if (node.kind === N_VAR_DECL) {
+    const initializer = node.children[2]
+    rejectUnreadOverwrites(ctx, initializer, declarations, unread)
+    const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
+    if (at >= 0) {
+      unread[at] = initializer.kind !== N_EMPTY
+    }
+    return
+  }
+  if (node.kind === N_IDENT) {
+    const at = declarationIndex(ctx.program, declarations, ctx.program.nodeLocals[node.id])
+    if (at >= 0) {
+      unread[at] = false
+    }
+    return
+  }
+  if (node.kind === N_BINARY && node.text === "=" && node.children[0].kind === N_IDENT) {
+    const target = node.children[0]
+    rejectUnreadOverwrites(ctx, node.children[1], declarations, unread)
+    const local = ctx.program.nodeLocals[target.id]
+    const at = declarationIndex(ctx.program, declarations, local)
+    if (at < 0 || local === null) {
+      return
+    }
+    if (unread[at]) {
+      ctx.error(
+        target,
+        `\`${local.name}\` is assigned again before its \`${ctx.table.typeName(local.type)}\` is inspected, and the value it replaces is dropped: test it first with \`${local.name}.isErr()\`, or hand the old value on before assigning another`
+      )
+    }
+    unread[at] = true
+    return
+  }
+  for (const child of node.children) {
+    rejectUnreadOverwrites(ctx, child, declarations, unread)
+  }
+}
+
+/** The position in `declarations` of the declaration of `local`, or -1. */
+const declarationIndex = (program: CheckedProgram, declarations: Node[], local: Local | null): i32 => {
+  if (local === null) {
+    return -1
+  }
+  let i = 0
+  while (i < declarations.length) {
+    const declared = program.nodeLocals[declarations[i].id]
+    if (declared !== null && declared === local) {
+      return i
+    }
+    i = i + 1
+  }
+  return -1
 }
 
 /** Every `Result`-typed `let`/`const` declared anywhere in `node`, in source order. */
@@ -453,16 +548,9 @@ const markResultReads = (
   read: boolean[]
 ): void => {
   if (node.kind === N_IDENT) {
-    const local = program.nodeLocals[node.id]
-    if (local !== null) {
-      let i = 0
-      while (i < declarations.length) {
-        const declared = program.nodeLocals[declarations[i].id]
-        if (declared !== null && declared === local) {
-          read[i] = true
-        }
-        i = i + 1
-      }
+    const at = declarationIndex(program, declarations, program.nodeLocals[node.id])
+    if (at >= 0) {
+      read[at] = true
     }
     return
   }

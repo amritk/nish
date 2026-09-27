@@ -17,11 +17,13 @@
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo } from "./program"
+import { isFractional, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import {
   N_LIST,
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
+  N_TYPE_LITERAL,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
@@ -196,6 +198,15 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
           `a function is never a value in ${LANGUAGE}, so it cannot be the type of a field, a local, an element, ` +
           "a return value or an alias"
       )
+    case N_TYPE_LITERAL:
+      // WP31 §4: a literal type is a bound of `integer<Lo, Hi>` and nothing
+      // else, which `rangedBound` reads without coming here. Anywhere else it
+      // would be a literal type argument in general, a const generic, which is
+      // a construct of its own that nothing has designed.
+      return ctx.errorType(
+        node,
+        `A literal type \`${node.text}\` is only allowed as a bound of \`integer<Lo, Hi>\``
+      )
     default:
       return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`)
   }
@@ -231,15 +242,11 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     return resolveResult(node, args, argc, ctx)
   }
 
-  // `integer<Lo, Hi>` is the spelling ranged integers will take
-  // (docs/wp31-ranged-integers.md §3). It is refused before every declared
-  // name and type parameter, so that `integer` never means something a later
-  // release would have to take back.
+  // `integer<Lo, Hi>`, a ranged integer (WP31 §4). It is answered before
+  // every declared name and type parameter, which is why the name has been
+  // reserved since 0.10.0: `integer` never means anything else.
   if (name === "integer") {
-    return ctx.errorType(
-      node,
-      "`integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet"
-    )
+    return resolveRanged(node, args, argc, ctx)
   }
 
   if (name === "Array") {
@@ -350,6 +357,108 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)
+}
+
+/**
+ * `integer<Lo, Hi>` (WP31 §4). Both bounds are integer literals, the range is
+ * not empty, and both ends lie in `i32`, because a ranged value is always an
+ * `i32` (§5). `integer<0, 0xFF>` is `integer<0, 255>`: the type is interned by
+ * the values, not by the spelling.
+ */
+const resolveRanged = (node: Node, args: Node, argc: i32, ctx: CheckContext): i32 => {
+  if (argc !== 2) {
+    return ctx.errorType(node, "`integer` needs exactly two bounds, e.g. `integer<0, 255>`")
+  }
+  const loNode = args.children[0]
+  const hiNode = args.children[1]
+  const lo = rangedBound(ctx, loNode)
+  if (lo === BOUND_REFUSED) {
+    return T_ERROR
+  }
+  const hi = rangedBound(ctx, hiNode)
+  if (hi === BOUND_REFUSED) {
+    return T_ERROR
+  }
+  if (lo > hi) {
+    return ctx.errorType(
+      node,
+      `\`integer<${loNode.text}, ${hiNode.text}>\` is an empty range: the lower bound is greater than the upper bound`
+    )
+  }
+  return ctx.table.rangedOf(toI32(lo), toI32(hi))
+}
+
+/** What `rangedBound` answers once it has reported; no bound in `i32` is this far out. */
+const BOUND_REFUSED: i64 = 1099511627776
+
+/**
+ * The value one bound of `integer<Lo, Hi>` denotes, or `BOUND_REFUSED` once it
+ * has said why it is not one. A bound is a literal as written, sign included,
+ * because a constant is a value and a type argument cannot name one without
+ * `typeof`, which Phase 0 forbids (WP31 §11).
+ */
+const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
+  if (bound.kind !== N_TYPE_LITERAL) {
+    ctx.error(
+      bound,
+      `A bound of \`integer<Lo, Hi>\` must be an integer literal, got \`${ctx.textOf(bound)}\` (a type or a constant cannot state a bound)`
+    )
+    return BOUND_REFUSED
+  }
+  const text = bound.text
+  const negative = text.startsWith("-")
+  const digits = negative ? text.substring(1) : text
+  if (isFractional(digits)) {
+    ctx.error(bound, `Non-integer literal \`${text}\` where a bound of \`integer<Lo, Hi>\` is expected`)
+    return BOUND_REFUSED
+  }
+  // `parseIntegerLiteral` wraps past `u64`, so a literal is measured before it
+  // is read: more significant digits than any `u32` needs in its radix is
+  // already outside `i32`, and anything shorter reads exactly.
+  const magnitude = fitsInU32Digits(digits) ? parseIntegerLiteral(digits) : BOUND_REFUSED
+  const value = negative ? -magnitude : magnitude
+  if (value < toI64(-2147483648) || value > toI64(2147483647)) {
+    ctx.error(
+      bound,
+      `Bound \`${text}\` of \`integer<Lo, Hi>\` is outside i32 (a ranged integer is always an i32)`
+    )
+    return BOUND_REFUSED
+  }
+  return value
+}
+
+/**
+ * Whether an integer literal as written has no more significant digits than
+ * the largest `u32` has in its radix: 10 decimal, 8 hexadecimal, 11 octal, 32
+ * binary. Leading zeros and `_` separators do not count. A literal that passes
+ * is read by `parseIntegerLiteral` without wrapping; one that fails is past
+ * `u32`, so it is outside `i32` whatever its digits are.
+ */
+const fitsInU32Digits = (digits: string): boolean => {
+  let limit = 10
+  let i = 0
+  if (digits.length > 2 && digits.charCodeAt(0) === 48) {
+    const marker = digits.charCodeAt(1)
+    if (marker === 120 || marker === 88) {
+      limit = 8
+      i = 2
+    } else if (marker === 111 || marker === 79) {
+      limit = 11
+      i = 2
+    } else if (marker === 98 || marker === 66) {
+      limit = 32
+      i = 2
+    }
+  }
+  let significant = 0
+  while (i < digits.length) {
+    const c = digits.charCodeAt(i)
+    if (c !== 95 && (significant > 0 || c !== 48)) {
+      significant = significant + 1
+    }
+    i = i + 1
+  }
+  return significant <= limit
 }
 
 /**

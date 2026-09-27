@@ -135,7 +135,7 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
     case N_EXPR_STMT:
       ctx.statementExpression = stmt.children[0]
       // WP16: a failure may not be dropped.
-      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1))
+      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1), scope)
       ctx.statementExpression = null
       // `process.exit(n)` and `panic(m)` end the path exactly as `return` does.
       return terminatesControlFlow(ctx, stmt.children[0])

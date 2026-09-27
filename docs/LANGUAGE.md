@@ -221,23 +221,72 @@ Type rules:
   Arrays of arrays (`tests/cases/arr_nested`), arrays of strings
   (`tests/cases/arr_strings`), arrays of class instances and class fields
   of array type work *(CLI only)*.
-- **`integer` is reserved** for ranged integers, `integer<Lo, Hi>`
-  ([wp31-ranged-integers.md](wp31-ranged-integers.md)), which this compiler
-  does not build yet. Holding the name now means the feature can be added
-  later without taking a name away from a program that already uses it.
-  As a type, `integer` or `integer<T>` is
-  `` `integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet ``
-  (`tests/cases/reject_integer_use`). A numeric literal as a type argument
-  (`integer<0, 255>`) is still a syntax error, because the parser reads only
-  types there. The name is also on the list of built-in type names, so
-  `type integer = …` and `enum integer` are refused the way `type string = …`
-  is (`reject_integer_alias`, `reject_integer_enum`). A class, interface or
-  function may not take it either, because `integer<0, 255>` would then mean
-  two things in the module that declared one:
-  `` `integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a class ``
-  (`reject_integer_class`, `reject_integer_interface`,
-  `reject_integer_function`). A module constant or a local called `integer`
-  is a value, not a type, and is still accepted.
+- **`integer<Lo, Hi>` is a ranged integer** ([wp31-ranged-integers.md](wp31-ranged-integers.md)):
+  an `i32` the compiler knows lies in `[Lo, Hi]`. It is an `i32` in the IR, in
+  memory and at the ABI, in both number modes, and `tsc` reads it as a
+  `number` alias (`runtime/nish.d.ts`). `integer<0, 0xFF>` and
+  `integer<0, 255>` are one type, spelled `integer<0, 255>` in a diagnostic and
+  mangled `rng.p0.p255` in a symbol (`rng.m128.p127` for `integer<-128, 127>`),
+  so `Box<integer<0, 255>>` is `%struct.Box$rng.p0.p255`
+  (`tests/cases/rng_param`, `rng_generic`).
+  - **The bounds** are two integer literals, a sign allowed, with
+    `Lo <= Hi` and both in `i32`. Each other spelling is refused:
+    `` `integer` needs exactly two bounds, e.g. `integer<0, 255>` ``
+    (`reject_rng_arity`, `reject_integer_use`);
+    ``A bound of `integer<Lo, Hi>` must be an integer literal, got `MAX` ``,
+    a constant or a type (`reject_rng_bound_not_literal`,
+    `reject_rng_bound_type`);
+    ``Non-integer literal `1.5` where a bound of `integer<Lo, Hi>` is expected``
+    (`reject_rng_bound_float`);
+    `` `integer<10, 0>` is an empty range `` (`reject_rng_empty`); and
+    ``Bound `4294967295` of `integer<Lo, Hi>` is outside i32``
+    (`reject_rng_bound_i32`, `reject_rng_bound_i32_negative`). A numeric
+    literal type is parsed wherever a type is and is legal only as one of
+    these bounds: `const x: 5` and `Box<3>` are
+    ``A literal type `5` is only allowed as a bound of `integer<Lo, Hi>` ``
+    (`reject_rng_literal_type`, `reject_rng_literal_type_argument`).
+  - **Entering a range is checked.** An annotated initialiser, an assignment
+    (`=`, the compound forms, `++` and `--`), an argument to a function, a
+    method or a constructor, a `return`, a field or object-literal field, an
+    array-literal element, an element store and `push` are *entries*. The
+    source must be an `i32` or another ranged type — a `u8` is not an
+    `integer<0, 255>` (`reject_rng_from_u8`), and under `--number-mode f64` a
+    `number` is an `f64` that enters through `toI32(x)` (`reject_rng_from_f64`).
+    A literal inside the range and a value of a range inside this one cost
+    nothing; a literal outside it is
+    ``Literal `12` is outside the range of integer<0, 9>``
+    (`reject_rng_literal_outside`, `reject_rng_literal_outside_negative`).
+    Anything else is compared once and the program panics outside the range,
+    printing `value out of range: expected integer<0, 255>` and exiting 1
+    (`rng_param`, `rng_entries`, `rng_bitwise`, `rng_entry_panic`,
+    `rng_entry_range_panic`, `rng_entry_push_panic`, `rng_entry_bitwise_panic`). The check is the type's
+    meaning, so `--unchecked-indexing` keeps it and `--wrapping` changes only
+    the arithmetic before it. Under Node nothing is checked, which
+    [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent) records.
+  - **Leaving a range is free.** Every operator reads a ranged value as `i32`,
+    so `r + 1` is an `i32`, `r < 9` compares two `i32`s and `toI64(r)` is a
+    `sext`; mixing one with an `i32` is never an error, and nothing computes a
+    range. The range survives where nothing is computed: a `const` without an
+    annotation keeps it and a `let` widens to `i32` (`rng_widen`); a read of a
+    ranged field, element or result keeps it; and a type argument keeps it, so
+    `identity(r)` is `identity<integer<0, 9>>` (`rng_generic`). A counter
+    declared with a range fails its last `i++`, which is why the range goes on
+    the value used rather than on the counter (`rng_entry_panic`).
+  - **Where a range may not go.** A `declare function` may not mention one,
+    because the C side never promised it (`reject_rng_declare_function`,
+    `reject_rng_declare_function_return`), and `new Array<integer<1, 9>>(n)` is
+    refused because its zero fill is outside the range
+    (`reject_rng_array_zero_fill`). Under `-g` a ranged type is a
+    `DW_TAG_typedef` of `int` named `integer<0, 255>` (`dbg_rng`).
+  - **The name.** `integer` is on the list of built-in type names, so
+    `type integer = …` and `enum integer` are refused the way `type string = …`
+    is (`reject_integer_alias`, `reject_integer_enum`). A class, interface or
+    function may not take it either, because `integer<0, 255>` would then mean
+    two things in the module that declared one:
+    `` `integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a class ``
+    (`reject_integer_class`, `reject_integer_interface`,
+    `reject_integer_function`). A module constant or a local called `integer`
+    is a value, not a type, and is still accepted.
 
 ### Numeric literals
 
@@ -611,6 +660,27 @@ one must be read at least once (`` `outcome` holds a `Result<i32, string>`
 that is never inspected ``, `reject_result_unhandled`). Handing the value on —
 an argument, a `return` — counts as reading it: the responsibility moves with
 the value, and the receiving signature carries the same rules.
+
+Storing one is handing it on too. An assignment statement — `rs[0] = rs[1]`,
+`r2 = r1` — moves the `Result` into its target and is not a
+discard; `r2 = r1` reads `r1`, and `r2`, a local, must still be inspected
+(`tests/cases/res_result_store`, `reject_result_store_unread`). The value an
+assignment replaces is dropped, though, so a `Result` local may not be
+assigned again while the value it holds has not been read since it was
+written (`` `r` is assigned again before its `Result<i32, string>` is
+inspected ``, `reject_result_overwrite_unread`). The check reads the function
+in source order, with an assignment's right-hand side before its target, so
+`r = retry(r)` is accepted, and a read in either branch of an `if` counts for
+an assignment after it. An element or a field is not tracked slot by slot, so
+`rs[0] = rs[1]` overwrites `rs[0]` unchecked. In a generic
+body a discarded value is judged by the type its template declares, as Rust's
+`#[must_use]` is: `items.pop()` on `items: T[]` drops a `T`, which is not a
+`Result` to the template's author even where `T` is one, while a template
+that drops a `Result<T, E>` it declared, or a concrete `Result`, is refused at
+every instantiation (`res_result_store`, `reject_result_generic_discarded`).
+That is what lets a `Map` hold a `Result` value
+(`tests/cases/map_value_result`, and `map_value_result_by_value` for one that
+travels packed).
 
 **2. The error arm comes first.** `r.value` is legal only where the checker
 proved `isOk()`, `r.error` only where it proved `isErr()`. There is no

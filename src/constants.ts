@@ -122,7 +122,7 @@ export const parseIntegerLiteral = (text: string): i64 => {
 }
 
 /** Whether a literal as written has a fraction or an exponent, so it is not an integer. */
-const isFractional = (text: string): boolean => {
+export const isFractional = (text: string): boolean => {
   if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
     return false
   }

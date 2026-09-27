@@ -117,7 +117,10 @@ export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope
   }
   const op = expr.text
   const value = expr.children[1]
-  const rhs = checkExpression(ctx, value, scope, elem)
+  // WP31 §7: `a[i] op= v` on a ranged element computes in `i32`, and the
+  // result enters the range before the store (`rangedStoreOf`).
+  const operand = op === "=" ? elem : ctx.table.baseOf(elem)
+  const rhs = checkExpression(ctx, value, scope, operand)
   if (elem === T_ERROR || rhs === T_ERROR) {
     return T_ERROR
   }
@@ -132,10 +135,10 @@ export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope
   // `a[i] &= v` and the rest of the bitwise family: the element is the target,
   // so the operand rule is `&`'s and the words are a local's.
   if (isBitwiseCompound(op)) {
-    return checkBitwiseAssignOperands(ctx, expr, elem, rhs)
+    return checkBitwiseAssignOperands(ctx, expr, operand, rhs) === T_ERROR ? T_ERROR : elem
   }
-  if (!isNumeric(elem) || rhs !== elem) {
-    const a = ctx.table.typeName(elem)
+  if (!isNumeric(operand) || rhs !== operand) {
+    const a = ctx.table.typeName(operand)
     return ctx.errorType(
       expr,
       // The token as it was written, `*=` and not `*`: stage0's element path
@@ -179,7 +182,10 @@ export const checkArrayMethod = (
   // (its receiver is not an identifier), so `b.xs.push(0)` in f64 mode is an
   // f64 pushed onto an `i32[]` there and was accepted here
   // (`reject_push_field_literal`, WP19 §A3).
-  const elemContext = access.children[0].kind === N_IDENT ? elem : -1
+  // A ranged element is the exception (WP31 §6): the range is a sink the
+  // pushed value enters, not a width, so it reaches the argument whatever the
+  // receiver is spelled like.
+  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isRanged(elem) ? elem : -1
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType()
@@ -200,8 +206,16 @@ export const checkArrayMethod = (
     if (!checkBuiltinArity(ctx, call, "indexOf", args, 1)) {
       return ctx.numberType()
     }
-    const got = checkExpression(ctx, args.children[0], scope, elemContext)
-    if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
+    // `indexOf` only compares, so a ranged element is looked for as its base:
+    // asking for a value outside the range finds nothing, and is not an entry.
+    const probe = ctx.table.baseOf(elem)
+    const got = checkExpression(
+      ctx,
+      args.children[0],
+      scope,
+      access.children[0].kind === N_IDENT ? probe : -1
+    )
+    if (got !== T_ERROR && !ctx.table.assignable(got, probe)) {
       const want = ctx.table.typeName(elem)
       ctx.error(
         args.children[0],
@@ -276,6 +290,15 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
     return ctx.errorType(
       expr,
       `\`new Array<${spelled}>(n)\` would zero-fill with null ${spelled} values; build it with \`[]\` and \`push\` instead`
+    )
+  }
+  // WP31: a zero is a value of a range only when the range holds it, and a
+  // zero-filled `integer<1, 9>[]` would hold values its type says it cannot.
+  if (ctx.table.isRanged(elem) && (ctx.table.rangeLo(elem) > 0 || ctx.table.rangeHi(elem) < 0)) {
+    const spelled = ctx.table.typeName(elem)
+    return ctx.errorType(
+      expr,
+      `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is outside the range; build it with \`[]\` and \`push\` instead`
     )
   }
   if (args.children.length !== 1) {

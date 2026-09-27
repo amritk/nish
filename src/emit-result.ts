@@ -40,6 +40,7 @@
 // analysis are WP16's, unchanged.
 
 import { Emitter } from "./emit"
+import { emitPanicTail } from "./emit-builtins"
 import { internalErrorFor } from "./ice"
 import { ResultLayout, resultLayout } from "./result"
 import { N_CALL, N_MEMBER, Node } from "./nodes"
@@ -299,12 +300,12 @@ export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, privat
     }
     return packArm(emitter, type, isOk, payload, hasPayload)
   }
-  const object = emitter.emitExpression(expr)
-  if (privateAbi) {
-    return armsForObject(emitter, type, object)
-  }
-  return packObject(emitter, type, object)
+  return packResultObject(emitter, type, emitter.emitExpression(expr), privateAbi)
 }
+
+/** The word, or the private ABI's arms, for a by-value `Result` already in memory at `object`. */
+export const packResultObject = (emitter: Emitter, type: i32, object: string, privateAbi: boolean): string =>
+  privateAbi ? armsForObject(emitter, type, object) : packObject(emitter, type, object)
 
 /**
  * The caller's half: materialise the word as the object every other construct
@@ -607,10 +608,7 @@ const emitExpect = (emitter: Emitter, expr: Node, receiver: i32): string => {
   emitter.fn.emit(`br i1 ${flag}, label %${okBlock.label}, label %${errBlock.label}`)
 
   emitter.fn.placeBlock(errBlock)
-  const message = emitter.emitExpression(expr.children[1].children[0])
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`)
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`)
-  emitter.fn.emit("unreachable")
+  emitPanicTail(emitter, emitter.emitExpression(expr.children[1].children[0]))
 
   emitter.fn.placeBlock(okBlock)
   if (!layout.hasValue) {
