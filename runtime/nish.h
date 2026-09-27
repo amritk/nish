@@ -341,6 +341,26 @@ typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
 int64_t nish_cpu_count(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 
+/* ---- A scope's tasks (wp29 stage P2), runtime/runtime-parallel.c ----
+ *
+ * `nish_scope_spawn` files one task under `scope`, an address the caller keeps
+ * alive until it joins: it copies `size` bytes of `payload` and keeps them with
+ * `run` and `finish`, and runs nothing yet. `nish_scope_join` takes every task
+ * filed under `scope`, runs `run(payload)` for each -- the first on the calling
+ * thread and each other on a thread of its own, which frees its arena before it
+ * exits -- waits for all of them, and then calls `finish(payload)` for each on
+ * the calling thread, in the order they were filed. Without `-DNISH_THREADS`,
+ * or when a thread cannot be created, a task runs on the calling thread, so
+ * running short of threads costs speed and never an answer.
+ *
+ * The preconditions are the language's (docs/LANGUAGE.md, "Scoped tasks"):
+ * `run` writes nothing another task or the caller can see, its result is a
+ * scalar it writes into its own payload, and only `finish`, on the calling
+ * thread, stores into memory the caller owns. */
+typedef void (*nish_task_fn)(void *payload);
+void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size);
+void nish_scope_join(void *scope);
+
 #ifdef __cplusplus
 }
 #endif

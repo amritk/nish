@@ -62,7 +62,7 @@
 import { CLI, VERSION } from "./branding"
 import { SourceFile } from "./diagnostics"
 import { internalErrorFor } from "./ice"
-import { IRFunction, IRModule } from "./ir"
+import { IRFunction, IRModule, paramSuffix } from "./ir"
 import { StringMap } from "./map"
 import { Node } from "./nodes"
 import { CheckedProgram, EnumInfo, FunctionSig, StructInfo } from "./program"
@@ -602,8 +602,9 @@ export class DebugInfo {
       const variable = this.module.addMetadata(
         `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${arg}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
       )
+      // `paramValue`'s spelling, written inline: a call there is one more arena string per parameter (NL9011).
       fn.emit(
-        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`
+        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}${paramSuffix(sig.paramNames[i])}, metadata ${variable}, metadata !DIExpression())`
       )
       i = i + 1
     }

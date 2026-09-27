@@ -192,6 +192,10 @@ export const PAR_MAP: i32 = 1
 export const PAR_REDUCE: i32 = 2
 /** `mapRange` or `reduceBlocks`: the loop one thread runs over its share of a region. */
 export const PAR_CHUNK: i32 = 3
+/** `ThreadScope.spawn` from `nish/threads` (WP29 P2): its call to `runTask` becomes a task on the scope. */
+export const PAR_SPAWN: i32 = 4
+/** `runTask`: what one task computes on its thread, and the store its scope makes at the join. */
+export const PAR_TASK: i32 = 5
 
 // WP32: what an instantiation is to the emitter's `Map` lowering
 // (`mapIntrinsicRole` in `src/generics.ts` decides, `src/emit-map.ts` reads).
@@ -1139,6 +1143,8 @@ export class CheckedProgram {
   usesArgv: boolean
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
   parallelCalls: ParallelCall[]
+  /** WP29 P2: every `spawn` call, judged with the facts as `parallelCalls` is (`Compilation.checkParallel`). */
+  spawnCalls: ParallelCall[]
   /**
    * Every `x.f = e;` in this module's bodies whose field is stored inline, with
    * the length `e` is known to have (`src/inline-arrays.ts`). Parallel lists
@@ -1287,6 +1293,7 @@ export class CheckedProgram {
     this.enumList = []
     this.entryMain = null
     this.parallelCalls = []
+    this.spawnCalls = []
     this.inlineAssignNodes = []
     this.inlineAssignLengths = []
     this.newTypeArgumentIds = new StringMap()

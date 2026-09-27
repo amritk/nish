@@ -1,0 +1,1 @@
+The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)
