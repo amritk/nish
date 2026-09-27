@@ -5,7 +5,7 @@
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression } from "./builtins"
 import { CheckContext } from "./context"
-import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions"
+import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import {
   N_BLOCK,
@@ -31,7 +31,12 @@ import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types"
 /** The method set, in the order the "supported:" message lists them. */
 const ARRAY_METHODS: string = "push, pop, indexOf, join"
 
-/** `[a, b]`. An empty literal takes its type from context, since there is nothing to read. */
+/**
+ * `[a, b]`. An empty literal takes its type from context, since there is
+ * nothing to read. An element's proof does not become the element type
+ * (#234): `[r]` inside `if (r.ok)` is a `Result<T, E>[]`, since anything
+ * pushed later is checked against that type.
+ */
 export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (expr.children.length === 0) {
     if (want < 0 || !ctx.table.isArray(want)) {
@@ -45,7 +50,7 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
   let elem = -1
   for (const element of expr.children) {
-    const type = checkExpression(ctx, element, scope, hint)
+    const type = unproven(ctx, checkExpression(ctx, element, scope, hint))
     if (type === T_ERROR) {
       continue
     }

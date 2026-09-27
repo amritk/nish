@@ -1,0 +1,1 @@
+reject_result_array_keeps_proof.ts:13:27: error: Cannot read `value` of `Result<i32, i32>` before the error is handled
