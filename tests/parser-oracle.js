@@ -236,7 +236,10 @@ const printTypeScriptTree = (source, sf) => {
         emit(depth, "IDENT", s, e, node.text)
         return
       case ts.SyntaxKind.NumericLiteral:
-        emit(depth, "NUMBER", s, e, source.slice(node.getStart(sf), node.end))
+        // As written, less its separators: the parser drops them
+        // (`withoutSeparators` in src/lexer.ts), and the lexer has already
+        // refused one anywhere but between two digits.
+        emit(depth, "NUMBER", s, e, source.slice(node.getStart(sf), node.end).replaceAll("_", ""))
         return
       case ts.SyntaxKind.BigIntLiteral:
         emit(depth, "BIGINT", s, e, source.slice(node.getStart(sf), node.end))

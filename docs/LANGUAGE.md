@@ -93,7 +93,8 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/dbg_utf8`).
 - **Numeric literals.** Decimal, hexadecimal (`0x10`), binary (`0b1`),
   octal (`0o17`), exponent (`1e3`), and separators (`1_000`) are accepted
-  *(CLI only)*. A literal's type comes from its context (see
+  *(CLI only)*; a separator goes only between two digits (see
+  [Numeric literals](#numeric-literals)). A literal's type comes from its context (see
   [Numeric literals](#numeric-literals)); by default it is `number`. In i32
   mode a literal must have an integral value: `1.5` is rejected with
   `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1.0`, `1e3`
@@ -289,6 +290,24 @@ Type rules:
 
 ### Numeric literals
 
+**A separator goes between two digits and nowhere else**, as in TypeScript.
+`1_000_000`, `0xFF_FF` and `1_234.5_6` are the values their digits spell, and
+so is `1e1_0` in an exponent (`tests/cases/math_numeric_separators`). Any
+other `_` is refused by the lexer with TypeScript's words, one error for the
+whole literal: after a radix prefix (`0x_FF`,
+`tests/cases/reject_separator_after_prefix`), at the end (`10_`,
+`reject_separator_trailing`), either side of the point (`1_.5`, `1._5`:
+`reject_separator_before_dot`, `reject_separator_after_dot`), straight after
+the exponent marker or its sign (`1e_5`, `1e+_5`, `reject_separator_exponent`),
+before the BigInt suffix (`0xFF_n`, `reject_separator_before_bigint_suffix`)
+and after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
+`` Numeric separators are not allowed here `` (TS6188), and two in a row
+(`1__0`, `0xF__F`, `reject_separator_doubled`) is
+`` Multiple consecutive numeric separators are not permitted `` (TS6189). The
+parser still reads the literal, so the next token does not cost a second
+error, and a bound of a ranged type is refused the same way
+(`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
+
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
 takes that type (`src/expressions.ts`, `checkNumericLiteral`;
@@ -349,7 +368,9 @@ at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
 rule, `reject_u64_literal_precision`) because a numeric literal is read as a
 double, as TypeScript reads it, so a larger one is already rounded. Every one of these messages quotes the
 literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
-as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
+as `0x1FF` and a rounded literal as the digits in the file. The one exception
+is a separator, which the parser drops, so `1_000_000_000_000` in an `i32`
+context reads back as `` Literal `1000000000000` does not fit in i32 ``. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
 `` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
 (`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is
@@ -503,7 +524,12 @@ value, so nothing is boxed; `null` takes its type from context.
   the narrowed `cur` on the right and then drops it) and before a loop whose
   body, condition, or update assigns the variable, because the second
   iteration sees the assigned value (`tests/cases/reject_null_narrowing_assigned`;
-  `reject_null_narrowing_leaks` for a use after the guarded block).
+  `reject_null_narrowing_leaks` for a use after the guarded block). Inside an
+  `&&` or `||` chain the same holds operand by operand: an operand that
+  assigns the variable ends its narrowing for every operand after it and for
+  the region the chain guards, so `p !== null && g((p = null) === null) && p.v`
+  is refused, and a test after the assignment narrows again
+  (`tests/cases/reject_null_narrowing_assigned_in_chain`, `res_proof_consumers`).
   Constants and parameters keep their narrowing for the whole region.
   Property paths are not narrowed: `if (n.next !== null) n.next.v` is
   rejected; copy into a local first *(CLI only)*.
@@ -622,7 +648,7 @@ still costs something against C and Rust, are in
 | `Err(e)` | the failure value, likewise | `res_basic` |
 | `r.isOk()`, `r.isErr()` | the discriminant test, and what narrows `r` | `res_basic` |
 | `r.ok` | the same bit as a plain `boolean`; `if (r.ok)` narrows too, because a tagged union is how TypeScript itself would spell this | `res_basic` |
-| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`, `res_by_value_param`; `reject_result_value_unchecked`, `reject_result_by_value_unchecked` |
+| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`, `res_by_value_param`; `reject_result_value_unchecked`, `reject_result_by_value_unchecked`, `reject_result_let_keeps_proof`, `reject_result_narrowing_assigned_in_chain` |
 | `r.error` | `E`, only where it proved `isErr()` | `res_basic`; `reject_result_error_in_ok_arm` |
 | `r.orReturn()` | `T` when ok; otherwise `return Err(r.error)` from the enclosing function — Rust's `?` | `res_propagate`, `res_by_value_propagate`; `reject_result_propagate_plain`, `reject_result_propagate_error_type` |
 | `r.unwrapOr(d)` | `T` when ok, `d` otherwise | `res_unwrap` |
@@ -686,7 +712,25 @@ and hold after an `if` whose other branch cannot fall through:
 | `r.isOk() ? a : b` | in `a` (and in `b` for `isErr()`) |
 
 A field or element holding a `Result` is not narrowed; bind it to a local
-first, exactly as for a nullable.
+first, exactly as for a nullable. An assignment inside an `&&` or `||` chain
+ends the narrowing for the operands after it, as for a nullable
+(`tests/cases/reject_result_narrowing_assigned_in_chain`).
+
+**A proof stays with its variable.** What a test proved is seen only by a
+*proof consumer*: the receiver of `.ok`, `.value`, `.error`, `isOk()`,
+`isErr()`, `unwrapOr`, `expect` or `orReturn`, or another narrowing test.
+Wherever a type is instead inferred from the narrowed variable's value, it is
+the plain `Result<T, E>`: a `let` or `const` initialiser, a ternary, and an
+array literal's elements. Arguments, `return`s and stores already take the
+declared type they flow into. So inside `if (r.ok)`, `const y = r` needs its
+own test before `y.value`, `c ? r : q` does too whatever `q` was narrowed to,
+and `[r]` is a `Result<T, E>[]` that an `Err` may be pushed onto
+(`tests/cases/reject_result_let_keeps_proof`, `reject_result_ternary_keeps_proof`,
+`reject_result_array_keeps_proof`; `res_proof_consumers` for the tests that
+make each of them compile). `tsc` narrows `const y = r` along with `r`, so this
+refuses programs `tsc` accepts; that is the safe direction, and the rule a
+reassignment, a pushed element or the other arm of a ternary would otherwise
+break.
 
 **3. Propagation is contagious.** `r.orReturn()` is legal only inside a
 function that itself returns a `Result` whose error arm accepts `E`
@@ -4614,7 +4658,7 @@ messages are exact for the cases cited; other rows quote the checker
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
-| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
+| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_null_narrowing_assigned_in_chain`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
