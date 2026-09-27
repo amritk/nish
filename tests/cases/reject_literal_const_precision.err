@@ -1,0 +1,2 @@
+Literal `1e19` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead
+Literal `99999999999999999999` exceeds 2^53 and cannot be written exactly

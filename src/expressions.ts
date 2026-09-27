@@ -16,7 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding"
-import { parseIntegerLiteral } from "./constants"
+import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics"
 import { CheckContext } from "./context"
@@ -269,7 +269,7 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
     return type
   }
   const text = expr.text
-  if (hasFraction(text)) {
+  if (isFractional(text)) {
     // The wording says where the integer type came from: an explicit context
     // names it, and otherwise it is the number mode.
     const where =
@@ -292,7 +292,7 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
     // Past 2^53 the literal is already the double it rounded to, whatever the
     // digits say, so the range check below would be answering a question about
     // a different number. stage0 refuses it here and stage1 was compiling it.
-    if (Number(text) > TWO_53) {
+    if (numericLiteralValue(text) > TWO_53) {
       return ctx.errorType(
         expr,
         `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${spelled} value instead`
@@ -302,11 +302,11 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
     // largest values are past 2^53 and cannot be written at all.
     const bits = intBits(type)
     const limit: f64 = bits === 64 ? 18446744073709551615.0 : Math.pow(2.0, toF64(bits)) - 1.0
-    if (Number(text) > limit) {
+    if (numericLiteralValue(text) > limit) {
       return ctx.errorType(expr, `Literal \`${text}\` does not fit in ${spelled}`)
     }
   }
-  if (type === T_I64 && Math.abs(Number(text)) > TWO_53) {
+  if (type === T_I64 && Math.abs(numericLiteralValue(text)) > TWO_53) {
     return ctx.errorType(
       expr,
       `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`
@@ -330,7 +330,7 @@ export const checkRangedLiteral = (
   at: Node
 ): i32 => {
   const text = expr.text
-  if (hasFraction(text)) {
+  if (isFractional(text)) {
     return ctx.errorType(
       expr,
       `Non-integer literal \`${text}\` where ${ctx.table.typeName(want)} is expected`
@@ -348,29 +348,10 @@ export const checkRangedLiteral = (
   return want
 }
 
-/** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
-const TWO_53: f64 = 9007199254740992.0
-
-/** Whether a literal as written has a fraction or an exponent. */
-const hasFraction = (text: string): boolean => {
-  if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
-    return false
-  }
-  let i = 0
-  while (i < text.length) {
-    const c = text.charCodeAt(i)
-    if (c === 46) {
-      return true // a `.`; an exponent alone is still an integer value
-    }
-    i = i + 1
-  }
-  return Number(text) !== Math.floor(Number(text))
-}
-
 /** `-2147483648` parses as minus applied to 2147483648; that exact form is allowed. */
 const fitsInI32 = (text: string, negated: boolean): boolean => {
   const limit: f64 = negated ? 2147483648.0 : 2147483647.0
-  return Number(text) <= limit
+  return numericLiteralValue(text) <= limit
 }
 
 const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {

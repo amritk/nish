@@ -43,6 +43,7 @@ import {
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
+import { numericLiteralValue } from "./constants"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
 import {
   analyzeEscapes,
@@ -2344,7 +2345,7 @@ const isCountedLoop = (
   } else if (upward) {
     // In `f64`, as stage0's `src/` computes it: a bound past the i32 range must still
     // compare as out of range rather than wrapping into it.
-    const written: f64 = Number(bound.text)
+    const written: f64 = numericLiteralValue(bound.text)
     const last: f64 = inclusive ? written : written - 1.0
     if (last + toF64(delta) > INT32_MAX) {
       return false
@@ -2383,10 +2384,10 @@ export const stepOf = (expr: Node, name: string): i32 => {
       return 0
     }
     if (expr.text === "+=") {
-      return toI32(Number(rhs.text))
+      return toI32(numericLiteralValue(rhs.text))
     }
     if (expr.text === "-=") {
-      return -toI32(Number(rhs.text))
+      return -toI32(numericLiteralValue(rhs.text))
     }
   }
   return 0
