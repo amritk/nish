@@ -15,7 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsModule } from "./parallel"
+import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import {
@@ -550,7 +550,7 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
   // emitted by the construct rather than called, so the declaration is for
   // TypeScript and Node and has no signature here.
   if (name === DISPOSE_METHOD) {
-    if (!isThreadsModule(ctx.program)) {
+    if (!isThreadsSource(ctx.program)) {
       ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
     }
     return

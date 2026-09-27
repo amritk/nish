@@ -111,6 +111,17 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
 export const isThreadsModule = (program: CheckedProgram): boolean =>
   program.packageName === CLI && program.source.path === threadsModuleName()
 
+/**
+ * Whether `program` is `std/threads.ts` read as a file of its own, in any
+ * package: what the declarations only `nish/threads` may make are allowed in
+ * (`[Symbol.dispose]`, a method with a function parameter). It is the path
+ * alone because the performance gate compiles `std/threads.ts` as a root, and
+ * because a file that declares them without being the module gets no scope's
+ * lowering from them: `spawn`'s role is still `isThreadsModule`'s.
+ */
+export const isThreadsSource = (program: CheckedProgram): boolean =>
+  program.source.path === threadsModuleName()
+
 /** Whether `template` is `ThreadScope.spawn` from `nish/threads` (WP29 P2). */
 export const isSpawnTemplate = (template: TemplateInfo): boolean => {
   const owner = template.owner

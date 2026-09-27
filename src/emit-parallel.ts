@@ -258,7 +258,7 @@ export const emitSpawnTask = (
   const fn = emitter.fn
   const slot = fn.emitAlloca("task.payload", payloadType, emitter.opts.optimizeAttributes ? 8 : 0)
   let i = 0
-  while (i < 3) {
+  while (i < types.length && i < values.length) {
     const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${slot}, i32 0, i32 ${i}`)
     fn.emit(`store ${types[i]} ${values[i]}, ${types[i]}* ${at}`)
     i = i + 1
@@ -355,16 +355,23 @@ const taskFinish = (
  */
 export const openScope = (emitter: Emitter, list: Node): void => {
   for (const decl of list.children) {
-    const local = emitter.program.nodeLocals[decl.id]
-    if (local === null) {
-      process.exit(
-        internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json)
-      )
-    }
-    const value = loadLocal(emitter, local)
-    emitter.openScopes.push(emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`))
-    emitter.openScopeLoops.push(emitter.loops.length)
+    openOneScope(emitter, decl)
   }
+}
+
+/**
+ * One declarator of `openScope`'s. What it allocates is the name of a value
+ * every exit of the block reads, so it is kept on purpose, and a function of
+ * its own keeps the declarator loop from owning it.
+ */
+const openOneScope = (emitter: Emitter, decl: Node): void => {
+  const local = emitter.program.nodeLocals[decl.id]
+  if (local === null) {
+    process.exit(internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json))
+  }
+  const value = loadLocal(emitter, local)
+  emitter.openScopes.push(emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`))
+  emitter.openScopeLoops.push(emitter.loops.length)
 }
 
 /**
