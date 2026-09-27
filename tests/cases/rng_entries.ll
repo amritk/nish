@@ -4,9 +4,10 @@
 
 @.str.0 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"value out of range: expected integer<0, 99>\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"value out of range: expected integer<-5, 5>\00" }, align 8
-@.str.2 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 255>\00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<0, 9>\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [62 x i8] } { i64 61, [62 x i8] c"value out of range: expected integer<-2000000000, 2000000000>\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 255>\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<0, 9>\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -76,6 +77,21 @@ cond.end:
   ret i32 %2
 }
 
+define internal noundef i32 @span(i32 noundef %v) #0 {
+entry:
+  %0 = sub i32 %v, -2000000000
+  %1 = icmp ult i32 %0, -294967295
+  br i1 %1, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [62 x i8] }* @.str.2 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  ret i32 %v
+}
+
 define noundef i32 @nish_main() #0 {
 entry:
   %n.addr = alloca i32, align 4
@@ -98,7 +114,7 @@ entry:
   br i1 %2, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.2 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.3 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -111,7 +127,7 @@ rng.ok:
   br i1 %5, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -138,7 +154,7 @@ rng.ok.1:
   br i1 %17, label %rng.ok.2, label %rng.fail.2
 
 rng.fail.2:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -170,7 +186,7 @@ push.store:
   br i1 %32, label %rng.ok.3, label %rng.fail.3
 
 rng.fail.3:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -211,7 +227,7 @@ bounds.ok.1:
   br i1 %50, label %rng.ok.4, label %rng.fail.4
 
 rng.fail.4:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -261,7 +277,7 @@ forof.end:
   br i1 %70, label %rng.ok.5, label %rng.fail.5
 
 rng.fail.5:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -273,7 +289,7 @@ rng.ok.5:
   br i1 %73, label %rng.ok.6, label %rng.fail.6
 
 rng.fail.6:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.3 to i8*), i32 2, i1 true)
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.4 to i8*), i32 2, i1 true)
   call void @nish_exit(i32 1)
   unreachable
 
@@ -283,26 +299,37 @@ rng.ok.6:
   %75 = getelementptr inbounds %struct.Pixel, %struct.Pixel* %74, i32 0, i32 0
   %76 = load i32, i32* %75, align 4
   %77 = call i8* @nish_str_from_i32(i32 %76)
-  %78 = call i8* @nish_str_concat(i8* %77, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %78 = call i8* @nish_str_concat(i8* %77, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %79 = load i32, i32* %total.addr, align 4
   %80 = call i8* @nish_str_from_i32(i32 %79)
   %81 = call i8* @nish_str_concat(i8* %78, i8* %80)
-  %82 = call i8* @nish_str_concat(i8* %81, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %82 = call i8* @nish_str_concat(i8* %81, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %83 = load %struct.Cursor*, %struct.Cursor** %c.addr, align 8
   %84 = getelementptr inbounds %struct.Cursor, %struct.Cursor* %83, i32 0, i32 0
   %85 = load i32, i32* %84, align 4, !tbaa !4
   %86 = call i8* @nish_str_from_i32(i32 %85)
   %87 = call i8* @nish_str_concat(i8* %82, i8* %86)
-  %88 = call i8* @nish_str_concat(i8* %87, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %88 = call i8* @nish_str_concat(i8* %87, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %89 = sub nsw i32 0, 3
   %90 = call i32 @clamp(i1 true, i32 %89)
   %91 = call i8* @nish_str_from_i32(i32 %90)
   %92 = call i8* @nish_str_concat(i8* %88, i8* %91)
-  %93 = call i8* @nish_str_concat(i8* %92, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %93 = call i8* @nish_str_concat(i8* %92, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %94 = load i32, i32* %count.addr, align 4
   %95 = call i8* @nish_str_from_i32(i32 %94)
   %96 = call i8* @nish_str_concat(i8* %93, i8* %95)
   call void @nish_print(i8* %96)
+  %97 = load i32, i32* %n.addr, align 4
+  %98 = mul nsw i32 %97, 666666666
+  %99 = add nsw i32 %98, 2
+  %100 = call i32 @span(i32 %99)
+  %101 = call i8* @nish_str_from_i32(i32 %100)
+  %102 = call i8* @nish_str_concat(i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %103 = sub nsw i32 0, 2000000000
+  %104 = call i32 @span(i32 %103)
+  %105 = call i8* @nish_str_from_i32(i32 %104)
+  %106 = call i8* @nish_str_concat(i8* %102, i8* %105)
+  call void @nish_print(i8* %106)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

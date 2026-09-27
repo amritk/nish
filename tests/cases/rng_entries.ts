@@ -3,6 +3,8 @@
 // assignment to a field, a `return`, and the result of a compound assignment
 // and of `++`, which compute in `i32` and enter the range again before they
 // are stored. The literals in the array are inside the range and cost nothing.
+// `span` enters a range wider than `INT_MAX`, whose width is written as the
+// `i32` constant with the same bits, and both of its ends pass.
 interface Pixel {
   level: integer<0, 255>
 }
@@ -17,6 +19,8 @@ class Cursor {
 }
 
 const clamp = (big: boolean, v: i32): integer<-5, 5> => (big ? v : 0)
+
+const span = (v: i32): integer<-2000000000, 2000000000> => v
 
 export const main = (): number => {
   const n = 3
@@ -35,5 +39,6 @@ export const main = (): number => {
   count++
   count += 2
   console.log(`${p.level} ${total} ${c.pos} ${clamp(true, -3)} ${count}`)
+  console.log(`${span(n * 666666666 + 2)} ${span(-2000000000)}`)
   return 0
 }
