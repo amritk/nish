@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 72 programs, 952175 dump lines live, 72 distinct modules.
+# 72 programs, 952251 dump lines live, 72 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/constants.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/constants.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -18065,46 +18065,48 @@ function emitSpawnTask(emitter: Emitter, task: FunctionSig, types: string[], val
   local 259:9 slot: string (const)
   callee 259:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
   local 260:7 i: i32 (let)
-  local 262:11 at: string (const)
-  callee 262:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 263:5 IRFunction.emit -> @IRFunction.emit
-  local 266:9 raw: string (const)
-  callee 266:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local 267:9 scope: string (const)
-  callee 267:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 267:41 Emitter.llvm -> @Emitter.llvm
-  local 268:9 size: string (const)
-  local 269:9 run: string (const)
-  local 270:9 finish: string (const)
-  callee 271:3 IRFunction.emit -> @IRFunction.emit
-  callee 272:18 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 274:3 IRModule.addFunction -> @IRModule.addFunction
-  callee 274:30 taskRun -> @taskRun
-  callee 275:3 IRModule.addFunction -> @IRModule.addFunction
-  callee 275:30 taskFinish -> @taskFinish
+  local 263:11 type: string (const)
+  local 264:11 value: string (const)
+  local 265:11 at: string (const)
+  callee 265:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 266:5 IRFunction.emit -> @IRFunction.emit
+  local 269:9 raw: string (const)
+  callee 269:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 270:9 scope: string (const)
+  callee 270:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 270:41 Emitter.llvm -> @Emitter.llvm
+  local 271:9 size: string (const)
+  local 272:9 run: string (const)
+  local 273:9 finish: string (const)
+  callee 274:3 IRFunction.emit -> @IRFunction.emit
+  callee 275:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 277:3 IRModule.addFunction -> @IRModule.addFunction
+  callee 277:30 taskRun -> @taskRun
+  callee 278:3 IRModule.addFunction -> @IRModule.addFunction
+  callee 278:30 taskFinish -> @taskFinish
 function taskFunction(emitter: Emitter, name: string): IRFunction -> @taskFunction
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
-  sharedWrite: 282:5
+  sharedWrite: 285:5
   escaping: name
   calls: IRFunction.constructor IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow
   pointer emitter: size=200 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 280:9 attrs: string[] (const)
-  local 284:9 params: IRParam[] (const)
-  callee 285:15 new IRParam -> @IRParam.constructor
-  local 286:9 fn: IRFunction (const)
-  callee 286:14 new IRFunction -> @IRFunction.constructor
-  local 291:11 group: string[] (const)
-  callee 293:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  local 283:9 attrs: string[] (const)
+  local 287:9 params: IRParam[] (const)
+  callee 288:15 new IRParam -> @IRParam.constructor
+  local 289:9 fn: IRFunction (const)
+  callee 289:14 new IRFunction -> @IRFunction.constructor
+  local 294:11 group: string[] (const)
+  callee 296:20 IRModule.attrGroupFor -> @IRModule.attrGroupFor
 function loadPayload(fn: IRFunction, typed: string, payloadType: string, index: i32, type: string): string -> @loadPayload
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer fn: size=112 writesThrough=true captured=false passedTo=IRFunction.emitValue#0 IRFunction.emitValue#0
   stackSites=0 stackLocals=0
-  local 306:9 at: string (const)
-  callee 306:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 309:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 309:9 at: string (const)
+  callee 309:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 312:10 IRFunction.emitValue -> @IRFunction.emitValue
 function taskRun(emitter: Emitter, name: string, body: FunctionSig, payloadType: string, argType: string, result: string): IRFunction -> @taskRun
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
   sharedWrite: via taskFunction
@@ -18113,18 +18115,18 @@ function taskRun(emitter: Emitter, name: string, body: FunctionSig, payloadType:
   pointer emitter: size=200 writesThrough=false captured=false passedTo=taskFunction#0
   pointer body: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 321:9 fn: IRFunction (const)
-  callee 321:14 taskFunction -> @taskFunction
-  local 322:9 typed: string (const)
-  callee 322:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 323:9 arg: string (const)
-  callee 323:15 loadPayload -> @loadPayload
-  local 324:9 r: string (const)
-  callee 324:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local 325:9 at: string (const)
-  callee 325:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 326:3 IRFunction.emit -> @IRFunction.emit
-  callee 327:3 IRFunction.emit -> @IRFunction.emit
+  local 324:9 fn: IRFunction (const)
+  callee 324:14 taskFunction -> @taskFunction
+  local 325:9 typed: string (const)
+  callee 325:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 326:9 arg: string (const)
+  callee 326:15 loadPayload -> @loadPayload
+  local 327:9 r: string (const)
+  callee 327:13 IRFunction.emitValue -> @IRFunction.emitValue
+  local 328:9 at: string (const)
+  callee 328:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 329:3 IRFunction.emit -> @IRFunction.emit
+  callee 330:3 IRFunction.emit -> @IRFunction.emit
 function taskFinish(emitter: Emitter, name: string, store: FunctionSig, payloadType: string, types: string[], result: string): IRFunction -> @taskFinish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
   sharedWrite: via taskFunction
@@ -18134,18 +18136,18 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig, payloadT
   pointer store: size=104 writesThrough=false captured=false
   pointer types: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 340:9 fn: IRFunction (const)
-  callee 340:14 taskFunction -> @taskFunction
-  local 341:9 typed: string (const)
-  callee 341:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 342:9 dst: string (const)
-  callee 342:15 loadPayload -> @loadPayload
-  local 343:9 at: string (const)
-  callee 343:14 loadPayload -> @loadPayload
-  local 344:9 r: string (const)
-  callee 344:13 loadPayload -> @loadPayload
-  callee 345:3 IRFunction.emit -> @IRFunction.emit
-  callee 346:3 IRFunction.emit -> @IRFunction.emit
+  local 343:9 fn: IRFunction (const)
+  callee 343:14 taskFunction -> @taskFunction
+  local 344:9 typed: string (const)
+  callee 344:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 345:9 dst: string (const)
+  callee 345:15 loadPayload -> @loadPayload
+  local 346:9 at: string (const)
+  callee 346:14 loadPayload -> @loadPayload
+  local 347:9 r: string (const)
+  callee 347:13 loadPayload -> @loadPayload
+  callee 348:3 IRFunction.emit -> @IRFunction.emit
+  callee 349:3 IRFunction.emit -> @IRFunction.emit
 function openScope(emitter: Emitter, list: Node): void -> @openScope [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via openOneScope
@@ -18153,41 +18155,41 @@ function openScope(emitter: Emitter, list: Node): void -> @openScope [exported]
   pointer emitter: size=200 writesThrough=false captured=false passedTo=openOneScope#0
   pointer list: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 357:14 decl: Node (const)
-  callee 358:5 openOneScope -> @openOneScope
+  local 360:14 decl: Node (const)
+  callee 361:5 openOneScope -> @openOneScope
 function openOneScope(emitter: Emitter, decl: Node): void -> @openOneScope
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 373:3
+  sharedWrite: 376:3
   calls: Emitter.llvm IRFunction.emitValue internalErrorFor loadLocal nish_array_grow nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=200 writesThrough=false captured=false passedTo=loadLocal#0 Emitter.llvm#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 368:9 local: Local | null (const)
-  callee 370:18 internalErrorFor -> @internalErrorFor
-  local 372:9 value: string (const)
-  callee 372:17 loadLocal -> @loadLocal
-  callee 373:27 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 373:59 Emitter.llvm -> @Emitter.llvm
+  local 371:9 local: Local | null (const)
+  callee 373:18 internalErrorFor -> @internalErrorFor
+  local 375:9 value: string (const)
+  callee 375:17 loadLocal -> @loadLocal
+  callee 376:27 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 376:59 Emitter.llvm -> @Emitter.llvm
 function emitScopeJoins(emitter: Emitter, minLoops: i32): void -> @emitScopeJoins [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emit
   calls: Emitter.useRuntime IRFunction.emit nish_panic_index nish_str_concat
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  local 385:7 i: i32 (let)
-  callee 388:7 IRFunction.emit -> @IRFunction.emit
-  callee 388:36 Emitter.useRuntime -> @Emitter.useRuntime
+  local 388:7 i: i32 (let)
+  callee 391:7 IRFunction.emit -> @IRFunction.emit
+  callee 391:36 Emitter.useRuntime -> @Emitter.useRuntime
 function closeBlockScopes(emitter: Emitter, count: i32): void -> @closeBlockScopes [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 408:5
+  sharedWrite: 411:5
   calls: Emitter.useRuntime IRBlock.terminated IRFunction.currentBlock IRFunction.emit nish_panic_index nish_str_concat
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  callee 400:8 IRBlock.terminated -> @IRBlock.terminated
-  callee 400:8 IRFunction.currentBlock -> @IRFunction.currentBlock
-  local 401:9 i: i32 (let)
-  callee 403:7 IRFunction.emit -> @IRFunction.emit
-  callee 403:36 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 403:8 IRBlock.terminated -> @IRBlock.terminated
+  callee 403:8 IRFunction.currentBlock -> @IRFunction.currentBlock
+  local 404:9 i: i32 (let)
+  callee 406:7 IRFunction.emit -> @IRFunction.emit
+  callee 406:36 Emitter.useRuntime -> @Emitter.useRuntime
 module src/emit-classes.ts
 import Emitter from "./emit" -> struct Emitter
 import emitPackedResult from "./emit-result" -> function @emitPackedResult

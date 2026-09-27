@@ -259,8 +259,11 @@ export const emitSpawnTask = (
   const slot = fn.emitAlloca("task.payload", payloadType, emitter.opts.optimizeAttributes ? 8 : 0)
   let i = 0
   while (i < types.length && i < values.length) {
+    // Read before the call below, which ends the length facts.
+    const type = types[i]
+    const value = values[i]
     const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${slot}, i32 0, i32 ${i}`)
-    fn.emit(`store ${types[i]} ${values[i]}, ${types[i]}* ${at}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
     i = i + 1
   }
   const raw = fn.emitValue(`bitcast ${payloadType}* ${slot} to i8*`)
