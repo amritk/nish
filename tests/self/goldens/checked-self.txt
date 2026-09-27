@@ -8455,7 +8455,7 @@ function threadsModuleName(): string -> @threadsModuleName [exported]
   calls: nish_str_concat stdModuleName
   stackSites=0 stackLocals=0
   callee 104:48 stdModuleName -> @stdModuleName
-function isThreadsModule(program: CheckedProgram): boolean -> @isThreadsModule [exported]
+function isThreadsModule(program: CheckedProgram): boolean -> @isThreadsModule
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq threadsModuleName
   pointer program: size=520 writesThrough=false captured=false

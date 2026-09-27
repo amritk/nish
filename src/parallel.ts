@@ -108,7 +108,7 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
  * part of the test: a root-package file that happens to sit at `std/threads.ts`
  * is an ordinary module, and its templates run as they are written.
  */
-export const isThreadsModule = (program: CheckedProgram): boolean =>
+const isThreadsModule = (program: CheckedProgram): boolean =>
   program.packageName === CLI && program.source.path === threadsModuleName()
 
 /**
