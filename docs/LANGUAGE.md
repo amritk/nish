@@ -298,11 +298,15 @@ whole literal: after a radix prefix (`0x_FF`,
 `tests/cases/reject_separator_after_prefix`), at the end (`10_`,
 `reject_separator_trailing`), either side of the point (`1_.5`, `1._5`:
 `reject_separator_before_dot`, `reject_separator_after_dot`), straight after
-the exponent marker or its sign (`1e_5`, `reject_separator_exponent`) and
-after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
+the exponent marker or its sign (`1e_5`, `1e+_5`, `reject_separator_exponent`),
+before the BigInt suffix (`0xFF_n`, `reject_separator_before_bigint_suffix`)
+and after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
 `` Numeric separators are not allowed here `` (TS6188), and two in a row
-(`1__0`, `reject_separator_doubled`) is
-`` Multiple consecutive numeric separators are not permitted `` (TS6189).
+(`1__0`, `0xF__F`, `reject_separator_doubled`) is
+`` Multiple consecutive numeric separators are not permitted `` (TS6189). The
+parser still reads the literal, so the next token does not cost a second
+error, and a bound of a ranged type is refused the same way
+(`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
 
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it

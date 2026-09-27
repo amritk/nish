@@ -414,6 +414,13 @@ export class Lexer {
    * scanned, or empty when every separator sits between two digits.
    */
   separatorError: string
+  /**
+   * The kind of the literal a separator error stood in for, or `TOK_END` when
+   * there is none: the next token `next()` hands out is that literal, over the
+   * same bytes, so the parser reads a number where the programmer wrote one
+   * and the error is the only one the literal costs.
+   */
+  pendingNumber: i32
 
   /**
    * The pieces of the literal being scanned, for the literals that have an
@@ -435,6 +442,7 @@ export class Lexer {
     this.escapeTooLarge = false
     this.literalTooLarge = false
     this.separatorError = ""
+    this.pendingNumber = TOK_END
     this.literal = new StringBuilder()
     this.skipShebang()
   }
@@ -513,6 +521,12 @@ export class Lexer {
    * counting.
    */
   next(): void {
+    if (this.pendingNumber !== TOK_END) {
+      const kind = this.pendingNumber
+      this.pendingNumber = TOK_END
+      this.emit(kind, this.end, this.source.substring(this.start, this.end))
+      return
+    }
     this.skipTrivia()
     this.start = this.pos
     if (this.pos >= this.source.length) {
@@ -584,19 +598,27 @@ export class Lexer {
         second === CH_O_UPPER)
     ) {
       end = this.scanDigits(end + 2, true)
-      if (this.at(end - 1) === CH_N_LOWER) {
-        this.emitNumber(TOK_BIGINT, end)
-        return
-      }
-      this.emitNumber(TOK_NUMBER, end)
+    } else {
+      end = this.scanDecimal(end)
+    }
+    // `123n` is one BigInt token, as it is in TypeScript; the language has no
+    // `bigint`, and the parser says so about the literal rather than about a
+    // stray `n` after it.
+    if (this.at(end) === CH_N_LOWER) {
+      this.emitNumber(TOK_BIGINT, end + 1)
       return
     }
+    this.emitNumber(TOK_NUMBER, end)
+  }
+
+  /** The end of a decimal literal's digits, point and exponent, starting at `at`. */
+  scanDecimal(at: i32): i32 {
     // `0_1` is refused too: a leading `0` is where a legacy octal literal
     // would start, and TypeScript allows no separator after it.
-    if (this.at(end) === CH_0 && this.at(end + 1) === CH_UNDERSCORE) {
+    if (this.at(at) === CH_0 && this.at(at + 1) === CH_UNDERSCORE) {
       this.separatorError = SEPARATOR_HERE
     }
-    end = this.scanDigits(end, false)
+    let end = this.scanDigits(at, false)
     if (this.at(end) === CH_DOT) {
       end = this.scanDigits(end + 1, false)
     }
@@ -610,14 +632,7 @@ export class Lexer {
         end = this.scanDigits(after, false)
       }
     }
-    // `123n` is one BigInt token, as it is in TypeScript; the language has no
-    // `bigint`, and the parser says so about the literal rather than about a
-    // stray `n` after it.
-    if (this.at(end) === CH_N_LOWER) {
-      this.emitNumber(TOK_BIGINT, end + 1)
-      return
-    }
-    this.emitNumber(TOK_NUMBER, end)
+    return end
   }
 
   /**
@@ -625,8 +640,10 @@ export class Lexer {
    * TypeScript's `scanNumberFragment` reads it: a `_` is allowed straight
    * after a digit and nowhere else, so a run that starts or ends with one, or
    * holds two in a row, records its first misplaced separator in
-   * `separatorError`. After a radix prefix a digit is any identifier byte,
-   * and the checker judges which of them the radix allows.
+   * `separatorError`. After a radix prefix a digit is any identifier byte
+   * but the BigInt suffix `n`, which ends the run so that `0xFF_n` is judged
+   * a trailing separator, and the checker judges which of them the radix
+   * allows.
    */
   scanDigits(at: i32, radix: boolean): i32 {
     let end = at
@@ -640,7 +657,7 @@ export class Lexer {
         }
         afterDigit = false
         afterSeparator = true
-      } else if (radix ? isIdentPart(c) : isDigit(c)) {
+      } else if (radix ? isIdentPart(c) && c !== CH_N_LOWER : isDigit(c)) {
         afterDigit = true
         afterSeparator = false
       } else {
@@ -661,9 +678,13 @@ export class Lexer {
     }
   }
 
-  /** A numeric literal's token ending at `end`, or its separator error in its place. */
+  /**
+   * A numeric literal's token ending at `end`, or its separator error first,
+   * with the literal itself left in `pendingNumber` for the next call.
+   */
   emitNumber(kind: i32, end: i32): void {
     if (this.separatorError.length > 0) {
+      this.pendingNumber = kind
       this.error(this.separatorError, end)
       return
     }
