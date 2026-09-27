@@ -339,6 +339,8 @@ Narrowing follows the same engine as `T | null` below: it applies to a
 **variable**, never a property path; it ends at any assignment to that
 variable; and it is dropped before a loop that assigns it. `if (r.isOk()) A
 else B` narrows in `A`, and after the `if` when `B` cannot fall through.
+The proof stays with `r`: `const y = r`, `c ? r : q` and `[r]` are plain
+`Result`s, so test `y` itself before `y.value`.
 
 `panic(message)` is the other ending: message to stderr, exit 1. It is for an
 invariant that cannot hold, not for a failure a caller should handle. It
@@ -382,8 +384,9 @@ export const main = (): i32 => {
   `Map.get` (see [Map and Set](#map-and-set)).
 - Narrowing applies to a **local or parameter**, never a property path. `if
   (n.next !== null) n.next.v` is rejected — copy into a local first.
-- A narrowing ends at any assignment to the variable, and is dropped before a
-  loop whose body, condition or update assigns it.
+- A narrowing ends at any assignment to the variable, including one in an
+  earlier operand of the same `&&` / `||` chain, and is dropped before a loop
+  whose body, condition or update assigns it.
 - Two nullables cannot be compared with each other; compare each with `null`.
 - `new Array<T | null>(n)` is allowed: the zero fill *is* `null`.
 

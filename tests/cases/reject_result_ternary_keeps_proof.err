@@ -1,0 +1,1 @@
+reject_result_ternary_keeps_proof.ts:13:24: error: Cannot read `value` of `Result<i32, i32>` before the error is handled

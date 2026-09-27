@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 695 programs, 50188 dump lines.
+# 696 programs, 50218 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -36987,6 +36987,37 @@ function openFile(path: string): Result<i32, IoError> -> @openFile [exported]
 function describe(r: Result<i32, i32>): i32 -> @describe [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program tests/cases/res_proof_consumers.ts
+module tests/cases/res_proof_consumers.ts (entry)
+struct Cell (class) size=4 align=4
+  field v: i32 index=0 offset=0 initialized
+function parse(n: i32): Result<i32, i32> -> @parse
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=12
+  escaping: n
+  stackSites=2 stackLocals=0
+function g(b: boolean): boolean -> @g
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: g nish_alloc_struct nish_print nish_str_from_i32 parse
+  stackSites=1 stackLocals=1
+  local 15:9 r: Result<i32, i32> (const)
+  callee 15:13 parse -> @parse
+  local 16:9 q: Result<i32, i32> (const)
+  callee 16:13 parse -> @parse
+  local 17:7 total: i32 (let)
+  local 19:11 z: Result<i32, i32> (const)
+  local 23:11 arr: Result<i32, i32>[] (const)
+  local 24:16 each: Result<i32, i32> (const)
+  local 30:7 s: Result<i32, i32> (let)
+  callee 30:11 parse -> @parse
+  callee 31:20 g -> @g
+  callee 31:27 parse -> @parse
+  local 34:7 p: Cell | null (let)
+  callee 35:21 g -> @g
 program tests/cases/res_propagate.ts
 module tests/cases/res_propagate.ts (entry)
 function half(n: i32): Result<i32, string> -> @half
