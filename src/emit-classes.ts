@@ -19,6 +19,7 @@
 // per family and the language has no function values to register.
 
 import { Emitter } from "./emit"
+import { emitRangedStore } from "./emit-builtins"
 import { emitPackedResult, emitResultReturningCall, privateResultAbi, resultTypeDecl } from "./emit-result"
 import { fieldTbaa } from "./tbaa"
 import {
@@ -333,6 +334,7 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), field.type, old, rhs)
   }
+  emitRangedStore(emitter, expr, value)
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`)
   return value
 }

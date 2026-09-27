@@ -14,6 +14,7 @@
 import { closeHeaderScope, openHeaderScope } from "./emit-arrays"
 import { Emitter, LoopTarget } from "./emit"
 import { emitScopeJoins } from "./emit-parallel"
+import { emitRangedStore } from "./emit-builtins"
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -393,6 +394,7 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
         `${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`
       )
     : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs)
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value
 }
@@ -410,6 +412,7 @@ export const emitIncDec = (emitter: Emitter, expr: Node): string => {
   const one = float ? "0x3FF0000000000000" : "1"
   const old = loadLocal(emitter, local)
   const value = emitter.fn.emitValue(`${opcode} ${emitter.llvm(local.type)} ${old}, ${one}`)
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return expr.flags === FLAG_POSTFIX ? old : value
 }

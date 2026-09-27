@@ -16,6 +16,13 @@ corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives
 cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
 cases/u_div_zero_panic     # u32 / 0 panics too (one compare instead of two); JS gives Infinity >>> 0
 cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
+# By design (WP31 §6): a value leaving `integer<Lo, Hi>` at an entry panics with exit 1;
+# under Node the type is a `number` alias and nothing is checked
+cases/rng_entry_panic      # the last i++ leaves integer<0, 255> (exit 1); JS finishes the loop
+cases/rng_entry_panic_f64  # the same program in f64 mode, which the unmodified runner compares
+cases/rng_entry_range_panic   # -3 of integer<-5, 5> enters integer<0, 9> (exit 1); JS passes it on
+cases/rng_entry_push_panic    # push(12) onto integer<0, 9>[] through a field (exit 1); JS pushes it
+cases/rng_entry_bitwise_panic # 7 <<= 3 leaves integer<0, 15> (exit 1); JS prints 56
 
 # Native-only introspection: these print raw Arena.used() byte counts, which the Node shim reports as 0
 cases/mem_arena_builtins   # prints arena byte usage

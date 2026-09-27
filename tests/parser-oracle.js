@@ -193,6 +193,21 @@ const printTypeScriptTree = (source, sf) => {
         }
         return
       case ts.SyntaxKind.LiteralType:
+        // WP31 §4: a numeric literal type, the bound of `integer<Lo, Hi>`. The
+        // `typescript` parser reads `-5` as a prefix minus over the literal,
+        // and stage1 as one node whose text keeps the sign.
+        if (node.literal.kind === ts.SyntaxKind.NumericLiteral) {
+          emit(depth, "TYPE_LITERAL", s, e, node.literal.getText(sf))
+          return
+        }
+        if (
+          ts.isPrefixUnaryExpression(node.literal) &&
+          node.literal.operator === ts.SyntaxKind.MinusToken &&
+          ts.isNumericLiteral(node.literal.operand)
+        ) {
+          emit(depth, "TYPE_LITERAL", s, e, `-${node.literal.operand.getText(sf)}`)
+          return
+        }
         if (node.literal.kind !== ts.SyntaxKind.NullKeyword) {
           unsupported(node)
         }

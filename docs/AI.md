@@ -198,15 +198,37 @@ const good = (a: i32, b: i64): i64 => {
 };
 ```
 
-**`integer` is reserved, not a type.** It is held for ranged integers
-(`integer<Lo, Hi>`), which the compiler does not build yet, so writing it as a
-type is refused. Declaring a type alias, enum, class, interface or function
-named `integer` is refused too. Use `i32`. A value named `integer` (a local
-or a module constant) is fine.
+**`integer<Lo, Hi>` is an `i32` that stays in `[Lo, Hi]`.** The bounds are two
+integer literals (a sign allowed) inside `i32`, and it is an `i32` everywhere
+the machine can see. Putting a value *into* one is checked: an `i32` or
+another range is compared once and the program panics (exit 1) outside the
+range, a literal outside it is a compile error, and a literal inside it or a
+narrower range costs nothing. Taking one *out* is free: every operator reads
+it as `i32`, a `const` keeps the range and a `let` widens to `i32`. A `u8` is
+not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
+not mention a range. Put the range on the value you use, not on a loop
+counter, which has to leave the range to end the loop.
 
-```ts nish:err NL2333
-const clamp = (x: integer): i32 => x;
+```ts nish:ok
+const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
+
+const sumAll = (buf: u8[]): i32 => {
+  let sum = 0;
+  for (let i = 0; i < 256 && i < buf.length; i++) {
+    const b: integer<0, 255> = i;
+    sum = sum + toI32(getByte(buf, b));
+  }
+  return sum;
+};
 ```
+
+```ts nish:err-body NL2384
+const digit: integer<0, 9> = 12;
+```
+
+Declaring a type alias, enum, class, interface or function named `integer` is
+refused, because the name is the type. A value named `integer` (a local or a
+module constant) is fine.
 
 ```ts nish:err NL2332
 class integer {
@@ -763,7 +785,7 @@ export const main = (): i32 => {
 - **Any argument will do** — an array, an object — because nothing writes
   memory while the tasks run. There is no thread count: one task, one thread.
 
-```ts nish:err NL2379
+```ts nish:err NL2388
 import { scope } from "nish/threads";
 
 const one = (n: i32): i32 => n + 1;

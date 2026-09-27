@@ -45,6 +45,7 @@ import {
   emitBuiltinCall,
   emitIdentifierBuiltinCall,
   emitNamespaceProperty,
+  emitRangeEntry,
   isIdentifierBuiltinCall,
 } from "./emit-builtins"
 import {
@@ -1089,9 +1090,13 @@ export class Emitter {
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
+    // A value entering a range (WP31 §6) is the same `i32`, checked here.
     const from = this.program.nodeCoercions[expr.id]
+    const to = this.program.nodeTypes[expr.id]
     let result = value
-    if (from >= 0) {
+    if (from >= 0 && this.table.isRanged(to)) {
+      emitRangeEntry(this, value, from, to)
+    } else if (from >= 0) {
       result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`)
     }
     this.fn.setLocation(saved)
@@ -1349,7 +1354,9 @@ export class Emitter {
     if (type < 0) {
       process.exit(internalErrorFor(`emitter: no type recorded for ${nodeName(expr.kind)}`, this.opts.json))
     }
-    return type
+    // WP31 §7: every lowering reads a ranged value as its base, `i32`. The
+    // range itself is read from the table where a value enters one.
+    return this.table.baseOf(type)
   }
 
   llvm(type: i32): string {

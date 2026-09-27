@@ -82,6 +82,10 @@ no prelude can reach it. They are language decisions
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.
+- **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
+  in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
+  an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)
+  §6). Only a program that leaves a range can tell the difference.
 - **`orReturn()` does not propagate.** It throws a marker that the rewriter's
   `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
   it escapes as an uncaught exception. Every other part of `Result` works —

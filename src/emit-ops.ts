@@ -21,6 +21,7 @@
 import { internalErrorFor } from "./ice"
 import { parseIntegerLiteral } from "./constants"
 import { Emitter } from "./emit"
+import { emitRangedStore } from "./emit-builtins"
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit-control"
 import { emitElementAssignment } from "./emit-arrays"
 import { emitFieldAssignment } from "./emit-classes"
@@ -476,9 +477,12 @@ export const emitBitwiseCombine = (
   old: string,
   right: Node
 ): string => {
-  const opcode = shiftOpcodeFor(bitwiseOpcode(op), type)
-  const rhs = emitRightOperand(emitter, opcode, type, right)
-  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${old}, ${rhs}`)
+  // A ranged target is its base here (WP31 §7): the shift-count mask reads
+  // the width, and a range has no width of its own.
+  const operand = emitter.table.baseOf(type)
+  const opcode = shiftOpcodeFor(bitwiseOpcode(op), operand)
+  const rhs = emitRightOperand(emitter, opcode, operand, right)
+  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(operand)} ${old}, ${rhs}`)
 }
 
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */
@@ -486,6 +490,7 @@ const emitBitwiseAssignment = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0])
   const old = loadLocal(emitter, local)
   const value = emitBitwiseCombine(emitter, expr.text, local.type, old, expr.children[1])
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value
 }

@@ -139,10 +139,12 @@ const bitsOf = (type: i32): i32 => {
 }
 
 /**
- * `bitsOf` for a type id that may be an enum (WP23): an enum is an `i32`, and
- * `intBits` is deliberately 0 for it so that arithmetic stays refused.
+ * `bitsOf` for a type id that may be an enum (WP23) or a range (WP31): both are
+ * an `i32`, and `bitsOf` knows neither, because each is a kind of the table
+ * rather than a scalar id.
  */
-const bitsOfIn = (table: TypeTable, type: i32): i32 => (table.isEnum(type) ? 32 : bitsOf(type))
+const bitsOfIn = (table: TypeTable, type: i32): i32 =>
+  table.isEnum(type) || table.isRanged(type) ? 32 : bitsOf(type)
 
 /**
  * A metadata string literal: backslash and double quote escaped, as stage0's `src/`
@@ -293,6 +295,15 @@ export class DebugInfo {
       } else {
         ref = this.enumeration(declared)
       }
+    } else if (this.table.isRanged(type)) {
+      // WP31 §9: a typedef of `int` named with the display spelling. DWARF's
+      // own answer is `DW_TAG_subrange_type` with both bounds, which LLVM 18
+      // cannot write, so a debugger sees `integer<0, 255>` and an `int`'s
+      // encoding; the bounds are in the name.
+      const base = this.typeRef(T_I32)
+      ref = this.module.addMetadata(
+        `!DIDerivedType(tag: DW_TAG_typedef, name: ${quote(this.table.typeName(type))}, file: ${this.file}, baseType: ${base})`
+      )
     } else if (this.table.isResult(type)) {
       // A `Result` has no `StructInfo` — its layout is derived from the type —
       // but `resultLayout` knows everything a `DW_TAG_structure_type` needs, so

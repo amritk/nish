@@ -41,6 +41,7 @@ import {
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
   isSpawnCall,
+  panicTailCallees,
 } from "./emit-builtins"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
 import {
@@ -62,6 +63,7 @@ import {
   isPushCall,
   isStringMethodCall,
   isTemplateExpression,
+  rangedStoreOf,
   receiverIsValue,
   methodReceiver,
   storesInlineElements,
@@ -1258,6 +1260,7 @@ class FactCollector {
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
     this.collectDivisionFacts(node)
+    this.collectRangeFacts(node)
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
     for (const child of node.children) {
@@ -1427,8 +1430,9 @@ class FactCollector {
           this.facts.effect = EFFECT_WRITE
           this.facts.callees.add("nish_alloc_struct")
         } else if (method === "expect") {
-          this.facts.callees.add("nish_write")
-          this.facts.callees.add("nish_exit")
+          const tail: string[] = []
+          panicTailCallees(tail)
+          this.addCallees(tail)
         }
         return
       }
@@ -1548,9 +1552,29 @@ class FactCollector {
     if (op !== "/" && op !== "%" && op !== "/=" && op !== "%=") {
       return
     }
+    // A ranged target of `/=` keeps its range on its node (WP31); the
+    // division is its base's, `i32`.
     const left = this.unit.program.nodeTypes[node.children[0].id]
-    if (left >= 0 && isInteger(left)) {
+    if (left >= 0 && isInteger(this.table.baseOf(left))) {
       this.facts.callees.add("nish_panic_div")
+    }
+  }
+
+  /**
+   * A value entering a range may take the panic tail (WP31 §6): an entry the
+   * checker recorded that `entryIsFree` does not excuse, and the store of a
+   * compound assignment or an increment into a ranged place. Mirrors
+   * `emitRangeEntry` and `emitRangedStore`.
+   */
+  collectRangeFacts(node: Node): void {
+    const program = this.unit.program
+    const from = program.nodeCoercions[node.id]
+    const to = program.nodeTypes[node.id]
+    const entered = from >= 0 && this.table.isRanged(to) && !this.table.entryIsFree(from, to)
+    if (entered || rangedStoreOf(program, this.table, node) >= 0) {
+      const tail: string[] = []
+      panicTailCallees(tail)
+      this.addCallees(tail)
     }
   }
 

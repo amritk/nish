@@ -1,4 +1,4 @@
-// NL2381: A `using` declaration is a statement of a block: its scope joins when that
+// NL2390: A `using` declaration is a statement of a block: its scope joins when that
 // block ends, and the body of this `if` is one statement, not a block.
 import { scope } from "nish/threads";
 

@@ -1,4 +1,4 @@
-// NL2383: A task cannot be handed a `Result`, which is passed as its parts rather than
+// NL2392: A task cannot be handed a `Result`, which is passed as its parts rather than
 // as one value: hand it the value the `Result` holds.
 import { scope } from "nish/threads";
 

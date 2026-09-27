@@ -93,6 +93,7 @@ import {
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
+  N_TYPE_LITERAL,
   N_TYPE_NULL,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
@@ -1361,6 +1362,20 @@ export class Parser {
     if (this.at(TOK_NULL)) {
       this.advance()
       return this.node(N_TYPE_NULL, start, this.previousEnd)
+    }
+    // WP31 §4: a numeric literal type, `255` or `-128`. It is read wherever a
+    // type is, because a number cannot start a type otherwise, and the checker
+    // refuses it everywhere but as a bound of `integer<Lo, Hi>`.
+    if (this.at(TOK_NUMBER) || (this.at(TOK_MINUS) && this.peek() === TOK_NUMBER)) {
+      const negative = this.at(TOK_MINUS)
+      if (negative) {
+        this.advance()
+      }
+      const literal = this.node(N_TYPE_LITERAL, start, this.end)
+      literal.text = negative ? `-${this.value}` : this.value
+      this.advance()
+      literal.end = this.previousEnd
+      return literal
     }
     if (!this.at(TOK_IDENT)) {
       return this.fail(`expected a type name, found \`${tokenName(this.kind)}\``)

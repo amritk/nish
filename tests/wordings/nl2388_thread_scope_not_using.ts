@@ -1,4 +1,4 @@
-// NL2379: A scope must be introduced by `using`: bound by `const`, nothing would join
+// NL2388: A scope must be introduced by `using`: bound by `const`, nothing would join
 // its tasks when the block ends.
 import { scope } from "nish/threads";
 

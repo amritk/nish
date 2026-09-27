@@ -110,9 +110,14 @@ export const N_TYPE_FUNCTION: i32 = 61
 // parameters (always empty). Legal only as the argument for a function-typed
 // parameter; it is never a value.
 export const N_ARROW: i32 = 62
+// A numeric literal written as a type, `255` or `-128` (WP31,
+// docs/wp31-ranged-integers.md §4): text: the literal as written, with the
+// sign when there is one. Parsed wherever a type is parsed, and legal only as
+// a bound of `integer<Lo, Hi>`, which the checker says everywhere else.
+export const N_TYPE_LITERAL: i32 = 63
 
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 63
+export const N_COUNT: i32 = 64
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -322,6 +327,8 @@ export const nodeName = (kind: i32): string => {
       return "TYPE_FUNCTION"
     case N_ARROW:
       return "ARROW"
+    case N_TYPE_LITERAL:
+      return "TYPE_LITERAL"
     default:
       return "?"
   }

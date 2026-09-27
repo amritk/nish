@@ -1,4 +1,4 @@
-// NL2380: A scope is only ever the receiver of a `spawn` statement: handed to another
+// NL2389: A scope is only ever the receiver of a `spawn` statement: handed to another
 // function it could be stored, and given a task after its block joined it.
 import { scope, ThreadScope } from "nish/threads";
 

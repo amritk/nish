@@ -1,4 +1,4 @@
-// NL2378: `using` takes only a `scope()` from `nish/threads`: a scope is the one value
+// NL2387: `using` takes only a `scope()` from `nish/threads`: a scope is the one value
 // whose disposal the language defines, and a `Box` has none.
 class Box {
   n: i32 = 0;
