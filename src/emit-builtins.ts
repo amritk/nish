@@ -20,9 +20,12 @@
 import { isBuiltinFunction } from "./builtins"
 import { Emitter } from "./emit"
 import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit-strings"
+import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
+import { paramValue } from "./ir"
 import { N_IDENT, Node } from "./nodes"
-import { CheckedProgram } from "./program"
+import { Options } from "./options"
+import { CheckedProgram, FunctionSig } from "./program"
 import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
@@ -318,6 +321,57 @@ export const emitRangeEntry = (emitter: Emitter, value: string, from: i32, to: i
   fn.placeBlock(failBlock)
   emitPanicTail(emitter, emitter.stringConstant(`value out of range: expected ${table.typeName(to)}`))
   fn.placeBlock(okBlock)
+}
+
+/**
+ * Whether `sig` checks its ranged parameters itself, on entry (WP31 §9). A
+ * function outside the linkage condition (`privateAbi`) can be called by a C,
+ * N-API or wasm host with any `int32_t`, and nothing on that side knows the
+ * range, so the callee is the one place every call passes through. Its callers
+ * in this program then leave the check to it rather than making it twice; a
+ * function inside the condition has every caller in view, and each of them
+ * checks where the facts that can prove the entry are.
+ */
+export const checksRangesInPrologue = (table: TypeTable, opts: Options, sig: FunctionSig): boolean =>
+  !privateAbi(opts, sig.visibleOutside()) && takesRange(table, sig)
+
+/** Whether some parameter of `sig` is a ranged integer. */
+export const takesRange = (table: TypeTable, sig: FunctionSig): boolean => {
+  for (const type of sig.paramTypes) {
+    if (table.isRanged(type)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether a call to `callee` checks argument `index` at the call site: always,
+ * unless `callee` checks that parameter in its own prologue. Every call site
+ * asks this, so a caller never skips a check the callee does not make.
+ */
+export const checksArgumentRange = (emitter: Emitter, callee: FunctionSig, index: i32): boolean =>
+  !emitter.table.isRanged(callee.paramTypes[index]) ||
+  !checksRangesInPrologue(emitter.table, emitter.opts, callee)
+
+/**
+ * The prologue `checksRangesInPrologue` asks for: each ranged parameter
+ * entering its range from an `i32`, in parameter order, before anything else
+ * the function does. It is the entry check of any other position, so the
+ * failure is the same panic a caller's check would have given.
+ */
+export const emitParamRangeChecks = (emitter: Emitter, sig: FunctionSig): void => {
+  if (privateAbi(emitter.opts, sig.visibleOutside())) {
+    return
+  }
+  let i = 0
+  while (i < sig.paramNames.length) {
+    const type = sig.paramTypes[i]
+    if (emitter.table.isRanged(type)) {
+      emitRangeEntry(emitter, paramValue(sig.paramNames[i]), T_I32, type)
+    }
+    i = i + 1
+  }
 }
 
 /** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */

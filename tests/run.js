@@ -6666,6 +6666,282 @@ if (!only || "interop".includes(only)) {
   }
 }
 
+// ---- WP31 §9: ranged parameters at the host boundary --------------------------------
+// An exported function with a ranged parameter checks it on entry, since a host may
+// pass any `int32_t`. C has nothing to catch, so the check is the panic (the golden
+// `interop_rng_host` and its `.c` host); the header says so and compiles under
+// `-pedantic`. JavaScript does, so the N-API shim and the wasm loader read the value as
+// the number it is and throw a RangeError before the call: ToInt32 would wrap
+// 4294967301 to 5, which is in range. A range inside data a host writes (an array, a
+// record's field) is not described by any sidecar.
+if (!only || "interop_rng".includes(only) || only.startsWith("interop_rng")) {
+  const rngDir = path.join(buildDir, "interop_rng")
+  fs.mkdirSync(rngDir, { recursive: true })
+  const runtimeDir = path.join(root, "runtime")
+  const rngFile = (ext) => path.join(rngDir, `interop_rng_host.${ext}`)
+  // Relative to the root, as a host's build would name it: the comments quote it.
+  const rngSource = "tests/cases/interop_rng_host.ts"
+  const emitted = spawnSync(
+    NISH,
+    [
+      rngSource,
+      "-o",
+      rngFile("ll"),
+      "--emit-header",
+      rngFile("h"),
+      "--emit-dts",
+      rngFile("d.ts"),
+      "--emit-napi",
+      rngFile("napi.c"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check("interop_rng: every sidecar is written", emitted.status === 0, emitted.stderr)
+  const rngText = (ext) =>
+    emitted.status === 0 && fs.existsSync(rngFile(ext)) ? fs.readFileSync(rngFile(ext), "utf8") : ""
+  // An argument its callee checks in the prologue is not checked at the call, so a
+  // loop is warned (NL9013) about the private callee's argument alone.
+  const loopJson = spawnSync(
+    NISH,
+    ["tests/cases/interop_rng_loop.ts", "-o", path.join(rngDir, "interop_rng_loop.ll"), "--json"],
+    { cwd: root, encoding: "utf8" }
+  )
+  const loopWarnings = loopJson.stdout.split("\n").filter((l) => l.includes('"code":"NL9013"'))
+  check(
+    "interop_rng_loop: an argument the exported callee checks itself is not reported, the private callee's is",
+    loopJson.status === 0 && loopWarnings.length === 1 && loopWarnings[0].includes('"line":14,"column":44'),
+    loopJson.stdout + loopJson.stderr
+  )
+  const header = rngText("h")
+  check(
+    "interop_rng.h declares a ranged parameter `int32_t`, with its range and what leaving it does above the prototype",
+    header.includes(
+      "/* pick(base: number, day: integer<1, 7>): number -- day: panics outside [1, 7] */\nint32_t pick(int32_t base, int32_t day);"
+    ) &&
+      header.includes("int32_t low(int32_t x);") &&
+      header.includes("-- buf: uint8_t elements, i: panics outside [0, 255] */") &&
+      header.includes("/* lastDigit(n: number): integer<0, 9> */\nint32_t lastDigit(int32_t n);") &&
+      header.includes("  int32_t day; /* day: integer<1, 7> */"),
+    header
+  )
+  check(
+    "interop_rng.h leaves a range inside an array or a record undeclared, with the existing line",
+    header.includes(
+      "/* count(xs: integer<0, 9>[]): number: not declared; no C spelling for one of its types. */"
+    ) &&
+      header.includes("/* slotDay(s: Slot): number: not declared; no C spelling for one of its types. */") &&
+      !header.includes("int32_t count(") &&
+      !header.includes("int32_t slotDay("),
+    header
+  )
+  if (!has("clang")) {
+    skip("clang not found: interop_rng header and host builds skipped")
+  } else if (emitted.status === 0) {
+    const strict = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", `-I${runtimeDir}`, `-I${rngDir}`]
+    const syn = spawnSync("clang", [...strict, "-fsyntax-only", "-x", "c", rngFile("h")])
+    check(
+      "interop_rng.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    )
+    // The header's own prototypes, called in range: what a C host that keeps to them sees.
+    const driver = path.join(rngDir, "interop_rng_driver.c")
+    fs.writeFileSync(
+      driver,
+      [
+        "#include <stdio.h>",
+        '#include "interop_rng_host.h"',
+        "int main(void) {",
+        "  uint8_t bytes[3] = {7, 8, 9};",
+        "  nish_array buf = {3, 3, (char *)bytes};",
+        '  printf("%d %d %d\\n", getByte(&buf, 2), pick(4, 7), low(-1));',
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    )
+    const exe = path.join(rngDir, "interop_rng_driver")
+    // The driver is what `-pedantic` holds to the header; the link reuses the
+    // runtime objects every other case links against (`linkNative`).
+    const driverObject = path.join(rngDir, "interop_rng_driver.o")
+    const dc = spawnSync("clang", [...strict, "-O2", "-c", driver, "-o", driverObject])
+    const cc = dc.status === 0 ? linkNative(exe, rngFile("ll"), { driver: driverObject }) : dc
+    const run = cc.status === 0 ? spawnSync(exe) : null
+    check(
+      "a -pedantic C driver calls the ranged functions through interop_rng.h",
+      run !== null && run.status === 0 && String(run.stdout).trim() === "9 47 127",
+      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+    )
+  }
+
+  const dts = rngText("d.ts")
+  check(
+    "interop_rng.d.ts declares a ranged parameter `number` and names the range the loader checks",
+    dts.includes(
+      "  /** tests/cases/interop_rng_host.ts: pick(base: number, day: integer<1, 7>): number. Throws a RangeError unless day is an integer in [1, 7]. */\n  pick(base: number, day: number): number;"
+    ) &&
+      dts.includes("  lastDigit(n: number): number;") &&
+      dts.includes("  // count(xs: integer<0, 9>[]): number  -- not exported to JS") &&
+      dts.includes("  // slotDay(s: Slot): number  -- not exported to JS"),
+    dts
+  )
+  let tscPath = path.join(root, "node_modules", "typescript", "bin", "tsc")
+  try {
+    tscPath = require.resolve("typescript/bin/tsc")
+  } catch {
+    // Not resolvable from here: keep the node_modules path above.
+  }
+  if (dts.length > 0) {
+    const r = spawnSync("node", [tscPath, "--noEmit", "--strict", rngFile("d.ts")], { cwd: root })
+    check(
+      "interop_rng.d.ts passes tsc --noEmit --strict",
+      r.status === 0,
+      String(r.stdout) + String(r.stderr)
+    )
+  }
+
+  // One script for both bridges: each call's answer, or the class and message it threw.
+  const calls = [
+    "const bytes = new Uint8Array([7, 8, 9]);",
+    "const tryCall = (f) => { try { return String(f()); } catch (e) { return e.constructor.name + ': ' + e.message; } };",
+    "const lines = [",
+    "  tryCall(() => api.pick(5, 3)),",
+    "  tryCall(() => api.pick(5, 4294967301)),",
+    "  tryCall(() => api.pick(5, 2.5)),",
+    "  tryCall(() => api.pick(5, Number.NaN)),",
+    "  tryCall(() => api.pick(5, '3')),",
+    "  tryCall(() => api.low(-128)),",
+    "  tryCall(() => api.low(-129)),",
+    "  tryCall(() => api.getByte(bytes, 2)),",
+    "  tryCall(() => api.getByte(bytes, 4294967301)),",
+    "  tryCall(() => api.lastDigit(-7)),",
+    "  String(api.count === undefined && api.slotDay === undefined),",
+    "];",
+  ]
+  const expected = [
+    "53",
+    "RangeError: pick: argument 2 (day) must be an integer in [1, 7]",
+    "RangeError: pick: argument 2 (day) must be an integer in [1, 7]",
+    "RangeError: pick: argument 2 (day) must be an integer in [1, 7]",
+    "TypeError: pick: argument 2 (day) must be a number",
+    "0",
+    "RangeError: low: argument 1 (x) must be an integer in [-128, 127]",
+    "9",
+    "RangeError: getByte: argument 2 (i) must be an integer in [0, 255]",
+    "3",
+    "true",
+  ]
+
+  const napi = rngText("napi.c")
+  check(
+    "interop_rng.napi.c reads a ranged argument as a double and throws a RangeError outside the range",
+    napi.includes("napi_get_value_double(env, argv[1], &day_raw)") &&
+      napi.includes("if (!(day_raw >= 1 && day_raw <= 7 && day_raw == (double)(int32_t)day_raw))") &&
+      napi.includes(
+        'return nish_napi_range_fail(env, "pick: argument 2 (day) must be an integer in [1, 7]");'
+      ) &&
+      napi.includes(
+        'return nish_napi_range_fail_at(env, mark, "labelLength: argument 2 (day) must be an integer in [1, 7]");'
+      ) &&
+      napi.includes("napi_throw_range_error(env, NULL, message);") &&
+      napi.includes("/* tests/cases/interop_rng_host.ts: count(xs: integer<0, 9>[]): number -- not bridged"),
+    napi
+  )
+  const nodeInclude =
+    process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node")
+  if (!fs.existsSync(path.join(nodeInclude, "node_api.h"))) {
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): interop_rng addon build skipped`)
+  } else if (emitted.status === 0 && has("clang")) {
+    const strictNapi = ["-std=c11", "-Wall", "-Wextra", "-Werror", `-I${runtimeDir}`, `-I${nodeInclude}`]
+    const syn = spawnSync("clang", [...strictNapi, "-fsyntax-only", rngFile("napi.c")])
+    check(
+      "interop_rng.napi.c compiles under -std=c11 -Wall -Wextra -Werror",
+      syn.status === 0,
+      String(syn.stderr)
+    )
+    // The promise-returning twins reject with the same RangeError, and their helper
+    // is written only when one of them calls it, which -Werror holds it to.
+    const asyncShim = path.join(rngDir, "interop_rng_async.napi.c")
+    const asyncEmit = spawnSync(
+      NISH,
+      [rngSource, "-o", `${rngDir}${path.sep}async${path.sep}`, "--threads", "--emit-napi-async", asyncShim],
+      { cwd: root, encoding: "utf8" }
+    )
+    const asyncText = asyncEmit.status === 0 ? fs.readFileSync(asyncShim, "utf8") : ""
+    const asyncSyn =
+      asyncEmit.status === 0
+        ? spawnSync("clang", [...strictNapi, "-DNISH_THREADS", "-fsyntax-only", asyncShim])
+        : null
+    check(
+      "interop_rng: --emit-napi-async rejects an out-of-range argument with a RangeError, and compiles under -Werror",
+      asyncSyn !== null &&
+        asyncSyn.status === 0 &&
+        asyncText.includes(
+          'return nish_napi_range_reject(env, nish_deferred, nish_promise, "pickAsync: argument 2 (day) must be an integer in [1, 7]");'
+        ) &&
+        asyncText.includes("napi_create_range_error(env, NULL, text, &error) == napi_ok"),
+      asyncEmit.stderr + (asyncSyn ? String(asyncSyn.stderr) : "") + asyncText
+    )
+    const addon = path.join(rngDir, "interop_rng_host.node")
+    const b = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        rngFile("ll"),
+        "runtime/runtime.c",
+        rngFile("napi.c"),
+        "-o",
+        addon,
+        "--profile",
+        "napi",
+      ],
+      { cwd: root }
+    )
+    check("interop_rng: the napi profile builds the addon", b.status === 0, String(b.stderr))
+    const script = [
+      `const api = require(${JSON.stringify(addon)});`,
+      ...calls,
+      "lines.push(tryCall(() => api.labelLength('mon', 0)));",
+      "lines.push(tryCall(() => api.labelLength('mon', 7)));",
+      "console.log(lines.join('\\n'));",
+    ].join("\n")
+    const r = b.status === 0 ? spawnSync("node", ["-e", script], { cwd: root }) : null
+    check(
+      "napi: an out-of-range argument throws a RangeError before the call, 4294967301 included",
+      r !== null &&
+        r.status === 0 &&
+        String(r.stdout).trim() ===
+          [...expected, "RangeError: labelLength: argument 2 (day) must be an integer in [1, 7]", "10"].join(
+            "\n"
+          ),
+      String(b.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    )
+  }
+
+  if (emitted.status === 0 && has("wasm-ld")) {
+    const wasm = rngFile("wasm")
+    const w = spawnSync(
+      "bash",
+      ["scripts/build.sh", rngFile("ll"), "runtime/runtime-wasm.c", "-o", wasm, "--profile", "wasm"],
+      { cwd: root }
+    )
+    const script = [
+      'import { readFileSync } from "node:fs";',
+      `const api = await (await import(${JSON.stringify(rngFile("mjs"))})).load(readFileSync(${JSON.stringify(wasm)}));`,
+      ...calls,
+      "console.log(lines.join('\\n'));",
+    ].join("\n")
+    const r = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null
+    check(
+      "wasm: the loader throws the same RangeError before the call, 4294967301 included",
+      r !== null && r.status === 0 && String(r.stdout).trim() === expected.join("\n"),
+      String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    )
+  } else if (emitted.status === 0) {
+    skip("wasm-ld not found: interop_rng wasm loader check skipped")
+  }
+}
+
 // ---- WP14: self-hosting ---------------------------------------------------------------
 // `src/` is the compiler written in Nish (docs/wp14-selfhost.md), and the
 // compiler every other section of this file runs. It is checked here rather than

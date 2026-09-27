@@ -848,6 +848,44 @@ unpacks a result. A `Result` held by pointer still does not cross either JS
 boundary, for the reason a string does not: it is arena memory the next call
 may recycle.
 
+A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
+`i32` it is, and is checked where every call passes through
+([wp31-ranged-integers.md](wp31-ranged-integers.md) §9):
+
+- **Where the check lives is the linkage condition.** A function that
+  `--strict-exports` makes `internal` has every caller in view, so each call
+  site checks its argument, where the facts that can prove it free are. Any
+  other function (exported, or every function under `--no-strict-exports`)
+  can be called by a host with any `int32_t`, so it checks its ranged
+  parameters in its own prologue, before anything else it does, and its
+  callers in the program pass theirs unchecked (`tests/cases/interop_rng_param`),
+  so a loop that passes one is given no performance warning for it: no guard
+  at the call would remove the callee's check (`interop_rng_loop`).
+  Leaving the range there is the same panic as at any other entry, which is
+  what a C host sees (`interop_rng_host`, driven by `interop_rng_host.c`).
+- **The bridges throw first.** The N-API shim reads a ranged argument with
+  `napi_get_value_double`, and the wasm loader judges the number it was
+  given, so a value that is not an integer in `[Lo, Hi]` throws
+  ``RangeError: pick: argument 2 (day) must be an integer in [1, 7]`` before the
+  call, rather than ending the process. The value is read as a double because
+  ToInt32 would wrap `4294967301` to `5`, which is in range; `RangeError` is
+  what JavaScript throws for `new Uint8Array(-1)`. `--emit-napi-async`
+  rejects with the same error.
+- **The sidecars say the range.** `--emit-header` spells the parameter
+  `int32_t` and gives the source signature above the prototype, with
+  `day: panics outside [1, 7]`; `--emit-dts` spells it `number` and adds
+  `Throws a RangeError unless day is an integer in [1, 7].` A ranged result
+  and a ranged field are `int32_t` / `number` with the range in the comment,
+  since a value the program produced is already inside it.
+- **A range inside data is not described.** An `integer<0, 9>[]` parameter, a
+  record with a ranged field, or a `Result` over a range is memory a host
+  writes and nothing checks on entry, so the header gives the function its
+  existing line, `not declared; no C spelling for one of its types`, and the
+  `.d.ts`, the loader and the N-API shim leave it out with their own
+  (`tests/run.js`, the `interop_rng` block, which builds every sidecar of
+  `interop_rng_host.ts`, compiles the header under `-pedantic` and calls the
+  addon and the wasm build from Node).
+
 ## Declarations
 
 ### Program structure

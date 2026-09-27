@@ -20,7 +20,7 @@
 
 import { Emitter } from "./emit"
 import { emitRangedStore } from "./emit-builtins"
-import { emitPackedResult, emitResultReturningCall, privateResultAbi, resultTypeDecl } from "./emit-result"
+import { emitPackedResult, emitResultReturningCall, privateAbi, resultTypeDecl } from "./emit-result"
 import { fieldTbaa } from "./tbaa"
 import {
   emitArrayLength,
@@ -249,7 +249,7 @@ const emitCall = (
   args: Node[],
   site: Node
 ): string => {
-  const calleePrivate = privateResultAbi(emitter, callee.exported)
+  const calleePrivate = privateAbi(emitter.opts, callee.exported)
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`]
   let i = 0
   while (i < args.length) {
@@ -263,7 +263,7 @@ const emitCall = (
     const want = callee.paramTypes[i + 1]
     const value = emitter.table.resultByValue(want)
       ? emitPackedResult(emitter, args[i], want, calleePrivate)
-      : emitter.emitExpression(args[i])
+      : emitter.emitArgument(args[i], callee, i + 1)
     operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`)
     i = i + 1
   }

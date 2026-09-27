@@ -59,7 +59,7 @@ import {
   MAP_RESERVE,
   StructInfo,
 } from "./program"
-import { packResultObject, privateResultAbi, unpackReturnedResult } from "./emit-result"
+import { packResultObject, privateAbi, unpackReturnedResult } from "./emit-result"
 import { isMapOwner } from "./generics"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isUndefined } from "./validator"
@@ -432,24 +432,22 @@ const loadMaybeValue = (emitter: Emitter, parts: MaybeParts): string => {
  * every other construct reads, as any other call's is (#233).
  */
 const callValueAt = (emitter: Emitter, read: FunctionSig, operands: string): string => {
-  const privateAbi = privateResultAbi(emitter, read.visibleOutside())
+  const isPrivate = privateAbi(emitter.opts, read.visibleOutside())
   const value = emitter.fn.emitValue(
-    `call ${emitter.llvmAbi(read.returnType, privateAbi)} @${read.name}(${operands})`
+    `call ${emitter.llvmAbi(read.returnType, isPrivate)} @${read.name}(${operands})`
   )
   if (!emitter.table.resultByValue(read.returnType)) {
     return value
   }
-  return unpackReturnedResult(emitter, read.returnType, value, false, privateAbi)
+  return unpackReturnedResult(emitter, read.returnType, value, false, isPrivate)
 }
 
 /** A `V` handed to `setValueAt` or `insertAt` as parameter `index` of `sig`: a packable `Result` goes as its word. */
 const valueOperand = (emitter: Emitter, sig: FunctionSig, index: i32, value: string): string => {
   const type = sig.paramTypes[index]
-  const privateAbi = privateResultAbi(emitter, sig.visibleOutside())
-  const passed = emitter.table.resultByValue(type)
-    ? packResultObject(emitter, type, value, privateAbi)
-    : value
-  return `${emitter.llvmAbi(type, privateAbi)} ${passed}`
+  const isPrivate = privateAbi(emitter.opts, sig.visibleOutside())
+  const passed = emitter.table.resultByValue(type) ? packResultObject(emitter, type, value, isPrivate) : value
+  return `${emitter.llvmAbi(type, isPrivate)} ${passed}`
 }
 
 /**
@@ -921,8 +919,8 @@ const emitMapRoute = (emitter: Emitter, sig: FunctionSig, values: string[]): str
   // the object again, it is what `insertAt` is handed and what the `phi` joins.
   let fallback = values[2]
   if (emitter.table.resultByValue(sig.paramTypes[2])) {
-    const privateAbi = privateResultAbi(emitter, sig.visibleOutside())
-    fallback = unpackReturnedResult(emitter, sig.paramTypes[2], fallback, false, privateAbi)
+    const isPrivate = privateAbi(emitter.opts, sig.visibleOutside())
+    fallback = unpackReturnedResult(emitter, sig.paramTypes[2], fallback, false, isPrivate)
   }
   const kept = emitProbeCall(emitter, -1, tableMethod(emitter, owner, "probe"), values[0], values[1])
   const ty = emitter.llvm(sig.returnType)

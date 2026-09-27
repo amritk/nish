@@ -38,6 +38,7 @@
 import {
   builtinCallees,
   builtinCalleesNamed,
+  checksRangesInPrologue,
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
   isSpawnCall,
@@ -1726,6 +1727,15 @@ const collectFacts = (
   const body = sig.body()
   if (body !== null) {
     collector.visit(body)
+  }
+  // WP31 §9: the prologue that checks a host's arguments may take the panic
+  // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
+  // the entry they no longer check, which is sound and costs nothing: they call
+  // this function, and it calls the same two.
+  if (checksRangesInPrologue(table, opts, sig)) {
+    const tail: string[] = []
+    panicTailCallees(tail)
+    collector.addCallees(tail)
   }
 
   // The two arena builtins that report the bump position. Read here rather

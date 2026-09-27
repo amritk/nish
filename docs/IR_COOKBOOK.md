@@ -6357,6 +6357,55 @@ attributes #0 = { nounwind willreturn readonly }
 ```
 <!-- cookbook:end type-ranged-proven -->
 
+An exported function can be called by a host with any `int32_t`, so it checks
+its ranged parameters itself (WP31 §9): the `rng.fail` block is in `pick`'s
+prologue, before anything else it does, and `weekly` passes `n` with no check
+of its own. A function `--strict-exports` makes `internal` keeps the check at
+each call site instead, as `firstByte` does above, because there every caller
+is in view. The prologue can end the process, so `pick` loses `willreturn`.
+
+<!-- cookbook:begin type-ranged-export -->
+```ts
+export const pick = (base: i32, day: integer<1, 7>): i32 => base * 10 + day
+
+export const weekly = (n: i32): i32 => pick(n, n)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<1, 7>\00" }, align 8
+
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @nish_exit(i32 noundef) #2
+
+define noundef i32 @pick(i32 noundef %base, i32 noundef %day) #0 {
+entry:
+  %0 = sub i32 %day, 1
+  %1 = icmp ult i32 %0, 7
+  br i1 %1, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  %2 = mul nsw i32 %base, 10
+  %3 = add nsw i32 %2, %day
+  ret i32 %3
+}
+
+define noundef i32 @weekly(i32 noundef %n) #0 {
+entry:
+  %0 = tail call i32 @pick(i32 %n, i32 %n)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+```
+<!-- cookbook:end type-ranged-export -->
+
 ## Declarations
 
 ### Locals

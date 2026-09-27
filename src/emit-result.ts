@@ -44,6 +44,7 @@ import { emitPanicTail } from "./emit-builtins"
 import { internalErrorFor } from "./ice"
 import { ResultLayout, resultLayout } from "./result"
 import { N_CALL, N_MEMBER, Node } from "./nodes"
+import { Options } from "./options"
 import { CheckedProgram } from "./program"
 import {
   K_ARRAY,
@@ -288,24 +289,24 @@ const packObject = (emitter: Emitter, type: i32, object: string): string => {
  * runs before the arena scope is released, because the object it may be read
  * out of is arena memory the release reclaims.
  */
-export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, privateAbi: boolean): string => {
+export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, isPrivate: boolean): string => {
   declareResultTypes(emitter, type)
   if (expr.kind === N_CALL && isResultConstructorCall(emitter.program, emitter.table, expr)) {
     const args = expr.children[1]
     const hasPayload = args.children.length > 0
     const payload = hasPayload ? emitter.emitExpression(args.children[0]) : ""
     const isOk = expr.children[0].text === "Ok"
-    if (privateAbi) {
+    if (isPrivate) {
       return armsForArm(emitter, type, isOk, payload, hasPayload)
     }
     return packArm(emitter, type, isOk, payload, hasPayload)
   }
-  return packResultObject(emitter, type, emitter.emitExpression(expr), privateAbi)
+  return packResultObject(emitter, type, emitter.emitExpression(expr), isPrivate)
 }
 
 /** The word, or the private ABI's arms, for a by-value `Result` already in memory at `object`. */
-export const packResultObject = (emitter: Emitter, type: i32, object: string, privateAbi: boolean): string =>
-  privateAbi ? armsForObject(emitter, type, object) : packObject(emitter, type, object)
+export const packResultObject = (emitter: Emitter, type: i32, object: string, isPrivate: boolean): string =>
+  isPrivate ? armsForObject(emitter, type, object) : packObject(emitter, type, object)
 
 /**
  * The caller's half: materialise the word as the object every other construct
@@ -343,14 +344,20 @@ const unpackResult = (emitter: Emitter, type: i32, word: string, stack: boolean)
 }
 
 /**
- * Whether `sig` may use the private per-arm `Result` ABI rather than the
- * packed word. The condition is exactly the one that decides `internal`
- * linkage in `emit.ts`, and the two must not drift: the private shape is safe
- * only because no host can name the symbol. An imported function is exported
- * by definition, so a cross-module call is always packed.
+ * The linkage condition: whether every caller of a function is one this
+ * program contains, so its ABI is the program's own to choose. The condition
+ * is exactly the one that decides `internal` linkage in `emit.ts`, and the two
+ * must not drift: a private ABI is safe only because no host can name the
+ * symbol. An imported function is exported by definition, so a cross-module
+ * call always takes the public one.
+ *
+ * Two things follow from it. A `Result` travels as one slot per arm rather than
+ * the packed word (WP15), and a ranged parameter is checked at each call site,
+ * where the facts are, rather than in the callee's prologue (WP31 §9,
+ * `checksRangesInPrologue`). The interop sidecars ask it too, since a function
+ * this answers `true` for is one no host can call.
  */
-export const privateResultAbi = (emitter: Emitter, exported: boolean): boolean =>
-  emitter.opts.strictExports && !exported
+export const privateAbi = (opts: Options, exported: boolean): boolean => opts.strictExports && !exported
 
 /** The tag with both payload slots still `undef`; the live arm fills one in. */
 const armsFor = (isOk: boolean): string => {
@@ -468,9 +475,9 @@ export const unpackReturnedResult = (
   type: i32,
   value: string,
   stack: boolean,
-  privateAbi: boolean
+  isPrivate: boolean
 ): string => {
-  if (privateAbi) {
+  if (isPrivate) {
     return unpackArms(emitter, type, value, stack)
   }
   return unpackResult(emitter, type, value, stack)
@@ -483,7 +490,7 @@ export const emitResultReturn = (emitter: Emitter, value: string): void => {
   if (sig === null) {
     process.exit(internalErrorFor("emitter: a `Result` return outside a function", emitter.opts.json))
   }
-  const abi = emitter.llvmAbi(sig.returnType, privateResultAbi(emitter, sig.visibleOutside()))
+  const abi = emitter.llvmAbi(sig.returnType, privateAbi(emitter.opts, sig.visibleOutside()))
   emitter.fn.emit(`ret ${abi} ${value}`)
 }
 
@@ -497,10 +504,10 @@ export const emitResultReturningCall = (
   call: string,
   type: i32,
   site: Node,
-  privateAbi: boolean
+  isPrivate: boolean
 ): string => {
   const returned = emitter.fn.emitValue(call)
-  return unpackReturnedResult(emitter, type, returned, emitter.isStackSite(site), privateAbi)
+  return unpackReturnedResult(emitter, type, returned, emitter.isStackSite(site), isPrivate)
 }
 
 // ---- `r.ok` / `r.value` / `r.error` ---------------------------------------
@@ -547,7 +554,7 @@ const emitOrReturn = (emitter: Emitter, expr: Node, receiver: i32): string => {
   emitter.fn.placeBlock(errBlock)
   const error = loadSlot(emitter, layout, object, layout.errorIndex, layout.errorType)
   if (emitter.table.resultByValue(returnType)) {
-    const propagated = privateResultAbi(emitter, sig.visibleOutside())
+    const propagated = privateAbi(emitter.opts, sig.visibleOutside())
       ? armsForArm(emitter, returnType, false, error, true)
       : packArm(emitter, returnType, false, error, true)
     emitter.emitScopeExit()

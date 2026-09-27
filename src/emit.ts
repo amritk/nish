@@ -42,9 +42,11 @@ import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays"
 import {
+  checksArgumentRange,
   emitBuiltinCall,
   emitIdentifierBuiltinCall,
   emitNamespaceProperty,
+  emitParamRangeChecks,
   emitRangeEntry,
   isIdentifierBuiltinCall,
 } from "./emit-builtins"
@@ -78,7 +80,7 @@ import {
   emitResultReturn,
   emitResultReturningCall,
   isResultConstructorCall,
-  privateResultAbi,
+  privateAbi,
   unpackReturnedResult,
 } from "./emit-result"
 import {
@@ -387,7 +389,7 @@ export class Emitter {
     const params: IRParam[] = []
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
-    const privateAbi = privateResultAbi(this, sig.visibleOutside())
+    const isPrivate = privateAbi(this.opts, sig.visibleOutside())
     let i = 0
     while (i < sig.paramNames.length) {
       // WP29: a compile-time function parameter is a position in the call and
@@ -400,12 +402,12 @@ export class Emitter {
       const type = sig.paramTypes[i]
       let attrs: string[] = []
       if (optimize) {
-        attrs = paramAttributes(this.table, name, type, facts, privateAbi)
+        attrs = paramAttributes(this.table, name, type, facts, isPrivate)
       }
-      params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs))
+      params.push(new IRParam(name, this.llvmAbi(type, isPrivate), attrs))
       i = i + 1
     }
-    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi))
+    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, isPrivate))
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
     // WP29: a function another module's instantiation calls is `hidden`
@@ -417,7 +419,7 @@ export class Emitter {
       this.fn.linkage = "internal"
     } else if (sig.hidden) {
       this.fn.linkage = "hidden"
-    } else if (this.opts.strictExports && !sig.exported) {
+    } else if (privateAbi(this.opts, sig.exported)) {
       this.fn.linkage = "internal"
     }
     if (optimize) {
@@ -425,7 +427,7 @@ export class Emitter {
         this.table,
         sig.returnType,
         facts.returnDeref,
-        privateAbi,
+        isPrivate,
         facts.returnAlign
       )
       this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts))
@@ -444,8 +446,11 @@ export class Emitter {
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug
     if (debug !== null) {
-      debug.beginFunction(this.fn, sig, false, "", privateAbi)
+      debug.beginFunction(this.fn, sig, false, "", isPrivate)
     }
+    // WP31 §9: a host may call this function, so its ranged parameters are
+    // checked here, before anything is allocated, and its callers skip theirs.
+    emitParamRangeChecks(this, sig)
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
@@ -465,7 +470,7 @@ export class Emitter {
           sig.paramTypes[i],
           paramValue(name),
           facts.isStackParam(name),
-          privateAbi
+          isPrivate
         )
         this.paramObjectNames.push(name)
         this.paramObjectValues.push(object)
@@ -1029,7 +1034,7 @@ export class Emitter {
         this,
         value,
         sig.returnType,
-        privateResultAbi(this, sig.visibleOutside())
+        privateAbi(this.opts, sig.visibleOutside())
       )
       this.emitScopeExit()
       emitResultReturn(this, packed)
@@ -1086,6 +1091,20 @@ export class Emitter {
 
   /** Lower an expression and answer the LLVM value holding its result. */
   emitExpression(expr: Node): string {
+    return this.emitEntering(expr, true)
+  }
+
+  /**
+   * Argument `index` of a call to `callee`: `emitExpression`, less the range
+   * entry when the callee checks that parameter in its own prologue (WP31 §9,
+   * `checksArgumentRange`).
+   */
+  emitArgument(expr: Node, callee: FunctionSig, index: i32): string {
+    return this.emitEntering(expr, checksArgumentRange(this, callee, index))
+  }
+
+  /** `emitExpression`, with the range entry at `expr` checked only when `checkRange` says so. */
+  emitEntering(expr: Node, checkRange: boolean): string {
     const saved = this.enterLocation(expr)
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
@@ -1096,7 +1115,7 @@ export class Emitter {
     const to = this.program.nodeTypes[expr.id]
     let result = value
     if (from >= 0 && this.table.isRanged(to)) {
-      if (!this.program.nodeProvenRange[expr.id]) {
+      if (checkRange && !this.program.nodeProvenRange[expr.id]) {
         emitRangeEntry(this, value, from, to)
       }
     } else if (from >= 0) {
@@ -1267,7 +1286,7 @@ export class Emitter {
     const operandTypes: string[] = []
     const operandValues: string[] = []
     // A non-exported callee takes and answers one slot per arm (WP15).
-    const calleePrivate = privateResultAbi(this, sig.visibleOutside())
+    const calleePrivate = privateAbi(this.opts, sig.visibleOutside())
     let i = 0
     while (i < args.children.length) {
       // WP29: a function argument chose which function this call reaches, and
@@ -1282,7 +1301,7 @@ export class Emitter {
       const want = sig.paramTypes[i]
       const value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
-        : this.emitExpression(args.children[i])
+        : this.emitArgument(args.children[i], sig, i)
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
@@ -1379,8 +1398,8 @@ export class Emitter {
   }
 
   /** The LLVM type at a call boundary: `i64` for a `Result` the ABI packs (WP17). */
-  llvmAbi(type: i32, privateAbi: boolean): string {
-    return this.table.llvmAbiType(type, privateAbi)
+  llvmAbi(type: i32, isPrivate: boolean): string {
+    return this.table.llvmAbiType(type, isPrivate)
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */

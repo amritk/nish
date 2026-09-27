@@ -7,6 +7,11 @@
 //   1. reads the arguments (`napi_get_cb_info`) and checks the count,
 //   2. type-checks and converts each one:
 //        number   a JS number; ToInt32 semantics in i32 mode (like `x | 0`)
+//        integer<Lo, Hi>  a JS number read as a double (`napi_get_value_double`),
+//                 which must be an integer in [Lo, Hi] or the call throws a
+//                 RangeError naming the function, the parameter and the range
+//                 (WP31 §9). ToInt32 would wrap 4294967301 to 5, which is in
+//                 range, so the value is judged before it is converted.
 //        u8 u16 u32  a JS number through ToUint32 (`napi_get_value_uint32`),
 //                 then the width's own modulus, so 300 reaches a `u8` as 44
 //                 exactly as `new Uint8Array([300])[0]` does
@@ -258,6 +263,14 @@ export class Reader {
   word: string
   okScalar: ScalarReader | null
   errScalar: ScalarReader | null
+  /**
+   * `READ_SCALAR` for a ranged parameter (WP31 §9): the double read is checked
+   * against `[lo, hi]`, which `interval` spells for the message; `""` for any
+   * other parameter.
+   */
+  interval: string
+  lo: i32
+  hi: i32
 
   constructor(kind: i32, jsType: string, usesTypeof: boolean, arena: boolean) {
     this.kind = kind
@@ -271,10 +284,16 @@ export class Reader {
     this.word = ""
     this.okScalar = null
     this.errScalar = null
+    this.interval = ""
+    this.lo = 0
+    this.hi = 0
   }
 }
 
 const napiReader = (table: TypeTable, t: i32, written: boolean): Reader | null => {
+  if (table.isRanged(t)) {
+    return napiRangedReader(table, t)
+  }
   const scalar = napiScalarReader(table, t)
   if (scalar !== null) {
     const out = new Reader(READ_SCALAR, scalar.jsType, true, false)
@@ -300,6 +319,32 @@ const napiReader = (table: TypeTable, t: i32, written: boolean): Reader | null =
     return out
   }
   return null
+}
+
+/**
+ * The reader for a ranged argument (WP31 §9). It is read as a double, because
+ * the int32 getter is ToInt32 and would hand the check a value already wrapped
+ * into the range, then checked, and only then narrowed to the `int32_t` the
+ * callee takes. It is not in `napiScalarReader`, so a range inside a `Result`
+ * payload stays a type the shim does not carry.
+ */
+const napiRangedReader = (table: TypeTable, t: i32): Reader => {
+  const scalar = new ScalarReader(
+    "number",
+    "napi_number",
+    "napi_get_value_double",
+    "int32_t",
+    "double",
+    "(int32_t)",
+    "",
+    false
+  )
+  const out = new Reader(READ_SCALAR, scalar.jsType, true, false)
+  out.scalar = scalar
+  out.interval = `[${table.rangeLo(t)}, ${table.rangeHi(t)}]`
+  out.lo = table.rangeLo(t)
+  out.hi = table.rangeHi(t)
+  return out
 }
 
 /**
@@ -358,6 +403,17 @@ const napiFailCall = (mode: i32, message: string): string => {
   return `nish_napi_fail(env, "${message}")`
 }
 
+/** `napiFailCall` for an argument outside its range: the same three returns, with a RangeError. */
+const napiRangeFailCall = (mode: i32, message: string): string => {
+  if (mode === FAIL_RELEASE) {
+    return `nish_napi_range_fail_at(env, mark, "${message}")`
+  }
+  if (mode === FAIL_REJECT) {
+    return `nish_napi_range_reject(env, nish_deferred, nish_promise, "${message}")`
+  }
+  return `nish_napi_range_fail(env, "${message}")`
+}
+
 /**
  * Declaration and conversion lines for parameter `c` read from `argv[i]`.
  * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
@@ -379,6 +435,12 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, 
       lines.push(`  return ${napiFailCall(mode, `${what} must be a ${scalar.jsType}`)};`)
       lines.push(`if (${napiScalarGet(scalar, `argv[${i}]`, `&${dest}`)} != napi_ok)`)
       lines.push(`  return ${napiFailCall(mode, `${what} could not be converted`)};`)
+      // WP31 §9: in the range, which also makes the narrowing below defined,
+      // and an integer, which a NaN or a fraction is not.
+      if (r.interval.length > 0) {
+        lines.push(`if (!(${dest} >= ${r.lo} && ${dest} <= ${r.hi} && ${dest} == (double)(int32_t)${dest}))`)
+        lines.push(`  return ${napiRangeFailCall(mode, `${what} must be an integer in ${r.interval}`)};`)
+      }
       if (narrows) {
         lines.push(`${scalar.c} ${c} = ${scalar.open}${dest}${scalar.close};`)
       }
@@ -534,7 +596,8 @@ const napiScalarBoxCall = (box: string, value: string, dest: string): string =>
 
 /** The boxing plan for a result of this type, or `null` when it cannot cross. */
 const napiBoxer = (table: TypeTable, t: i32): Boxer | null => {
-  const scalar = napiScalarBox(table, t)
+  // WP31: a ranged result is an `int32_t` already inside its range.
+  const scalar = table.isRanged(t) ? "napi_create_int32" : napiScalarBox(table, t)
   if (scalar.length > 0) {
     const out = new Boxer(BOX_SCALAR, false)
     out.scalar = scalar
@@ -622,12 +685,20 @@ export class Plan {
   box: Boxer
   /** Strings or arrays cross: bracket the call with an arena mark/release. */
   scoped: boolean
+  /** A ranged argument is checked (WP31 §9), so the shim needs its RangeError helpers. */
+  takesRange: boolean
 
   constructor(fn: ExternalFunction, readers: Reader[], box: Boxer, scoped: boolean) {
     this.fn = fn
     this.readers = readers
     this.box = box
     this.scoped = scoped
+    this.takesRange = false
+    for (const r of readers) {
+      if (r.interval.length > 0) {
+        this.takesRange = true
+      }
+    }
   }
 }
 
@@ -1039,8 +1110,12 @@ export const generateNapiShim = (
   let needsScoped = false
   let needsResult = false
   let needsF32 = false
+  let needsRange = false
+  let needsRangeScoped = false
   for (const p of plans) {
     planned.push(p.fn)
+    needsRange = needsRange || p.takesRange
+    needsRangeScoped = needsRangeScoped || (p.takesRange && p.scoped)
     for (const r of p.readers) {
       if (r.jsType === "string") {
         needsString = true
@@ -1061,6 +1136,11 @@ export const generateNapiShim = (
     if (p.box.kind === BOX_RESULT) {
       needsResult = true
     }
+  }
+
+  let needsRangeAsync = false
+  for (const p of asyncPlans) {
+    needsRangeAsync = needsRangeAsync || p.takesRange
   }
 
   const lines: string[] = []
@@ -1117,7 +1197,7 @@ export const generateNapiShim = (
   lines.push("")
   lines.push(`/* C ABI of the bridged ${LANGUAGE} functions (identical to --emit-header). */`)
   for (const p of plans) {
-    lines.push(`${cPrototype(table, p.fn.sig, p.fn.writtenParams)};`)
+    lines.push(`${cPrototype(table, p.fn)};`)
   }
   lines.push("")
   // Every external function is either wrapped below or named here with the
@@ -1150,6 +1230,28 @@ export const generateNapiShim = (
     lines.push("static napi_value nish_napi_fail_at(napi_env env, uint64_t mark, const char *message) {")
     lines.push("  nish_arena_release(mark);")
     lines.push("  return nish_napi_fail(env, message);")
+    lines.push("}")
+    lines.push("")
+  }
+  // WP31 §9: each helper is written only when a wrapper calls it, because an
+  // unused `static` function is a warning and the shim compiles under -Werror.
+  if (needsRange) {
+    lines.push("/* An argument outside its parameter's range: a RangeError, which is what")
+    lines.push(" * JavaScript throws for `new Uint8Array(-1)`, rather than the panic the")
+    lines.push(" * function's own check on entry would end the process with. */")
+    lines.push("static napi_value nish_napi_range_fail(napi_env env, const char *message) {")
+    lines.push("  napi_throw_range_error(env, NULL, message);")
+    lines.push("  return NULL;")
+    lines.push("}")
+    lines.push("")
+  }
+  if (needsRangeScoped) {
+    lines.push("/* The same, from a call that already marked the arena: release first. */")
+    lines.push(
+      "static napi_value nish_napi_range_fail_at(napi_env env, uint64_t mark, const char *message) {"
+    )
+    lines.push("  nish_arena_release(mark);")
+    lines.push("  return nish_napi_range_fail(env, message);")
     lines.push("}")
     lines.push("")
   }
@@ -1280,6 +1382,22 @@ export const generateNapiShim = (
       "static napi_value nish_napi_reject(napi_env env, napi_deferred deferred, napi_value promise, const char *message) {"
     )
     lines.push("  nish_napi_reject_at(env, deferred, message);")
+    lines.push("  return promise;")
+    lines.push("}")
+    lines.push("")
+  }
+  if (needsRangeAsync) {
+    lines.push("/* An argument outside its parameter's range, to a wrapper with a promise to")
+    lines.push(" * answer: reject it with a RangeError, as the synchronous wrapper throws one. */")
+    lines.push(
+      "static napi_value nish_napi_range_reject(napi_env env, napi_deferred deferred, napi_value promise, const char *message) {"
+    )
+    lines.push("  napi_value text, error;")
+    lines.push("  if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) == napi_ok &&")
+    lines.push("      napi_create_range_error(env, NULL, text, &error) == napi_ok)")
+    lines.push("    napi_reject_deferred(env, deferred, error);")
+    lines.push("  else")
+    lines.push("    napi_reject_deferred(env, deferred, nish_napi_undefined(env));")
     lines.push("  return promise;")
     lines.push("}")
     lines.push("")
