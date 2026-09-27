@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 698 programs, 50255 dump lines.
+# 700 programs, 50343 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37234,6 +37234,96 @@ function main(): i32 -> @nish_main [exported entry]
   local 11:9 bad: Result<void, string> (const)
   callee 11:15 checkPort -> @checkPort
   callee 15:3 checkPort -> @checkPort
+program tests/cases/reserved_label_names.ts
+module tests/cases/reserved_label_names.ts (entry)
+struct Tally (class) size=4 align=4
+  field entry: i32 index=0 offset=0
+  constructor -> @Tally.constructor
+  method plus -> @Tally.plus
+function next(entry: i32): i32 -> @next
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function counted(): i32 -> @counted
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 9:7 entry: i32 (let)
+function letter(chr: i32): string -> @letter
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_new
+  stackSites=0 stackLocals=0
+function parse(n: i32): Result<i32, boolean> -> @parse
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=12
+  escaping: n
+  stackSites=2 stackLocals=0
+function orZero(entry: Result<i32, boolean>): i32 -> @orZero
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function Tally.constructor(this: Tally, entry: i32): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: entry
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Tally.plus(this: Tally, entry: i32): i32 -> @Tally.plus [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Tally.constructor Tally.plus counted letter next nish_arena_mark nish_arena_release nish_print nish_str_from_i32 orZero parse
+  stackSites=2 stackLocals=0
+  callee 34:15 next -> @next
+  callee 35:15 counted -> @counted
+  callee 36:15 letter -> @letter
+  callee 37:15 orZero -> @orZero
+  callee 37:22 parse -> @parse
+  callee 38:15 Tally.plus -> @Tally.plus
+  callee 38:15 new Tally -> @Tally.constructor
+program tests/cases/reserved_label_names_dbg.ts
+module tests/cases/reserved_label_names_dbg.ts (entry)
+struct Tally (class) size=4 align=4
+  field entry: i32 index=0 offset=0
+  constructor -> @Tally.constructor
+  method plus -> @Tally.plus
+function next(entry: i32): i32 -> @next
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function counted(): i32 -> @counted
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 11:7 entry: i32 (let)
+function letter(chr: i32): string -> @letter
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_new
+  stackSites=0 stackLocals=0
+function parse(n: i32): Result<i32, boolean> -> @parse
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=12
+  escaping: n
+  stackSites=2 stackLocals=0
+function orZero(entry: Result<i32, boolean>): i32 -> @orZero
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function Tally.constructor(this: Tally, entry: i32): void -> @Tally.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: entry
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Tally.plus(this: Tally, entry: i32): i32 -> @Tally.plus [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Tally.constructor Tally.plus counted letter next nish_arena_mark nish_arena_release nish_print nish_str_from_i32 orZero parse
+  stackSites=2 stackLocals=0
+  callee 36:15 next -> @next
+  callee 37:15 counted -> @counted
+  callee 38:15 letter -> @letter
+  callee 39:15 orZero -> @orZero
+  callee 39:22 parse -> @parse
+  callee 40:15 Tally.plus -> @Tally.plus
+  callee 40:15 new Tally -> @Tally.constructor
 program tests/cases/rng_bitwise.ts
 module tests/cases/rng_bitwise.ts (entry)
 struct Flags (class) size=4 align=4
