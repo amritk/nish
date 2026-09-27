@@ -17,7 +17,7 @@
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo } from "./program"
-import { isFractional, parseIntegerLiteral } from "./constants"
+import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import {
   N_LIST,
@@ -413,9 +413,9 @@ const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
     return BOUND_REFUSED
   }
   // `parseIntegerLiteral` wraps past `u64`, so a literal is measured before it
-  // is read: more significant digits than any `u32` needs in its radix is
-  // already outside `i32`, and anything shorter reads exactly.
-  const magnitude = fitsInU32Digits(digits) ? parseIntegerLiteral(digits) : BOUND_REFUSED
+  // is read: one past 2^31 is outside `i32` whatever it reads as, and anything
+  // smaller reads exactly.
+  const magnitude = numericLiteralValue(digits) <= 2147483648.0 ? parseIntegerLiteral(digits) : BOUND_REFUSED
   const value = negative ? -magnitude : magnitude
   if (value < toI64(-2147483648) || value > toI64(2147483647)) {
     ctx.error(
@@ -425,40 +425,6 @@ const rangedBound = (ctx: CheckContext, bound: Node): i64 => {
     return BOUND_REFUSED
   }
   return value
-}
-
-/**
- * Whether an integer literal as written has no more significant digits than
- * the largest `u32` has in its radix: 10 decimal, 8 hexadecimal, 11 octal, 32
- * binary. Leading zeros and `_` separators do not count. A literal that passes
- * is read by `parseIntegerLiteral` without wrapping; one that fails is past
- * `u32`, so it is outside `i32` whatever its digits are.
- */
-const fitsInU32Digits = (digits: string): boolean => {
-  let limit = 10
-  let i = 0
-  if (digits.length > 2 && digits.charCodeAt(0) === 48) {
-    const marker = digits.charCodeAt(1)
-    if (marker === 120 || marker === 88) {
-      limit = 8
-      i = 2
-    } else if (marker === 111 || marker === 79) {
-      limit = 11
-      i = 2
-    } else if (marker === 98 || marker === 66) {
-      limit = 32
-      i = 2
-    }
-  }
-  let significant = 0
-  while (i < digits.length) {
-    const c = digits.charCodeAt(i)
-    if (c !== 95 && (significant > 0 || c !== 48)) {
-      significant = significant + 1
-    }
-    i = i + 1
-  }
-  return significant <= limit
 }
 
 /**

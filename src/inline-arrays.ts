@@ -48,6 +48,7 @@
 // field named in an instantiation's body or inside an arrow, where the node
 // tables are not this module's: each keeps the pointer layout.
 
+import { numericLiteralValue } from "./constants"
 import { CheckContext } from "./context"
 import { intrinsicType, isAssignmentOperator } from "./emit-util"
 import { StringMap } from "./map"
@@ -253,7 +254,7 @@ const mayInline = (
 const constantLength = (program: CheckedProgram, expr: Node): i32 => {
   const e = unwrap(expr)
   if (e.kind === N_NUMBER) {
-    const n: f64 = Number(e.text)
+    const n: f64 = numericLiteralValue(e.text)
     if (n !== Math.floor(n) || n < 0.0 || n > 1048576.0) {
       return -1
     }
