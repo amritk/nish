@@ -44,6 +44,7 @@
 
 import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
+import { numericLiteralValue } from "./constants"
 import { isScalarArgument } from "./escape"
 import { isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
 import {
@@ -531,9 +532,9 @@ const isLiteral = (node: Node, want: string): boolean => {
   }
   if (e.kind === N_UNARY && (e.text === "-" || e.text === "+")) {
     const operand = unwrapParens(e.children[0])
-    return operand.kind === N_NUMBER && want === "0" && Number(operand.text) === 0
+    return operand.kind === N_NUMBER && want === "0" && numericLiteralValue(operand.text) === 0
   }
-  return e.kind === N_NUMBER && Number(e.text) === Number(want)
+  return e.kind === N_NUMBER && numericLiteralValue(e.text) === Number(want)
 }
 
 /**
@@ -648,7 +649,8 @@ const tripsOf = (node: Node): i32 => {
   if (cond.text !== "<" && cond.text !== "<=") {
     return DEFAULT_TRIPS
   }
-  const span = Number(bound.text) - Number(first.text) + (cond.text === "<=" ? 1.0 : 0.0)
+  const span =
+    numericLiteralValue(bound.text) - numericLiteralValue(first.text) + (cond.text === "<=" ? 1.0 : 0.0)
   const trips = Math.ceil(span / toF64(step))
   if (trips < 1.0) {
     return 1

@@ -19,7 +19,7 @@
 // masked here at compile time, so the common `x << 3` stays one instruction.
 
 import { internalErrorFor } from "./ice"
-import { parseIntegerLiteral } from "./constants"
+import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter } from "./emit"
 import { emitRangedStore } from "./emit-builtins"
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit-control"
@@ -53,7 +53,7 @@ export const numericConstant = (text: string, type: i32): string => {
     const value = parseIntegerLiteral(text)
     return type === T_I32 ? `${toI32(value)}` : `${value}`
   }
-  return floatText(Number(text), type)
+  return floatText(numericLiteralValue(text), type)
 }
 
 /** The LLVM constant for a folded module constant, by the type it was declared with. */

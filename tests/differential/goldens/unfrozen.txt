@@ -82,6 +82,7 @@ cases/fnarg_forward added after R6: no rewriter to freeze it with
 cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
+cases/literal_spellings added after R6: no rewriter to freeze it with
 cases/map_annotated_new added after R6: no rewriter to freeze it with
 cases/map_arena_callee added after R6: no rewriter to freeze it with
 cases/map_compaction added after R6: no rewriter to freeze it with

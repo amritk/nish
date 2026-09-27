@@ -23,7 +23,7 @@
     },
     "src/checker.ts": {
       "NL9007": 1,
-      "NL9011": 2
+      "NL9011": 1
     },
     "src/compilation.ts": {
       "NL9007": 5,

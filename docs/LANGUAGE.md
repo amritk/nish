@@ -97,8 +97,9 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   [Numeric literals](#numeric-literals)). A literal's type comes from its context (see
   [Numeric literals](#numeric-literals)); by default it is `number`. In i32
   mode a literal must have an integral value: `1.5` is rejected with
-  `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1.0`, `1e3`
-  are integral and accepted *(CLI only)*. A literal above `2147483647` is
+  `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1e3` is the
+  integer 1000 and accepted, but a point spells a float, so `1.0` is refused
+  as `1.5` is *(CLI only)*. A literal above `2147483647` is
   rejected with ``Literal `...` does not fit in i32`` *(CLI only)*; the
   directly negated literal `-2147483648` is accepted and is `INT_MIN`
   (`tests/cases/int_min_literal`).
@@ -328,6 +329,20 @@ and after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
 parser still reads the literal, so the next token does not cost a second
 error, and a bound of a ranged type is refused the same way
 (`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
+
+**Every spelling is read at the value it spells, in every numeric type**,
+as TypeScript reads it (#267): `0b1010` is 10, `0o17` is 15, `1_000` is 1000
+and `1e5` is 100000 as an `i32`, an `i64`, an `f64`, a module constant or a
+bound of `integer<Lo, Hi>` (`tests/cases/literal_spellings`). A binary or
+octal literal past 2^53 rounds once, to the double TypeScript reads. An
+exponent is an integer when its value is one, so `100e-2` is the integer 1 and
+`1e-1` in an integer position is `` Non-integer literal `1e-1` where i32 is
+expected `` (`reject_literal_exponent_fraction`); a point always spells a
+float. The range rules below read the same value, so `1e10` and a 33-bit
+`0b` literal are `` Literal `1e10` does not fit in i32 ``
+(`reject_literal_exponent_overflow`, `reject_literal_binary_overflow`), and an
+`i64` module constant past 2^53 is refused as an `i64` literal is
+(`reject_literal_const_precision`).
 
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
