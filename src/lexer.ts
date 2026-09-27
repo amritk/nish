@@ -187,6 +187,10 @@ const CH_TILDE: i32 = 126
 const CH_AT: i32 = 64
 const CH_HASH: i32 = 35
 
+/** TypeScript's TS6188 and TS6189, for a numeric separator not between two digits. */
+const SEPARATOR_HERE: string = "Numeric separators are not allowed here"
+const SEPARATOR_DOUBLED: string = "Multiple consecutive numeric separators are not permitted"
+
 /** End of input, and the answer to every read past it. */
 const CH_EOF: i32 = -1
 
@@ -344,6 +348,29 @@ const utf8Encode = (cp: i32): string => {
   )
 }
 
+/**
+ * A numeric literal's text without its digit separators — `1_000` is `1000` —
+ * which is the spelling every later phase reads. The lexer has already refused
+ * a separator anywhere but between two digits, so dropping them all is exact.
+ */
+export const withoutSeparators = (text: string): string => {
+  if (text.indexOf("_") < 0) {
+    return text
+  }
+  const digits = new StringBuilder()
+  let chunk = 0
+  let i = 0
+  while (i < text.length) {
+    if (text.charCodeAt(i) === CH_UNDERSCORE) {
+      digits.add(text.slice(chunk, i))
+      chunk = i + 1
+    }
+    i = i + 1
+  }
+  digits.add(text.slice(chunk, text.length))
+  return digits.toText()
+}
+
 export class Lexer {
   source: string
   /** Read cursor, a byte offset. */
@@ -382,6 +409,11 @@ export class Lexer {
   escapeTooLarge: boolean
   /** Whether an escape in the literal being scanned was `escapeTooLarge`. */
   literalTooLarge: boolean
+  /**
+   * The error for the first misplaced separator in the numeric literal being
+   * scanned, or empty when every separator sits between two digits.
+   */
+  separatorError: string
 
   /**
    * The pieces of the literal being scanned, for the literals that have an
@@ -402,6 +434,7 @@ export class Lexer {
     this.escapeEnd = 0
     this.escapeTooLarge = false
     this.literalTooLarge = false
+    this.separatorError = ""
     this.literal = new StringBuilder()
     this.skipShebang()
   }
@@ -529,10 +562,17 @@ export class Lexer {
    * A numeric literal. The text is kept as written — `0x10` stays `0x10` — and
    * the parser converts it, because the conversion needs the type the context
    * demands and the lexer has no context. Digit separators are part of the
-   * token and the parser drops them.
+   * token and the parser drops them (`withoutSeparators`).
+   *
+   * A separator is allowed only between two digits of the literal, as it is in
+   * TypeScript, and every other `_` is refused here in `tsc`'s words — after a
+   * radix prefix, doubled, trailing, or beside a `.` or an exponent. The
+   * literal is still scanned to its end, so the error takes the whole
+   * literal's place and is the only one it costs.
    */
   scanNumber(): void {
     let end = this.pos
+    this.separatorError = ""
     const second = this.at(end + 1)
     if (
       this.at(end) === CH_0 &&
@@ -543,25 +583,22 @@ export class Lexer {
         second === CH_O_LOWER ||
         second === CH_O_UPPER)
     ) {
-      end = end + 2
-      while (end < this.source.length && (isIdentPart(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-        end = end + 1
-      }
+      end = this.scanDigits(end + 2, true)
       if (this.at(end - 1) === CH_N_LOWER) {
-        this.emit(TOK_BIGINT, end, this.source.substring(this.start, end))
+        this.emitNumber(TOK_BIGINT, end)
         return
       }
-      this.emit(TOK_NUMBER, end, this.source.substring(this.start, end))
+      this.emitNumber(TOK_NUMBER, end)
       return
     }
-    while (end < this.source.length && (isDigit(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-      end = end + 1
+    // `0_1` is refused too: a leading `0` is where a legacy octal literal
+    // would start, and TypeScript allows no separator after it.
+    if (this.at(end) === CH_0 && this.at(end + 1) === CH_UNDERSCORE) {
+      this.separatorError = SEPARATOR_HERE
     }
+    end = this.scanDigits(end, false)
     if (this.at(end) === CH_DOT) {
-      end = end + 1
-      while (end < this.source.length && (isDigit(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-        end = end + 1
-      }
+      end = this.scanDigits(end + 1, false)
     }
     const exponent = this.at(end)
     if (exponent === CH_E_LOWER || exponent === CH_E_UPPER) {
@@ -569,21 +606,68 @@ export class Lexer {
       if (this.at(after) === CH_PLUS || this.at(after) === CH_MINUS) {
         after = after + 1
       }
-      if (isDigit(this.at(after))) {
-        end = after
-        while (end < this.source.length && isDigit(this.at(end))) {
-          end = end + 1
-        }
+      if (isDigit(this.at(after)) || this.at(after) === CH_UNDERSCORE) {
+        end = this.scanDigits(after, false)
       }
     }
     // `123n` is one BigInt token, as it is in TypeScript; the language has no
     // `bigint`, and the parser says so about the literal rather than about a
     // stray `n` after it.
     if (this.at(end) === CH_N_LOWER) {
-      this.emit(TOK_BIGINT, end + 1, this.source.substring(this.start, end + 1))
+      this.emitNumber(TOK_BIGINT, end + 1)
       return
     }
-    this.emit(TOK_NUMBER, end, this.source.substring(this.start, end))
+    this.emitNumber(TOK_NUMBER, end)
+  }
+
+  /**
+   * The end of a run of digits starting at `at`, with its separators, as
+   * TypeScript's `scanNumberFragment` reads it: a `_` is allowed straight
+   * after a digit and nowhere else, so a run that starts or ends with one, or
+   * holds two in a row, records its first misplaced separator in
+   * `separatorError`. After a radix prefix a digit is any identifier byte,
+   * and the checker judges which of them the radix allows.
+   */
+  scanDigits(at: i32, radix: boolean): i32 {
+    let end = at
+    let afterDigit = false
+    let afterSeparator = false
+    while (end < this.source.length) {
+      const c = this.at(end)
+      if (c === CH_UNDERSCORE) {
+        if (!afterDigit) {
+          this.refuseSeparator(afterSeparator ? SEPARATOR_DOUBLED : SEPARATOR_HERE)
+        }
+        afterDigit = false
+        afterSeparator = true
+      } else if (radix ? isIdentPart(c) : isDigit(c)) {
+        afterDigit = true
+        afterSeparator = false
+      } else {
+        break
+      }
+      end = end + 1
+    }
+    if (afterSeparator) {
+      this.refuseSeparator(SEPARATOR_HERE)
+    }
+    return end
+  }
+
+  /** Record a misplaced separator, unless the literal already has one. */
+  refuseSeparator(message: string): void {
+    if (this.separatorError.length === 0) {
+      this.separatorError = message
+    }
+  }
+
+  /** A numeric literal's token ending at `end`, or its separator error in its place. */
+  emitNumber(kind: i32, end: i32): void {
+    if (this.separatorError.length > 0) {
+      this.error(this.separatorError, end)
+      return
+    }
+    this.emit(kind, end, this.source.substring(this.start, end))
   }
 
   /**
