@@ -1,0 +1,1 @@
+`wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own

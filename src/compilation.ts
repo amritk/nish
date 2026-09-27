@@ -104,7 +104,10 @@ import {
   reachesDstMessage,
   reduceMessage,
   resultMessage,
+  scopeFindings,
   sharedWriteMessage,
+  taskArgumentMessage,
+  taskArrowMessage,
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
@@ -948,6 +951,7 @@ export class Compilation {
    */
   checkParallel(): void {
     const facts = this.analyze()
+    this.checkScopes(facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.parallelCalls) {
@@ -983,6 +987,42 @@ export class Compilation {
         const warning = allocationWarning(this.table, sig, fn, result, facts)
         if (!refused && warning.length > 0) {
           this.sink.reportPerformance(program.source, call.node.start, call.node.end, warning)
+        }
+      }
+    }
+  }
+
+  /**
+   * WP29 P2: every scope is joined, because none can leave the block that
+   * declares it (`scopeFindings`), and every task is one that may run beside
+   * the others: the rules a data-parallel body is held to, less the ones about
+   * an element's arena, which a task does not share (`src/parallel.ts`).
+   */
+  checkScopes(facts: FactsTable): void {
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const finding of scopeFindings(programs, program, this.table, facts)) {
+        this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+      }
+      for (const call of program.spawnCalls) {
+        const fn = parallelBodyOf(call.sig)
+        if (fn === null) {
+          continue
+        }
+        const messages: string[] = []
+        messages.push(fn.lifted ? taskArrowMessage() : "")
+        messages.push(taskArgumentMessage(this.table, call.sig))
+        messages.push(resultMessage(this.table, call.sig, fn, fn.returnType))
+        messages.push(sharedWriteMessage(call.sig, fn, facts))
+        messages.push(arenaMessage(call.sig, fn, facts))
+        for (const message of messages) {
+          if (message.length > 0) {
+            this.sink.report(program.source, call.node.start, call.node.end, message)
+          }
         }
       }
     }

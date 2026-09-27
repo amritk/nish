@@ -253,6 +253,12 @@ const emitCall = (
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`]
   let i = 0
   while (i < args.length) {
+    // WP29 P2: `spawn`'s task is a function argument, which chose the method
+    // this call reaches and is no value to pass.
+    if (callee.isCompileTime(i + 1)) {
+      i = i + 1
+      continue
+    }
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1]
     const value = emitter.table.resultByValue(want)

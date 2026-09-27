@@ -1,0 +1,2 @@
+reject_thread_region_dst_not_fresh.ts:9:19
+The destination of this `spawn` must be a `const` local bound to a fresh array

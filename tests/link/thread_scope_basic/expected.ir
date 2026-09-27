@@ -1,0 +1,5 @@
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+declare void @nish_scope_join(i8* noundef nonnull)
+declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef)
+define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$run(i8* noundef %p)
+define internal void @nish.ThreadScope.spawn$arr.f64$f64$fn.5.sumOf$finish(i8* noundef %p)

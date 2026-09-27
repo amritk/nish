@@ -1,0 +1,2 @@
+reject_thread_region_read.ts:20:20
+This reads `sums`, a destination of a task of `s`, before the scope joins

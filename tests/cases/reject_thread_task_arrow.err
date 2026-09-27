@@ -1,0 +1,1 @@
+The task given to `spawn` must be a top-level function named at the call, not an arrow

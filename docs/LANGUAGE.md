@@ -2151,9 +2151,150 @@ from the whole-program facts, and each rule is reported there:
   array is refused whether or not it is `dst` at run time. A reduce writes no
   array of its caller's and has no such rule.
 
-`parallelFor`, a scope of spawned tasks, locks, channels and non-scalar results
-are not in this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.2,
-§4.3, §7).
+### Scoped tasks: `using s = scope()`
+
+A scope runs a handful of different functions at once, each on a thread of its
+own, and joins them all when the block that declares it ends
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.2). It is the shape
+`parallelMapInto` cannot take: work that is not one function over one array.
+
+```typescript
+import { scope } from "nish/threads";
+
+const sumOf = (xs: f64[]): f64 => { /* ... */ return 7.0; };
+const primesBelow = (n: i32): i32 => { /* ... */ return 168; };
+
+export const main = (): i32 => {
+  const xs: f64[] = [1.5, 2.5, 3.0];
+  const sums: f64[] = [0.0];
+  const counts: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(sumOf, xs, sums, 0);           // sums[0] = sumOf(xs)
+    s.spawn(primesBelow, 1000, counts, 0); // counts[0] = primesBelow(1000)
+  }                                        // both have run, and both answers are stored
+  console.log(`${sums[0]} ${counts[0]}`);  // 7 168
+  return 0;
+};
+```
+
+- **`s.spawn(entry, arg, dst, at)`** runs `entry(arg)` on a thread of its own
+  and stores the answer in `dst[at]` (`tests/link/thread_scope_basic`). `entry`
+  is a [function parameter](#function-parameters) and must be a top-level
+  function named at the call; an arrow is
+  `` The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name) ``
+  (`tests/cases/reject_thread_task_arrow`). `at` is checked at the spawn and
+  again when the answer is stored; out of range is
+  `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+- **A task runs when its scope joins, not when it is spawned.** Joining a
+  scope runs every task it was given at once — the first on the thread that
+  opened the scope and each other on a thread of its own, so `N` tasks start
+  `N - 1` threads — waits for all of them, and then stores each answer in the
+  order the tasks were spawned, on the thread that opened the scope. That is
+  what makes a scope free of races: while the tasks run, the thread that opened the scope is
+  waiting for them, the tasks write nothing another can see (below), and every
+  store into the program's memory is made after the last task has finished. So
+  a task may be handed any argument — an array, an object.
+- **A destination is a fresh `const` array that is never handed on, and until
+  the block ends the scope's thread neither reads a destination nor writes
+  what a task may read.** Natively a task runs, and its answer is stored, when
+  the scope joins; under Node each runs and stores where it is spawned. Two
+  rules keep the program's meaning the same either way:
+  - A `spawn`'s destination is a `const` local bound to a literal array or
+    `new Array(...)` in the same function, used only by index, `.length`, its
+    methods, a `for...of` and as a destination — never an argument, a task's
+    argument, a stored value or a returned one — so nothing else can reach it.
+    Anything else is
+    `` The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a destination: a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read ``
+    (`tests/cases/reject_thread_region_dst_not_fresh`, and
+    `reject_thread_region_dst_as_arg` for one handed to a later task).
+  - From the first statement of the block that holds a `spawn` on the scope
+    to the block's end — a `return`'s value aside, computed after the join —
+    the program may not read a destination a task of the scope has been given
+    by then (`` This reads `sums`, a destination of a task of `s`, before the scope joins: … ``,
+    `tests/cases/reject_thread_region_read`), and may not write memory a task
+    could read. A task reads only what its argument reaches, so a store is
+    fine into the own slots of a `const` bound to a fresh array or object
+    literal that is never handed on, and a call is fine unless it writes
+    through a pointer it is handed; a function that only fills an array it
+    allocates, such as one that builds and returns a row, writes nothing a task
+    can see. Every other write is refused, whatever alias it goes through —
+    a store, `push` or `pop`, `Arena`, a call that writes through its
+    argument, a task of another scope, whose join stores
+    (`reject_thread_region_write`, `reject_thread_region_alias_write`,
+    `reject_thread_region_call_write`).
+
+  The rules are local because memory is reached only through parameters and
+  what a function allocates: a module constant is a number, a `boolean` or a
+  string, and nothing is `static`. N tasks over N arrays of the destination's
+  own type, built before the scope, in the spawning loop or after the first
+  spawn, all compile (`tests/link/thread_scope_many_arrays`).
+- **The join is emitted at every exit of the block**: its end, a `return` —
+  before the returned value is computed, so the value can read what the tasks
+  stored — and a `break` or `continue` that leaves the block
+  (`tests/link/thread_scope_exit_paths`). It sits inside every arena scope
+  around it, which releases only after the join, and an argument a task is
+  handed is never given back by a loop's pass before the join reads it
+  (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
+  another). `throw` and a panic end the process and join nothing.
+- **A scope is introduced by `using`, and `using` takes only a scope.** A
+  scope bound any other way is
+  `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
+  (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
+  `` `using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs ``
+  (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
+  statement of a block; as the body of an `if` or a loop it is
+  `` A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block ``
+  (`tests/cases/reject_thread_using_placement`), and in a `case` clause it is
+  refused as every declaration there is. Outside a declaration `using` is an
+  ordinary identifier, as in TypeScript (`tests/parser/using.ts`).
+- **A scope never leaves its block.** It is only ever the receiver of a `spawn`
+  statement; passed, stored, returned or copied it is
+  `` A `ThreadScope` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it ``
+  (`tests/cases/reject_thread_scope_escapes`). That, and the join at every exit,
+  is the whole proof that every task is joined: there is no handle to forget.
+- **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` declares one,
+  so TypeScript and Node accept `using s = scope()`; the compiler emits the join
+  itself and never calls it. Any other class's is
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called ``
+  (`tests/cases/reject_thread_dispose_elsewhere`).
+- **There is no thread count.** Each spawn is one task and each task one
+  thread; a scope with more tasks than cores leaves the scheduler to share them
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9 declines the knob until
+  a measurement asks for it).
+
+What a task may do is what a data-parallel body may, less the rules about an
+element's arena, which a task does not share, and each rule is reported at the
+`spawn`:
+
+- **The task writes nothing another can see**, with the words of the
+  data-parallel rule:
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``
+  (`tests/cases/reject_thread_task_shared_write`). A task inside a task, or
+  inside a data-parallel body, is refused by this rule, because a scope's join
+  stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
+  data-parallel call inside a task is refused by it too
+  (`reject_thread_task_nested_map`).
+- **It answers a number, a `boolean` or an enum**, because a task's thread
+  frees its arena when it exits:
+  `` `label` answers `string`, and `spawn` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  (`tests/cases/reject_thread_task_result_type`). What it allocates on the way
+  is freed with its thread.
+- **It leaves the arena alone**, because the first task runs in the arena of
+  the thread that opened the scope:
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  (`tests/cases/reject_thread_task_arena`).
+- **Its argument is not a `Result` small enough to travel as its parts**:
+  `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
+  (`tests/cases/reject_thread_task_result_arg`).
+
+Under Node, `scope()` is an object whose `spawn` runs its task at once and
+stores the answer there; the rule above is what makes that print the same as
+the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
+`--js-explicit-resource-management` on Node 22 and is native from Node 24.
+
+`parallelFor`, locks, channels, non-scalar results and `scope(n)` are not in
+this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.3, §7).
 
 ### Interfaces and object literals
 

@@ -45,12 +45,20 @@
 import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
 import { isScalarArgument } from "./escape"
-import { isTemplateExpression, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
   N_BLOCK,
   N_CALL,
+  N_EXPR_STMT,
+  FLAG_CONST,
+  N_INDEX,
+  N_MEMBER,
+  N_PAREN,
+  N_PARAM,
+  N_VAR_DECL,
+  FLAG_USING,
   N_DO,
   N_FALSE,
   N_FOR,
@@ -74,12 +82,26 @@ import {
   PAR_MAP,
   PAR_NONE,
   PAR_REDUCE,
+  PAR_SPAWN,
+  PAR_TASK,
   ParallelCall,
   TemplateInfo,
 } from "./program"
 import { stdModuleName } from "./std-modules"
 import { StringSet } from "./map"
+import { Local } from "./symbols"
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, TypeTable } from "./types"
+
+/** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
+const THREAD_SCOPE: string = "ThreadScope"
+
+/** The name the parser gives a method declared as `[Symbol.dispose]` (WP29 P2). */
+export const DISPOSE_METHOD: string = "[Symbol.dispose]"
+
+/** The refusal of a `[Symbol.dispose]` method anywhere but `nish/threads`'s `ThreadScope`. */
+export const disposeElsewhereMessage = (owner: string): string =>
+  `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` from ` +
+  "`nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
@@ -92,10 +114,38 @@ export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threa
 const isThreadsModule = (program: CheckedProgram): boolean =>
   program.packageName === CLI && program.source.path === threadsModuleName()
 
+/**
+ * Whether `program` is `std/threads.ts` read as a file of its own, in any
+ * package: what the declarations only `nish/threads` may make are allowed in
+ * (`[Symbol.dispose]`, a method with a function parameter). It is the path
+ * alone because the performance gate compiles `std/threads.ts` as a root, and
+ * because a file that declares them without being the module gets no scope's
+ * lowering from them: `spawn`'s role is still `isThreadsModule`'s.
+ */
+export const isThreadsSource = (program: CheckedProgram): boolean =>
+  program.source.path === threadsModuleName()
+
+/** Whether `template` is `ThreadScope.spawn` from `nish/threads` (WP29 P2). */
+export const isSpawnTemplate = (template: TemplateInfo): boolean => {
+  const owner = template.owner
+  return (
+    owner !== null &&
+    owner.name === THREAD_SCOPE &&
+    template.decl.children[0].text === "spawn" &&
+    isThreadsModule(template.home.program)
+  )
+}
+
 /** The `PAR_*` role of an instantiation of `template`. */
 export const parallelRole = (template: TemplateInfo): i32 => {
+  if (isSpawnTemplate(template)) {
+    return PAR_SPAWN
+  }
   if (template.owner !== null || !isThreadsModule(template.home.program)) {
     return PAR_NONE
+  }
+  if (template.sourceName === "runTask") {
+    return PAR_TASK
   }
   const name = template.sourceName
   if (name === "parallelMapInto") {
@@ -122,6 +172,23 @@ export const parallelBodyOf = (sig: FunctionSig): FunctionSig | null => {
   return instance === null || instance.functionArgs.length !== 1 ? null : instance.functionArgs[0]
 }
 
+/**
+ * The `storeResult` instance a `runTask` instance calls: the store a task's
+ * scope makes when it joins. `runTask`'s body is that one call, and which
+ * instance it reaches is in the instance's own tables.
+ */
+export const taskStoreOf = (task: FunctionSig): FunctionSig | null => {
+  const instance = task.instance
+  const body = task.body()
+  if (instance === null || body === null || body.kind !== N_CALL) {
+    return null
+  }
+  return instance.nodeCallees[body.id]
+}
+
+/** Whether `sig` is an instance of `ThreadScope.spawn` (WP29 P2). */
+export const isSpawnEntry = (sig: FunctionSig): boolean => parallelRoleOf(sig) === PAR_SPAWN
+
 /** Whether `sig` is an instance of `parallelMapInto` or `parallelReduce`: one whose region the emitter builds. */
 export const isParallelEntry = (sig: FunctionSig): boolean => {
   const role = parallelRoleOf(sig)
@@ -134,15 +201,18 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
  * again with the same node and, for the same tuple, the same instance.
  */
 export const recordParallelCall = (program: CheckedProgram, node: Node, sig: FunctionSig): void => {
-  if (!isParallelEntry(sig)) {
+  // WP29 P2: a `spawn` is judged by the same facts, and kept apart because a
+  // task is not an element: nothing about it is scoped per call.
+  const calls = isSpawnEntry(sig) ? program.spawnCalls : program.parallelCalls
+  if (!isParallelEntry(sig) && !isSpawnEntry(sig)) {
     return
   }
-  for (const call of program.parallelCalls) {
+  for (const call of calls) {
     if (call.node === node && call.sig === sig) {
       return
     }
   }
-  program.parallelCalls.push(new ParallelCall(node, sig))
+  calls.push(new ParallelCall(node, sig))
 }
 
 // ---- The rules ---------------------------------------------------------------------------
@@ -154,8 +224,13 @@ const positionIn = (fn: FunctionSig, node: Node): string => {
 }
 
 /** What the template is called in a diagnostic: its source name, without the instance's type arguments. */
-const intrinsicName = (sig: FunctionSig): string =>
-  parallelRoleOf(sig) === PAR_MAP ? "parallelMapInto" : "parallelReduce"
+const intrinsicName = (sig: FunctionSig): string => {
+  const role = parallelRoleOf(sig)
+  if (role === PAR_SPAWN) {
+    return "spawn"
+  }
+  return role === PAR_MAP ? "parallelMapInto" : "parallelReduce"
+}
 
 /**
  * The body writes memory its caller could observe, which two threads running
@@ -616,4 +691,666 @@ const costOf = (node: Node): i32 => {
 export const mapGrain = (fn: FunctionSig): i32 => {
   const body = fn.body()
   return body === null ? REGION_COST : REGION_COST / costOf(body)
+}
+
+// ---- WP29 P2: the scope ------------------------------------------------------------------
+//
+// `using s = scope(); s.spawn(entry, arg, dst, at)`. What keeps a scope free
+// of races is when its tasks run: at the join, not at the spawn
+// (runtime/runtime-parallel.c). While they run, the thread that opened the
+// scope is inside the join and runs nothing else; each task may write nothing
+// another can see (`sharedWriteMessage`, the rule a data-parallel body is held
+// to) and answers a number, a `boolean` or an enum; and each answer is stored
+// into `dst[at]` by the thread that opened the scope, after the last task has
+// finished. So any argument may be handed to a task — nothing writes it while
+// the tasks read it. What the parent may do between its spawns is limited for
+// another reason, that Node runs each task at its spawn: see "the region" below.
+//
+// What is left to check is that every scope is joined, which the construct
+// guarantees once a scope cannot get away from its block: it is made only by
+// `scope()` as the initialiser of a `using` declaration, which is a statement
+// of a block, and used only as the receiver of a `spawn` statement.
+
+/** One refusal the scope rules make, where it is reported. */
+export class ScopeFinding {
+  node: Node
+  message: string
+
+  constructor(node: Node, message: string) {
+    this.node = node
+    this.message = message
+  }
+}
+
+const usingNotScopeMessage = (): string =>
+  "`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal " +
+  "the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs"
+
+const scopeNotUsingMessage = (): string =>
+  "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that " +
+  "declares it ends, so a scope bound any other way would be one nobody joins"
+
+const scopeEscapesMessage = (): string =>
+  `A \`${THREAD_SCOPE}\` can only be the receiver of a \`spawn\` statement: passed, stored, returned or copied, ` +
+  "it could be given a task after its block has joined it"
+
+const usingPlaceMessage = (): string =>
+  "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, " +
+  "and a single-statement body is not a block"
+
+/** The task given to `spawn` is an arrow. */
+export const taskArrowMessage = (): string =>
+  "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a " +
+  "unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread " +
+  "(declare the arrow as a `const` of the module and pass its name)"
+
+/** The argument of a task is a `Result` the ABI passes as its parts. */
+export const taskArgumentMessage = (table: TypeTable, sig: FunctionSig): string => {
+  const instance = sig.instance
+  if (instance === null || instance.typeArgs.length === 0 || !table.resultByValue(instance.typeArgs[0])) {
+    return ""
+  }
+  return (
+    `The argument of \`spawn\` is \`${table.typeName(instance.typeArgs[0])}\`, which a task cannot be handed: ` +
+    "a `Result` is passed as its parts rather than as one value, so hand the task the value it holds"
+  )
+}
+
+/** Whether `program` loaded `nish/threads`, without which there is no scope to check. */
+const threadsLoaded = (programs: CheckedProgram[]): boolean => {
+  for (const program of programs) {
+    if (isThreadsModule(program)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `call` is `scope()` from `nish/threads`: a call of a free function answering a `ThreadScope`. */
+const isScopeCall = (program: CheckedProgram, call: Node, scopeType: i32): boolean => {
+  if (call.kind !== N_CALL || program.nodeTypes[call.id] !== scopeType) {
+    return false
+  }
+  const callee = program.nodeCallees[call.id]
+  return callee !== null && callee.sourceName === "scope" && callee.instance === null
+}
+
+/**
+ * Whether `node`, a `ThreadScope` identifier under the first `n` of
+ * `parents`, is the receiver of a `spawn` statement: `s.spawn(...)` standing
+ * alone.
+ */
+const isSpawnReceiver = (node: Node, parents: Node[], n: i32): boolean => {
+  if (n < 3) {
+    return false
+  }
+  const member = parents[n - 1]
+  const call = parents[n - 2]
+  const stmt = parents[n - 3]
+  return (
+    member.kind === N_MEMBER &&
+    member.text === "spawn" &&
+    member.children[0] === node &&
+    call.kind === N_CALL &&
+    call.children[0] === member &&
+    stmt.kind === N_EXPR_STMT
+  )
+}
+
+/** Whether `node` is the initialiser of a declarator of a `using` statement, under the first `n` of `parents`. */
+const isUsingInitialiser = (node: Node, parents: Node[], n: i32): boolean => {
+  if (n < 3) {
+    return false
+  }
+  const decl = parents[n - 1]
+  const stmt = parents[n - 3]
+  return (
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === node &&
+    stmt.kind === N_VAR &&
+    (stmt.flags & FLAG_USING) !== 0
+  )
+}
+
+/** The walk: `node` under `parents`, outermost first, with every refusal pushed onto `out`. */
+const walkScopes = (
+  program: CheckedProgram,
+  node: Node,
+  parents: Node[],
+  scopeType: i32,
+  out: ScopeFinding[]
+): void => {
+  const n = parents.length
+  const parent: Node | null = n > 0 ? parents[n - 1] : null
+  if (node.kind === N_VAR && (node.flags & FLAG_USING) !== 0) {
+    // A `case` clause's declarations are refused as every declaration there is.
+    if (parent === null || parent.kind !== N_BLOCK) {
+      out.push(new ScopeFinding(node, usingPlaceMessage()))
+    }
+    for (const decl of node.children[0].children) {
+      const init = unwrapParens(decl.children[2])
+      if (!isScopeCall(program, init, scopeType)) {
+        out.push(new ScopeFinding(decl, usingNotScopeMessage()))
+      }
+    }
+  }
+  const declaresName =
+    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node
+  if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
+    // A parenthesised scope is judged as what it wraps, where it stands.
+    let at = node
+    let depth = n
+    while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+      at = parents[depth - 1]
+      depth = depth - 1
+    }
+    if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
+      if (!isUsingInitialiser(at, parents, depth)) {
+        out.push(new ScopeFinding(node, scopeNotUsingMessage()))
+      }
+    } else if (!(node.kind === N_IDENT && isSpawnReceiver(at, parents, depth))) {
+      out.push(new ScopeFinding(node, scopeEscapesMessage()))
+    }
+  }
+  parents.push(node)
+  for (const child of node.children) {
+    walkScopes(program, child, parents, scopeType, out)
+  }
+  parents.pop()
+}
+
+/**
+ * Every refusal of the scope rules in `program`'s bodies. The bodies of
+ * `nish/threads` itself are the scope's own and are not judged; a generic
+ * body is judged once per instantiation, over that instantiation's tables,
+ * and an arrow inside a body with the body, whose tables it shares.
+ */
+export const scopeFindings = (
+  programs: CheckedProgram[],
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable
+): ScopeFinding[] => {
+  const out: ScopeFinding[] = []
+  // Without `nish/threads` there is no scope, and all that can be wrong is a
+  // `using` of something else, which a module that never spells the word
+  // cannot have: the text answers that without a walk.
+  const loaded = threadsLoaded(programs)
+  if (isThreadsModule(program) || (!loaded && program.source.text.indexOf("using") < 0)) {
+    return out
+  }
+  // No node has type -2, so without the module only the `using` rule applies.
+  const scopeType = loaded ? table.structOf(THREAD_SCOPE) : -2
+  for (const sig of program.functions) {
+    const body = sig.body()
+    if (body === null || sig.lifted || !sig.definedIn(program.source)) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const parents: Node[] = []
+    walkScopes(program, body, parents, scopeType, out)
+    if (loaded) {
+      checkBody(program, facts, body, out)
+    }
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+  }
+  return out
+}
+
+// ---- WP29 P2: what the thread that opened a scope may do before it joins -----------------
+//
+// A task runs, and its answer is stored, when its scope joins; under Node the
+// same task runs and stores where it is spawned. The two print the same only if
+// nothing between a scope's first `spawn` and the end of its block can tell
+// when that happened. That stretch is the *region*: from the statement of the
+// block that holds the first `spawn` on the scope to the block's end, except a
+// `return`'s value, which is computed after the join.
+//
+// Memory is reached only through a function's parameters and what it
+// allocates: a module constant is a number, a boolean or a string, and nothing
+// is `static`. So two local facts about each variable of the function decide
+// the rule, and no alias analysis is needed:
+//
+//   - **A destination is a `const` bound to a fresh array** (a literal or
+//     `new Array`) that is only ever indexed, walked, asked its `.length` or a
+//     method, or named as a `spawn`'s destination: never handed on — not an
+//     argument, not a task's argument, not stored, not returned. Nothing else
+//     can reach it, so the region may not read *it*, by name.
+//   - **A write in the region must miss everything a task reads.** A task
+//     reads only what its argument reaches. So a store is allowed into the own
+//     slots of a *private* local — a `const` bound to a fresh array or object
+//     literal that is never handed on and never a destination — and a call is
+//     allowed unless it writes through a pointer it is handed
+//     (`PointerParamFacts.writesThrough`): a function that only fills memory it
+//     allocated itself, such as one that builds and returns an array, writes
+//     nothing a task can see. Every other write is refused: a store through
+//     anything else, `push` or `pop` on anything else, `Arena`, and a task of
+//     another scope, whose join stores.
+
+/** The tail every refusal of the rule shares, which is what its code is keyed on. */
+const REGION_TAIL: string =
+  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores " +
+  "where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a " +
+  "scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read"
+
+/**
+ * What the function's body does with each of its variables, read once before
+ * its regions are judged: whether it is a `const` bound to a fresh array (and
+ * so may be a destination) or to a fresh array or object literal (and so may
+ * be private), and whether any use of it hands it on or names it a destination.
+ */
+class VariableUses {
+  locals: Local[]
+  freshArray: boolean[]
+  freshLiteral: boolean[]
+  handedOn: boolean[]
+  destination: boolean[]
+
+  constructor() {
+    this.locals = []
+    this.freshArray = []
+    this.freshLiteral = []
+    this.handedOn = []
+    this.destination = []
+  }
+
+  indexOf(local: Local | null): i32 {
+    return local === null ? -1 : this.locals.indexOf(local)
+  }
+
+  add(local: Local): i32 {
+    const at = this.indexOf(local)
+    if (at >= 0) {
+      return at
+    }
+    this.locals.push(local)
+    this.freshArray.push(false)
+    this.freshLiteral.push(false)
+    this.handedOn.push(false)
+    this.destination.push(false)
+    return this.locals.length - 1
+  }
+
+  /** A `const` bound to a fresh array, never handed on: what a destination has to be. */
+  isDestinationShaped(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshArray[at] && !this.handedOn[at]
+  }
+
+  /** A `const` bound to a fresh literal, never handed on and never a destination: nothing but this function reaches it. */
+  isPrivate(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshLiteral[at] && !this.handedOn[at] && !this.destination[at]
+  }
+}
+
+/** Whether `init` is a fresh array: a literal, or `new Array(...)`. */
+const isFreshArray = (init: Node): boolean => {
+  const e = unwrapParens(init)
+  return (
+    e.kind === N_ARRAY ||
+    (e.kind === N_NEW && e.children[0].kind === N_IDENT && e.children[0].text === "Array")
+  )
+}
+
+/** Whether `init` is a fresh array or object literal, whose own slots nothing else reaches. */
+const isFreshLiteral = (init: Node): boolean => isFreshArray(init) || unwrapParens(init).kind === N_OBJECT
+
+/** The `spawn` instance `node` calls, when it is a call of one; `null` otherwise. */
+const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null => {
+  if (node.kind !== N_CALL || node.children[0].kind !== N_MEMBER) {
+    return null
+  }
+  const callee = program.nodeCallees[node.id]
+  return callee !== null && isSpawnEntry(callee) ? callee : null
+}
+
+/** The local `node` names, when it is an identifier (parenthesised or not); `null` otherwise. */
+const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
+  const e = unwrapParens(node)
+  return e.kind === N_IDENT ? program.nodeLocals[e.id] : null
+}
+
+/**
+ * Record what `node` does with the variables it names. A use of a variable
+ * keeps it unhanded only as the base of an index or a member, as the iterable
+ * of a `for...of`, or as a `spawn`'s destination, which is recorded as such.
+ */
+const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, uses: VariableUses): void => {
+  if (node.kind === N_VAR) {
+    const constant = (node.flags & FLAG_CONST) !== 0
+    for (const decl of node.children[0].children) {
+      const local = program.nodeLocals[decl.id]
+      if (local !== null) {
+        const at = uses.add(local)
+        uses.freshArray[at] = constant && isFreshArray(decl.children[2])
+        uses.freshLiteral[at] = constant && isFreshLiteral(decl.children[2])
+      }
+    }
+  }
+  if (node.kind === N_IDENT && parent !== null) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null) {
+      const at = uses.add(local)
+      const base =
+        ((parent.kind === N_INDEX || parent.kind === N_MEMBER) &&
+          unwrapParens(parent.children[0]) === node) ||
+        (parent.kind === N_FOR_OF && unwrapParens(parent.children[1]) === node)
+      const declared = parent.kind === N_VAR_DECL && parent.children[0] === node
+      if (!base && !declared) {
+        uses.handedOn[at] = true
+      }
+    }
+  }
+  const callee = spawnCallee(program, node)
+  if (callee !== null) {
+    const args = node.children[1].children
+    let k = 0
+    while (k < args.length) {
+      const arg = args[k]
+      const local: Local | null = k === 2 ? namedLocal(program, arg) : null
+      if (local !== null) {
+        uses.destination[uses.add(local)] = true
+      } else {
+        collectUses(program, arg, node.children[1], uses)
+      }
+      k = k + 1
+    }
+    collectUses(program, node.children[0], node, uses)
+    return
+  }
+  if (node.kind === N_PAREN && parent !== null) {
+    // A parenthesised name is used as its parentheses are.
+    for (const child of node.children) {
+      collectUses(program, child, parent, uses)
+    }
+    return
+  }
+  for (const child of node.children) {
+    collectUses(program, child, node, uses)
+  }
+}
+
+/** One scope's region being walked: the scope's locals, its name, and the destinations its tasks store into so far. */
+class RegionState {
+  locals: Local[]
+  name: string
+  destinations: Local[]
+
+  constructor(locals: Local[], name: string) {
+    this.locals = locals
+    this.name = name
+    this.destinations = []
+  }
+
+  owns(local: Local | null): boolean {
+    return local !== null && this.locals.indexOf(local) >= 0
+  }
+
+  isDestination(local: Local | null): boolean {
+    return local !== null && this.destinations.indexOf(local) >= 0
+  }
+
+  addDestination(local: Local | null): void {
+    if (local !== null && this.destinations.indexOf(local) < 0) {
+      this.destinations.push(local)
+    }
+  }
+
+  /** Whether a task can have been filed by now: the first `spawn`, or one in a loop around this. */
+  live(): boolean {
+    return this.destinations.length > 0
+  }
+}
+
+/** The local a `spawn` call's receiver names, or `null`. */
+const spawnReceiver = (program: CheckedProgram, node: Node): Local | null =>
+  namedLocal(program, node.children[0].children[0])
+
+/** The local a `spawn` call names as its destination, or `null`. */
+const spawnDestination = (program: CheckedProgram, node: Node): Local | null => {
+  const args = node.children[1].children
+  return args.length > 2 ? namedLocal(program, args[2]) : null
+}
+
+/** Whether `node` or anything under it (outside an arrow) is a `spawn` on `state`'s scope. */
+const holdsSpawnOn = (program: CheckedProgram, node: Node, state: RegionState): boolean => {
+  if (node.kind === N_ARROW) {
+    return false
+  }
+  if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
+    return true
+  }
+  for (const child of node.children) {
+    if (holdsSpawnOn(program, child, state)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Every destination of a `spawn` on `state`'s scope under `node`: what a loop's later passes will have stored into. */
+const collectDestinations = (program: CheckedProgram, node: Node, state: RegionState): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
+    state.addDestination(spawnDestination(program, node))
+  }
+  for (const child of node.children) {
+    collectDestinations(program, child, state)
+  }
+}
+
+const destinationMessage = (): string =>
+  "The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), " +
+  `used only by index, \`.length\`, its methods and as a destination${REGION_TAIL}`
+
+const regionReadMessage = (state: RegionState, name: string): string =>
+  `This reads \`${name}\`, a destination of a task of \`${state.name}\`, before the scope joins${REGION_TAIL}`
+
+const regionWriteMessage = (state: RegionState, what: string): string =>
+  `${what} writes memory a task of \`${state.name}\` may read, before the scope joins${REGION_TAIL}`
+
+/** Whether `target` is memory rather than a local: an element or a field. */
+const isMemoryTarget = (target: Node): boolean => {
+  const t = unwrapParens(target)
+  return t.kind === N_INDEX || t.kind === N_MEMBER
+}
+
+/** Whether `target`, an assignment's left side, is one of a private local's own slots: `p[i]` or `p.f`. */
+const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses): boolean => {
+  const t = unwrapParens(target)
+  return (t.kind === N_INDEX || t.kind === N_MEMBER) && uses.isPrivate(namedLocal(program, t.children[0]))
+}
+
+/**
+ * The refusal for a call in the region, or "": `Arena`, `push` or `pop` on
+ * anything but a private local, a task of another scope, or a function that
+ * writes through a pointer it is handed.
+ */
+const regionCallMessage = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  node: Node,
+  state: RegionState,
+  uses: VariableUses
+): string => {
+  const callee = node.children[0]
+  if (callee.kind === N_MEMBER) {
+    const receiver = unwrapParens(callee.children[0])
+    if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
+      return regionWriteMessage(state, `\`Arena.${callee.text}\``)
+    }
+    if (state.isDestination(namedLocal(program, receiver))) {
+      return regionReadMessage(state, receiver.text)
+    }
+    if ((callee.text === "push" || callee.text === "pop") && !uses.isPrivate(namedLocal(program, receiver))) {
+      const type = program.nodeTypes[receiver.id]
+      if (type >= 0 && program.nodeCallees[node.id] === null) {
+        return regionWriteMessage(state, `\`${callee.text}\``)
+      }
+    }
+  }
+  const sig = program.nodeCallees[node.id]
+  if (sig === null) {
+    return ""
+  }
+  if (isSpawnEntry(sig)) {
+    return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
+  }
+  const own = facts.get(sig.name)
+  if (own === null) {
+    return regionWriteMessage(state, `\`${sig.sourceName}\``)
+  }
+  for (const pp of own.pointerParams) {
+    if (pp.writesThrough) {
+      return regionWriteMessage(state, `\`${sig.sourceName}\``)
+    }
+  }
+  return ""
+}
+
+/** Walk `node`, parent code inside `state`'s region, pushing each refusal. */
+const walkRegion = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  uses: VariableUses,
+  node: Node,
+  state: RegionState,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return // a lifted function of its own; it runs only when called
+  }
+  if (node.kind === N_RETURN) {
+    return // every scope joins before a `return` computes its value
+  }
+  if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
+    // A later pass sees what every spawn inside the loop stored on the passes before.
+    collectDestinations(program, node, state)
+  }
+  if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
+    // The task's argument and destination are the parent's code, evaluated
+    // before the task is filed.
+    for (const arg of node.children[1].children) {
+      walkRegion(program, facts, uses, arg, state, out)
+    }
+    state.addDestination(spawnDestination(program, node))
+    return
+  }
+  // Until a task can have been filed, nothing can tell when it runs.
+  if (!state.live()) {
+    for (const child of node.children) {
+      walkRegion(program, facts, uses, child, state, out)
+    }
+    return
+  }
+  let message = ""
+  if (node.kind === N_BINARY && isAssignmentOperator(node.text) && isMemoryTarget(node.children[0])) {
+    if (!isPrivateSlot(program, node.children[0], uses)) {
+      message = regionWriteMessage(state, "This assignment")
+    }
+  } else if (
+    node.kind === N_UNARY &&
+    (node.text === "++" || node.text === "--") &&
+    isMemoryTarget(node.children[0]) &&
+    !isPrivateSlot(program, node.children[0], uses)
+  ) {
+    message = regionWriteMessage(state, `This \`${node.text}\``)
+  } else if (node.kind === N_INDEX && state.isDestination(namedLocal(program, node.children[0]))) {
+    message = regionReadMessage(state, unwrapParens(node.children[0]).text)
+  } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
+    message = regionReadMessage(state, unwrapParens(node.children[1]).text)
+  } else if (node.kind === N_CALL) {
+    message = regionCallMessage(program, facts, node, state, uses)
+  }
+  if (message.length > 0) {
+    out.push(new ScopeFinding(node, message))
+    return
+  }
+  for (const child of node.children) {
+    walkRegion(program, facts, uses, child, state, out)
+  }
+}
+
+/** Every `spawn` under `node` whose destination is not a fresh, unhanded `const` array. */
+const checkDestinations = (
+  program: CheckedProgram,
+  node: Node,
+  uses: VariableUses,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (spawnCallee(program, node) !== null) {
+    const args = node.children[1].children
+    if (args.length > 2 && !uses.isDestinationShaped(namedLocal(program, args[2]))) {
+      out.push(new ScopeFinding(args[2], destinationMessage()))
+    }
+  }
+  for (const child of node.children) {
+    checkDestinations(program, child, uses, out)
+  }
+}
+
+/**
+ * Every block under `node` that declares a scope, with that scope's region
+ * judged: from the block's first statement to hold a `spawn` on the scope to
+ * the block's end.
+ */
+const findRegions = (
+  program: CheckedProgram,
+  facts: FactsTable,
+  uses: VariableUses,
+  node: Node,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (node.kind === N_BLOCK) {
+    let i = 0
+    while (i < node.children.length) {
+      const stmt = node.children[i]
+      if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+        const locals: Local[] = []
+        for (const decl of stmt.children[0].children) {
+          const local = program.nodeLocals[decl.id]
+          if (local !== null) {
+            locals.push(local)
+          }
+        }
+        const state = new RegionState(locals, locals.length > 0 ? locals[0].name : "scope")
+        let started = false
+        let j = i + 1
+        while (j < node.children.length) {
+          const later = node.children[j]
+          started = started || holdsSpawnOn(program, later, state)
+          if (started) {
+            walkRegion(program, facts, uses, later, state, out)
+          }
+          j = j + 1
+        }
+      }
+      i = i + 1
+    }
+  }
+  for (const child of node.children) {
+    findRegions(program, facts, uses, child, out)
+  }
+}
+
+/** The destination rule and every region of one function's body. */
+const checkBody = (program: CheckedProgram, facts: FactsTable, body: Node, out: ScopeFinding[]): void => {
+  const uses = new VariableUses()
+  collectUses(program, body, null, uses)
+  checkDestinations(program, body, uses, out)
+  findRegions(program, facts, uses, body, out)
 }

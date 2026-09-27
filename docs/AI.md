@@ -748,6 +748,62 @@ import { parallelReduce } from "nish/threads";
 export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   // `+` folds from 0
 ```
 
+### Scoped tasks: `using s = scope()`
+
+Different functions at once, one thread each: open a scope with `using`, give
+it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
+`entry(arg)` into `dst[at]` when the block ends. (A plain block, for the same
+reason as the one above: `tests/link/thread_scope_basic` compiles it.)
+
+```ts
+import { scope } from "nish/threads";
+
+const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
+const square = (n: i32): i32 => n * n;
+
+export const main = (): i32 => {
+  const xs: f64[] = [1.5, 2.5];
+  const sums: f64[] = [0.0];
+  const squares: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(sumOf, xs, sums, 0);
+    s.spawn(square, 12, squares, 0);
+  }                                          // joined here, on every exit
+  console.log(`${sums[0]} ${squares[0]}`);   // 4 144
+  return 0;
+};
+```
+
+- **The tasks run when the block ends**, together, and each answer is stored
+  after the last one finishes. So read a destination after the block. A
+  destination is a `const` bound to a fresh array (`[0, 0]`, `new Array`) that
+  you only index; never pass it on. Between the first `spawn` and the block's
+  end, don't read a destination, and don't write memory a task could read (a
+  store into an argument, a call that writes through its argument).
+- **`using` takes only `scope()`**, and `scope()` only comes from `using`.
+  The scope is only ever the receiver of a `spawn` statement: never pass it,
+  store it or return it.
+- **The task is a named top-level function**, not an arrow, and it follows the
+  data-parallel rules: it writes nothing anybody else can see, answers a number,
+  a `boolean` or an enum, and leaves `Arena` alone. A task cannot open a scope
+  of its own or call `parallelMapInto`.
+- **Any argument will do** — an array, an object — because nothing writes
+  memory while the tasks run. There is no thread count: one task, one thread.
+
+```ts nish:err NL2388
+import { scope } from "nish/threads";
+
+const one = (n: i32): i32 => n + 1;
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  const s = scope();   // a scope must be introduced by `using`
+  s.spawn(one, 1, out, 0);
+  return out[0];
+};
+```
+
 ### Calling C
 
 `declare function name(params): T;` declares a C function this program calls but

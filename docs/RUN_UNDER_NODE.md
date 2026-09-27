@@ -104,6 +104,16 @@ no prelude can reach it. They are language decisions
   something quietly wrong, which is the failure mode to want: a number that
   silently stopped wrapping at 2^53 would be much worse than a thrown error
   naming the line.
+- **A scope's tasks run at the spawn under Node**, one after another, and each
+  stores its answer there; natively they run together when the scope's block
+  ends, and each answer is stored after the last task finishes
+  ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
+  nothing another can see and cannot print, and the checker refuses a program
+  that reads a destination, or writes what a task may read, before the block
+  ends, so the two print the same. `using` itself needs `--js-explicit-resource-management` on Node
+  22 and is native from Node 24; Node 22's flagged `using` never calls
+  `[Symbol.dispose]`, and nothing here needs it to, because every task has run
+  by the time the block ends.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`
@@ -121,9 +131,11 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Two `nish/threads` programs are held to the same claim by name,
-`tests/link/par_map` and `tests/link/par_reduce`: each prints under Node what
-its native binary prints (`node tests/run.js threads-under-node`).
+Six `nish/threads` programs are held to the same claim by name,
+`tests/link/par_map`, `tests/link/par_reduce` and the four
+`tests/link/thread_scope_*`: each prints under Node, run with
+`--js-explicit-resource-management`, what its native binary prints
+(`node tests/run.js threads-under-node`).
 
 Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
 
