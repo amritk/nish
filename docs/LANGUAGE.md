@@ -264,6 +264,27 @@ Type rules:
     meaning, so `--unchecked-indexing` keeps it and `--wrapping` changes only
     the arithmetic before it. Under Node nothing is checked, which
     [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent) records.
+  - **An entry the compiler can prove is free** (WP31 §8). The bounds proof of
+    [Element access](#element-access) judges each entry where the value is
+    computed, and writes no compare where it already places the value inside
+    the range. Two sources can be proven. A local is proven one end at a
+    time: the lower end when `Lo` is `-2147483648`, or `Lo <= 0` and the local
+    is known non-negative; the upper end when `Hi` is `2147483647`, or the
+    local is known below `Hi + 1` — by a loop condition, a guard that reaches
+    the entry, a literal it was bound to, or its own declared range. And
+    `toI32(x)` of a `u8`, a `u16` or a ranged value lands in `x`'s declared
+    range, so `const r: integer<0, 255> = toI32(b)` costs nothing for a `u8`
+    `b`. `for (let i = 0; i < 256; i++) { const b: integer<0, 255> = i }` is
+    the shape §7 recommends, and the loop condition proves it
+    (`tests/cases/perf_rng_quiet`); so is a call that hands a loop counter to a
+    ranged parameter, which leaves wp31 §12's `getByte` program with no check
+    at all (`perf_rng_getbyte`). A lower end above zero is never proven
+    from a guard, because the proof records no lower bound but zero, and the
+    sum a compound assignment or an increment stores back is never proven at
+    all; both keep their check. A check that survives inside a loop is a
+    performance warning ([Diagnostics](#diagnostics-and-debugging-flags)), and a counter declared
+    with a range is the loop that warns and then panics
+    (`perf_rng_counter`).
   - **Leaving a range is free.** Every operator reads a ranged value as `i32`,
     so `r + 1` is an `i32`, `r < 9` compares two `i32`s and `toI64(r)` is a
     `sext`; mixing one with an `i32` is never an error, and nothing computes a
@@ -2819,8 +2840,18 @@ and both come from the program as written:
 
   - `i >= 0` from a literal initialiser, from `i = w.length`, from a test that
     reaches the access (`if (i >= 0)`, `0 <= i`, the false arm of `i < 0`), or
-    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, which
-    is the one *ranged* type the language has today.
+    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, and
+    neither is an `integer<Lo, Hi>` with `Lo >= 0`.
+  - **a bound read off the type.** A declared range bounds its index from
+    above as well: a `u8` is below 256, a `u16` below 65536 and an
+    `integer<Lo, Hi>` below `Hi + 1`, so with a length guard that covers the
+    range (`if (table.length < 256) { return }`) the access needs no check.
+    `const k = toI32(b)` keeps the bound of a `u8` or `u16` `b`, because the
+    conversion is a `zext`. A `u32` or `u64` has no upper bound an `i32` fact
+    can carry, and a range wider than the length that is known keeps its
+    check (`tests/cases/arr_bounds_ranged`). Nothing is recorded and nothing
+    is forgotten: every write into a ranged place is an entry, so the value
+    is inside its range at every point.
   - `i < w.length` from a test that reaches the access — a loop condition, an
     `if`, the right operand of `&&`, the statements after
     `if (i >= w.length) { return; }` — or, through `const n = w.length`, from
@@ -4447,6 +4478,21 @@ by the caller.
     (`this.source.charCodeAt(this.pos)`) or a computed index was never a
     candidate, and the rewrite there is to bind them to locals first
     (`tests/cases/perf_bounds_quiet`).
+  - **a range entry that was not proven** — a value entering an
+    `integer<Lo, Hi>` inside a loop where the proof above did not place it in
+    the range, so the compare and its cold panic run on every iteration. A
+    local is named with the guard that proves it —
+    `if (k >= 0 && k <= 99)`, or `if (k <= 99)` for a range with no lower end
+    — and anything computed is told to be bound to an `i32` local and guarded
+    there, or, when it is a counter or a cursor written back into its own
+    range, to be declared `i32` with the range on the value that is used
+    (`tests/cases/perf_rng_loop`, `perf_rng_counter`). Reported on the value,
+    or on the target of a compound assignment or an increment, once per
+    entry. Silent outside a loop; silent for a proven entry
+    (`tests/cases/perf_rng_quiet`); and silent for a range whose lower end is
+    neither 0 nor `-2147483648`, where no guard proves the entry. Like the
+    clamp warning it is **unaffected by `--unchecked-indexing`**, which leaves
+    the entry check in place.
   - **a `substring` bound whose clamp could not be folded off** —
     `s.substring(a, b)` inside a loop where the proof above could not place `a`
     or `b` in `[0, s.length]`, so that bound keeps the `llvm.smin` /

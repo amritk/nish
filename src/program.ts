@@ -537,6 +537,7 @@ export class Instantiation {
    */
   nodeProvenIndex: boolean[]
   nodeProvenClamp: boolean[]
+  nodeProvenRange: boolean[]
   /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
   fusion: FusionTable
   /**
@@ -583,6 +584,7 @@ export class Instantiation {
     this.nodeCaseValues = new Array<i64>(nodeCount)
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
+    this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.fusion = new FusionTable()
     this.from = null
     let i = 0
@@ -610,6 +612,7 @@ export class Instantiation {
     this.nodeCaseValues = outer.nodeCaseValues
     this.nodeProvenIndex = outer.nodeProvenIndex
     this.nodeProvenClamp = outer.nodeProvenClamp
+    this.nodeProvenRange = outer.nodeProvenRange
     this.fusion = outer.fusion
   }
 }
@@ -1128,6 +1131,7 @@ export class CheckedProgram {
   savedNodeCaseValues: i64[]
   savedNodeProvenIndex: boolean[]
   savedNodeProvenClamp: boolean[]
+  savedNodeProvenRange: boolean[]
   savedFusion: FusionTable
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
   enums: StringMap
@@ -1225,6 +1229,16 @@ export class CheckedProgram {
    */
   nodeProvenClamp: boolean[]
   /**
+   * A range entry node id -> the same analysis proved the value already lies
+   * in the range it enters, so the emitter writes no check (WP31 §8). Keyed
+   * by the value node the checker recorded the entry on (`nodeCoercions`),
+   * and read by the emitter and the attribute pass alike, so a proven entry
+   * costs nothing and takes no panic tail into the callee set. A compound
+   * assignment or an increment into a ranged place is never in here: its
+   * value is a sum, which no fact is stated about.
+   */
+  nodeProvenRange: boolean[]
+  /**
    * WP32 S5: the calls of this module's bodies that are one fused lookup
    * (docs/wp32-map.md §9.1). Inside a generic's body it is the
    * instantiation's own, which `enterInstance` installs.
@@ -1272,6 +1286,7 @@ export class CheckedProgram {
     this.savedNodeCaseValues = []
     this.savedNodeProvenIndex = []
     this.savedNodeProvenClamp = []
+    this.savedNodeProvenRange = []
     this.fusion = new FusionTable()
     this.savedFusion = this.fusion
     this.enums = new StringMap()
@@ -1298,6 +1313,7 @@ export class CheckedProgram {
     this.nodeEnumValues = new Array<i32>(nodeCount)
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
+    this.nodeProvenRange = new Array<boolean>(nodeCount)
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1
@@ -1526,6 +1542,7 @@ export class CheckedProgram {
     this.savedNodeCaseValues = this.nodeCaseValues
     this.savedNodeProvenIndex = this.nodeProvenIndex
     this.savedNodeProvenClamp = this.nodeProvenClamp
+    this.savedNodeProvenRange = this.nodeProvenRange
     this.savedFusion = this.fusion
     this.nodeTypes = info.nodeTypes
     this.nodeLocals = info.nodeLocals
@@ -1535,6 +1552,7 @@ export class CheckedProgram {
     this.nodeCaseValues = info.nodeCaseValues
     this.nodeProvenIndex = info.nodeProvenIndex
     this.nodeProvenClamp = info.nodeProvenClamp
+    this.nodeProvenRange = info.nodeProvenRange
     this.fusion = info.fusion
     this.activeInstance = info
   }
@@ -1549,6 +1567,7 @@ export class CheckedProgram {
     this.nodeCaseValues = this.savedNodeCaseValues
     this.nodeProvenIndex = this.savedNodeProvenIndex
     this.nodeProvenClamp = this.savedNodeProvenClamp
+    this.nodeProvenRange = this.savedNodeProvenRange
     this.fusion = this.savedFusion
     this.activeInstance = null
   }

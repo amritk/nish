@@ -1563,15 +1563,20 @@ class FactCollector {
 
   /**
    * A value entering a range may take the panic tail (WP31 §6): an entry the
-   * checker recorded that `entryIsFree` does not excuse, and the store of a
-   * compound assignment or an increment into a ranged place. Mirrors
-   * `emitRangeEntry` and `emitRangedStore`.
+   * checker recorded that neither `entryIsFree` nor the proof in
+   * `nodeProvenRange` (§8) excuses, and the store of a compound assignment or
+   * an increment into a ranged place. Mirrors `emitRangeEntry` and
+   * `emitRangedStore`.
    */
   collectRangeFacts(node: Node): void {
     const program = this.unit.program
     const from = program.nodeCoercions[node.id]
     const to = program.nodeTypes[node.id]
-    const entered = from >= 0 && this.table.isRanged(to) && !this.table.entryIsFree(from, to)
+    const entered =
+      from >= 0 &&
+      this.table.isRanged(to) &&
+      !this.table.entryIsFree(from, to) &&
+      !program.nodeProvenRange[node.id]
     if (entered || rangedStoreOf(program, this.table, node) >= 0) {
       const tail: string[] = []
       panicTailCallees(tail)

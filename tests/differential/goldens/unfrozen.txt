@@ -21,6 +21,7 @@ cases/arr_bounds_generic_instances_method added after R6: no rewriter to freeze 
 cases/arr_bounds_generic_instances_prim added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
+cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
 cases/arr_bounds_store_rhs added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class added after R6: no rewriter to freeze it with
 cases/arr_header_hoist_record_class_root added after R6: no rewriter to freeze it with
@@ -177,6 +178,10 @@ cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
+cases/perf_rng_counter added after R6: no rewriter to freeze it with
+cases/perf_rng_getbyte added after R6: no rewriter to freeze it with
+cases/perf_rng_loop added after R6: no rewriter to freeze it with
+cases/perf_rng_quiet added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
