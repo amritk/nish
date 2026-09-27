@@ -222,7 +222,7 @@ const sumAll = (buf: u8[]): i32 => {
 };
 ```
 
-```ts nish:err-body NL2383
+```ts nish:err-body NL2384
 const digit: integer<0, 9> = 12;
 ```
 

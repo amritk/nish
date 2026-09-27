@@ -644,6 +644,27 @@ that is never inspected ``, `reject_result_unhandled`). Handing the value on —
 an argument, a `return` — counts as reading it: the responsibility moves with
 the value, and the receiving signature carries the same rules.
 
+Storing one is handing it on too. An assignment statement — `rs[0] = rs[1]`,
+`r2 = r1` — moves the `Result` into its target and is not a
+discard; `r2 = r1` reads `r1`, and `r2`, a local, must still be inspected
+(`tests/cases/res_result_store`, `reject_result_store_unread`). The value an
+assignment replaces is dropped, though, so a `Result` local may not be
+assigned again while the value it holds has not been read since it was
+written (`` `r` is assigned again before its `Result<i32, string>` is
+inspected ``, `reject_result_overwrite_unread`). The check reads the function
+in source order, with an assignment's right-hand side before its target, so
+`r = retry(r)` is accepted, and a read in either branch of an `if` counts for
+an assignment after it. An element or a field is not tracked slot by slot, so
+`rs[0] = rs[1]` overwrites `rs[0]` unchecked. In a generic
+body a discarded value is judged by the type its template declares, as Rust's
+`#[must_use]` is: `items.pop()` on `items: T[]` drops a `T`, which is not a
+`Result` to the template's author even where `T` is one, while a template
+that drops a `Result<T, E>` it declared, or a concrete `Result`, is refused at
+every instantiation (`res_result_store`, `reject_result_generic_discarded`).
+That is what lets a `Map` hold a `Result` value
+(`tests/cases/map_value_result`, and `map_value_result_by_value` for one that
+travels packed).
+
 **2. The error arm comes first.** `r.value` is legal only where the checker
 proved `isOk()`, `r.error` only where it proved `isErr()`. There is no
 spelling that reaches the success payload without deciding what happens to the
