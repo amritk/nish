@@ -28,9 +28,9 @@
  *     so is every string offset. ASCII agrees; nothing else does.
  *   - **`a[i]` is unchecked**: out of range is `undefined` here and an exit-1
  *     panic natively. Only a program that indexes out of range can tell.
- *   - **Method dispatch is virtual under Node** and static natively, so an
- *     override reached through a base-typed value differs (LANGUAGE.md,
- *     "Method dispatch is static").
+ *   - **A record put into an array is shared here** and copied natively, and
+ *     `slice`, `new Array<T>(n)` and the typed-array names each differ too;
+ *     the document lists them.
  *   - **`orReturn()` does not propagate.** It throws a marker the rewriter's
  *     `try`/`catch` turns into an early `return`; unmodified there is no
  *     `catch`, so it escapes. `Ok`/`Err`/`isOk`/`isErr`/`value`/`error`/

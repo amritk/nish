@@ -143,7 +143,13 @@ own source until the seed compiles it, which is the next release.
 
 1. **Decide the rule and the lowering first.** Write the TypeScript snippet
    and the IR you expect by hand; check it with `llvm-as` and
-   `opt -passes=verify`.
+   `opt -passes=verify`. State the construct's **TypeScript reading**: what
+   the same source means when it runs as TypeScript under Node. It is
+   identical (A), or native stops where TypeScript carries on (B), or it
+   differs and you give the TypeScript that means what Nish means (C). A
+   construct with no TypeScript reading is not added, and a C construct needs a
+   measured reason. The classes and the ledger of every C row are in
+   [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6.
 2. **Parser and validator.** New syntax needs a node kind in `src/nodes.ts`
    (with its child layout written beside it) and a production in
    `src/parser.ts`. If the construct can *never* be compiled, add a rule to
