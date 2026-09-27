@@ -1,0 +1,2 @@
+reject_thread_region_call_write.ts:25:5
+`scale` writes memory a task of `s` may read, before the scope joins

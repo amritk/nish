@@ -34,7 +34,7 @@ import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
 import { StringMap, StringSet } from "./map"
-import { parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
+import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
 import {
   collectMethodSignature,
   collectStructMembers,
@@ -1268,9 +1268,10 @@ export const checkGenericCall = (
       `\`${template.sourceName}\` expects ${parameters.children.length} argument(s), got ${args.children.length}`
     )
   }
-  // A generic method never has a function parameter: its signature collector
-  // refuses one, so its arguments are all values and are checked as values.
-  const functional = template.owner === null
+  // A generic method has no function parameter — its signature collector
+  // refuses one, so its arguments are all values and are checked as values —
+  // except `nish/threads`'s `spawn`, whose task is one (WP29 P2).
+  const functional = template.owner === null || isSpawnTemplate(template)
   const names = typeParamSet(template)
   const bindings = new StringMap()
   let argTypes: i32[] = []
@@ -1314,11 +1315,7 @@ export const checkGenericCall = (
     const early = argTypes[i]
     if (later[i] && !(functional && isFunctionParameter(param))) {
       let want = -1
-      if (
-        annotation.kind !== N_EMPTY &&
-        template.owner === null &&
-        !mentionsUnbound(annotation, names, bindings)
-      ) {
+      if (annotation.kind !== N_EMPTY && functional && !mentionsUnbound(annotation, names, bindings)) {
         want = resolveInTemplate(template, annotation, bindings)
       }
       const type = checkExpression(ctx, arg, scope, want)

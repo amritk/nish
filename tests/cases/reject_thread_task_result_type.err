@@ -1,0 +1,1 @@
+`label` answers `string`, and `spawn` hands back only a number, a `boolean` or an enum

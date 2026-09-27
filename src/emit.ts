@@ -94,7 +94,15 @@ import {
   maybeLocalIndex,
   MaybeParts,
 } from "./emit-map"
-import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel"
+import {
+  closeBlockScopes,
+  emitParallelRegion,
+  emitScopeJoins,
+  emitSpawnTask,
+  isParallelRegionCall,
+  isSpawnTaskCall,
+  openScope,
+} from "./emit-parallel"
 import { addStringConstant, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -112,6 +120,7 @@ import {
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
+  FLAG_USING,
   N_FALSE,
   N_FOR,
   N_FOR_OF,
@@ -214,6 +223,14 @@ export class Emitter {
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
+  /**
+   * WP29 P2: each scope a `using` declaration opened and its block has not
+   * yet closed, innermost last, as the `i8*` its tasks are filed under, and
+   * how many loops enclosed it — which is how a `break` or `continue` knows
+   * which scopes it leaves (`emitScopeJoins`).
+   */
+  openScopes: string[]
+  openScopeLoops: i32[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -263,6 +280,8 @@ export class Emitter {
     this.currentSig = null
     this.tailCallId = -1
     this.loops = []
+    this.openScopes = []
+    this.openScopeLoops = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -417,6 +436,8 @@ export class Emitter {
     this.maybeParts = []
     this.fusedProbes = []
     this.loops = []
+    this.openScopes = []
+    this.openScopeLoops = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
@@ -836,9 +857,12 @@ export class Emitter {
   // ---- Dispatch -----------------------------------------------------------
 
   emitBlock(block: Node): void {
+    const scopes = this.openScopes.length
     for (const stmt of block.children) {
       this.emitStatement(stmt)
     }
+    // WP29 P2: a block that fell off its end joins the scopes it opened.
+    closeBlockScopes(this, scopes)
   }
 
   /**
@@ -930,6 +954,9 @@ export class Emitter {
         return
       case N_VAR:
         this.emitVariableDeclarations(stmt.children[0])
+        if ((stmt.flags & FLAG_USING) !== 0) {
+          openScope(this, stmt.children[0]) // WP29 P2
+        }
         return
       case N_EXPR_STMT:
         this.emitExpression(stmt.children[0])
@@ -971,6 +998,10 @@ export class Emitter {
 
   /** `return e`: the value first (it may allocate), then the arena scope release, then `ret`. */
   emitReturn(stmt: Node): void {
+    // WP29 P2: every scope open here joins before the value is computed, so
+    // the value may read what the tasks stored, and inside every arena scope
+    // the exit is about to release.
+    emitScopeJoins(this, 0)
     const value = stmt.children[0]
     if (value.kind === N_EMPTY) {
       this.emitScopeExit()
@@ -1257,6 +1288,12 @@ export class Emitter {
     // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
     if (mapIntrinsicOf(sig) !== MAP_NONE) {
       return emitMapIntrinsic(this, sig, operandValues)
+    }
+    // WP29 P2: inside a `spawn` instance, the call to `runTask` becomes a
+    // task filed on the scope, run when the scope joins.
+    if (isSpawnTaskCall(this.currentSig, sig)) {
+      emitSpawnTask(this, sig, operandTypes, operandValues)
+      return "void"
     }
     // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
     // call to the chunk loop is the one that runs on several threads.
