@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 703 programs, 50678 dump lines.
+# 709 programs, 50828 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -531,6 +531,56 @@ function test(): i32 -> @test [exported]
   callee 46:24 hoisted -> @hoisted
   callee 46:38 magic -> @magic
   callee 46:60 afterExit -> @afterExit
+program tests/cases/arr_bounds_ranged.ts
+module tests/cases/arr_bounds_ranged.ts (entry)
+function lookup(table: i32[], i: integer<0, 255>): i32 -> @lookup
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function byByte(table: i32[], b: u8): i32 -> @byByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: b
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function byHalf(table: i32[], h: u16): i32 -> @byHalf
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: h
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function converted(table: i32[], b: u8): i32 -> @converted
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 29:9 k: i32 (const)
+function short(table: i32[], i: integer<0, 255>): i32 -> @short
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function wide(table: i32[], w: u32): i32 -> @wide
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: w
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: byByte byHalf converted lookup nish_arena_mark nish_arena_release nish_array_grow nish_panic_div nish_print nish_str_concat nish_str_from_i32 short wide
+  stackSites=1 stackLocals=1
+  local 55:9 table: i32[] (const)
+  local 56:12 k: i32 (let)
+  local 59:9 b: u8 (const)
+  local 60:9 h: u16 (const)
+  local 61:9 w: u32 (const)
+  callee 62:18 lookup -> @lookup
+  callee 62:40 byByte -> @byByte
+  callee 62:60 byHalf -> @byHalf
+  callee 62:80 converted -> @converted
+  callee 63:18 short -> @short
+  callee 63:39 wide -> @wide
 program tests/cases/arr_bounds_shrink_panic.ts
 module tests/cases/arr_bounds_shrink_panic.ts (entry)
 function drain(ys: i32[]): i32 -> @drain
@@ -36854,6 +36904,97 @@ function test(): i32 -> @test [exported]
   stackSites=1 stackLocals=2
   local 20:9 e: Entry (const)
   local 22:9 h: Header (const)
+program tests/cases/perf_rng_counter.ts
+module tests/cases/perf_rng_counter.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+  local 8:7 sum: i32 (let)
+  local 10:12 i: integer<0, 255> (let)
+program tests/cases/perf_rng_getbyte.ts
+module tests/cases/perf_rng_getbyte.ts (entry)
+function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumInline(buf: u8[]): i32 -> @sumInline
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 sum: i32 (let)
+  local 19:12 i: i32 (let)
+function sumCalled(buf: u8[]): i32 -> @sumCalled
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: getByte
+  pointer buf: size=0 writesThrough=false captured=false passedTo=getByte#0
+  stackSites=0 stackLocals=0
+  local 26:7 sum: i32 (let)
+  local 27:12 i: i32 (let)
+  callee 28:23 getByte -> @getByte
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 sumCalled sumInline
+  stackSites=1 stackLocals=1
+  local 34:9 table: u8[] (const)
+  local 35:12 k: i32 (let)
+  callee 38:18 sumInline -> @sumInline
+  callee 38:38 sumCalled -> @sumCalled
+program tests/cases/perf_rng_loop.ts
+module tests/cases/perf_rng_loop.ts (entry)
+struct Tally (class) size=4 align=4
+  field hits: integer<0, 1000> index=0 offset=0 initialized
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32 nish_write
+  stackSites=2 stackLocals=2
+  local 9:9 xs: i32[] (const)
+  local 10:9 t: Tally (const)
+  local 11:7 total: i32 (let)
+  local 12:12 k: i32 (let)
+  local 14:11 w: integer<0, 99> (const)
+  local 16:11 v: integer<0, 99> (const)
+  local 18:11 top: integer<-2147483648, 99> (const)
+  local 23:11 day: integer<1, 31> (const)
+program tests/cases/perf_rng_quiet.ts
+module tests/cases/perf_rng_quiet.ts (entry)
+function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function clampByte(v: i32): integer<0, 255> -> @clampByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: v
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: clampByte getByte nish_arena_mark nish_arena_release nish_exit nish_print nish_str_from_i32 nish_write
+  stackSites=2 stackLocals=2
+  local 24:9 table: u8[] (const)
+  local 25:7 total: i32 (let)
+  local 28:12 i: i32 (let)
+  local 29:11 b: integer<0, 255> (const)
+  callee 31:27 getByte -> @getByte
+  local 34:9 xs: i32[] (const)
+  local 35:12 k: i32 (let)
+  local 36:11 v: i32 (const)
+  local 38:13 r: integer<0, 99> (const)
+  local 44:12 k: i32 (let)
+  local 45:11 byte: integer<0, 255> (const)
+  local 46:11 wide: integer<0, 1000> (const)
+  local 48:13 low: integer<0, 127> (const)
+  local 53:12 k: i32 (let)
+  local 54:11 v: i32 (const)
+  local 56:13 top: integer<-2147483648, 9> (const)
+  callee 60:19 clampByte -> @clampByte
+  callee 60:38 clampByte -> @clampByte
+  local 62:9 once: integer<0, 99999> (const)
 program tests/cases/perf_str_concat_loop.ts
 module tests/cases/perf_str_concat_loop.ts (entry)
 function test(): i32 -> @test [exported]
@@ -37544,9 +37685,9 @@ function echo<integer<0, 255>>(x: integer<0, 255>): integer<0, 255> -> @echo$rng
 program tests/cases/rng_widen.ts
 module tests/cases/rng_widen.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64
   stackSites=1 stackLocals=1
   local 7:9 low: integer<0, 9> (const)
   local 8:9 kept: integer<0, 9> (const)
@@ -44304,6 +44445,21 @@ function storeResult<i32>(dst: i32[], at: i32, r: i32): void -> @nish.storeResul
   pointer dst: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee 188:5 slotOutOfRange -> @nish.slotOutOfRange
+program docs/cookbook/type-ranged-proven.ts
+module docs/cookbook/type-ranged-proven.ts (entry)
+function lookup(table: i32[], i: integer<0, 255>): i32 -> @lookup
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumTable(table: i32[]): i32 -> @sumTable
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: lookup
+  pointer table: size=0 writesThrough=false captured=false passedTo=lookup#0
+  stackSites=0 stackLocals=0
+  local 9:7 sum: i32 (let)
+  local 10:12 i: i32 (let)
+  callee 11:17 lookup -> @lookup
 program docs/cookbook/type-ranged.ts
 module docs/cookbook/type-ranged.ts (entry)
 function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte

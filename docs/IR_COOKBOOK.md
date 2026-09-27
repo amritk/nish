@@ -6161,8 +6161,8 @@ each compared once, `sub` by the lower bound (left out when it is zero) and
 `icmp ult` against the width of the range, the shape of the index check, with
 the failure in a cold `rng.fail` block that ends the way `panic` does. A
 literal inside the range, and a value of a range inside this one, enter with
-no check at all; the index into `buf` is still checked, because proving an
-index from a range is WP31 W2.
+no check at all. The index into `buf` is still checked: the range says `i` is
+below 256, but nothing says `buf` has 256 elements.
 
 <!-- cookbook:begin type-ranged -->
 ```ts
@@ -6256,6 +6256,106 @@ attributes #3 = { nounwind noreturn cold }
 !13 = !{!12, !12, i64 0}
 ```
 <!-- cookbook:end type-ranged -->
+
+A range is also a fact the bounds proof reads (WP31 §8). `lookup`'s index
+needs `0 <= i < table.length`: the type gives `0 <= i < 256` and the length
+guard gives `table.length >= 256`, so there is no `bounds.fail` block. In
+`sumTable` the loop condition places `i` in `[0, 255]` where it enters the
+parameter, so there is no `rng.fail` block either, and with no panic left
+either function can reach, both are `willreturn`.
+
+<!-- cookbook:begin type-ranged-proven -->
+```ts
+const lookup = (table: i32[], i: integer<0, 255>): i32 => {
+  if (table.length < 256) {
+    return 0
+  }
+  return table[i]
+}
+
+const sumTable = (table: i32[]): i32 => {
+  let sum = 0
+  for (let i = 0; i < 256; i++) {
+    sum = sum + lookup(table, i)
+  }
+  return sum
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+define internal noundef i32 @lookup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i32 noundef %i) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = icmp slt i32 %2, 256
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  ret i32 0
+
+if.end:
+  %4 = sext i32 %i to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %4
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %9
+}
+
+define internal noundef i32 @sumTable(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table) #0 {
+entry:
+  %sum.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %sum.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, 256
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i32, i32* %sum.addr, align 4
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = call i32 @lookup(%struct.nish_array* %table, i32 %3)
+  %5 = add nsw i32 %2, %4
+  store i32 %5, i32* %sum.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = add nsw i32 %6, 1
+  store i32 %7, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %8 = load i32, i32* %sum.addr, align 4
+  ret i32 %8
+}
+
+attributes #0 = { nounwind willreturn readonly }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end type-ranged-proven -->
 
 ## Declarations
 
