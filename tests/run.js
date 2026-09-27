@@ -4021,6 +4021,46 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
     loopJson.stdout
   )
 
+  // WP31 §10 step 3: §12's program with `i: integer<0, 255>`. Each of its
+  // three functions reaches the attributes `sumInline` had before the range,
+  // because none keeps a bounds check or a range check.
+  const getByte = compileRng("perf_rng_getbyte", "perf_rng_getbyte_report.ll")
+  const getByteIr =
+    getByte.status === 0 ? fs.readFileSync(path.join(buildDir, "perf_rng_getbyte_report.ll"), "utf8") : ""
+  const groupOf = (fn) => {
+    const define = new RegExp(`^define [^\\n]*@${fn}\\([^\\n]*\\) (#\\d+) \\{$`, "m").exec(getByteIr)
+    const group = define === null ? null : new RegExp(`^attributes ${define[1]} = (.*)$`, "m").exec(getByteIr)
+    return group === null ? "" : group[1]
+  }
+  check(
+    "performance: wp31 §12's getByte, sumCalled and sumInline are all { nounwind willreturn readonly }, with no check left",
+    getByte.status === 0 &&
+      warned(getByte.stderr).length === 0 &&
+      ["getByte", "sumCalled", "sumInline"].every(
+        (fn) => groupOf(fn) === "{ nounwind willreturn readonly }"
+      ) &&
+      !/nish_panic_index|rng\.fail/.test(getByteIr),
+    getByte.stderr + getByteIr
+  )
+
+  // The entry check is the type's meaning, so `--unchecked-indexing` leaves
+  // it, and its warning, where they are.
+  const unchecked = spawnSync(
+    NISH,
+    [
+      path.join(casesDir, "perf_rng_loop.ts"),
+      "-o",
+      path.join(buildDir, "perf_rng_loop_unchecked.ll"),
+      "--unchecked-indexing",
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "performance: --unchecked-indexing keeps every NL9013 warning of perf_rng_loop",
+    unchecked.status === 0 && at(warned(unchecked.stderr)) === "14:31,16:31,18:43,20:5",
+    unchecked.stderr
+  )
+
   const quiet = compileRng("perf_rng_quiet", "perf_rng_quiet_report.ll")
   const quietIr =
     quiet.status === 0 ? fs.readFileSync(path.join(buildDir, "perf_rng_quiet_report.ll"), "utf8") : ""

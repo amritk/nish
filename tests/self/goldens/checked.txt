@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 702 programs, 50350 dump lines.
+# 703 programs, 50379 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -36873,6 +36873,36 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 8:7 sum: i32 (let)
   local 10:12 i: integer<0, 255> (let)
+program tests/cases/perf_rng_getbyte.ts
+module tests/cases/perf_rng_getbyte.ts (entry)
+function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumInline(buf: u8[]): i32 -> @sumInline
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 sum: i32 (let)
+  local 19:12 i: i32 (let)
+function sumCalled(buf: u8[]): i32 -> @sumCalled
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: getByte
+  pointer buf: size=0 writesThrough=false captured=false passedTo=getByte#0
+  stackSites=0 stackLocals=0
+  local 26:7 sum: i32 (let)
+  local 27:12 i: i32 (let)
+  callee 28:23 getByte -> @getByte
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 sumCalled sumInline
+  stackSites=1 stackLocals=1
+  local 34:9 table: u8[] (const)
+  local 35:12 k: i32 (let)
+  callee 38:18 sumInline -> @sumInline
+  callee 38:38 sumCalled -> @sumCalled
 program tests/cases/perf_rng_loop.ts
 module tests/cases/perf_rng_loop.ts (entry)
 struct Tally (class) size=4 align=4

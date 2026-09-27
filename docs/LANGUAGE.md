@@ -275,7 +275,9 @@ Type rules:
     range, so `const r: integer<0, 255> = toI32(b)` costs nothing for a `u8`
     `b`. `for (let i = 0; i < 256; i++) { const b: integer<0, 255> = i }` is
     the shape §7 recommends, and the loop condition proves it
-    (`tests/cases/perf_rng_quiet`). A lower end above zero is never proven
+    (`tests/cases/perf_rng_quiet`); so is a call that hands a loop counter to a
+    ranged parameter, which leaves wp31 §12's `getByte` program with no check
+    at all (`perf_rng_getbyte`). A lower end above zero is never proven
     from a guard, because the proof records no lower bound but zero, and the
     sum a compound assignment or an increment stores back is never proven at
     all; both keep their check. A check that survives inside a loop is a

@@ -178,6 +178,7 @@ cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
 cases/perf_rng_counter added after R6: no rewriter to freeze it with
+cases/perf_rng_getbyte added after R6: no rewriter to freeze it with
 cases/perf_rng_loop added after R6: no rewriter to freeze it with
 cases/perf_rng_quiet added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
