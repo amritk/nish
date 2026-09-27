@@ -176,6 +176,7 @@ cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
+cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
 cases/rng_bitwise added after R6: no rewriter to freeze it with

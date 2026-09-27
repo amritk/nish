@@ -91,6 +91,7 @@ import {
   T_I64,
   T_STRING,
   T_VOID,
+  R_UNKNOWN,
 } from "./types"
 
 /**
@@ -410,6 +411,19 @@ const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
     "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)"
   )
 }
+
+/**
+ * `type` with no proof: a `Result` read in the unknown state, and any other
+ * type unchanged (#234). A proof is visible only to a proof consumer, which is
+ * the receiver of `.ok`, `.value`, `.error` or a `Result` method, or a
+ * narrowing test. Where a type is instead *inferred* from a value (a
+ * `let`/`const` initialiser, a ternary, an array literal's elements), the
+ * narrowed state would outlive the test that proved it. The comparison
+ * `assignable` makes ignores the state, so a later write of any other
+ * `Result` into that type would keep the claim. An argument, a `return` and a
+ * store are checked against a declared type, which never carries a proof.
+ */
+export const unproven = (ctx: CheckContext, type: i32): i32 => ctx.table.withState(type, R_UNKNOWN)
 
 const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
@@ -946,8 +960,10 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
   narrow(ctx, expr.children[0], thenScope, true)
   const elseScope = scope.child()
   narrow(ctx, expr.children[0], elseScope, false)
-  const whenTrue = checkExpression(ctx, expr.children[1], thenScope, want)
-  const whenFalse = checkExpression(ctx, expr.children[2], elseScope, want)
+  // An arm's proof is not the ternary's (#234): `c ? r : q` is a `Result`
+  // whatever `r` was narrowed to, because the other arm may be `q`.
+  const whenTrue = unproven(ctx, checkExpression(ctx, expr.children[1], thenScope, want))
+  const whenFalse = unproven(ctx, checkExpression(ctx, expr.children[2], elseScope, want))
   if (whenTrue === T_ERROR || whenFalse === T_ERROR) {
     return T_ERROR
   }
@@ -1025,14 +1041,14 @@ export const narrow = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: bo
 
 const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
   const op = cond.text
-  if (op === "&&" && whenTrue) {
-    narrow(ctx, cond.children[0], scope, true)
-    narrow(ctx, cond.children[1], scope, true)
-    return
-  }
-  if (op === "||" && !whenTrue) {
-    narrow(ctx, cond.children[0], scope, false)
-    narrow(ctx, cond.children[1], scope, false)
+  if ((op === "&&" && whenTrue) || (op === "||" && !whenTrue)) {
+    narrow(ctx, cond.children[0], scope, whenTrue)
+    // The right operand runs after the left one's test, so a variable it
+    // assigns no longer holds the value the test proved something about
+    // (#235): `p !== null && g((p = null) === null) && p.v`. This is the
+    // statement rule `assignInto` applies, for the operands after it.
+    clearNarrowingsAssignedIn(ctx, cond.children[1], scope)
+    narrow(ctx, cond.children[1], scope, whenTrue)
     return
   }
   if (op !== "===" && op !== "!==") {
