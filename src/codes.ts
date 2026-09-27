@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 481
+export const RULE_COUNT: i32 = 490
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -198,6 +198,8 @@ const diagnosticRules = (): string[] => [
   "NL2307",
   "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm",
   "NL2151",
+  ">(n)` would zero-fill with 0, which is outside the range; build it with `[]` and `push` instead",
+  "NL2386",
   "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
   "NL2166",
   "`super` is only valid inside a method or constructor of a class that `extends` another class",
@@ -288,6 +290,8 @@ const diagnosticRules = (): string[] => [
   "NL2377",
   "`, which only its body could bind, and a block body's type is not inferred",
   "NL2343",
+  "` of `integer<Lo, Hi>` is outside i32 (a ranged integer is always an i32)",
+  "NL2382",
   ": `static` members are not supported (use a top-level function or const)",
   "NL2027",
   ": initializers must be literals (assign other values in the constructor)",
@@ -310,6 +314,8 @@ const diagnosticRules = (): string[] => [
   "NL3025",
   ".isErr()`, or use `.orReturn()`, `.unwrapOr(v)` or `.expect(message)`",
   "NL2032",
+  ">` is an empty range: the lower bound is greater than the upper bound",
+  "NL2381",
   "Only top-level function declarations are supported in Phase 1 (found ",
   "NL2230",
   "The `for...of` variable takes the element type; remove the annotation",
@@ -326,6 +332,8 @@ const diagnosticRules = (): string[] => [
   "NL2085",
   " only where it is instantiated, and this program instantiates none",
   "NL4007",
+  ", and a range is a promise the C side never made: declare it `i32`",
+  "NL2385",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
   "; convert the error first: `if (r.isErr()) { return Err(...); }`",
@@ -350,6 +358,8 @@ const diagnosticRules = (): string[] => [
   "NL2341",
   "` takes its signature from the arrow; drop the annotation on `",
   "NL2273",
+  "A bound of `integer<Lo, Hi>` must be an integer literal, got `",
+  "NL2379",
   "Template literal hole must be string, number, or boolean, got ",
   "NL2238",
   "` is a built-in type name and cannot be used for a type alias",
@@ -376,6 +386,8 @@ const diagnosticRules = (): string[] => [
   "NL2321",
   "` cannot declare methods (interfaces describe layout only)",
   "NL2048",
+  "`integer` needs exactly two bounds, e.g. `integer<0, 255>`",
+  "NL2378",
   ", and a declared C function takes scalars and `CPtr` only",
   "NL2322",
   "the command line at https://github.com/amritk/nish/issues",
@@ -458,6 +470,8 @@ const diagnosticRules = (): string[] => [
   "NL2304",
   "` has no `value`: its success arm carries nothing",
   "NL2064",
+  "` is only allowed as a bound of `integer<Lo, Hi>`",
+  "NL2383",
   "`namespace` and `module` blocks are forbidden in ",
   "NL1027",
   "Default imports are not supported; use `import { ",
@@ -466,6 +480,8 @@ const diagnosticRules = (): string[] => [
   "NL2214",
   "Type arguments are not written at a call site in ",
   "NL2303",
+  "` where a bound of `integer<Lo, Hi>` is expected",
+  "NL2380",
   "Getters and setters are not supported in class `",
   "NL2209",
   " (build the parts with template literals first)",
@@ -826,6 +842,8 @@ const diagnosticRules = (): string[] => [
   "NL2269",
   "` is not generic, so `new ",
   "NL2318",
+  "` is outside the range of ",
+  "NL2384",
   "`, which already extends `",
   "NL2110",
   "`Reflect` is forbidden in ",

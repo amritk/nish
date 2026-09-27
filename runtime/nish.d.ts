@@ -54,6 +54,12 @@ type u64 = number;
 type f32 = number;
 type f64 = number;
 
+// ---- Ranged integers (docs/wp31-ranged-integers.md) --------------------------
+//
+// An `i32` the compiler knows lies in `[Lo, Hi]`. The bounds are numeric
+// literal types, and `tsc` checks only that; the range itself is `nish`'s.
+type integer<Lo extends number, Hi extends number> = number;
+
 // ---- Result (docs/LANGUAGE.md -> Result and error handling) ------------------
 //
 // Modelled as the tagged union TypeScript would use anyway, intersected with

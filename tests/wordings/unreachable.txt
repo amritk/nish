@@ -19,6 +19,7 @@ NL2001  retired: the overload/override rule the inheritance work removed
 NL2206  retired: `Generic classes are not supported`, the refusal WP18 G5 replaced; `new` on a class that is not generic is NL2318 now
 NL2298  retired: `a generic function cannot yet be instantiated from another module`, the refusal WP18 G7 replaced; a template is imported and instantiated now (tests/link/generic_import)
 NL2316  retired: the same refusal one level up for a generic class or interface, also replaced by WP18 G7 (tests/link/generic_import, tests/link/package_generic_import)
+NL2333  retired: `integer<Lo, Hi>` refused as reserved until ranged integers landed (WP31 W1); `integer` is the type now, and a malformed one is NL2378-NL2383
 NL2357  retired: `get` refused as "not supported yet" until its `V | undefined` landed (WP32 S3); each place that refuses a maybe has its own code now, NL2361-NL2369
 NL2294  retired: `a constrained type parameter is not supported yet`, the refusal WP18 G6 replaced; a constraint is accepted now, and what it may name is NL2326/NL2327 (tests/cases/reject_generic_constraint)
 NL2004  retired: the `implements` field-order rule, reworded since

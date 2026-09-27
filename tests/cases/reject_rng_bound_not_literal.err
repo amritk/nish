@@ -1,0 +1,1 @@
+A bound of `integer<Lo, Hi>` must be an integer literal, got `MAX` (a type or a constant cannot state a bound)

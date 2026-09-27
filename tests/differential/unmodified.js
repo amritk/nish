@@ -46,6 +46,10 @@ const KNOWN = new Map([
   ["f64_minmax_nan", "llvm.minnum/maxnum answer the non-NaN operand; Math.min/max answer NaN"],
   ["f64_round_negzero", "Math.round(-0.3) is +0 natively and -0 in JS, and x/0 differs on the integer side"],
   ["f64_i32_mixed", "explicit `i32` locals wrap natively; unmodified Node has only doubles"],
+  [
+    "rng_entry_panic_f64",
+    "a value leaving `integer<Lo, Hi>` panics natively; under Node the type is a `number` alias",
+  ],
 ])
 
 /** Every f64-mode program with an entry point, from the cases and the corpus. */

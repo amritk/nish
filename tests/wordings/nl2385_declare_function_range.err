@@ -1,0 +1,1 @@
+`declare function putchar` takes `c` as integer<0, 255>, and a range is a promise the C side never made: declare it `i32`
