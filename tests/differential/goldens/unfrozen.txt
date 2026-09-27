@@ -74,6 +74,7 @@ cases/cls_inline_array_push added after R6: no rewriter to freeze it with
 cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with
+cases/dbg_rng added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/fnarg_arrow added after R6: no rewriter to freeze it with
 cases/fnarg_forward added after R6: no rewriter to freeze it with
@@ -177,6 +178,16 @@ cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
+cases/rng_bitwise added after R6: no rewriter to freeze it with
+cases/rng_entries added after R6: no rewriter to freeze it with
+cases/rng_entry_bitwise_panic added after R6: no rewriter to freeze it with
+cases/rng_entry_panic added after R6: no rewriter to freeze it with
+cases/rng_entry_panic_f64 added after R6: no rewriter to freeze it with
+cases/rng_entry_push_panic added after R6: no rewriter to freeze it with
+cases/rng_entry_range_panic added after R6: no rewriter to freeze it with
+cases/rng_generic added after R6: no rewriter to freeze it with
+cases/rng_param added after R6: no rewriter to freeze it with
+cases/rng_widen added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with
 cases/set_iter_keys added after R6: no rewriter to freeze it with

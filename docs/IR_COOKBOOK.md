@@ -5963,6 +5963,111 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr-literals -->
 
+### Ranged integers: `integer<Lo, Hi>`
+
+A ranged value is an `i32` in the IR, in memory and at the ABI, so `getByte`'s
+parameter is a plain `i32 %i` and reading it costs nothing. What a range costs
+is its *entry*: the value `firstByte` passes and the sum `brighten` returns are
+each compared once, `sub` by the lower bound (left out when it is zero) and
+`icmp ult` against the width of the range, the shape of the index check, with
+the failure in a cold `rng.fail` block that ends the way `panic` does. A
+literal inside the range, and a value of a range inside this one, enter with
+no check at all; the index into `buf` is still checked, because proving an
+index from a range is WP31 W2.
+
+<!-- cookbook:begin type-ranged -->
+```ts
+const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i]
+
+const brighten = (level: integer<-128, 127>): integer<-128, 127> => level + 1
+
+const firstByte = (buf: u8[], n: i32): u8 => getByte(buf, n)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"value out of range: expected integer<-128, 127>\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 255>\00" }, align 8
+
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 %0
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i8 %8
+}
+
+define internal noundef i32 @brighten(i32 noundef %level) #0 {
+entry:
+  %0 = add nsw i32 %level, 1
+  %1 = sub i32 %0, -128
+  %2 = icmp ult i32 %1, 256
+  br i1 %2, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  ret i32 %0
+}
+
+define internal noundef i8 @firstByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %n) #0 {
+entry:
+  %0 = icmp ult i32 %n, 256
+  br i1 %0, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.1 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  %1 = call i8 @getByte(%struct.nish_array* %buf, i32 %n)
+  ret i8 %1
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i8", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end type-ranged -->
+
 ## Declarations
 
 ### Locals

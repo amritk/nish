@@ -1,0 +1,1 @@
+A literal type `3` is only allowed as a bound of `integer<Lo, Hi>`

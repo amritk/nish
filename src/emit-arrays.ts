@@ -30,6 +30,7 @@ import { HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
 import { parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
+import { emitRangedStore } from "./emit-builtins"
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -1083,6 +1084,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
   }
+  emitRangedStore(emitter, expr, value)
   emitter.fn.emit(
     `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )

@@ -23,6 +23,7 @@ import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } f
 import { internalErrorFor } from "./ice"
 import { N_IDENT, Node } from "./nodes"
 import { CheckedProgram } from "./program"
+import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
 import {
@@ -45,6 +46,8 @@ import {
 } from "./types"
 
 const PARSE_RUNTIME: string = "nish_parse_number"
+/** 2^32, which turns a range width past `INT_MAX` into the `i32` constant with the same bits. */
+const TWO_32: i64 = 4294967296
 const SAT_I32: string = "llvm.fptosi.sat.i32.f64"
 
 const callIntrinsic = (emitter: Emitter, name: string, ret: string, args: string): string =>
@@ -254,11 +257,67 @@ const emitStreamWrite = (emitter: Emitter, expr: Node, fd: i32): string => {
  * `unreachable` legal and lets a non-void function end with a panic.
  */
 const emitPanic = (emitter: Emitter, expr: Node): string => {
-  const message = emitter.emitExpression(firstArgument(expr))
+  emitPanicTail(emitter, emitter.emitExpression(firstArgument(expr)))
+  return "void"
+}
+
+/**
+ * The ending `panic`, `r.expect(message)` and a failed range entry share: the
+ * message and a newline on stderr, then exit 1. It is spelled once so the
+ * three cannot drift apart, and `panicTailCallees` is what `src/attributes.ts`
+ * is told it calls. No runtime symbol is added for it, so the core runtime's
+ * budget does not move (WP31 §6).
+ */
+export const emitPanicTail = (emitter: Emitter, message: string): void => {
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`)
   emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`)
   emitter.fn.emit("unreachable")
-  return "void"
+}
+
+/**
+ * The check a compound assignment or an increment makes before it stores into
+ * a ranged place (WP31 §7): the sum is an `i32`, and it enters the range again.
+ */
+export const emitRangedStore = (emitter: Emitter, expr: Node, value: string): void => {
+  const to = rangedStoreOf(emitter.program, emitter.table, expr)
+  if (to >= 0) {
+    emitRangeEntry(emitter, value, T_I32, to)
+  }
+}
+
+/** The runtime symbols `emitPanicTail` calls, for the attribute pass. */
+export const panicTailCallees = (out: string[]): void => {
+  out.push("nish_write")
+  out.push("nish_exit")
+}
+
+/**
+ * `value`, of type `from`, entering the range `to` (WP31 §6): one unsigned
+ * compare, `sub` then `icmp ult` against the width of the range — the shape of
+ * the index check — and a cold block that panics. Nothing is emitted when the
+ * source is a range inside this one, or when the range is all of `i32`. The
+ * check is the type's meaning, not an index check, so `--unchecked-indexing`
+ * leaves it where it is.
+ */
+export const emitRangeEntry = (emitter: Emitter, value: string, from: i32, to: i32): void => {
+  const table = emitter.table
+  if (table.entryIsFree(from, to)) {
+    return
+  }
+  const lo = table.rangeLo(to)
+  const hi = table.rangeHi(to)
+  const width = toI64(hi) - toI64(lo) + toI64(1)
+  const fn = emitter.fn
+  const offset = lo === 0 ? value : fn.emitValue(`sub i32 ${value}, ${lo}`)
+  // The width as an `i32` constant: past `INT_MAX` it is the same bits read signed.
+  const bound = width > toI64(2147483647) ? width - TWO_32 : width
+  const inRange = fn.emitValue(`icmp ult i32 ${offset}, ${bound}`)
+  const failBlock = fn.newBlock("rng.fail")
+  const okBlock = fn.newBlock("rng.ok")
+  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
+  fn.placeBlock(failBlock)
+  emitPanicTail(emitter, emitter.stringConstant(`value out of range: expected ${table.typeName(to)}`))
+  fn.placeBlock(okBlock)
 }
 
 /** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
@@ -673,8 +732,7 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   if (name === "panic") {
-    out.push("nish_write")
-    out.push("nish_exit")
+    panicTailCallees(out)
     return out
   }
   return out // f64ToBits / bitsToF64: one bitcast, no call

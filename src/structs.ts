@@ -24,6 +24,7 @@ import {
   isGenericFunction,
 } from "./generics"
 import { isExported, collectParams } from "./declarations"
+import { checkRangedLiteral } from "./expressions"
 import {
   FLAG_DEFINITE,
   FLAG_OPTIONAL,
@@ -501,6 +502,10 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     } else if (!ctx.table.assignable(initType, type)) {
       const got = ctx.table.typeName(initType)
       ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
+    } else if (ctx.table.isRanged(type) && initType === type) {
+      // WP31 §6: the literal is stored with no check, so it has to be inside.
+      const negated = initializer.kind === N_UNARY
+      checkRangedLiteral(ctx, negated ? initializer.children[0] : initializer, type, negated, initializer)
     }
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
