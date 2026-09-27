@@ -299,12 +299,12 @@ export const emitPackedResult = (emitter: Emitter, expr: Node, type: i32, privat
     }
     return packArm(emitter, type, isOk, payload, hasPayload)
   }
-  const object = emitter.emitExpression(expr)
-  if (privateAbi) {
-    return armsForObject(emitter, type, object)
-  }
-  return packObject(emitter, type, object)
+  return packResultObject(emitter, type, emitter.emitExpression(expr), privateAbi)
 }
+
+/** The word, or the private ABI's arms, for a by-value `Result` already in memory at `object`. */
+export const packResultObject = (emitter: Emitter, type: i32, object: string, privateAbi: boolean): string =>
+  privateAbi ? armsForObject(emitter, type, object) : packObject(emitter, type, object)
 
 /**
  * The caller's half: materialise the word as the object every other construct
