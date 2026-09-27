@@ -39271,7 +39271,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -39303,8 +39303,8 @@ function ThreadScope.spawn<i32, i32, primesBelow>(this: ThreadScope, entry: void
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.11.primesBelow#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, primesBelow> -> @nish.runTask$i32$i32$fn.11.primesBelow
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, primesBelow> -> @nish.runTask$i32$i32$fn.11.primesBelow
 function ThreadScope.spawn<i32, i32, longestCollatz>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.14.longestCollatz [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
@@ -39313,8 +39313,8 @@ function ThreadScope.spawn<i32, i32, longestCollatz>(this: ThreadScope, entry: v
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.14.longestCollatz#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, longestCollatz> -> @nish.runTask$i32$i32$fn.14.longestCollatz
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, longestCollatz> -> @nish.runTask$i32$i32$fn.14.longestCollatz
 function ThreadScope.spawn<i32, i32, digitSum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.digitSum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
@@ -39323,8 +39323,8 @@ function ThreadScope.spawn<i32, i32, digitSum>(this: ThreadScope, entry: void, a
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.digitSum#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, digitSum> -> @nish.runTask$i32$i32$fn.8.digitSum
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, digitSum> -> @nish.runTask$i32$i32$fn.8.digitSum
 function ThreadScope.spawn<i32, i32, checksum>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.8.checksum [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
@@ -39333,8 +39333,8 @@ function ThreadScope.spawn<i32, i32, checksum>(this: ThreadScope, entry: void, a
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.8.checksum#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, checksum> -> @nish.runTask$i32$i32$fn.8.checksum
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, checksum> -> @nish.runTask$i32$i32$fn.8.checksum
 function runTask<i32, i32, primesBelow>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.11.primesBelow [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
@@ -42668,7 +42668,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -42737,7 +42737,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -43031,7 +43031,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -43063,8 +43063,8 @@ function ThreadScope.spawn<i32, i32, square>(this: ThreadScope, entry: void, arg
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.6.square#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, square> -> @nish.runTask$i32$i32$fn.6.square
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, square> -> @nish.runTask$i32$i32$fn.6.square
 function ThreadScope.spawn<i32, i32, cube>(this: ThreadScope, entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$i32$i32$fn.4.cube [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.slotOutOfRange
@@ -43073,8 +43073,8 @@ function ThreadScope.spawn<i32, i32, cube>(this: ThreadScope, entry: void, arg: 
   pointer this: size=4 writesThrough=true captured=true
   pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$i32$i32$fn.4.cube#2
   stackSites=0 stackLocals=0
-  callee 223:7 slotOutOfRange -> @nish.slotOutOfRange
-  callee 225:5 runTask<i32, i32, cube> -> @nish.runTask$i32$i32$fn.4.cube
+  callee 222:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 224:5 runTask<i32, i32, cube> -> @nish.runTask$i32$i32$fn.4.cube
 function runTask<i32, i32, square>(entry: void, arg: i32, dst: i32[], at: i32): void -> @nish.runTask$i32$i32$fn.6.square [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
@@ -47739,7 +47739,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -47816,7 +47816,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -47959,7 +47959,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
@@ -48037,7 +48037,7 @@ module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64
 struct ThreadScope (class) size=4 align=4 exported
-  field spawned: i32 index=0 offset=0 initialized
+  field tag: i32 index=0 offset=0 initialized
 function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64

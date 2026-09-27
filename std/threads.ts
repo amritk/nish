@@ -207,11 +207,10 @@ const runTask = <A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void =>
  */
 export class ThreadScope {
   /**
-   * How many tasks this scope was given. Nothing reads it: a class has a field
-   * so that each scope is an object of its own, whose address is what the
-   * runtime files its tasks under.
+   * Nothing reads or writes it. It is here so that each scope is an object of
+   * its own, whose address is what the runtime files the scope's tasks under.
    */
-  spawned: i32 = 0
+  tag: i32 = 0
 
   /**
    * Run `entry(arg)` on a thread of its own and store its answer in `dst[at]`
