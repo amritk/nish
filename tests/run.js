@@ -8235,6 +8235,97 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       ? "the two `copy of src/map.ts` rules are missing"
       : "copy the block from src/map.ts again"
   )
+  // WP31 §10: the acceptance programs. bench/cursor.ts's `@scan` is the same
+  // function with and without `--unchecked-indexing`; the cursor declared
+  // `integer<0, …>` warns at each of its three advances; and bench/getbyte.ts
+  // is one module either way, with no check in it and its three functions
+  // `{ nounwind willreturn readonly }`, as tests/cases/perf_rng_getbyte pins.
+  const benchIr = (file, name, extra) => {
+    const out = path.join(buildDir, `bench_${name}.ll`)
+    const r = spawnSync(NISH, [file, "--profile", "speed", "-o", out, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    return { r, ir: r.status === 0 ? fs.readFileSync(out, "utf8") : "", out }
+  }
+  const defineOf = (ir, fn) => {
+    const at = ir.indexOf(`@${fn}(`)
+    const start = ir.lastIndexOf("\ndefine ", at) + 1
+    return at < 0 ? "" : ir.slice(start, ir.indexOf("\n}\n", at) + 2)
+  }
+  const cursorFile = path.join("bench", "cursor.ts")
+  const cursor = benchIr(cursorFile, "cursor", [])
+  const cursorU = benchIr(cursorFile, "cursor_unchecked", ["--unchecked-indexing"])
+  const scan = defineOf(cursor.ir, "scan")
+  check(
+    "bench: bench/cursor.ts's @scan has no bounds check and is byte-identical to the --unchecked-indexing build (WP31 §10 step 1)",
+    scan !== "" &&
+      !scan.includes("nish_panic_index") &&
+      scan === defineOf(cursorU.ir, "scan") &&
+      !/performance: /.test(cursor.r.stderr),
+    `${cursor.r.stderr}${cursorU.r.stderr}`
+  )
+  const rangedCursor = path.join(buildDir, "bench_cursor_ranged.ts")
+  fs.writeFileSync(
+    rangedCursor,
+    fs
+      .readFileSync(path.join(root, cursorFile), "utf8")
+      .replace("\n  let i = 0\n", "\n  let i: integer<0, 2147483647> = 0\n")
+  )
+  const ranged = benchIr(rangedCursor, "cursor_ranged", [])
+  const advances = ranged.r.stderr
+    .split("\n")
+    .filter((l) => /:\d+:\d+: performance: this value is not proven to lie in integer<0, 2147483647>/.test(l))
+    .map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":"))
+  check(
+    "bench: bench/cursor.ts with its cursor declared integer<0, 2147483647> warns once at each of its three advances (WP31 §10 step 2)",
+    ranged.r.status === 0 && advances.join(",") === "42:13,47:13,51:11",
+    ranged.r.stderr
+  )
+  if (cursor.r.status === 0 && has("clang")) {
+    // The checksum is recomputed here from the rule `scan` states, over the
+    // program's own source, so the timed loop is also the right one.
+    const exe = path.join(buildDir, "bench_cursor")
+    const cc = linkNative(exe, cursor.out)
+    const run = cc.status === 0 ? spawnSync(exe, [cursorFile], { cwd: root, encoding: "utf8" }) : null
+    // `charCodeAt` reads bytes, so the source is read as one character a byte.
+    const text = fs.readFileSync(path.join(root, cursorFile), "latin1")
+    const counts = { word: 0, number: 0, other: 0 }
+    for (const m of text.matchAll(/([A-Za-z_][A-Za-z_0-9]*)|([0-9]+)|[\s\S]/g)) {
+      if (m[1] !== undefined) {
+        counts.word++
+      } else if (m[2] !== undefined) {
+        counts.number++
+      } else {
+        counts.other++
+      }
+    }
+    const want = (counts.word * 7 + counts.number * 3 + counts.other) * 400
+    check(
+      "bench: bench/cursor.ts links, runs, and prints the checksum its rule gives for its own source",
+      run !== null &&
+        run.status === 0 &&
+        run.stdout.trim() === `${text.length} bytes, 400 passes, checksum ${want}`,
+      run ? `${run.stdout}${run.stderr}\nexpected checksum ${want}` : String(cc.stderr)
+    )
+  } else if (cursor.r.status === 0) {
+    skip("bench: bench/cursor.ts native run (no clang)")
+  }
+  const getbyteFile = path.join("bench", "getbyte.ts")
+  const getbyte = benchIr(getbyteFile, "getbyte", [])
+  const getbyteU = benchIr(getbyteFile, "getbyte_unchecked", ["--unchecked-indexing"])
+  const readonlyGroup = /^attributes (#\d+) = \{ nounwind willreturn readonly \}$/m.exec(getbyte.ir)
+  check(
+    "bench: bench/getbyte.ts is one module with and without --unchecked-indexing, with no check in it, and getByte, sumInline and sumCalled are { nounwind willreturn readonly } (WP31 §10 step 3)",
+    getbyte.ir !== "" &&
+      getbyte.ir === getbyteU.ir &&
+      !/@nish_(panic|exit)/.test(getbyte.ir) &&
+      readonlyGroup !== null &&
+      ["getByte", "sumInline", "sumCalled"].every((fn) =>
+        defineOf(getbyte.ir, fn).split("\n")[0].endsWith(` ${readonlyGroup[1]} {`)
+      ),
+    `${getbyte.r.stderr}${getbyteU.r.stderr}`
+  )
   const targetLl = path.join(buildDir, "opt_target_triple.ll")
   if (has("opt") && fs.existsSync(targetLl)) {
     const ir = fs.readFileSync(targetLl, "utf8")

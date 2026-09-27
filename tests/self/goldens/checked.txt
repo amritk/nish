@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 713 programs, 50944 dump lines.
+# 715 programs, 51008 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -45161,6 +45161,38 @@ function Towers.moveDisks(this: Towers, disks: i32, fromPile: i32, toPile: i32):
   callee 79:7 Towers.moveDisks -> @Towers.moveDisks
   callee 80:7 Towers.moveTopDisk -> @Towers.moveTopDisk
   callee 81:7 Towers.moveDisks -> @Towers.moveDisks
+program bench/cursor.ts
+module bench/cursor.ts (entry)
+const PASSES: i32 = 400
+function isAlpha(c: i32): boolean -> @isAlpha
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function isDigit(c: i32): boolean -> @isDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scan(s: string): i32 -> @scan
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isAlpha isDigit
+  stackSites=0 stackLocals=0
+  local 33:7 words: i32 (let)
+  local 34:7 numbers: i32 (let)
+  local 35:7 other: i32 (let)
+  local 36:7 i: i32 (let)
+  local 38:11 c: i32 (const)
+  callee 39:9 isAlpha -> @isAlpha
+  callee 41:31 isAlpha -> @isAlpha
+  callee 41:59 isDigit -> @isDigit
+  callee 44:16 isDigit -> @isDigit
+  callee 46:30 isDigit -> @isDigit
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_read_file nish_str_concat nish_str_from_i32 nish_str_from_i64 scan
+  stackSites=0 stackLocals=0
+  local 62:9 text: string (const)
+  local 63:7 checksum: i64 (let)
+  local 64:7 pass: i32 (let)
+  callee 66:33 scan -> @scan
 program bench/fib.ts
 module bench/fib.ts (entry)
 function fib(n: i32): i32 -> @fib
@@ -45177,6 +45209,40 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 11:9 N: i32 (const)
   callee 12:15 fib -> @fib
+program bench/getbyte.ts
+module bench/getbyte.ts (entry)
+const ROUNDS: i32 = 65536
+function getByte(buf: u8[], i: integer<0, 255>): u8 -> @getByte
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function sumInline(buf: u8[]): i32 -> @sumInline
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 32:7 sum: i32 (let)
+  local 33:12 i: i32 (let)
+function sumCalled(buf: u8[]): i32 -> @sumCalled
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: getByte
+  pointer buf: size=0 writesThrough=false captured=false passedTo=getByte#0
+  stackSites=0 stackLocals=0
+  local 40:7 sum: i32 (let)
+  local 41:12 i: i32 (let)
+  callee 42:23 getByte -> @getByte
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 sumCalled sumInline
+  stackSites=1 stackLocals=1
+  local 48:9 table: u8[] (const)
+  local 49:12 k: i32 (let)
+  local 52:7 checksum: i64 (let)
+  local 53:12 round: i32 (let)
+  local 54:14 k: i32 (let)
+  callee 55:35 sumInline -> @sumInline
+  callee 55:61 sumCalled -> @sumCalled
 program bench/hoist-field.ts
 module bench/hoist-field.ts (entry)
 struct Holder (class) size=8 align=8

@@ -1,6 +1,9 @@
 # WP31: Ranged integer types, designed for after G8
 
-**Design note (proposed, nothing built).** This decides the surface and the
+**Design note (built and measured).** W1 to W3 built it (#261, #268, #273),
+and W4 measured it: §10 has the numbers, and what they say is that the
+declared range is a frontend fact and not a speed-up. This note decided the
+surface and the
 semantics of `integer<Lo, Hi>`, the declared form of
 [wp15-performance.md](wp15-performance.md#2-zero-cost-safety-the-bounds-check-pipeline)
 §2 mechanism 1, so that building it after WP18 G8 is a build and not a
@@ -569,8 +572,111 @@ that same protocol, does three things in order:
    says the declared range is a frontend fact and not a speed-up, as wp15 §2b
    said of counted loops.
 
-No number here has been measured for the declared form. §2 and §9 give the
-runs this note did make, with their commands.
+### What W4 measured
+
+**The box and the protocol, for every number below.** x86-64, a four-core
+Intel Xeon Processor @ 2.10GHz virtual machine, Linux 6.18, Ubuntu clang
+18.1.3 (LLVM 18), load average under 1.0 throughout. The compiler is
+`build/nish` from `npm run build` at `60df17a` (`nish 0.12.0`). Every binary is
+built with `--profile speed`, which is the default, as
+`build/nish bench/<name>.ts --link <exe> --profile speed`, and its twin is the
+same command with `--unchecked-indexing`. The timing follows wp15 §2: user plus
+system CPU time, read from `getrusage(RUSAGE_CHILDREN)` around each run, with
+3 warm-up runs and then **15 timed runs per binary**. The binaries alternate
+within each round and are pinned with `taskset -c 2`. The tables give the
+minimum and the median, with the minimum wall time beside them, and each ratio
+divides minimums. Neither program joins `bench/run.mjs`'s suite. Each is
+one program compared with itself under a flag, not a program with C, Go and
+Rust twins, so the checks that pin them are in `tests/run.js`'s bench section.
+
+**Step 1: the cursor, committed and re-measured.** `bench/cursor.ts` is item
+3's lexer-shaped scan. It has a letter arm, a digit arm and one byte of
+anything else, and `str_bounds_proven` pins its shape. Its input is
+`cat src/*.ts > build/cursor.txt` at `60df17a`, which is 2,028,734 bytes
+(wp15 used 547 KB), and it makes 400 passes:
+
+| build | CPU min | CPU median | wall min | / unchecked |
+| --- | ---: | ---: | ---: | ---: |
+| `--unchecked-indexing` | 2555.9 ms | 2619.5 ms | 2573.9 ms | 1.000 |
+| **proven** (the default) | **2531.8 ms** | 2608.3 ms | 2540.0 ms | **0.991** |
+| the cursor declared `integer<0, 2147483647>` (step 2) | 2653.2 ms | 2780.9 ms | 2655.4 ms | 1.038 |
+
+An earlier run of the first two rows alone, under the same protocol, gave
+2588.5 ms against 2527.7 ms (0.977x). The proven and unchecked executables are
+**byte-identical** (`cmp`, 8,096 bytes each), so the ratio between them is
+the box's noise and nothing else. `@scan` is the same 151 lines in both
+modules, with no `nish_panic_index`. The one check the proven module keeps is
+`process.argv[1]`, and LLVM folds it behind the `process.argv.length < 2`
+guard. In wp15 the gap was 630 ms against 623 ms. Here there is no gap at
+all, because what was left then (that same startup check, plus code layout)
+is now gone as well.
+
+The 1.069x itself cannot be re-derived as a ratio. It divided the build from
+*before* item 6 by the proven one, and that build cannot be made from this
+tree. The proof has no switch to turn it off, and #56, which added it, shipped
+in 0.2.0. No release that old parses the file: it has no semicolons, and
+0.12.0 is the first release that accepts that. What this step re-derives is
+the half of wp15's claim that the analysis owns: the proven cursor is the
+unchecked one.
+
+**Step 2: the cursor does not regress, and declaring it is the mistake.**
+`tests/run.js` holds `@scan` byte-identical to the unchecked build, and
+`str_bounds_proven.ll` has not changed. It also compiles the twin that
+declares the cursor, `let i: integer<0, 2147483647> = 0` in place of
+`let i = 0`, which is the widest range an `i32` can have. That twin warns once
+at each of the three advances (lines 42, 47 and 51), as §7 predicts: each
+`i = i + 1` is a range entry that nothing proves, because the bound that
+matters is `s.length` and no literal can state it. The table above prices the
+mistake: **1.038x** the unchecked build at the minimum and 1.062x at the
+median, and 280 bytes of executable (8,376 against 8,096).
+
+**Step 3: `getByte`, judged by its IR, with the time reported.**
+`bench/getbyte.ts` contains `perf_rng_getbyte`'s three functions verbatim, with
+`i: integer<0, 255>`, and none of them is exported. So `getByte` has no §9
+prologue, and what is timed is the closed program. Its `main` runs both sums
+256 times a round for 65,536 rounds and changes one byte of the table between
+passes. The checksum, 1,095,227,845,120, agrees with the same loop computed
+independently. The IR criteria all hold, and `tests/run.js` checks them on
+this file as well as on the golden:
+
+- `@getByte` has no `nish_panic_index` call.
+- `@getByte`, `@sumCalled` and `@sumInline` share
+  `{ nounwind willreturn readonly }`.
+- The range entry at the call in `@sumCalled` compiles to nothing. The module
+  has no `nish_panic_*` or `nish_exit` call anywhere, so the loop condition
+  `i < 256` proved it.
+
+There is nothing left for `--unchecked-indexing` to take out. The two modules
+are the same bytes, and so are the two executables (8,016 bytes each):
+
+| build | CPU min | CPU median | wall min | / unchecked |
+| --- | ---: | ---: | ---: | ---: |
+| `--unchecked-indexing` | 392.0 ms | 409.9 ms | 392.6 ms | 1.000 |
+| **`i: integer<0, 255>`** | **389.5 ms** | 411.8 ms | 390.4 ms | **0.994** |
+| `i: i32`, §12's spelling | 397.7 ms | 410.6 ms | 398.6 ms | 1.015 |
+
+**It is 1.00x, so the declared range is a frontend fact and not a
+speed-up**, as wp15 §2b said of counted loops. The three rows are one
+executable timed three times, so the spread between them is the noise floor
+of this protocol on this box.
+
+The third row was built from
+`sed 's/i: integer<0, 255>/i: i32/' bench/getbyte.ts`, and it is the second
+finding. §2's table, measured at `08b83df`, gave `@getByte` one check and cost
+it and `@sumCalled` their `willreturn` and `readonly`. That no longer holds.
+#222 (`67bc669`) landed after that measurement, and it hands an internal
+function the facts that every one of its call sites proves. So today the
+`i32` spelling compiles to **the same module** as the ranged one; only
+`source_filename` differs. On a closed program the range is therefore a fact
+the frontend could already derive. It says in the signature what the call
+sites already prove.
+
+Where a range does change the frontend's output is a function with callers
+the compiler cannot see. Exported, the `i32` spelling of `getByte` keeps its
+`nish_panic_index`. The ranged one has no check in its body and has §9's
+prologue check at the boundary instead. Both are `{ nounwind }`. At the
+boundary, then, the range moves the check to where the caller can see it: the
+entry of the call, not the middle of the body. It does not remove the check.
 
 ---
 
