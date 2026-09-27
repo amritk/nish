@@ -1,4 +1,4 @@
-// NL2381: The task given to `spawn` is a top-level function named at the call; an
+// NL2382: The task given to `spawn` is a top-level function named at the call; an
 // arrow written there is refused, where `parallelMapInto` would take it.
 import { scope } from "nish/threads";
 

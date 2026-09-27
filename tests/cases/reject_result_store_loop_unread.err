@@ -1,0 +1,1 @@
+reject_result_store_loop_unread.ts:12:5: error: `s` is assigned again before its `Result<i32, string>` is inspected, and the value it replaces is dropped

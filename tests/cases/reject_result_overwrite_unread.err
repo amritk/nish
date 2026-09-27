@@ -1,0 +1,1 @@
+reject_result_overwrite_unread.ts:9:3: error: `r` is assigned again before its `Result<i32, string>` is inspected, and the value it replaces is dropped

@@ -763,7 +763,7 @@ export const main = (): i32 => {
 - **Any argument will do** — an array, an object — because nothing writes
   memory while the tasks run. There is no thread count: one task, one thread.
 
-```ts nish:err NL2378
+```ts nish:err NL2379
 import { scope } from "nish/threads";
 
 const one = (n: i32): i32 => n + 1;

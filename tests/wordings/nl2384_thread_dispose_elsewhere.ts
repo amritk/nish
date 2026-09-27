@@ -1,4 +1,4 @@
-// NL2383: `[Symbol.dispose]` belongs to `nish/threads`'s scope alone: `using` takes
+// NL2384: `[Symbol.dispose]` belongs to `nish/threads`'s scope alone: `using` takes
 // nothing else, so any other class's would never be called.
 class Handle {
   n: i32 = 0;
