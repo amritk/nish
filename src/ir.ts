@@ -110,13 +110,18 @@ const isWordByte = (code: i32): boolean => {
  * the `entry` block every function opens with, and the `chr` byte
  * `String.fromCharCode` allocates (`emitFromCharCode`). A parameter spelled
  * like either takes a `.param` suffix instead (issue #266), so a new dot-free
- * block label or alloca name joins this test. The answer is a literal, so a
- * caller building a longer line allocates nothing more for it.
+ * block label or alloca name joins this test. The answer is a literal, so
+ * `-g`'s long `llvm.dbg.value` line can splice it in without building the
+ * parameter's name as a string of its own.
  */
 export const paramSuffix = (name: string): string => (name === "entry" || name === "chr" ? ".param" : "")
 
-/** The `%` name a parameter is written with: `%<name>`, plus `paramSuffix`. */
-export const paramValue = (name: string): string => `%${name}${paramSuffix(name)}`
+/**
+ * The `%` name a parameter is written with: `%<name>`, plus `paramSuffix`.
+ * It branches rather than appending, so the usual parameter is one string.
+ */
+export const paramValue = (name: string): string =>
+  paramSuffix(name).length > 0 ? `%${name}.param` : `%${name}`
 
 /** One parameter of a `define`: `<type> <attrs...> %<name>`. */
 export class IRParam {
