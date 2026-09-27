@@ -83,6 +83,7 @@ cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
+cases/leading_zero_legal added after R6: no rewriter to freeze it with
 cases/literal_spellings added after R6: no rewriter to freeze it with
 cases/map_annotated_new added after R6: no rewriter to freeze it with
 cases/map_arena_callee added after R6: no rewriter to freeze it with
