@@ -93,7 +93,8 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/dbg_utf8`).
 - **Numeric literals.** Decimal, hexadecimal (`0x10`), binary (`0b1`),
   octal (`0o17`), exponent (`1e3`), and separators (`1_000`) are accepted
-  *(CLI only)*. A literal's type comes from its context (see
+  *(CLI only)*; a separator goes only between two digits (see
+  [Numeric literals](#numeric-literals)). A literal's type comes from its context (see
   [Numeric literals](#numeric-literals)); by default it is `number`. In i32
   mode a literal must have an integral value: `1.5` is rejected with
   `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1.0`, `1e3`
@@ -289,6 +290,24 @@ Type rules:
 
 ### Numeric literals
 
+**A separator goes between two digits and nowhere else**, as in TypeScript.
+`1_000_000`, `0xFF_FF` and `1_234.5_6` are the values their digits spell, and
+so is `1e1_0` in an exponent (`tests/cases/math_numeric_separators`). Any
+other `_` is refused by the lexer with TypeScript's words, one error for the
+whole literal: after a radix prefix (`0x_FF`,
+`tests/cases/reject_separator_after_prefix`), at the end (`10_`,
+`reject_separator_trailing`), either side of the point (`1_.5`, `1._5`:
+`reject_separator_before_dot`, `reject_separator_after_dot`), straight after
+the exponent marker or its sign (`1e_5`, `1e+_5`, `reject_separator_exponent`),
+before the BigInt suffix (`0xFF_n`, `reject_separator_before_bigint_suffix`)
+and after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
+`` Numeric separators are not allowed here `` (TS6188), and two in a row
+(`1__0`, `0xF__F`, `reject_separator_doubled`) is
+`` Multiple consecutive numeric separators are not permitted `` (TS6189). The
+parser still reads the literal, so the next token does not cost a second
+error, and a bound of a ranged type is refused the same way
+(`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
+
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
 takes that type (`src/expressions.ts`, `checkNumericLiteral`;
@@ -349,7 +368,9 @@ at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
 rule, `reject_u64_literal_precision`) because a numeric literal is read as a
 double, as TypeScript reads it, so a larger one is already rounded. Every one of these messages quotes the
 literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
-as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
+as `0x1FF` and a rounded literal as the digits in the file. The one exception
+is a separator, which the parser drops, so `1_000_000_000_000` in an `i32`
+context reads back as `` Literal `1000000000000` does not fit in i32 ``. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
 `` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
 (`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 698 programs, 50306 dump lines.
+# 699 programs, 50317 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -34518,6 +34518,18 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 7:9 z: f64 (const)
   local 8:9 big: i64 (const)
+program tests/cases/math_numeric_separators.ts
+module tests/cases/math_numeric_separators.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 5:9 million: i32 (const)
+  local 6:9 mask: i32 (const)
+  local 7:9 big: i64 (const)
+  local 8:9 price: f64 (const)
+  local 9:9 tenBillion: f64 (const)
 program tests/cases/math_random.ts
 module tests/cases/math_random.ts (entry)
 function bad(): i32 -> @bad
