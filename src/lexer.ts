@@ -373,6 +373,15 @@ export class Lexer {
    * Written and read in the same three lines, at both call sites.
    */
   escapeEnd: i32
+  /**
+   * Whether that escape was a well-formed `\u{...}` above 0x10FFFF: its third
+   * return value. It is refused, but `escapeEnd` still says where it ends, so
+   * the literal is scanned to its end and `emitLiteral` puts the error in its
+   * token's place, which keeps it the only error the literal costs.
+   */
+  escapeTooLarge: boolean
+  /** Whether an escape in the literal being scanned was `escapeTooLarge`. */
+  literalTooLarge: boolean
 
   /**
    * The pieces of the literal being scanned, for the literals that have an
@@ -391,6 +400,8 @@ export class Lexer {
     this.value = ""
     this.braceDepth = []
     this.escapeEnd = 0
+    this.escapeTooLarge = false
+    this.literalTooLarge = false
     this.literal = new StringBuilder()
     this.skipShebang()
   }
@@ -590,6 +601,7 @@ export class Lexer {
     let at = this.pos + 1
     let chunk = at
     this.literal.reset()
+    this.literalTooLarge = false
     while (true) {
       if (at >= this.source.length) {
         this.error("unterminated string literal", at)
@@ -597,7 +609,7 @@ export class Lexer {
       }
       const c = this.at(at)
       if (c === quote) {
-        this.emit(TOK_STRING, at + 1, this.literalText(chunk, at))
+        this.emitLiteral(TOK_STRING, at + 1, chunk, at)
         return
       }
       if (c === CH_LF) {
@@ -624,6 +636,9 @@ export class Lexer {
    */
   takeEscape(chunk: i32, at: i32): i32 {
     const decoded = this.scanEscape(at + 1)
+    if (this.escapeTooLarge) {
+      this.literalTooLarge = true
+    }
     if (this.escapeEnd < 0) {
       this.error("invalid escape sequence", at + 2)
       return -1
@@ -633,6 +648,18 @@ export class Lexer {
     }
     this.literal.add(decoded)
     return this.escapeEnd
+  }
+
+  /**
+   * A literal's token, ending at `end` with its text ending at `at` — or, when
+   * one of its escapes was past the last code point, that error in its place.
+   */
+  emitLiteral(kind: i32, end: i32, chunk: i32, at: i32): void {
+    if (this.literalTooLarge) {
+      this.error("An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive", end)
+      return
+    }
+    this.emit(kind, end, this.literalText(chunk, at))
   }
 
   /**
@@ -660,6 +687,7 @@ export class Lexer {
 
   scanEscape(at: i32): string {
     this.escapeEnd = at + 1
+    this.escapeTooLarge = false
     const c = this.at(at)
     if (c === CH_N_LOWER) {
       return "\n"
@@ -692,26 +720,33 @@ export class Lexer {
       return utf8Encode(value)
     }
     if (c === CH_U_LOWER) {
-      if (this.at(at + 1) === CH_LBRACE) {
-        let end = at + 2
-        let value = 0
-        while (end < this.source.length && hexValue(this.at(end)) >= 0) {
-          value = value * 16 + hexValue(this.at(end))
-          end = end + 1
-        }
-        if (end === at + 2 || this.at(end) !== CH_RBRACE) {
-          this.escapeEnd = -1
-          return ""
-        }
-        this.escapeEnd = end + 1
-        return utf8Encode(value)
-      }
-      const value = this.scanHex(at + 1, 4)
+      const value = this.scanUnicode(at + 1)
       if (value < 0) {
         this.escapeEnd = -1
         return ""
       }
-      this.escapeEnd = at + 5
+      if (this.escapeTooLarge) {
+        return ""
+      }
+      // A high surrogate written right before a low one is the one code point
+      // the pair spells, as it is in JavaScript's UTF-16. A surrogate left on
+      // its own keeps its three WTF-8 bytes (docs/LANGUAGE.md, "String
+      // literals").
+      const next = this.escapeEnd
+      if (
+        value >= 0xd800 &&
+        value <= 0xdbff &&
+        this.at(next) === CH_BACKSLASH &&
+        this.at(next + 1) === CH_U_LOWER
+      ) {
+        const low = this.scanUnicode(next + 2)
+        if (low >= 0xdc00 && low <= 0xdfff) {
+          return utf8Encode(0x10000 + ((value - 0xd800) << 10) + (low - 0xdc00))
+        }
+        // Not a partner: it is scanned again, and judged, as an escape of its own.
+        this.escapeEnd = next
+        this.escapeTooLarge = false
+      }
       return utf8Encode(value)
     }
     if (c === CH_LF) {
@@ -723,6 +758,37 @@ export class Lexer {
     }
     // `\\`, `\"`, `\'`, `` \` ``, `\$` and anything else: the character itself.
     return this.source.substring(at, at + 1)
+  }
+
+  /**
+   * The code point of a `\u` escape whose `u` is just before `at` — four hex
+   * digits or a braced run of them — with `escapeEnd` set past it, or -1 when
+   * it is malformed. A braced value above 0x10FFFF stops accumulating there,
+   * so that it cannot wrap round into a code point it does not spell, and
+   * sets `escapeTooLarge`.
+   */
+  scanUnicode(at: i32): i32 {
+    if (this.at(at) === CH_LBRACE) {
+      let end = at + 1
+      let value = 0
+      while (end < this.source.length && hexValue(this.at(end)) >= 0) {
+        if (value <= 0x10ffff) {
+          value = value * 16 + hexValue(this.at(end))
+        }
+        end = end + 1
+      }
+      if (end === at + 1 || this.at(end) !== CH_RBRACE) {
+        return -1
+      }
+      this.escapeTooLarge = value > 0x10ffff
+      this.escapeEnd = end + 1
+      return value
+    }
+    const value = this.scanHex(at, 4)
+    if (value >= 0) {
+      this.escapeEnd = at + 4
+    }
+    return value
   }
 
   /** The value of exactly `count` hex digits at `at`, or -1. */
@@ -750,6 +816,7 @@ export class Lexer {
     let i = at
     let chunk = at
     this.literal.reset()
+    this.literalTooLarge = false
     while (true) {
       if (i >= this.source.length) {
         this.error("unterminated template literal", i)
@@ -757,12 +824,12 @@ export class Lexer {
       }
       const c = this.at(i)
       if (c === CH_BACKTICK) {
-        this.emit(whole, i + 1, this.literalText(chunk, i))
+        this.emitLiteral(whole, i + 1, chunk, i)
         return
       }
       if (c === CH_DOLLAR && this.at(i + 1) === CH_LBRACE) {
         this.braceDepth.push(0)
-        this.emit(opening, i + 2, this.literalText(chunk, i))
+        this.emitLiteral(opening, i + 2, chunk, i)
         return
       }
       if (c === CH_BACKSLASH) {
