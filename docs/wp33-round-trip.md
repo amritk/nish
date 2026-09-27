@@ -1,7 +1,7 @@
 # WP33: The round trip — TypeScript into Nish, and back out
 
 **Proposed. Nothing here is built.** This is the plan of record for one
-requirement with two directions:
+requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
    an agent can do most of that move by driving the compiler, with the
@@ -10,6 +10,11 @@ requirement with two directions:
 2. **Out.** A Nish program can always go back to TypeScript that runs on Node,
    Bun or a browser and means what the native build meant, so adopting Nish is
    never a one-way door.
+
+The constraint: **neither direction may cost the native build anything.** No
+instruction, no attribute, no byte of layout, in a program that uses none of
+it. The round trip is paid for at compile time and on the TypeScript side,
+never in the binary (§1 rule 6).
 
 And a rule for the language itself, which is the part that outlives any tool:
 **every decision is made with the TypeScript reading of the program in view**
@@ -35,7 +40,7 @@ unless the row says otherwise.
 ## 1. The decision
 
 **Build both directions on one mechanism: the checker's facts, written out as
-edits to the source text.** Five rules:
+edits to the source text.** Six rules:
 
 1. **A Nish program is a TypeScript program, and every place its meaning
    differs is a ledger row with a mechanical translation.** A difference with
@@ -61,6 +66,18 @@ edits to the source text.** Five rules:
    emitted as TypeScript, run under Node, and compared with its native binary.
    That replaces the frozen rewrites and restores the fuzz differential that
    WP19 lost (§4.5).
+6. **The native build pays nothing.** Everything in this note is a compile-time
+   analysis, a diagnostic, or TypeScript the compiler writes out. None of it is
+   a change to the IR a program already compiles to. Where the two readings
+   differ because Nish's meaning is the fast one (i32 arithmetic, a checked
+   `slice`, contiguous records, UTF-8 strings), **Nish's meaning stays**, and
+   the difference becomes a translation on the way out and a flagged site on
+   the way in. Two existing tests hold every stage to it: the `.ll` goldens
+   must not move, since no stage here changes a lowering, and
+   `bench/instructions.json`'s gate (21 programs under cachegrind, 0.1%
+   tolerance, run by `npm test`) must not rise. A proposal that needs either to
+   move is out of scope for this note, and goes through its own measured work
+   package the way every lowering does.
 
 The thesis, because it is the argument for spending on this at all:
 
@@ -88,7 +105,7 @@ construct, builtin and layout decision falls into exactly one class:
 | --- | --- | --- | --- |
 | **A — identical** | Same source, same output. | Always. | TS tests prove it. |
 | **B — safety net** | Native stops (exit 1, or a compile error) where TS carries on with `undefined`, `NaN` or a wrong value. A program that never trips the check prints the same thing both ways. | Always. It is Nish being stricter, never different. | TS tests prove it for every program that passes them. |
-| **C — translated** | The two readings differ, and `--emit ts` writes Nish's meaning in TS at that site. | Only when the difference buys something measured, and only with its translation stated in the same change. | TS tests prove nothing *at that site*. §5.2 names it. |
+| **C — translated** | The two readings differ, and `--emit ts` writes Nish's meaning in TS at that site. | When Nish's meaning is measurably faster, or taking TS's would cost the native build anything, and only with its translation stated in the same change. | TS tests prove nothing *at that site*. §5.2 names it. |
 | **D — untranslatable** | The two readings differ, and no local rewrite recovers Nish's meaning. | **Never.** One found is a bug to close. | — |
 
 B is what the bounds check is. `a[i]` out of range is a panic natively and
@@ -98,12 +115,16 @@ a program that is already wrong. The same holds for `pop()` on an empty array,
 `charCodeAt` past the end, integer division by zero, and every compile-time
 rejection (a rejected program has no TS reading to disagree with).
 
-C is where both directions pay. On the way out, each C row is a helper or an
-idiom in the emitted TS. On the way in, each C row is a place where TS code that
+C is where both directions pay, and **C is where speed lives**. Every
+performance decision the language has made that departs from JavaScript is a C
+row: wrapping i32, the checked `slice`, contiguous records, UTF-8. Moving any
+of them to A would mean giving up the speed, so they stay C. The cost lands
+outside the binary instead. On the way out, each C row is a helper or an idiom
+in the emitted TS. On the way in, each C row is a place where TS code that
 passed its tests can compile to a Nish program that answers differently, with
-no error. That second cost is the one that decides whether a C row is worth
-keeping: **a C row is acceptable when the way in can flag every site where it
-applies**, which is a type question the checker already answers.
+no error. That second cost decides whether a C row is acceptable: **the way in
+must be able to flag every site where it applies**, which is a type question
+the checker already answers.
 
 ---
 
@@ -131,8 +152,8 @@ collected in §7.
 
 | Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
-| `.length`, `charCodeAt`, `indexOf`, `slice`, `substring` count **UTF-8 bytes** | `"héllo".length` is 6 natively, 5 in TS | C | `utf8.length(s)`, `utf8.slice(s, a, b)`, … | **The largest row in the ledger. Open, §7 Q1.** Out is easy, since the helpers are exact. In is the problem: every `.length` in every ingested file becomes a flagged site (§5.2), and ASCII-only code, the common case, cannot be told apart from the rest by type. |
-| `slice(a, b)` panics outside `[0, length]`, where JS clamps, and takes no negative index | `"abcdef".slice(2, 10)` panics natively and is `cdef` in TS; `slice(-2, 6)` panics natively and is `ef` in TS | C | a `slice` helper that panics | **Close it: adopt JavaScript's rule** (clamp, and a negative index counts from the end). JS defines both behaviours as correct, and code depends on them (`s.slice(-3)`, `s.slice(0, max)`). They cost the same compares as the check they replace, and the row becomes A. |
+| `.length`, `charCodeAt`, `indexOf`, `slice`, `substring` count **UTF-8 bytes** | `"héllo".length` is 6 natively, 5 in TS | C | `utf8.length(s)`, `utf8.slice(s, a, b)`, … | **Keep it (§7 Q1).** Out is easy, since the helpers are exact. In is narrower than it looks: code that only passes offsets between string methods is consistent in either unit, and it breaks only where an offset or code unit meets a fact from outside. That means a length printed or stored, a non-ASCII literal compared with `charCodeAt`, or a hard-coded offset into non-ASCII text. Those are the sites §5.2 flags. |
+| `slice(a, b)` panics outside `[0, length]`, where JS clamps, and takes no negative index | `"abcdef".slice(2, 10)` panics natively and is `cdef` in TS; `slice(-2, 6)` panics natively and is `ef` in TS | C | a `slice` helper that panics | **Keep it.** [wp15-performance.md](wp15-performance.md) §4 measured the clamp at 13 x86-64 instructions per call (1.18x on a lexer-shaped scan). A check can be proven away and a clamp cannot: `opt -O2` deletes every `slice` check on constant offsets. `substring` already keeps JS's exact clamping, so the way in has a spelling for code that depends on it. The ingest fix rewrites `s.slice(-n)` to `s.slice(s.length - n)`, and `slice(a, b)` that may overrun to `substring` (`review`: they differ when `a > b`). |
 | `parseInt`, `parseFloat`, `Number(s)` follow Nish's rules | RUN_UNDER_NODE.md | C | runtime helpers | Keep. The prelude today replaces the *global* `parseInt`, which changes other JS in the same process. The helpers in §4.3 are imports instead. |
 
 ### 3.3 Arrays and records
@@ -312,6 +333,7 @@ new band, off by default and on under `--compat` and `--emit ts`:
 ```
 warning[NL8001]: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
   --> src/table.ts:41:18
+   = it is flagged because it pads a printed column, where the unit shows
    = the two agree when `name` is ASCII
    = your TypeScript tests do not check this line's meaning
 ```
@@ -319,10 +341,13 @@ warning[NL8001]: `name.length` counts UTF-8 bytes here, and UTF-16 units in Type
 It is the map both directions need. On the way in, it lists exactly where "the
 tests still pass" stops being evidence, which is what an agent should look at
 by hand or cover with a new test. On the way out, it is the list of places
-`--emit ts` will put a helper. The facts are all the checker's already (the
-type of `name`, which array a record was copied into), so the class is cheap.
-The record-aliasing row is the one new analysis. It reuses the element-reference
-tracking behind `reject_arr_element_across_push`.
+`--emit ts` will put a helper. Most of the facts are the checker's already
+(the type of `name`, which array a record was copied into), so the class is
+cheap. Two rows need a new analysis. Record aliasing reuses the
+element-reference tracking behind `reject_arr_element_across_push`. The string
+row (§3.2) follows where an offset or a code unit flows, and flags it only
+where it meets an outside fact. Both are warnings, so neither changes the IR
+(§1 rule 6).
 
 ### 5.3 The loop an agent runs
 
@@ -355,17 +380,27 @@ This is what "keep it in mind as we design the language" means in practice.
    way a construct ships with its golden `.ll` today. The step is in
    [ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-construct).
 2. **No new D.** A construct with no TS reading is refused, or given one first.
-3. **Prefer A when it is cheap.** Where JavaScript's meaning costs about what
-   Nish's does, take JavaScript's. `slice` clamping (§3.2) is the example: it
-   is the same compares.
+3. **Prefer A only when it is free.** Take JavaScript's meaning when it costs
+   the native build nothing, measured: the `.ll` goldens of the programs that
+   do not use the construct unchanged, and `bench/instructions.json` not
+   raised. Anything more and the row stays C. `substring` is the example of
+   both at once: it has JS's clamping at a measured cost, and `slice` stays
+   beside it as the fast, checked one (§3.2).
 4. **A layout decision must be invisible in the TS reading, or a C row with a
    flag.** Inline array fields already meet the first standard ("no program can
    tell the two layouts apart"). Contiguous record arrays do not (§3.3), which
    is why they need the `portability` flag. `Map` refused interface values for
    exactly this reason ([wp32-map.md](wp32-map.md) §1, row 7).
 5. **A divergence must buy something measured.** i32 buys integer speed,
-   contiguous records buy vectorisation, and UTF-8 buys memory and C interop.
-   Each is priced in its own note. A C row with no number beside it becomes A.
+   contiguous records buy vectorisation, the checked `slice` buys 13
+   instructions a call, and UTF-8 buys memory and C interop. Each is priced in
+   its own note. A C row with no number beside it becomes A, **unless becoming
+   A would cost the native build**, in which case the number gets measured and
+   written down.
+6. **Compatibility work never changes a lowering.** A stage of this note that
+   moves a `.ll` golden or an instruction count is wrong by construction.
+   Changes to how something compiles go through their own work package, with
+   the measurement every lowering needs.
 
 ---
 
@@ -373,12 +408,12 @@ This is what "keep it in mind as we design the language" means in practice.
 
 | # | Question | Options | Recommendation |
 | --- | --- | --- | --- |
-| Q1 | String offsets | (a) keep UTF-8 bytes, C row, flagged on the way in; (b) keep UTF-8 storage but make `.length` and offsets UTF-16 units, with an "all ASCII" bit in the string header so the common case stays O(1), and put bytes behind explicit APIs; (c) UTF-16 storage | **(b), measured first.** It is the only row that touches most ingested files, and (a) makes every `.length` a manual review. (b) keeps the memory and C-interop reasons for UTF-8. The cost is O(n) offsets on non-ASCII strings without a breadcrumb index, and that has to be measured on the corpus before it is decided. MASTER_PLAN §3.4 records UTF-8 bytes as decided. This reopens it, so it is the owner's call. |
-| Q2 | Default `number` | i32 in strict and f64 in compat (wp28 §5.3), or f64 everywhere | **Leave it as wp28 has it.** The way out handles i32 in one token per operator, so the round trip does not force a change. Only ingestion needs f64, and compat already implies it. |
-| Q3 | Record copies | (a) C row, flagged on the way in (§3.3); (b) a checker rule that rejects every observable aliasing | **(a).** (b) refuses programs that are fine, and the flag already names the site. |
-| Q4 | Typed-array names | (a) translate to `number[]` where `push`/`pop` is used; (b) refuse `push`/`pop` on the four names | **(b).** It is breaking but small, and it makes the row A. A program that pushes writes `f64[]`, which is what it meant. |
+| Q1 | String offsets | (a) keep UTF-8 bytes, C row, flagged on the way in; (b) keep UTF-8 storage but make `.length` and offsets UTF-16 units, with an "all ASCII" bit in the string header; (c) UTF-16 storage | **(a).** (b) and (c) both cost the native build: (b) puts a header bit test on every `.length` and `charCodeAt` and makes offsets O(n) on non-ASCII text, and (c) doubles the memory of ASCII text and breaks C interop. Rule 6 rules both out. (a) keeps MASTER_PLAN §3.4's decision, and §3.2's narrower flag keeps the way in reviewable. |
+| Q2 | Default `number` | i32 in strict and f64 in compat (wp28 §5.3), or f64 everywhere | **Leave it as wp28 has it.** Strict keeps i32's speed, and the way out handles it in one token per operator. Ingested code starts in f64, where it means what it meant. Moving a module to i32 is then a step on wp28's ratchet: a measured speed-up, with the §5.2 flags as the checklist of what could change. |
+| Q3 | Record copies | (a) C row, flagged on the way in (§3.3); (b) a checker rule that rejects every observable aliasing; (c) store records by pointer, as JS does | **(a).** (c) gives up the contiguous layout that makes `Point[]` vectorise. (b) costs nothing natively, but it refuses programs that are fine, and the flag already names the site. |
+| Q4 | Typed-array names | (a) translate to `number[]` where `push`/`pop` is used; (b) refuse `push`/`pop` on the four names | **(b).** A compile-time refusal, so the IR of every program that still compiles is unchanged. It is breaking but small, and it makes the row A. A program that pushes writes `f64[]`, which is what it meant. |
 | Q5 | `fix` in `--json` | a nested `fix` field on the diagnostic; or separate `{"severity":"fix"}` lines | **The field.** One object per diagnostic is the contract, and the fix belongs to the diagnostic. |
-| Q6 | `slice` | JS clamping and negative indices, or keep the panic | **JS's rule** (§3.2). It is breaking, since a program that relied on the panic now continues, but no correct program relied on it. |
+| Q6 | `slice` | JS clamping and negative indices, or keep the panic | **Keep the panic** (§3.2). The clamp is measured at 13 instructions a call and can never be proven away. `substring` is the JS-exact spelling. |
 
 ---
 
@@ -406,7 +441,7 @@ This is what "keep it in mind as we design the language" means in practice.
 | --- | --- | --- |
 | **R0** | This note; the ledger in [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md) brought up to date; the TypeScript-reading step in ARCHITECTURE.md's checklist | Makes the rule binding before any tool exists. |
 | **R1** | The `portability` class (§5.2); the parser reading all of TypeScript's syntax (§5.0) | Both directions need the map, it is cheap, and it is useful on its own. The parser is what makes every diagnostic an agent reads name its rule. |
-| **R2** | Close the cheap rows in the language: `slice` (Q6), typed-array names (Q4). Measure Q1. | Every row closed now is a helper `--emit ts` never needs and a warning an agent never reads. |
+| **R2** | Close the rows that are free to close: typed-array names (Q4), a compile-time refusal. | Every row closed now is a helper `--emit ts` never needs and a warning an agent never reads. Only compile-time changes qualify (§1 rule 6). |
 | **R3** | The runtime split by host (§4.3) | `--emit ts` imports from it, and Bun and the browser need it anyway. |
 | **R4** | `--emit ts` (§4), with the live differential (§4.5) | The exit door, and the oracle §5.3 step 6 leans on. |
 | **R5** | `fix` in `--json` and `nish fix` (§5.1); the AI.md section | The agent loop, once the compiler can say where the risks are. |
@@ -414,3 +449,18 @@ This is what "keep it in mind as we design the language" means in practice.
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
 and it is also what gives R5 its differential.
+
+Every stage is held to §1 rule 6 by the tests `npm test` already runs: no
+`.ll` golden moves, and the instruction gate stays green without its baseline
+being raised. R1's parser work and R5's fixes also touch the compiler's own
+speed, which nothing gates today. A stage that changes the parser or the
+checker times the compiler building itself (`scripts/bootstrap.sh --verify`)
+before and after, and says the number.
+
+What the native build does not pay, the TypeScript side does. `--emit ts`
+output is slower than hand-written TypeScript wherever a helper stands in for
+a Nish meaning, and the UTF-8 string helpers are the expensive ones. The i32
+idioms (`| 0`, `Math.imul`) are the ones V8 already optimises best. That is
+the right place for the cost: a team runs the emitted TypeScript because it is
+leaving, or while it decides, and §4.2's ratchet removes each helper once the
+team chooses JS's meaning at that site.

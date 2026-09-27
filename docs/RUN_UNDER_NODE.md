@@ -88,7 +88,9 @@ no prelude can reach it. They are language decisions
   natively outside `[0, length]`: `"abcdef".slice(2, 10)` is `cdef` under Node
   and `slice out of range: [2, 10) of length 6` natively, and `slice(-2, 6)` is
   `ef` against a panic. Unlike `a[i]`, JavaScript defines both as correct, so a
-  program ported from TypeScript can depend on them.
+  program ported from TypeScript can depend on them. `substring` keeps
+  JavaScript's clamping exactly; `slice` is the checked, faster one
+  ([wp15-performance.md](wp15-performance.md) §4).
 - **A record put into an array is copied natively** and shared here
   ([Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)).
   After `ps.push(p); p.x = 9`, `ps[0].x` is still the old value natively and

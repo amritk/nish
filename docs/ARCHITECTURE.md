@@ -148,7 +148,9 @@ own source until the seed compiles it, which is the next release.
    identical (A), or native stops where TypeScript carries on (B), or it
    differs and you give the TypeScript that means what Nish means (C). A
    construct with no TypeScript reading is not added, and a C construct needs a
-   measured reason. The classes and the ledger of every C row are in
+   measured reason. Taking JavaScript's meaning is never worth a cost to the
+   native build: where it is slower, Nish's meaning stays and the difference
+   is a C row. The classes and the ledger of every C row are in
    [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6.
 2. **Parser and validator.** New syntax needs a node kind in `src/nodes.ts`
    (with its child layout written beside it) and a production in

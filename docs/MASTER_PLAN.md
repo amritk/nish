@@ -149,7 +149,7 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
 | Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
-| String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 proposes UTF-16 offsets over UTF-8 storage, since this row is the largest difference between the two readings of a program; to be measured before it is decided. |
+| String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
 
 ## 4. What exists today
 
@@ -856,8 +856,10 @@ major. Whether it happens at all is still wp22 §10's open question.
   and unbuilt: `--emit ts` as the way back out to TypeScript, a `portability`
   warning at each place the two readings differ, and fixes in `--json` for an
   agent porting a TypeScript project in. Its rule binds now: every construct
-  states its TypeScript reading. Its §7 has six decisions for the owner. One of
-  them, string offsets, reopens the encoding row of §3.4.
+  states its TypeScript reading. None of it may cost the native build: no
+  stage moves a `.ll` golden or raises `bench/instructions.json`, and where
+  JavaScript's meaning is the slower one, Nish's stays and is translated on
+  the way out. Its §7 has six decisions for the owner.
 
 #### Settled, with the note that settles it
 
