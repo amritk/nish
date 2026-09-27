@@ -25,7 +25,7 @@
 // make a node of is an `N_ERROR` with the reason.
 
 import { Diagnostic, SourceFile } from "./diagnostics"
-import { Lexer } from "./lexer"
+import { Lexer, withoutSeparators } from "./lexer"
 import {
   FLAG_CONST,
   FLAG_DEFINITE,
@@ -1864,7 +1864,7 @@ export class Parser {
       }
       case TOK_NUMBER: {
         const node = this.node(N_NUMBER, start, this.end)
-        node.text = this.value
+        node.text = withoutSeparators(this.value)
         this.advance()
         return node
       }
