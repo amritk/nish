@@ -1059,12 +1059,15 @@ export class Emitter {
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
-    // A value entering a range (WP31 §6) is the same `i32`, checked here.
+    // A value entering a range (WP31 §6) is the same `i32`, checked here
+    // unless `src/bounds.ts` proved it already lies inside (§8).
     const from = this.program.nodeCoercions[expr.id]
     const to = this.program.nodeTypes[expr.id]
     let result = value
     if (from >= 0 && this.table.isRanged(to)) {
-      emitRangeEntry(this, value, from, to)
+      if (!this.program.nodeProvenRange[expr.id]) {
+        emitRangeEntry(this, value, from, to)
+      }
     } else if (from >= 0) {
       result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`)
     }

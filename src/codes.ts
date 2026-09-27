@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 490
+export const RULE_COUNT: i32 = 491
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1022,6 +1022,8 @@ const diagnosticRules = (): string[] => [
 const performanceRules = (): string[] => [
   "` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both",
   "NL9012",
+  "so entering the range keeps its check on every iteration of this loop",
+  "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",
   "NL9001",
   "is rebuilt from its own value on every iteration of this loop",

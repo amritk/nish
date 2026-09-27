@@ -203,7 +203,11 @@ integer literals (a sign allowed) inside `i32`, and it is an `i32` everywhere
 the machine can see. Putting a value *into* one is checked: an `i32` or
 another range is compared once and the program panics (exit 1) outside the
 range, a literal outside it is a compile error, and a literal inside it or a
-narrower range costs nothing. Taking one *out* is free: every operator reads
+narrower range costs nothing. So does a value a loop condition or a guard
+already bounds (`b` below), and `toI32` of a `u8`; a check left inside a loop
+is a performance warning (NL9013) naming the guard that removes it. A range
+bounds an index too: `integer<0, 255>`, like `u8`, needs only a length guard of
+256. Taking one *out* is free: every operator reads
 it as `i32`, a `const` keeps the range and a `let` widens to `i32`. A `u8` is
 not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
 not mention a range. Put the range on the value you use, not on a loop

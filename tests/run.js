@@ -3975,6 +3975,88 @@ if (!only || only.startsWith("rng")) {
   }
 }
 
+// ---- Ranged integers, proved (WP31 §8) -------------------------------------------
+// An entry the bounds proof places inside its range costs nothing and is not
+// reported; one it cannot, inside a loop, warns with NL9013 and names the
+// rewrite. `perf_rng_counter` is §7's trap: the warning, then the panic.
+if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
+  const compileRng = (name, out) =>
+    spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, out)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const warned = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l))
+  const at = (lines) => lines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",")
+
+  // Four shapes: a local, which is named with its guard; a computed value; a
+  // range with no lower end, whose guard is the upper test alone; and a store
+  // back into a field. The fifth entry starts above zero, where no guard
+  // proves anything, and is checked without a word.
+  const loop = compileRng("perf_rng_loop", "perf_rng_loop_report.ll")
+  const loopLines = warned(loop.stderr)
+  check(
+    "performance: a range entry the proof could not place, inside a loop, warns once, naming its rewrite",
+    loop.status === 0 &&
+      loopLines.length === 4 &&
+      at(loopLines) === "14:31,16:31,18:43,20:5" &&
+      loopLines.every((l) =>
+        l.includes("so entering the range keeps its check on every iteration of this loop")
+      ) &&
+      loopLines[0].includes("`k` is not proven to lie in integer<0, 99> here") &&
+      loopLines[0].includes("`if (k >= 0 && k <= 99)` proves it") &&
+      loopLines[1].includes("this value is not proven to lie in integer<0, 99>") &&
+      loopLines[1].includes("bind it to an `i32` local and guard that local") &&
+      loopLines[2].includes("`if (k <= 99)` proves it") &&
+      loopLines[3].includes("this value is not proven to lie in integer<0, 1000>"),
+    loop.stderr
+  )
+  const loopJson = spawnSync(
+    NISH,
+    [path.join(casesDir, "perf_rng_loop.ts"), "-o", path.join(buildDir, "perf_rng_loop_json.ll"), "--json"],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "performance: each surviving range entry in a loop is NL9013 in --json",
+    loopJson.status === 0 && (loopJson.stdout.match(/"code":"NL9013"/g) ?? []).length === 4,
+    loopJson.stdout
+  )
+
+  const quiet = compileRng("perf_rng_quiet", "perf_rng_quiet_report.ll")
+  const quietIr =
+    quiet.status === 0 ? fs.readFileSync(path.join(buildDir, "perf_rng_quiet_report.ll"), "utf8") : ""
+  check(
+    "performance: perf_rng_quiet proves every entry in its loops, so one check is left, outside them, and nothing is reported",
+    quiet.status === 0 &&
+      warned(quiet.stderr).length === 0 &&
+      (quietIr.match(/^rng\.fail[.\d]*:/gm) ?? []).length === 1,
+    quiet.stderr
+  )
+
+  const counter = compileRng("perf_rng_counter", "perf_rng_counter_report.ll")
+  const counterLines = warned(counter.stderr)
+  check(
+    "performance: a ranged loop counter warns at its advance (WP31 §7's trap)",
+    counter.status === 0 &&
+      counterLines.length === 1 &&
+      at(counterLines) === "10:45" &&
+      counterLines[0].includes("the value written to `i` is not proven to lie in integer<0, 255>"),
+    counter.stderr
+  )
+  if (counter.status === 0) {
+    const exe = path.join(buildDir, "perf_rng_counter")
+    const cc = linkNative(exe, path.join(buildDir, "perf_rng_counter_report.ll"))
+    const run = cc.status === 0 ? spawnSync(exe) : null
+    check(
+      "perf_rng_counter: the last advance leaves the range, and the program exits 1 after its first line",
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("value out of range: expected integer<0, 255>") &&
+        String(run.stdout).trim() === "counting",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    )
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 // The two runtime unit tests below name the runtime's sources rather than the
 // prebuilt objects, deliberately: what they assert *is* that the two

@@ -190,6 +190,17 @@ export const isInteger = (type: i32): boolean => intBits(type) > 0
 
 export const isNumeric = (type: i32): boolean => isInteger(type) || isFloat(type)
 
+/** The closed interval a declaration allows, `lo <= v <= hi` (`TypeTable.declaredRange`). */
+export class DeclaredRange {
+  lo: i64
+  hi: i64
+
+  constructor(lo: i64, hi: i64) {
+    this.lo = lo
+    this.hi = hi
+  }
+}
+
 /**
  * Every type in one program, interned.
  *
@@ -408,6 +419,38 @@ export class TypeTable {
    */
   baseOf(type: i32): i32 {
     return this.isRanged(type) ? T_I32 : type
+  }
+
+  /**
+   * The values `type`'s declaration allows, or `null` for a type that states
+   * no range (WP31 §8): `[Lo, Hi]` for `integer<Lo, Hi>`, and the unsigned
+   * widths' own. `src/bounds.ts` reads it where it used to ask `isUnsigned`,
+   * so the type answers and no fact has to be stored or forgotten: every write
+   * into a ranged place is an entry, and an unsigned one cannot hold anything
+   * else. `hi` stops at the `i64` maximum for `u64`, which is past every
+   * bound an `i32` fact can carry, and that is the only question it answers.
+   */
+  declaredRange(type: i32): DeclaredRange | null {
+    if (this.isRanged(type)) {
+      return new DeclaredRange(toI64(this.refs[type]), toI64(this.errs[type]))
+    }
+    switch (type) {
+      case T_U8:
+        return new DeclaredRange(0, 255)
+      case T_U16:
+        return new DeclaredRange(0, 65535)
+      case T_U32:
+        return new DeclaredRange(0, 4294967295)
+      case T_U64: {
+        // 2^63 - 1, built from two halves because a literal past 2^53 is refused.
+        const high: i64 = 2147483647
+        const shift: i64 = 4294967296
+        const low: i64 = 4294967295
+        return new DeclaredRange(0, high * shift + low)
+      }
+      default:
+        return null
+    }
   }
 
   // ---- `Result<T, E>` (WP16) ----------------------------------------------

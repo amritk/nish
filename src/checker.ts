@@ -92,7 +92,7 @@ import {
   StructRegistry,
   StructTemplateInfo,
 } from "./program"
-import { analyzeBounds } from "./bounds"
+import { BoundsWalk, analyzeBounds } from "./bounds"
 import { checkResultLocalsHandled } from "./result"
 import { checkReturnValue, checkStatements } from "./statements"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
@@ -1242,6 +1242,8 @@ class PerfWalk {
    * of one source-order walk or the diagnostics stop being in source order.
    */
   unprovenIndices: Node[]
+  /** The range entries whose check survived inside a loop (WP31 §8), found by the same walk. */
+  unprovenRanges: Node[]
   loops: Node[]
   declared: Local[]
   declaredDepth: i32[]
@@ -1253,11 +1255,18 @@ class PerfWalk {
    */
   declaredAllocates: boolean[]
 
-  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]) {
+  constructor(
+    ctx: CheckContext,
+    sig: FunctionSig,
+    body: Node,
+    unprovenIndices: Node[],
+    unprovenRanges: Node[]
+  ) {
     this.ctx = ctx
     this.sig = sig
     this.body = body
     this.unprovenIndices = unprovenIndices
+    this.unprovenRanges = unprovenRanges
     this.loops = []
     this.declared = []
     this.declaredDepth = []
@@ -1337,12 +1346,12 @@ export const checkSignatureBody = (
     // are reported, because one of the warnings is about the proofs that did
     // not come off, and it has to be reported by the same source-order walk
     // as the rest of the class.
-    const unprovenIndices = analyzeBounds(ctx, body, ctx.uncheckedIndexing)
+    const bounds = analyzeBounds(ctx, body, ctx.uncheckedIndexing)
     // WP15 §8: the performance warnings, over the same body and the same
     // side tables. Only for a body that checked cleanly — advice about code
     // that does not compile is noise, and a poisoned body has incomplete
     // side tables anyway.
-    checkPerformance(ctx, sig, body, unprovenIndices)
+    checkPerformance(ctx, sig, body, bounds)
     // WP15 §2a: an element reference into contiguous struct storage may not
     // be held across a `push`. Same placement and same reason as the line
     // above — the walk reads types and bindings pass 2 has just written.
@@ -1371,8 +1380,8 @@ export const checkSignatureBody = (
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void => {
-  walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body)
+const checkPerformance = (ctx: CheckContext, sig: FunctionSig, body: Node, bounds: BoundsWalk): void => {
+  walkPerformance(new PerfWalk(ctx, sig, body, bounds.unproven, bounds.unprovenRanges), body)
 }
 
 /**
@@ -1412,6 +1421,52 @@ const checkSurvivingBoundsCheck = (walk: PerfWalk, access: Node): void => {
       "compares against the length on every iteration: guard it with a test that reaches the access — " +
       `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
       "the upper one"
+  )
+}
+
+/** The test that proves `name` into `[lo, hi]`, for a range starting at 0 or at `-2147483648`. */
+const rangeGuard = (name: string, lo: i32, hi: i32): string => {
+  if (lo !== 0) {
+    return `${name} <= ${hi}`
+  }
+  return hi === 2147483647 ? `${name} >= 0` : `${name} >= 0 && ${name} <= ${hi}`
+}
+
+/**
+ * A range entry `src/bounds.ts` could not prove, inside a loop (WP31 §8): the
+ * compare and the cold panic run on every iteration. The words follow the
+ * value that enters. A local is named with the guard that proves it, which is
+ * why only a range starting at 0 or at `-2147483648` is ever reported
+ * (`judgeRange`). Anything computed has no guard of its own, so the advice is
+ * to bind it to a local first, or, when it is a counter or a cursor written
+ * back into its own range, not to range it: §7's trap, where the counter has
+ * to leave the range to leave the loop.
+ */
+const checkSurvivingRangeCheck = (walk: PerfWalk, value: Node): void => {
+  const ctx = walk.ctx
+  // A store back (`i++`, `i += 1`) is reported at its target, whose range it is.
+  const stored = ctx.program.nodeCoercions[value.id] < 0
+  const at = stored ? value.children[0] : value
+  const range = ctx.program.nodeTypes[at.id]
+  const lo = ctx.table.rangeLo(range)
+  const hi = ctx.table.rangeHi(range)
+  const spelled = ctx.table.typeName(range)
+  const name = stored ? "" : perfLocalName(ctx, value)
+  if (name.length > 0) {
+    ctx.performance(
+      value,
+      `\`${name}\` is not proven to lie in ${spelled} here, so entering the range keeps its check on every ` +
+        `iteration of this loop: guard it with a test that reaches it — \`if (${rangeGuard(name, lo, hi)})\` proves it`
+    )
+    return
+  }
+  const target = stored ? perfLocalName(ctx, at) : ""
+  const what = target.length > 0 ? `the value written to \`${target}\`` : "this value"
+  ctx.performance(
+    at,
+    `${what} is not proven to lie in ${spelled} here, so entering the range keeps its check on every ` +
+      "iteration of this loop: bind it to an `i32` local and guard that local, or, for a counter or a cursor, " +
+      "declare it `i32` and give the range to the value that is used, where the loop condition proves it"
   )
 }
 
@@ -1641,6 +1696,9 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
   if (isUnprovenIndex(walk, node)) {
     checkSurvivingBoundsCheck(walk, node)
   }
+  if (isUnprovenRange(walk, node)) {
+    checkSurvivingRangeCheck(walk, node)
+  }
   for (const child of node.children) {
     walkPerformance(walk, child)
   }
@@ -1650,6 +1708,16 @@ const walkPerformance = (walk: PerfWalk, node: Node): void => {
 const isUnprovenIndex = (walk: PerfWalk, node: Node): boolean => {
   for (const access of walk.unprovenIndices) {
     if (access === node) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `node` is one of the range entries the bounds analysis could not prove. */
+const isUnprovenRange = (walk: PerfWalk, node: Node): boolean => {
+  for (const value of walk.unprovenRanges) {
+    if (value === node) {
       return true
     }
   }
