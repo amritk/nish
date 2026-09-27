@@ -98,7 +98,7 @@ import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel"
 import { addStringConstant, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { IRBlock, IRFunction, IRModule, IRParam } from "./ir"
+import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -442,7 +442,7 @@ export class Emitter {
         const object = unpackReturnedResult(
           this,
           sig.paramTypes[i],
-          `%${name}`,
+          paramValue(name),
           facts.isStackParam(name),
           privateAbi
         )
@@ -1155,7 +1155,7 @@ export class Emitter {
         // WP17: a by-value `Result` parameter *is* a pointer to the object the
         // prologue unpacked it into, so the name lowers to that value.
         const object = this.paramObject(local.name)
-        return object.length > 0 ? object : `%${local.name}`
+        return object.length > 0 ? object : paramValue(local.name)
       }
       // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
       if (this.table.isMaybe(local.type)) {

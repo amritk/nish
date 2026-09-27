@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 72 programs, 954572 dump lines live, 72 distinct modules.
+# 72 programs, 955191 dump lines live, 72 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/declarations.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/bounds.ts src/statements.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/options.ts src/emit-parallel.ts src/target.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -15145,6 +15145,7 @@ import IRBlock from "./ir" -> struct IRBlock
 import IRFunction from "./ir" -> struct IRFunction
 import IRModule from "./ir" -> struct IRModule
 import IRParam from "./ir" -> struct IRParam
+import paramValue from "./ir" -> function @paramValue
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import N_ARRAY from "./nodes" -> const N_ARRAY
@@ -15379,7 +15380,7 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=112
   sharedWrite: 386:7
   escaping: sig
-  calls: DebugInfo.beginFunction Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue emitConstructorPrologue functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes privateResultAbi returnAttributes unpackReturnedResult
+  calls: DebugInfo.beginFunction Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.isLibraryCopy Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam FunctionSig.isCompileTime FunctionSig.visibleOutside IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue emitConstructorPrologue functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes paramValue privateResultAbi returnAttributes unpackReturnedResult
   pointer this: size=184 writesThrough=true captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 privateResultAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.isLibraryCopy#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0
   pointer sig: size=104 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 FunctionSig.visibleOutside#0 FunctionSig.isCompileTime#0 Emitter.isLibraryCopy#1 DebugInfo.beginFunction#2 emitConstructorPrologue#1
   stackSites=0 stackLocals=0
@@ -15413,6 +15414,7 @@ function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @E
   callee 441:11 TypeTable.resultByValue -> @TypeTable.resultByValue
   local 442:15 object: string (const)
   callee 442:24 unpackReturnedResult -> @unpackReturnedResult
+  callee 445:11 paramValue -> @paramValue
   callee 446:11 FunctionFacts.isStackParam -> @FunctionFacts.isStackParam
   callee 456:7 emitConstructorPrologue -> @emitConstructorPrologue
   local 458:11 body: Node (const)
@@ -15895,7 +15897,7 @@ function Emitter.emitRawExpression(this: Emitter, expr: Node): string -> @Emitte
 function Emitter.emitIdentifier(this: Emitter, expr: Node): string -> @Emitter.emitIdentifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via constantText
-  calls: Emitter.alignSuffix Emitter.llvm Emitter.paramObject Emitter.slotOf IRFunction.emitValue TypeTable.isMaybe constantText emitNamespaceProperty internalErrorFor maybeLocalIndex nish_exit nish_panic_index nish_str_concat
+  calls: Emitter.alignSuffix Emitter.llvm Emitter.paramObject Emitter.slotOf IRFunction.emitValue TypeTable.isMaybe constantText emitNamespaceProperty internalErrorFor maybeLocalIndex nish_exit nish_panic_index nish_str_concat paramValue
   pointer this: size=184 writesThrough=false captured=false passedTo=constantText#0 emitNamespaceProperty#0 Emitter.paramObject#0 maybeLocalIndex#0 Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -15906,6 +15908,7 @@ function Emitter.emitIdentifier(this: Emitter, expr: Node): string -> @Emitter.e
   local 1152:11 local: Local | null (const)
   local 1157:15 object: string (const)
   callee 1157:24 Emitter.paramObject -> @Emitter.paramObject
+  callee 1158:45 paramValue -> @paramValue
   callee 1161:11 TypeTable.isMaybe -> @TypeTable.isMaybe
   callee 1162:32 maybeLocalIndex -> @maybeLocalIndex
   local 1164:13 ty: string (const)
@@ -16092,6 +16095,7 @@ import SourceFile from "./diagnostics" -> struct SourceFile
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import IRFunction from "./ir" -> struct IRFunction
 import IRModule from "./ir" -> struct IRModule
+import paramSuffix from "./ir" -> function @paramSuffix
 import StringMap from "./map" -> struct StringMap
 import Node from "./nodes" -> struct Node
 import CheckedProgram from "./program" -> struct CheckedProgram
@@ -16467,7 +16471,7 @@ function DebugInfo.beginFunction(this: DebugInfo, fn: IRFunction, sig: FunctionS
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 582:5
   escaping: name privateAbi
-  calls: DebugInfo.abiTypeRef DebugInfo.lineOf DebugInfo.locationOf DebugInfo.typeRef FunctionSig.isCompileTime IRFunction.emit IRFunction.setLocation IRModule.addDeclaration IRModule.addMetadata TypeTable.llvmAbiType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 quote
+  calls: DebugInfo.abiTypeRef DebugInfo.lineOf DebugInfo.locationOf DebugInfo.typeRef FunctionSig.isCompileTime IRFunction.emit IRFunction.setLocation IRModule.addDeclaration IRModule.addMetadata TypeTable.llvmAbiType nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 paramSuffix quote
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.lineOf#0 DebugInfo.typeRef#0 DebugInfo.abiTypeRef#0 DebugInfo.abiTypeRef#0 DebugInfo.locationOf#0 DebugInfo.abiTypeRef#0
   pointer fn: size=112 writesThrough=true captured=false passedTo=IRFunction.setLocation#0 IRFunction.emit#0
   pointer sig: size=104 writesThrough=false captured=false passedTo=FunctionSig.isCompileTime#0 FunctionSig.isCompileTime#0
@@ -16501,8 +16505,9 @@ function DebugInfo.beginFunction(this: DebugInfo, fn: IRFunction, sig: FunctionS
   callee 602:24 IRModule.addMetadata -> @IRModule.addMetadata
   callee 603:35 quote -> @quote
   callee 603:145 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
-  callee 605:7 IRFunction.emit -> @IRFunction.emit
-  callee 606:47 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
+  callee 606:7 IRFunction.emit -> @IRFunction.emit
+  callee 607:47 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
+  callee 607:125 paramSuffix -> @paramSuffix
 function DebugInfo.locationOf(this: DebugInfo, node: Node): string -> @DebugInfo.locationOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addMetadata
@@ -16510,11 +16515,11 @@ function DebugInfo.locationOf(this: DebugInfo, node: Node): string -> @DebugInfo
   pointer this: size=96 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 614:11 line: i32 (const)
-  callee 614:18 SourceFile.lineOf -> @SourceFile.lineOf
-  local 615:11 column: i32 (const)
-  callee 615:20 SourceFile.byteColumnOf -> @SourceFile.byteColumnOf
-  callee 616:12 IRModule.addMetadata -> @IRModule.addMetadata
+  local 615:11 line: i32 (const)
+  callee 615:18 SourceFile.lineOf -> @SourceFile.lineOf
+  local 616:11 column: i32 (const)
+  callee 616:20 SourceFile.byteColumnOf -> @SourceFile.byteColumnOf
+  callee 617:12 IRModule.addMetadata -> @IRModule.addMetadata
 function DebugInfo.describeValue(this: DebugInfo, fn: IRFunction, local: Local, type: i32, value: string, node: Node): void -> @DebugInfo.describeValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addDeclaration
@@ -16525,14 +16530,14 @@ function DebugInfo.describeValue(this: DebugInfo, fn: IRFunction, local: Local, 
   pointer local: size=32 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=DebugInfo.lineOf#2
   stackSites=0 stackLocals=0
-  callee 625:5 IRModule.addDeclaration -> @IRModule.addDeclaration
-  local 626:11 variable: string (const)
-  callee 626:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 627:33 quote -> @quote
-  callee 627:108 DebugInfo.lineOf -> @DebugInfo.lineOf
-  callee 627:149 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 629:5 IRFunction.emit -> @IRFunction.emit
-  callee 630:45 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 626:5 IRModule.addDeclaration -> @IRModule.addDeclaration
+  local 627:11 variable: string (const)
+  callee 627:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 628:33 quote -> @quote
+  callee 628:108 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee 628:149 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 630:5 IRFunction.emit -> @IRFunction.emit
+  callee 631:45 TypeTable.llvmType -> @TypeTable.llvmType
 function DebugInfo.declareLocal(this: DebugInfo, fn: IRFunction, local: Local, slot: string, node: Node): void -> @DebugInfo.declareLocal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRModule.addDeclaration
@@ -16542,14 +16547,14 @@ function DebugInfo.declareLocal(this: DebugInfo, fn: IRFunction, local: Local, s
   pointer local: size=32 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=DebugInfo.lineOf#2
   stackSites=0 stackLocals=0
-  callee 636:5 IRModule.addDeclaration -> @IRModule.addDeclaration
-  local 637:11 variable: string (const)
-  callee 637:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 638:33 quote -> @quote
-  callee 638:108 DebugInfo.lineOf -> @DebugInfo.lineOf
-  callee 638:149 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 640:5 IRFunction.emit -> @IRFunction.emit
-  callee 641:47 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 637:5 IRModule.addDeclaration -> @IRModule.addDeclaration
+  local 638:11 variable: string (const)
+  callee 638:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 639:33 quote -> @quote
+  callee 639:108 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee 639:149 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 641:5 IRFunction.emit -> @IRFunction.emit
+  callee 642:47 TypeTable.llvmType -> @TypeTable.llvmType
 module src/ir.ts
 import StringBuilder from "./strings" -> struct StringBuilder
 import StringMap from "./map" -> struct StringMap
@@ -16651,6 +16656,16 @@ function startsWithWord(text: string, word: string): boolean -> @startsWithWord
 function isWordByte(code: i32): boolean -> @isWordByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function paramSuffix(name: string): string -> @paramSuffix [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function paramValue(name: string): string -> @paramValue [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: nish_str_concat paramSuffix
+  stackSites=0 stackLocals=0
+  callee 124:3 paramSuffix -> @paramSuffix
 function IRParam.constructor(this: IRParam, name: string, type: string, attrs: string[]): void -> @IRParam.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: attrs name type
@@ -16664,29 +16679,29 @@ function IRFunction.constructor(this: IRFunction, name: string, params: IRParam[
   pointer this: size=112 writesThrough=true captured=false
   pointer params: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 149:20 new IRBlock -> @IRBlock.constructor
-  callee 153:24 new StringMap -> @StringMap.constructor
-  callee 154:25 new StringMap -> @StringMap.constructor
+  callee 170:20 new IRBlock -> @IRBlock.constructor
+  callee 174:24 new StringMap -> @StringMap.constructor
+  callee 175:25 new StringMap -> @StringMap.constructor
 function IRFunction.newTemp(this: IRFunction): string -> @IRFunction.newTemp [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 165:5
+  sharedWrite: 186:5
   calls: nish_str_concat nish_str_from_i32
   pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 164:11 temp: string (const)
+  local 185:11 temp: string (const)
 function IRFunction.location(this: IRFunction): string -> @IRFunction.location [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRFunction.setLocation(this: IRFunction, ref: string): void -> @IRFunction.setLocation [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 176:5
+  sharedWrite: 197:5
   escaping: ref
   pointer this: size=112 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function IRFunction.emit(this: IRFunction, instr: string): void -> @IRFunction.emit [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 182:7
+  sharedWrite: 203:7
   escaping: instr
   calls: nish_array_grow nish_str_concat
   pointer this: size=112 writesThrough=false captured=false
@@ -16697,21 +16712,21 @@ function IRFunction.emitValue(this: IRFunction, instr: string): string -> @IRFun
   calls: IRFunction.emit IRFunction.newTemp nish_str_concat
   pointer this: size=112 writesThrough=true captured=false passedTo=IRFunction.newTemp#0 IRFunction.emit#0
   stackSites=0 stackLocals=0
-  local 190:11 temp: string (const)
-  callee 190:18 IRFunction.newTemp -> @IRFunction.newTemp
-  callee 191:5 IRFunction.emit -> @IRFunction.emit
+  local 211:11 temp: string (const)
+  callee 211:18 IRFunction.newTemp -> @IRFunction.newTemp
+  callee 212:5 IRFunction.emit -> @IRFunction.emit
 function IRFunction.emitAlloca(this: IRFunction, name: string, type: string, align: i32): string -> @IRFunction.emitAlloca [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 207:5
+  sharedWrite: 228:5
   escaping: name
   calls: StringMap.get StringMap.set nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 203:11 n: i32 (const)
-  callee 203:15 StringMap.get -> @StringMap.get
-  callee 204:5 StringMap.set -> @StringMap.set
-  local 205:11 slot: string (const)
-  local 206:11 suffix: string (const)
+  local 224:11 n: i32 (const)
+  callee 224:15 StringMap.get -> @StringMap.get
+  callee 225:5 StringMap.set -> @StringMap.set
+  local 226:11 slot: string (const)
+  local 227:11 suffix: string (const)
 function IRFunction.currentBlock(this: IRFunction): IRBlock -> @IRFunction.currentBlock [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   pointer this: size=112 writesThrough=false captured=false
@@ -16723,13 +16738,13 @@ function IRFunction.newBlock(this: IRFunction, base: string): IRBlock -> @IRFunc
   calls: IRBlock.constructor StringMap.get StringMap.set nish_alloc_struct nish_str_concat nish_str_from_i32
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 223:11 n: i32 (const)
-  callee 223:15 StringMap.get -> @StringMap.get
-  callee 224:5 StringMap.set -> @StringMap.set
-  callee 225:12 new IRBlock -> @IRBlock.constructor
+  local 244:11 n: i32 (const)
+  callee 244:15 StringMap.get -> @StringMap.get
+  callee 245:5 StringMap.set -> @StringMap.set
+  callee 246:12 new IRBlock -> @IRBlock.constructor
 function IRFunction.placeBlock(this: IRFunction, block: IRBlock): void -> @IRFunction.placeBlock [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 230:5
+  sharedWrite: 251:5
   escaping: block
   calls: nish_array_grow
   pointer this: size=112 writesThrough=true captured=false
@@ -16737,35 +16752,36 @@ function IRFunction.placeBlock(this: IRFunction, block: IRBlock): void -> @IRFun
   stackSites=0 stackLocals=0
 function IRFunction.toText(this: IRFunction): string -> @IRFunction.toText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 263:11
-  calls: IRBlock.constructor IRBlock.toText StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  sharedWrite: 284:11
+  calls: IRBlock.constructor IRBlock.toText StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramValue
   pointer this: size=112 writesThrough=false captured=false
   stackSites=5 stackLocals=5
-  local 235:11 params: string[] (const)
-  local 236:16 p: IRParam (const)
-  local 237:13 parts: string[] (const)
-  local 238:18 attr: string (const)
-  local 244:11 retParts: string[] (const)
-  local 245:16 attr: string (const)
-  local 249:11 attrs: string (const)
-  local 250:11 linkage: string (const)
-  local 251:11 dbg: string (const)
-  local 252:11 out: StringBuilder (const)
-  callee 252:17 new StringBuilder -> @StringBuilder.constructor
-  callee 253:5 StringBuilder.add -> @StringBuilder.add
-  local 254:9 i: i32 (let)
-  callee 257:9 StringBuilder.add -> @StringBuilder.add
-  local 259:13 block: IRBlock (const)
-  local 261:15 withPrelude: IRBlock (const)
-  callee 261:29 new IRBlock -> @IRBlock.constructor
-  local 262:20 instr: string (const)
-  local 265:20 instr: string (const)
-  callee 268:9 StringBuilder.add -> @StringBuilder.add
-  callee 268:17 IRBlock.toText -> @IRBlock.toText
-  callee 270:9 StringBuilder.add -> @StringBuilder.add
-  callee 270:17 IRBlock.toText -> @IRBlock.toText
+  local 256:11 params: string[] (const)
+  local 257:16 p: IRParam (const)
+  local 258:13 parts: string[] (const)
+  local 259:18 attr: string (const)
+  callee 262:18 paramValue -> @paramValue
+  local 265:11 retParts: string[] (const)
+  local 266:16 attr: string (const)
+  local 270:11 attrs: string (const)
+  local 271:11 linkage: string (const)
+  local 272:11 dbg: string (const)
+  local 273:11 out: StringBuilder (const)
+  callee 273:17 new StringBuilder -> @StringBuilder.constructor
   callee 274:5 StringBuilder.add -> @StringBuilder.add
-  callee 275:12 StringBuilder.toText -> @StringBuilder.toText
+  local 275:9 i: i32 (let)
+  callee 278:9 StringBuilder.add -> @StringBuilder.add
+  local 280:13 block: IRBlock (const)
+  local 282:15 withPrelude: IRBlock (const)
+  callee 282:29 new IRBlock -> @IRBlock.constructor
+  local 283:20 instr: string (const)
+  local 286:20 instr: string (const)
+  callee 289:9 StringBuilder.add -> @StringBuilder.add
+  callee 289:17 IRBlock.toText -> @IRBlock.toText
+  callee 291:9 StringBuilder.add -> @StringBuilder.add
+  callee 291:17 IRBlock.toText -> @IRBlock.toText
+  callee 295:5 StringBuilder.add -> @StringBuilder.add
+  callee 296:12 StringBuilder.toText -> @StringBuilder.toText
 function IRModule.constructor(this: IRModule, sourceFileName: string): void -> @IRModule.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: sourceFileName
@@ -16773,65 +16789,65 @@ function IRModule.constructor(this: IRModule, sourceFileName: string): void -> @
   stackSites=0 stackLocals=0
 function IRModule.addMetadata(this: IRModule, text: string): string -> @IRModule.addMetadata [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 313:7
+  sharedWrite: 334:7
   escaping: text
   calls: nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 310:9 index: i32 (let)
+  local 331:9 index: i32 (let)
 function IRModule.reserveMetadata(this: IRModule): string -> @IRModule.reserveMetadata [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 325:5
+  sharedWrite: 346:5
   calls: nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 324:11 index: i32 (const)
+  local 345:11 index: i32 (const)
 function IRModule.setMetadata(this: IRModule, ref: string, text: string): void -> @IRModule.setMetadata [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 330:5
+  sharedWrite: 351:5
   escaping: ref text
   calls: metadataIndex nish_panic_index
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 330:19 metadataIndex -> @metadataIndex
+  callee 351:19 metadataIndex -> @metadataIndex
 function IRModule.addNamedMetadata(this: IRModule, line: string): void -> @IRModule.addNamedMetadata [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 335:7
+  sharedWrite: 356:7
   escaping: line
   calls: nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addTypeDecl(this: IRModule, text: string): void -> @IRModule.addTypeDecl [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 341:7
+  sharedWrite: 362:7
   escaping: text
   calls: nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addGlobal(this: IRModule, text: string): void -> @IRModule.addGlobal [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 347:7
+  sharedWrite: 368:7
   escaping: text
   calls: nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addDeclaration(this: IRModule, text: string): void -> @IRModule.addDeclaration [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 353:7
+  sharedWrite: 374:7
   escaping: text
   calls: nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addRawDefinition(this: IRModule, text: string): void -> @IRModule.addRawDefinition [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 359:7
+  sharedWrite: 380:7
   escaping: text
   calls: nish_array_grow nish_str_eq
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function IRModule.addFunction(this: IRModule, fn: IRFunction): void -> @IRModule.addFunction [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 364:5
+  sharedWrite: 385:5
   escaping: fn
   calls: nish_array_grow
   pointer this: size=80 writesThrough=false captured=false
@@ -16839,35 +16855,35 @@ function IRModule.addFunction(this: IRModule, fn: IRFunction): void -> @IRModule
   stackSites=0 stackLocals=0
 function IRModule.attrGroupFor(this: IRModule, attrs: string[]): string -> @IRModule.attrGroupFor [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 373:7
+  sharedWrite: 394:7
   calls: nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
   pointer this: size=80 writesThrough=false captured=false
   pointer attrs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 369:11 text: string (const)
-  local 370:9 index: i32 (let)
+  local 390:11 text: string (const)
+  local 391:9 index: i32 (let)
 function IRModule.toText(this: IRModule): string -> @IRModule.toText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.toText
   calls: IRFunction.toText nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=80 writesThrough=false captured=false
   stackSites=5 stackLocals=5
-  local 379:11 sections: string[] (const)
-  local 380:11 header: string[] (const)
-  local 384:16 line: string (const)
-  local 401:13 bodies: string[] (const)
-  local 402:18 fn: IRFunction (const)
-  callee 403:21 IRFunction.toText -> @IRFunction.toText
-  local 408:13 groups: string[] (const)
-  local 409:11 i: i32 (let)
-  local 417:13 nodes: string[] (const)
-  local 418:18 line: string (const)
-  local 421:11 m: i32 (let)
+  local 400:11 sections: string[] (const)
+  local 401:11 header: string[] (const)
+  local 405:16 line: string (const)
+  local 422:13 bodies: string[] (const)
+  local 423:18 fn: IRFunction (const)
+  callee 424:21 IRFunction.toText -> @IRFunction.toText
+  local 429:13 groups: string[] (const)
+  local 430:11 i: i32 (let)
+  local 438:13 nodes: string[] (const)
+  local 439:18 line: string (const)
+  local 442:11 m: i32 (let)
 function metadataIndex(ref: string): i32 -> @metadataIndex
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 438:7 value: i32 (let)
-  local 439:7 i: i32 (let)
+  local 459:7 value: i32 (let)
+  local 460:7 i: i32 (let)
 module src/escape.ts
 import classifyUse from "./attributes" -> function @classifyUse
 import constructorOf from "./attributes" -> function @constructorOf
