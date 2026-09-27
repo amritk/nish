@@ -257,7 +257,8 @@ Type rules:
     (`reject_rng_literal_outside`, `reject_rng_literal_outside_negative`).
     Anything else is compared once and the program panics outside the range,
     printing `value out of range: expected integer<0, 255>` and exiting 1
-    (`rng_param`, `rng_entries`, `rng_entry_panic`). The check is the type's
+    (`rng_param`, `rng_entries`, `rng_bitwise`, `rng_entry_panic`,
+    `rng_entry_range_panic`, `rng_entry_push_panic`, `rng_entry_bitwise_panic`). The check is the type's
     meaning, so `--unchecked-indexing` keeps it and `--wrapping` changes only
     the arithmetic before it. Under Node nothing is checked, which
     [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent) records.

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 687 programs, 49310 dump lines.
+# 691 programs, 49394 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -36366,6 +36366,28 @@ function main(): i32 -> @nish_main [exported entry]
   local 11:9 bad: Result<void, string> (const)
   callee 11:15 checkPort -> @checkPort
   callee 15:3 checkPort -> @checkPort
+program tests/cases/rng_bitwise.ts
+module tests/cases/rng_bitwise.ts (entry)
+struct Flags (class) size=4 align=4
+  field bits: integer<0, 255> index=0 offset=0 initialized
+  method set -> @Flags.set
+function Flags.set(this: Flags, n: i32): void -> @Flags.set [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 10:5
+  escaping: n
+  calls: nish_exit nish_write
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: Flags.set nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32 nish_write
+  stackSites=2 stackLocals=2
+  local 17:7 mask: integer<0, 255> (let)
+  local 18:9 n: i32 (const)
+  local 24:9 f: Flags (const)
+  callee 25:3 Flags.set -> @Flags.set
+  local 26:9 cells: integer<0, 15>[] (const)
 program tests/cases/rng_entries.ts
 module tests/cases/rng_entries.ts (entry)
 struct Pixel (interface) size=4 align=4
@@ -36407,6 +36429,14 @@ function main(): i32 -> @nish_main [exported entry]
   callee 41:47 clamp -> @clamp
   callee 42:18 span -> @span
   callee 42:45 span -> @span
+program tests/cases/rng_entry_bitwise_panic.ts
+module tests/cases/rng_entry_bitwise_panic.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: nish_arena_mark nish_arena_release nish_exit nish_print nish_str_from_i32 nish_write
+  stackSites=0 stackLocals=0
+  local 5:7 m: integer<0, 15> (let)
 program tests/cases/rng_entry_panic.ts
 module tests/cases/rng_entry_panic.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -36425,6 +36455,54 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 6:7 sum: i32 (let)
   local 7:12 i: integer<0, 255> (let)
+program tests/cases/rng_entry_push_panic.ts
+module tests/cases/rng_entry_push_panic.ts (entry)
+struct Digits (class) size=8 align=8
+  field items: integer<0, 9>[] index=0 offset=0
+  constructor -> @Digits.constructor
+  method add -> @Digits.add
+function Digits.constructor(this: Digits): void -> @Digits.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Digits.add(this: Digits, raw: i32): void -> @Digits.add [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 12:5
+  escaping: raw
+  calls: nish_array_grow nish_exit nish_write
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Digits.add
+  calls: Digits.add Digits.constructor nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 17:9 d: Digits (const)
+  callee 17:13 new Digits -> @Digits.constructor
+  callee 18:3 Digits.add -> @Digits.add
+  callee 20:3 Digits.add -> @Digits.add
+program tests/cases/rng_entry_range_panic.ts
+module tests/cases/rng_entry_range_panic.ts (entry)
+function digit(d: integer<0, 9>): i32 -> @digit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: d
+  stackSites=0 stackLocals=0
+function pass(v: integer<-5, 5>): i32 -> @pass
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  escaping: v
+  calls: digit nish_exit nish_write
+  stackSites=0 stackLocals=0
+  callee 7:42 digit -> @digit
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pass
+  stackSites=0 stackLocals=0
+  local 10:9 up: integer<-5, 5> (const)
+  local 11:9 down: integer<-5, 5> (const)
+  callee 12:18 pass -> @pass
+  callee 13:18 pass -> @pass
 program tests/cases/rng_generic.ts
 module tests/cases/rng_generic.ts (entry)
 struct Box<integer<-128, 127>> (class) size=4 align=4
@@ -36472,16 +36550,26 @@ function offset(x: integer<-128, 127>): i32 -> @offset
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: getByte nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_write offset
+  calls: echo$rng.p0.p255 getByte nish_arena_mark nish_arena_release nish_exit nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_write offset
   stackSites=1 stackLocals=1
-  local 11:9 table: u8[] (const)
-  local 12:9 n: i32 (const)
-  local 13:9 narrow: integer<0, 3> (const)
-  callee 14:18 getByte -> @getByte
-  callee 14:39 getByte -> @getByte
-  callee 14:65 getByte -> @getByte
-  callee 15:18 offset -> @offset
-  callee 15:34 offset -> @offset
+  local 16:9 table: u8[] (const)
+  local 17:9 n: i32 (const)
+  local 18:9 narrow: integer<0, 3> (const)
+  callee 19:18 getByte -> @getByte
+  callee 19:39 getByte -> @getByte
+  callee 19:65 getByte -> @getByte
+  callee 20:18 offset -> @offset
+  callee 20:34 offset -> @offset
+  local 21:9 hex: integer<0, 255> (const)
+  local 22:9 bin: integer<0, 255> (const)
+  callee 22:39 echo<integer<0, 255>> -> @echo$rng.p0.p255
+  local 23:9 dec: integer<0, 255> (const)
+  callee 23:32 echo<integer<0, 255>> -> @echo$rng.p0.p255
+  callee 24:18 getByte -> @getByte
+function echo<integer<0, 255>>(x: integer<0, 255>): integer<0, 255> -> @echo$rng.p0.p255 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
 program tests/cases/rng_widen.ts
 module tests/cases/rng_widen.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

@@ -173,9 +173,13 @@ cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_user added after R6: no rewriter to freeze it with
+cases/rng_bitwise added after R6: no rewriter to freeze it with
 cases/rng_entries added after R6: no rewriter to freeze it with
+cases/rng_entry_bitwise_panic added after R6: no rewriter to freeze it with
 cases/rng_entry_panic added after R6: no rewriter to freeze it with
 cases/rng_entry_panic_f64 added after R6: no rewriter to freeze it with
+cases/rng_entry_push_panic added after R6: no rewriter to freeze it with
+cases/rng_entry_range_panic added after R6: no rewriter to freeze it with
 cases/rng_generic added after R6: no rewriter to freeze it with
 cases/rng_param added after R6: no rewriter to freeze it with
 cases/rng_widen added after R6: no rewriter to freeze it with

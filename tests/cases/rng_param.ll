@@ -49,6 +49,9 @@ entry:
   %arr.data = alloca [4 x i8], align 8
   %n.addr = alloca i32, align 4
   %narrow.addr = alloca i32, align 4
+  %hex.addr = alloca i32, align 4
+  %bin.addr = alloca i32, align 4
+  %dec.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 4, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -117,8 +120,36 @@ rng.ok.1:
   %37 = call i8* @nish_str_from_i32(i32 %36)
   %38 = call i8* @nish_str_concat(i8* %31, i8* %37)
   call void @nish_print(i8* %38)
+  store i32 200, i32* %hex.addr, align 4
+  %39 = load i32, i32* %hex.addr, align 4
+  %40 = call i32 @echo$rng.p0.p255(i32 %39)
+  store i32 %40, i32* %bin.addr, align 4
+  %41 = load i32, i32* %bin.addr, align 4
+  %42 = call i32 @echo$rng.p0.p255(i32 %41)
+  store i32 %42, i32* %dec.addr, align 4
+  %43 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
+  %44 = load i32, i32* %dec.addr, align 4
+  %45 = sub nsw i32 %44, 197
+  %46 = icmp ult i32 %45, 256
+  br i1 %46, label %rng.ok.2, label %rng.fail.2
+
+rng.fail.2:
+  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok.2:
+  %47 = call i8 @getByte(%struct.nish_array* %43, i32 %45)
+  %48 = zext i8 %47 to i64
+  %49 = call i8* @nish_str_from_u64(i64 %48)
+  call void @nish_print(i8* %49)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+}
+
+define internal noundef i32 @echo$rng.p0.p255(i32 noundef %x) #1 {
+entry:
+  ret i32 %x
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

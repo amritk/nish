@@ -477,9 +477,12 @@ export const emitBitwiseCombine = (
   old: string,
   right: Node
 ): string => {
-  const opcode = shiftOpcodeFor(bitwiseOpcode(op), type)
-  const rhs = emitRightOperand(emitter, opcode, type, right)
-  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${old}, ${rhs}`)
+  // A ranged target is its base here (WP31 §7): the shift-count mask reads
+  // the width, and a range has no width of its own.
+  const operand = emitter.table.baseOf(type)
+  const opcode = shiftOpcodeFor(bitwiseOpcode(op), operand)
+  const rhs = emitRightOperand(emitter, opcode, operand, right)
+  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(operand)} ${old}, ${rhs}`)
 }
 
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */

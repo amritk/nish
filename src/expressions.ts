@@ -1379,6 +1379,11 @@ export const assignInto = (
     if (local !== null) {
       scope.clearNarrowing(local)
     }
+    // The target is read and written without being checked as an expression,
+    // so its range is recorded on it here for `rangedStoreOf` to find.
+    if (ctx.table.isRanged(slot)) {
+      ctx.program.nodeTypes[expr.children[0].id] = slot
+    }
     const result = checkBitwiseAssignOperands(ctx, expr, operand, bits)
     return result === T_ERROR ? T_ERROR : slot
   }

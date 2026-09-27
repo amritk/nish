@@ -3949,7 +3949,14 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
 // on stderr, before the line after it prints. The f64 twin is the one the
 // unmodified Node runner compares, where the same program runs to the end.
 if (!only || only.startsWith("rng")) {
-  for (const name of ["rng_entry_panic", "rng_entry_panic_f64"]) {
+  for (const [name, needle, expectedOut] of [
+    ["rng_entry_panic", "value out of range: expected integer<0, 255>", ""],
+    ["rng_entry_panic_f64", "value out of range: expected integer<0, 255>", ""],
+    // A range entering another it does not fit in, and `push` through a field.
+    ["rng_entry_range_panic", "value out of range: expected integer<0, 9>", "4"],
+    ["rng_entry_push_panic", "value out of range: expected integer<0, 9>", "3"],
+    ["rng_entry_bitwise_panic", "value out of range: expected integer<0, 15>", "7"],
+  ]) {
     const ll = path.join(buildDir, `${name}.ll`)
     if (!fs.existsSync(ll)) {
       continue
@@ -3958,11 +3965,11 @@ if (!only || only.startsWith("rng")) {
     const cc = linkNative(exe, ll)
     const run = cc.status === 0 ? spawnSync(exe) : null
     check(
-      `${name}: exits 1 with "value out of range: expected integer<0, 255>" on stderr`,
+      `${name}: exits 1 with "${needle}" on stderr`,
       run !== null &&
         run.status === 1 &&
-        String(run.stderr).includes("value out of range: expected integer<0, 255>") &&
-        String(run.stdout).trim() === "",
+        String(run.stderr).includes(needle) &&
+        String(run.stdout).trim() === expectedOut,
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
     )
   }
