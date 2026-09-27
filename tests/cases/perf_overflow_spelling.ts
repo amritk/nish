@@ -8,14 +8,10 @@
 // an i32, so a compiler that read the normalised text would report a masked
 // shift here. Neither does.
 //
-// Three other spellings belong in this case and are missing from it on
-// purpose. `docs/LANGUAGE.md` accepts hexadecimal, binary, octal, exponent and
-// separated literals; stage1 handles decimal and hexadecimal, refuses `0b101`,
-// `0o17` and `1_000`, and — worse — reads `1e5` as `245`. Those divergences
-// are older than this rule and have nothing to do with folding, so they are
-// not pinned here: a case that fails for an unrelated reason is a case nobody
-// can read. They want their own change, in the number path, with its own
-// tests.
+// The other spellings `docs/LANGUAGE.md` accepts — binary, octal, exponent
+// and separated — are read at their true value by the number path since #267
+// and are pinned by `literal_spellings`, not here: this case is about the
+// warning, and a spelling the fold does not read is one it does not warn on.
 export function test(): number {
   const hexShift = 1 << 0x20;
   return hexShift;

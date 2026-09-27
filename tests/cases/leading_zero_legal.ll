@@ -14,11 +14,15 @@ entry:
   %half.addr = alloca double, align 8
   %scaled.addr = alloca double, align 8
   %hex.addr = alloca i32, align 4
+  %bin.addr = alloca i32, align 4
+  %oct.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i32 0, i32* %zero.addr, align 4
   store double 0x3FE0000000000000, double* %half.addr, align 8
   store double 0x0000000000000000, double* %scaled.addr, align 8
   store i32 15, i32* %hex.addr, align 4
+  store i32 1, i32* %bin.addr, align 4
+  store i32 7, i32* %oct.addr, align 4
   %0 = load i32, i32* %zero.addr, align 4
   %1 = call i8* @nish_str_from_i32(i32 %0)
   %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
@@ -29,11 +33,18 @@ entry:
   %7 = load double, double* %scaled.addr, align 8
   %8 = call i8* @nish_str_from_f64(double %7)
   %9 = call i8* @nish_str_concat(i8* %6, i8* %8)
-  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %11 = load i32, i32* %hex.addr, align 4
-  %12 = call i8* @nish_str_from_i32(i32 %11)
-  %13 = call i8* @nish_str_concat(i8* %10, i8* %12)
-  call void @nish_print(i8* %13)
+  call void @nish_print(i8* %9)
+  %10 = load i32, i32* %hex.addr, align 4
+  %11 = call i8* @nish_str_from_i32(i32 %10)
+  %12 = call i8* @nish_str_concat(i8* %11, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %13 = load i32, i32* %bin.addr, align 4
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  %15 = call i8* @nish_str_concat(i8* %12, i8* %14)
+  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %17 = load i32, i32* %oct.addr, align 4
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  %19 = call i8* @nish_str_concat(i8* %16, i8* %18)
+  call void @nish_print(i8* %19)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

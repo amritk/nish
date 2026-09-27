@@ -21,6 +21,7 @@
 // this module never overflows a signed value of its own to describe one.
 
 import { CheckContext } from "./context"
+import { withoutSeparators } from "./lexer"
 import {
   N_BINARY,
   N_FALSE,
@@ -35,6 +36,7 @@ import {
   Node,
 } from "./nodes"
 import { ConstInfo } from "./program"
+import { StringBuilder } from "./strings"
 import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING } from "./types"
 
 /**
@@ -80,24 +82,92 @@ const stringValue = (value: string): ConstValue => {
   return out
 }
 
-/** Digits of an integer literal as written: decimal, `0x`, `0b`, `0o`, with `_` separators. */
-export const parseIntegerLiteral = (text: string): i64 => {
-  let radix = toI64(10)
-  let i = 0
+/** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
+export const TWO_53: f64 = 9007199254740992.0
+
+/**
+ * The radix a numeric literal is written in: 16, 2 or 8 after a `0x`, `0b` or
+ * `0o` prefix in either case, and 10 otherwise.
+ */
+const literalRadix = (text: string): i32 => {
   if (text.length > 2 && text.charCodeAt(0) === 48) {
     const marker = text.charCodeAt(1)
     if (marker === 120 || marker === 88) {
-      radix = toI64(16)
-      i = 2
-    } else if (marker === 98 || marker === 66) {
-      radix = toI64(2)
-      i = 2
-    } else if (marker === 111 || marker === 79) {
-      radix = toI64(8)
-      i = 2
+      return 16
+    }
+    if (marker === 98 || marker === 66) {
+      return 2
+    }
+    if (marker === 111 || marker === 79) {
+      return 8
     }
   }
+  return 10
+}
+
+/**
+ * The value a numeric literal spells, as TypeScript reads it: the double
+ * nearest to it, with `_` separators dropped. This is the one reader every
+ * phase asks, whatever the spelling (#267). The runtime's `Number` reads
+ * decimal, exponents and `0x` but calls `0b` and `0o` `NaN`, so those two are
+ * respelled in hexadecimal first, which keeps a literal past 2^53 rounded once
+ * and exactly as TypeScript rounds it.
+ */
+export const numericLiteralValue = (text: string): f64 => {
+  const plain = withoutSeparators(text)
+  const radix = literalRadix(plain)
+  if (radix === 2 || radix === 8) {
+    return Number(asHexLiteral(plain, radix === 2 ? 1 : 3))
+  }
+  return Number(plain)
+}
+
+/** A `0b` or `0o` literal without separators, as the `0x` literal of the same value. */
+const asHexLiteral = (text: string, bitsPerDigit: i32): string => {
+  const hex = new StringBuilder()
+  hex.add("0x")
+  // The digits are read as one stream of bits, padded on the left to a whole
+  // number of nibbles, so each hex digit takes the four bits that line up.
+  const total = (text.length - 2) * bitsPerDigit
+  let pending = (4 - (total % 4)) % 4
+  let nibble = 0
+  let i = 2
+  while (i < text.length) {
+    const digit = text.charCodeAt(i) - 48
+    let bit = bitsPerDigit - 1
+    while (bit >= 0) {
+      nibble = nibble * 2 + ((digit >> bit) & 1)
+      pending = pending + 1
+      if (pending === 4) {
+        hex.addChar(nibble < 10 ? 48 + nibble : 87 + nibble)
+        nibble = 0
+        pending = 0
+      }
+      bit = bit - 1
+    }
+    i = i + 1
+  }
+  return hex.toText()
+}
+
+/**
+ * The integer a literal spells: decimal, `0x`, `0b`, `0o`, with `_`
+ * separators, or a decimal exponent (`1e5` is 100000). Callers have refused a
+ * fractional literal first (`isFractional`).
+ */
+export const parseIntegerLiteral = (text: string): i64 => {
+  const radix = toI64(literalRadix(text))
+  if (radix === toI64(10) && (text.indexOf("e") >= 0 || text.indexOf("E") >= 0)) {
+    // An exponent is read as the double TypeScript reads, and `toI64`
+    // saturates, so a literal past `i64` is out of every range the callers
+    // check rather than a wrapped value that might pass one.
+    return toI64(numericLiteralValue(text))
+  }
   let value = toI64(0)
+  let i = 0
+  if (radix !== toI64(10)) {
+    i = 2 // past the prefix
+  }
   while (i < text.length) {
     const c = text.charCodeAt(i)
     if (c !== 95) {
@@ -121,20 +191,23 @@ export const parseIntegerLiteral = (text: string): i64 => {
   return value
 }
 
-/** Whether a literal as written has a fraction or an exponent, so it is not an integer. */
+/**
+ * Whether a literal is not an integer. A point spells a float whatever
+ * follows it, so `1.0` is one; an exponent is one only when it leaves a
+ * fraction, so `1e-1` is and `1e3` is the integer 1000. A radix literal never is.
+ */
 export const isFractional = (text: string): boolean => {
-  if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
+  if (literalRadix(text) !== 10) {
     return false
   }
-  let i = 0
-  while (i < text.length) {
-    const c = text.charCodeAt(i)
-    if (c === 46 || c === 101 || c === 69) {
-      return true // `.`, `e`, `E`
-    }
-    i = i + 1
+  if (text.indexOf(".") >= 0) {
+    return true
   }
-  return false
+  if (text.indexOf("e") < 0 && text.indexOf("E") < 0) {
+    return false
+  }
+  const value = numericLiteralValue(text)
+  return value !== Math.floor(value)
 }
 
 /** The name a diagnostic gives a folded value's type. */
@@ -244,7 +317,7 @@ const fold = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): Co
 
 const foldNumber = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32): ConstValue => {
   if (expected === T_F64) {
-    return floatValue(Number(expr.text))
+    return floatValue(numericLiteralValue(expr.text))
   }
   if (isFractional(expr.text)) {
     return reject(
@@ -255,6 +328,16 @@ const foldNumber = (ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
     )
   }
   const type = expected === T_I64 ? T_I64 : T_I32
+  // An `i32` past its range is refused by the fit check after the fold; an
+  // `i64` has none, and a literal past 2^53 is already a rounded double.
+  if (type === T_I64 && numericLiteralValue(expr.text) > TWO_53) {
+    return reject(
+      ctx,
+      info,
+      expr,
+      `Literal \`${expr.text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`
+    )
+  }
   const out = new ConstValue(type)
   out.intValue = parseIntegerLiteral(expr.text)
   return out

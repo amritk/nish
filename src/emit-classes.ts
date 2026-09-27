@@ -38,7 +38,7 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { parseIntegerLiteral } from "./constants"
+import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { emitStringLength, emitStringMethodCall } from "./emit-strings"
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -137,7 +137,7 @@ const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
     return emitter.stringConstant(literal.children.length > 0 ? literal.children[0].text : "")
   }
   if (isFloat(field.type)) {
-    const value = Number(literal.text)
+    const value = numericLiteralValue(literal.text)
     return floatText(negated ? -value : value, field.type)
   }
   let value = parseIntegerLiteral(literal.text)
