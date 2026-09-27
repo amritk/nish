@@ -330,6 +330,22 @@ parser still reads the literal, so the next token does not cost a second
 error, and a bound of a ranged type is refused the same way
 (`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
 
+**A decimal literal does not start with `0` and another digit**, as in
+TypeScript, and as in a JavaScript module, where Node refuses one as a
+`SyntaxError`. `0`, `0.5` and `0e1` are legal, and so is every radix prefix
+(`tests/cases/leading_zero_legal`). A run of octal digits after the zero is a
+legacy octal literal: `017`, and `017.5` or `07_1` with it, are
+`` Octal literals are not allowed. Use the syntax '0o17' `` (TS1121), naming the
+`0o` spelling of those digits (`tests/cases/reject_leading_zero_octal`). Any
+other, such as `09`, `08.5` or `09e1`, is
+`` Decimals with leading zeros are not allowed `` (TS1489,
+`reject_leading_zero_decimal`). The lexer refuses it and it costs one error,
+as a misplaced separator does. Before issue #271, `017` compiled as seventeen.
+There are two differences from `tsc`. `tsc` reads `017.5` as two tokens and
+reports a second error for the `.5`, but the lexer reports one error for the
+whole literal. And `-017` suggests `0o17`, not `-0o17`, because the lexer does
+not see the sign.
+
 **Every spelling is read at the value it spells, in every numeric type**,
 as TypeScript reads it (#267): `0b1010` is 10, `0o17` is 15, `1_000` is 1000
 and `1e5` is 100000 as an `i32`, an `i64`, an `f64`, a module constant or a
