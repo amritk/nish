@@ -1,0 +1,3 @@
+:5:24: syntax error: Octal literals are not allowed. Use the syntax '0o17'
+:6:18: syntax error: Octal literals are not allowed. Use the syntax '0o17'
+:7:18: syntax error: Octal literals are not allowed. Use the syntax '0o7'

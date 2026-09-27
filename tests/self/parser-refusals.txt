@@ -135,6 +135,8 @@ reject_import_type_only	expected `{`, found `IDENT`
 reject_in_operator	expected `;`, found `IDENT`
 reject_instanceof	expected `;`, found `IDENT`
 reject_labeled_statement	expected `;`, found `:`
+reject_leading_zero_decimal	Decimals with leading zeros are not allowed
+reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
 reject_loose_equality	expected `;`, found `==`
 reject_loose_inequality	expected `;`, found `!=`
 reject_map_iter_for_in	expected `;`, found `IDENT`
