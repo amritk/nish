@@ -60,7 +60,7 @@ export const RULE_COUNT: i32 = 498
  * contains.
  */
 const diagnosticRules = (): string[] => [
-  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so between a scope's first `spawn` and the end of its block its thread may neither read an array a task stores into nor write memory a task may read",
+  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read",
   "NL2394",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",

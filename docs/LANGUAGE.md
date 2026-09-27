@@ -2195,25 +2195,40 @@ export const main = (): i32 => {
   waiting for them, the tasks write nothing another can see (below), and every
   store into the program's memory is made after the last task has finished. So
   a task may be handed any argument — an array, an object.
-- **Until the block ends, its thread neither reads what a task stores into nor
-  writes what a task may read.** Natively a task runs, and its answer is
-  stored, when the scope joins; under Node each runs and stores where it is
-  spawned. So from the first statement of the block that holds a `spawn` on
-  the scope to the block's end — a `return`'s value aside, which is computed
-  after the join — the program may not index, walk or call a method on an
-  array of an answer type a task of the scope has been given by then, nor hand
-  memory that reaches one to a call or a task; and it may write no memory at
-  all: no element or field store, whatever alias it goes through, no `push` or
-  `pop`, no `Arena` call, no call to a function that writes what its caller can
-  see, and no task on another scope, whose join would store. A write before
-  the first spawn is fine, and so is anything on a local. Each is
-  `` This reads a `i32[]`, which a task of `s` stores into, before the scope joins: a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so between a scope's first `spawn` and the end of its block its thread may neither read an array a task stores into nor write memory a task may read ``
-  with the words for what it does (`tests/cases/reject_thread_region_read`,
-  `reject_thread_region_write`, `reject_thread_region_alias_write`,
-  `reject_thread_region_call_write`). It is judged by type, as memory is
-  reached only through parameters: a module constant is a number, a `boolean`
-  or a string. That is what keeps a program's meaning the same compiled and
-  under Node.
+- **A destination is a fresh `const` array that is never handed on, and until
+  the block ends the scope's thread neither reads a destination nor writes
+  what a task may read.** Natively a task runs, and its answer is stored, when
+  the scope joins; under Node each runs and stores where it is spawned. Two
+  rules keep the program's meaning the same either way:
+  - A `spawn`'s destination is a `const` local bound to a literal array or
+    `new Array(...)` in the same function, used only by index, `.length`, its
+    methods, a `for...of` and as a destination — never an argument, a task's
+    argument, a stored value or a returned one — so nothing else can reach it.
+    Anything else is
+    `` The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a destination: a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read ``
+    (`tests/cases/reject_thread_region_dst_not_fresh`, and
+    `reject_thread_region_dst_as_arg` for one handed to a later task).
+  - From the first statement of the block that holds a `spawn` on the scope
+    to the block's end — a `return`'s value aside, computed after the join —
+    the program may not read a destination a task of the scope has been given
+    by then (`` This reads `sums`, a destination of a task of `s`, before the scope joins: … ``,
+    `tests/cases/reject_thread_region_read`), and may not write memory a task
+    could read. A task reads only what its argument reaches, so a store is
+    fine into the own slots of a `const` bound to a fresh array or object
+    literal that is never handed on, and a call is fine unless it writes
+    through a pointer it is handed; a function that only fills an array it
+    allocates, such as one that builds and returns a row, writes nothing a task
+    can see. Every other write is refused, whatever alias it goes through —
+    a store, `push` or `pop`, `Arena`, a call that writes through its
+    argument, a task of another scope, whose join stores
+    (`reject_thread_region_write`, `reject_thread_region_alias_write`,
+    `reject_thread_region_call_write`).
+
+  The rules are local because memory is reached only through parameters and
+  what a function allocates: a module constant is a number, a `boolean` or a
+  string, and nothing is `static`. N tasks over N arrays of the destination's
+  own type, built before the scope, in the spawning loop or after the first
+  spawn, all compile (`tests/link/thread_scope_many_arrays`).
 - **The join is emitted at every exit of the block**: its end, a `return` —
   before the returned value is computed, so the value can read what the tasks
   stored — and a `break` or `continue` that leaves the block

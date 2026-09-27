@@ -52,6 +52,7 @@ import {
   N_BLOCK,
   N_CALL,
   N_EXPR_STMT,
+  FLAG_CONST,
   N_INDEX,
   N_MEMBER,
   N_PAREN,
@@ -892,7 +893,7 @@ export const scopeFindings = (
     const parents: Node[] = []
     walkScopes(program, body, parents, scopeType, out)
     if (loaded) {
-      findRegions(program, table, facts, body, out)
+      checkBody(program, facts, body, out)
     }
     if (instance !== null) {
       program.leaveInstance()
@@ -906,52 +907,99 @@ export const scopeFindings = (
 // A task runs, and its answer is stored, when its scope joins; under Node the
 // same task runs and stores where it is spawned. The two print the same only if
 // nothing between a scope's first `spawn` and the end of its block can tell
-// when that happened: the thread that opened the scope may not read an array a
-// task stores into, and may not write memory a task may read. That stretch is
-// the *region*: from the statement of the block that holds the first `spawn` on
-// the scope to the block's end, except a `return`'s value, which is computed
-// after the join.
+// when that happened. That stretch is the *region*: from the statement of the
+// block that holds the first `spawn` on the scope to the block's end, except a
+// `return`'s value, which is computed after the join.
 //
-// Memory is reached only through a function's parameters: a module constant is
-// a number, a boolean or a string, and nothing is `static`. So the rule is
-// local and judged by type, as `reachesDstMessage` is. A task stores into
-// arrays whose element is its answer type `R`; the region may not index, walk
-// or call a method on an array of an `R` a task of the scope has been given by
-// then, nor hand one on, reachable through fields and elements, to a call or to
-// a task. And it may write no memory at all — no element or field store, no
-// `push` or `pop`, no `Arena` call, no call whose facts carry a shared write,
-// no task on another scope, whose join would store — because a task may be
-// reading whatever that write reaches. An alias changes nothing: the store is
-// refused whatever it is stored through.
+// Memory is reached only through a function's parameters and what it
+// allocates: a module constant is a number, a boolean or a string, and nothing
+// is `static`. So two local facts about each variable of the function decide
+// the rule, and no alias analysis is needed:
+//
+//   - **A destination is a `const` bound to a fresh array** (a literal or
+//     `new Array`) that is only ever indexed, walked, asked its `.length` or a
+//     method, or named as a `spawn`'s destination: never handed on — not an
+//     argument, not a task's argument, not stored, not returned. Nothing else
+//     can reach it, so the region may not read *it*, by name.
+//   - **A write in the region must miss everything a task reads.** A task
+//     reads only what its argument reaches. So a store is allowed into the own
+//     slots of a *private* local — a `const` bound to a fresh array or object
+//     literal that is never handed on and never a destination — and a call is
+//     allowed unless it writes through a pointer it is handed
+//     (`PointerParamFacts.writesThrough`): a function that only fills memory it
+//     allocated itself, such as one that builds and returns an array, writes
+//     nothing a task can see. Every other write is refused: a store through
+//     anything else, `push` or `pop` on anything else, `Arena`, and a task of
+//     another scope, whose join stores.
 
-/** The tail every refusal of the region shares, which is what its code is keyed on. */
+/** The tail every refusal of the rule shares, which is what its code is keyed on. */
 const REGION_TAIL: string =
-  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and " +
-  "stores where it is spawned, so between a scope's first `spawn` and the end of its block its thread may " +
-  "neither read an array a task stores into nor write memory a task may read"
+  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores " +
+  "where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a " +
+  "scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read"
 
-/** One scope's region being walked: the scope's locals, its name, and the answer types its tasks store so far. */
-class RegionState {
+/**
+ * What the function's body does with each of its variables, read once before
+ * its regions are judged: whether it is a `const` bound to a fresh array (and
+ * so may be a destination) or to a fresh array or object literal (and so may
+ * be private), and whether any use of it hands it on or names it a destination.
+ */
+class VariableUses {
   locals: Local[]
-  name: string
-  answers: i32[]
+  freshArray: boolean[]
+  freshLiteral: boolean[]
+  handedOn: boolean[]
+  destination: boolean[]
 
-  constructor(locals: Local[], name: string) {
-    this.locals = locals
-    this.name = name
-    this.answers = []
+  constructor() {
+    this.locals = []
+    this.freshArray = []
+    this.freshLiteral = []
+    this.handedOn = []
+    this.destination = []
   }
 
-  owns(local: Local | null): boolean {
-    return local !== null && this.locals.indexOf(local) >= 0
+  indexOf(local: Local | null): i32 {
+    return local === null ? -1 : this.locals.indexOf(local)
   }
 
-  addAnswer(type: i32): void {
-    if (this.answers.indexOf(type) < 0) {
-      this.answers.push(type)
+  add(local: Local): i32 {
+    const at = this.indexOf(local)
+    if (at >= 0) {
+      return at
     }
+    this.locals.push(local)
+    this.freshArray.push(false)
+    this.freshLiteral.push(false)
+    this.handedOn.push(false)
+    this.destination.push(false)
+    return this.locals.length - 1
+  }
+
+  /** A `const` bound to a fresh array, never handed on: what a destination has to be. */
+  isDestinationShaped(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshArray[at] && !this.handedOn[at]
+  }
+
+  /** A `const` bound to a fresh literal, never handed on and never a destination: nothing but this function reaches it. */
+  isPrivate(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshLiteral[at] && !this.handedOn[at] && !this.destination[at]
   }
 }
+
+/** Whether `init` is a fresh array: a literal, or `new Array(...)`. */
+const isFreshArray = (init: Node): boolean => {
+  const e = unwrapParens(init)
+  return (
+    e.kind === N_ARRAY ||
+    (e.kind === N_NEW && e.children[0].kind === N_IDENT && e.children[0].text === "Array")
+  )
+}
+
+/** Whether `init` is a fresh array or object literal, whose own slots nothing else reaches. */
+const isFreshLiteral = (init: Node): boolean => isFreshArray(init) || unwrapParens(init).kind === N_OBJECT
 
 /** The `spawn` instance `node` calls, when it is a call of one; `null` otherwise. */
 const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null => {
@@ -962,16 +1010,112 @@ const spawnCallee = (program: CheckedProgram, node: Node): FunctionSig | null =>
   return callee !== null && isSpawnEntry(callee) ? callee : null
 }
 
-/** The local a `spawn` call's receiver names, or `null`. */
-const spawnReceiver = (program: CheckedProgram, node: Node): Local | null => {
-  const receiver = unwrapParens(node.children[0].children[0])
-  return receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
+/** The local `node` names, when it is an identifier (parenthesised or not); `null` otherwise. */
+const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
+  const e = unwrapParens(node)
+  return e.kind === N_IDENT ? program.nodeLocals[e.id] : null
 }
 
-/** The answer type `R` of a `spawn` instance: its second type argument. */
-const answerOf = (sig: FunctionSig): i32 => {
-  const instance = sig.instance
-  return instance === null || instance.typeArgs.length < 2 ? -1 : instance.typeArgs[1]
+/**
+ * Record what `node` does with the variables it names. A use of a variable
+ * keeps it unhanded only as the base of an index or a member, as the iterable
+ * of a `for...of`, or as a `spawn`'s destination, which is recorded as such.
+ */
+const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, uses: VariableUses): void => {
+  if (node.kind === N_VAR) {
+    const constant = (node.flags & FLAG_CONST) !== 0
+    for (const decl of node.children[0].children) {
+      const local = program.nodeLocals[decl.id]
+      if (local !== null) {
+        const at = uses.add(local)
+        uses.freshArray[at] = constant && isFreshArray(decl.children[2])
+        uses.freshLiteral[at] = constant && isFreshLiteral(decl.children[2])
+      }
+    }
+  }
+  if (node.kind === N_IDENT && parent !== null) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null) {
+      const at = uses.add(local)
+      const base =
+        ((parent.kind === N_INDEX || parent.kind === N_MEMBER) &&
+          unwrapParens(parent.children[0]) === node) ||
+        (parent.kind === N_FOR_OF && unwrapParens(parent.children[1]) === node)
+      const declared = parent.kind === N_VAR_DECL && parent.children[0] === node
+      if (!base && !declared) {
+        uses.handedOn[at] = true
+      }
+    }
+  }
+  const callee = spawnCallee(program, node)
+  if (callee !== null) {
+    const args = node.children[1].children
+    let k = 0
+    while (k < args.length) {
+      const arg = args[k]
+      const local: Local | null = k === 2 ? namedLocal(program, arg) : null
+      if (local !== null) {
+        uses.destination[uses.add(local)] = true
+      } else {
+        collectUses(program, arg, node.children[1], uses)
+      }
+      k = k + 1
+    }
+    collectUses(program, node.children[0], node, uses)
+    return
+  }
+  if (node.kind === N_PAREN && parent !== null) {
+    // A parenthesised name is used as its parentheses are.
+    for (const child of node.children) {
+      collectUses(program, child, parent, uses)
+    }
+    return
+  }
+  for (const child of node.children) {
+    collectUses(program, child, node, uses)
+  }
+}
+
+/** One scope's region being walked: the scope's locals, its name, and the destinations its tasks store into so far. */
+class RegionState {
+  locals: Local[]
+  name: string
+  destinations: Local[]
+
+  constructor(locals: Local[], name: string) {
+    this.locals = locals
+    this.name = name
+    this.destinations = []
+  }
+
+  owns(local: Local | null): boolean {
+    return local !== null && this.locals.indexOf(local) >= 0
+  }
+
+  isDestination(local: Local | null): boolean {
+    return local !== null && this.destinations.indexOf(local) >= 0
+  }
+
+  addDestination(local: Local | null): void {
+    if (local !== null && this.destinations.indexOf(local) < 0) {
+      this.destinations.push(local)
+    }
+  }
+
+  /** Whether a task can have been filed by now: the first `spawn`, or one in a loop around this. */
+  live(): boolean {
+    return this.destinations.length > 0
+  }
+}
+
+/** The local a `spawn` call's receiver names, or `null`. */
+const spawnReceiver = (program: CheckedProgram, node: Node): Local | null =>
+  namedLocal(program, node.children[0].children[0])
+
+/** The local a `spawn` call names as its destination, or `null`. */
+const spawnDestination = (program: CheckedProgram, node: Node): Local | null => {
+  const args = node.children[1].children
+  return args.length > 2 ? namedLocal(program, args[2]) : null
 }
 
 /** Whether `node` or anything under it (outside an arrow) is a `spawn` on `state`'s scope. */
@@ -990,46 +1134,25 @@ const holdsSpawnOn = (program: CheckedProgram, node: Node, state: RegionState): 
   return false
 }
 
-/** Every answer type of a `spawn` on `state`'s scope under `node`: what a loop's later passes will have stored. */
-const collectAnswers = (program: CheckedProgram, node: Node, state: RegionState): void => {
+/** Every destination of a `spawn` on `state`'s scope under `node`: what a loop's later passes will have stored into. */
+const collectDestinations = (program: CheckedProgram, node: Node, state: RegionState): void => {
   if (node.kind === N_ARROW) {
     return
   }
-  const callee = spawnCallee(program, node)
-  if (callee !== null && state.owns(spawnReceiver(program, node))) {
-    state.addAnswer(answerOf(callee))
+  if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
+    state.addDestination(spawnDestination(program, node))
   }
   for (const child of node.children) {
-    collectAnswers(program, child, state)
+    collectDestinations(program, child, state)
   }
 }
 
-/** The answer type a value of `type` can reach an array of, or -1: what reading or handing it on could see. */
-const reachedAnswer = (table: TypeTable, program: CheckedProgram, type: i32, state: RegionState): i32 => {
-  for (const answer of state.answers) {
-    if (type >= 0 && reachingPath(table, program, type, answer, "x", new StringSet()).length > 0) {
-      return answer
-    }
-  }
-  return -1
-}
+const destinationMessage = (): string =>
+  "The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), " +
+  `used only by index, \`.length\`, its methods and as a destination${REGION_TAIL}`
 
-/** The answer type of the array `type` is, when a task of the scope stores into arrays of it; -1 otherwise. */
-const answerArray = (table: TypeTable, type: i32, state: RegionState): i32 => {
-  if (type < 0 || table.kindOf(type) !== K_ARRAY) {
-    return -1
-  }
-  const element = table.refOf(type)
-  return state.answers.indexOf(element) >= 0 ? element : -1
-}
-
-const regionReadMessage = (table: TypeTable, state: RegionState, answer: i32): string =>
-  `This reads a \`${table.typeName(answer)}[]\`, which a task of \`${state.name}\` stores into, before the scope joins` +
-  REGION_TAIL
-
-const regionHandMessage = (table: TypeTable, state: RegionState, answer: i32): string =>
-  `This hands on memory that reaches a \`${table.typeName(answer)}[]\`, which a task of \`${state.name}\` stores ` +
-  `into, before the scope joins${REGION_TAIL}`
+const regionReadMessage = (state: RegionState, name: string): string =>
+  `This reads \`${name}\`, a destination of a task of \`${state.name}\`, before the scope joins${REGION_TAIL}`
 
 const regionWriteMessage = (state: RegionState, what: string): string =>
   `${what} writes memory a task of \`${state.name}\` may read, before the scope joins${REGION_TAIL}`
@@ -1040,17 +1163,23 @@ const isMemoryTarget = (target: Node): boolean => {
   return t.kind === N_INDEX || t.kind === N_MEMBER
 }
 
+/** Whether `target`, an assignment's left side, is one of a private local's own slots: `p[i]` or `p.f`. */
+const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses): boolean => {
+  const t = unwrapParens(target)
+  return (t.kind === N_INDEX || t.kind === N_MEMBER) && uses.isPrivate(namedLocal(program, t.children[0]))
+}
+
 /**
- * The refusal for a call in the region, or "": it writes (a user function with
- * a shared write, `push`, `pop`, anything on `Arena`, a task of another scope),
- * or it is handed memory that reaches an array a task stores into.
+ * The refusal for a call in the region, or "": `Arena`, `push` or `pop` on
+ * anything but a private local, a task of another scope, or a function that
+ * writes through a pointer it is handed.
  */
 const regionCallMessage = (
-  table: TypeTable,
   program: CheckedProgram,
   facts: FactsTable,
   node: Node,
-  state: RegionState
+  state: RegionState,
+  uses: VariableUses
 ): string => {
   const callee = node.children[0]
   if (callee.kind === N_MEMBER) {
@@ -1058,29 +1187,30 @@ const regionCallMessage = (
     if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
       return regionWriteMessage(state, `\`Arena.${callee.text}\``)
     }
-    const type = program.nodeTypes[receiver.id]
-    if (type >= 0 && table.kindOf(type) === K_ARRAY && (callee.text === "push" || callee.text === "pop")) {
-      return regionWriteMessage(state, `\`${callee.text}\``)
+    if (state.isDestination(namedLocal(program, receiver))) {
+      return regionReadMessage(state, receiver.text)
     }
-    const answer = reachedAnswer(table, program, type, state)
-    if (answer >= 0) {
-      return regionHandMessage(table, state, answer)
+    if ((callee.text === "push" || callee.text === "pop") && !uses.isPrivate(namedLocal(program, receiver))) {
+      const type = program.nodeTypes[receiver.id]
+      if (type >= 0 && program.nodeCallees[node.id] === null) {
+        return regionWriteMessage(state, `\`${callee.text}\``)
+      }
     }
   }
   const sig = program.nodeCallees[node.id]
-  if (sig !== null) {
-    if (isSpawnEntry(sig)) {
-      return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
-    }
-    const own = facts.get(sig.name)
-    if (own === null || own.sharedWrite) {
-      return regionWriteMessage(state, `\`${sig.sourceName}\``)
-    }
+  if (sig === null) {
+    return ""
   }
-  for (const arg of node.children[1].children) {
-    const answer = reachedAnswer(table, program, program.nodeTypes[unwrapParens(arg).id], state)
-    if (answer >= 0) {
-      return regionHandMessage(table, state, answer)
+  if (isSpawnEntry(sig)) {
+    return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
+  }
+  const own = facts.get(sig.name)
+  if (own === null) {
+    return regionWriteMessage(state, `\`${sig.sourceName}\``)
+  }
+  for (const pp of own.pointerParams) {
+    if (pp.writesThrough) {
+      return regionWriteMessage(state, `\`${sig.sourceName}\``)
     }
   }
   return ""
@@ -1088,9 +1218,9 @@ const regionCallMessage = (
 
 /** Walk `node`, parent code inside `state`'s region, pushing each refusal. */
 const walkRegion = (
-  table: TypeTable,
   program: CheckedProgram,
   facts: FactsTable,
+  uses: VariableUses,
   node: Node,
   state: RegionState,
   out: ScopeFinding[]
@@ -1103,61 +1233,70 @@ const walkRegion = (
   }
   if (node.kind === N_FOR || node.kind === N_WHILE || node.kind === N_DO || node.kind === N_FOR_OF) {
     // A later pass sees what every spawn inside the loop stored on the passes before.
-    collectAnswers(program, node, state)
+    collectDestinations(program, node, state)
   }
-  const callee = spawnCallee(program, node)
-  if (callee !== null && state.owns(spawnReceiver(program, node))) {
-    // The task's own argument and destination are the parent's code; the task
-    // reads its argument, which must reach nothing an earlier task stores into.
-    const args = node.children[1].children
-    for (const arg of args) {
-      walkRegion(table, program, facts, arg, state, out)
+  if (spawnCallee(program, node) !== null && state.owns(spawnReceiver(program, node))) {
+    // The task's argument and destination are the parent's code, evaluated
+    // before the task is filed.
+    for (const arg of node.children[1].children) {
+      walkRegion(program, facts, uses, arg, state, out)
     }
-    if (args.length > 1) {
-      const answer = reachedAnswer(table, program, program.nodeTypes[unwrapParens(args[1]).id], state)
-      if (answer >= 0) {
-        out.push(new ScopeFinding(args[1], regionHandMessage(table, state, answer)))
-      }
-    }
-    state.addAnswer(answerOf(callee))
+    state.addDestination(spawnDestination(program, node))
     return
   }
-  // Until a task can have been filed — the first `spawn`, or any spawn in a
-  // loop around this, whose earlier passes filed one — nothing can see a write.
-  if (state.answers.length === 0) {
+  // Until a task can have been filed, nothing can tell when it runs.
+  if (!state.live()) {
     for (const child of node.children) {
-      walkRegion(table, program, facts, child, state, out)
+      walkRegion(program, facts, uses, child, state, out)
     }
     return
   }
   let message = ""
   if (node.kind === N_BINARY && isAssignmentOperator(node.text) && isMemoryTarget(node.children[0])) {
-    message = regionWriteMessage(state, "This assignment")
+    if (!isPrivateSlot(program, node.children[0], uses)) {
+      message = regionWriteMessage(state, "This assignment")
+    }
   } else if (
     node.kind === N_UNARY &&
     (node.text === "++" || node.text === "--") &&
-    isMemoryTarget(node.children[0])
+    isMemoryTarget(node.children[0]) &&
+    !isPrivateSlot(program, node.children[0], uses)
   ) {
     message = regionWriteMessage(state, `This \`${node.text}\``)
-  } else if (node.kind === N_INDEX) {
-    const answer = answerArray(table, program.nodeTypes[unwrapParens(node.children[0]).id], state)
-    if (answer >= 0) {
-      message = regionReadMessage(table, state, answer)
-    }
-  } else if (node.kind === N_FOR_OF) {
-    const answer = answerArray(table, program.nodeTypes[unwrapParens(node.children[1]).id], state)
-    if (answer >= 0) {
-      message = regionReadMessage(table, state, answer)
-    }
+  } else if (node.kind === N_INDEX && state.isDestination(namedLocal(program, node.children[0]))) {
+    message = regionReadMessage(state, unwrapParens(node.children[0]).text)
+  } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
+    message = regionReadMessage(state, unwrapParens(node.children[1]).text)
   } else if (node.kind === N_CALL) {
-    message = regionCallMessage(table, program, facts, node, state)
+    message = regionCallMessage(program, facts, node, state, uses)
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
     return
   }
   for (const child of node.children) {
-    walkRegion(table, program, facts, child, state, out)
+    walkRegion(program, facts, uses, child, state, out)
+  }
+}
+
+/** Every `spawn` under `node` whose destination is not a fresh, unhanded `const` array. */
+const checkDestinations = (
+  program: CheckedProgram,
+  node: Node,
+  uses: VariableUses,
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (spawnCallee(program, node) !== null) {
+    const args = node.children[1].children
+    if (args.length > 2 && !uses.isDestinationShaped(namedLocal(program, args[2]))) {
+      out.push(new ScopeFinding(args[2], destinationMessage()))
+    }
+  }
+  for (const child of node.children) {
+    checkDestinations(program, child, uses, out)
   }
 }
 
@@ -1168,8 +1307,8 @@ const walkRegion = (
  */
 const findRegions = (
   program: CheckedProgram,
-  table: TypeTable,
   facts: FactsTable,
+  uses: VariableUses,
   node: Node,
   out: ScopeFinding[]
 ): void => {
@@ -1195,7 +1334,7 @@ const findRegions = (
           const later = node.children[j]
           started = started || holdsSpawnOn(program, later, state)
           if (started) {
-            walkRegion(table, program, facts, later, state, out)
+            walkRegion(program, facts, uses, later, state, out)
           }
           j = j + 1
         }
@@ -1204,6 +1343,14 @@ const findRegions = (
     }
   }
   for (const child of node.children) {
-    findRegions(program, table, facts, child, out)
+    findRegions(program, facts, uses, child, out)
   }
+}
+
+/** The destination rule and every region of one function's body. */
+const checkBody = (program: CheckedProgram, facts: FactsTable, body: Node, out: ScopeFinding[]): void => {
+  const uses = new VariableUses()
+  collectUses(program, body, null, uses)
+  checkDestinations(program, body, uses, out)
+  findRegions(program, facts, uses, body, out)
 }

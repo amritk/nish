@@ -6,14 +6,15 @@ import { scope } from "nish/threads";
 
 const triple = (n: i32): i32 => n * 3;
 
-const firstTriple = (k: i32, out: i32[]): i32 => {
+const firstTriple = (k: i32): i32 => {
+  const res: i32[] = [0, 0];
   using s = scope();
-  s.spawn(triple, k, out, 0);
+  s.spawn(triple, k, res, 0);
   if (k > 1) {
-    return out[0];
+    return res[0];
   }
-  s.spawn(triple, k + 1, out, 1);
-  return -1;
+  s.spawn(triple, k + 1, res, 1);
+  return res[0] * 100 + res[1];
 };
 
 export const main = (): i32 => {
@@ -29,11 +30,12 @@ export const main = (): i32 => {
     }
   }
   console.log(`${out[0]} ${out[1]} ${out[2]}`);
+  const pair: i32[] = [0, 0];
   let n: i32 = 0;
   while (true) {
     using s = scope();
     for (let j: i32 = 0; j < 2; j++) {
-      s.spawn(triple, j + n, out, j);
+      s.spawn(triple, j + n, pair, j);
       if (j === 0) {
         continue; // leaves the loop inside the scope's block, not the block
       }
@@ -43,8 +45,8 @@ export const main = (): i32 => {
       break;
     }
   }
-  console.log(`${out[0]} ${out[1]}`);
-  console.log(`${firstTriple(5, out)} ${out[0]}`);
-  console.log(`${firstTriple(0, out)} ${out[0]} ${out[1]}`);
+  console.log(`${pair[0]} ${pair[1]}`);
+  console.log(`${firstTriple(5)}`);
+  console.log(`${firstTriple(0)}`);
   return 0;
 };

@@ -776,9 +776,11 @@ export const main = (): i32 => {
 ```
 
 - **The tasks run when the block ends**, together, and each answer is stored
-  after the last one finishes. So read a destination after the block: between
-  the first `spawn` and the block's end, reading an array of the answer type,
-  or writing memory at all (a store, `push`, a call that writes), is refused.
+  after the last one finishes. So read a destination after the block. A
+  destination is a `const` bound to a fresh array (`[0, 0]`, `new Array`) that
+  you only index; never pass it on. Between the first `spawn` and the block's
+  end, don't read a destination, and don't write memory a task could read (a
+  store into an argument, a call that writes through its argument).
 - **`using` takes only `scope()`**, and `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.

@@ -44089,17 +44089,17 @@ function square(n: i32): i32 -> @square
 function cube(n: i32): i32 -> @cube
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function powers(n: i32, out: i32[]): void -> @powers [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function powers(n: i32): i32 -> @powers [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.ThreadScope.spawn$i32$i32$fn.6.square
   escaping: n
-  calls: nish.ThreadScope.spawn$i32$i32$fn.4.cube nish.ThreadScope.spawn$i32$i32$fn.6.square nish.scope
-  pointer out: size=0 writesThrough=true captured=true passedTo=nish.ThreadScope.spawn$i32$i32$fn.6.square#3 nish.ThreadScope.spawn$i32$i32$fn.4.cube#3
+  calls: nish.ThreadScope.spawn$i32$i32$fn.4.cube nish.ThreadScope.spawn$i32$i32$fn.6.square nish.scope nish_arena_mark nish_arena_release nish_panic_index
   stackSites=0 stackLocals=0
-  local 8:9 s: ThreadScope (const)
-  callee 8:13 scope -> @nish.scope
-  callee 9:3 ThreadScope.spawn<i32, i32, square> -> @nish.ThreadScope.spawn$i32$i32$fn.6.square
-  callee 10:3 ThreadScope.spawn<i32, i32, cube> -> @nish.ThreadScope.spawn$i32$i32$fn.4.cube
+  local 8:9 out: i32[] (const)
+  local 10:11 s: ThreadScope (const)
+  callee 10:15 scope -> @nish.scope
+  callee 11:5 ThreadScope.spawn<i32, i32, square> -> @nish.ThreadScope.spawn$i32$i32$fn.6.square
+  callee 12:5 ThreadScope.spawn<i32, i32, cube> -> @nish.ThreadScope.spawn$i32$i32$fn.4.cube
 module std/threads.ts [package nish]
 const BLOCK: i32 = 1048576
 const MAX_BLOCKS: i32 = 64

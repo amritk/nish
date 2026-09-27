@@ -131,8 +131,8 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Five `nish/threads` programs are held to the same claim by name,
-`tests/link/par_map`, `tests/link/par_reduce` and the three
+Six `nish/threads` programs are held to the same claim by name,
+`tests/link/par_map`, `tests/link/par_reduce` and the four
 `tests/link/thread_scope_*`: each prints under Node, run with
 `--js-explicit-resource-management`, what its native binary prints
 (`node tests/run.js threads-under-node`).

@@ -1961,7 +1961,7 @@ if (!only || "par_alloc".includes(only)) {
 // the native binary to, and the specifier is the one a program writes:
 // `nish/threads`, answered by `runtime/nish.mjs`'s resolve hook.
 //
-// WP29 P2 adds the scope's three programs. Under Node a task runs at its spawn
+// WP29 P2 adds the scope's four programs. Under Node a task runs at its spawn
 // and stores its answer there, and natively when its scope joins; the checker
 // refuses a program that reads a destination, or writes what a task may read,
 // before the scope's block ends, so every scope program prints the same both
@@ -1972,6 +1972,7 @@ for (const name of [
   "par_reduce",
   "thread_scope_basic",
   "thread_scope_exit_paths",
+  "thread_scope_many_arrays",
   "thread_scope_nested_arena",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {

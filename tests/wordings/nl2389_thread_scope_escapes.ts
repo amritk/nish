@@ -4,15 +4,17 @@ import { scope, ThreadScope } from "nish/threads";
 
 const one = (n: i32): i32 => n + 1;
 
-const later = (s: ThreadScope, out: i32[]): void => {
+const later = (s: ThreadScope): i32 => {
+  const out: i32[] = [0];
   s.spawn(one, 1, out, 0);
+  return out[0];
 };
 
 export const main = (): i32 => {
   const out: i32[] = [0];
   {
     using s = scope();
-    later(s, out);
+    out[0] = later(s);
   }
   return out[0];
 };

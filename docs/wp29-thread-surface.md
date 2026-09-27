@@ -324,13 +324,14 @@ defaults the plan proposed where it says so:
   at its own block's end.
 - **Under Node**, `scope()` answers an object whose `spawn` runs its task and
   stores the answer at once, and whose `[Symbol.dispose]` does nothing. The two
-  print the same because the checker refuses what could tell them apart:
-  between a scope's first `spawn` and the end of its block, its thread may not
-  read an array a task stores into (by answer type) nor write any memory
-  (element and field stores, `push`/`pop`, `Arena`, a call with a shared
-  write, another scope's task), which holds through an alias because it is
-  judged by type and by what is written, not by name
-  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+  print the same because the checker refuses what could tell them apart: a
+  destination is a `const` bound to a fresh array that is never handed on, and
+  between a scope's first `spawn` and the end of its block its thread may not
+  read a destination nor write memory a task could read — a store is allowed
+  only into a never-handed-on fresh literal's own slots, and a call only if it
+  writes through no pointer it is handed (`PointerParamFacts.writesThrough`),
+  which lets a call that builds and fills its own array through while it
+  refuses one that writes its argument ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
   `using` needs `--js-explicit-resource-management` on Node 22, whose flagged
   `using` never calls `[Symbol.dispose]` — which this design does not need —
   and is native from Node 24. `runtime/nish.d.ts` declares the disposable
