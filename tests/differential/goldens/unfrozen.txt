@@ -157,6 +157,7 @@ cases/map_key_u8 added after R6: no rewriter to freeze it with
 cases/map_type_param_shadow added after R6: no rewriter to freeze it with
 cases/map_value_result added after R6: no rewriter to freeze it with
 cases/map_value_result_by_value added after R6: no rewriter to freeze it with
+cases/math_numeric_separators added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with
