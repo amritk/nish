@@ -62,7 +62,7 @@
 import { CLI, VERSION } from "./branding"
 import { SourceFile } from "./diagnostics"
 import { internalErrorFor } from "./ice"
-import { IRFunction, IRModule } from "./ir"
+import { IRFunction, IRModule, paramSuffix } from "./ir"
 import { StringMap } from "./map"
 import { Node } from "./nodes"
 import { CheckedProgram, EnumInfo, FunctionSig, StructInfo } from "./program"
@@ -603,7 +603,7 @@ export class DebugInfo {
         `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${arg}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
       )
       fn.emit(
-        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`
+        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}${paramSuffix(sig.paramNames[i])}, metadata ${variable}, metadata !DIExpression())`
       )
       i = i + 1
     }
