@@ -776,8 +776,9 @@ export const main = (): i32 => {
 ```
 
 - **The tasks run when the block ends**, together, and each answer is stored
-  after the last one finishes. So read a destination after the block, not
-  inside it: inside, it still holds its old value (and under Node, the new one).
+  after the last one finishes. So read a destination after the block: between
+  the first `spawn` and the block's end, reading an array of the answer type,
+  or writing memory at all (a store, `push`, a call that writes), is refused.
 - **`using` takes only `scope()`**, and `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.

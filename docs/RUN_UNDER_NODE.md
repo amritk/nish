@@ -108,9 +108,9 @@ no prelude can reach it. They are language decisions
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes
   ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
-  nothing another can see and cannot print, so the two print the same unless
-  the program reads a destination, or writes what a task reads, before the
-  block ends. `using` itself needs `--js-explicit-resource-management` on Node
+  nothing another can see and cannot print, and the checker refuses a program
+  that reads a destination, or writes what a task may read, before the block
+  ends, so the two print the same. `using` itself needs `--js-explicit-resource-management` on Node
   22 and is native from Node 24; Node 22's flagged `using` never calls
   `[Symbol.dispose]`, and nothing here needs it to, because every task has run
   by the time the block ends.

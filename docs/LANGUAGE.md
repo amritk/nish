@@ -2191,13 +2191,29 @@ export const main = (): i32 => {
   opened the scope and each other on a thread of its own, so `N` tasks start
   `N - 1` threads — waits for all of them, and then stores each answer in the
   order the tasks were spawned, on the thread that opened the scope. That is
-  what makes a scope free of races without asking anything of the program
-  between its spawns: while the tasks run, the thread that opened the scope is
+  what makes a scope free of races: while the tasks run, the thread that opened the scope is
   waiting for them, the tasks write nothing another can see (below), and every
   store into the program's memory is made after the last task has finished. So
-  a task may be handed any argument — an array, an object — and the block may
-  do anything between its spawns. What a task reads is what its argument holds
-  when the scope joins, and a destination holds its old value until then.
+  a task may be handed any argument — an array, an object.
+- **Until the block ends, its thread neither reads what a task stores into nor
+  writes what a task may read.** Natively a task runs, and its answer is
+  stored, when the scope joins; under Node each runs and stores where it is
+  spawned. So from the first statement of the block that holds a `spawn` on
+  the scope to the block's end — a `return`'s value aside, which is computed
+  after the join — the program may not index, walk or call a method on an
+  array of an answer type a task of the scope has been given by then, nor hand
+  memory that reaches one to a call or a task; and it may write no memory at
+  all: no element or field store, whatever alias it goes through, no `push` or
+  `pop`, no `Arena` call, no call to a function that writes what its caller can
+  see, and no task on another scope, whose join would store. A write before
+  the first spawn is fine, and so is anything on a local. Each is
+  `` This reads a `i32[]`, which a task of `s` stores into, before the scope joins: a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so between a scope's first `spawn` and the end of its block its thread may neither read an array a task stores into nor write memory a task may read ``
+  with the words for what it does (`tests/cases/reject_thread_region_read`,
+  `reject_thread_region_write`, `reject_thread_region_alias_write`,
+  `reject_thread_region_call_write`). It is judged by type, as memory is
+  reached only through parameters: a module constant is a number, a `boolean`
+  or a string. That is what keeps a program's meaning the same compiled and
+  under Node.
 - **The join is emitted at every exit of the block**: its end, a `return` —
   before the returned value is computed, so the value can read what the tasks
   stored — and a `break` or `continue` that leaves the block
@@ -2241,7 +2257,9 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``
   (`tests/cases/reject_thread_task_shared_write`). A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
-  stores into memory; and a data-parallel call inside a task is refused by it too.
+  stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
+  data-parallel call inside a task is refused by it too
+  (`reject_thread_task_nested_map`).
 - **It answers a number, a `boolean` or an enum**, because a task's thread
   frees its arena when it exits:
   `` `label` answers `string`, and `spawn` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
@@ -2256,9 +2274,8 @@ element's arena, which a task does not share, and each rule is reported at the
   (`tests/cases/reject_thread_task_result_arg`).
 
 Under Node, `scope()` is an object whose `spawn` runs its task at once and
-stores the answer there, so a program prints the same either way unless it
-reads a destination, or writes what a task reads, before the scope's block
-ends ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
+stores the answer there; the rule above is what makes that print the same as
+the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 `--js-explicit-resource-management` on Node 22 and is native from Node 24.
 
 `parallelFor`, locks, channels, non-scalar results and `scope(n)` are not in

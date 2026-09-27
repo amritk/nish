@@ -1,0 +1,2 @@
+reject_thread_region_write.ts:20:5
+This assignment writes memory a task of `s` may read, before the scope joins

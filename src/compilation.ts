@@ -1005,7 +1005,7 @@ export class Compilation {
     }
     for (const unit of this.modules) {
       const program = unit.checker.program
-      for (const finding of scopeFindings(programs, program, this.table)) {
+      for (const finding of scopeFindings(programs, program, this.table, facts)) {
         this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
       }
       for (const call of program.spawnCalls) {

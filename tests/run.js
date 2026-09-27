@@ -1962,10 +1962,10 @@ if (!only || "par_alloc".includes(only)) {
 // `nish/threads`, answered by `runtime/nish.mjs`'s resolve hook.
 //
 // WP29 P2 adds the scope's three programs. Under Node a task runs at its spawn
-// and stores its answer there, and natively when its scope joins; the two
-// print the same for a program that does not read a destination, or write what
-// a task reads, before the scope's block ends (docs/RUN_UNDER_NODE.md), which
-// is what these are. `using` needs `--js-explicit-resource-management` on
+// and stores its answer there, and natively when its scope joins; the checker
+// refuses a program that reads a destination, or writes what a task may read,
+// before the scope's block ends, so every scope program prints the same both
+// ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
 for (const name of [
   "par_map",
@@ -4460,13 +4460,13 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3840
  * that nothing but a fallback belongs in it, so a commit that needs the room has put
  * code on the path a program which never spawns still links.
  *
- * Raised to 320 by wp29 P2, measured **288 bytes** on 2026-09-26 with clang 18.1.3 on
+ * Raised to 320 by wp29 P2, measured **286 bytes** on 2026-09-27 with clang 18.1.3 on
  * linux-x64: a scope's tasks exist in this configuration too — filed by
  * `nish_scope_spawn` and run, on the calling thread, by `nish_scope_join` — because a
  * task stores its answer when its scope joins in every build, and a build that stored
  * it at the spawn instead would give a program that reads its destination early a
  * different answer. That is the fallback's own semantics rather than room spent, and
- * 32 bytes of slack are left, not 207.
+ * 34 bytes of slack are left, not 207.
  */
 const RUNTIME_PARALLEL_TEXT_BUDGET = 320
 /**
@@ -4482,8 +4482,8 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 320
  * with the operating system. Section GC means a program that runs nothing in parallel
  * pays none of it, and `examples/hello.ts` is checked to be the same size to the byte.
  *
- * Raised to 1,024 by wp29 P2, measured **903 bytes** on 2026-09-26 with clang 18.1.3 on
- * linux-x64: the 421 bytes are a scope's tasks — `nish_scope_spawn`, which copies a
+ * Raised to 1,024 by wp29 P2, measured **901 bytes** on 2026-09-27 with clang 18.1.3 on
+ * linux-x64: the 419 bytes are a scope's tasks — `nish_scope_spawn`, which copies a
  * task's payload into a list of its own, `nish_scope_join`, which runs a scope's tasks
  * one thread each and joins them, and the worker that frees each thread's arena. They
  * are this file's subject, the language's other way of dividing work across threads,

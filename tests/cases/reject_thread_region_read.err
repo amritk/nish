@@ -1,0 +1,2 @@
+reject_thread_region_read.ts:20:20
+This reads a `i32[]`, which a task of `s` stores into, before the scope joins

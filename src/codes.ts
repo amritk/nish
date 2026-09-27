@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 497
+export const RULE_COUNT: i32 = 498
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -60,6 +60,8 @@ export const RULE_COUNT: i32 = 497
  * contains.
  */
 const diagnosticRules = (): string[] => [
+  ": a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so between a scope's first `spawn` and the end of its block its thread may neither read an array a task stores into nor write memory a task may read",
+  "NL2394",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
   "`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs",

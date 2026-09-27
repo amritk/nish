@@ -1,0 +1,2 @@
+`mapped` writes memory its caller can see
+`spawn` runs it on several threads at once

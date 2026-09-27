@@ -29,6 +29,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
@@ -189,13 +190,13 @@ static NISH_TLS nish_task *nish_tasks = 0;
 
 void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size) {
   nish_task *t = (nish_task *)malloc(sizeof(nish_task) + (size_t)size);
+  /* Out of memory is the end of the program, as it is for every other
+   * allocation the runtime makes: running the task here instead would store
+   * its answer ahead of tasks filed before it, and a later spawn into the same
+   * slot has to be the one that stays. */
   if (!t) {
-    /* No memory to keep the task in: run it and store its answer now, in the
-     * caller's frame, which is still live. That costs the task its thread and
-     * nothing else. */
-    run((void *)payload);
-    finish((void *)payload);
-    return;
+    (void)!write(2, "nish: out of memory\n", 20);
+    _exit(1);
   }
   t->scope = scope;
   t->run = run;
