@@ -185,7 +185,8 @@ split that created `runtime-os.c`, not a higher ceiling.
 the next deadline or the next readable socket needs no colour in the language.
 That loop is exactly what tokio runs underneath the relay today.
 
-The primitives, with a handle as an `i32` descriptor:
+The primitives form a builtin module, `nish:net`, beside `nish:fs` and
+`nish:io`, with a handle as an `i32` descriptor:
 
 - **UDP.** `bind` (dual-stack IPv6), `sendTo`, and `recvFrom` into a caller's
   `u8[]` at an offset. `UDP_SEGMENT` on send and `UDP_GRO` on receive, with the
@@ -251,9 +252,13 @@ lanes below can be written and proved against their RFC's own test vectors
 what must be released or merged before the lane merges, not before it starts: a
 lane can be written against a stub of what it needs.
 
-**Where the code lives** is decision S2 (§6). The paths here assume a separate
-source package, `nish-net`, with directories `crypto/`, `tls/`, `http1/`,
-`http2/`, `quic/`, `http3/` and `apps/relay/`.
+**Where the code lives is the standard library** (decision S2, §6). The
+protocols are `std/` modules, imported as `nish/crypto/<primitive>`,
+`nish/net/tls`, `nish/net/http1`, `nish/net/http2`, `nish/net/quic`,
+`nish/net/http3` and `nish/net/webtransport`. A `nish/` specifier may already
+have more than one segment (LANGUAGE.md §Modules). The sockets and the loop are
+N5's builtin module, `nish:net`, beside `nish:fs` and `nish:io`. The relay
+itself (A1) is cs's own `services/relay`, rewritten in Nish on top of them.
 
 | Lane | What | Proved by | Needs |
 | --- | --- | --- | --- |
@@ -291,23 +296,25 @@ T2 and Q2 exist.
 | | Question | Recommendation |
 | --- | --- | --- |
 | **S1** | Crypto: pure Nish, or a verified C library through FFI | **Pure Nish, and it is also the shorter road.** Three facts make it affordable. First, ChaCha20-Poly1305 is add, rotate and xor, so it is constant time and fast in portable code; the server picks the cipher suite, and every browser offers it. Second, AES-128-GCM is required only for QUIC Initial packets, whose keys come from a connection id sent in the clear, and as TLS 1.3's mandatory fallback, where a bitsliced AES is correct though slow. Third, X25519 and P-256 fit in `i64` and `u64` limbs. The C route needs [wp27](wp27-ffi.md) S3 and S4, neither built, and hands the fixpoint callees it cannot see into. AES-NI and PCLMUL become builtins later, when a profile of the relay asks for them |
-| **S2** | Where the stack lives | **A separate source package** (`nish-net`), published with the `"nish"` export condition ([wp21](wp21-packages.md)). [wp26](wp26-stdlib.md)'s rule puts a syscall in the runtime and everything else in a module. A TLS and QUIC stack should not be released on the compiler's schedule, and the compiler's test suite should not carry it. Only N1–N6 land here |
+| **S2** | Where the stack lives | **Decided by the owner, 2026-09-28: the standard library.** It follows [wp26](wp26-stdlib.md)'s own line: a builtin exists for a syscall, and everything the language can express is a module. So N5's sockets are the builtin module `nish:net`, and everything above them is `nish/crypto/*` and `nish/net/*`. What it buys is the property wp26 §1a measured: a `std/` module is compiled into its importer, so the attribute fixpoint sees through it, and `--gc-sections` drops what the relay does not call. What it costs is cadence and suite. The stack ships in compiler releases, so a Release PR is worth cutting as each lane cs waits on lands. Its interop suites (the QUIC interop runner, `h2spec`, Chrome) run as a CI job of their own, beside `npm test` rather than inside it, and each module keeps wp26 §5's `tests/link/` case |
 | **S3** | The relay alone first, or the fold into the game server first | **The relay alone**, as a drop-in binary with the same flags and the same hash file, chosen per deployment. It carries real players while the game server is still Bun. Folding the relay into the game server is phase two's cutover, once netcode is Nish |
 | **S4** | Memory for phase one | **Pools sized from the caps** (N9 above). The memory-model note is phase two's, and nothing here waits for it |
-| **S5** | The HTTP the stack serves beyond the relay | **All three versions from the start of wave 2, behind the relay's own port first.** The same process can answer `/connect` and upgrade `/play` for the Bun game server as a reverse proxy, which puts H1 and H2 under real traffic in phase one and makes Caddy optional for game traffic |
+| **S5** | The HTTP the stack serves beyond the relay | **All three versions, once the relay is live (wave 4).** The same process answers `/connect` and upgrades `/play` for the Bun game server as a reverse proxy. That puts H1 and H2 under real traffic in phase one, and makes Caddy optional for game traffic |
 
 ## 7. Waves
 
-| Wave | Compiler and runtime (this repository) | Stack (S2's package) | cs |
+| Wave | Compiler and runtime | The stack, in `std/` | cs |
 | --- | --- | --- | --- |
-| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1–S5 answered; C0, the ratchet (cs note) |
-| 1 | a release carrying N1–N6 | T1, T2, H1 server, H2, Q2 | — |
+| 0 | N1, N2, N3, N5, N6 | K1–K6; H1 parser, HPACK, Q1, QPACK tables | S1, S3–S5 answered; C15 and C16 (cs note) |
+| 1 | a release carrying N1–N6, and K1–K6 as they land | T1, T2, H1 server, H2, Q2 | — |
 | 2 | — | Q3, Q4, R1; the loopback suite | — |
-| 3 | — | R2, A1 | **the Nish relay in staging behind a flag**; `boot-check`'s wire pass and `bench:offload` against Rust |
+| 3 | a release carrying R2 | R2 | A1, the relay in Nish; then **the Nish relay in staging behind a flag**, with `boot-check`'s wire pass and `bench:offload` against Rust |
 | 4 | — | S5's reverse proxy | the Rust relay retired |
 
 The first release worth cutting is the one carrying N1–N6: the stack's lanes
-past the pure ones wait on it.
+past the pure ones wait on it. Because the stack is `std/`, cs can use each
+lane only once a release carries it, so a release is worth cutting whenever a
+lane A1 depends on has landed.
 
 ## 8. After phase one
 
