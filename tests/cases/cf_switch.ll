@@ -29,14 +29,13 @@ entry:
   %4 = call i32 @classify(i32 2)
   %5 = mul nsw i32 %4, 3
   %6 = add nsw i32 %3, %5
-  %7 = sub nsw i32 0, 1
-  %8 = call i32 @classify(i32 %7)
-  %9 = mul nsw i32 %8, 4
-  %10 = add nsw i32 %6, %9
-  %11 = call i32 @classify(i32 9)
-  %12 = mul nsw i32 %11, 5
-  %13 = add nsw i32 %10, %12
-  ret i32 %13
+  %7 = call i32 @classify(i32 -1)
+  %8 = mul nsw i32 %7, 4
+  %9 = add nsw i32 %6, %8
+  %10 = call i32 @classify(i32 9)
+  %11 = mul nsw i32 %10, 5
+  %12 = add nsw i32 %9, %11
+  ret i32 %12
 }
 
 attributes #0 = { nounwind willreturn readnone }

@@ -107,29 +107,28 @@ lor.end:
   br i1 %9, label %if.then, label %if.end
 
 if.then:
-  %10 = sub nsw i32 0, 1
-  ret i32 %10
+  ret i32 -1
 
 if.end:
-  %11 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
-  %12 = load %struct.nish_array*, %struct.nish_array** %11, align 8, !tbaa !4
-  %13 = sext i32 %i to i64
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 0
-  %15 = load i64, i64* %14, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %16 = icmp ult i64 %13, %15
-  br i1 %16, label %bounds.ok, label %bounds.fail
+  %10 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
+  %11 = load %struct.nish_array*, %struct.nish_array** %10, align 8, !tbaa !4
+  %12 = sext i32 %i to i64
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %15 = icmp ult i64 %12, %14
+  br i1 %15, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %13, i64 %15)
+  call void @nish_panic_index(i64 %12, i64 %14)
   unreachable
 
 bounds.ok:
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %12, i64 0, i32 2
-  %18 = load i8*, i8** %17, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  %19 = bitcast i8* %18 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 %13
-  %21 = load i32, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  ret i32 %21
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %18 = bitcast i8* %17 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 %12
+  %20 = load i32, i32* %19, align 4, !alias.scope !9, !noalias !8, !tbaa !16
+  ret i32 %20
 }
 
 define noundef i32 @nish_main() #1 {

@@ -215,94 +215,90 @@ res.ok.1:
   br label %res.end
 
 res.alt:
-  %31 = sub nsw i32 0, 1
   br label %res.end
 
 res.end:
-  %32 = phi i32 [ %30, %res.ok.1 ], [ %31, %res.alt ]
-  %33 = call i8* @nish_str_from_i32(i32 %32)
-  call void @nish_print(i8* %33)
-  %34 = call { i1, i32, i32 } @quarter(i32 6)
-  %35 = extractvalue { i1, i32, i32 } %34, 0
-  %36 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
-  store i1 %35, i1* %36, align 1
-  %37 = extractvalue { i1, i32, i32 } %34, 1
-  %38 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
-  store i32 %37, i32* %38, align 4
-  %39 = extractvalue { i1, i32, i32 } %34, 2
-  %40 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
-  store i32 %39, i32* %40, align 4
-  %41 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
-  %42 = load i1, i1* %41, align 1
-  br i1 %42, label %res.ok.2, label %res.alt.1
+  %31 = phi i32 [ %30, %res.ok.1 ], [ -1, %res.alt ]
+  %32 = call i8* @nish_str_from_i32(i32 %31)
+  call void @nish_print(i8* %32)
+  %33 = call { i1, i32, i32 } @quarter(i32 6)
+  %34 = extractvalue { i1, i32, i32 } %33, 0
+  %35 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 %34, i1* %35, align 1
+  %36 = extractvalue { i1, i32, i32 } %33, 1
+  %37 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
+  store i32 %36, i32* %37, align 4
+  %38 = extractvalue { i1, i32, i32 } %33, 2
+  %39 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %38, i32* %39, align 4
+  %40 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  %41 = load i1, i1* %40, align 1
+  br i1 %41, label %res.ok.2, label %res.alt.1
 
 res.ok.2:
-  %43 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
-  %44 = load i32, i32* %43, align 4
+  %42 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
+  %43 = load i32, i32* %42, align 4
   br label %res.end.1
 
 res.alt.1:
-  %45 = sub nsw i32 0, 1
   br label %res.end.1
 
 res.end.1:
-  %46 = phi i32 [ %44, %res.ok.2 ], [ %45, %res.alt.1 ]
-  %47 = call i8* @nish_str_from_i32(i32 %46)
-  call void @nish_print(i8* %47)
-  %48 = call { i1, i32, i32 } @again(i32 10)
-  %49 = extractvalue { i1, i32, i32 } %48, 0
-  %50 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 0
-  store i1 %49, i1* %50, align 1
-  %51 = extractvalue { i1, i32, i32 } %48, 1
-  %52 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 1
+  %44 = phi i32 [ %43, %res.ok.2 ], [ -1, %res.alt.1 ]
+  %45 = call i8* @nish_str_from_i32(i32 %44)
+  call void @nish_print(i8* %45)
+  %46 = call { i1, i32, i32 } @again(i32 10)
+  %47 = extractvalue { i1, i32, i32 } %46, 0
+  %48 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 0
+  store i1 %47, i1* %48, align 1
+  %49 = extractvalue { i1, i32, i32 } %46, 1
+  %50 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 1
+  store i32 %49, i32* %50, align 4
+  %51 = extractvalue { i1, i32, i32 } %46, 2
+  %52 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 2
   store i32 %51, i32* %52, align 4
-  %53 = extractvalue { i1, i32, i32 } %48, 2
-  %54 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 2
-  store i32 %53, i32* %54, align 4
-  %55 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 0
-  %56 = load i1, i1* %55, align 1
-  br i1 %56, label %res.ok.3, label %res.alt.2
+  %53 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 0
+  %54 = load i1, i1* %53, align 1
+  br i1 %54, label %res.ok.3, label %res.alt.2
 
 res.ok.3:
-  %57 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 1
-  %58 = load i32, i32* %57, align 4
+  %55 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.2, i32 0, i32 1
+  %56 = load i32, i32* %55, align 4
   br label %res.end.2
 
 res.alt.2:
-  %59 = sub nsw i32 0, 1
   br label %res.end.2
 
 res.end.2:
-  %60 = phi i32 [ %58, %res.ok.3 ], [ %59, %res.alt.2 ]
-  %61 = call i8* @nish_str_from_i32(i32 %60)
-  call void @nish_print(i8* %61)
-  %62 = call { i1, i32, i32 } @again(i32 11)
-  %63 = extractvalue { i1, i32, i32 } %62, 0
-  %64 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 0
-  store i1 %63, i1* %64, align 1
-  %65 = extractvalue { i1, i32, i32 } %62, 1
-  %66 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 1
-  store i32 %65, i32* %66, align 4
-  %67 = extractvalue { i1, i32, i32 } %62, 2
-  %68 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 2
-  store i32 %67, i32* %68, align 4
-  %69 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 0
-  %70 = load i1, i1* %69, align 1
-  br i1 %70, label %res.ok.4, label %res.alt.3
+  %57 = phi i32 [ %56, %res.ok.3 ], [ -1, %res.alt.2 ]
+  %58 = call i8* @nish_str_from_i32(i32 %57)
+  call void @nish_print(i8* %58)
+  %59 = call { i1, i32, i32 } @again(i32 11)
+  %60 = extractvalue { i1, i32, i32 } %59, 0
+  %61 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 0
+  store i1 %60, i1* %61, align 1
+  %62 = extractvalue { i1, i32, i32 } %59, 1
+  %63 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 1
+  store i32 %62, i32* %63, align 4
+  %64 = extractvalue { i1, i32, i32 } %59, 2
+  %65 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 2
+  store i32 %64, i32* %65, align 4
+  %66 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 0
+  %67 = load i1, i1* %66, align 1
+  br i1 %67, label %res.ok.4, label %res.alt.3
 
 res.ok.4:
-  %71 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 1
-  %72 = load i32, i32* %71, align 4
+  %68 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.3, i32 0, i32 1
+  %69 = load i32, i32* %68, align 4
   br label %res.end.3
 
 res.alt.3:
-  %73 = sub nsw i32 0, 1
   br label %res.end.3
 
 res.end.3:
-  %74 = phi i32 [ %72, %res.ok.4 ], [ %73, %res.alt.3 ]
-  %75 = call i8* @nish_str_from_i32(i32 %74)
-  call void @nish_print(i8* %75)
+  %70 = phi i32 [ %69, %res.ok.4 ], [ -1, %res.alt.3 ]
+  %71 = call i8* @nish_str_from_i32(i32 %70)
+  call void @nish_print(i8* %71)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
