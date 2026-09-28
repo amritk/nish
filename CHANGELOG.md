@@ -26,6 +26,53 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-28
+
+### Breaking changes
+
+- runtime: Rename every tracked path to kebab-case ([#251](https://github.com/amritk/nish/pull/251))
+- Move the compiler from self/ to src/ ([#256](https://github.com/amritk/nish/pull/256))
+
+### Added
+
+- checker: Ranged integer types (WP31) ([#261](https://github.com/amritk/nish/pull/261))
+- checker: Threads P2, using s = scope() and s.spawn(fn, arg) ([#262](https://github.com/amritk/nish/pull/262))
+- interop: Ranged parameters at the host boundary (WP31) ([#273](https://github.com/amritk/nish/pull/273))
+
+### Fixed
+
+- interop: ParallelReduce under Node, and NL2348 at the call for a non-scalar reduce ([#259](https://github.com/amritk/nish/pull/259))
+- checker: A surrogate-pair escape is the code point it spells ([#258](https://github.com/amritk/nish/pull/258))
+- checker: A stored Result is not a discard, and Map of Result compiles ([#260](https://github.com/amritk/nish/pull/260))
+- checker: A proof never leaves a proof consumer, and an assignment ends a narrowing in an && chain ([#265](https://github.com/amritk/nish/pull/265))
+- checker: A misplaced numeric separator is refused in TypeScript's words ([#264](https://github.com/amritk/nish/pull/264))
+- codegen: A parameter or local named like an emitter label compiles ([#269](https://github.com/amritk/nish/pull/269))
+- checker: A binary, octal, exponent or separated literal reads its true value ([#270](https://github.com/amritk/nish/pull/270))
+- checker: A numeric literal with a leading zero is refused in TypeScript's words ([#272](https://github.com/amritk/nish/pull/272))
+
+### Performance
+
+- checker: Prove range entries and index through declared ranges (WP31) ([#268](https://github.com/amritk/nish/pull/268))
+
+### Changed
+
+- Apply Biome's autofixes ([#252](https://github.com/amritk/nish/pull/252))
+- Clear the lint backlog by hand, and make every function an arrow ([#253](https://github.com/amritk/nish/pull/253))
+- Format the tree with Biome, without semicolons ([#254](https://github.com/amritk/nish/pull/254))
+
+### Documentation
+
+- Open the README with what the name stands for, and mark stage0's src/ citations ([#250](https://github.com/amritk/nish/pull/250))
+- wp31: Record the ranged-integer measurements ([#274](https://github.com/amritk/nish/pull/274))
+- Plan the round trip between TypeScript and Nish, at zero native cost (WP33) ([#276](https://github.com/amritk/nish/pull/276))
+- wp34: Plan hosting cs, starting with its relay on a network stack in std ([#277](https://github.com/amritk/nish/pull/277))
+
+### Build
+
+- Regenerate package-lock.json for v0.12.0 ([#248](https://github.com/amritk/nish/pull/248))
+- Make every lint rule an error, and add the checks a clean tree allows ([#255](https://github.com/amritk/nish/pull/255))
+
+
 ## [0.12.0] - 2026-09-26
 
 ### Added
@@ -465,3 +512,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.10.0]: https://github.com/amritk/nish/releases/tag/v0.10.0
 [0.11.0]: https://github.com/amritk/nish/releases/tag/v0.11.0
 [0.12.0]: https://github.com/amritk/nish/releases/tag/v0.12.0
+[0.13.0]: https://github.com/amritk/nish/releases/tag/v0.13.0
