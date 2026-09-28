@@ -79,43 +79,32 @@ const INNER_AT: i32 = 5;
 const MESSAGE_896: string =
   "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
 
+// FIPS 180-4 examples, SHA-512 of one million "a".
+const MILLION_A_512: string =
+  "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b";
+
 /** Both widths of one message, one-shot, against their expected digests. */
 const checkBoth = (t: Suite, label: string, data: u8[], want512: string, want384: string): void => {
   t.eqStr(`sha512 ${label}`, hex(sha512(data)), want512);
   t.eqStr(`sha384 ${label}`, hex(sha384(data)), want384);
 };
 
-/** How many ways of cutting `data` in two give a SHA-512 other than the one-shot digest. */
-const sha512SplitMisses = (data: u8[]): i32 => {
+/** How many ways of cutting `data` in two give either width a digest other than its one-shot one. */
+const splitMisses = (data: u8[]): i32 => {
   const n: i32 = toI32(data.length);
-  const want = hex(sha512(data));
+  const want512 = hex(sha512(data));
+  const want384 = hex(sha384(data));
   let misses: i32 = 0;
   for (let cut: i32 = 0; cut <= n; cut++) {
-    // Each pass's hasher and hex are garbage once compared, so hand them back.
+    // Each pass's hashers and hex are garbage once compared, so hand them back.
     const mark = Arena.mark();
-    const h = new Sha512();
-    h.update(data, ZERO, cut);
-    h.update(data, cut, n - cut);
-    const same = hex(h.digest()) === want;
-    Arena.release(mark);
-    if (!same) {
-      misses++;
-    }
-  }
-  return misses;
-};
-
-const sha384SplitMisses = (data: u8[]): i32 => {
-  const n: i32 = toI32(data.length);
-  const want = hex(sha384(data));
-  let misses: i32 = 0;
-  for (let cut: i32 = 0; cut <= n; cut++) {
-    // Each pass's hasher and hex are garbage once compared, so hand them back.
-    const mark = Arena.mark();
-    const h = new Sha384();
-    h.update(data, ZERO, cut);
-    h.update(data, cut, n - cut);
-    const same = hex(h.digest()) === want;
+    const h512 = new Sha512();
+    const h384 = new Sha384();
+    h512.update(data, ZERO, cut);
+    h384.update(data, ZERO, cut);
+    h512.update(data, cut, n - cut);
+    h384.update(data, cut, n - cut);
+    const same = hex(h512.digest()) === want512 && hex(h384.digest()) === want384;
     Arena.release(mark);
     if (!same) {
       misses++;
@@ -164,7 +153,7 @@ export const runSuite = (): i32 => {
     t,
     'of one million "a"',
     million,
-    "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b",
+    MILLION_A_512,
     "9d0e1809716474cb086e834e310a4a1ced149e9c00f248527972cec5704c2a5b07b8b3dc38ecc4ebae97ddd87f3d8985"
   );
 
@@ -211,8 +200,7 @@ export const runSuite = (): i32 => {
   // byte at a time, gives the one-shot digest.
   const long = pattern(300);
   const longLen: i32 = toI32(long.length);
-  t.eqI32("sha512 of 300 bytes, cut in two at every point", sha512SplitMisses(long), ZERO);
-  t.eqI32("sha384 of 300 bytes, cut in two at every point", sha384SplitMisses(long), ZERO);
+  t.eqI32("sha512 and sha384 of 300 bytes, cut in two at every point", splitMisses(long), ZERO);
   const bytewise512 = new Sha512();
   const bytewise384 = new Sha384();
   for (let i: i32 = 0; i < longLen; i++) {
@@ -234,7 +222,7 @@ export const runSuite = (): i32 => {
   t.eqStr(
     'sha512 of one million "a" in 997-byte windows',
     hex(chunked.digest()),
-    "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"
+    MILLION_A_512
   );
 
   // A window that does not start at zero hashes only what it covers.
@@ -249,15 +237,16 @@ export const runSuite = (): i32 => {
   // copy(): a copy taken mid-stream digests the prefix, updating the copy leaves
   // the original alone, and the original's final digest is unchanged.
   const half: i32 = 150;
+  const prefix = window(long, 0, half);
   const main512 = new Sha512();
   main512.update(long, ZERO, half);
   const prefix512 = main512.copy();
   const fork512 = main512.copy();
   fork512.update(m896, ZERO, toI32(m896.length));
-  t.eqStr("Sha512.copy digests the prefix", hex(prefix512.digest()), hex(sha512(window(long, 0, half))));
+  t.eqStr("Sha512.copy digests the prefix", hex(prefix512.digest()), hex(sha512(prefix)));
   main512.update(long, half, longLen - half);
   t.eqStr("Sha512.copy leaves the original's digest unchanged", hex(main512.digest()), hex(sha512(long)));
-  const forked = window(long, 0, half);
+  const forked = window(prefix, 0, half);
   for (let i: i32 = 0; i < toI32(m896.length); i++) {
     forked.push(m896[i]);
   }
@@ -268,7 +257,7 @@ export const runSuite = (): i32 => {
   const prefix384 = main384.copy();
   const fork384 = main384.copy();
   fork384.update(m896, ZERO, toI32(m896.length));
-  t.eqStr("Sha384.copy digests the prefix", hex(prefix384.digest()), hex(sha384(window(long, 0, half))));
+  t.eqStr("Sha384.copy digests the prefix", hex(prefix384.digest()), hex(sha384(prefix)));
   main384.update(long, half, longLen - half);
   t.eqStr("Sha384.copy leaves the original's digest unchanged", hex(main384.digest()), hex(sha384(long)));
   t.eqStr("Sha384.copy is updated on its own", hex(fork384.digest()), hex(sha384(forked)));

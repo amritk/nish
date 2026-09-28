@@ -29,8 +29,8 @@ export const SHA512_BLOCK: i32 = 128
 /** The block offset at which padding writes the 128-bit message length (§5.1.2). */
 const LENGTH_AT: i32 = 112
 
-/** Offset zero, spelled as an `i32` so a method argument keeps that type in f64 mode. */
-const BLOCK_START: i32 = 0
+/** Offset zero, spelled as an `i32` so a method argument keeps that type in f64 mode (`reject_method_arg_literal`). */
+const OFFSET_ZERO: i32 = 0
 
 const w64 = (hi: u32, lo: u32): u64 => (toU64(hi) << 32) | toU64(lo)
 
@@ -169,8 +169,9 @@ const storeWord = (buf: u8[], off: i32, word: u64): void => {
 
 /**
  * The state both hashes share: the hash value, the partial block, and the
- * message length in bytes as a 128-bit count (`countHi`, `countLo`), which is
- * what §5.1.2 appends once it is shifted into bits.
+ * message length in bytes. §5.1.2 appends the length in bits as 128 bits; a
+ * byte count in a `u64` shifted left by three fills those 128 bits for any
+ * message shorter than 2^64 bytes, which is every message there can be.
  */
 class Sha512Engine {
   state: u64[]
@@ -179,16 +180,15 @@ class Sha512Engine {
   schedule: u64[]
   /** K (§4.2.3); read, never written. */
   constants: u64[]
-  countLo: u64 = 0
-  countHi: u64 = 0
+  count: u64 = 0
   filled: i32 = 0
   finished: boolean = false
 
-  constructor(initial: u64[], constants: u64[]) {
+  constructor(initial: u64[]) {
     this.state = initial
     this.block = new Array<u8>(SHA512_BLOCK)
     this.schedule = new Array<u64>(80)
-    this.constants = constants
+    this.constants = roundConstants()
   }
 
   /** One application of §6.4.2 to the block at `src[off]` .. `src[off + 127]`. */
@@ -243,11 +243,7 @@ class Sha512Engine {
     if (off < 0 || len < 0 || off > toI32(data.length) - len) {
       panic("sha512: the window is outside the buffer")
     }
-    const added = toU64(len)
-    this.countLo = this.countLo + added
-    if (this.countLo < added) {
-      this.countHi = this.countHi + 1
-    }
+    this.count = this.count + toU64(len)
     let at = off
     let left = len
     if (this.filled > 0) {
@@ -262,7 +258,7 @@ class Sha512Engine {
       if (this.filled < SHA512_BLOCK) {
         return
       }
-      this.compress(this.block, BLOCK_START)
+      this.compress(this.block, OFFSET_ZERO)
       this.filled = 0
     }
     while (left >= SHA512_BLOCK) {
@@ -288,8 +284,7 @@ class Sha512Engine {
       twin.block[i] = this.block[i]
     }
     twin.filled = this.filled
-    twin.countLo = this.countLo
-    twin.countHi = this.countHi
+    twin.count = this.count
     twin.finished = this.finished
   }
 
@@ -306,23 +301,18 @@ class Sha512Engine {
       block[i] = 0
     }
     if (this.filled >= LENGTH_AT) {
-      this.compress(block, BLOCK_START)
+      this.compress(block, OFFSET_ZERO)
       for (let i: i32 = 0; i < LENGTH_AT && i < blockLen; i++) {
         block[i] = 0
       }
     }
-    storeWord(block, LENGTH_AT, (this.countHi << 3) | (this.countLo >> 61))
-    storeWord(block, LENGTH_AT + 8, this.countLo << 3)
-    this.compress(block, BLOCK_START)
-    const whole = new Array<u8>(SHA512_SIZE)
-    for (let i: i32 = 0; i < 8; i++) {
-      storeWord(whole, 8 * i, this.state[i])
-    }
+    storeWord(block, LENGTH_AT, this.count >> 61)
+    storeWord(block, LENGTH_AT + 8, this.count << 3)
+    this.compress(block, OFFSET_ZERO)
+    // Both sizes are whole words, so the digest is the first `size / 8` of them.
     const out = new Array<u8>(size)
-    const outLen: i32 = toI32(out.length)
-    const wholeLen: i32 = toI32(whole.length)
-    for (let i: i32 = 0; i < outLen && i < wholeLen; i++) {
-      out[i] = whole[i]
+    for (let i: i32 = 0; i < size / 8 && i < 8; i++) {
+      storeWord(out, 8 * i, this.state[i])
     }
     return out
   }
@@ -337,7 +327,7 @@ export class Sha512 {
   engine: Sha512Engine
 
   constructor() {
-    this.engine = new Sha512Engine(sha512Initial(), roundConstants())
+    this.engine = new Sha512Engine(sha512Initial())
   }
 
   update(data: u8[], off: i32, len: i32): void {
@@ -364,7 +354,7 @@ export class Sha384 {
   engine: Sha512Engine
 
   constructor() {
-    this.engine = new Sha512Engine(sha384Initial(), roundConstants())
+    this.engine = new Sha512Engine(sha384Initial())
   }
 
   update(data: u8[], off: i32, len: i32): void {
@@ -386,13 +376,13 @@ export class Sha384 {
 /** The SHA-512 digest of all of `data`, as a fresh 64-byte array. */
 export const sha512 = (data: u8[]): u8[] => {
   const hasher = new Sha512()
-  hasher.update(data, BLOCK_START, toI32(data.length))
+  hasher.update(data, OFFSET_ZERO, toI32(data.length))
   return hasher.digest()
 }
 
 /** The SHA-384 digest of all of `data`, as a fresh 48-byte array. */
 export const sha384 = (data: u8[]): u8[] => {
   const hasher = new Sha384()
-  hasher.update(data, BLOCK_START, toI32(data.length))
+  hasher.update(data, OFFSET_ZERO, toI32(data.length))
   return hasher.digest()
 }
