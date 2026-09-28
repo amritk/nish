@@ -1,0 +1,439 @@
+{
+  "version": "0.13.0",
+  "date": "2026-09-28",
+  "tag": "v0.13.0",
+  "range": {
+    "from": "v0.12.0",
+    "to": "fc939b7"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-12-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.12.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6e8adc7"
+      ],
+      "pr": 248,
+      "author": "github-actions[bot]",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "open-the-readme-with-what-the-name-stands",
+      "type": "docs",
+      "breaking": false,
+      "title": "open the README with what the name stands for, and mark stage0's src/ citations",
+      "body": "The README now leads with the repository description: Native Instruction\nStatic Host AKA Turbo Typescript, a fast subset of TypeScript without the\nencumbrance of JavaScript.\n\nComments and documents cite the deleted stage0 compiler by its old paths\n(`src/checker/arrays.ts`, `src/types.ts`, ...). Every such citation now\nreads \"stage0's `src/...`\", so it cannot be mistaken for a pointer into the\ntree: nine of those names match a module of the current compiler. The\nfixture sources in `tests/cases/`, the goldens and the changelog are left\nas written.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "7c8e5d3"
+      ],
+      "pr": 250,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "rename-every-tracked-path-to-kebab-case-251",
+      "type": "refactor",
+      "scope": "runtime",
+      "breaking": true,
+      "title": "rename every tracked path to kebab-case",
+      "body": "Step 1 of the cleanup pass in `.claude/linting.md`: renames only. The\n22 snake_case modules of `self/` (`emit_arrays.ts` is `emit-arrays.ts`),\nthe cookbook snippets and their `.args`, the benchmarks, the test\nharness scripts and fixtures under `tests/self/`, `tests/ir/` and\n`tests/layout/`, and the three runtime halves are kebab-case, and every\nimport, script, workflow and document that names them follows. The\nfixture trees (`tests/cases`, `tests/link`, `tests/wordings`,\n`tests/differential/corpus`) keep their names, as the rule says.\n\nWhat moves with the names and nothing else: `tests/self/goldens/` and\n`docs/IR_COOKBOOK.md` are regenerated, and differ from before only in\nthe spelling of the paths and the order the new names sort in. A\ncookbook listing or a benchmark is still called by its file name, so\n`bench/run.mjs` and `docs/BENCHMARKS.md` spell them with hyphens now.\n`scripts/check-filenames.mjs` exempts a `node_modules` directory,\nbecause that is the name package resolution looks for, and with that it\nprints nothing.\n\nMeasured: 179 paths renamed; `check-filenames.mjs` 179 -> 0; Biome 1366 -> 1214 warnings\nRefs: .claude/linting.md\n\nBREAKING CHANGE: the runtime sources the npm package ships are now\n`runtime/runtime-os.c`, `runtime/runtime-parallel.c` and\n`runtime/runtime-wasm.c` (were `runtime_os.c`, `runtime_parallel.c` and\n`runtime_wasm.c`). `--link` finds them itself; a build that compiles\nthem by hand has to follow the new names.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c9ff06d"
+      ],
+      "pr": 251,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "apply-biome-s-autofixes-252",
+      "type": "refactor",
+      "breaking": false,
+      "title": "apply Biome's autofixes",
+      "body": "Step 2 of the cleanup pass in `.claude/linting.md`: `biome lint --write`,\nthen the unsafe fix for `useBlockStatements` alone, read before it was\ncommitted. Every `if`, `else` and loop body has braces now. A template\nwith no `${}` is a plain string, a Yoda comparison reads the other way\nround, and one `let` that is never reassigned is a `const`. Nothing is\nreformatted beyond what a fix needed.\n\nThe compiler's IR does not move. `self/` compiled by the same compiler\nbefore and after the fixes gives byte-identical `.ll` for every module\nof `compile.ts` and of the three dump entry points. The `tests/self`\nchecked-dump goldens are regenerated, and differ only in the columns a\nnew brace moved and in that one `const`.",
+      "metrics": [
+        "Biome 1214 -> 256 warnings; self/ IR byte-identical (69 modules)"
+      ],
+      "refs": [
+        ".claude/linting.md"
+      ],
+      "tests": [],
+      "commits": [
+        "c39b2ab"
+      ],
+      "pr": 252,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "clear-the-lint-backlog-by-hand-and-make",
+      "type": "refactor",
+      "breaking": false,
+      "title": "clear the lint backlog by hand, and make every function an arrow",
+      "body": "Step 3 of the cleanup pass in `.claude/linting.md`. `npm run lint` now\nreports no warnings.\n\n- **Every `function` declaration is an arrow bound to a `const`**: 142\n  in the JavaScript tooling and 75 in the Nish programs (`std/`,\n  `examples/`, `docs/cookbook/`, `bench/`, `tests/self/`), which join\n  the compiler under the `no-function-declaration` plugin.\n  `docs/cookbook/fn-add-function.ts` keeps its `function`, because that\n  listing exists to show the spelling. A `const` is not hoisted, so every\n  converted file was checked for module-level code that reaches a\n  function before its definition.\n- **No shadowed names**: 45 locals and parameters that hid an outer\n  binding are renamed, with the language service rather than by text.\n- **Unused imports** are gone, and no test module re-exports what it\n  imports.\n- **Nested ternaries** are `if`/`else` chains, and each empty block says\n  why it is empty.\n- `useParseIntRadix` is off for Nish programs, because the builtin\n  `parseInt` takes one argument, and `useForOf` is off everywhere,\n  because six of its seven hits were argument parsers that consume a\n  value with `argv[++i]`.",
+      "metrics": [
+        "Biome 256 -> 0 warnings; 217 function declarations converted"
+      ],
+      "refs": [
+        ".claude/linting.md"
+      ],
+      "tests": [],
+      "commits": [
+        "df9aad0"
+      ],
+      "pr": 253,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "format-the-tree-with-biome-without-semicolons-254",
+      "type": "refactor",
+      "breaking": false,
+      "title": "format the tree with Biome, without semicolons",
+      "body": "Step 4 of the cleanup pass in `.claude/linting.md`, together with its\nstep 7. The formatter now writes semicolons only where JavaScript's\ninsertion rule needs one (`\"semicolons\": \"asNeeded\"`), and\n`npm run format` has run over everything Biome reads. The fixtures in\n`tests/cases/` keep theirs, because the formatter does not read them.\nSemicolon-free sources need a compiler that accepts them; 0.12.0 is the\nfirst release that does, and it is the seed the compiler is built with.\n\nThe compiler's IR does not move: every module's `.ll` is byte-identical\nbefore and after the pass. What does move is text other files quote or\nscrape. The `tests/self` goldens, `docs/IR_COOKBOOK.md` and three `-g`\ngoldens that step into `std/` are regenerated, differing only in line\nand column numbers. The registry checker, the `tests/run.js` checks\nthat read the compiler's sources, and the version bump in\n`release-pr.yml` match with or without a semicolon.",
+      "metrics": [
+        "compiler IR byte-identical; 286 files formatted"
+      ],
+      "refs": [
+        ".claude/linting.md"
+      ],
+      "tests": [],
+      "commits": [
+        "88ff16c"
+      ],
+      "pr": 254,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "make-every-lint-rule-an-error-and-add",
+      "type": "build",
+      "breaking": false,
+      "title": "make every lint rule an error, and add the checks a clean tree allows",
+      "body": "Steps 5, 6, 8 and 10 of the cleanup pass, which ends here.\n`.claude/linting.md` now describes the gates rather than a backlog.\n\n- **Every Biome rule is an `error`**, the `no-function-declaration`\n  plugin included, and `npm run lint` is `biome check .` with the\n  formatter on, so formatting is a gate. The file-name check runs\n  without `--advisory`.\n- **`noUnusedLocals` and `noUnusedParameters`** are on in\n  `tsconfig.json`; tsc is what catches an unused name in the compiler.\n- **knip** (`npm run lint:dead` and a CI step) finds no unused file,\n  dependency or export. The 139 names the compiler exported that no\n  other module imports are internal now, and six were dead code.\n- **shellcheck** runs in CI at `-S warning`, with its eight findings\n  fixed.\n- **A `PostToolUse` hook** formats each file an agent edits, and\n  `npm run lint:fix` does the same for a person.\n- **`.git-blame-ignore-revs`** lists the two style-only commits.\n- `organizeImports` stays off: sorting reorders declarations in the IR\n  of 36 of the compiler's 69 modules.",
+      "metrics": [
+        "compiler 1,404,800 -> 1,403,920 bytes (139 exports internal); self-compile time unchanged (median 591 ms)"
+      ],
+      "refs": [
+        ".claude/linting.md"
+      ],
+      "tests": [],
+      "commits": [
+        "42b2f55"
+      ],
+      "pr": 255,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "move-the-compiler-from-self-to-src-256",
+      "type": "refactor",
+      "breaking": true,
+      "title": "move the compiler from self/ to src/",
+      "body": "The compiler's source lives in `src/`, the name a reader looks for. It was\n`self/`, named for the self-hosting milestone when a TypeScript\nimplementation still sat in `src/` beside it; that one was deleted in\nWP19 R6, and every citation of it now reads \"stage0's `src/`\", so the name\nis free and unambiguous.\n\nEvery build script, workflow, config (`biome.json`, `tsconfig.json`,\n`knip.json`), test harness and document follows. `tests/self/` keeps its\nname: it tests the self-hosted compiler, and the fixture trees are left as\nwritten. The compiler's IR does not move apart from each module's\n`source_filename`, and the `tests/self` goldens differ only in the path.\n\nRefs: docs/wp19-stage0-retirement.md\n\nBREAKING CHANGE: a build from a checkout compiles `src/compile.ts`, not\n`self/compile.ts`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "2b2eb95"
+      ],
+      "pr": 256,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "parallelreduce-under-node-and-nl2348-at-the-call",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "parallelReduce under Node, and NL2348 at the call for a non-scalar reduce",
+      "body": "`parallelReduce` now prints the same natively and under Node's documented prelude path, and a reduce over `string` or class elements is refused with one NL2348 at the user's call, naming the type.\n\n**Under Node (#224).** `reduceBlockCount` and `reduceBlockStart` in `std/threads.ts` computed in `i64`. Under the prelude, `toI64` is a BigInt, and a BigInt throws when it meets a number, so every reduce threw. Both functions now compute in `f64`. Every value they reach is exact there (`n * k < 2^37`), so the blocks, and with them wp29 §11's determinism contract, are unchanged. A cross-check of 14.7M `(n, k)` pairs against the BigInt definition found no mismatch. Both functions also lose their divide-by-zero path and become `nounwind willreturn readnone`. `nish/threads` already resolved under the prelude's resolve hook, and `docs/RUN_UNDER_NODE.md` now says so.\n\n**At the call (#225).** A reduce's `T` is its element, its identity and its result. Instantiating the std body for a `string` or a class used to report five errors inside `std/threads.ts`. `reduceElementMessage` in `src/parallel.ts` now answers before instantiation, from `checkGenericCall`. It reuses the map rule's wording, so the program gets one NL2348 at its own call.\n\nRefs: docs/LANGUAGE.md#data-parallelism-nishthreads, docs/wp29-thread-surface.md\nTests: tests/link/par_reduce_blocks, tests/cases/reject_par_reduce_result_type, tests/cases/reject_par_reduce_result_class, and a tests/run.js check that runs par_map and par_reduce under Node against the native output\n\nFixes #224\nFixes #225",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e43fd3f"
+      ],
+      "pr": 259,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-surrogate-pair-escape-is-the-code-point",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a surrogate-pair escape is the code point it spells",
+      "body": "A high-surrogate escape (`\\uD800`–`\\uDBFF`) written immediately before a low-surrogate escape (`\\uDC00`–`\\uDFFF`) now encodes as the four UTF-8 bytes of the one code point it spells. Before, the lexer encoded each half separately, as six bytes of CESU-8. So the pair escape of U+1F600 was not `===` to the emoji, its `length` was 6, a `Map` key set with one spelling was not found with the other, and printing it wrote invalid UTF-8. Either half may be written `\\uXXXX` or `\\u{…}`, in plain and template literals alike.\n\n**A lone surrogate** still encodes on its own as three bytes (WTF-8), as before. `docs/LANGUAGE.md` now states that rule. Pairs are joined only inside one literal: concatenating two halves at run time gives six bytes, which is a stated divergence from JavaScript.\n\n**A braced escape above `0x10FFFF` is refused**, in TypeScript's words: \"An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive\". It used to accumulate in `i32` without a bound, so `\\u{10000D800}` wrapped into the surrogate range.\n\nRefs: docs/LANGUAGE.md (String literals)\nTests: tests/cases/str_surrogate_pair, tests/cases/str_surrogate_map_key, tests/cases/str_surrogate_lone, tests/cases/reject_surrogate_escape_too_large, tests/cases/reject_surrogate_escape_wraps\n\nFixes #246",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e0ca12c"
+      ],
+      "pr": 258,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-stored-result-is-not-a-discard-and",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a stored Result is not a discard, and Map of Result compiles",
+      "body": "`new Map<string, Result<i32, string>>()` could not be compiled at all. The must-handle rule (NL2025) fired inside `std/collections.ts`, on `items[to] = items[from]` and on `items.pop()`. The fix changes three things about how a `Result` is handed on.\n\n**An assignment moves a `Result`; it does not drop one.** `rs[0] = rs[1]` and `r2 = r1` now compile. `r2 = r1` reads `r1`, and `r2`, a local, must still be inspected. The value an assignment replaces is dropped, though, so a new rule, **NL2377**, refuses assigning a `Result` local again while the value it holds has not been read since it was written. That closes the hole the exemption would otherwise open (`let r = f(); r = g();` losing `f()`'s failure).\n\nThe check reads the function in source order, right-hand side before target. It is not a control-flow graph: a read in either branch of an `if` counts. An element or a field is not tracked slot by slot. `docs/LANGUAGE.md` states all of this.\n\n**A discard in a generic body is judged against the template's declared type**, as Rust's `#[must_use]` is. `items.pop()` on `items: T[]` drops a `T`, which is no longer refused at `T = Result`. A template that drops a `Result<T, E>` it declared is still refused at every instantiation. When the origin cannot be followed, the judgement fails closed.\n\n**Two emitter bugs hidden behind the compile error are fixed.**\n- A missed `get` on such a map now answers `null` where it answered `0` into a pointer.\n- A packable `Result<i32, i32>` Map value is now packed and unpacked across `valueAt`, `setValueAt` and `insertAt`. Without that, it linked and then segfaulted.\n\nRefs: docs/LANGUAGE.md (Result, rule 1)\nTests: tests/cases/map_value_result, tests/cases/map_value_result_by_value, tests/cases/res_result_store, tests/cases/res_result_store_flow, tests/cases/reject_result_store_unread, tests/cases/reject_result_overwrite_unread, tests/cases/reject_result_store_loop_unread, tests/cases/reject_result_generic_discarded\n\nFixes #233",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "193ff08"
+      ],
+      "pr": 260,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "ranged-integer-types-wp31-261",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "ranged integer types (WP31)",
+      "body": "`integer<Lo, Hi>` is a type: an `i32` the compiler knows lies in `[Lo, Hi]`. This is stage W1 of `docs/wp31-ranged-integers.md`. The name was reserved in 0.10.0, so nothing breaks.\n\n```ts\nconst getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i]\n```\n\n**The type.** Both bounds are integer literals that fit in `i32` (decimal, hex, octal or binary). It is `i32` everywhere, in both number modes. It displays and mangles canonically (`integer<0, 0xFF>` is `integer<0, 255>`, `rng.p0.p255`), and `-g` writes a `DW_TAG_typedef` with that name. `runtime/nish.d.ts` declares it for `tsc` as a `number` alias.\n\n**Entering the range is checked.** The checked places are:\n- an annotated initialiser;\n- an assignment, including the arithmetic and bitwise compound forms and `++`/`--`;\n- an argument or a `return`;\n- a field or object-literal field;\n- an array element, an element store, or `push`.\n\nEach costs one `sub` and one `icmp ult`, with a cold panic. The panic's `write` + `exit` tail is now shared with `panic` and `expect`. A literal outside the range is a compile error. A literal inside it, a narrower range, and a range that is all of `i32` cost nothing. The check survives `--unchecked-indexing`. Under Node the type is erased, and that divergence is declared.\n\n**Leaving it.** Every operator reads a ranged value as `i32`, and a shift count is masked to 31. `const` and a type argument keep the range (`identity(r)` is `identity$rng.p0.p9`); `let` widens.\n\n**Refusals**, each with a code (NL2378–NL2386):\n- a wrong number of bounds;\n- a non-literal or non-integer bound;\n- an empty range;\n- a bound outside `i32`, measured by significant digits per radix so no literal can wrap;\n- a literal type anywhere but a bound;\n- a range in a `declare function`;\n- `new Array<integer<1, 9>>(n)`, whose zero fill is outside the range.\n\nNL2333, the old refusal of the reserved name, is retired.\n\nProving entries away is W2, and the host-boundary `RangeError` is W3.",
+      "metrics": [],
+      "refs": [
+        "docs/wp31-ranged-integers.md",
+        "docs/LANGUAGE.md (Types)"
+      ],
+      "tests": [
+        "tests/cases/rng_param",
+        "rng_generic",
+        "rng_widen",
+        "rng_entries",
+        "rng_bitwise",
+        "rng_entry_panic",
+        "rng_entry_panic_f64",
+        "rng_entry_range_panic",
+        "rng_entry_push_panic",
+        "rng_entry_bitwise_panic",
+        "dbg_rng",
+        "reject_rng_*"
+      ],
+      "commits": [
+        "c624201"
+      ],
+      "pr": 261,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-proof-never-leaves-a-proof-consumer-and",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a proof never leaves a proof consumer, and an assignment ends a narrowing in an && chain",
+      "body": "Two soundness holes in narrowing are closed. Both let a program `tsc` refuses compile, and then read garbage natively where Node throws.\n\n**A `Result`'s proof no longer leaks (#234).** An identifier narrowed to `ok` used to carry that proof into anything its value flowed into: a ternary arm, an array literal, an unannotated `let`. So `const z = r.value > 0 ? r : q` with `q` an `Err` typed `z` as proven, and `z.value` compiled and read the error's payload as a value. Now a proof is visible only to a proof consumer: the receiver of `.ok`, `.value`, `.error`, `isOk()`, `isErr()`, `unwrapOr`, `expect` or `orReturn`, or a narrowing test. Anywhere else, the value is the unproven `Result`. `const y = r` inside a narrowing therefore loses the proof. That refuses a few programs `tsc` accepts, which is the safe direction, and `docs/LANGUAGE.md` says so. `T | null` narrowing never leaked this way, because a narrowed nullable is a different type.\n\n**An assignment inside an `&&`/`||` chain ends a narrowing (#235).** In `p !== null && g((p = null) === null) && p.v > 0`, the checker re-applied `p`'s narrowing after the middle operand set `p` to `null`. Now an operand that assigns a narrowed variable ends its narrowing for every later operand, for `T | null` and `Result` alike. This is the rule `assignInto` already applies between statements.\n\nRefs: docs/LANGUAGE.md (narrowing, Result)\nTests: tests/cases/reject_result_ternary_keeps_proof, reject_result_array_keeps_proof, reject_result_let_keeps_proof, reject_null_narrowing_assigned_in_chain, reject_result_narrowing_assigned_in_chain, res_proof_consumers\n\nFixes #234\nFixes #235",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "fd70c82"
+      ],
+      "pr": 265,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-misplaced-numeric-separator-is-refused-in-typescript",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a misplaced numeric separator is refused in TypeScript's words",
+      "body": "A numeric separator that is not between two digits is now refused by the lexer with TypeScript's own wording, as one `NL0001` syntax error per literal:\n\n- \"Numeric separators are not allowed here\" (TS6188). Examples: `0x_FF`, `10_`, `0xFF_n`, `1_.5`, `1e_5`, `1e5_` and `0_1`.\n- \"Multiple consecutive numeric separators are not permitted\" (TS6189). Examples: `1__0` and `0xF__F`.\n\nBefore this, a later phase refused the literal and named a rule it had not broken. `0x_FF` was reported as not fitting in i32, for example.\n\nSeparators in the right place now work as well. The parser removes them from a number's text, so `1_000_000`, `0xFF_FF`, `9_007_199_254_740_991`, `1_234.5_6` and `1e1_0` compile at their values, where before the first two were refused.\n\nRefs: docs/LANGUAGE.md#numeric-literals\nTests: tests/cases/math_numeric_separators, tests/cases/reject_separator_*\nFixes #263\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3db12be"
+      ],
+      "pr": 264,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-parameter-or-local-named-like-an-emitter",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "a parameter or local named like an emitter label compiles",
+      "body": "LLVM keeps a function's arguments, blocks and allocas in one namespace, and the emitter wrote each parameter as `%<name>`, as the source spelled it. Two names the emitter writes itself have no dot, so a parameter could collide with them:\n\n- `entry`, the block every function opens with. `const f = (entry: i32): i32 => entry + 1` produced IR that `llvm-as` refused (`unable to create block named 'entry'`).\n- `chr`, the one-byte slot `String.fromCharCode` allocates, which a parameter of that name defined twice.\n\nA parameter with either name is now written `%entry.param` or `%chr.param`. That happens in the `define`, at every read, in the packed-`Result` prologue, and in the `-g` `llvm.dbg.value` line. The debug record keeps the source name.\n\nLocals were never affected, because a local's slot is `%<name>.addr`. The IR of every other program is byte-identical.\n\nTests: tests/cases/reserved_label_names, tests/cases/reserved_label_names_dbg\nFixes #266\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "55a1567"
+      ],
+      "pr": 269,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "threads-p2-using-s-scope-and-s-spawn",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "threads P2, using s = scope() and s.spawn(fn, arg)",
+      "body": "A scope runs unlike tasks on threads of their own, and every task is joined before its block is left:\n\n```ts\nimport { scope } from \"nish/threads\";\n{\n  using s = scope();\n  s.spawn(sumOf, xs, sums, 0);           // sums[0] = sumOf(xs)\n  s.spawn(primesBelow, 1000, counts, 0); // counts[0] = primesBelow(1000)\n}                                        // joined here, on every exit\n```\n\n`using` is read as a contextual keyword, a flag on the existing variable declaration, and it binds only `scope()`. A scope is only ever the receiver of a `spawn`, so it cannot leave its block.\n\nThe join is emitted at every exit of the block: its end, a `return` (before the returned value is computed), and a `break` or `continue` that leaves it. It always comes before any arena release.\n\nA task runs, and its answer is stored with `dst[at] = entry(arg)`, when the scope joins. The first task runs on the calling thread and each other on a thread of its own. Every answer is then stored on the calling thread in spawn order, so two tasks naming one slot are ordered and never race.\n\nA task is held to the data-parallel rules: it writes nothing its caller can see, controls no arena, and answers a number, a `boolean` or an enum. Its entry is a named top-level function.\n\nUnder Node, `spawn` runs the task and stores its answer at once. NL2394 keeps the two meanings the same:\n- a destination is a `const` local bound to a fresh array that is never handed on;\n- between a scope's first spawn and its block's end, the program may not read a destination or write memory a task could read.\n\nN tasks over N arrays compile, and every program that could tell the two apart is refused. `using` needs `--js-explicit-resource-management` on Node 22 and is native from Node 24.\n\nNew codes NL2387–NL2394.\n\nMeasured: 3.30x on four unlike tasks on 4 cores (examples/tasks.ts: 1.806 s sequential, 0.547 s as one scope)\nRefs: docs/LANGUAGE.md#scoped-tasks, docs/wp29-thread-surface.md\nTests: tests/link/thread_scope_basic, thread_scope_exit_paths, thread_scope_many_arrays, thread_scope_nested_arena, tests/cases/reject_thread_*\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c352966"
+      ],
+      "pr": 262,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "a-binary-octal-exponent-or-separated-literal-reads",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a binary, octal, exponent or separated literal reads its true value",
+      "body": "Every numeric-literal spelling the language accepts is now read at the value it spells, in every numeric type.\n\n- `1e5` as an `i32` was 245, which was a silent miscompile. The integer reader took the `e` for the hex digit 14. It is now 100000.\n- `0b1010` and `0o17` were refused as \"does not fit in i32\", because the runtime's `Number` reads them as NaN. They are now 10 and 15.\n- `1_000` is 1000 in every type.\n\nOne reader, `numericLiteralValue`, turns a literal's text into the double TypeScript reads. It drops separators, and it reads `0b`/`0o` through hexadecimal, so a literal past 2^53 rounds once, as TypeScript rounds it. Everything that reads a literal as a number now goes through it:\n- the fit and fraction checks;\n- the emitter's constants;\n- ranged-type bounds;\n- module constants, enum members and case labels;\n- the loop analyses.\n\nAn exponent counts as a fraction only when it leaves one: `1e3` is 1000, `100e-2` is 1, and `1e-1` is refused in integer position. An `i64` module constant past 2^53 (`1e19`) is now refused in the words an `i64` literal already had. Before, it was refused as a non-integer or folded to wrapped bits.\n\nDecimal and hexadecimal programs keep byte-identical IR.\n\nRefs: docs/LANGUAGE.md#numeric-literals\nTests: tests/cases/literal_spellings, tests/cases/reject_literal_*\nFixes #267\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "101910e"
+      ],
+      "pr": 270,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-26"
+    },
+    {
+      "id": "prove-range-entries-and-index-through-declared-ranges",
+      "type": "perf",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove range entries and index through declared ranges (WP31)",
+      "body": "A declared range is now a fact the bounds proof reads. A range check that the program already makes unnecessary is not emitted, and one left inside a loop warns.\n\n- **The type answers; nothing is stored.** `integer<Lo, Hi>`, and the unsigned widths' own ranges, give an index its non-negativity and its upper bound. A `u8`/`u16`/ranged local is an index type. `const k = toI32(b)` of one records `k < Hi + 1`. Every write into a ranged place is an entry, so there is no fact to forget.\n- **Every range entry is judged** at the point where it is checked. A local proven inside the range, by a guard, a loop bound or an earlier check, enters with no check at all. So does `toI32` of a range that fits. The proof is kept per instantiation. The function's attributes lose the panic tail when every entry in it is proven.\n- **NL9013**, a performance warning, fires for an unproven entry inside a loop. It names the guard that would prove it, or it suggests binding a computed value to an `i32` local. It is silent outside loops, silent under `--no-warn-performance`, and unaffected by `--unchecked-indexing`.\n\nwp31 §12's `getByte` program, with the index declared `integer<0, 255>`, now compiles `getByte`, `sumCalled` and `sumInline` to `{ nounwind willreturn readonly }` with no bounds or range check left. That is the attribute `sumInline` had before the range.\n\nRefs: docs/wp31-ranged-integers.md §8, docs/LANGUAGE.md\nTests: tests/cases/perf_rng_getbyte, perf_rng_quiet, perf_rng_loop, perf_rng_counter, arr_bounds_ranged\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3f335cd"
+      ],
+      "pr": 268,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-27"
+    },
+    {
+      "id": "a-numeric-literal-with-a-leading-zero-is",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a numeric literal with a leading zero is refused in TypeScript's words",
+      "body": "A decimal literal that starts with `0` and another digit is now refused by the lexer in TypeScript's words, as one `NL0001` syntax error per literal:\n\n- a run of octal digits (`017`, `00`, `07n`) gets TS1121, `Octal literals are not allowed. Use the syntax '0o17'`, naming the `0o` spelling of the same digits;\n- any other run (`09`, `08.5`) gets TS1489, `Decimals with leading zeros are not allowed`.\n\nBefore, `const x: i32 = 017` compiled and printed 17, a value neither `tsc` nor Node gives it, since both refuse the file.\n\n`0`, `0.5`, `0e1`, `0x…`, `0b…` and `0o…` stay legal. So does a zero inside a fraction or an exponent (`1.05`, `1e05`). The leading-zero error outranks a separator later in the literal, as it does in `tsc`.\n\nRefs: docs/LANGUAGE.md#numeric-literals\nTests: tests/cases/reject_leading_zero_octal, tests/cases/reject_leading_zero_decimal, tests/cases/leading_zero_legal\nFixes #271\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dd6fac3"
+      ],
+      "pr": 272,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-27"
+    },
+    {
+      "id": "ranged-parameters-at-the-host-boundary-wp31-273",
+      "type": "feat",
+      "scope": "interop",
+      "breaking": false,
+      "title": "ranged parameters at the host boundary (WP31)",
+      "body": "An exported function with an `integer<Lo, Hi>` parameter is now safe to call from a C, N-API or wasm host.\n\n- **Where the check lives follows the linkage.** A function that `--strict-exports` makes `internal` keeps each check at its call sites, where the facts are. Any other function checks its ranged parameters in its own prologue, because a host may pass any `int32_t`. Its Nish callers then skip their own check. A C host that passes a value out of range gets the panic it would get anywhere else.\n- **The bridges throw first.** The N-API shim reads the argument as a double. The wasm loader judges the number itself before the engine's ToInt32 could wrap it. Outside the range, both throw `RangeError: pick: argument 2 (day) must be an integer in [1, 7]`, 4294967301 included. A value that is not a number throws `TypeError`. `--emit-napi-async` rejects with the same error.\n- **The sidecars say so.** The C header spells the parameter `int32_t`, with its range and what leaving it does above the prototype; it compiles under `-std=c11 -Wall -Wextra -Werror -pedantic`. The `.d.ts` spells it `number` and names the `RangeError`. A range inside data (an array, a record, a `Result`) is not described.\n\nNL9013 no longer warns about an argument its callee checks in its own prologue.\n\nRefs: docs/wp31-ranged-integers.md §9, docs/LANGUAGE.md (Interop)\nTests: tests/cases/interop_rng_param, interop_rng_host (+ .c host), interop_rng_loop; tests/run.js \"interop_rng\"\nPart of #257",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "60df17a"
+      ],
+      "pr": 273,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-27"
+    },
+    {
+      "id": "record-the-ranged-integer-measurements-274",
+      "type": "docs",
+      "scope": "wp31",
+      "breaking": false,
+      "title": "record the ranged-integer measurements",
+      "body": "Stage W4 of the ranged integers measures WP31 §10's acceptance program: wp15's lexer-shaped cursor and perf_rng_getbyte's three functions, each built with and without `--unchecked-indexing` and timed under wp15 §2's protocol.\n\nThe cursor's proven build and its unchecked twin are byte-identical executables. Declaring the cursor `integer<0, 2147483647>` costs 1.038x and warns at the three steps that can leave the range. `getByte` with `i: integer<0, 255>` compiles to the same module as with `i: i32`: since #222, the call-site facts prove both. A declared range therefore changes code only at an exported boundary, where W3's prologue check replaces `nish_panic_index`.\n\n`bench/cursor.ts` and `bench/getbyte.ts` are committed. The bench section of `tests/run.js` pins these checks:\n- `@scan` is identical under the flag;\n- the three warnings;\n- a native checksum recomputed in JS;\n- getbyte's panic-free `readonly` module.",
+      "metrics": [
+        "cursor proven/unchecked 0.991x, ranged-declared 1.038x; getByte 0.994x"
+      ],
+      "refs": [
+        "docs/wp31-ranged-integers.md#10",
+        "docs/wp15-performance.md"
+      ],
+      "tests": [
+        "tests/run.js (bench)",
+        "bench/cursor.ts",
+        "bench/getbyte.ts"
+      ],
+      "commits": [
+        "0b75f06"
+      ],
+      "pr": 274,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-27"
+    },
+    {
+      "id": "plan-the-round-trip-between-typescript-and-nish",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan the round trip between TypeScript and Nish, at zero native cost (WP33)",
+      "body": "A new work package, WP33, plans how a program moves in both directions\nbetween TypeScript and Nish. On the way in, an agent ports a TypeScript\nproject by driving the compiler. On the way out, `--emit ts` turns a Nish\nprogram into TypeScript that runs on Node, Bun or a browser and means\nwhat the native build meant. Nothing is built yet.\n\nThe deciding constraint is that neither direction may cost the native\nbuild anything. Every stage is a compile-time analysis, a diagnostic, or\nTypeScript the compiler writes out, and none changes a lowering. So no\n`.ll` golden moves, and `bench/instructions.json` is never raised for it.\nWhere JavaScript's meaning is the slower one, Nish's meaning stays: it\nbecomes a translation on the way out and a flagged site on the way in.\n\nThe note sorts every difference between a program's two readings into\nfour classes: identical; a safety net, where native stops and TypeScript\ncarries on with a wrong value; translated; and untranslatable, which the\nlanguage may never add. It keeps a ledger of every known difference, and\nit records six decisions, each chosen to keep native speed:\n\n- strings stay UTF-8 bytes;\n- `slice` keeps its check, since JavaScript's clamp costs 13 instructions\n  a call and can never be proven away;\n- arrays of records stay contiguous, with the aliasing flagged on the way\n  in;\n- the typed-array names lose `push` and `pop`;\n- `--json` gains a `fix` field;\n- `number` stays i32 in strict mode and f64 in compat mode.\n\nRUN_UNDER_NODE.md gains four divergences it did not list: `slice` bounds,\nrecord copies into arrays, `new Array<T>(n)` holes, and `push` on the\ntyped-array names. The construct checklist in ARCHITECTURE.md now asks\nevery construct for its TypeScript reading.",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md",
+        "docs/RUN_UNDER_NODE.md",
+        "docs/wp15-performance.md"
+      ],
+      "tests": [],
+      "commits": [
+        "bb97533"
+      ],
+      "pr": 276,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "plan-hosting-cs-starting-with-its-relay-on",
+      "type": "docs",
+      "scope": "wp34",
+      "breaking": false,
+      "title": "plan hosting cs, starting with its relay on a network stack in std",
+      "body": "* docs(wp33): plan what the compiler owes the port of cs\n\nA second corpus beside the compiler itself: a browser arena shooter and\nits servers, which the owner wants written entirely in Nish. The note\nmeasures first. The released 0.12.0 parsed none of the game's source\nfiles, and every first refusal was something the game rewrites on its\nown side, such as an inline `type` import, `as const`, a regex or `?.`.\nSo the list is drawn from what the game *does*, and each item names\nthe part of it that cannot be written without it.\n\nThere are fourteen items: exported enums and aliases, JavaScript's zero\nand the missing `Math`, a wall clock and entropy, and an `--overlap`\nflag that refuses anything meaning two things under V8 and natively.\nThe flag carries most weight, since the port rewrites in place and runs\none source in both meanings for months. Then come `std/crypto`, typed\nJSON, host imports on `wasm`, programs that do not exit, sockets and a\nloop the program owns (wp24's refusal of `async` stands), HTTP and\nWebSocket, processes, WP27's remaining stages, and discriminated\nunions. The game's repository holds the port's own order and its\ncutover gates in `docs/nish-port.md`.\n\nRefs: docs/wp33-hosting-cs.md\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01812EzT4oFUanvz6FEZGKKJ\n\n* docs(wp34): start the cs port with its relay, on a Nish network stack\n\nThe owner set the order: the port of cs begins with the Rust half of\nits game server. That is the relay, which terminates WebTransport and\nforwards game datagrams over UDP. It is rebuilt in Nish on a network\nstack that serves HTTP/1.1, HTTP/2 and HTTP/3 with streaming bodies,\nraw sockets and WebTransport. The note moves from WP33 to WP34, because\nWP33 is now the round trip between TypeScript and Nish. Its separate\noverlap flag is withdrawn in favour of WP33's portability class.\n\nThe relay goes first because it computes nothing the game does. Its\ncontracts are two byte formats already pinned by fixtures, so it\ncarries none of the port's determinism risk. It is also the edge a\nnative game server needs before it can take a player.\n\nPhase one asks the compiler and runtime for five things: exported\nenums, byte plumbing, a clock and entropy, sockets with an epoll loop\nthe program owns (wp24's refusal of `async` stands), and constant-time\nbuiltins. Memory stays bounded without a new model, because pools are\nsized from the relay's caps. The stack is seventeen lanes in a package\nof its own, and most of them are proved by their RFC's own test vectors\nbefore a socket exists. The TLS 1.3 handshake is one state machine,\ncarried by TLS records over TCP and by CRYPTO frames over QUIC.\n\nRefs: docs/wp34-hosting-cs.md\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01812EzT4oFUanvz6FEZGKKJ\n\n* docs(wp34): put the network stack in the standard library\n\nThe owner decided where the stack lives: in `std/`, not in a package\nof its own. This follows wp26's line. A builtin exists for a syscall,\nand everything the language can express is a module. So the sockets\nand the loop become a builtin module, `nish:net`, beside `nish:fs`\nand `nish:io`. Everything above them becomes `nish/crypto/*` and\n`nish/net/*`, and multi-segment `nish/` specifiers already resolve.\n\nWhat it buys is what wp26 §1a measured: a std module compiles into its\nimporter, so the attribute fixpoint sees through it and dead code is\nstripped. What it costs is cadence, since cs can use a stack lane only\nonce a release carries it. The interop suites run as a CI job of their\nown, beside `npm test`. The note also corrects S5 to match its own wave\ntable: the stack serves the game's HTTP once the relay is live.\n\nRefs: docs/wp34-hosting-cs.md\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01812EzT4oFUanvz6FEZGKKJ",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "fc939b7"
+      ],
+      "pr": 277,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    }
+  ]
+}
