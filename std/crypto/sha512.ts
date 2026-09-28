@@ -202,7 +202,12 @@ class Sha512Engine {
       w[t] = loadWord(src, off + 8 * t)
     }
     for (let t: i32 = 16; t < wLen; t++) {
-      w[t] = smallSigma1(w[t - 2]) + w[t - 7] + smallSigma0(w[t - 15]) + w[t - 16]
+      // Named offsets rather than `w[t - 2]`, so the bounds prover sees each index.
+      const t2: i32 = t - 2
+      const t7: i32 = t - 7
+      const t15: i32 = t - 15
+      const t16: i32 = t - 16
+      w[t] = smallSigma1(w[t2]) + w[t7] + smallSigma0(w[t15]) + w[t16]
     }
     let a = h[0]
     let b = h[1]
@@ -212,19 +217,43 @@ class Sha512Engine {
     let f = h[5]
     let g = h[6]
     let hh = h[7]
-    for (let t: i32 = 0; t < wLen && t < kLen; t++) {
-      const ch = (e & f) ^ (~e & g)
-      const maj = (a & b) ^ (a & c) ^ (b & c)
-      const t1 = hh + bigSigma1(e) + ch + k[t] + w[t]
-      const t2 = bigSigma0(a) + maj
-      hh = g
-      g = f
-      f = e
-      e = d + t1
-      d = c
-      c = b
-      b = a
-      a = t1 + t2
+    // §6.4.2 step 4, eight rounds per pass. Rather than shift eight words down
+    // each round, the rounds rename them: T1 accumulates in the word that
+    // becomes the new `a`, and the word that becomes the new `e` is `d + T1`,
+    // so after eight rounds every word is back in its own name. Each index is
+    // `u` minus a constant, which the bounds prover can see; `u + 1` it cannot.
+    for (let u: i32 = 7; u < wLen && u < kLen; u += 8) {
+      const r0: i32 = u - 7
+      const r1: i32 = u - 6
+      const r2: i32 = u - 5
+      const r3: i32 = u - 4
+      const r4: i32 = u - 3
+      const r5: i32 = u - 2
+      const r6: i32 = u - 1
+      hh = hh + bigSigma1(e) + ((e & f) ^ (~e & g)) + k[r0] + w[r0]
+      d = d + hh
+      hh = hh + bigSigma0(a) + ((a & b) ^ (a & c) ^ (b & c))
+      g = g + bigSigma1(d) + ((d & e) ^ (~d & f)) + k[r1] + w[r1]
+      c = c + g
+      g = g + bigSigma0(hh) + ((hh & a) ^ (hh & b) ^ (a & b))
+      f = f + bigSigma1(c) + ((c & d) ^ (~c & e)) + k[r2] + w[r2]
+      b = b + f
+      f = f + bigSigma0(g) + ((g & hh) ^ (g & a) ^ (hh & a))
+      e = e + bigSigma1(b) + ((b & c) ^ (~b & d)) + k[r3] + w[r3]
+      a = a + e
+      e = e + bigSigma0(f) + ((f & g) ^ (f & hh) ^ (g & hh))
+      d = d + bigSigma1(a) + ((a & b) ^ (~a & c)) + k[r4] + w[r4]
+      hh = hh + d
+      d = d + bigSigma0(e) + ((e & f) ^ (e & g) ^ (f & g))
+      c = c + bigSigma1(hh) + ((hh & a) ^ (~hh & b)) + k[r5] + w[r5]
+      g = g + c
+      c = c + bigSigma0(d) + ((d & e) ^ (d & f) ^ (e & f))
+      b = b + bigSigma1(g) + ((g & hh) ^ (~g & a)) + k[r6] + w[r6]
+      f = f + b
+      b = b + bigSigma0(c) + ((c & d) ^ (c & e) ^ (d & e))
+      a = a + bigSigma1(f) + ((f & g) ^ (~f & hh)) + k[u] + w[u]
+      e = e + a
+      a = a + bigSigma0(b) + ((b & c) ^ (b & d) ^ (c & d))
     }
     h[0] = h[0] + a
     h[1] = h[1] + b
