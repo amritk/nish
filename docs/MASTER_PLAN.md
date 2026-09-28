@@ -849,12 +849,13 @@ major. Whether it happens at all is still wp22 §10's open question.
   is a diagnostic for a program that already fails, so neither withdraws
   anything. S4's build cache and S5's prebuilt distribution follow them
   ([wp21-packages.md](wp21-packages.md) §8).
-- **Hosting cs** ([wp33-hosting-cs.md](wp33-hosting-cs.md)), proposed: the
-  fourteen items the port of a browser game and its servers needs from the
-  compiler — a clock, sockets, host imports on `wasm`, programs that do not
-  exit, and the `--overlap` check among them — each tied to the part of the
-  game that cannot be written without it. The port's own plan, and its order,
-  are in the game's repository.
+- **Hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)), proposed: the
+  port of a browser game and its servers, starting with its Rust relay on a
+  Nish network stack (HTTP/1.1, HTTP/2, HTTP/3, WebTransport). Phase one asks
+  five things of the compiler and runtime — exported enums, byte plumbing, a
+  clock and entropy, sockets with a loop the program owns, constant-time
+  builtins — and the stack itself lives in a package of its own. The port's
+  order is in the game's repository.
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
