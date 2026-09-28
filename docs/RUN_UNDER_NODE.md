@@ -10,10 +10,12 @@ you are using:
 | | What it does | Fidelity |
 | --- | --- | --- |
 | **The prelude** (`runtime/nish.mjs`) | Supplies the globals Nish has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
-| **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Loads the program through the compiler's own checker and rewrites every expression from the recorded types | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
+| **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
 
-The rewriter is the testing oracle: it is exact because it can see the type of
-every expression and turn `a + b` into `(a + b) | 0`. The prelude is the thing
+The rewriter was the testing oracle: it was exact because it could see the type
+of every expression and turn `a + b` into `(a + b) | 0`. Its proposed successor
+is `--emit ts` ([wp33-round-trip.md](wp33-round-trip.md) §4), which writes the
+same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
 
@@ -82,6 +84,27 @@ no prelude can reach it. They are language decisions
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.
+- **`s.slice(a, b)` clamps and takes negative indices here**, and panics
+  natively outside `[0, length]`: `"abcdef".slice(2, 10)` is `cdef` under Node
+  and `slice out of range: [2, 10) of length 6` natively, and `slice(-2, 6)` is
+  `ef` against a panic. Unlike `a[i]`, JavaScript defines both as correct, so a
+  program ported from TypeScript can depend on them. `substring` keeps
+  JavaScript's clamping exactly; `slice` is the checked, faster one
+  ([wp15-performance.md](wp15-performance.md) §4).
+- **A record put into an array is copied natively** and shared here
+  ([Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)).
+  After `ps.push(p); p.x = 9`, `ps[0].x` is still the old value natively and
+  `9` under Node, and `[p, p]` is two records natively and one object twice
+  here. The reverse also holds: after `const r = ps[0]; ps[0] = q`, `r` reads
+  `q`'s fields natively, because it points into the slot, and the old object
+  under Node.
+- **`new Array<T>(n)` has holes here.** Natively it zero-fills, and under Node
+  every slot is `undefined` until written, so `a[1] + 1.0` is `1` natively and
+  `NaN` here.
+- **The typed-array names are plain arrays natively.** `Float64Array` is
+  `f64[]` in the language, `push` and `pop` included, and under Node it is
+  JavaScript's fixed-length typed array: `t.push(5.0)` is
+  `TypeError: t.push is not a function`.
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
   an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)
@@ -104,6 +127,11 @@ no prelude can reach it. They are language decisions
   something quietly wrong, which is the failure mode to want: a number that
   silently stopped wrapping at 2^53 would be much worse than a thrown error
   naming the line.
+- **Node only.** The prelude installs its loader with `node:module`'s
+  `registerHooks`, which Bun does not have (`Export named 'registerHooks' not
+  found`), and `runtime/shim.mjs` imports `node:fs`, `node:child_process` and
+  `node:os`, which a browser does not have.
+  [wp33-round-trip.md](wp33-round-trip.md) §4.3 splits the runtime by host.
 - **A scope's tasks run at the spawn under Node**, one after another, and each
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes

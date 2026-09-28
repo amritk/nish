@@ -149,7 +149,7 @@ function, class, interface or method is monomorphised, WP18), `symbol`,
 | Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
 | Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
-| String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. |
+| String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. [wp33](wp33-round-trip.md) §7 Q1 keeps it: UTF-16 offsets would cost the native build, so this stays a translated difference between the two readings, flagged on the way in. |
 
 ## 4. What exists today
 
@@ -852,6 +852,17 @@ major. Whether it happens at all is still wp22 §10's open question.
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
+- **The round trip** ([wp33-round-trip.md](wp33-round-trip.md)), decided
+  and unbuilt: `--emit ts` as the way back out to TypeScript, a `portability`
+  warning at each place the two readings differ, and fixes in `--json` for an
+  agent porting a TypeScript project in. Its rule binds now: every construct
+  states its TypeScript reading. None of it may cost the native build: no
+  stage moves a `.ll` golden or raises `bench/instructions.json`, and where
+  JavaScript's meaning is the slower one, Nish's stays and is translated on
+  the way out. Its §7 records the six decisions: strings stay UTF-8 bytes,
+  `slice` keeps its check, record arrays stay contiguous with the aliasing
+  flagged on the way in, the typed-array names lose `push` and `pop`, `--json`
+  gains a `fix` field, and `number` stays i32 in strict and f64 in compat.
 
 #### Settled, with the note that settles it
 
