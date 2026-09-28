@@ -42,9 +42,10 @@ export const SHA256_BLOCK: i32 = 64
  *
  * A function over a `switch` rather than a table, because a module constant
  * cannot be an array ([LANGUAGE.md](../../docs/LANGUAGE.md#module-constants))
- * and building one per hasher would be sixty-four stores for every `new`. LLVM
- * turns a `switch` whose every arm returns a constant into a read-only lookup
- * table, so this costs one load. `t` is the round number, never message data.
+ * and building one per hasher would be sixty-four stores for every `new`. LLVM's
+ * code generator turns a `switch` whose every arm returns a constant into a
+ * read-only lookup table, so in the binary this is one load. `t` is the round
+ * number, never message data.
  */
 const sha256RoundConstant = (t: i32): u32 => {
   switch (t) {
@@ -372,6 +373,8 @@ export class Sha256 {
       for (let i: i32 = 0; i < 8; i += 1) {
         toState[i] = fromState[i]
       }
+    } else {
+      panic("Sha256: a hash value that is not eight words")
     }
     sha256CopyBytes(this.block, 0, twin.block, 0, this.fill)
     twin.fill = this.fill
