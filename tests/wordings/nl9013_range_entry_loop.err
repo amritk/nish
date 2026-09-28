@@ -1,0 +1,1 @@
+`k` is not proven to lie in integer<0, 63> here, so entering the range keeps its check on every iteration of this loop: guard it with a test that reaches it — `if (k >= 0 && k <= 63)` proves it

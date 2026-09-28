@@ -148,6 +148,7 @@ const CH_MINUS: i32 = 45
 const CH_DOT: i32 = 46
 const CH_SLASH: i32 = 47
 const CH_0: i32 = 48
+const CH_7: i32 = 55
 const CH_9: i32 = 57
 const CH_COLON: i32 = 58
 const CH_SEMICOLON: i32 = 59
@@ -186,6 +187,13 @@ const CH_RBRACE: i32 = 125
 const CH_TILDE: i32 = 126
 const CH_AT: i32 = 64
 const CH_HASH: i32 = 35
+
+/** TypeScript's TS6188 and TS6189, for a numeric separator not between two digits. */
+const SEPARATOR_HERE: string = "Numeric separators are not allowed here"
+const SEPARATOR_DOUBLED: string = "Multiple consecutive numeric separators are not permitted"
+
+/** TypeScript's TS1489, for a decimal literal that starts with `0` and another digit. */
+const DECIMAL_LEADING_ZERO: string = "Decimals with leading zeros are not allowed"
 
 /** End of input, and the answer to every read past it. */
 const CH_EOF: i32 = -1
@@ -344,6 +352,29 @@ const utf8Encode = (cp: i32): string => {
   )
 }
 
+/**
+ * A numeric literal's text without its digit separators — `1_000` is `1000` —
+ * which is the spelling every later phase reads. The lexer has already refused
+ * a separator anywhere but between two digits, so dropping them all is exact.
+ */
+export const withoutSeparators = (text: string): string => {
+  if (text.indexOf("_") < 0) {
+    return text
+  }
+  const digits = new StringBuilder()
+  let chunk = 0
+  let i = 0
+  while (i < text.length) {
+    if (text.charCodeAt(i) === CH_UNDERSCORE) {
+      digits.add(text.slice(chunk, i))
+      chunk = i + 1
+    }
+    i = i + 1
+  }
+  digits.add(text.slice(chunk, text.length))
+  return digits.toText()
+}
+
 export class Lexer {
   source: string
   /** Read cursor, a byte offset. */
@@ -382,6 +413,18 @@ export class Lexer {
   escapeTooLarge: boolean
   /** Whether an escape in the literal being scanned was `escapeTooLarge`. */
   literalTooLarge: boolean
+  /**
+   * The error for the numeric literal being scanned — a leading zero, or else
+   * its first misplaced separator — or empty when it has neither.
+   */
+  numberError: string
+  /**
+   * The kind of the literal a `numberError` stood in for, or `TOK_END` when
+   * there is none: the next token `next()` hands out is that literal, over the
+   * same bytes, so the parser reads a number where the programmer wrote one
+   * and the error is the only one the literal costs.
+   */
+  pendingNumber: i32
 
   /**
    * The pieces of the literal being scanned, for the literals that have an
@@ -402,6 +445,8 @@ export class Lexer {
     this.escapeEnd = 0
     this.escapeTooLarge = false
     this.literalTooLarge = false
+    this.numberError = ""
+    this.pendingNumber = TOK_END
     this.literal = new StringBuilder()
     this.skipShebang()
   }
@@ -480,6 +525,12 @@ export class Lexer {
    * counting.
    */
   next(): void {
+    if (this.pendingNumber !== TOK_END) {
+      const kind = this.pendingNumber
+      this.pendingNumber = TOK_END
+      this.emit(kind, this.end, this.source.substring(this.start, this.end))
+      return
+    }
     this.skipTrivia()
     this.start = this.pos
     if (this.pos >= this.source.length) {
@@ -529,10 +580,18 @@ export class Lexer {
    * A numeric literal. The text is kept as written — `0x10` stays `0x10` — and
    * the parser converts it, because the conversion needs the type the context
    * demands and the lexer has no context. Digit separators are part of the
-   * token and the parser drops them.
+   * token and the parser drops them (`withoutSeparators`).
+   *
+   * A separator is allowed only between two digits of the literal, as it is in
+   * TypeScript, and every other `_` is refused here in `tsc`'s words — after a
+   * radix prefix, doubled, trailing, or beside a `.` or an exponent. So is a
+   * decimal literal with a leading zero (`017`, `09`). The literal is still
+   * scanned to its end, so the error takes the whole literal's place and is
+   * the only one it costs.
    */
   scanNumber(): void {
     let end = this.pos
+    this.numberError = ""
     const second = this.at(end + 1)
     if (
       this.at(end) === CH_0 &&
@@ -543,25 +602,37 @@ export class Lexer {
         second === CH_O_LOWER ||
         second === CH_O_UPPER)
     ) {
-      end = end + 2
-      while (end < this.source.length && (isIdentPart(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-        end = end + 1
-      }
-      if (this.at(end - 1) === CH_N_LOWER) {
-        this.emit(TOK_BIGINT, end, this.source.substring(this.start, end))
-        return
-      }
-      this.emit(TOK_NUMBER, end, this.source.substring(this.start, end))
+      end = this.scanDigits(end + 2, true)
+    } else {
+      end = this.scanDecimal(end)
+    }
+    // `123n` is one BigInt token, as it is in TypeScript; the language has no
+    // `bigint`, and the parser says so about the literal rather than about a
+    // stray `n` after it.
+    if (this.at(end) === CH_N_LOWER) {
+      this.emitNumber(TOK_BIGINT, end + 1)
       return
     }
-    while (end < this.source.length && (isDigit(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-      end = end + 1
+    this.emitNumber(TOK_NUMBER, end)
+  }
+
+  /** The end of a decimal literal's digits, point and exponent, starting at `at`. */
+  scanDecimal(at: i32): i32 {
+    // `0_1` is refused too: a leading `0` is where a legacy octal literal
+    // would start, and TypeScript allows no separator after it.
+    if (this.at(at) === CH_0 && this.at(at + 1) === CH_UNDERSCORE) {
+      this.numberError = SEPARATOR_HERE
     }
+    // `017` is a legacy octal literal and `09` a decimal with a leading zero,
+    // and TypeScript refuses both, as Node does in a module. Recorded before
+    // the digits are scanned, so it outranks a separator after them: `07_1`
+    // is an octal literal to `tsc`, not a misplaced separator.
+    if (this.at(at) === CH_0 && isDigit(this.at(at + 1))) {
+      this.numberError = this.leadingZeroError(at)
+    }
+    let end = this.scanDigits(at, false)
     if (this.at(end) === CH_DOT) {
-      end = end + 1
-      while (end < this.source.length && (isDigit(this.at(end)) || this.at(end) === CH_UNDERSCORE)) {
-        end = end + 1
-      }
+      end = this.scanDigits(end + 1, false)
     }
     const exponent = this.at(end)
     if (exponent === CH_E_LOWER || exponent === CH_E_UPPER) {
@@ -569,21 +640,90 @@ export class Lexer {
       if (this.at(after) === CH_PLUS || this.at(after) === CH_MINUS) {
         after = after + 1
       }
-      if (isDigit(this.at(after))) {
-        end = after
-        while (end < this.source.length && isDigit(this.at(end))) {
-          end = end + 1
-        }
+      if (isDigit(this.at(after)) || this.at(after) === CH_UNDERSCORE) {
+        end = this.scanDigits(after, false)
       }
     }
-    // `123n` is one BigInt token, as it is in TypeScript; the language has no
-    // `bigint`, and the parser says so about the literal rather than about a
-    // stray `n` after it.
-    if (this.at(end) === CH_N_LOWER) {
-      this.emit(TOK_BIGINT, end + 1, this.source.substring(this.start, end + 1))
+    return end
+  }
+
+  /**
+   * TypeScript's error for a decimal literal that starts at `at` with `0` and
+   * another digit. A run of octal digits is TS1121, which names the `0o`
+   * spelling of the same digits, and any other is TS1489; the run ends at the
+   * first byte that is not a digit, as `tsc`'s legacy octal scan does.
+   */
+  leadingZeroError(at: i32): string {
+    let end = at
+    let octal = true
+    while (isDigit(this.at(end))) {
+      octal = octal && this.at(end) <= CH_7
+      end = end + 1
+    }
+    if (!octal) {
+      return DECIMAL_LEADING_ZERO
+    }
+    let first = at
+    while (first < end - 1 && this.at(first) === CH_0) {
+      first = first + 1
+    }
+    return `Octal literals are not allowed. Use the syntax '0o${this.source.substring(first, end)}'`
+  }
+
+  /**
+   * The end of a run of digits starting at `at`, with its separators, as
+   * TypeScript's `scanNumberFragment` reads it: a `_` is allowed straight
+   * after a digit and nowhere else, so a run that starts or ends with one, or
+   * holds two in a row, records its first misplaced separator in
+   * `numberError`. After a radix prefix a digit is any identifier byte
+   * but the BigInt suffix `n`, which ends the run so that `0xFF_n` is judged
+   * a trailing separator, and the checker judges which of them the radix
+   * allows.
+   */
+  scanDigits(at: i32, radix: boolean): i32 {
+    let end = at
+    let afterDigit = false
+    let afterSeparator = false
+    while (end < this.source.length) {
+      const c = this.at(end)
+      if (c === CH_UNDERSCORE) {
+        if (!afterDigit) {
+          this.refuseSeparator(afterSeparator ? SEPARATOR_DOUBLED : SEPARATOR_HERE)
+        }
+        afterDigit = false
+        afterSeparator = true
+      } else if (radix ? isIdentPart(c) && c !== CH_N_LOWER : isDigit(c)) {
+        afterDigit = true
+        afterSeparator = false
+      } else {
+        break
+      }
+      end = end + 1
+    }
+    if (afterSeparator) {
+      this.refuseSeparator(SEPARATOR_HERE)
+    }
+    return end
+  }
+
+  /** Record a misplaced separator, unless the literal already has one. */
+  refuseSeparator(message: string): void {
+    if (this.numberError.length === 0) {
+      this.numberError = message
+    }
+  }
+
+  /**
+   * A numeric literal's token ending at `end`, or its `numberError` first,
+   * with the literal itself left in `pendingNumber` for the next call.
+   */
+  emitNumber(kind: i32, end: i32): void {
+    if (this.numberError.length > 0) {
+      this.pendingNumber = kind
+      this.error(this.numberError, end)
       return
     }
-    this.emit(TOK_NUMBER, end, this.source.substring(this.start, end))
+    this.emit(kind, end, this.source.substring(this.start, end))
   }
 
   /**

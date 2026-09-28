@@ -19,7 +19,8 @@
 // per family and the language has no function values to register.
 
 import { Emitter } from "./emit"
-import { emitPackedResult, emitResultReturningCall, privateResultAbi, resultTypeDecl } from "./emit-result"
+import { emitRangedStore } from "./emit-builtins"
+import { emitPackedResult, emitResultReturningCall, privateAbi, resultTypeDecl } from "./emit-result"
 import { fieldTbaa } from "./tbaa"
 import {
   emitArrayLength,
@@ -37,7 +38,7 @@ import {
   floatText,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { parseIntegerLiteral } from "./constants"
+import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { emitStringLength, emitStringMethodCall } from "./emit-strings"
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -136,7 +137,7 @@ const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
     return emitter.stringConstant(literal.children.length > 0 ? literal.children[0].text : "")
   }
   if (isFloat(field.type)) {
-    const value = Number(literal.text)
+    const value = numericLiteralValue(literal.text)
     return floatText(negated ? -value : value, field.type)
   }
   let value = parseIntegerLiteral(literal.text)
@@ -248,15 +249,21 @@ const emitCall = (
   args: Node[],
   site: Node
 ): string => {
-  const calleePrivate = privateResultAbi(emitter, callee.exported)
+  const calleePrivate = privateAbi(emitter.opts, callee.exported)
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`]
   let i = 0
   while (i < args.length) {
+    // WP29 P2: `spawn`'s task is a function argument, which chose the method
+    // this call reaches and is no value to pass.
+    if (callee.isCompileTime(i + 1)) {
+      i = i + 1
+      continue
+    }
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1]
     const value = emitter.table.resultByValue(want)
       ? emitPackedResult(emitter, args[i], want, calleePrivate)
-      : emitter.emitExpression(args[i])
+      : emitter.emitArgument(args[i], callee, i + 1)
     operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`)
     i = i + 1
   }
@@ -327,6 +334,7 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), field.type, old, rhs)
   }
+  emitRangedStore(emitter, expr, value)
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`)
   return value
 }

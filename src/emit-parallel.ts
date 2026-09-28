@@ -33,8 +33,10 @@
 import { Emitter } from "./emit"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam } from "./ir"
-import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf } from "./parallel"
-import { FunctionSig, PAR_CHUNK, PAR_MAP } from "./program"
+import { loadLocal } from "./emit-ops"
+import { Node } from "./nodes"
+import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf, taskStoreOf } from "./parallel"
+import { FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK } from "./program"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -183,4 +185,230 @@ const chunkTrampoline = (
   fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
   fn.emit("ret void")
   return fn
+}
+
+// ---- WP29 P2: a scope's tasks -----------------------------------------------------------
+//
+// `s.spawn(entry, arg, dst, at)` is an instance of `ThreadScope.spawn`, and
+// its body's call `runTask(entry, arg, dst, at)` is the task
+// (`std/threads.ts`). That call is split in two and filed on the scope:
+//
+//   %task.payload = alloca { A, R[]*, i32, R }         ; in the entry block
+//   store arg, dst, at into its first three fields
+//   call void @nish_scope_spawn(i8* %this, @<spawn>$run, @<spawn>$finish,
+//                               i8* <payload>, i64 <size of the payload>)
+//
+// The runtime copies the payload, so the frame it came from may end.
+// `<spawn>$run` is `entry(arg)` into the fourth field, and runs on a thread of
+// its own when the scope joins; `<spawn>$finish` is the checked store
+// `storeResult(dst, at, r)`, and runs on the thread that opened the scope once
+// every task of it has finished. The join is `nish_scope_join(scope)`, emitted
+// at every exit of the block that declared the scope: its end, a `return`, and
+// a `break` or `continue` that leaves it — before the release of any arena
+// scope around it, so a task never reads memory freed under it.
+
+/** Whether the call from `caller` to `callee` is the one a `spawn` instance files as a task. */
+export const isSpawnTaskCall = (caller: FunctionSig | null, callee: FunctionSig): boolean =>
+  caller !== null && parallelRoleOf(caller) === PAR_SPAWN && parallelRoleOf(callee) === PAR_TASK
+
+/** `taskStoreOf`, or an internal error when the template no longer has the shape this file reads. */
+const storeOf = (emitter: Emitter, task: FunctionSig): FunctionSig => {
+  const store = taskStoreOf(task)
+  if (store === null) {
+    process.exit(
+      internalErrorFor(
+        `emitter: \`${task.name}\` is not \`storeResult(dst, at, entry(arg))\``,
+        emitter.opts.json
+      )
+    )
+  }
+  return store
+}
+
+/** `entry(arg)`'s function, or an internal error when the task was given none. */
+const taskEntryOf = (emitter: Emitter, task: FunctionSig): FunctionSig => {
+  const body = parallelBodyOf(task)
+  if (body === null) {
+    process.exit(internalErrorFor(`emitter: \`${task.name}\` has no task`, emitter.opts.json))
+  }
+  return body
+}
+
+/**
+ * The task in place of `runTask(arg, dst, at)`, whose lowered operands are
+ * `types` and `values` (the task itself is a compile-time argument and has
+ * none). The receiver is the `spawn` instance's own `this`: the scope.
+ */
+export const emitSpawnTask = (
+  emitter: Emitter,
+  task: FunctionSig,
+  types: string[],
+  values: string[]
+): void => {
+  const caller = emitter.currentSig
+  if (caller === null || types.length !== 3 || values.length !== 3) {
+    process.exit(
+      internalErrorFor(`emitter: \`${task.name}\` is not a task over (arg, dst, at)`, emitter.opts.json)
+    )
+  }
+  const body = taskEntryOf(emitter, task)
+  const store = storeOf(emitter, task)
+  const result = emitter.llvm(body.returnType)
+  const payloadType = `{ ${types[0]}, ${types[1]}, ${types[2]}, ${result} }`
+  const fn = emitter.fn
+  const slot = fn.emitAlloca("task.payload", payloadType, emitter.opts.optimizeAttributes ? 8 : 0)
+  let i = 0
+  while (i < types.length && i < values.length) {
+    // Read before the call below, which ends the length facts.
+    const type = types[i]
+    const value = values[i]
+    const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${slot}, i32 0, i32 ${i}`)
+    fn.emit(`store ${type} ${value}, ${type}* ${at}`)
+    i = i + 1
+  }
+  const raw = fn.emitValue(`bitcast ${payloadType}* ${slot} to i8*`)
+  const scope = fn.emitValue(`bitcast ${emitter.llvm(caller.paramTypes[0])} %this to i8*`)
+  const size = `ptrtoint (${payloadType}* getelementptr (${payloadType}, ${payloadType}* null, i32 1) to i64)`
+  const run = `${caller.name}$run`
+  const finish = `${caller.name}$finish`
+  fn.emit(
+    `call void ${emitter.useRuntime("nish_scope_spawn")}(i8* ${scope}, void (i8*)* @${run}, void (i8*)* @${finish}, i8* ${raw}, i64 ${size})`
+  )
+  emitter.module.addFunction(taskRun(emitter, run, body, payloadType, types[0], result))
+  emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result))
+}
+
+/** An internal `void <name>(i8* %p)`, the shape of both halves of a task. */
+const taskFunction = (emitter: Emitter, name: string): IRFunction => {
+  const attrs: string[] = []
+  if (emitter.opts.optimizeAttributes) {
+    attrs.push("noundef")
+  }
+  const params: IRParam[] = []
+  params.push(new IRParam("p", "i8*", attrs))
+  const fn = new IRFunction(name, params, "void")
+  fn.linkage = "internal"
+  if (emitter.opts.optimizeAttributes) {
+    // As `nish_scope_join`'s callbacks: nothing unwinds, and nothing more is
+    // claimed about a function that runs a whole task.
+    const group: string[] = []
+    group.push("nounwind")
+    fn.attrGroup = emitter.module.attrGroupFor(group)
+  }
+  return fn
+}
+
+/** Field `index` of the payload `%p` points at, loaded as `type`. */
+const loadPayload = (
+  fn: IRFunction,
+  typed: string,
+  payloadType: string,
+  index: i32,
+  type: string
+): string => {
+  const at = fn.emitValue(
+    `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${index}`
+  )
+  return fn.emitValue(`load ${type}, ${type}* ${at}`)
+}
+
+/** `<spawn>$run`: `entry(arg)`, into the payload's last field. It runs on the task's thread. */
+const taskRun = (
+  emitter: Emitter,
+  name: string,
+  body: FunctionSig,
+  payloadType: string,
+  argType: string,
+  result: string
+): IRFunction => {
+  const fn = taskFunction(emitter, name)
+  const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
+  const arg = loadPayload(fn, typed, payloadType, 0, argType)
+  const r = fn.emitValue(`call ${result} @${body.name}(${argType} ${arg})`)
+  const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 3`)
+  fn.emit(`store ${result} ${r}, ${result}* ${at}`)
+  fn.emit("ret void")
+  return fn
+}
+
+/** `<spawn>$finish`: `storeResult(dst, at, r)`, on the thread that opened the scope, after the join. */
+const taskFinish = (
+  emitter: Emitter,
+  name: string,
+  store: FunctionSig,
+  payloadType: string,
+  types: string[],
+  result: string
+): IRFunction => {
+  const fn = taskFunction(emitter, name)
+  const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
+  const dst = loadPayload(fn, typed, payloadType, 1, types[1])
+  const at = loadPayload(fn, typed, payloadType, 2, types[2])
+  const r = loadPayload(fn, typed, payloadType, 3, result)
+  fn.emit(`call void @${store.name}(${types[1]} ${dst}, ${types[2]} ${at}, ${result} ${r})`)
+  fn.emit("ret void")
+  return fn
+}
+
+/**
+ * A `using` declaration has just been emitted: its scope is open until the
+ * block that declared it ends. The scope's address, as the `i8*` its tasks
+ * are filed under, is read once here; every exit of the block is dominated by
+ * the declaration, so each join can name the same value.
+ */
+export const openScope = (emitter: Emitter, list: Node): void => {
+  for (const decl of list.children) {
+    openOneScope(emitter, decl)
+  }
+}
+
+/**
+ * One declarator of `openScope`'s. What it allocates is the name of a value
+ * every exit of the block reads, so it is kept on purpose, and a function of
+ * its own keeps the declarator loop from owning it.
+ */
+const openOneScope = (emitter: Emitter, decl: Node): void => {
+  const local = emitter.program.nodeLocals[decl.id]
+  if (local === null) {
+    process.exit(internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json))
+  }
+  const value = loadLocal(emitter, local)
+  emitter.openScopes.push(emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`))
+  emitter.openScopeLoops.push(emitter.loops.length)
+}
+
+/**
+ * Join, innermost first, every open scope that `minLoops` or more loops
+ * enclosed: 0 for a `return`, which leaves them all, and one more than the
+ * target's position for a `break` or `continue`, which leaves the scopes
+ * opened inside the loop it targets. The scopes stay open for the paths
+ * that did not take this exit.
+ */
+export const emitScopeJoins = (emitter: Emitter, minLoops: i32): void => {
+  let i = emitter.openScopes.length - 1
+  while (i >= 0) {
+    if (emitter.openScopeLoops[i] >= minLoops) {
+      emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
+    }
+    i = i - 1
+  }
+}
+
+/**
+ * The end of a block that had `count` scopes open when it began: the ones it
+ * opened join, innermost first, if control reaches the end, and are closed
+ * either way.
+ */
+export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
+  if (!emitter.fn.currentBlock().terminated()) {
+    let i = emitter.openScopes.length - 1
+    while (i >= count) {
+      emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
+      i = i - 1
+    }
+  }
+  while (emitter.openScopes.length > count) {
+    emitter.openScopes.pop()
+    emitter.openScopeLoops.pop()
+  }
 }

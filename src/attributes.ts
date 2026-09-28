@@ -38,10 +38,13 @@
 import {
   builtinCallees,
   builtinCalleesNamed,
+  checksRangesInPrologue,
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
   isSpawnCall,
+  panicTailCallees,
 } from "./emit-builtins"
+import { numericLiteralValue } from "./constants"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
 import {
   analyzeEscapes,
@@ -62,6 +65,7 @@ import {
   isPushCall,
   isStringMethodCall,
   isTemplateExpression,
+  rangedStoreOf,
   receiverIsValue,
   methodReceiver,
   storesInlineElements,
@@ -101,7 +105,7 @@ import {
   Node,
 } from "./nodes"
 import { Options } from "./options"
-import { isParallelEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
+import { isParallelEntry, isSpawnEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
 import { ParentTable } from "./parents"
 import { CheckedProgram, FunctionSig, inlineElementStruct, ROLE_CONSTRUCTOR } from "./program"
 import {
@@ -1258,6 +1262,7 @@ class FactCollector {
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
     this.collectDivisionFacts(node)
+    this.collectRangeFacts(node)
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
     for (const child of node.children) {
@@ -1427,8 +1432,9 @@ class FactCollector {
           this.facts.effect = EFFECT_WRITE
           this.facts.callees.add("nish_alloc_struct")
         } else if (method === "expect") {
-          this.facts.callees.add("nish_write")
-          this.facts.callees.add("nish_exit")
+          const tail: string[] = []
+          panicTailCallees(tail)
+          this.addCallees(tail)
         }
         return
       }
@@ -1548,9 +1554,34 @@ class FactCollector {
     if (op !== "/" && op !== "%" && op !== "/=" && op !== "%=") {
       return
     }
+    // A ranged target of `/=` keeps its range on its node (WP31); the
+    // division is its base's, `i32`.
     const left = this.unit.program.nodeTypes[node.children[0].id]
-    if (left >= 0 && isInteger(left)) {
+    if (left >= 0 && isInteger(this.table.baseOf(left))) {
       this.facts.callees.add("nish_panic_div")
+    }
+  }
+
+  /**
+   * A value entering a range may take the panic tail (WP31 §6): an entry the
+   * checker recorded that neither `entryIsFree` nor the proof in
+   * `nodeProvenRange` (§8) excuses, and the store of a compound assignment or
+   * an increment into a ranged place. Mirrors `emitRangeEntry` and
+   * `emitRangedStore`.
+   */
+  collectRangeFacts(node: Node): void {
+    const program = this.unit.program
+    const from = program.nodeCoercions[node.id]
+    const to = program.nodeTypes[node.id]
+    const entered =
+      from >= 0 &&
+      this.table.isRanged(to) &&
+      !this.table.entryIsFree(from, to) &&
+      !program.nodeProvenRange[node.id]
+    if (entered || rangedStoreOf(program, this.table, node) >= 0) {
+      const tail: string[] = []
+      panicTailCallees(tail)
+      this.addCallees(tail)
     }
   }
 
@@ -1697,6 +1728,15 @@ const collectFacts = (
   if (body !== null) {
     collector.visit(body)
   }
+  // WP31 §9: the prologue that checks a host's arguments may take the panic
+  // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
+  // the entry they no longer check, which is sound and costs nothing: they call
+  // this function, and it calls the same two.
+  if (checksRangesInPrologue(table, opts, sig)) {
+    const tail: string[] = []
+    panicTailCallees(tail)
+    collector.addCallees(tail)
+  }
 
   // The two arena builtins that report the bump position. Read here rather
   // than in escape.ts because the walk has already put every runtime symbol a
@@ -1704,7 +1744,10 @@ const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isParallelEntry(sig)) {
-    markParallelEntry(facts)
+    markParallelEntry(facts, "nish_parallel_range")
+  }
+  if (isSpawnEntry(sig)) {
+    markParallelEntry(facts, "nish_scope_spawn") // WP29 P2: the payload is kept until the join
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
@@ -1741,10 +1784,16 @@ const collectFacts = (
  *
  * Both are claims LLVM would act on, and what each would buy is nothing: the
  * instance is called once per region, and the loop inside it is the chunk
- * function, whose own facts are unaffected.
+ * function, whose own facts are unaffected. *
+ * A `spawn` instance (WP29 P2) is the same shape with a longer wait: its
+ * payload — the argument and the destination — is copied into the scope's
+ * task and read when the scope joins, after `spawn` has returned. So every
+ * parameter escapes there too, which is also what keeps an argument out of a
+ * stack slot a later pass of a loop would reuse and out of a loop pass the
+ * arena would release before the join.
  */
-const markParallelEntry = (facts: FunctionFacts): void => {
-  facts.callees.add("nish_parallel_range")
+const markParallelEntry = (facts: FunctionFacts, runtime: string): void => {
+  facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
   }
@@ -2320,7 +2369,7 @@ const isCountedLoop = (
   } else if (upward) {
     // In `f64`, as stage0's `src/` computes it: a bound past the i32 range must still
     // compare as out of range rather than wrapping into it.
-    const written: f64 = Number(bound.text)
+    const written: f64 = numericLiteralValue(bound.text)
     const last: f64 = inclusive ? written : written - 1.0
     if (last + toF64(delta) > INT32_MAX) {
       return false
@@ -2359,10 +2408,10 @@ export const stepOf = (expr: Node, name: string): i32 => {
       return 0
     }
     if (expr.text === "+=") {
-      return toI32(Number(rhs.text))
+      return toI32(numericLiteralValue(rhs.text))
     }
     if (expr.text === "-=") {
-      return -toI32(Number(rhs.text))
+      return -toI32(numericLiteralValue(rhs.text))
     }
   }
   return 0

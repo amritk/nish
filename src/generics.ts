@@ -32,9 +32,9 @@ import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression } from "./expressions"
+import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
 import { StringMap, StringSet } from "./map"
-import { parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
+import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
 import {
   collectMethodSignature,
   collectStructMembers,
@@ -1268,9 +1268,10 @@ export const checkGenericCall = (
       `\`${template.sourceName}\` expects ${parameters.children.length} argument(s), got ${args.children.length}`
     )
   }
-  // A generic method never has a function parameter: its signature collector
-  // refuses one, so its arguments are all values and are checked as values.
-  const functional = template.owner === null
+  // A generic method has no function parameter — its signature collector
+  // refuses one, so its arguments are all values and are checked as values —
+  // except `nish/threads`'s `spawn`, whose task is one (WP29 P2).
+  const functional = template.owner === null || isSpawnTemplate(template)
   const names = typeParamSet(template)
   const bindings = new StringMap()
   let argTypes: i32[] = []
@@ -1282,7 +1283,8 @@ export const checkGenericCall = (
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
     later.push(deferred)
-    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, -1))
+    // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
+    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE))
     i = i + 1
   }
   i = 0
@@ -1313,11 +1315,7 @@ export const checkGenericCall = (
     const early = argTypes[i]
     if (later[i] && !(functional && isFunctionParameter(param))) {
       let want = -1
-      if (
-        annotation.kind !== N_EMPTY &&
-        template.owner === null &&
-        !mentionsUnbound(annotation, names, bindings)
-      ) {
+      if (annotation.kind !== N_EMPTY && functional && !mentionsUnbound(annotation, names, bindings)) {
         want = resolveInTemplate(template, annotation, bindings)
       }
       const type = checkExpression(ctx, arg, scope, want)
@@ -1392,6 +1390,7 @@ export const checkGenericCall = (
     if (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
+      !recordRangeEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
       const want = ctx.table.typeName(sig.paramTypes[i + offset])
@@ -2423,6 +2422,29 @@ export const elementOrigin = (ctx: CheckContext, iterable: Node, scope: Scope): 
     return null
   }
   return originElement(originOf(ctx, iterable, scope))
+}
+
+/**
+ * Whether the value of `expr`, in the instantiation whose body is being
+ * checked, is a `T` as the template wrote it: `items.pop()` on `items: T[]`,
+ * `identity(x)` on `x: T`. The must-handle rule (#233) judges a discarded
+ * value by that declared type, as Rust's `must_use` does, so a template that
+ * drops a `T` is not refused at `T = Result`, and one that drops a
+ * `Result<T, E>` still is.
+ *
+ * Unlike `originParameter`, an unknown origin answers false: here failing
+ * closed means refusing the discard, not waving it through.
+ */
+export const isParameterValue = (ctx: CheckContext, expr: Node, scope: Scope): boolean => {
+  if (ctx.typeBindings.size() === 0) {
+    return false
+  }
+  const at = substituted(originOf(ctx, expr, scope))
+  if (at === null || at.unknown || at.names.length > 0) {
+    return false
+  }
+  const node = unwrapOrigin(at.annotation)
+  return isBareName(node) && ctx.typeBindings.has(node.text)
 }
 
 /** The position of `name` in `names`, or -1. */

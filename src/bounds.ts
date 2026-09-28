@@ -19,6 +19,16 @@
 // clamp is dead code: `program.nodeProvenClamp` says which bounds those are
 // and `src/emit-strings.ts` writes them through.
 //
+// A third question is a range entry (WP31 §8, docs/wp31-ranged-integers.md).
+// A value entering an `integer<Lo, Hi>` is compared once where it enters, and
+// the same facts decide whether that compare can go: `judgeRange` writes the
+// verdict to `program.nodeProvenRange`, which the emitter and the attribute
+// pass read. A declared range is also a *source* of facts, read off the type
+// rather than stored: `knownNonNegative` and `maxIndexOf` ask
+// `TypeTable.declaredRange`, so a ranged, `u8` or `u16` local is bounded at
+// every program point with nothing to forget, because every write into a
+// ranged place is an entry and an unsigned one cannot hold anything else.
+//
 // Where LLVM finds this by itself, and where it does not. It needs the
 // receiver's length to be one value it can reason about: give it a string
 // literal bound to a local and a hoisted `const n = s.length`, and `opt -O3`
@@ -152,9 +162,9 @@ import {
   Node,
 } from "./nodes"
 import { StringMap } from "./map"
-import { CheckedProgram, FunctionSig, ROLE_METHOD, inlineElementStruct } from "./program"
+import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
-import { T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
+import { DeclaredRange, T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
 
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647
@@ -201,6 +211,12 @@ class ConditionFacts {
  * because entry order is the order everything is compared in.
  */
 export class State {
+  /**
+   * Where a declared range is read from (WP31 §8). It is not a fact: the
+   * type of a ranged or unsigned local answers `v >= Lo` and `v <= Hi` at
+   * every program point, so nothing about it is stored and nothing forgets it.
+   */
+  table: TypeTable
   nonNegative: Local[]
   belowIndex: Local[]
   belowHolder: Local[]
@@ -213,7 +229,8 @@ export class State {
   minValueVar: Local[]
   minValueValue: i32[]
 
-  constructor() {
+  constructor(table: TypeTable) {
+    this.table = table
     this.nonNegative = []
     this.belowIndex = []
     this.belowHolder = []
@@ -229,7 +246,7 @@ export class State {
 }
 
 const cloneState = (s: State): State => {
-  const out = new State()
+  const out = new State(s.table)
   for (const v of s.nonNegative) {
     out.nonNegative.push(v)
   }
@@ -289,12 +306,14 @@ const copyInto = (into: State, from: State): void => {
 // ---- Reading the state ------------------------------------------------------------
 
 /**
- * `v >= 0`. An unsigned type answers this without any flow at all, which is
- * the one ranged type the language already has: `u8`/`u16`/`u32`/`u64` cannot
- * hold a negative value, so their lower bound is read off the declaration.
+ * `v >= 0`. A declared range answers this without any flow at all (WP31 §8):
+ * `integer<Lo, Hi>` with `Lo >= 0`, and `u8`/`u16`/`u32`/`u64`, the ranged
+ * types the language had first, cannot hold a negative value, so their lower
+ * bound is read off the declaration.
  */
 const knownNonNegative = (state: State, v: Local): boolean => {
-  if (isUnsigned(v.type)) {
+  const declared = state.table.declaredRange(v.type)
+  if (declared !== null && declared.lo >= 0) {
     return true
   }
   for (const x of state.nonNegative) {
@@ -353,9 +372,19 @@ const holdersAbove = (state: State, i: Local): Local[] => {
   return out
 }
 
-/** The smallest recorded `n` with `i < n`, or -1 when there is none. */
+/**
+ * The smallest `n` known to satisfy `i < n`, or -1 when there is none. A
+ * declared `Hi` is one of the candidates (WP31 §8): `Hi + 1`, whenever it is
+ * an `i32` bound at all, so `u8` and `u16` bound an index by 256 and 65536
+ * and a ranged local by its own top, with nothing recorded and nothing to
+ * forget. A recorded fact that is tighter still wins.
+ */
 const maxIndexOf = (state: State, i: Local): i32 => {
   let best = -1
+  const declared = state.table.declaredRange(i.type)
+  if (declared !== null && declared.hi >= toI64(-1) && declared.hi < I32_MAX) {
+    best = toI32(declared.hi) + 1
+  }
   let k = 0
   while (k < state.maxIndexVar.length) {
     if (state.maxIndexVar[k] === i && (best < 0 || state.maxIndexValue[k] < best)) {
@@ -705,7 +734,7 @@ const forgetArrayLengths = (ctx: CheckContext, state: State): void => {
  * that the two compilers meet the same state in the same order.
  */
 const intersect = (a: State, b: State): State => {
-  const out = new State()
+  const out = new State(a.table)
   for (const v of a.nonNegative) {
     if (knownNonNegative(b, v)) {
       out.nonNegative.push(v)
@@ -1014,14 +1043,16 @@ const forgetLocal = (walk: BoundsWalk, state: State, v: Local): void => {
  * Integer types only. An `f64` index is truncated toward zero by `fptosi`, and
  * a proof about the double is not a proof about the truncation once `NaN` and
  * the values past `2^63` are in the picture, so `--number-mode f64` gets the
- * constant-index proofs and nothing else.
+ * constant-index proofs and nothing else. A ranged integer is an `i32` in
+ * both modes (WP31 §5), so it keeps the proofs an `i32` gets.
  */
-const isIndexType = (type: i32): boolean => type === T_I32 || type === T_I64 || isUnsigned(type)
+const isIndexType = (table: TypeTable, type: i32): boolean =>
+  type === T_I32 || type === T_I64 || isUnsigned(type) || table.isRanged(type)
 
-/** A local that can be an index: an integer, signed or unsigned. */
-const indexLocal = (program: CheckedProgram, expr: Node): Local | null => {
-  const v = localOf(program, expr)
-  if (v === null || !isIndexType(v.type)) {
+/** A local that can be an index: an integer, signed, unsigned or ranged. */
+const indexLocal = (ctx: CheckContext, expr: Node): Local | null => {
+  const v = localOf(ctx.program, expr)
+  if (v === null || !isIndexType(ctx.table, v.type)) {
     return null
   }
   return v
@@ -1044,6 +1075,23 @@ const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean => {
     program.nodeBuiltins[call.id] === "" &&
     call.children[1].children.length === 1
   )
+}
+
+/**
+ * The range `toI32(x)` lands in when `x`'s type declares one that fits in
+ * `i32` (WP31 §8), or `null`. `u8` and `u16` widen with `zext`, and a ranged
+ * value is already the `i32` it converts to, so the declaration bounds the
+ * result. `u32` and `u64` declare a range past `INT_MAX`, where the
+ * conversion keeps the low 32 bits and reads them signed, so they state
+ * nothing here.
+ */
+const convertedRange = (walk: BoundsWalk, expr: Node): DeclaredRange | null => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind !== N_CALL || !isBuiltinToI32(walk.ctx.program, e)) {
+    return null
+  }
+  const declared = walk.ctx.table.declaredRange(walk.ctx.program.nodeTypes[e.children[1].children[0].id])
+  return declared !== null && declared.hi <= I32_MAX ? declared : null
 }
 
 /**
@@ -1117,8 +1165,8 @@ const literalValue = (expr: Node): i32 => {
 const orderFacts = (walk: BoundsWalk, state: State, lo: Node, hi: Node, strict: boolean): Fact[] => {
   const ctx = walk.ctx
   const out: Fact[] = []
-  const loVar = indexLocal(ctx.program, lo)
-  const hiVar = indexLocal(ctx.program, hi)
+  const loVar = indexLocal(ctx, lo)
+  const hiVar = indexLocal(ctx, hi)
   const loConst = literalValue(lo)
   const hiConst = literalValue(hi)
   const hiLength = lengthOf(walk, hi)
@@ -1173,7 +1221,7 @@ const addEqualityFacts = (walk: BoundsWalk, out: Fact[], value: Node, other: Nod
   if (n < 0) {
     return
   }
-  const v = indexLocal(walk.ctx.program, value)
+  const v = indexLocal(walk.ctx, value)
   if (v !== null) {
     out.push(new Fact(FACT_MIN_VALUE, v, null, n))
     out.push(new Fact(FACT_MAX_INDEX, v, null, n + 1))
@@ -1199,7 +1247,7 @@ const disequalityFacts = (walk: BoundsWalk, state: State, left: Node, right: Nod
 
 const addDisequalityFacts = (walk: BoundsWalk, state: State, out: Fact[], value: Node, other: Node): void => {
   const n = literalValue(other)
-  const v = indexLocal(walk.ctx.program, value)
+  const v = indexLocal(walk.ctx, value)
   if (n < 0 || v === null) {
     return
   }
@@ -1286,7 +1334,7 @@ const survivingFacts = (walk: BoundsWalk, facts: Fact[], later: Node): Fact[] =>
   if (facts.length === 0) {
     return facts
   }
-  const scratch = new State()
+  const scratch = new State(walk.ctx.table)
   addFacts(scratch, facts)
   forgetAcross(walk, scratch, later)
   return factsOf(scratch)
@@ -1386,7 +1434,7 @@ const isDecrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
  * one.
  */
 const keepsUpperBound = (ctx: CheckContext, v: Local, known: boolean): boolean =>
-  !isUnsigned(v.type) && isIndexType(v.type) && (!ctx.wrapping || known)
+  !isUnsigned(v.type) && isIndexType(ctx.table, v.type) && (!ctx.wrapping || known)
 
 /**
  * The facts `v = <local> - c` and `v = <local>` give `v`, read off what the
@@ -1433,9 +1481,13 @@ const impliesNonNegative = (walk: BoundsWalk, state: State, expr: Node): boolean
   if (lengthOf(walk, e) !== null) {
     return true
   }
+  const converted = convertedRange(walk, e)
+  if (converted !== null) {
+    return converted.lo >= 0
+  }
   const v = localOf(ctx.program, e)
   if (v !== null) {
-    return isIndexType(v.type) && knownNonNegative(state, v)
+    return isIndexType(ctx.table, v.type) && knownNonNegative(state, v)
   }
   if (e.kind !== N_BINARY || e.text !== "+") {
     return false
@@ -1458,35 +1510,46 @@ const initialiserFacts = (walk: BoundsWalk, state: State, v: Local, init: Node):
   const ctx = walk.ctx
   const out: Fact[] = []
   const e = unwrapBoundsParens(init)
-  if (isIndexType(v.type) && impliesNonNegative(walk, state, e)) {
+  if (isIndexType(ctx.table, v.type) && impliesNonNegative(walk, state, e)) {
     out.push(new Fact(FACT_NON_NEGATIVE, v, null, 0))
   }
   const n = literalValue(e)
-  if (n >= 0 && isIndexType(v.type)) {
+  if (n >= 0 && isIndexType(ctx.table, v.type)) {
     out.push(new Fact(FACT_MIN_VALUE, v, null, n))
     out.push(new Fact(FACT_MAX_INDEX, v, null, n + 1))
     return out
   }
   const holder = lengthOf(walk, e)
-  if (holder !== null && isIndexType(v.type)) {
+  if (holder !== null && isIndexType(ctx.table, v.type)) {
     // `const n = xs.length` is the hoist everybody is told to write, and this
     // is the fact that keeps it as fast as the loop that re-reads the length.
     out.push(new Fact(FACT_AT_MOST, v, holder, 0))
     return out
   }
-  if (!isIndexType(v.type)) {
+  // `const k = toI32(b)` on a `u8` is below 256 for the reason `b` is: the
+  // type cannot hold anything else (WP31 §8).
+  const converted = convertedRange(walk, e)
+  if (converted !== null && isIndexType(ctx.table, v.type)) {
+    if (converted.hi >= toI64(-1) && converted.hi < I32_MAX) {
+      out.push(new Fact(FACT_MAX_INDEX, v, null, toI32(converted.hi) + 1))
+    }
+    return out
+  }
+  if (!isIndexType(ctx.table, v.type)) {
     return initialiserArrayFacts(ctx, v, e, out)
   }
   // `let j = i`: the copy has every bound the original has.
-  const copied = indexLocal(ctx.program, e)
-  if (copied !== null && copied.type === v.type) {
+  // A ranged local and an `i32` are one value with one base, so a copy between
+  // them carries the bounds too.
+  const copied = indexLocal(ctx, e)
+  if (copied !== null && ctx.table.baseOf(copied.type) === ctx.table.baseOf(v.type)) {
     differenceFacts(walk, state, v, copied, 0, out)
     return out
   }
   if (e.kind === N_BINARY && e.text === "-") {
     const c = literalValue(e.children[1])
-    const w = indexLocal(ctx.program, e.children[0])
-    if (c >= 0 && w !== null && w.type === v.type) {
+    const w = indexLocal(ctx, e.children[0])
+    if (c >= 0 && w !== null && ctx.table.baseOf(w.type) === ctx.table.baseOf(v.type)) {
       differenceFacts(walk, state, v, w, c, out)
     }
     // `xs.length - 1` is the last index, when there is one: no floor, since
@@ -1526,6 +1589,8 @@ export class BoundsWalk {
   ctx: CheckContext
   /** Access nodes whose surviving check is worth a warning, in source order. */
   unproven: Node[]
+  /** Range entries whose surviving check is worth a warning (`judgeRange`), in evaluation order. */
+  unprovenRanges: Node[]
   loops: i32
   uncheckedIndexing: boolean
   /**
@@ -1580,6 +1645,7 @@ export class BoundsWalk {
   constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
     this.ctx = ctx
     this.unproven = []
+    this.unprovenRanges = []
     this.paths = []
     this.continues = []
     this.breaks = []
@@ -1664,7 +1730,7 @@ const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index:
     addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + 1))
     return
   }
-  const i = indexLocal(walk.ctx.program, index)
+  const i = indexLocal(walk.ctx, index)
   if (i === null) {
     return
   }
@@ -1716,7 +1782,7 @@ const judge = (
   if (walk.loops === 0 || walk.uncheckedIndexing || lengthHolder(ctx, receiver) === null) {
     return
   }
-  if (indexLocal(ctx.program, index) === null) {
+  if (indexLocal(ctx, index) === null) {
     return
   }
   walk.unproven.push(node)
@@ -1762,7 +1828,7 @@ const provesClamp = (ctx: CheckContext, state: State, holder: Local | null, boun
   if (holder === null) {
     return false
   }
-  const i = indexLocal(ctx.program, bound)
+  const i = indexLocal(ctx, bound)
   if (i === null || !knownNonNegative(state, i)) {
     return false
   }
@@ -1873,7 +1939,7 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
   if (constant >= 0) {
     return knownMinLength(state, holder, constant + 1)
   }
-  const i = indexLocal(ctx.program, index)
+  const i = indexLocal(ctx, index)
   if (i === null || !knownNonNegative(state, i)) {
     return false
   }
@@ -1888,9 +1954,56 @@ const proves = (ctx: CheckContext, state: State, holder: Local, index: Node): bo
  * Walk an expression in evaluation order, proving the accesses it contains and
  * applying what it does to the state. The order is the emitter's: an access is
  * judged at the point its check runs, which is after its own operands and
- * before anything that follows it.
+ * before anything that follows it. A range entry is the same: the emitter
+ * checks a value once it has been computed (`emitExpression`), so it is judged
+ * in the state the value's own evaluation left.
  */
 const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
+  walkOperands(walk, state, expr)
+  let e = expr
+  while (true) {
+    judgeRange(walk, state, e)
+    if (e.kind !== N_PAREN) {
+      return
+    }
+    e = e.children[0]
+  }
+}
+
+/**
+ * Argument `index` of a call to `callee` (`null` when the checker recorded
+ * none). When the callee checks that ranged parameter in its own prologue
+ * (WP31 §9: it is outside the linkage condition `privateAbi` states, read here
+ * from the context), the emitter writes no check at the call, so a warning
+ * that one survives in this loop would name a guard that removes nothing.
+ */
+const walkArgument = (
+  walk: BoundsWalk,
+  state: State,
+  arg: Node,
+  callee: FunctionSig | null,
+  index: i32
+): void => {
+  walkExpression(walk, state, arg)
+  const count = walk.unprovenRanges.length
+  if (callee === null || count === 0 || walk.unprovenRanges[count - 1] !== arg) {
+    return
+  }
+  // Only the argument's own entry goes; one inside it (a nested call's) stands.
+  // A method's or a constructor's `this` is parameter 0 and no argument.
+  const param = callee.role === ROLE_FUNCTION ? index : index + 1
+  const ctx = walk.ctx
+  const inPrologue =
+    param < callee.paramTypes.length &&
+    ctx.table.isRanged(callee.paramTypes[param]) &&
+    !(ctx.strictExports && !callee.visibleOutside())
+  if (inPrologue) {
+    walk.unprovenRanges.pop()
+  }
+}
+
+/** `walkExpression` without the range judge: what an expression does, and the accesses inside it. */
+const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
   // A leaf — a name, a literal, `this` — changes nothing and proves nothing.
   if (expr.children.length === 0 || walk.done) {
     return
@@ -1942,8 +2055,11 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (clamped) {
       holder = lengthHolder(ctx, callee.children[0])
     }
+    const target = ctx.program.nodeCallees[e.id]
+    let at = 0
     for (const arg of e.children[1].children) {
-      walkExpression(walk, state, arg)
+      walkArgument(walk, state, arg, target, at)
+      at = at + 1
       if (clamped) {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null
@@ -1970,8 +2086,11 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   }
 
   if (e.kind === N_NEW) {
+    const target = ctx.program.nodeCallees[e.id]
+    let at = 0
     for (const arg of e.children[2].children) {
-      walkExpression(walk, state, arg)
+      walkArgument(walk, state, arg, target, at)
+      at = at + 1
     }
     applyCallEffects(walk, state, e) // a constructor body is a callee like any other
     return
@@ -2024,6 +2143,119 @@ const walkExpression = (walk: BoundsWalk, state: State, expr: Node): void => {
   // walked rather than skipped.
   for (const child of e.children) {
     walkExpression(walk, state, child)
+  }
+}
+
+// ---- Range entries (WP31 §6 and §8) -------------------------------------------------
+
+/** The `Lo` of a range with no lower end to prove. */
+const I32_MIN: i64 = -2147483648
+
+/**
+ * Whether `node` stores back into a ranged place: a compound assignment or an
+ * increment, whose sum enters the target's range again. It is
+ * `rangedStoreOf` in `src/emit-util.ts`, asked here without reaching into the
+ * emitter (the reason `isBoundsAssignment` gives).
+ */
+const storesBackRange = (ctx: CheckContext, node: Node): boolean => {
+  const steps = node.kind === N_UNARY && (node.text === "++" || node.text === "--")
+  const compound = node.kind === N_BINARY && node.text !== "=" && isBoundsAssignment(node.text)
+  return (steps || compound) && ctx.table.isRanged(ctx.program.nodeTypes[node.children[0].id])
+}
+
+/**
+ * The range a value enters at `node` with a check, or -1: an entry the
+ * checker recorded (a ranged `nodeTypes` beside the source in
+ * `nodeCoercions`), or a store back into a ranged place. The two the emitter
+ * checks (`emitRangeEntry` and `emitRangedStore`), less the entries that cost
+ * nothing already (`entryIsFree`).
+ */
+const rangeEntryOf = (ctx: CheckContext, node: Node): i32 => {
+  const program = ctx.program
+  const table = ctx.table
+  const from = program.nodeCoercions[node.id]
+  const to = program.nodeTypes[node.id]
+  if (from >= 0 && table.isRanged(to)) {
+    return table.entryIsFree(from, to) ? -1 : to
+  }
+  if (storesBackRange(ctx, node)) {
+    const target = program.nodeTypes[node.children[0].id]
+    return table.entryIsFree(T_I32, target) ? -1 : target
+  }
+  return -1
+}
+
+/**
+ * Whether the value `source` already lies in `to` where it enters (WP31 §8).
+ * Two sources can be judged. `toI32(x)` lands in `x`'s declared range
+ * (`convertedRange`), so `toI32(b)` on a `u8` enters `integer<0, 255>` for
+ * nothing. A local is judged by its facts, one end at a time:
+ *
+ *   - the lower end holds when `Lo` is `-2147483648`, or `Lo <= 0` and the
+ *     local is known non-negative. `Lo > 0` is never proven from flow, because
+ *     `orderFacts` records no lower bound but zero (§11 leaves that open);
+ *   - the upper end holds when `Hi` is `2147483647`, or `maxIndexOf` bounds
+ *     the local by at most `Hi + 1`.
+ *
+ * A declared range on the source counts through the same two queries, so a
+ * wider range is narrowed by a guard exactly as an `i32` is.
+ */
+const provesEntry = (walk: BoundsWalk, state: State, source: Node, to: i32): boolean => {
+  const ctx = walk.ctx
+  const lo = toI64(ctx.table.rangeLo(to))
+  const hi = toI64(ctx.table.rangeHi(to))
+  const converted = convertedRange(walk, source)
+  if (converted !== null) {
+    return converted.lo >= lo && converted.hi <= hi
+  }
+  const v = indexLocal(ctx, source)
+  if (v === null) {
+    return false
+  }
+  const low = lo === I32_MIN || (lo <= toI64(0) && knownNonNegative(state, v))
+  if (!low) {
+    return false
+  }
+  if (hi === I32_MAX) {
+    return true
+  }
+  const bound = maxIndexOf(state, v)
+  return bound >= 0 && toI64(bound) <= hi + toI64(1)
+}
+
+/**
+ * Record the verdict for one range entry, the way `judge` does for an access:
+ * a proof goes into `program.nodeProvenRange`, where the emitter and the
+ * attribute pass read it, and a check left inside a loop goes on the list
+ * `src/checker.ts` warns from (WP31 §8).
+ *
+ * Only pass 2 judges an entry. `src/ranges.ts` walks bodies again with what
+ * the whole program knows, and could prove more, but a warning pass 2 gave
+ * would then have to be taken back (`retractWarnings` does that for an
+ * access); an entry it leaves checked is sound, and costs what it did.
+ *
+ * The warning names a guard, so it is only given where a guard can prove the
+ * entry: a range starting at 0 or at `-2147483648`. A lower end above zero is
+ * never proven from flow, and one below it only by `v >= 0`, which would
+ * refuse values the range allows.
+ */
+const judgeRange = (walk: BoundsWalk, state: State, node: Node): void => {
+  if (walk.tables !== null) {
+    return
+  }
+  const ctx = walk.ctx
+  const to = rangeEntryOf(ctx, node)
+  if (to < 0) {
+    return
+  }
+  // An entry with no recorded source is a store back, a sum no fact is stated about.
+  if (ctx.program.nodeCoercions[node.id] >= 0 && provesEntry(walk, state, node, to)) {
+    ctx.program.nodeProvenRange[node.id] = true
+    return
+  }
+  const lo = toI64(ctx.table.rangeLo(to))
+  if (walk.loops > 0 && (lo === toI64(0) || lo === I32_MIN)) {
+    walk.unprovenRanges.push(node)
   }
 }
 
@@ -2774,38 +3006,41 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
 }
 
 /**
- * Prove the indices of one checked function body. Returns the access nodes
- * whose check survived inside a loop, in source order, so that the WP15 §8
- * walk reports them from the same source-order traversal every other warning
- * of the class comes out of.
+ * Prove the indices and the range entries of one checked function body.
+ * Returns the walk, whose `unproven` and `unprovenRanges` are the accesses and
+ * entries whose check survived inside a loop, so that the WP15 §8 walk reports
+ * them from the same source-order traversal every other warning of the class
+ * comes out of.
  *
- * The proofs themselves go into `program.nodeProvenIndex`, which is the only
- * thing the emitter ever reads from here.
+ * The proofs themselves go into `program.nodeProvenIndex` and
+ * `program.nodeProvenRange`, which are the only things the emitter ever reads
+ * from here.
  */
-export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: boolean): Node[] => {
+export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: boolean): BoundsWalk => {
+  const walk = new BoundsWalk(ctx, uncheckedIndexing)
   // A body with nothing to judge has nothing to prove and nothing to warn
   // about, and the walk writes nothing else.
-  if (!judgesAnything(body)) {
-    return []
+  if (!judgesAnything(ctx, body)) {
+    return walk
   }
-  const walk = new BoundsWalk(ctx, uncheckedIndexing)
-  const state = new State()
+  const state = new State(ctx.table)
   if (body.kind === N_BLOCK) {
     walkBoundsStatement(walk, state, body)
   } else {
     walkExpression(walk, state, body)
   }
-  return walk.unproven
+  return walk
 }
 
 /**
- * Whether `node` holds anything `judge` or `judgeClampBound` is ever called on:
- * an element access, or a call spelled `.charCodeAt(...)` or `.substring(...)`,
- * whatever its receiver. Read off the syntax alone, so it answers `true` for
- * more than the walk judges, never less.
+ * Whether `node` holds anything `judge`, `judgeClampBound` or `judgeRange` is
+ * ever called on: an element access, a call spelled `.charCodeAt(...)` or
+ * `.substring(...)` whatever its receiver, or a value entering a range. Read
+ * off the syntax and the entries the checker recorded, so it answers `true`
+ * for more than the walk judges, never less.
  */
-const judgesAnything = (node: Node): boolean => {
-  if (node.kind === N_INDEX) {
+const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
+  if (node.kind === N_INDEX || rangeEntryOf(ctx, node) >= 0) {
     return true
   }
   if (node.kind === N_CALL) {
@@ -2815,7 +3050,8 @@ const judgesAnything = (node: Node): boolean => {
     }
   }
   for (const child of node.children) {
-    if (child.children.length > 0 && judgesAnything(child)) {
+    // A leaf judges nothing unless a value enters a range there (WP31 §6).
+    if (child.children.length > 0 ? judgesAnything(ctx, child) : rangeEntryOf(ctx, child) >= 0) {
       return true
     }
   }
@@ -2976,10 +3212,7 @@ export const isOpenAccess = (ctx: CheckContext, node: Node): boolean => {
     return false
   }
   for (const bound of node.children[1].children) {
-    if (
-      !program.nodeProvenClamp[bound.id] &&
-      (literalValue(bound) >= 0 || indexLocal(program, bound) !== null)
-    ) {
+    if (!program.nodeProvenClamp[bound.id] && (literalValue(bound) >= 0 || indexLocal(ctx, bound) !== null)) {
       return true
     }
   }
@@ -2988,7 +3221,7 @@ export const isOpenAccess = (ctx: CheckContext, node: Node): boolean => {
 
 /** Whether `holderOf` answers for `receiver` at all, and `proves` reads `index`. */
 const couldProve = (ctx: CheckContext, receiver: Node, index: Node): boolean => {
-  if (literalValue(index) < 0 && indexLocal(ctx.program, index) === null) {
+  if (literalValue(index) < 0 && indexLocal(ctx, index) === null) {
     return false
   }
   if (lengthHolder(ctx, receiver) !== null) {
@@ -3251,7 +3484,6 @@ const writesVariable = (effects: Effects, v: Local): boolean =>
  * to a link of the path, or calls something that might.
  */
 const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionSig): EntryFacts => {
-  const program = walk.ctx.program
   const count = callee.paramNames.length
   const out = new EntryFacts(count)
   const args: Node[] = []
@@ -3285,9 +3517,9 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
     let holderRoot: Local | null = null
     let fields: string[] = []
     const type = callee.paramTypes[k]
-    if (isIndexType(type)) {
+    if (isIndexType(walk.ctx.table, type)) {
       const constant = literalValue(arg)
-      const v = indexLocal(program, arg)
+      const v = indexLocal(walk.ctx, arg)
       if (constant >= 0) {
         out.floor[k] = constant
         out.maxIndex[k] = constant + 1
@@ -3520,7 +3752,7 @@ const seedEntry = (walk: BoundsWalk, state: State, params: (Local | null)[], ent
   let k = 0
   while (k < params.length && k < entering.floor.length) {
     const p = params[k]
-    if (p !== null && isIndexType(p.type)) {
+    if (p !== null && isIndexType(walk.ctx.table, p.type)) {
       if (entering.floor[k] >= 0) {
         addFact(state, new Fact(FACT_MIN_VALUE, p, null, entering.floor[k]))
       }
@@ -3543,7 +3775,7 @@ const seedEntry = (walk: BoundsWalk, state: State, params: (Local | null)[], ent
       addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, entering.values[k]))
     } else if (holder !== null && entering.index[k] >= 0) {
       const i = params[entering.index[k]]
-      if (i !== null && isIndexType(i.type)) {
+      if (i !== null && isIndexType(walk.ctx.table, i.type)) {
         addFact(state, new Fact(entering.kinds[k], i, holder, 0))
       }
     }
@@ -3589,7 +3821,7 @@ export const walkWithRanges = (
   walk.callees = callees
   walk.record = record
   walk.stopAfter = record ? -1 : stopAfter
-  const state = new State()
+  const state = new State(ctx.table)
   if (entering !== null && !entering.isEmpty()) {
     seedEntry(walk, state, params, entering)
   }

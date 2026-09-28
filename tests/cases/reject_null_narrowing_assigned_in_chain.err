@@ -1,0 +1,1 @@
+reject_null_narrowing_assigned_in_chain.ts:13:49: error: Cannot read property `v` of `Node2 | null`

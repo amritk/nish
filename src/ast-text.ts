@@ -25,6 +25,7 @@
 
 import {
   FLAG_CONST,
+  FLAG_USING,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_OPTIONAL,
@@ -72,6 +73,9 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_CONST) !== 0) {
     name = `${name}+const`
+  }
+  if ((node.flags & FLAG_USING) !== 0) {
+    name = `${name}+using`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

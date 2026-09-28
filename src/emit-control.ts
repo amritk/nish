@@ -13,6 +13,8 @@
 
 import { closeHeaderScope, openHeaderScope } from "./emit-arrays"
 import { Emitter, LoopTarget } from "./emit"
+import { emitScopeJoins } from "./emit-parallel"
+import { emitRangedStore } from "./emit-builtins"
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -293,6 +295,8 @@ const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRB
 export const emitBreak = (emitter: Emitter): void => {
   const target = emitter.loops[emitter.loops.length - 1]
   target.hasBreak = true
+  // WP29 P2: the scopes opened inside the target join first, inside its pass.
+  emitScopeJoins(emitter, emitter.loops.length)
   if (target.scopesPass()) {
     emitter.releasePass(target)
   }
@@ -306,6 +310,7 @@ export const emitContinue = (emitter: Emitter): void => {
     const loop = emitter.loops[i]
     const target = loop.continueBlock
     if (target !== null) {
+      emitScopeJoins(emitter, i + 1) // WP29 P2, as for `break`
       if (loop.scopesPass()) {
         emitter.releasePass(loop)
       }
@@ -389,6 +394,7 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
         `${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`
       )
     : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs)
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value
 }
@@ -406,6 +412,7 @@ export const emitIncDec = (emitter: Emitter, expr: Node): string => {
   const one = float ? "0x3FF0000000000000" : "1"
   const old = loadLocal(emitter, local)
   const value = emitter.fn.emitValue(`${opcode} ${emitter.llvm(local.type)} ${old}, ${one}`)
+  emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return expr.flags === FLAG_POSTFIX ? old : value
 }

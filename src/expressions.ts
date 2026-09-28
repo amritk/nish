@@ -16,6 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding"
+import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics"
 import { CheckContext } from "./context"
@@ -90,6 +91,7 @@ import {
   T_I64,
   T_STRING,
   T_VOID,
+  R_UNKNOWN,
 } from "./types"
 
 /**
@@ -116,11 +118,33 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   // the welcome on; nothing else does, so everywhere else it is refused here,
   // once, however the value is used.
   const welcome = want === WANT_MAYBE || ctx.table.isMaybe(want)
-  const type = computeType(ctx, expr, scope, welcome && expr.kind !== N_PAREN ? -1 : want)
-  if (ctx.table.isMaybe(type) && !welcome && expr.kind !== N_PAREN) {
-    ctx.program.nodeTypes[expr.id] = T_ERROR
-    return refuseMaybe(ctx, expr, type)
+  // WP31 §6 and §7: a ranged `want` is a sink the value enters, and a ranged
+  // value keeps its range only where nothing computes with it — an
+  // unannotated `const`, which is one of the maybe's places, and a generic
+  // argument, which says so with `WANT_RANGE`. Everywhere else an operator or
+  // a sink of another type reads it as its base, `i32`.
+  const entry = ctx.table.isRanged(want) ? want : -1
+  const keepsRange = welcome || want === WANT_RANGE || entry >= 0
+  let inner = welcome && expr.kind !== N_PAREN ? -1 : want
+  if (want === WANT_RANGE && expr.kind !== N_PAREN) {
+    inner = -1
+  } else if (entry >= 0 && !takesRangeContext(expr)) {
+    inner = -1
   }
+  const computed = computeType(ctx, expr, scope, inner)
+  if (ctx.table.isMaybe(computed) && !welcome && expr.kind !== N_PAREN) {
+    ctx.program.nodeTypes[expr.id] = T_ERROR
+    return refuseMaybe(ctx, expr, computed)
+  }
+  // An entry: an `i32`, or a value of another range, stored where this range
+  // is wanted. The node records the range and `nodeCoercions` the source, the
+  // way a class standing for an interface does, and the emitter checks the
+  // value there (`emitRangeEntry`). A value already of this range, a literal
+  // included, is recorded as it is and costs nothing.
+  if (recordRangeEntry(ctx, expr, computed, entry)) {
+    return entry
+  }
+  const type = readAsBase(ctx, computed, keepsRange)
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want)
     ctx.program.nodeCoercions[expr.id] = type
@@ -130,6 +154,45 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   ctx.program.nodeTypes[expr.id] = type
   return type
 }
+
+/**
+ * The `want` of a place that keeps a value's range (WP31 §7): an argument whose
+ * type argument is being inferred, so `identity(r)` binds `T` to `r`'s range.
+ * Below every type id and apart from -1 and `WANT_MAYBE`, so every checker
+ * that reads `want < 0` as "no contextual type" reads it the same way.
+ */
+export const WANT_RANGE: i32 = -3
+
+/**
+ * The expressions a ranged `want` reaches, because they spell a value rather
+ * than compute one: a literal, which is checked against the range, and the
+ * parentheses and the ternary arms that pass it on. Every other expression is
+ * checked with no context, and its value enters the range with a check.
+ */
+const takesRangeContext = (expr: Node): boolean =>
+  expr.kind === N_NUMBER ||
+  expr.kind === N_PAREN ||
+  expr.kind === N_CONDITIONAL ||
+  (expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER)
+
+/**
+ * An entry recorded after the value was checked, for a sink whose type was not
+ * known then: a generic argument, checked before its type arguments were
+ * inferred (WP31 §6). Answers whether `node` now enters `to`, which is what
+ * `checkExpression` records itself when the sink is known first.
+ */
+export const recordRangeEntry = (ctx: CheckContext, node: Node, from: i32, to: i32): boolean => {
+  if (!ctx.table.isRanged(to) || from === to || (from !== T_I32 && !ctx.table.isRanged(from))) {
+    return false
+  }
+  ctx.program.nodeCoercions[node.id] = from
+  ctx.program.nodeTypes[node.id] = to
+  return true
+}
+
+/** A ranged type read as its base, `i32`, unless the place keeps the range. */
+const readAsBase = (ctx: CheckContext, type: i32, keepsRange: boolean): i32 =>
+  keepsRange ? type : ctx.table.baseOf(type)
 
 const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   switch (expr.kind) {
@@ -198,12 +261,15 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * which is `i32` unless `--number-mode f64`.
  */
 const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: boolean, at: Node): i32 => {
+  if (ctx.table.isRanged(want)) {
+    return checkRangedLiteral(ctx, expr, want, negated, at)
+  }
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType()
   if (isFloat(type)) {
     return type
   }
   const text = expr.text
-  if (hasFraction(text)) {
+  if (isFractional(text)) {
     // The wording says where the integer type came from: an explicit context
     // names it, and otherwise it is the number mode.
     const where =
@@ -226,7 +292,7 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
     // Past 2^53 the literal is already the double it rounded to, whatever the
     // digits say, so the range check below would be answering a question about
     // a different number. stage0 refuses it here and stage1 was compiling it.
-    if (Number(text) > TWO_53) {
+    if (numericLiteralValue(text) > TWO_53) {
       return ctx.errorType(
         expr,
         `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${spelled} value instead`
@@ -236,11 +302,11 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
     // largest values are past 2^53 and cannot be written at all.
     const bits = intBits(type)
     const limit: f64 = bits === 64 ? 18446744073709551615.0 : Math.pow(2.0, toF64(bits)) - 1.0
-    if (Number(text) > limit) {
+    if (numericLiteralValue(text) > limit) {
       return ctx.errorType(expr, `Literal \`${text}\` does not fit in ${spelled}`)
     }
   }
-  if (type === T_I64 && Math.abs(Number(text)) > TWO_53) {
+  if (type === T_I64 && Math.abs(numericLiteralValue(text)) > TWO_53) {
     return ctx.errorType(
       expr,
       `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`
@@ -249,29 +315,43 @@ const checkNumericLiteral = (ctx: CheckContext, expr: Node, want: i32, negated: 
   return type
 }
 
-/** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
-const TWO_53: f64 = 9007199254740992.0
-
-/** Whether a literal as written has a fraction or an exponent. */
-const hasFraction = (text: string): boolean => {
-  if (text.startsWith("0x") || text.startsWith("0X") || text.startsWith("0b") || text.startsWith("0o")) {
-    return false
+/**
+ * A literal where a range is wanted (WP31 §6): it takes the range as its type
+ * and costs nothing when it lies inside, and is a compile error when it does
+ * not, in the voice of ``Literal `256` does not fit in u8``. It is an `i32`
+ * literal first, so a fraction or a value past `i32` is refused in the words
+ * those already have.
+ */
+export const checkRangedLiteral = (
+  ctx: CheckContext,
+  expr: Node,
+  want: i32,
+  negated: boolean,
+  at: Node
+): i32 => {
+  const text = expr.text
+  if (isFractional(text)) {
+    return ctx.errorType(
+      expr,
+      `Non-integer literal \`${text}\` where ${ctx.table.typeName(want)} is expected`
+    )
   }
-  let i = 0
-  while (i < text.length) {
-    const c = text.charCodeAt(i)
-    if (c === 46) {
-      return true // a `.`; an exponent alone is still an integer value
-    }
-    i = i + 1
+  if (!fitsInI32(text, negated)) {
+    return ctx.errorType(expr, `Literal \`${text}\` does not fit in i32`)
   }
-  return Number(text) !== Math.floor(Number(text))
+  const magnitude = parseIntegerLiteral(text)
+  const value = negated ? -magnitude : magnitude
+  if (value < toI64(ctx.table.rangeLo(want)) || value > toI64(ctx.table.rangeHi(want))) {
+    const spelled = negated ? `-${text}` : text
+    return ctx.errorType(at, `Literal \`${spelled}\` is outside the range of ${ctx.table.typeName(want)}`)
+  }
+  return want
 }
 
 /** `-2147483648` parses as minus applied to 2147483648; that exact form is allowed. */
 const fitsInI32 = (text: string, negated: boolean): boolean => {
   const limit: f64 = negated ? 2147483648.0 : 2147483647.0
-  return Number(text) <= limit
+  return numericLiteralValue(text) <= limit
 }
 
 const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
@@ -312,6 +392,19 @@ const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
     "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)"
   )
 }
+
+/**
+ * `type` with no proof: a `Result` read in the unknown state, and any other
+ * type unchanged (#234). A proof is visible only to a proof consumer, which is
+ * the receiver of `.ok`, `.value`, `.error` or a `Result` method, or a
+ * narrowing test. Where a type is instead *inferred* from a value (a
+ * `let`/`const` initialiser, a ternary, an array literal's elements), the
+ * narrowed state would outlive the test that proved it. The comparison
+ * `assignable` makes ignores the state, so a later write of any other
+ * `Result` into that type would keep the claim. An argument, a `return` and a
+ * store are checked against a declared type, which never carries a proof.
+ */
+export const unproven = (ctx: CheckContext, type: i32): i32 => ctx.table.withState(type, R_UNKNOWN)
 
 const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
@@ -430,7 +523,10 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (target.kind !== N_IDENT) {
     return ctx.errorType(target, "Only simple variables can be assigned")
   }
-  const type = checkExpression(ctx, target, scope, -1)
+  // WP31: the target keeps its range on its node, which is how the emitter
+  // knows the stored value enters it again (`rangedStoreOf`); the arithmetic
+  // is its base's.
+  const type = ctx.table.baseOf(checkExpression(ctx, target, scope, WANT_RANGE))
   if (type === T_ERROR) {
     return T_ERROR
   }
@@ -845,8 +941,10 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
   narrow(ctx, expr.children[0], thenScope, true)
   const elseScope = scope.child()
   narrow(ctx, expr.children[0], elseScope, false)
-  const whenTrue = checkExpression(ctx, expr.children[1], thenScope, want)
-  const whenFalse = checkExpression(ctx, expr.children[2], elseScope, want)
+  // An arm's proof is not the ternary's (#234): `c ? r : q` is a `Result`
+  // whatever `r` was narrowed to, because the other arm may be `q`.
+  const whenTrue = unproven(ctx, checkExpression(ctx, expr.children[1], thenScope, want))
+  const whenFalse = unproven(ctx, checkExpression(ctx, expr.children[2], elseScope, want))
   if (whenTrue === T_ERROR || whenFalse === T_ERROR) {
     return T_ERROR
   }
@@ -924,14 +1022,14 @@ export const narrow = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: bo
 
 const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
   const op = cond.text
-  if (op === "&&" && whenTrue) {
-    narrow(ctx, cond.children[0], scope, true)
-    narrow(ctx, cond.children[1], scope, true)
-    return
-  }
-  if (op === "||" && !whenTrue) {
-    narrow(ctx, cond.children[0], scope, false)
-    narrow(ctx, cond.children[1], scope, false)
+  if ((op === "&&" && whenTrue) || (op === "||" && !whenTrue)) {
+    narrow(ctx, cond.children[0], scope, whenTrue)
+    // The right operand runs after the left one's test, so a variable it
+    // assigns no longer holds the value the test proved something about
+    // (#235): `p !== null && g((p = null) === null) && p.v`. This is the
+    // statement rule `assignInto` applies, for the operands after it.
+    clearNarrowingsAssignedIn(ctx, cond.children[1], scope)
+    narrow(ctx, cond.children[1], scope, whenTrue)
     return
   }
   if (op !== "===" && op !== "!==") {
@@ -1265,15 +1363,26 @@ export const assignInto = (
     }
     return slot
   }
+  // WP31 §7: a compound assignment to a ranged place computes in `i32`, and
+  // the result enters the range again, which the emitter checks before the
+  // store (`rangedStoreOf`). The target keeps its range on its node so that
+  // question can be answered from the tables.
+  const operand = ctx.table.baseOf(slot)
   if (isBitwiseCompound(op)) {
     // The bitwise family reads the target, applies one instruction and writes
     // it back, whatever the target is, so a local, a field and an element all
     // share the operand rule (and the refusal) below.
-    const bits = checkExpression(ctx, value, scope, slot)
+    const bits = checkExpression(ctx, value, scope, operand)
     if (local !== null) {
       scope.clearNarrowing(local)
     }
-    return checkBitwiseAssignOperands(ctx, expr, slot, bits)
+    // The target is read and written without being checked as an expression,
+    // so its range is recorded on it here for `rangedStoreOf` to find.
+    if (ctx.table.isRanged(slot)) {
+      ctx.program.nodeTypes[expr.children[0].id] = slot
+    }
+    const result = checkBitwiseAssignOperands(ctx, expr, operand, bits)
+    return result === T_ERROR ? T_ERROR : slot
   }
   // A compound arithmetic assignment has a rule of its own rather than the
   // binary operator's: the target must be numeric and the value must be
@@ -1289,18 +1398,23 @@ export const assignInto = (
   // `checkOperator` used, because that is what records its type — and
   // `collectDivisionFacts` reads exactly that to decide whether `x /= k` can
   // reach `nish_panic_div` (`tests/cases/div_compound_attributes`).
-  const target = checkExpression(ctx, expr.children[0], scope, slot)
-  const rhs = checkExpression(ctx, value, scope, value.kind === N_NUMBER ? literalHint(target, slot) : slot)
+  const target = ctx.table.baseOf(checkExpression(ctx, expr.children[0], scope, slot))
+  const rhs = checkExpression(
+    ctx,
+    value,
+    scope,
+    value.kind === N_NUMBER ? literalHint(target, operand) : operand
+  )
   if (local !== null) {
     scope.clearNarrowing(local)
   }
   if (target === T_ERROR || rhs === T_ERROR || slot === T_ERROR) {
     return slot
   }
-  if (!isNumeric(slot) || rhs !== slot) {
+  if (!isNumeric(operand) || rhs !== operand) {
     return ctx.errorType(
       expr,
-      `Operator \`${op}\` requires two operands of the same numeric type, got ${ctx.table.typeName(slot)} and ${ctx.table.typeName(rhs)}`
+      `Operator \`${op}\` requires two operands of the same numeric type, got ${ctx.table.typeName(operand)} and ${ctx.table.typeName(rhs)}`
     )
   }
   return slot

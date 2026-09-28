@@ -1,0 +1,2 @@
+reject_thread_region_dst_as_arg.ts:20:24
+The destination of this `spawn` must be a `const` local bound to a fresh array

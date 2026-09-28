@@ -135,6 +135,8 @@ reject_import_type_only	expected `{`, found `IDENT`
 reject_in_operator	expected `;`, found `IDENT`
 reject_instanceof	expected `;`, found `IDENT`
 reject_labeled_statement	expected `;`, found `:`
+reject_leading_zero_decimal	Decimals with leading zeros are not allowed
+reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
 reject_loose_equality	expected `;`, found `==`
 reject_loose_inequality	expected `;`, found `!=`
 reject_map_iter_for_in	expected `;`, found `IDENT`
@@ -156,6 +158,15 @@ reject_param_destructured	expected a name, found `{`
 reject_param_rest	expected a name, found `...`
 reject_regex	expected an expression, found `/`
 reject_satisfies	expected `;`, found `IDENT`
+reject_separator_after_dot	Numeric separators are not allowed here
+reject_separator_after_prefix	Numeric separators are not allowed here
+reject_separator_before_bigint_suffix	Numeric separators are not allowed here
+reject_separator_before_dot	Numeric separators are not allowed here
+reject_separator_doubled	Multiple consecutive numeric separators are not permitted
+reject_separator_exponent	Numeric separators are not allowed here
+reject_separator_leading_zero	Numeric separators are not allowed here
+reject_separator_ranged_bound	Numeric separators are not allowed here
+reject_separator_trailing	Numeric separators are not allowed here
 reject_shebang_not_first	'#!' can only be used at the start of a file
 reject_side_effect_import	expected `{`, found `STRING`
 reject_surrogate_escape_too_large	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive

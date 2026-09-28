@@ -549,6 +549,27 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP29 P2: a scope's tasks. `nish_scope_spawn` files one — it copies the
+    // payload and keeps the task until its scope joins, which is a shared
+    // write — and `nish_scope_join` runs every task filed under a scope, each
+    // on a thread of its own, joins them, and makes each task's store: so it
+    // does whatever the tasks and their stores do, and is not `willreturn`.
+    this.add(
+      new RuntimeFunction(
+        "nish_scope_spawn",
+        "declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_scope_join",
+        "declare void @nish_scope_join(i8* noundef nonnull)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // The partitioner's own question, declared because it is part of the ABI
     // nish.h publishes. It caches the answer in a word of its own, which no
     // program can observe.

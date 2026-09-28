@@ -105,6 +105,10 @@ no prelude can reach it. They are language decisions
   `f64[]` in the language, `push` and `pop` included, and under Node it is
   JavaScript's fixed-length typed array: `t.push(5.0)` is
   `TypeError: t.push is not a function`.
+- **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
+  in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
+  an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)
+  §6). Only a program that leaves a range can tell the difference.
 - **`orReturn()` does not propagate.** It throws a marker that the rewriter's
   `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
   it escapes as an uncaught exception. Every other part of `Result` works —
@@ -128,6 +132,16 @@ no prelude can reach it. They are language decisions
   found`), and `runtime/shim.mjs` imports `node:fs`, `node:child_process` and
   `node:os`, which a browser does not have.
   [wp33-round-trip.md](wp33-round-trip.md) §4.3 splits the runtime by host.
+- **A scope's tasks run at the spawn under Node**, one after another, and each
+  stores its answer there; natively they run together when the scope's block
+  ends, and each answer is stored after the last task finishes
+  ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)). A task writes
+  nothing another can see and cannot print, and the checker refuses a program
+  that reads a destination, or writes what a task may read, before the block
+  ends, so the two print the same. `using` itself needs `--js-explicit-resource-management` on Node
+  22 and is native from Node 24; Node 22's flagged `using` never calls
+  `[Symbol.dispose]`, and nothing here needs it to, because every task has run
+  by the time the block ends.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`
@@ -145,9 +159,11 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Two `nish/threads` programs are held to the same claim by name,
-`tests/link/par_map` and `tests/link/par_reduce`: each prints under Node what
-its native binary prints (`node tests/run.js threads-under-node`).
+Six `nish/threads` programs are held to the same claim by name,
+`tests/link/par_map`, `tests/link/par_reduce` and the four
+`tests/link/thread_scope_*`: each prints under Node, run with
+`--js-explicit-resource-management`, what its native binary prints
+(`node tests/run.js threads-under-node`).
 
 Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
 

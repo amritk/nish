@@ -93,11 +93,13 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   (`tests/cases/dbg_utf8`).
 - **Numeric literals.** Decimal, hexadecimal (`0x10`), binary (`0b1`),
   octal (`0o17`), exponent (`1e3`), and separators (`1_000`) are accepted
-  *(CLI only)*. A literal's type comes from its context (see
+  *(CLI only)*; a separator goes only between two digits (see
+  [Numeric literals](#numeric-literals)). A literal's type comes from its context (see
   [Numeric literals](#numeric-literals)); by default it is `number`. In i32
   mode a literal must have an integral value: `1.5` is rejected with
-  `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1.0`, `1e3`
-  are integral and accepted *(CLI only)*. A literal above `2147483647` is
+  `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1e3` is the
+  integer 1000 and accepted, but a point spells a float, so `1.0` is refused
+  as `1.5` is *(CLI only)*. A literal above `2147483647` is
   rejected with ``Literal `...` does not fit in i32`` *(CLI only)*; the
   directly negated literal `-2147483648` is accepted and is `INT_MIN`
   (`tests/cases/int_min_literal`).
@@ -220,25 +222,143 @@ Type rules:
   Arrays of arrays (`tests/cases/arr_nested`), arrays of strings
   (`tests/cases/arr_strings`), arrays of class instances and class fields
   of array type work *(CLI only)*.
-- **`integer` is reserved** for ranged integers, `integer<Lo, Hi>`
-  ([wp31-ranged-integers.md](wp31-ranged-integers.md)), which this compiler
-  does not build yet. Holding the name now means the feature can be added
-  later without taking a name away from a program that already uses it.
-  As a type, `integer` or `integer<T>` is
-  `` `integer<Lo, Hi>` is reserved for ranged integers, which this compiler does not have yet ``
-  (`tests/cases/reject_integer_use`). A numeric literal as a type argument
-  (`integer<0, 255>`) is still a syntax error, because the parser reads only
-  types there. The name is also on the list of built-in type names, so
-  `type integer = …` and `enum integer` are refused the way `type string = …`
-  is (`reject_integer_alias`, `reject_integer_enum`). A class, interface or
-  function may not take it either, because `integer<0, 255>` would then mean
-  two things in the module that declared one:
-  `` `integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a class ``
-  (`reject_integer_class`, `reject_integer_interface`,
-  `reject_integer_function`). A module constant or a local called `integer`
-  is a value, not a type, and is still accepted.
+- **`integer<Lo, Hi>` is a ranged integer** ([wp31-ranged-integers.md](wp31-ranged-integers.md)):
+  an `i32` the compiler knows lies in `[Lo, Hi]`. It is an `i32` in the IR, in
+  memory and at the ABI, in both number modes, and `tsc` reads it as a
+  `number` alias (`runtime/nish.d.ts`). `integer<0, 0xFF>` and
+  `integer<0, 255>` are one type, spelled `integer<0, 255>` in a diagnostic and
+  mangled `rng.p0.p255` in a symbol (`rng.m128.p127` for `integer<-128, 127>`),
+  so `Box<integer<0, 255>>` is `%struct.Box$rng.p0.p255`
+  (`tests/cases/rng_param`, `rng_generic`).
+  - **The bounds** are two integer literals, a sign allowed, with
+    `Lo <= Hi` and both in `i32`. Each other spelling is refused:
+    `` `integer` needs exactly two bounds, e.g. `integer<0, 255>` ``
+    (`reject_rng_arity`, `reject_integer_use`);
+    ``A bound of `integer<Lo, Hi>` must be an integer literal, got `MAX` ``,
+    a constant or a type (`reject_rng_bound_not_literal`,
+    `reject_rng_bound_type`);
+    ``Non-integer literal `1.5` where a bound of `integer<Lo, Hi>` is expected``
+    (`reject_rng_bound_float`);
+    `` `integer<10, 0>` is an empty range `` (`reject_rng_empty`); and
+    ``Bound `4294967295` of `integer<Lo, Hi>` is outside i32``
+    (`reject_rng_bound_i32`, `reject_rng_bound_i32_negative`). A numeric
+    literal type is parsed wherever a type is and is legal only as one of
+    these bounds: `const x: 5` and `Box<3>` are
+    ``A literal type `5` is only allowed as a bound of `integer<Lo, Hi>` ``
+    (`reject_rng_literal_type`, `reject_rng_literal_type_argument`).
+  - **Entering a range is checked.** An annotated initialiser, an assignment
+    (`=`, the compound forms, `++` and `--`), an argument to a function, a
+    method or a constructor, a `return`, a field or object-literal field, an
+    array-literal element, an element store and `push` are *entries*. The
+    source must be an `i32` or another ranged type — a `u8` is not an
+    `integer<0, 255>` (`reject_rng_from_u8`), and under `--number-mode f64` a
+    `number` is an `f64` that enters through `toI32(x)` (`reject_rng_from_f64`).
+    A literal inside the range and a value of a range inside this one cost
+    nothing; a literal outside it is
+    ``Literal `12` is outside the range of integer<0, 9>``
+    (`reject_rng_literal_outside`, `reject_rng_literal_outside_negative`).
+    Anything else is compared once and the program panics outside the range,
+    printing `value out of range: expected integer<0, 255>` and exiting 1
+    (`rng_param`, `rng_entries`, `rng_bitwise`, `rng_entry_panic`,
+    `rng_entry_range_panic`, `rng_entry_push_panic`, `rng_entry_bitwise_panic`). The check is the type's
+    meaning, so `--unchecked-indexing` keeps it and `--wrapping` changes only
+    the arithmetic before it. Under Node nothing is checked, which
+    [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md#what-stays-divergent) records.
+  - **An entry the compiler can prove is free** (WP31 §8). The bounds proof of
+    [Element access](#element-access) judges each entry where the value is
+    computed, and writes no compare where it already places the value inside
+    the range. Two sources can be proven. A local is proven one end at a
+    time: the lower end when `Lo` is `-2147483648`, or `Lo <= 0` and the local
+    is known non-negative; the upper end when `Hi` is `2147483647`, or the
+    local is known below `Hi + 1` — by a loop condition, a guard that reaches
+    the entry, a literal it was bound to, or its own declared range. And
+    `toI32(x)` of a `u8`, a `u16` or a ranged value lands in `x`'s declared
+    range, so `const r: integer<0, 255> = toI32(b)` costs nothing for a `u8`
+    `b`. `for (let i = 0; i < 256; i++) { const b: integer<0, 255> = i }` is
+    the shape §7 recommends, and the loop condition proves it
+    (`tests/cases/perf_rng_quiet`); so is a call that hands a loop counter to a
+    ranged parameter, which leaves wp31 §12's `getByte` program with no check
+    at all (`perf_rng_getbyte`). A lower end above zero is never proven
+    from a guard, because the proof records no lower bound but zero, and the
+    sum a compound assignment or an increment stores back is never proven at
+    all; both keep their check. A check that survives inside a loop is a
+    performance warning ([Diagnostics](#diagnostics-and-debugging-flags)), and a counter declared
+    with a range is the loop that warns and then panics
+    (`perf_rng_counter`).
+  - **Leaving a range is free.** Every operator reads a ranged value as `i32`,
+    so `r + 1` is an `i32`, `r < 9` compares two `i32`s and `toI64(r)` is a
+    `sext`; mixing one with an `i32` is never an error, and nothing computes a
+    range. The range survives where nothing is computed: a `const` without an
+    annotation keeps it and a `let` widens to `i32` (`rng_widen`); a read of a
+    ranged field, element or result keeps it; and a type argument keeps it, so
+    `identity(r)` is `identity<integer<0, 9>>` (`rng_generic`). A counter
+    declared with a range fails its last `i++`, which is why the range goes on
+    the value used rather than on the counter (`rng_entry_panic`).
+  - **Where a range may not go.** A `declare function` may not mention one,
+    because the C side never promised it (`reject_rng_declare_function`,
+    `reject_rng_declare_function_return`), and `new Array<integer<1, 9>>(n)` is
+    refused because its zero fill is outside the range
+    (`reject_rng_array_zero_fill`). Under `-g` a ranged type is a
+    `DW_TAG_typedef` of `int` named `integer<0, 255>` (`dbg_rng`).
+  - **The name.** `integer` is on the list of built-in type names, so
+    `type integer = …` and `enum integer` are refused the way `type string = …`
+    is (`reject_integer_alias`, `reject_integer_enum`). A class, interface or
+    function may not take it either, because `integer<0, 255>` would then mean
+    two things in the module that declared one:
+    `` `integer` is reserved for ranged integers (`integer<Lo, Hi>`) and cannot be declared as a class ``
+    (`reject_integer_class`, `reject_integer_interface`,
+    `reject_integer_function`). A module constant or a local called `integer`
+    is a value, not a type, and is still accepted.
 
 ### Numeric literals
+
+**A separator goes between two digits and nowhere else**, as in TypeScript.
+`1_000_000`, `0xFF_FF` and `1_234.5_6` are the values their digits spell, and
+so is `1e1_0` in an exponent (`tests/cases/math_numeric_separators`). Any
+other `_` is refused by the lexer with TypeScript's words, one error for the
+whole literal: after a radix prefix (`0x_FF`,
+`tests/cases/reject_separator_after_prefix`), at the end (`10_`,
+`reject_separator_trailing`), either side of the point (`1_.5`, `1._5`:
+`reject_separator_before_dot`, `reject_separator_after_dot`), straight after
+the exponent marker or its sign (`1e_5`, `1e+_5`, `reject_separator_exponent`),
+before the BigInt suffix (`0xFF_n`, `reject_separator_before_bigint_suffix`)
+and after a leading zero (`0_1`, `reject_separator_leading_zero`) are all
+`` Numeric separators are not allowed here `` (TS6188), and two in a row
+(`1__0`, `0xF__F`, `reject_separator_doubled`) is
+`` Multiple consecutive numeric separators are not permitted `` (TS6189). The
+parser still reads the literal, so the next token does not cost a second
+error, and a bound of a ranged type is refused the same way
+(`integer<0, 0x_FF>`, `reject_separator_ranged_bound`).
+
+**A decimal literal does not start with `0` and another digit**, as in
+TypeScript, and as in a JavaScript module, where Node refuses one as a
+`SyntaxError`. `0`, `0.5` and `0e1` are legal, and so is every radix prefix
+(`tests/cases/leading_zero_legal`). A run of octal digits after the zero is a
+legacy octal literal: `017`, and `017.5` or `07_1` with it, are
+`` Octal literals are not allowed. Use the syntax '0o17' `` (TS1121), naming the
+`0o` spelling of those digits (`tests/cases/reject_leading_zero_octal`). Any
+other, such as `09`, `08.5` or `09e1`, is
+`` Decimals with leading zeros are not allowed `` (TS1489,
+`reject_leading_zero_decimal`). The lexer refuses it and it costs one error,
+as a misplaced separator does. Before issue #271, `017` compiled as seventeen.
+There are two differences from `tsc`. `tsc` reads `017.5` as two tokens and
+reports a second error for the `.5`, but the lexer reports one error for the
+whole literal. And `-017` suggests `0o17`, not `-0o17`, because the lexer does
+not see the sign.
+
+**Every spelling is read at the value it spells, in every numeric type**,
+as TypeScript reads it (#267): `0b1010` is 10, `0o17` is 15, `1_000` is 1000
+and `1e5` is 100000 as an `i32`, an `i64`, an `f64`, a module constant or a
+bound of `integer<Lo, Hi>` (`tests/cases/literal_spellings`). A binary or
+octal literal past 2^53 rounds once, to the double TypeScript reads. An
+exponent is an integer when its value is one, so `100e-2` is the integer 1 and
+`1e-1` in an integer position is `` Non-integer literal `1e-1` where i32 is
+expected `` (`reject_literal_exponent_fraction`); a point always spells a
+float. The range rules below read the same value, so `1e10` and a 33-bit
+`0b` literal are `` Literal `1e10` does not fit in i32 ``
+(`reject_literal_exponent_overflow`, `reject_literal_binary_overflow`), and an
+`i64` module constant past 2^53 is refused as an `i64` literal is
+(`reject_literal_const_precision`).
 
 A numeric literal has the mode's default type (`i32`, or `f64` in f64 mode)
 unless its *immediate* context demands another numeric type, in which case it
@@ -300,7 +420,9 @@ at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
 rule, `reject_u64_literal_precision`) because a numeric literal is read as a
 double, as TypeScript reads it, so a larger one is already rounded. Every one of these messages quotes the
 literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
-as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
+as `0x1FF` and a rounded literal as the digits in the file. The one exception
+is a separator, which the parser drops, so `1_000_000_000_000` in an `i32`
+context reads back as `` Literal `1000000000000` does not fit in i32 ``. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
 `` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
 (`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is
@@ -454,7 +576,12 @@ value, so nothing is boxed; `null` takes its type from context.
   the narrowed `cur` on the right and then drops it) and before a loop whose
   body, condition, or update assigns the variable, because the second
   iteration sees the assigned value (`tests/cases/reject_null_narrowing_assigned`;
-  `reject_null_narrowing_leaks` for a use after the guarded block).
+  `reject_null_narrowing_leaks` for a use after the guarded block). Inside an
+  `&&` or `||` chain the same holds operand by operand: an operand that
+  assigns the variable ends its narrowing for every operand after it and for
+  the region the chain guards, so `p !== null && g((p = null) === null) && p.v`
+  is refused, and a test after the assignment narrows again
+  (`tests/cases/reject_null_narrowing_assigned_in_chain`, `res_proof_consumers`).
   Constants and parameters keep their narrowing for the whole region.
   Property paths are not narrowed: `if (n.next !== null) n.next.v` is
   rejected; copy into a local first *(CLI only)*.
@@ -573,7 +700,7 @@ still costs something against C and Rust, are in
 | `Err(e)` | the failure value, likewise | `res_basic` |
 | `r.isOk()`, `r.isErr()` | the discriminant test, and what narrows `r` | `res_basic` |
 | `r.ok` | the same bit as a plain `boolean`; `if (r.ok)` narrows too, because a tagged union is how TypeScript itself would spell this | `res_basic` |
-| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`, `res_by_value_param`; `reject_result_value_unchecked`, `reject_result_by_value_unchecked` |
+| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`, `res_by_value_param`; `reject_result_value_unchecked`, `reject_result_by_value_unchecked`, `reject_result_let_keeps_proof`, `reject_result_narrowing_assigned_in_chain` |
 | `r.error` | `E`, only where it proved `isErr()` | `res_basic`; `reject_result_error_in_ok_arm` |
 | `r.orReturn()` | `T` when ok; otherwise `return Err(r.error)` from the enclosing function — Rust's `?` | `res_propagate`, `res_by_value_propagate`; `reject_result_propagate_plain`, `reject_result_propagate_error_type` |
 | `r.unwrapOr(d)` | `T` when ok, `d` otherwise | `res_unwrap` |
@@ -594,6 +721,27 @@ one must be read at least once (`` `outcome` holds a `Result<i32, string>`
 that is never inspected ``, `reject_result_unhandled`). Handing the value on —
 an argument, a `return` — counts as reading it: the responsibility moves with
 the value, and the receiving signature carries the same rules.
+
+Storing one is handing it on too. An assignment statement — `rs[0] = rs[1]`,
+`r2 = r1` — moves the `Result` into its target and is not a
+discard; `r2 = r1` reads `r1`, and `r2`, a local, must still be inspected
+(`tests/cases/res_result_store`, `reject_result_store_unread`). The value an
+assignment replaces is dropped, though, so a `Result` local may not be
+assigned again while the value it holds has not been read since it was
+written (`` `r` is assigned again before its `Result<i32, string>` is
+inspected ``, `reject_result_overwrite_unread`). The check reads the function
+in source order, with an assignment's right-hand side before its target, so
+`r = retry(r)` is accepted, and a read in either branch of an `if` counts for
+an assignment after it. An element or a field is not tracked slot by slot, so
+`rs[0] = rs[1]` overwrites `rs[0]` unchecked. In a generic
+body a discarded value is judged by the type its template declares, as Rust's
+`#[must_use]` is: `items.pop()` on `items: T[]` drops a `T`, which is not a
+`Result` to the template's author even where `T` is one, while a template
+that drops a `Result<T, E>` it declared, or a concrete `Result`, is refused at
+every instantiation (`res_result_store`, `reject_result_generic_discarded`).
+That is what lets a `Map` hold a `Result` value
+(`tests/cases/map_value_result`, and `map_value_result_by_value` for one that
+travels packed).
 
 **2. The error arm comes first.** `r.value` is legal only where the checker
 proved `isOk()`, `r.error` only where it proved `isErr()`. There is no
@@ -616,7 +764,25 @@ and hold after an `if` whose other branch cannot fall through:
 | `r.isOk() ? a : b` | in `a` (and in `b` for `isErr()`) |
 
 A field or element holding a `Result` is not narrowed; bind it to a local
-first, exactly as for a nullable.
+first, exactly as for a nullable. An assignment inside an `&&` or `||` chain
+ends the narrowing for the operands after it, as for a nullable
+(`tests/cases/reject_result_narrowing_assigned_in_chain`).
+
+**A proof stays with its variable.** What a test proved is seen only by a
+*proof consumer*: the receiver of `.ok`, `.value`, `.error`, `isOk()`,
+`isErr()`, `unwrapOr`, `expect` or `orReturn`, or another narrowing test.
+Wherever a type is instead inferred from the narrowed variable's value, it is
+the plain `Result<T, E>`: a `let` or `const` initialiser, a ternary, and an
+array literal's elements. Arguments, `return`s and stores already take the
+declared type they flow into. So inside `if (r.ok)`, `const y = r` needs its
+own test before `y.value`, `c ? r : q` does too whatever `q` was narrowed to,
+and `[r]` is a `Result<T, E>[]` that an `Err` may be pushed onto
+(`tests/cases/reject_result_let_keeps_proof`, `reject_result_ternary_keeps_proof`,
+`reject_result_array_keeps_proof`; `res_proof_consumers` for the tests that
+make each of them compile). `tsc` narrows `const y = r` along with `r`, so this
+refuses programs `tsc` accepts; that is the safe direction, and the rule a
+reassignment, a pushed element or the other arm of a ternary would otherwise
+break.
 
 **3. Propagation is contagious.** `r.orReturn()` is legal only inside a
 function that itself returns a `Result` whose error arm accepts `E`
@@ -681,6 +847,44 @@ same union for the wasm build, and the generated loader packs an argument and
 unpacks a result. A `Result` held by pointer still does not cross either JS
 boundary, for the reason a string does not: it is arena memory the next call
 may recycle.
+
+A **ranged parameter** (`integer<Lo, Hi>`, [Types](#types)) crosses as the
+`i32` it is, and is checked where every call passes through
+([wp31-ranged-integers.md](wp31-ranged-integers.md) §9):
+
+- **Where the check lives is the linkage condition.** A function that
+  `--strict-exports` makes `internal` has every caller in view, so each call
+  site checks its argument, where the facts that can prove it free are. Any
+  other function (exported, or every function under `--no-strict-exports`)
+  can be called by a host with any `int32_t`, so it checks its ranged
+  parameters in its own prologue, before anything else it does, and its
+  callers in the program pass theirs unchecked (`tests/cases/interop_rng_param`),
+  so a loop that passes one is given no performance warning for it: no guard
+  at the call would remove the callee's check (`interop_rng_loop`).
+  Leaving the range there is the same panic as at any other entry, which is
+  what a C host sees (`interop_rng_host`, driven by `interop_rng_host.c`).
+- **The bridges throw first.** The N-API shim reads a ranged argument with
+  `napi_get_value_double`, and the wasm loader judges the number it was
+  given, so a value that is not an integer in `[Lo, Hi]` throws
+  ``RangeError: pick: argument 2 (day) must be an integer in [1, 7]`` before the
+  call, rather than ending the process. The value is read as a double because
+  ToInt32 would wrap `4294967301` to `5`, which is in range; `RangeError` is
+  what JavaScript throws for `new Uint8Array(-1)`. `--emit-napi-async`
+  rejects with the same error.
+- **The sidecars say the range.** `--emit-header` spells the parameter
+  `int32_t` and gives the source signature above the prototype, with
+  `day: panics outside [1, 7]`; `--emit-dts` spells it `number` and adds
+  `Throws a RangeError unless day is an integer in [1, 7].` A ranged result
+  and a ranged field are `int32_t` / `number` with the range in the comment,
+  since a value the program produced is already inside it.
+- **A range inside data is not described.** An `integer<0, 9>[]` parameter, a
+  record with a ranged field, or a `Result` over a range is memory a host
+  writes and nothing checks on entry, so the header gives the function its
+  existing line, `not declared; no C spelling for one of its types`, and the
+  `.d.ts`, the loader and the N-API shim leave it out with their own
+  (`tests/run.js`, the `interop_rng` block, which builds every sidecar of
+  `interop_rng_host.ts`, compiles the header under `-pedantic` and calls the
+  addon and the wasm build from Node).
 
 ## Declarations
 
@@ -2037,9 +2241,150 @@ from the whole-program facts, and each rule is reported there:
   array is refused whether or not it is `dst` at run time. A reduce writes no
   array of its caller's and has no such rule.
 
-`parallelFor`, a scope of spawned tasks, locks, channels and non-scalar results
-are not in this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.2,
-§4.3, §7).
+### Scoped tasks: `using s = scope()`
+
+A scope runs a handful of different functions at once, each on a thread of its
+own, and joins them all when the block that declares it ends
+([wp29-thread-surface.md](wp29-thread-surface.md) §4.2). It is the shape
+`parallelMapInto` cannot take: work that is not one function over one array.
+
+```typescript
+import { scope } from "nish/threads";
+
+const sumOf = (xs: f64[]): f64 => { /* ... */ return 7.0; };
+const primesBelow = (n: i32): i32 => { /* ... */ return 168; };
+
+export const main = (): i32 => {
+  const xs: f64[] = [1.5, 2.5, 3.0];
+  const sums: f64[] = [0.0];
+  const counts: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(sumOf, xs, sums, 0);           // sums[0] = sumOf(xs)
+    s.spawn(primesBelow, 1000, counts, 0); // counts[0] = primesBelow(1000)
+  }                                        // both have run, and both answers are stored
+  console.log(`${sums[0]} ${counts[0]}`);  // 7 168
+  return 0;
+};
+```
+
+- **`s.spawn(entry, arg, dst, at)`** runs `entry(arg)` on a thread of its own
+  and stores the answer in `dst[at]` (`tests/link/thread_scope_basic`). `entry`
+  is a [function parameter](#function-parameters) and must be a top-level
+  function named at the call; an arrow is
+  `` The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name) ``
+  (`tests/cases/reject_thread_task_arrow`). `at` is checked at the spawn and
+  again when the answer is stored; out of range is
+  `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+- **A task runs when its scope joins, not when it is spawned.** Joining a
+  scope runs every task it was given at once — the first on the thread that
+  opened the scope and each other on a thread of its own, so `N` tasks start
+  `N - 1` threads — waits for all of them, and then stores each answer in the
+  order the tasks were spawned, on the thread that opened the scope. That is
+  what makes a scope free of races: while the tasks run, the thread that opened the scope is
+  waiting for them, the tasks write nothing another can see (below), and every
+  store into the program's memory is made after the last task has finished. So
+  a task may be handed any argument — an array, an object.
+- **A destination is a fresh `const` array that is never handed on, and until
+  the block ends the scope's thread neither reads a destination nor writes
+  what a task may read.** Natively a task runs, and its answer is stored, when
+  the scope joins; under Node each runs and stores where it is spawned. Two
+  rules keep the program's meaning the same either way:
+  - A `spawn`'s destination is a `const` local bound to a literal array or
+    `new Array(...)` in the same function, used only by index, `.length`, its
+    methods, a `for...of` and as a destination — never an argument, a task's
+    argument, a stored value or a returned one — so nothing else can reach it.
+    Anything else is
+    `` The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), used only by index, `.length`, its methods and as a destination: a scope's tasks run, and store their answers, when its block ends, and under Node each runs and stores where it is spawned, so a destination is a fresh `const` array that is never handed on, and between a scope's first `spawn` and the end of its block its thread neither reads a destination nor writes memory a task may read ``
+    (`tests/cases/reject_thread_region_dst_not_fresh`, and
+    `reject_thread_region_dst_as_arg` for one handed to a later task).
+  - From the first statement of the block that holds a `spawn` on the scope
+    to the block's end — a `return`'s value aside, computed after the join —
+    the program may not read a destination a task of the scope has been given
+    by then (`` This reads `sums`, a destination of a task of `s`, before the scope joins: … ``,
+    `tests/cases/reject_thread_region_read`), and may not write memory a task
+    could read. A task reads only what its argument reaches, so a store is
+    fine into the own slots of a `const` bound to a fresh array or object
+    literal that is never handed on, and a call is fine unless it writes
+    through a pointer it is handed; a function that only fills an array it
+    allocates, such as one that builds and returns a row, writes nothing a task
+    can see. Every other write is refused, whatever alias it goes through —
+    a store, `push` or `pop`, `Arena`, a call that writes through its
+    argument, a task of another scope, whose join stores
+    (`reject_thread_region_write`, `reject_thread_region_alias_write`,
+    `reject_thread_region_call_write`).
+
+  The rules are local because memory is reached only through parameters and
+  what a function allocates: a module constant is a number, a `boolean` or a
+  string, and nothing is `static`. N tasks over N arrays of the destination's
+  own type, built before the scope, in the spawning loop or after the first
+  spawn, all compile (`tests/link/thread_scope_many_arrays`).
+- **The join is emitted at every exit of the block**: its end, a `return` —
+  before the returned value is computed, so the value can read what the tasks
+  stored — and a `break` or `continue` that leaves the block
+  (`tests/link/thread_scope_exit_paths`). It sits inside every arena scope
+  around it, which releases only after the join, and an argument a task is
+  handed is never given back by a loop's pass before the join reads it
+  (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
+  another). `throw` and a panic end the process and join nothing.
+- **A scope is introduced by `using`, and `using` takes only a scope.** A
+  scope bound any other way is
+  `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
+  (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
+  `` `using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs ``
+  (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
+  statement of a block; as the body of an `if` or a loop it is
+  `` A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block ``
+  (`tests/cases/reject_thread_using_placement`), and in a `case` clause it is
+  refused as every declaration there is. Outside a declaration `using` is an
+  ordinary identifier, as in TypeScript (`tests/parser/using.ts`).
+- **A scope never leaves its block.** It is only ever the receiver of a `spawn`
+  statement; passed, stored, returned or copied it is
+  `` A `ThreadScope` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it ``
+  (`tests/cases/reject_thread_scope_escapes`). That, and the join at every exit,
+  is the whole proof that every task is joined: there is no handle to forget.
+- **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` declares one,
+  so TypeScript and Node accept `using s = scope()`; the compiler emits the join
+  itself and never calls it. Any other class's is
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called ``
+  (`tests/cases/reject_thread_dispose_elsewhere`).
+- **There is no thread count.** Each spawn is one task and each task one
+  thread; a scope with more tasks than cores leaves the scheduler to share them
+  ([wp29-thread-surface.md](wp29-thread-surface.md) §9 declines the knob until
+  a measurement asks for it).
+
+What a task may do is what a data-parallel body may, less the rules about an
+element's arena, which a task does not share, and each rule is reported at the
+`spawn`:
+
+- **The task writes nothing another can see**, with the words of the
+  data-parallel rule:
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``
+  (`tests/cases/reject_thread_task_shared_write`). A task inside a task, or
+  inside a data-parallel body, is refused by this rule, because a scope's join
+  stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
+  data-parallel call inside a task is refused by it too
+  (`reject_thread_task_nested_map`).
+- **It answers a number, a `boolean` or an enum**, because a task's thread
+  frees its arena when it exits:
+  `` `label` answers `string`, and `spawn` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  (`tests/cases/reject_thread_task_result_type`). What it allocates on the way
+  is freed with its thread.
+- **It leaves the arena alone**, because the first task runs in the arena of
+  the thread that opened the scope:
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  (`tests/cases/reject_thread_task_arena`).
+- **Its argument is not a `Result` small enough to travel as its parts**:
+  `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
+  (`tests/cases/reject_thread_task_result_arg`).
+
+Under Node, `scope()` is an object whose `spawn` runs its task at once and
+stores the answer there; the rule above is what makes that print the same as
+the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
+`--js-explicit-resource-management` on Node 22 and is native from Node 24.
+
+`parallelFor`, locks, channels, non-scalar results and `scope(n)` are not in
+this stage ([wp29-thread-surface.md](wp29-thread-surface.md) §4.3, §7).
 
 ### Interfaces and object literals
 
@@ -2549,8 +2894,18 @@ and both come from the program as written:
 
   - `i >= 0` from a literal initialiser, from `i = w.length`, from a test that
     reaches the access (`if (i >= 0)`, `0 <= i`, the false arm of `i < 0`), or
-    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, which
-    is the one *ranged* type the language has today.
+    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, and
+    neither is an `integer<Lo, Hi>` with `Lo >= 0`.
+  - **a bound read off the type.** A declared range bounds its index from
+    above as well: a `u8` is below 256, a `u16` below 65536 and an
+    `integer<Lo, Hi>` below `Hi + 1`, so with a length guard that covers the
+    range (`if (table.length < 256) { return }`) the access needs no check.
+    `const k = toI32(b)` keeps the bound of a `u8` or `u16` `b`, because the
+    conversion is a `zext`. A `u32` or `u64` has no upper bound an `i32` fact
+    can carry, and a range wider than the length that is known keeps its
+    check (`tests/cases/arr_bounds_ranged`). Nothing is recorded and nothing
+    is forgotten: every write into a ranged place is an entry, so the value
+    is inside its range at every point.
   - `i < w.length` from a test that reaches the access — a loop condition, an
     `if`, the right operand of `&&`, the statements after
     `if (i >= w.length) { return; }` — or, through `const n = w.length`, from
@@ -4177,6 +4532,21 @@ by the caller.
     (`this.source.charCodeAt(this.pos)`) or a computed index was never a
     candidate, and the rewrite there is to bind them to locals first
     (`tests/cases/perf_bounds_quiet`).
+  - **a range entry that was not proven** — a value entering an
+    `integer<Lo, Hi>` inside a loop where the proof above did not place it in
+    the range, so the compare and its cold panic run on every iteration. A
+    local is named with the guard that proves it —
+    `if (k >= 0 && k <= 99)`, or `if (k <= 99)` for a range with no lower end
+    — and anything computed is told to be bound to an `i32` local and guarded
+    there, or, when it is a counter or a cursor written back into its own
+    range, to be declared `i32` with the range on the value that is used
+    (`tests/cases/perf_rng_loop`, `perf_rng_counter`). Reported on the value,
+    or on the target of a compound assignment or an increment, once per
+    entry. Silent outside a loop; silent for a proven entry
+    (`tests/cases/perf_rng_quiet`); and silent for a range whose lower end is
+    neither 0 nor `-2147483648`, where no guard proves the entry. Like the
+    clamp warning it is **unaffected by `--unchecked-indexing`**, which leaves
+    the entry check in place.
   - **a `substring` bound whose clamp could not be folded off** —
     `s.substring(a, b)` inside a loop where the proof above could not place `a`
     or `b` in `[0, s.length]`, so that bound keeps the `llvm.smin` /
@@ -4435,7 +4805,7 @@ messages are exact for the cases cited; other rows quote the checker
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
-| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
+| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_null_narrowing_assigned_in_chain`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |

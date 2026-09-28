@@ -1,6 +1,6 @@
 # WP33: The round trip — TypeScript into Nish, and back out
 
-**Proposed. Nothing here is built.** This is the plan of record for one
+**Decided (§7, 2026-09-28); nothing here is built.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -165,6 +165,7 @@ collected in §7.
 | `new Array<T>(n)` zero-fills | `new Array<f64>(3)` then `a[1] + 1.0` is `1` natively and `NaN` in TS | C | `new Array<T>(n).fill(0)` (`false` for `boolean`) | Keep. The translation is exact and obvious to a reader. |
 | `Float64Array` and the other three typed-array names are `f64[]`, with `push` and `pop` | `t.push(5.0)` is a `TypeError: t.push is not a function` in TS | C | `number[]` for a binding that ever calls `push` or `pop`, the typed array otherwise | **Open, §7 Q4.** The alternative is to refuse `push`/`pop` on the four names, which makes the row A. |
 | `a[i]` out of range, `pop()` on empty, `charCodeAt` past the end | panics natively; `undefined` / `NaN` in TS | B | nothing | — |
+| a ranged integer, `integer<Lo, Hi>`, leaves its range | an exit-1 panic natively, silent in TS, where `runtime/nish.d.ts` makes it `number` ([wp31-ranged-integers.md](wp31-ranged-integers.md) §6) | B | nothing | The check is what lets the compiler drop other checks, so it is a speed feature as well as a safety net. |
 
 ### 3.4 Control flow and errors
 
@@ -184,6 +185,7 @@ collected in §7.
 | `enum` | Node's `--experimental-strip-types` refuses it (not erasable); Bun accepts it | C | a `const` object and a type of the same name | — |
 | `console.log` prints `String(x)` | Node's console inspects: `-0` prints as `-0` | C | the runtime's `log` | — |
 | the prelude needs Node | Bun cannot load it (`registerHooks` is not in Bun's `node:module`); a browser cannot load `shim.mjs` (`node:fs`, `node:child_process`, `process`) | — | — | Split the runtime by host (§4.3). |
+| scoped tasks, `using s = scope()` | the tasks run one after another at each `spawn` under Node, and together at the block's end natively; the checker refuses every program where the two could print differently ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)) | A | the source as written | Node 22 needs `--js-explicit-resource-management` for `using`, and Node 24 has it natively. `--emit ts` output targets the host's `using` support, or lowers the block to a `try`/`finally` for a host without it. |
 | `declare function` (FFI) and `CPtr` | no JS counterpart (`ffi_scalar` in known-failures) | not a TS program | the module stays native and is imported through `--emit-napi` or wasm (§4.4) | This is the only row with no TS reading, and it is not D: the interop layer already gives it a *JS* reading, one module at a time. |
 
 ### 3.6 Identical, for the record
@@ -404,9 +406,13 @@ This is what "keep it in mind as we design the language" means in practice.
 
 ---
 
-## 7. Decisions for the owner
+## 7. Decisions
 
-| # | Question | Options | Recommendation |
+The owner took every recommendation below on 2026-09-28, with not losing
+performance as the deciding constraint (§1 rule 6). Each row is now the plan,
+and the stages in §9 build it.
+
+| # | Question | Options | Decision |
 | --- | --- | --- | --- |
 | Q1 | String offsets | (a) keep UTF-8 bytes, C row, flagged on the way in; (b) keep UTF-8 storage but make `.length` and offsets UTF-16 units, with an "all ASCII" bit in the string header; (c) UTF-16 storage | **(a).** (b) and (c) both cost the native build: (b) puts a header bit test on every `.length` and `charCodeAt` and makes offsets O(n) on non-ASCII text, and (c) doubles the memory of ASCII text and breaks C interop. Rule 6 rules both out. (a) keeps MASTER_PLAN §3.4's decision, and §3.2's narrower flag keeps the way in reviewable. |
 | Q2 | Default `number` | i32 in strict and f64 in compat (wp28 §5.3), or f64 everywhere | **Leave it as wp28 has it.** Strict keeps i32's speed, and the way out handles it in one token per operator. Ingested code starts in f64, where it means what it meant. Moving a module to i32 is then a step on wp28's ratchet: a measured speed-up, with the §5.2 flags as the checklist of what could change. |

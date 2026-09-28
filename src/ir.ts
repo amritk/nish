@@ -102,6 +102,27 @@ const isWordByte = (code: i32): boolean => {
   return code === 95
 }
 
+/**
+ * What a parameter's `%` name appends to the name the source wrote. LLVM names
+ * a function's arguments, blocks and allocas in one namespace, and a parameter
+ * keeps its own name because every other name the emitter writes there is a
+ * number, `%this`, or carries a dot a source identifier cannot — except two:
+ * the `entry` block every function opens with, and the `chr` byte
+ * `String.fromCharCode` allocates (`emitFromCharCode`). A parameter spelled
+ * like either takes a `.param` suffix instead (issue #266), so a new dot-free
+ * block label or alloca name joins this test. The answer is a literal, so
+ * `-g`'s long `llvm.dbg.value` line can splice it in without building the
+ * parameter's name as a string of its own.
+ */
+export const paramSuffix = (name: string): string => (name === "entry" || name === "chr" ? ".param" : "")
+
+/**
+ * The `%` name a parameter is written with: `%<name>`, plus `paramSuffix`.
+ * It branches rather than appending, so the usual parameter is one string.
+ */
+export const paramValue = (name: string): string =>
+  paramSuffix(name).length > 0 ? `%${name}.param` : `%${name}`
+
 /** One parameter of a `define`: `<type> <attrs...> %<name>`. */
 export class IRParam {
   name: string
@@ -238,7 +259,7 @@ export class IRFunction {
       for (const attr of p.attrs) {
         parts.push(attr)
       }
-      parts.push(`%${p.name}`)
+      parts.push(paramValue(p.name))
       params.push(parts.join(" "))
     }
     const retParts: string[] = []

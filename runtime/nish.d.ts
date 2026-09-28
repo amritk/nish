@@ -54,6 +54,12 @@ type u64 = number;
 type f32 = number;
 type f64 = number;
 
+// ---- Ranged integers (docs/wp31-ranged-integers.md) --------------------------
+//
+// An `i32` the compiler knows lies in `[Lo, Hi]`. The bounds are numeric
+// literal types, and `tsc` checks only that; the range itself is `nish`'s.
+type integer<Lo extends number, Hi extends number> = number;
+
 // ---- Result (docs/LANGUAGE.md -> Result and error handling) ------------------
 //
 // Modelled as the tagged union TypeScript would use anyway, intersected with
@@ -103,6 +109,19 @@ declare function Err<T, E>(error: E): Result<T, E>;
 // project which does pull `lib.dom` in merges with it instead of colliding;
 // `Process` is not that lucky, so a project that needs `@types/node` for other
 // reasons should drop this file's `process` rather than fight it.
+
+/**
+ * The disposable protocol `using` reads (WP29 P2, docs/wp29-thread-surface.md
+ * §5): declared here so that a program using `nish/threads`'s scope needs no
+ * `"ESNext.Disposable"` in its `lib`. `nish` itself takes `using` only for a
+ * `scope()`, and `[Symbol.dispose]` only in `nish/threads`.
+ */
+interface SymbolConstructor {
+  readonly dispose: unique symbol;
+}
+interface Disposable {
+  [Symbol.dispose](): void;
+}
 
 interface Console {
   /** `x` and a newline to stdout. Statement position; exactly one argument. */

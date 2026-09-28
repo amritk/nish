@@ -15,6 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
+import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import {
@@ -24,6 +25,7 @@ import {
   isGenericFunction,
 } from "./generics"
 import { isExported, collectParams } from "./declarations"
+import { checkRangedLiteral } from "./expressions"
 import {
   FLAG_DEFINITE,
   FLAG_OPTIONAL,
@@ -501,6 +503,10 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     } else if (!ctx.table.assignable(initType, type)) {
       const got = ctx.table.typeName(initType)
       ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`)
+    } else if (ctx.table.isRanged(type) && initType === type) {
+      // WP31 §6: the literal is stored with no check, so it has to be inside.
+      const negated = initializer.kind === N_UNARY
+      checkRangedLiteral(ctx, negated ? initializer.children[0] : initializer, type, negated, initializer)
     }
     // The field keeps its initializer even when that initializer was refused.
     // What it is worth is nothing; what it *says* is that the programmer wrote
@@ -545,6 +551,15 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
 
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
+  // WP29 P2: the method `using` calls is the scope's, and the scope's join is
+  // emitted by the construct rather than called, so the declaration is for
+  // TypeScript and Node and has no signature here.
+  if (name === DISPOSE_METHOD) {
+    if (!isThreadsSource(ctx.program)) {
+      ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
+    }
+    return
+  }
   const what = `Method \`${name}\``
   const shown = spelled(ctx, owner)
   if (owner.hasMember(name)) {

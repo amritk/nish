@@ -125,6 +125,14 @@ export const K_ENUM: i32 = 17
  * of the payload half.
  */
 const K_MAYBE: i32 = 18
+/**
+ * `integer<Lo, Hi>` (WP31, docs/wp31-ranged-integers.md §4): an `i32` the
+ * compiler knows lies in `[Lo, Hi]`. `refs[type]` is `Lo` and `errs[type]` is
+ * `Hi`, both as the values they denote, so `integer<0, 0xFF>` and
+ * `integer<0, 255>` are one id. It is `i32` in IR, in memory and at the ABI;
+ * the range is the checker's, and every write into one is checked.
+ */
+const K_RANGED: i32 = 19
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -181,6 +189,17 @@ export const intBits = (type: i32): i32 => {
 export const isInteger = (type: i32): boolean => intBits(type) > 0
 
 export const isNumeric = (type: i32): boolean => isInteger(type) || isFloat(type)
+
+/** The closed interval a declaration allows, `lo <= v <= hi` (`TypeTable.declaredRange`). */
+export class DeclaredRange {
+  lo: i64
+  hi: i64
+
+  constructor(lo: i64, hi: i64) {
+    this.lo = lo
+    this.hi = hi
+  }
+}
 
 /**
  * Every type in one program, interned.
@@ -282,7 +301,10 @@ export class TypeTable {
     // `readonly T[]` and `T[]` are two types, so they are two ids and the key
     // has to tell them apart; the suffix is only added for the readonly one so
     // that every key already in the table keeps its spelling.
-    const base = kind === K_RESULT ? `${kind}:${ref}:${err}:${state}` : this.derivedKey(kind, ref, name)
+    const base =
+      kind === K_RESULT || kind === K_RANGED
+        ? `${kind}:${ref}:${err}:${state}`
+        : this.derivedKey(kind, ref, name)
     const key = ro ? `${base}:ro` : base
     const existing = this.index.get(key, -1)
     if (existing >= 0) {
@@ -353,6 +375,82 @@ export class TypeTable {
   /** Whether `type` is a maybe; -1, a node with no recorded type, is not. */
   isMaybe(type: i32): boolean {
     return type >= 0 && this.kinds[type] === K_MAYBE
+  }
+
+  // ---- `integer<Lo, Hi>` (WP31) --------------------------------------------
+
+  /** The ranged type `integer<lo, hi>`; the caller has checked `lo <= hi` and both in `i32`. */
+  rangedOf(lo: i32, hi: i32): i32 {
+    return this.internAll(K_RANGED, lo, "", hi, R_UNKNOWN, false)
+  }
+
+  /** Whether `type` is a ranged integer; -1, a node with no recorded type, is not. */
+  isRanged(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_RANGED
+  }
+
+  /** The lower bound of a ranged type. */
+  rangeLo(type: i32): i32 {
+    return this.refs[type]
+  }
+
+  /** The upper bound of a ranged type. */
+  rangeHi(type: i32): i32 {
+    return this.errs[type]
+  }
+
+  /**
+   * Whether a value of type `from` enters the range `to` with no check: `from`
+   * is a range inside `to`, or `to` is all of `i32` (WP31 §6). The emitter and
+   * the attribute pass both ask, so what is emitted and what the attributes
+   * are told it calls cannot disagree.
+   */
+  entryIsFree(from: i32, to: i32): boolean {
+    if (this.isRanged(from) && this.refs[from] >= this.refs[to] && this.errs[from] <= this.errs[to]) {
+      return true
+    }
+    return this.refs[to] === -2147483648 && this.errs[to] === 2147483647
+  }
+
+  /**
+   * The type an operator reads a value as: `i32` for a ranged type (WP31 §7,
+   * "every operator reads a ranged value as its base") and the type itself for
+   * everything else.
+   */
+  baseOf(type: i32): i32 {
+    return this.isRanged(type) ? T_I32 : type
+  }
+
+  /**
+   * The values `type`'s declaration allows, or `null` for a type that states
+   * no range (WP31 §8): `[Lo, Hi]` for `integer<Lo, Hi>`, and the unsigned
+   * widths' own. `src/bounds.ts` reads it where it used to ask `isUnsigned`,
+   * so the type answers and no fact has to be stored or forgotten: every write
+   * into a ranged place is an entry, and an unsigned one cannot hold anything
+   * else. `hi` stops at the `i64` maximum for `u64`, which is past every
+   * bound an `i32` fact can carry, and that is the only question it answers.
+   */
+  declaredRange(type: i32): DeclaredRange | null {
+    if (this.isRanged(type)) {
+      return new DeclaredRange(toI64(this.refs[type]), toI64(this.errs[type]))
+    }
+    switch (type) {
+      case T_U8:
+        return new DeclaredRange(0, 255)
+      case T_U16:
+        return new DeclaredRange(0, 65535)
+      case T_U32:
+        return new DeclaredRange(0, 4294967295)
+      case T_U64: {
+        // 2^63 - 1, built from two halves because a literal past 2^53 is refused.
+        const high: i64 = 2147483647
+        const shift: i64 = 4294967296
+        const low: i64 = 4294967295
+        return new DeclaredRange(0, high * shift + low)
+      }
+      default:
+        return null
+    }
   }
 
   // ---- `Result<T, E>` (WP16) ----------------------------------------------
@@ -426,6 +524,11 @@ export class TypeTable {
         return `en$${this.names[type]}`
       case K_RESULT:
         return `res.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`
+      // WP31 §4: each bound is `p` or `m` and its decimal value, so a run of
+      // digits always follows a letter and never a separator, which is what
+      // keeps `cStructName`'s escape injective.
+      case K_RANGED:
+        return `rng.${signedBound(this.refs[type])}.${signedBound(this.errs[type])}`
       default:
         return this.scalarName(type)
     }
@@ -476,7 +579,8 @@ export class TypeTable {
       kind === T_F32 ||
       // WP23: an enum is an `i32`, so it packs exactly as one does — every
       // widening on that path goes through `llvmType`, which already says `i32`.
-      kind === K_ENUM
+      kind === K_ENUM ||
+      kind === K_RANGED
     )
   }
 
@@ -551,6 +655,8 @@ export class TypeTable {
         return `%struct.${this.names[type]}*`
       case K_ENUM:
         return "i32"
+      case K_RANGED:
+        return "i32"
       case K_NULLABLE:
         return this.llvmType(this.refs[type])
       case K_MAYBE:
@@ -581,6 +687,8 @@ export class TypeTable {
         return 4
       case K_ENUM:
         return 4 // an i32
+      case K_RANGED:
+        return 4 // an i32 (WP31 §5)
       default:
         return 8 // i64, u64, f64, and every pointer
     }
@@ -601,6 +709,8 @@ export class TypeTable {
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_ENUM:
         return this.names[type]
+      case K_RANGED:
+        return `integer<${this.refs[type]}, ${this.errs[type]}>`
       case K_NULLABLE:
         return `${this.typeName(this.refs[type])} | null`
       case K_MAYBE:
@@ -663,6 +773,12 @@ export class TypeTable {
     if (from === to) {
       return true
     }
+    // WP31 §7: a ranged value leaves its range into an `i32` for nothing. The
+    // other direction is an entry, which `checkExpression` records where the
+    // value is checked into its sink, so it never reaches this question.
+    if (to === T_I32 && this.kinds[from] === K_RANGED) {
+      return true
+    }
     // `state` is a proof about one use site, not part of the type: a `Result`
     // narrowed to its ok arm is the same value, and the same LLVM pointer, as
     // the un-narrowed one it came from (WP16).
@@ -691,3 +807,6 @@ export class TypeTable {
     return this.refs[from] === this.refs[to]
   }
 }
+
+/** A bound as `mangle` spells it: `p255`, `m128`. */
+const signedBound = (value: i32): string => (value < 0 ? `m${-toI64(value)}` : `p${value}`)

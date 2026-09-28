@@ -21,10 +21,15 @@
  * function exists. The thread-local arena the divided case needs is WP20 T0 and
  * arrives with the same macro.
  *
- * There is no language surface here and nothing in the language calls this yet:
- * docs/wp29-thread-surface.md is the surface, and this is the stage under it.
+ * docs/wp29-thread-surface.md is the surface this is the stage under: P1's
+ * `parallelMapInto` and `parallelReduce` divide a range here, and P2's scopes
+ * run their tasks here (`nish_scope_spawn`, `nish_scope_join`).
  */
 #include "nish.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
@@ -153,4 +158,107 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
   (void)grain;
   body(0, len, ctx);
 #endif
+}
+
+/* ---- A scope's tasks (wp29 P2) ----
+ *
+ * A task is filed when it is spawned and run when its scope joins, which is
+ * what keeps a scope race-free without a borrow checker: while the tasks run,
+ * the thread that opened the scope is inside the join and runs nothing else,
+ * the tasks write nothing but their own payloads (the language's rule), and
+ * every store into the caller's memory is a `finish` made on the caller's
+ * thread after the last task has finished.
+ *
+ * The filed tasks are one list per thread, newest first, and each carries the
+ * scope it belongs to. Only the thread that opened a scope files into it or
+ * joins it, so the list needs no lock, and scopes may nest: a join takes its
+ * own scope's tasks out of the list and leaves the rest. */
+typedef struct nish_task {
+  struct nish_task *next;
+  void *scope;
+  nish_task_fn run;
+  nish_task_fn finish;
+#ifdef NISH_PAR_REAL
+  pthread_t th;
+  int started;
+#endif
+  /* The copied payload, aligned for any field it holds. */
+  uint64_t payload[];
+} nish_task;
+
+static NISH_TLS nish_task *nish_tasks = 0;
+
+void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size) {
+  nish_task *t = (nish_task *)malloc(sizeof(nish_task) + (size_t)size);
+  /* Out of memory is the end of the program, as it is for every other
+   * allocation the runtime makes: running the task here instead would store
+   * its answer ahead of tasks filed before it, and a later spawn into the same
+   * slot has to be the one that stays. */
+  if (!t) {
+    (void)!write(2, "nish: out of memory\n", 20);
+    _exit(1);
+  }
+  t->scope = scope;
+  t->run = run;
+  t->finish = finish;
+  memcpy(t->payload, payload, (size_t)size);
+  t->next = nish_tasks;
+  nish_tasks = t;
+}
+
+#ifdef NISH_PAR_REAL
+static void *nish_task_worker(void *p) {
+  nish_task *t = (nish_task *)p;
+  /* A task is one thread's work, as a chunk is, so a region inside it runs on
+   * this thread rather than multiplying the threads. */
+  nish_par_depth = 1;
+  t->run(t->payload);
+  nish_free_arena(); /* as `nish_par_worker`: this thread's arena, and only it */
+  return 0;
+}
+#endif
+
+void nish_scope_join(void *scope) {
+  /* This scope's tasks, oldest first: the list is newest first, and moving each
+   * one to the front of `mine` reverses it. */
+  nish_task *mine = 0;
+  nish_task **link = &nish_tasks;
+  while (*link) {
+    nish_task *t = *link;
+    if (t->scope == scope) {
+      *link = t->next;
+      t->next = mine;
+      mine = t;
+    } else {
+      link = &t->next;
+    }
+  }
+  if (!mine) return;
+#ifdef NISH_PAR_REAL
+  /* Every task but the first on a thread of its own, and the first on this
+   * one, so N tasks cost N-1 spawns and this thread is not idle. A task inside
+   * a region or another task's thread runs here, as a nested region does. */
+  for (nish_task *t = mine->next; t; t = t->next) {
+    t->started = nish_par_depth == 0 && pthread_create(&t->th, 0, nish_task_worker, t) == 0;
+  }
+  nish_par_depth++;
+  mine->run(mine->payload);
+  for (nish_task *t = mine->next; t; t = t->next) {
+    if (!t->started) t->run(t->payload);
+  }
+  nish_par_depth--;
+  for (nish_task *t = mine->next; t; t = t->next) {
+    if (t->started) pthread_join(t->th, 0);
+  }
+#else
+  for (nish_task *t = mine; t; t = t->next) t->run(t->payload);
+#endif
+  /* The stores, in the order the tasks were spawned, so two tasks with one
+   * destination leave the later one's answer there, as they would in sequence. */
+  while (mine) {
+    nish_task *t = mine;
+    mine = t->next;
+    t->finish(t->payload);
+    free(t);
+  }
 }

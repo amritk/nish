@@ -1,0 +1,1 @@
+reject_result_let_keeps_proof.ts:13:22: error: Cannot read `value` of `Result<i32, i32>` before the error is handled

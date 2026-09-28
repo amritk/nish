@@ -28,8 +28,9 @@
 
 import { HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
-import { parseIntegerLiteral } from "./constants"
+import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
+import { emitRangedStore } from "./emit-builtins"
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -955,7 +956,7 @@ export const literalLength = (expr: Node): i32 => {
   if (e.kind !== N_NUMBER) {
     return -1
   }
-  const n: f64 = Number(e.text)
+  const n: f64 = numericLiteralValue(e.text)
   if (n !== Math.floor(n) || n < 0.0) {
     return -1
   }
@@ -1083,6 +1084,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
   }
+  emitRangedStore(emitter, expr, value)
   emitter.fn.emit(
     `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )

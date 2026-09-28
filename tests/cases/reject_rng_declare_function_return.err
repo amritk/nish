@@ -1,0 +1,1 @@
+`declare function rand` returns integer<0, 32767>, and a range is a promise the C side never made: declare it `i32`

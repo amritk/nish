@@ -1131,6 +1131,195 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end par-alloc -->
 
+### `nish/threads`: a scope of tasks
+
+`using s = scope()` opens a scope and `s.spawn(entry, arg, dst, at)` files a
+task on it; the block's every exit is a call to `nish_scope_join`, which runs
+the tasks — the first on this thread, each other on a thread of its own — and,
+once all have finished, stores each answer. Below, the join comes right after
+the two spawns, at the block's end and before `out` is read; in a function
+with an arena scope it comes before the release, so the scope's memory
+outlives every task that reads it. Each spawn is an
+instance of `ThreadScope.spawn` in `nish/threads`'s own module, where the
+call `runTask(entry, arg, dst, at)` becomes a payload and a filing:
+
+```llvm
+%task.payload = alloca { i32, %struct.nish_array*, i32, i32 }, align 8
+; ... arg, dst and at stored into its first three fields ...
+call void @nish_scope_spawn(i8* %scope, void (i8*)* @<spawn>$run, void (i8*)* @<spawn>$finish, i8* %payload, i64 <size>)
+```
+
+`@<spawn>$run(p)` calls `entry(arg)` into the payload's last field on the
+task's thread, and `@<spawn>$finish(p)` calls the checked `storeResult(dst, at,
+r)` on the thread that opened the scope, after the join. The whole of both
+modules is `tests/link/thread_scope_basic`'s golden (docs/LANGUAGE.md, "Scoped
+tasks").
+
+<!-- cookbook:begin thread-scope -->
+```ts
+import { scope } from "nish/threads"
+
+const square = (n: i32): i32 => n * n
+
+const cube = (n: i32): i32 => n * n * n
+
+export const powers = (n: i32): i32 => {
+  const out: i32[] = [0, 0]
+  {
+    using s = scope()
+    s.spawn(square, n, out, 0)
+    s.spawn(cube, n, out, 1)
+  }
+  return out[0] + out[1]
+}
+```
+
+```llvm
+%struct.ThreadScope = type { i32 }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+
+declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2
+declare void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare void @nish_scope_join(i8* noundef nonnull) #1
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define hidden noundef i32 @square(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, %n
+  ret i32 %0
+}
+
+define hidden noundef i32 @cube(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, %n
+  %1 = mul nsw i32 %0, %n
+  ret i32 %1
+}
+
+define noundef i32 @powers(i32 noundef %n) #1 {
+entry:
+  %out.addr = alloca %struct.nish_array*, align 8
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 2, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 2, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %4 = call i8* @nish_alloc_struct(i64 8)
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %6 = bitcast i8* %4 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 0
+  store i32 0, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = getelementptr inbounds i32, i32* %6, i64 1
+  store i32 0, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  %9 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %9, %struct.ThreadScope** %s.addr, align 8
+  %10 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %11 = bitcast %struct.ThreadScope* %10 to i8*
+  %12 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %13 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.square(%struct.ThreadScope* %12, i32 %n, %struct.nish_array* %13, i32 0)
+  %14 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %15 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$i32$fn.4.cube(%struct.ThreadScope* %14, i32 %n, %struct.nish_array* %15, i32 1)
+  call void @nish_scope_join(i8* %11)
+  %16 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %19 = icmp ult i64 0, %18
+  br i1 %19, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %18)
+  unreachable
+
+bounds.ok:
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %22 = bitcast i8* %21 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 0
+  %24 = load i32, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %25 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 0
+  %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %28 = icmp ult i64 1, %27
+  br i1 %28, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 1, i64 %27)
+  unreachable
+
+bounds.ok.1:
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %25, i64 0, i32 2
+  %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %31 = bitcast i8* %30 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 1
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %34 = add nsw i32 %24, %33
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %34
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i32", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end thread-scope -->
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the
@@ -5962,6 +6151,260 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr-literals -->
+
+### Ranged integers: `integer<Lo, Hi>`
+
+A ranged value is an `i32` in the IR, in memory and at the ABI, so `getByte`'s
+parameter is a plain `i32 %i` and reading it costs nothing. What a range costs
+is its *entry*: the value `firstByte` passes and the sum `brighten` returns are
+each compared once, `sub` by the lower bound (left out when it is zero) and
+`icmp ult` against the width of the range, the shape of the index check, with
+the failure in a cold `rng.fail` block that ends the way `panic` does. A
+literal inside the range, and a value of a range inside this one, enter with
+no check at all. The index into `buf` is still checked: the range says `i` is
+below 256, but nothing says `buf` has 256 elements.
+
+<!-- cookbook:begin type-ranged -->
+```ts
+const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i]
+
+const brighten = (level: integer<-128, 127>): integer<-128, 127> => level + 1
+
+const firstByte = (buf: u8[], n: i32): u8 => getByte(buf, n)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"value out of range: expected integer<-128, 127>\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 255>\00" }, align 8
+
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 %0
+  %8 = load i8, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i8 %8
+}
+
+define internal noundef i32 @brighten(i32 noundef %level) #0 {
+entry:
+  %0 = add nsw i32 %level, 1
+  %1 = sub i32 %0, -128
+  %2 = icmp ult i32 %1, 256
+  br i1 %2, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  ret i32 %0
+}
+
+define internal noundef i8 @firstByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %n) #0 {
+entry:
+  %0 = icmp ult i32 %n, 256
+  br i1 %0, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.1 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  %1 = call i8 @getByte(%struct.nish_array* %buf, i32 %n)
+  ret i8 %1
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i8", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end type-ranged -->
+
+A range is also a fact the bounds proof reads (WP31 §8). `lookup`'s index
+needs `0 <= i < table.length`: the type gives `0 <= i < 256` and the length
+guard gives `table.length >= 256`, so there is no `bounds.fail` block. In
+`sumTable` the loop condition places `i` in `[0, 255]` where it enters the
+parameter, so there is no `rng.fail` block either, and with no panic left
+either function can reach, both are `willreturn`.
+
+<!-- cookbook:begin type-ranged-proven -->
+```ts
+const lookup = (table: i32[], i: integer<0, 255>): i32 => {
+  if (table.length < 256) {
+    return 0
+  }
+  return table[i]
+}
+
+const sumTable = (table: i32[]): i32 => {
+  let sum = 0
+  for (let i = 0; i < 256; i++) {
+    sum = sum + lookup(table, i)
+  }
+  return sum
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+define internal noundef i32 @lookup(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i32 noundef %i) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = icmp slt i32 %2, 256
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  ret i32 0
+
+if.end:
+  %4 = sext i32 %i to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %4
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %9
+}
+
+define internal noundef i32 @sumTable(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table) #0 {
+entry:
+  %sum.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %sum.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, 256
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i32, i32* %sum.addr, align 4
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = call i32 @lookup(%struct.nish_array* %table, i32 %3)
+  %5 = add nsw i32 %2, %4
+  store i32 %5, i32* %sum.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = add nsw i32 %6, 1
+  store i32 %7, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %8 = load i32, i32* %sum.addr, align 4
+  ret i32 %8
+}
+
+attributes #0 = { nounwind willreturn readonly }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end type-ranged-proven -->
+
+An exported function can be called by a host with any `int32_t`, so it checks
+its ranged parameters itself (WP31 §9): the `rng.fail` block is in `pick`'s
+prologue, before anything else it does, and `weekly` passes `n` with no check
+of its own. A function `--strict-exports` makes `internal` keeps the check at
+each call site instead, as `firstByte` does above, because there every caller
+is in view. The prologue can end the process, so `pick` loses `willreturn`.
+
+<!-- cookbook:begin type-ranged-export -->
+```ts
+export const pick = (base: i32, day: integer<1, 7>): i32 => base * 10 + day
+
+export const weekly = (n: i32): i32 => pick(n, n)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<1, 7>\00" }, align 8
+
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @nish_exit(i32 noundef) #2
+
+define noundef i32 @pick(i32 noundef %base, i32 noundef %day) #0 {
+entry:
+  %0 = sub i32 %day, 1
+  %1 = icmp ult i32 %0, 7
+  br i1 %1, label %rng.ok, label %rng.fail
+
+rng.fail:
+  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+rng.ok:
+  %2 = mul nsw i32 %base, 10
+  %3 = add nsw i32 %2, %day
+  ret i32 %3
+}
+
+define noundef i32 @weekly(i32 noundef %n) #0 {
+entry:
+  %0 = tail call i32 @pick(i32 %n, i32 %n)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+```
+<!-- cookbook:end type-ranged-export -->
 
 ## Declarations
 
@@ -13058,6 +13501,8 @@ declare void @nish_panic_index(i64 noundef, i64 noundef) #6
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #5
+declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #5
+declare void @nish_scope_join(i8* noundef nonnull) #5
 declare noundef i64 @nish_cpu_count() #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {

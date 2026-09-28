@@ -42,9 +42,12 @@ import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays"
 import {
+  checksArgumentRange,
   emitBuiltinCall,
   emitIdentifierBuiltinCall,
   emitNamespaceProperty,
+  emitParamRangeChecks,
+  emitRangeEntry,
   isIdentifierBuiltinCall,
 } from "./emit-builtins"
 import {
@@ -77,7 +80,7 @@ import {
   emitResultReturn,
   emitResultReturningCall,
   isResultConstructorCall,
-  privateResultAbi,
+  privateAbi,
   unpackReturnedResult,
 } from "./emit-result"
 import {
@@ -93,11 +96,19 @@ import {
   maybeLocalIndex,
   MaybeParts,
 } from "./emit-map"
-import { emitParallelRegion, isParallelRegionCall } from "./emit-parallel"
+import {
+  closeBlockScopes,
+  emitParallelRegion,
+  emitScopeJoins,
+  emitSpawnTask,
+  isParallelRegionCall,
+  isSpawnTaskCall,
+  openScope,
+} from "./emit-parallel"
 import { addStringConstant, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { IRBlock, IRFunction, IRModule, IRParam } from "./ir"
+import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -111,6 +122,7 @@ import {
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
+  FLAG_USING,
   N_FALSE,
   N_FOR,
   N_FOR_OF,
@@ -213,6 +225,14 @@ export class Emitter {
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
+  /**
+   * WP29 P2: each scope a `using` declaration opened and its block has not
+   * yet closed, innermost last, as the `i8*` its tasks are filed under, and
+   * how many loops enclosed it — which is how a `break` or `continue` knows
+   * which scopes it leaves (`emitScopeJoins`).
+   */
+  openScopes: string[]
+  openScopeLoops: i32[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -262,6 +282,8 @@ export class Emitter {
     this.currentSig = null
     this.tailCallId = -1
     this.loops = []
+    this.openScopes = []
+    this.openScopeLoops = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -367,7 +389,7 @@ export class Emitter {
     const params: IRParam[] = []
     // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
-    const privateAbi = privateResultAbi(this, sig.visibleOutside())
+    const isPrivate = privateAbi(this.opts, sig.visibleOutside())
     let i = 0
     while (i < sig.paramNames.length) {
       // WP29: a compile-time function parameter is a position in the call and
@@ -380,12 +402,12 @@ export class Emitter {
       const type = sig.paramTypes[i]
       let attrs: string[] = []
       if (optimize) {
-        attrs = paramAttributes(this.table, name, type, facts, privateAbi)
+        attrs = paramAttributes(this.table, name, type, facts, isPrivate)
       }
-      params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs))
+      params.push(new IRParam(name, this.llvmAbi(type, isPrivate), attrs))
       i = i + 1
     }
-    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi))
+    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, isPrivate))
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
     // WP29: a function another module's instantiation calls is `hidden`
@@ -397,7 +419,7 @@ export class Emitter {
       this.fn.linkage = "internal"
     } else if (sig.hidden) {
       this.fn.linkage = "hidden"
-    } else if (this.opts.strictExports && !sig.exported) {
+    } else if (privateAbi(this.opts, sig.exported)) {
       this.fn.linkage = "internal"
     }
     if (optimize) {
@@ -405,7 +427,7 @@ export class Emitter {
         this.table,
         sig.returnType,
         facts.returnDeref,
-        privateAbi,
+        isPrivate,
         facts.returnAlign
       )
       this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts))
@@ -416,14 +438,19 @@ export class Emitter {
     this.maybeParts = []
     this.fusedProbes = []
     this.loops = []
+    this.openScopes = []
+    this.openScopeLoops = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug
     if (debug !== null) {
-      debug.beginFunction(this.fn, sig, false, "", privateAbi)
+      debug.beginFunction(this.fn, sig, false, "", isPrivate)
     }
+    // WP31 §9: a host may call this function, so its ranged parameters are
+    // checked here, before anything is allocated, and its callers skip theirs.
+    emitParamRangeChecks(this, sig)
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
@@ -441,9 +468,9 @@ export class Emitter {
         const object = unpackReturnedResult(
           this,
           sig.paramTypes[i],
-          `%${name}`,
+          paramValue(name),
           facts.isStackParam(name),
-          privateAbi
+          isPrivate
         )
         this.paramObjectNames.push(name)
         this.paramObjectValues.push(object)
@@ -835,9 +862,12 @@ export class Emitter {
   // ---- Dispatch -----------------------------------------------------------
 
   emitBlock(block: Node): void {
+    const scopes = this.openScopes.length
     for (const stmt of block.children) {
       this.emitStatement(stmt)
     }
+    // WP29 P2: a block that fell off its end joins the scopes it opened.
+    closeBlockScopes(this, scopes)
   }
 
   /**
@@ -929,6 +959,9 @@ export class Emitter {
         return
       case N_VAR:
         this.emitVariableDeclarations(stmt.children[0])
+        if ((stmt.flags & FLAG_USING) !== 0) {
+          openScope(this, stmt.children[0]) // WP29 P2
+        }
         return
       case N_EXPR_STMT:
         this.emitExpression(stmt.children[0])
@@ -970,6 +1003,10 @@ export class Emitter {
 
   /** `return e`: the value first (it may allocate), then the arena scope release, then `ret`. */
   emitReturn(stmt: Node): void {
+    // WP29 P2: every scope open here joins before the value is computed, so
+    // the value may read what the tasks stored, and inside every arena scope
+    // the exit is about to release.
+    emitScopeJoins(this, 0)
     const value = stmt.children[0]
     if (value.kind === N_EMPTY) {
       this.emitScopeExit()
@@ -997,7 +1034,7 @@ export class Emitter {
         this,
         value,
         sig.returnType,
-        privateResultAbi(this, sig.visibleOutside())
+        privateAbi(this.opts, sig.visibleOutside())
       )
       this.emitScopeExit()
       emitResultReturn(this, packed)
@@ -1054,13 +1091,34 @@ export class Emitter {
 
   /** Lower an expression and answer the LLVM value holding its result. */
   emitExpression(expr: Node): string {
+    return this.emitEntering(expr, true)
+  }
+
+  /**
+   * Argument `index` of a call to `callee`: `emitExpression`, less the range
+   * entry when the callee checks that parameter in its own prologue (WP31 §9,
+   * `checksArgumentRange`).
+   */
+  emitArgument(expr: Node, callee: FunctionSig, index: i32): string {
+    return this.emitEntering(expr, checksArgumentRange(this, callee, index))
+  }
+
+  /** `emitExpression`, with the range entry at `expr` checked only when `checkRange` says so. */
+  emitEntering(expr: Node, checkRange: boolean): string {
     const saved = this.enterLocation(expr)
     const value = this.emitRawExpression(expr)
     // A class value used as an interface it implements: the interface's fields
     // are its first fields, so the recorded conversion is a pointer bitcast.
+    // A value entering a range (WP31 §6) is the same `i32`, checked here
+    // unless `src/bounds.ts` proved it already lies inside (§8).
     const from = this.program.nodeCoercions[expr.id]
+    const to = this.program.nodeTypes[expr.id]
     let result = value
-    if (from >= 0) {
+    if (from >= 0 && this.table.isRanged(to)) {
+      if (checkRange && !this.program.nodeProvenRange[expr.id]) {
+        emitRangeEntry(this, value, from, to)
+      }
+    } else if (from >= 0) {
       result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`)
     }
     this.fn.setLocation(saved)
@@ -1150,7 +1208,7 @@ export class Emitter {
         // WP17: a by-value `Result` parameter *is* a pointer to the object the
         // prologue unpacked it into, so the name lowers to that value.
         const object = this.paramObject(local.name)
-        return object.length > 0 ? object : `%${local.name}`
+        return object.length > 0 ? object : paramValue(local.name)
       }
       // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
       if (this.table.isMaybe(local.type)) {
@@ -1228,7 +1286,7 @@ export class Emitter {
     const operandTypes: string[] = []
     const operandValues: string[] = []
     // A non-exported callee takes and answers one slot per arm (WP15).
-    const calleePrivate = privateResultAbi(this, sig.visibleOutside())
+    const calleePrivate = privateAbi(this.opts, sig.visibleOutside())
     let i = 0
     while (i < args.children.length) {
       // WP29: a function argument chose which function this call reaches, and
@@ -1243,7 +1301,7 @@ export class Emitter {
       const want = sig.paramTypes[i]
       const value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
-        : this.emitExpression(args.children[i])
+        : this.emitArgument(args.children[i], sig, i)
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
@@ -1252,6 +1310,12 @@ export class Emitter {
     // WP32: `hashKey` and `sameKey` are lowered in place, per key type.
     if (mapIntrinsicOf(sig) !== MAP_NONE) {
       return emitMapIntrinsic(this, sig, operandValues)
+    }
+    // WP29 P2: inside a `spawn` instance, the call to `runTask` becomes a
+    // task filed on the scope, run when the scope joins.
+    if (isSpawnTaskCall(this.currentSig, sig)) {
+      emitSpawnTask(this, sig, operandTypes, operandValues)
+      return "void"
     }
     // WP29 P1: inside a `parallelMapInto` or `parallelReduce` instance, the
     // call to the chunk loop is the one that runs on several threads.
@@ -1312,7 +1376,9 @@ export class Emitter {
     if (type < 0) {
       process.exit(internalErrorFor(`emitter: no type recorded for ${nodeName(expr.kind)}`, this.opts.json))
     }
-    return type
+    // WP31 §7: every lowering reads a ranged value as its base, `i32`. The
+    // range itself is read from the table where a value enters one.
+    return this.table.baseOf(type)
   }
 
   llvm(type: i32): string {
@@ -1332,8 +1398,8 @@ export class Emitter {
   }
 
   /** The LLVM type at a call boundary: `i64` for a `Result` the ABI packs (WP17). */
-  llvmAbi(type: i32, privateAbi: boolean): string {
-    return this.table.llvmAbiType(type, privateAbi)
+  llvmAbi(type: i32, isPrivate: boolean): string {
+    return this.table.llvmAbiType(type, isPrivate)
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */

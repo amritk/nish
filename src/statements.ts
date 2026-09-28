@@ -19,6 +19,7 @@ import {
   clearNarrowingsAssignedIn,
   narrow,
   resolveMaybeAnnotation,
+  unproven,
   WANT_MAYBE,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
@@ -135,7 +136,7 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
     case N_EXPR_STMT:
       ctx.statementExpression = stmt.children[0]
       // WP16: a failure may not be dropped.
-      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1))
+      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1), scope)
       ctx.statementExpression = null
       // `process.exit(n)` and `panic(m)` end the path exactly as `return` does.
       return terminatesControlFlow(ctx, stmt.children[0])
@@ -229,7 +230,10 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       want = -1
     }
     const initType = checkExpression(ctx, initializer, scope, want)
-    let type = declared < 0 ? initType : declared
+    // An inferred type never carries the initialiser's proof (#234):
+    // `let y = r` inside `if (r.ok)` is a `Result`, and `y` may be assigned
+    // an error later.
+    let type = declared < 0 ? unproven(ctx, initType) : declared
     if (declared >= 0 && initType !== T_ERROR && !ctx.table.assignable(initType, declared)) {
       ctx.error(
         initializer,

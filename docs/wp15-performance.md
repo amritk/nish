@@ -2041,6 +2041,24 @@ measurement closed says so and says why.
    header is hoisted the checks cost about 0.5%. An index proven here also
    takes `nish_panic_index` out of the function's callee set, so a function
    whose every index is proven keeps `willreturn`.
+   **The declared surface has since shipped** (WP31, #261, #268, #273), and
+   [wp31 §10](wp31-ranged-integers.md#10-stages-the-rolling-freeze-and-the-acceptance-program)
+   measured it under §2's protocol. The box was a four-core 2.10 GHz Xeon VM
+   with clang 18.1.3 at `60df17a`. The statistic is CPU time, 3 warm-ups and
+   15 alternating runs per binary pinned to one core, as the minimum over
+   `--unchecked-indexing`. The cursor is now `bench/cursor.ts`, 400 passes over
+   the 2.0 MB of `src/*.ts`. Its proven and unchecked executables are
+   byte-identical, and they time at **0.991x** (0.977x on an earlier run),
+   which is noise. The 1.069x before/proven ratio cannot be re-derived,
+   because no compiler without the proof can build the program. Declaring the
+   cursor `integer<0, 2147483647>` warns at each of its three advances and
+   costs **1.038x**. `bench/getbyte.ts` is §2's `getByte` with
+   `i: integer<0, 255>`. It has no check left, and its three functions are
+   `{ nounwind willreturn readonly }`. It builds to the same executable as
+   `--unchecked-indexing`, so it measures **0.994x**: the declared range is a
+   frontend fact and not a speed-up. The `i32` spelling of the same program
+   compiles to the same module, because the call-site facts of #222 already
+   prove it.
 7. **Contiguous record arrays** (§2a) — **done for `interface` elements, and
    closed for class elements**. 2.27x on a loop whose allocation order and
    traversal order differ, and nothing at all when they agree — the measurement

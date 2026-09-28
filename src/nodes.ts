@@ -110,9 +110,14 @@ export const N_TYPE_FUNCTION: i32 = 61
 // parameters (always empty). Legal only as the argument for a function-typed
 // parameter; it is never a value.
 export const N_ARROW: i32 = 62
+// A numeric literal written as a type, `255` or `-128` (WP31,
+// docs/wp31-ranged-integers.md §4): text: the literal as written, with the
+// sign when there is one. Parsed wherever a type is parsed, and legal only as
+// a bound of `integer<Lo, Hi>`, which the checker says everywhere else.
+export const N_TYPE_LITERAL: i32 = 63
 
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 63
+export const N_COUNT: i32 = 64
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -153,6 +158,11 @@ export const FLAG_STATIC: i32 = 64
 // from the same two bits. A field carries `readonly` legitimately, so only a
 // method and a constructor read this.
 export const FLAG_STATIC_FIRST: i32 = 128
+// `flags` on N_VAR: bit 8 is `using` (WP29 P2), set together with `FLAG_CONST`
+// because a `using` binding cannot be reassigned either. The declaration is
+// the same node as a `let` or a `const`, so nothing that walks declarations
+// needs a new kind to find it.
+export const FLAG_USING: i32 = 256
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -317,6 +327,8 @@ export const nodeName = (kind: i32): string => {
       return "TYPE_FUNCTION"
     case N_ARROW:
       return "ARROW"
+    case N_TYPE_LITERAL:
+      return "TYPE_LITERAL"
     default:
       return "?"
   }

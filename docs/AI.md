@@ -198,15 +198,41 @@ const good = (a: i32, b: i64): i64 => {
 };
 ```
 
-**`integer` is reserved, not a type.** It is held for ranged integers
-(`integer<Lo, Hi>`), which the compiler does not build yet, so writing it as a
-type is refused. Declaring a type alias, enum, class, interface or function
-named `integer` is refused too. Use `i32`. A value named `integer` (a local
-or a module constant) is fine.
+**`integer<Lo, Hi>` is an `i32` that stays in `[Lo, Hi]`.** The bounds are two
+integer literals (a sign allowed) inside `i32`, and it is an `i32` everywhere
+the machine can see. Putting a value *into* one is checked: an `i32` or
+another range is compared once and the program panics (exit 1) outside the
+range, a literal outside it is a compile error, and a literal inside it or a
+narrower range costs nothing. So does a value a loop condition or a guard
+already bounds (`b` below), and `toI32` of a `u8`; a check left inside a loop
+is a performance warning (NL9013) naming the guard that removes it. A range
+bounds an index too: `integer<0, 255>`, like `u8`, needs only a length guard of
+256. Taking one *out* is free: every operator reads
+it as `i32`, a `const` keeps the range and a `let` widens to `i32`. A `u8` is
+not an `integer<0, 255>` (convert with `toI32`), and a `declare function` may
+not mention a range. Put the range on the value you use, not on a loop
+counter, which has to leave the range to end the loop.
 
-```ts nish:err NL2333
-const clamp = (x: integer): i32 => x;
+```ts nish:ok
+const getByte = (buf: u8[], i: integer<0, 255>): u8 => buf[i];
+
+const sumAll = (buf: u8[]): i32 => {
+  let sum = 0;
+  for (let i = 0; i < 256 && i < buf.length; i++) {
+    const b: integer<0, 255> = i;
+    sum = sum + toI32(getByte(buf, b));
+  }
+  return sum;
+};
 ```
+
+```ts nish:err-body NL2384
+const digit: integer<0, 9> = 12;
+```
+
+Declaring a type alias, enum, class, interface or function named `integer` is
+refused, because the name is the type. A value named `integer` (a local or a
+module constant) is fine.
 
 ```ts nish:err NL2332
 class integer {
@@ -317,6 +343,8 @@ Narrowing follows the same engine as `T | null` below: it applies to a
 **variable**, never a property path; it ends at any assignment to that
 variable; and it is dropped before a loop that assigns it. `if (r.isOk()) A
 else B` narrows in `A`, and after the `if` when `B` cannot fall through.
+The proof stays with `r`: `const y = r`, `c ? r : q` and `[r]` are plain
+`Result`s, so test `y` itself before `y.value`.
 
 `panic(message)` is the other ending: message to stderr, exit 1. It is for an
 invariant that cannot hold, not for a failure a caller should handle. It
@@ -360,8 +388,9 @@ export const main = (): i32 => {
   `Map.get` (see [Map and Set](#map-and-set)).
 - Narrowing applies to a **local or parameter**, never a property path. `if
   (n.next !== null) n.next.v` is rejected — copy into a local first.
-- A narrowing ends at any assignment to the variable, and is dropped before a
-  loop whose body, condition or update assigns it.
+- A narrowing ends at any assignment to the variable, including one in an
+  earlier operand of the same `&&` / `||` chain, and is dropped before a loop
+  whose body, condition or update assigns it.
 - Two nullables cannot be compared with each other; compare each with `null`.
 - `new Array<T | null>(n)` is allowed: the zero fill *is* `null`.
 
@@ -721,6 +750,62 @@ export const main = (): i32 => {
 import { parallelReduce } from "nish/threads";
 
 export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   // `+` folds from 0
+```
+
+### Scoped tasks: `using s = scope()`
+
+Different functions at once, one thread each: open a scope with `using`, give
+it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
+`entry(arg)` into `dst[at]` when the block ends. (A plain block, for the same
+reason as the one above: `tests/link/thread_scope_basic` compiles it.)
+
+```ts
+import { scope } from "nish/threads";
+
+const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
+const square = (n: i32): i32 => n * n;
+
+export const main = (): i32 => {
+  const xs: f64[] = [1.5, 2.5];
+  const sums: f64[] = [0.0];
+  const squares: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(sumOf, xs, sums, 0);
+    s.spawn(square, 12, squares, 0);
+  }                                          // joined here, on every exit
+  console.log(`${sums[0]} ${squares[0]}`);   // 4 144
+  return 0;
+};
+```
+
+- **The tasks run when the block ends**, together, and each answer is stored
+  after the last one finishes. So read a destination after the block. A
+  destination is a `const` bound to a fresh array (`[0, 0]`, `new Array`) that
+  you only index; never pass it on. Between the first `spawn` and the block's
+  end, don't read a destination, and don't write memory a task could read (a
+  store into an argument, a call that writes through its argument).
+- **`using` takes only `scope()`**, and `scope()` only comes from `using`.
+  The scope is only ever the receiver of a `spawn` statement: never pass it,
+  store it or return it.
+- **The task is a named top-level function**, not an arrow, and it follows the
+  data-parallel rules: it writes nothing anybody else can see, answers a number,
+  a `boolean` or an enum, and leaves `Arena` alone. A task cannot open a scope
+  of its own or call `parallelMapInto`.
+- **Any argument will do** — an array, an object — because nothing writes
+  memory while the tasks run. There is no thread count: one task, one thread.
+
+```ts nish:err NL2388
+import { scope } from "nish/threads";
+
+const one = (n: i32): i32 => n + 1;
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  const s = scope();   // a scope must be introduced by `using`
+  s.spawn(one, 1, out, 0);
+  return out[0];
+};
 ```
 
 ### Calling C

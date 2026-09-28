@@ -16,6 +16,7 @@ import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { functionTypeHereMessage, isFunctionParameter } from "./generics"
+import { isThreadsSource } from "./parallel"
 import { FLAG_EXPORTED, N_EMPTY, N_LIST, Node } from "./nodes"
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
@@ -55,7 +56,9 @@ export const collectParams = (
     // more. Only a top-level function may have one; everywhere else the
     // parameter is refused by what it belongs to.
     if (isFunctionParameter(param)) {
-      if (owner >= 0 || foreign) {
+      // One method may take one: `ThreadScope.spawn` in `nish/threads`, whose
+      // task is named at the call like a data-parallel body (WP29 P2).
+      if ((owner >= 0 && !isThreadsSource(ctx.program)) || foreign) {
         const what = foreign ? "a `declare function`" : "a method or a constructor"
         ctx.error(param.children[1], functionTypeHereMessage(name, what))
         continue
@@ -155,7 +158,9 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
   }
   let i = 0
   while (i < sig.paramTypes.length) {
-    if (!isForeignType(ctx.table, sig.paramTypes[i])) {
+    if (ctx.table.isRanged(sig.paramTypes[i])) {
+      refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
+    } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
       const spelled = ctx.table.typeName(sig.paramTypes[i])
       ctx.error(
         decl,
@@ -175,13 +180,29 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     }
     i = i + 1
   }
-  if (!isForeignType(ctx.table, sig.returnType)) {
+  if (ctx.table.isRanged(sig.returnType)) {
+    refuseForeignRange(ctx, decl.children[2], name, "returns", sig.returnType)
+  } else if (!isForeignType(ctx.table, sig.returnType)) {
     const spelled = ctx.table.typeName(sig.returnType)
     ctx.error(
       decl.children[2],
       `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar or \`CPtr\` only`
     )
   }
+}
+
+/**
+ * A ranged integer in a `declare function` (WP31 §9). The C side never
+ * promised the range, so writing it would be a claim this compiler cannot
+ * check on the way in and would trust on the way out — the objection
+ * `docs/wp27-ffi.md` makes to every attribute on a foreign callee. `i32` is the
+ * spelling, and the value enters a range with a check once it is back.
+ */
+const refuseForeignRange = (ctx: CheckContext, at: Node, name: string, what: string, type: i32): void => {
+  ctx.error(
+    at,
+    `\`declare function ${name}\` ${what} ${ctx.table.typeName(type)}, and a range is a promise the C side never made: declare it \`i32\``
+  )
 }
 
 /**

@@ -26,6 +26,7 @@
 import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes"
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
+import { privateAbi } from "./emit-result"
 import { StringMap, StringSet } from "./map"
 import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
@@ -86,11 +87,20 @@ export class ExternalFunction {
    * array parameter is provably read-only, so C may spell it `const`.
    */
   writtenParams: StringSet
+  /**
+   * A range sits inside a parameter or the result rather than being one
+   * (WP31 §9): an `integer<0, 255>[]`, a record with a ranged field, a `Result`
+   * over one. That is data a host writes and nothing checks on entry, so no
+   * sidecar describes the function; the header gives it the line every other
+   * type without a C spelling gets.
+   */
+  rangeInData: boolean
 
-  constructor(sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet) {
+  constructor(sig: FunctionSig, unit: ModuleUnit, writtenParams: StringSet, rangeInData: boolean) {
     this.sig = sig
     this.unit = unit
     this.writtenParams = writtenParams
+    this.rangeInData = rangeInData
   }
 }
 
@@ -113,6 +123,7 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
     units.push(new AnalysisUnit(unit.checker.program, unit.parents))
   }
   const facts = analyzeFunctions(units, compilation.table, compilation.opts, compilation.runtime)
+  const ranged = structsHoldingRanges(compilation)
   const out: ExternalFunction[] = []
   for (const unit of compilation.modules) {
     const program = unit.checker.program
@@ -138,7 +149,8 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
       if (entryMain !== null && sig === entryMain) {
         continue
       }
-      if (!sig.exported && compilation.opts.strictExports) {
+      // `internal`, so no host can name it (the linkage condition, WP31 §9).
+      if (privateAbi(compilation.opts, sig.exported)) {
         continue
       }
       // WP29: an instantiation that was given a function, or an arrow lifted
@@ -147,12 +159,73 @@ export const externalFunctions = (compilation: Compilation): ExternalFunction[] 
       if (sig.compileTimeOnly()) {
         continue
       }
-      out.push(
-        new ExternalFunction(sig, unit, writtenArrayParams(compilation.table, sig, facts.get(sig.name)))
-      )
+      const written = writtenArrayParams(compilation.table, sig, facts.get(sig.name))
+      out.push(new ExternalFunction(sig, unit, written, signatureHidesRange(compilation.table, sig, ranged)))
     }
   }
   return out
+}
+
+/**
+ * The names of the classes and interfaces that hold a range anywhere a host
+ * could write it: in a field, in an element or a payload of one, or in another
+ * record one of their fields points at. A record can point at itself, so the
+ * set grows until a pass adds nothing rather than recursing through fields.
+ */
+const structsHoldingRanges = (compilation: Compilation): StringSet => {
+  const table = compilation.table
+  const ranged = new StringSet()
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const unit of compilation.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (ranged.has(info.name)) {
+          continue
+        }
+        for (const field of info.fields) {
+          if (holdsRange(table, field.type, ranged)) {
+            ranged.add(info.name)
+            grew = true
+            break
+          }
+        }
+      }
+    }
+  }
+  return ranged
+}
+
+/** Whether `t` is a range or has one inside it; `ranged` is `structsHoldingRanges`. */
+const holdsRange = (table: TypeTable, t: i32, ranged: StringSet): boolean => {
+  if (table.isRanged(t)) {
+    return true
+  }
+  switch (table.kindOf(t)) {
+    case K_ARRAY:
+      return holdsRange(table, table.refOf(t), ranged)
+    case K_NULLABLE:
+      return holdsRange(table, table.refOf(t), ranged)
+    case K_RESULT:
+      return holdsRange(table, table.okOf(t), ranged) || holdsRange(table, table.errOf(t), ranged)
+    case K_STRUCT:
+      return ranged.has(table.nameOf(t))
+    default:
+      return false
+  }
+}
+
+/** `ExternalFunction.rangeInData`: a range held by a parameter or the result, not one itself. */
+const signatureHidesRange = (table: TypeTable, sig: FunctionSig, ranged: StringSet): boolean => {
+  if (!table.isRanged(sig.returnType) && holdsRange(table, sig.returnType, ranged)) {
+    return true
+  }
+  for (const t of sig.paramTypes) {
+    if (!table.isRanged(t) && holdsRange(table, t, ranged)) {
+      return true
+    }
+  }
+  return false
 }
 
 const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet => {
@@ -247,6 +320,11 @@ export const typedView = (table: TypeTable, t: i32): TypedView | null => {
  * (`ExternalFunction.writtenParams`); every other array parameter is `const`.
  */
 export const cType = (table: TypeTable, t: i32, position: i32, written: boolean): string => {
+  // WP31 §5: a ranged integer is an `i32` at the ABI. The range is not a C
+  // type, so the comment above the prototype is where a host reads it.
+  if (table.isRanged(t)) {
+    return "int32_t"
+  }
   switch (table.kindOf(t)) {
     case T_I32:
       return "int32_t"
@@ -493,6 +571,11 @@ export const tsSignature = (table: TypeTable, sig: FunctionSig): string => {
  * arrays as `number[]`, `i64[]`, ... since `Int32Array` and `i32[]` are one type).
  */
 export const tsKeyword = (table: TypeTable, t: i32): string => {
+  // WP31 §9: `integer<0, 255>`, as written, so every comment that shows the
+  // signature shows the range a host has to keep to.
+  if (table.isRanged(t)) {
+    return table.typeName(t)
+  }
   switch (table.kindOf(t)) {
     case T_I32:
       return "number"
@@ -718,7 +801,7 @@ const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalF
   let i = 0
   while (i < declared.length) {
     const fn = declared[i]
-    if (fn.sig.name !== "main" && cPrototype(table, fn.sig, fn.writtenParams).length > 0) {
+    if (fn.sig.name !== "main" && cPrototype(table, fn).length > 0) {
       const ident = cFunctionName(fn.sig.name).ident
       const at = seen.get(ident, -1)
       if (at >= 0 && at < declared.length) {
@@ -859,8 +942,17 @@ const reportUninstantiated = (
 const sigNameNode = (sig: FunctionSig): Node =>
   sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0]
 
-/** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
-export const cPrototype = (table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string => {
+/**
+ * `int32_t add(int32_t a, int32_t b)` for a function, or `""` when a type has
+ * no C spelling or holds a range a host would write unchecked
+ * (`ExternalFunction.rangeInData`).
+ */
+export const cPrototype = (table: TypeTable, fn: ExternalFunction): string => {
+  if (fn.rangeInData) {
+    return ""
+  }
+  const sig = fn.sig
+  const writtenParams = fn.writtenParams
   const ret = cType(table, sig.returnType, POS_RETURN, false)
   if (ret.length === 0) {
     return ""
