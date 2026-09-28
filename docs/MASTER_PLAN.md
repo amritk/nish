@@ -849,6 +849,12 @@ major. Whether it happens at all is still wp22 §10's open question.
   is a diagnostic for a program that already fails, so neither withdraws
   anything. S4's build cache and S5's prebuilt distribution follow them
   ([wp21-packages.md](wp21-packages.md) §8).
+- **Hosting cs** ([wp33-hosting-cs.md](wp33-hosting-cs.md)), proposed: the
+  fourteen items the port of a browser game and its servers needs from the
+  compiler — a clock, sockets, host imports on `wasm`, programs that do not
+  exit, and the `--overlap` check among them — each tied to the part of the
+  game that cannot be written without it. The port's own plan, and its order,
+  are in the game's repository.
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
