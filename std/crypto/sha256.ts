@@ -175,8 +175,12 @@ const sha256RoundConstant = (t: i32): u32 => {
       return 0xa4506ceb
     case 62:
       return 0xbef9a3f7
-    default:
+    case 63:
       return 0xc67178f2
+    // Unreachable: `t` is a round number, 0 to 63. A `default` of its own
+    // keeps K_63 inside the table, so the lookup needs no range test first.
+    default:
+      return 0
   }
 }
 
@@ -208,8 +212,11 @@ const sha256CopyBytes = (from: u8[], fromAt: i32, to: u8[], toAt: i32, n: i32): 
  */
 const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
   // The test is written as the condition the body runs under, not as an
-  // early exit, because that is the shape that proves every index below in
-  // range and lets the loops run without a bounds check each.
+  // early exit, because that is the shape that proves the plain `w[t]` and
+  // `h[i]` indices in range and drops their bounds checks. The computed ones —
+  // the byte reads in `sha256LoadWord` and `w[t - 2]` and its kin — keep a
+  // check each; measured, removing every check with `--unchecked-indexing`
+  // moved the 1 MiB time by less than the run-to-run noise.
   if (toI32(h.length) >= 8 && toI32(w.length) >= 64 && at >= 0 && at <= toI32(src.length) - SHA256_BLOCK) {
     // Step 1: the message schedule.
     for (let t: i32 = 0; t < 16; t += 1) {
