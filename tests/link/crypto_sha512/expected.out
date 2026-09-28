@@ -1,0 +1,36 @@
+PASS  SHA512_SIZE
+PASS  SHA384_SIZE
+PASS  SHA512_BLOCK
+PASS  a SHA-512 digest is SHA512_SIZE bytes
+PASS  a SHA-384 digest is SHA384_SIZE bytes
+PASS  sha512 of the empty message
+PASS  sha384 of the empty message
+PASS  sha512 of "abc"
+PASS  sha384 of "abc"
+PASS  sha512 of the 896-bit message
+PASS  sha384 of the 896-bit message
+PASS  sha512 of one million "a"
+PASS  sha384 of one million "a"
+PASS  sha512 of 111 bytes
+PASS  sha384 of 111 bytes
+PASS  sha512 of 112 bytes
+PASS  sha384 of 112 bytes
+PASS  sha512 of 127 bytes
+PASS  sha384 of 127 bytes
+PASS  sha512 of 128 bytes
+PASS  sha384 of 128 bytes
+PASS  sha512 of 129 bytes
+PASS  sha384 of 129 bytes
+PASS  sha512 of 300 bytes, cut in two at every point
+PASS  sha384 of 300 bytes, cut in two at every point
+PASS  sha512 of 300 bytes, one byte at a time
+PASS  sha384 of 300 bytes, one byte at a time
+PASS  sha512 of one million "a" in 997-byte windows
+PASS  sha384 of a window at offset 5
+PASS  Sha512.copy digests the prefix
+PASS  Sha512.copy leaves the original's digest unchanged
+PASS  Sha512.copy is updated on its own
+PASS  Sha384.copy digests the prefix
+PASS  Sha384.copy leaves the original's digest unchanged
+PASS  Sha384.copy is updated on its own
+sha512: 35 passed, 0 failed, 0 skipped
