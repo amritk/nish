@@ -207,7 +207,11 @@ export const FLAG_USING: i32 = 256
 //
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
-// shape exists. `src/ast-text.ts` prints each flag, so `--emit-ast` and
+// shape exists. A checker rule that needs no type is a sweep over the whole
+// module in pass 1 (`refuseForOfHeads`), not a rule in the body check: pass 2
+// checks a template's body once per instantiation, so a template nothing
+// instantiates is never checked, and a refusal stated there would let it
+// compile (`tests/cases/reject_for_await_template`). `src/ast-text.ts` prints each flag, so `--emit-ast` and
 // `tests/parser-oracle.js` compare them.
 
 // `flags` on N_VAR and N_MODULE_CONST: bit 9 is `var` rather than `let`

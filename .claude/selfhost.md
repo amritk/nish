@@ -270,11 +270,15 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `N_SOURCE_FILE`.
 
   The refusal runs before anything else reads the node, so no later rule has
-  to know the shape exists, and `src/ast-text.ts` prints every flag so that
-  `--emit-ast` and `tests/parser-oracle.js` compare it. A word the lexer
-  treats as an identifier (`var`, `try`, `with`, `in`, `await`) is matched by
-  text where it opens the construct, as `of` and `using` are, so the lexer
-  and its oracle stay as they are. When a case comes off, it leaves both
+  to know the shape exists. An NL2xxx rule that needs no type is a sweep over
+  the module in pass 1, never a rule in the body check: a template's body is
+  checked only when something instantiates it, so a rule stated there lets an
+  uninstantiated one compile (`tests/cases/reject_for_await_template`).
+  `src/ast-text.ts` prints every flag so that `--emit-ast` and
+  `tests/parser-oracle.js` compare it. A word the lexer treats as an
+  identifier (`var`, `try`, `with`, `in`, `await`) is matched by text where it
+  opens the construct, as `of` and `using` are, so the lexer and its oracle
+  stay as they are. When a case comes off, it leaves both
   parser-refusal registers and the R6 section of
   `tests/wordings/unreachable.txt` in the same change, with its `.err`
   re-pinned to the rule.

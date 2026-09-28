@@ -1769,13 +1769,12 @@ export class Parser {
       this.advance()
     }
     this.expect(TOK_LPAREN)
-    const isVar = this.varAhead()
-    if ((this.at(TOK_CONST) || this.at(TOK_LET) || isVar) && this.peek() === TOK_IDENT) {
+    if (((this.at(TOK_CONST) || this.at(TOK_LET)) && this.peek() === TOK_IDENT) || this.varAhead()) {
       const declStart = this.start
       const declaration = this.node(N_VAR, declStart, this.end)
       if (this.at(TOK_CONST)) {
         declaration.flags = declaration.flags | FLAG_CONST
-      } else if (isVar) {
+      } else if (this.at(TOK_IDENT)) {
         declaration.flags = declaration.flags | FLAG_VAR
       }
       this.advance()
@@ -1904,7 +1903,7 @@ export class Parser {
     this.advance()
     let label = ""
     if (this.at(TOK_IDENT) && !this.newlineBefore()) {
-      if (this.labelled(this.value)) {
+      if (this.labels.indexOf(this.value) >= 0) {
         label = this.value
       } else {
         this.report("a label is not supported", this.start, this.end)
@@ -1915,16 +1914,6 @@ export class Parser {
     const node = this.node(kind, start, this.previousEnd)
     node.text = label
     return node
-  }
-
-  /** Whether a labelled statement around this point declares `name`. */
-  labelled(name: string): boolean {
-    for (const label of this.labels) {
-      if (label === name) {
-        return true
-      }
-    }
-    return false
   }
 
   parseExpressionStatement(start: i32): Node {

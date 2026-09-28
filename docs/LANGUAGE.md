@@ -4801,8 +4801,8 @@ messages are exact for the cases cited; other rows quote the checker
 | enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
 | name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
 | top-level `let` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
-| `for await` | `` `for await` is not supported `` | `nl2133_for_await` |
-| `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `nl2135_for_of_without_declaration` |
+| `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
+| `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
 | assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |

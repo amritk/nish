@@ -128,6 +128,12 @@ const printTypeScriptTree = (source, sf) => {
     return (declarationList.flags & ts.NodeFlags.BlockScoped) === 0 ? "+var" : ""
   }
 
+  /** The declaration a `for` or `for...of` head holds: its VAR, then its list. */
+  const declarationHead = (declarationList, depth) => {
+    emit(depth, `VAR${letFlags(declarationList)}`, at(declarationList.getStart(sf)), at(declarationList.end))
+    list(depth + 1, declarationList.declarations, variableDeclaration)
+  }
+
   /**
    * `[Symbol.dispose]`, the one computed member name Nish parses (WP29 P2),
    * which it keeps as a name spelled with its brackets.
@@ -508,9 +514,7 @@ const printTypeScriptTree = (source, sf) => {
         if (node.initializer === undefined) {
           empty(depth + 1)
         } else if (ts.isVariableDeclarationList(node.initializer)) {
-          const [ds, de] = [at(node.initializer.getStart(sf)), at(node.initializer.end)]
-          emit(depth + 1, `VAR${letFlags(node.initializer)}`, ds, de)
-          list(depth + 2, node.initializer.declarations, variableDeclaration)
+          declarationHead(node.initializer, depth + 1)
         } else {
           expression(node.initializer, depth + 1)
         }
@@ -529,8 +533,7 @@ const printTypeScriptTree = (source, sf) => {
         emit(depth, `FOR_OF${isAwait}${forIn}`, s, e)
         const initializer = node.initializer
         if (ts.isVariableDeclarationList(initializer)) {
-          emit(depth + 1, `VAR${letFlags(initializer)}`, at(initializer.getStart(sf)), at(initializer.end))
-          list(depth + 2, initializer.declarations, variableDeclaration)
+          declarationHead(initializer, depth + 1)
         } else {
           expression(initializer, depth + 1)
         }

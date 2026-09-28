@@ -38,6 +38,7 @@ import {
   FLAG_CONST,
   FLAG_FOREIGN,
   FLAG_PREFIX,
+  FLAG_VAR,
   N_ARROW,
   N_BINARY,
   N_BLOCK,
@@ -103,7 +104,7 @@ import {
 } from "./program"
 import { BoundsWalk, analyzeBounds } from "./bounds"
 import { checkResultLocalsHandled } from "./result"
-import { checkReturnValue, checkStatements } from "./statements"
+import { checkReturnValue, checkStatements, refuseForOfHeads } from "./statements"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
   checkImplements,
@@ -256,6 +257,7 @@ export class Checker {
       this.ctx.errored = false
       aliasType(alias, this.ctx)
     }
+    refuseForOfHeads(this.ctx, this.program.file)
     this.ctx.errored = false
     this.qualifySymbols()
   }
@@ -673,8 +675,8 @@ export class Checker {
    * signatures.
    */
   collectConstants(stmt: Node): void {
-    // `var` is Phase 0's (NL1036), so a module constant without `const` is a `let`.
-    if ((stmt.flags & FLAG_CONST) === 0) {
+    // A `var` is Phase 0's (NL1036), which stops the module before this.
+    if ((stmt.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
       this.ctx.error(
         stmt,
         "Top-level `let` is not supported; a module has no top-level code, so only `const` is available"
