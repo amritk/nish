@@ -32,12 +32,24 @@ test is **data, not code**: a source file next to the output it must produce.
     the Node rewrite are handed the same environment.
   - `<name>.stdout` — for dump flags (`--emit-ast`, `--emit-checked`): the
     compiler's stdout is the golden and no IR is written.
+  - `<name>.portability` — the WP33 portability warnings: the case is compiled
+    a second time with `--warn-portability --json`, and the objects whose
+    `severity` is `"portability"` must equal the file line for line (paths
+    relative to the repository). An empty file is the quiet case's golden:
+    nothing may be reported. The flag is not written into `.args`, because
+    the tools that compile `tests/cases/` with the last release would refuse
+    it; `tests/diagnostic-coverage.js` adds it to every `port_*` case and
+    `nl8xxx_*` wording itself. The class's own checks (off by default, the
+    same IR with and without it, nothing for a program with an error,
+    independence from `--no-warn-performance`) are the WP33 block of
+    `tests/run.js`.
 
 - **Naming is by family prefix**, matching the module that owns the construct:
   `cf_*` control flow, `cls_*` classes, `str_*` strings, `arr_*` arrays,
   `mem_*` memory, `math_*` / `div_*` / `i64_*` / `f64_*` numerics, `io_*` and
   `process_*` builtins, `entry_*` / `export_*` modules and the `main` wrapper,
-  `opt_*` optimisation flags, `dbg_*` debug info, `dump_*` the dump flags, and
+  `opt_*` optimisation flags, `dbg_*` debug info, `dump_*` the dump flags,
+  `perf_*` the performance warnings, `port_*` the portability warnings, and
   `reject_*` for a validator or checker rejection (over half the suite). Pick
   the prefix the neighbours use.
 - **Whole programs go under `tests/link/<name>/`** when the point is the

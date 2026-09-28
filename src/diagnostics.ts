@@ -45,6 +45,16 @@
 // is a *counted skip* with no C toolchain and the second is the nightly rather
 // than `npm test`, so this is still a rule a reader keeps on a machine without
 // clang — but it is no longer only that.
+//
+// The WP33 portability warnings (docs/wp33-round-trip.md §5.2) are the second
+// kind that is not an error, and they are built on the performance class's
+// terms: `kind` is `portability`, a third list of their own that neither
+// `hasErrors` nor the performance report reads, the same report order, and
+// dropped the same way when the compilation failed. They are apart from the
+// performance list rather than mixed into it because the two answer different
+// questions — what this costs natively, and where the TypeScript reading of
+// the same source answers differently — and a reader asks for them separately
+// (`--no-warn-performance`, `--warn-portability`).
 
 import { codeFor } from "./codes"
 import { compareStrings, jsonQuote, StringBuilder } from "./strings"
@@ -59,6 +69,9 @@ export const MAX_REPORTED_ERRORS: i32 = 20
 
 /** The `kind` word of a WP15 §8 diagnostic, in the summary line and in `--json`. */
 const PERFORMANCE: string = "performance"
+
+/** The `kind` word of a WP33 portability warning, in the summary line and in `--json`. */
+const PORTABILITY: string = "portability"
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are
@@ -286,7 +299,8 @@ export class Diagnostic {
 
   /**
    * The `--json` form: one flat object, no excerpt. `severity` is the field a
-   * tool filters on, so a WP15 §8 warning says `performance` there; a syntax
+   * tool filters on, so a WP15 §8 warning says `performance` there and a WP33
+   * one says `portability`; a syntax
    * error keeps its `syntax error: ` prefix inside `message`, because its
    * severity is still `error`. `code` is the stable identifier from
    * `src/codes.ts` — the field to key on rather than the prose, since the
@@ -298,9 +312,9 @@ export class Diagnostic {
   json(): string {
     const endLine = this.source.lineOf(this.end)
     const endColumn = this.source.columnOf(this.end)
-    const performance = this.kind === PERFORMANCE
-    const severity = performance ? PERFORMANCE : "error"
-    const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`
+    const warning = this.kind === PERFORMANCE || this.kind === PORTABILITY
+    const severity = warning ? this.kind : "error"
+    const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
     return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}}`
   }
@@ -330,12 +344,22 @@ export class DiagnosticSink {
    * another.
    */
   warningFileOrder: StringMap
+  /**
+   * The WP33 portability warnings, in the same report order as `warnings` and
+   * kept by the same insertion, but a list of their own: the driver prints
+   * them only under `--warn-portability`, and never as part of the
+   * performance report or its count. They share `warningFileOrder`, so the
+   * two reports list files alike; that cannot reorder a performance warning,
+   * because the portability pass runs after the last of those is in.
+   */
+  portability: Diagnostic[]
 
   constructor() {
     this.items = []
     this.warnings = []
     this.fileOrder = new StringMap()
     this.warningFileOrder = new StringMap()
+    this.portability = []
   }
 
   report(source: SourceFile, start: i32, end: i32, text: string): void {
@@ -380,17 +404,30 @@ export class DiagnosticSink {
    * thousands of errors, and nothing cascades into a warning.
    */
   reportPerformance(source: SourceFile, start: i32, end: i32, text: string): void {
-    if (!this.warningFileOrder.has(source.path)) {
-      this.warningFileOrder.set(source.path, this.warningFileOrder.size())
+    this.insertWarning(this.warnings, new Diagnostic(source, start, end, PERFORMANCE, text))
+  }
+
+  /**
+   * Record a WP33 portability warning, at its place in the report order of
+   * its own list — the insertion `reportPerformance` makes, for the same
+   * reason: the pass hands them over per function and per row, not sorted.
+   */
+  reportPortability(source: SourceFile, start: i32, end: i32, text: string): void {
+    this.insertWarning(this.portability, new Diagnostic(source, start, end, PORTABILITY, text))
+  }
+
+  /** The stable insertion both warning lists are kept sorted by (`compareWarnings`). */
+  insertWarning(list: Diagnostic[], warning: Diagnostic): void {
+    if (!this.warningFileOrder.has(warning.source.path)) {
+      this.warningFileOrder.set(warning.source.path, this.warningFileOrder.size())
     }
-    const warning = new Diagnostic(source, start, end, PERFORMANCE, text)
-    this.warnings.push(warning)
-    let i = this.warnings.length - 1
-    while (i > 0 && this.compareWarnings(this.warnings[i - 1], warning) > 0) {
-      this.warnings[i] = this.warnings[i - 1]
+    list.push(warning)
+    let i = list.length - 1
+    while (i > 0 && this.compareWarnings(list[i - 1], warning) > 0) {
+      list[i] = list[i - 1]
       i = i - 1
     }
-    this.warnings[i] = warning
+    list[i] = warning
   }
 
   /**
@@ -525,23 +562,37 @@ export class DiagnosticSink {
    * print nothing at all.
    */
   formatWarnings(max: i32): string {
-    if (this.warnings.length === 0) {
-      return ""
-    }
-    if (this.warnings.length === 1) {
-      return this.warnings[0].message()
-    }
-    const lines: string[] = []
-    let i = 0
-    while (i < this.warnings.length && i < max) {
-      lines.push(this.warnings[i].message())
-      i = i + 1
-    }
-    const hidden = this.warnings.length - max
-    if (hidden > 0) {
-      lines.push(`...and ${hidden} more performance warning${hidden === 1 ? "" : "s"}`)
-    }
-    lines.push(`${this.warnings.length} performance warnings`)
-    return lines.join("\n")
+    return formatList(this.warnings, PERFORMANCE, max)
   }
+
+  /** The portability report (WP33), in the performance report's layout and with its own count. */
+  formatPortability(max: i32): string {
+    return formatList(this.portability, PORTABILITY, max)
+  }
+}
+
+/**
+ * One warning list as a report: each warning's summary and excerpt, at most
+ * `max` of them, then `...and N more <kind> warnings` and a count line. A lone
+ * warning prints exactly its message, and an empty list prints nothing.
+ */
+const formatList = (list: Diagnostic[], kind: string, max: i32): string => {
+  if (list.length === 0) {
+    return ""
+  }
+  if (list.length === 1) {
+    return list[0].message()
+  }
+  const lines: string[] = []
+  let i = 0
+  while (i < list.length && i < max) {
+    lines.push(list[i].message())
+    i = i + 1
+  }
+  const hidden = list.length - max
+  if (hidden > 0) {
+    lines.push(`...and ${hidden} more ${kind} warning${hidden === 1 ? "" : "s"}`)
+  }
+  lines.push(`${list.length} ${kind} warnings`)
+  return lines.join("\n")
 }

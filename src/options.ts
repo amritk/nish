@@ -113,6 +113,15 @@ export class Options {
    * the time a compile takes and nothing it writes.
    */
   rangeReference: boolean
+  /**
+   * `--warn-portability` (WP33, docs/wp33-round-trip.md §5.2): run the
+   * portability pass after checking and report the sites where the program's
+   * TypeScript reading answers differently. It changes no byte of the IR; it
+   * is here rather than in the driver alone, where `--no-warn-performance`
+   * lives, because the pass is work `Compilation` would otherwise do on every
+   * compile, and off by default means none of it is done.
+   */
+  warnPortability: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -134,5 +143,6 @@ export class Options {
     this.packageRoot = ""
     this.json = false
     this.rangeReference = false
+    this.warnPortability = false
   }
 }
