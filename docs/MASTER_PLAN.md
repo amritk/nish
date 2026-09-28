@@ -849,6 +849,14 @@ major. Whether it happens at all is still wp22 §10's open question.
   is a diagnostic for a program that already fails, so neither withdraws
   anything. S4's build cache and S5's prebuilt distribution follow them
   ([wp21-packages.md](wp21-packages.md) §8).
+- **Hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)), proposed: the
+  port of a browser game and its servers, starting with its Rust relay on a
+  Nish network stack (HTTP/1.1, HTTP/2, HTTP/3, WebTransport). Phase one asks
+  five things of the compiler and runtime — exported enums, byte plumbing, a
+  clock and entropy, sockets with a loop the program owns, constant-time
+  builtins — and the stack itself is standard library, `nish/crypto/*` and
+  `nish/net/*` over a `nish:net` builtin module. The port's order is in the
+  game's repository.
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
