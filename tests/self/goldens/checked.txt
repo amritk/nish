@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 715 programs, 51008 dump lines.
+# 717 programs, 51069 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37132,6 +37132,69 @@ function test(): i32 -> @test [exported]
   local 24:7 head: string (let)
   local 29:7 seen: i32 (let)
   local 30:14 x: string (const)
+program tests/cases/port_array_quiet.ts
+module tests/cases/port_array_quiet.ts (entry)
+struct Point (class) size=4 align=4
+  field x: i32 index=0 offset=0 initialized
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 9:9 n: i32 (const)
+  local 10:9 none: f64[] (const)
+  local 11:9 grown: i32[] (const)
+  local 12:12 i: i32 (let)
+  local 15:9 floats: f64[] (const)
+  local 16:9 points: Point | null[] (const)
+program tests/cases/port_array_zero_fill.ts
+module tests/cases/port_array_zero_fill.ts (entry)
+struct Grid (class) size=8 align=8
+  field cells: i32[] index=0 offset=0
+  constructor -> @Grid.constructor
+function Grid.constructor(this: Grid, side: i32): void -> @Grid.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function total(xs: f64[]): f64 -> @total
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 21:7 sum: f64 (let)
+  local 22:14 x: f64 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via startingWith$f64
+  calls: Grid.constructor nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_f64 nish_str_from_i32 startingWith$f64 startingWith$i32 total
+  stackSites=2 stackLocals=2
+  local 29:9 n: i32 (const)
+  local 30:9 weights: f64[] (const)
+  local 31:9 seen: boolean[] (const)
+  local 32:9 counts: i32[] (const)
+  local 33:9 bytes: u8[] (const)
+  local 34:9 grid: Grid (const)
+  callee 34:16 new Grid -> @Grid.constructor
+  local 35:9 half: f64 (const)
+  local 36:9 floats: f64[] (const)
+  callee 36:18 startingWith<f64> -> @startingWith$f64
+  local 37:9 ints: i32[] (const)
+  callee 37:16 startingWith<i32> -> @startingWith$i32
+  callee 38:15 total -> @total
+  callee 41:15 total -> @total
+function startingWith<f64>(n: i32, first: f64): f64[] -> @startingWith$f64 [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:3
+  escaping: first n
+  calls: nish_panic_index
+  stackSites=0 stackLocals=0
+  local 15:9 out: f64[] (const)
+function startingWith<i32>(n: i32, first: i32): i32[] -> @startingWith$i32 [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:3
+  escaping: first n
+  calls: nish_panic_index
+  stackSites=0 stackLocals=0
+  local 15:9 out: i32[] (const)
 program tests/cases/process_exit.ts
 module tests/cases/process_exit.ts (entry)
 function finish(code: i32): i32 -> @finish
