@@ -614,6 +614,32 @@ if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes
   )
 }
 
+// ---- A refused `const` is one diagnostic (#275) --------------------------------------
+// A `.err` is a substring match, so it cannot see a cascade after the line it
+// names. A `const` whose initializer is refused is declared as the error type,
+// and each case here uses one afterwards; the count is what says those uses
+// stayed silent rather than each reporting `Unknown identifier` or `Unknown function`.
+for (const name of [
+  "reject_const_refused_initializer",
+  "reject_rng_array_zero_fill",
+  "reject_arrow_as_value",
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const r = spawnSync(
+    NISH,
+    [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, `${name}.ll`), "--json"],
+    { cwd: root, encoding: "utf8" }
+  )
+  const errors = diagnosticsOf(r.stdout).filter((d) => d.severity === "error")
+  check(
+    `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+    r.status === 1 && errors.length === 1,
+    errors.map(diagnosticLine).join("\n") || `${r.stdout}${r.stderr}`
+  )
+}
+
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).

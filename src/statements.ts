@@ -244,16 +244,14 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       ctx.error(decl, "Cannot declare a variable of type void")
       type = T_ERROR
     }
-    // A rejected initializer leaves the variable declared only when the
-    // annotation says what it is — and an annotation that did not resolve does
-    // not say. Without a type there is nothing to declare it as, so it stays
-    // undeclared and its later uses are `Unknown identifier` —
-    // stage0's `catch` declares it in exactly the annotated case and rethrows
-    // otherwise (`checkVariableDeclaration` in stage0's `src/checker/statements.ts`),
-    // and the cascade that follows is the visible half of the difference
-    // (WP19 §A3: `const at = m.get(k, -1)` in f64 mode).
-    if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
-      continue
+    // A refused initializer still declares the variable, as the annotation
+    // says when it resolved and as `T_ERROR` when there is none to go by, so
+    // that its later uses are checked quietly rather than each reported as an
+    // `Unknown identifier` the programmer never wrote (#275). The error type
+    // is silent wherever it is read, and the emitter never sees it: the
+    // program stopped at the refusal.
+    if (ctx.errored && declared < 0) {
+      type = T_ERROR
     }
     declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
   }

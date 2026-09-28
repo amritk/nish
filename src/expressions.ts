@@ -112,6 +112,12 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (ctx.errored) {
     return T_ERROR
   }
+  // A value whose type only its context can say, where the context is a
+  // local whose initializer was refused: `y = null` after `let y = <refused>`
+  // repeats that refusal rather than finding a new one.
+  if (want === T_ERROR && typedByContext(ctx, expr)) {
+    return T_ERROR
+  }
   // WP32: a maybe (`V | undefined`, what `m.get(k)` answers) is checked into
   // one of three places, which say so by the `want` they pass: `WANT_MAYBE`,
   // or the maybe type itself for a `const` annotated with it. Parentheses pass
@@ -153,6 +159,21 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   ctx.program.nodeTypes[expr.id] = type
   return type
+}
+
+/** `null`, `{ ... }`, `[]`, `Ok(...)` and `Err(...)`: no type without a contextual one. */
+const typedByContext = (ctx: CheckContext, expr: Node): boolean => {
+  if (expr.kind === N_NULL || expr.kind === N_OBJECT) {
+    return true
+  }
+  if (expr.kind === N_ARRAY) {
+    return expr.children.length === 0
+  }
+  if (expr.kind !== N_CALL) {
+    return false
+  }
+  const callee = expr.children[0]
+  return callee.kind === N_IDENT && isResultConstructor(callee.text) && ctx.signature(callee.text) === null
 }
 
 /**
@@ -1488,6 +1509,12 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     if (isBuiltinFunction(callee.text)) {
       return checkBuiltinFunction(ctx, expr, scope)
+    }
+    // A local whose initializer was refused is `T_ERROR`, and calling it
+    // repeats that refusal rather than finding a new one.
+    const local = scope.lookup(callee.text)
+    if (local !== null && local.type === T_ERROR) {
+      return T_ERROR
     }
     return ctx.errorType(callee, `Unknown function \`${callee.text}\``)
   }
