@@ -538,6 +538,8 @@ export class Instantiation {
   nodeProvenIndex: boolean[]
   nodeProvenClamp: boolean[]
   nodeProvenRange: boolean[]
+  /** The `dst.set(src)` calls whose two arrays are proven distinct, per instantiation like the proofs above. */
+  nodeDisjointCopy: boolean[]
   /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
   fusion: FusionTable
   /**
@@ -585,6 +587,7 @@ export class Instantiation {
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
+    this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     this.fusion = new FusionTable()
     this.from = null
     let i = 0
@@ -613,6 +616,7 @@ export class Instantiation {
     this.nodeProvenIndex = outer.nodeProvenIndex
     this.nodeProvenClamp = outer.nodeProvenClamp
     this.nodeProvenRange = outer.nodeProvenRange
+    this.nodeDisjointCopy = outer.nodeDisjointCopy
     this.fusion = outer.fusion
   }
 }
@@ -1132,6 +1136,7 @@ export class CheckedProgram {
   savedNodeProvenIndex: boolean[]
   savedNodeProvenClamp: boolean[]
   savedNodeProvenRange: boolean[]
+  savedNodeDisjointCopy: boolean[]
   savedFusion: FusionTable
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
   enums: StringMap
@@ -1239,6 +1244,15 @@ export class CheckedProgram {
    */
   nodeProvenRange: boolean[]
   /**
+   * WP34 N2: a `dst.set(src)` call node id -> the checker proved the two
+   * arrays' element buffers distinct (`disjointCopy` in `src/arrays.ts`), so
+   * the emitter copies with `llvm.memcpy`. Every other `set` is an
+   * `llvm.memmove`, because `TypedArray.prototype.set` promises a copy that
+   * behaves as if `src` were read first, overlap or not, and a `memcpy` over
+   * overlapping bytes is undefined. "Not proven" is the memmove, never a guess.
+   */
+  nodeDisjointCopy: boolean[]
+  /**
    * WP32 S5: the calls of this module's bodies that are one fused lookup
    * (docs/wp32-map.md §9.1). Inside a generic's body it is the
    * instantiation's own, which `enterInstance` installs.
@@ -1287,6 +1301,7 @@ export class CheckedProgram {
     this.savedNodeProvenIndex = []
     this.savedNodeProvenClamp = []
     this.savedNodeProvenRange = []
+    this.savedNodeDisjointCopy = []
     this.fusion = new FusionTable()
     this.savedFusion = this.fusion
     this.enums = new StringMap()
@@ -1314,6 +1329,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
+    this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1
@@ -1543,6 +1559,7 @@ export class CheckedProgram {
     this.savedNodeProvenIndex = this.nodeProvenIndex
     this.savedNodeProvenClamp = this.nodeProvenClamp
     this.savedNodeProvenRange = this.nodeProvenRange
+    this.savedNodeDisjointCopy = this.nodeDisjointCopy
     this.savedFusion = this.fusion
     this.nodeTypes = info.nodeTypes
     this.nodeLocals = info.nodeLocals
@@ -1553,6 +1570,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = info.nodeProvenIndex
     this.nodeProvenClamp = info.nodeProvenClamp
     this.nodeProvenRange = info.nodeProvenRange
+    this.nodeDisjointCopy = info.nodeDisjointCopy
     this.fusion = info.fusion
     this.activeInstance = info
   }
@@ -1568,6 +1586,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = this.savedNodeProvenIndex
     this.nodeProvenClamp = this.savedNodeProvenClamp
     this.nodeProvenRange = this.savedNodeProvenRange
+    this.nodeDisjointCopy = this.savedNodeDisjointCopy
     this.fusion = this.savedFusion
     this.activeInstance = null
   }

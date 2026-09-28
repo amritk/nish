@@ -33,8 +33,10 @@ import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
   FLAG_CONST,
+  N_ARRAY,
   N_BLOCK,
   N_BREAK,
+  N_CALL,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
@@ -42,7 +44,9 @@ import {
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
+  N_IDENT,
   N_IF,
+  N_NEW,
   N_RETURN,
   N_SWITCH,
   N_THROW,
@@ -256,7 +260,28 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       continue
     }
     declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
+    const local = ctx.program.nodeLocals[decl.id]
+    if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
+      local.fresh = allocatesArray(ctx, initializer)
+    }
   }
+}
+
+/**
+ * WP34 N2: `init` allocates the array it answers — a literal, a `new`, or a
+ * `readFileBytesSync`, whose buffer the runtime copies the file into — so a
+ * `const` bound to it names a buffer nothing else does (`Local.fresh`).
+ */
+const allocatesArray = (ctx: CheckContext, init: Node): boolean => {
+  const e = unwrapParens(init)
+  if (e.kind === N_ARRAY || e.kind === N_NEW) {
+    return true
+  }
+  if (e.kind !== N_CALL || e.children[0].kind !== N_IDENT || ctx.program.nodeCallees[e.id] !== null) {
+    return false
+  }
+  const imported = ctx.program.nodeBuiltins[e.id]
+  return (imported.length > 0 ? imported : e.children[0].text) === "readFileBytesSync"
 }
 
 /**

@@ -401,6 +401,21 @@ export function updIdx(a, i, f) {
   return v;
 }
 
+/**
+ * `dst.set(src, offset)` (WP34 N2): `TypedArray.prototype.set`'s copy on the
+ * plain array a `u8[]` is here. The source is copied first, so a self-copy or
+ * an overlapping one reads what was there before, as `memmove` does natively;
+ * a range past the end fails with the native panic and its words, where a
+ * typed array would throw a `RangeError` for the same offsets.
+ */
+export function arraySet(dst, src, offset) {
+  const at = offset === undefined ? 0 : toIndex(offset);
+  const end = at + src.length;
+  if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
+  const copy = src.slice();
+  for (let i = 0; i < copy.length; i++) dst[at + i] = copy[i];
+}
+
 /** `new Array<T>(n)`: `n` zero-filled elements (`0`, `0n`, or `false`). */
 export function newArray(n, zero) {
   return new Array(toIndex(n)).fill(zero);
@@ -429,6 +444,15 @@ export function readFileSync(path) {
 export function readFileSyncOrNull(path) {
   try {
     return fs.readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** `readFileBytesSync(path)` (WP34 N2): the bytes as a plain array of numbers, or null. */
+export function readFileBytesSync(path) {
+  try {
+    return Array.from(fs.readFileSync(path));
   } catch {
     return null;
   }

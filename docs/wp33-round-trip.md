@@ -164,6 +164,7 @@ collected in §7.
 | **A store into a slot overwrites what an element reference sees** | `const r = ps[0]; ps[0] = q` then `r.x` is `q.x` natively and the old value in TS | C | a field-by-field copy into the existing element: `ps[0].x = q.x; ps[0].y = q.y` | As above. Together the two translations are exact: a copy in is a fresh object, and a store is a write into the object already in the slot. |
 | `new Array<T>(n)` zero-fills | `new Array<f64>(3)` then `a[1] + 1.0` is `1` natively and `NaN` in TS | C | `new Array<T>(n).fill(0)` (`false` for `boolean`) | Keep. The translation is exact and obvious to a reader. |
 | `Float64Array` and the other three typed-array names are `f64[]`, with `push` and `pop` | `t.push(5.0)` is a `TypeError: t.push is not a function` in TS | C | `number[]` for a binding that ever calls `push` or `pop`, the typed array otherwise | **Open, §7 Q4.** The alternative is to refuse `push`/`pop` on the four names, which makes the row A. |
+| `dst.set(src, offset)` on an array of numbers ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill), WP34 N2) | a `u8[]` is a plain `Array` under Node, and `Array` has no `set`: a `TypeError` without the prelude. `runtime/nish.mjs` adds `Array.prototype.set` with the typed array's copy-first meaning and the native panic, and the `bytes_*` programs agree byte for byte under it | C (A under the prelude) | an imported `set(dst, src, at)` helper, the prelude's own | Keep. `fill` needs no row: `Array.prototype.fill` already has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, so it is class A (§3.6). A range past the end panics natively and under the prelude, where a real typed array throws a `RangeError`: class B, as `a[i]` is. |
 | `a[i]` out of range, `pop()` on empty, `charCodeAt` past the end | panics natively; `undefined` / `NaN` in TS | B | nothing | — |
 | a ranged integer, `integer<Lo, Hi>`, leaves its range | an exit-1 panic natively, silent in TS, where `runtime/nish.d.ts` makes it `number` ([wp31-ranged-integers.md](wp31-ranged-integers.md) §6) | B | nothing | The check is what lets the compiler drop other checks, so it is a speed feature as well as a safety net. |
 
@@ -194,7 +195,8 @@ Class A today, and each one is a rule to keep A: `Map` and `Set` (insertion
 order, `get` answers `V | undefined`); `T | null` and narrowing; classes
 (reference semantics, static dispatch, which cannot differ now that there is no
 inheritance); compile-time function parameters and non-capturing arrows;
-`for...of` over an array; template literals; f64 arithmetic; `std/threads.ts`'s
+`for...of` over an array; `fill` on an array of numbers, clamped ends and
+all; template literals; f64 arithmetic; `std/threads.ts`'s
 parallel calls, whose std bodies are their sequential meaning; ASI.
 
 ---

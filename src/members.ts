@@ -755,7 +755,7 @@ const checkStringProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   return T_ERROR
 }
 
-const checkIndexArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: string): void => {
+export const checkIndexArgument = (ctx: CheckContext, arg: Node, scope: Scope, name: string): void => {
   const type = checkExpression(ctx, arg, scope, ctx.numberType())
   if (type !== T_ERROR && !isNumeric(type)) {
     ctx.error(arg, `\`${name}\` expects a number index, got ${ctx.table.typeName(type)}`)

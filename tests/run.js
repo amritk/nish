@@ -2235,6 +2235,23 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
 }
 
+// WP34 N2: `fill` on an element wider than a byte is a plain store loop, and the
+// emitter writes no `memset` of its own for a zero value, because `opt -O2`'s loop
+// idiom pass makes one of that loop. This holds it to that: if the loop ever grows
+// something the pass cannot see through, a `clear` over `i32[]` stays a loop and the
+// rule's claim is false.
+const fillZeroLl = path.join(buildDir, "bytes_fill_zero.ll")
+if (has("opt") && fs.existsSync(fillZeroLl)) {
+  const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", fillZeroLl])
+  const out = String(o.stdout)
+  const clear = out.match(/define[^\n]*@clear\([\s\S]*?\n\}/)
+  check(
+    "opt -O2 turns bytes_fill_zero's zero fill loop over i32[] into llvm.memset",
+    o.status === 0 && clear !== null && /call void @llvm\.memset/.test(clear[0]),
+    o.status === 0 ? out : String(o.stderr)
+  )
+}
+
 // ---- WP18: generics ---------------------------------------------------------------
 // The acceptance test of the whole package, and a golden cannot express it: an
 // instantiation's `define` must be *byte-identical* to the `define` of the
@@ -3589,7 +3606,7 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
           "return, which in the runtime table means a fresh allocation per call -- but it is not in " +
           `isAllocatingBuiltin in src/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
           "gets an arena scope that releases the result before the ret. Add a tests/cases/mem_*_scope case for it " +
-          "beside the other three while you are there."
+          "beside the others while you are there."
       ),
       ...stale.map(
         (builtin) =>
@@ -3605,19 +3622,21 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   // there is no per-builtin fixture to keep in step. A shape the generator cannot
   // express is a counted skip rather than a failure: half one is what proves
   // completeness, and this half is about what membership does.
-  const nishReturnType = (fn) => {
+  // The Nish return types a probe may declare, in the order they are tried.
+  const nishReturnTypes = (fn) => {
     const ret = returnPart(fn)
     const orNull = /\bnonnull\b/.test(ret) ? "" : " | null"
-    // The element type of an array is not in `%struct.nish_array*`; every
-    // array-answering builtin answers `string[]` today, and a probe that does not
-    // typecheck skips itself below rather than claiming anything.
     if (/i8\*$/.test(ret)) {
-      return `string${orNull}`
+      return [`string${orNull}`]
     }
+    // The element type of an array is not in `%struct.nish_array*`, so each element
+    // type an array-answering builtin answers is tried in turn: `string[]` for the
+    // listings, `u8[]` for `readFileBytesSync` (WP34 N2). A probe that typechecks as
+    // none of them skips itself below rather than claiming anything.
     if (/%struct\.nish_array\*$/.test(ret)) {
-      return `string[]${orNull}`
+      return [`string[]${orNull}`, `u8[]${orNull}`]
     }
-    return undefined
+    return []
   }
   const stringArity = (fn) => {
     const params = fn.signature.slice(fn.signature.indexOf("(") + 1, fn.signature.lastIndexOf(")"))
@@ -3629,9 +3648,9 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   }
   for (const [builtin, symbol] of allocating) {
     const fn = runtimeByName.get(symbol)
-    const returnType = nishReturnType(fn)
+    const returnTypes = nishReturnTypes(fn)
     const arity = stringArity(fn)
-    if (returnType === undefined || arity === undefined || arity === 0) {
+    if (returnTypes.length === 0 || arity === undefined || arity === 0) {
       skip(
         `${builtin}: no arena-scope probe (@${symbol} takes or answers a shape the generator cannot write)`
       )
@@ -3641,19 +3660,28 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     const args = Array.from({ length: arity }, (_, i) => `arg${i}`).join(", ")
     // The template literal is the local allocation that gives the function something
     // to release, which is what made the missing sites visible in the first place.
-    const probeSrc = [
-      `export const probe = (${params}): ${returnType} => {`,
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
-      "  const label = `probe ${arg0}`;",
-      "  console.log(label);",
-      `  return ${builtin}(${args});`,
-      "};",
-      "",
-    ].join("\n")
+    const sourceFor = (returnType) =>
+      [
+        `export const probe = (${params}): ${returnType} => {`,
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  const label = `probe ${arg0}`;",
+        "  console.log(label);",
+        `  return ${builtin}(${args});`,
+        "};",
+        "",
+      ].join("\n")
     const probeTs = path.join(buildDir, `alloc_probe_${builtin}.ts`)
     const probeLl = path.join(buildDir, `alloc_probe_${builtin}.ll`)
-    fs.writeFileSync(probeTs, probeSrc)
-    const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root })
+    let probeSrc = ""
+    let r = null
+    for (const returnType of returnTypes) {
+      probeSrc = sourceFor(returnType)
+      fs.writeFileSync(probeTs, probeSrc)
+      r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root })
+      if (r.status === 0) {
+        break
+      }
+    }
     if (r.status !== 0) {
       skip(
         `${builtin}: no arena-scope probe (the generated program did not compile: ${String(r.stderr).trim().split("\n")[0]})`
@@ -4552,6 +4580,12 @@ const RUNTIME_TEXT_BUDGET = 3584
  *
  * The two together are 5,120; they were 4,864, which was exactly the single budget they
  * replaced -- a coincidence then and not a constraint now.
+ *
+ * WP34 N2's `nish_read_file_bytes` (`readFileBytesSync`) spends **46** of the 189:
+ * measured **1,393 bytes** on 2026-09-28 (`.text` 1,358 plus `.text.unlikely.` 35) with
+ * clang 18 on linux-x64, leaving 143. It is that small because it reads nothing itself:
+ * it hands the bytes `nish_read_file_or_null` already put in the arena to a fresh array
+ * header, so there is one read path and one `S_ISDIR` guard for both builtins.
  */
 const RUNTIME_OS_TEXT_BUDGET = 1536
 /**

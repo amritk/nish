@@ -747,12 +747,13 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     if (callee !== null) {
       return argumentUse(callee, 0)
     }
-    // `p.push(v)` and `p.pop()` store into the array header; `indexOf` and
-    // `join` only read it, and so do the string byte methods, whose runtime
-    // parameters are all `nocapture readonly` and whose `substring` copies
-    // what it keeps. Anything else is treated as retaining the receiver.
+    // `p.push(v)` and `p.pop()` store into the array header, and `p.set(q)`
+    // and `p.fill(v)` into its elements (WP34 N2); `indexOf` and `join` only
+    // read it, and so do the string byte methods, whose runtime parameters
+    // are all `nocapture readonly` and whose `substring` copies what it keeps.
+    // Anything else is treated as retaining the receiver.
     const method = arrayMethodName(program, table, above)
-    if (method === "push" || method === "pop") {
+    if (method === "push" || method === "pop" || method === "set" || method === "fill") {
       return use(USE_WRITE)
     }
     if (method.length > 0) {
@@ -836,6 +837,12 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE)
+    }
+    // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
+    // nothing — the elements are numbers, and the copy is a `memmove` whose
+    // source is `nocapture readonly`.
+    if (arrayMethodName(program, table, owner) === "set") {
+      return use(USE_READ)
     }
     return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE)
   }
@@ -1532,6 +1539,23 @@ class FactCollector {
     if (method === "join") {
       this.facts.effect = EFFECT_WRITE // one arena allocation
       this.facts.callees.add("nish_alloc_struct")
+      return
+    }
+    // WP34 N2: a byte copy into the receiver's elements, which also reads the
+    // source's, and fails a range check through the slice panic.
+    if (method === "set") {
+      this.facts.effect = EFFECT_WRITE
+      this.facts.readsMemory = true
+      this.noteArrayWrite(call, methodReceiver(call))
+      if (!this.opts.uncheckedIndexing) {
+        this.facts.callees.add("nish_panic_slice")
+      }
+      return
+    }
+    // A store of one value into a clamped range of slots: no check, no call.
+    if (method === "fill") {
+      this.facts.effect = EFFECT_WRITE
+      this.noteArrayWrite(call, methodReceiver(call))
       return
     }
     this.facts.readsMemory = true // `indexOf` scans the elements
@@ -2463,7 +2487,8 @@ const bodyMayExtend = (
 /**
  * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
  * the two a hoisted header has to be safe from. Every other array method reads
- * (`indexOf`, `join`) or builds something new.
+ * (`indexOf`, `join`), builds something new, or writes elements and leaves
+ * the header alone (`set`, `fill`).
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)

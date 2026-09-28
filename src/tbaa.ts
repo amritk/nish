@@ -123,7 +123,7 @@ export const elementTbaa = (emitter: Emitter, elem: i32): string => {
  * `src/emit-arrays.ts` and carries this tag: `new Array`, a literal, `push`
  * and `pop`, whether the header is an arena bump or an entry-block alloca. Or
  * it is C behind a call: `nish_array_grow`, `nish_alloc_array`,
- * `nish_readdir`, `nish_argv_init`, a C caller's stack header or the N-API
+ * `nish_readdir`, `nish_read_file_bytes`, `nish_argv_init`, a C caller's stack header or the N-API
  * shim's. An inline array field's header sits inside a class object and is
  * written by `storeHeaderField` alone (`initInlineArrays`,
  * `emitInlineArrayAssignment`), never through the class's field path, which

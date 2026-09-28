@@ -1,0 +1,2 @@
+reject_thread_region_fill.ts:19:5
+`fill` writes memory a task of `s` may read, before the scope joins

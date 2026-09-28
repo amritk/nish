@@ -84,6 +84,7 @@ provide("writeError", shim.writeError);
 provide("panic", shim.panic);
 provide("readFileSync", shim.readFileSync);
 provide("readFileSyncOrNull", shim.readFileSyncOrNull);
+provide("readFileBytesSync", shim.readFileBytesSync);
 provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
 provide("mkdirSync", shim.mkdirSync);
@@ -93,6 +94,22 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("getenv", shim.getenv);
+
+// `dst.set(src, offset)` (WP34 N2). A `u8[]` is a plain `Array` here, which
+// has `fill` with the typed array's meaning already but no `set`, so the one
+// method is added to `Array.prototype` — non-enumerable, as a builtin method is,
+// so no `for...in` sees it — unless something got there first. It copies the
+// source before writing, as the native `memmove` does, and fails a range past
+// the end with the native panic.
+if (!("set" in Array.prototype)) {
+  Object.defineProperty(Array.prototype, "set", {
+    value: function set(source, offset) {
+      shim.arraySet(this, source, offset);
+    },
+    writable: true,
+    configurable: true,
+  });
+}
 
 // The clock. `monotonicNanos()` answers an `i64`, so the value is a BigInt here
 // as it is in the rewritten runner — and unusually for the i64 surface that is

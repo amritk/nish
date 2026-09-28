@@ -119,6 +119,7 @@ const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
 const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileSync" ||
   name === "readFileSyncOrNull" ||
+  name === "readFileBytesSync" ||
   name === "getenv" ||
   name === "readdirSync" ||
   name === "realpathSync"

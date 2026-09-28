@@ -40,6 +40,7 @@ import {
 } from "./emit-ops"
 import { isAssignmentOperator, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
+import { emitSliceCheck } from "./emit-strings"
 import { internalErrorFor } from "./ice"
 import {
   N_ARRAY,
@@ -67,6 +68,7 @@ const HEADER_PTR: string = "%struct.nish_array*"
 const HEADER_BYTES: i32 = 24
 const MEMSET: string = "llvm.memset.p0i8.i64"
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64"
+const MEMMOVE: string = "llvm.memmove.p0i8.p0i8.i64"
 
 /**
  * WP15 section 2a: the record stored inline in this array's slots, or `null`
@@ -1316,6 +1318,125 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   return out
 }
 
+// ---- WP34 N2: the bulk writes -------------------------------------------------------------
+
+/** The address of element `idx` of `arr` as the `i8*` a byte intrinsic takes. */
+const elementBytes = (emitter: Emitter, arr: string, elem: i32, idx: string): string => {
+  const ty = slotType(emitter, elem)
+  const slot = elementPointer(emitter, new ArrayBase(arr, null), elem, idx)
+  return ty === "i8" ? slot : emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`)
+}
+
+/**
+ * `dst.set(src, at)`: every element of `src` into `dst` from `at` on, as one
+ * byte copy. `TypedArray.prototype.set` promises the copy behaves as if `src`
+ * were read first, overlap or not, so the copy is an `llvm.memmove`; it is an
+ * `llvm.memcpy` only where the checker proved the two buffers distinct
+ * (`nodeDisjointCopy`), because a `memcpy` over overlapping bytes is undefined.
+ *
+ * The range written is checked the way `s.slice(from, to)` checks what it
+ * reads, `0 <= at <= at + src.length <= dst.length`, and fails through the
+ * same panic, which prints that range: JavaScript throws a `RangeError` for
+ * exactly these offsets. The lengths are read after every argument has been
+ * evaluated, as JavaScript reads them, and the copy carries the element
+ * alias scope, because it touches element bytes and never a header.
+ */
+const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string => {
+  const fn = emitter.fn
+  const args = expr.children[1].children
+  const src = emitter.emitExpression(args[0])
+  const at = args.length > 1 ? emitIndex(emitter, args[1]) : "0"
+  const count = loadLength(emitter, src)
+  const end = fn.emitValue(`add i64 ${at}, ${count}`)
+  if (!emitter.opts.uncheckedIndexing) {
+    emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
+  }
+  const size = elementSize(emitter, elem)
+  const bytes = size === 1 ? count : fn.emitValue(`mul i64 ${count}, ${size}`)
+  let copy = MEMMOVE
+  if (emitter.program.nodeDisjointCopy[expr.id]) {
+    copy = MEMCPY
+    emitter.declare(
+      `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+    )
+  } else {
+    emitter.declare(
+      `declare void @${MEMMOVE}(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)`
+    )
+  }
+  const to = elementBytes(emitter, dst, elem, at)
+  const from = elementBytes(emitter, src, elem, "0")
+  fn.emit(`call void @${copy}(i8* ${to}, i8* ${from}, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
+  return "void"
+}
+
+/**
+ * JavaScript's relative index, which `fill` takes for each end: a negative
+ * `k` counts back from `len`, and either way the answer is clamped into
+ * `[0, len]`, so no offset is ever out of range and `fill` never panics. An
+ * integer literal, the usual spelling of an end, is never negative (a minus
+ * sign is a unary operator), so it needs only the upper half of the clamp.
+ */
+const relativeIndex = (emitter: Emitter, k: string, len: string, literal: boolean): string => {
+  const fn = emitter.fn
+  if (literal) {
+    return fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${k}, i64 ${len})`)
+  }
+  const negative = fn.emitValue(`icmp slt i64 ${k}, 0`)
+  const back = fn.emitValue(`add i64 ${len}, ${k}`)
+  const low = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smax.i64")}(i64 ${back}, i64 0)`)
+  const high = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${k}, i64 ${len})`)
+  return fn.emitValue(`select i1 ${negative}, i64 ${low}, i64 ${high}`)
+}
+
+/**
+ * `a.fill(value, start, end)`: `value` into every slot of `[start, end)`, each
+ * end relative and clamped as JavaScript's are. A one-byte element is one
+ * `llvm.memset`. A wider one is a store loop of the one value, counted and
+ * with nothing else in it, which is the shape LLVM vectorises — and which
+ * `opt -O2`'s loop-idiom pass turns into a `memset` by itself when the value
+ * is a repeated byte, zero above all, so no second lowering is written here.
+ */
+/** `expr` is an integer literal, which `emitIndex` folds to its value. */
+const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
+  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
+
+const emitFill = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
+  const fn = emitter.fn
+  const args = expr.children[1].children
+  const value = emitter.emitExpression(args[0])
+  const start = args.length > 1 ? emitIndex(emitter, args[1]) : ""
+  const stop = args.length > 2 ? emitIndex(emitter, args[2]) : ""
+  const len = loadLength(emitter, arr)
+  const from = start.length > 0 ? relativeIndex(emitter, start, len, isIntegerLiteral(emitter, args[1])) : "0"
+  const to = stop.length > 0 ? relativeIndex(emitter, stop, len, isIntegerLiteral(emitter, args[2])) : len
+  if (slotType(emitter, elem) === "i8") {
+    const span = fn.emitValue(`sub i64 ${to}, ${from}`)
+    const count = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smax.i64")}(i64 ${span}, i64 0)`)
+    emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`)
+    const at = elementBytes(emitter, arr, elem, from)
+    fn.emit(`call void @${MEMSET}(i8* ${at}, i8 ${value}, i64 ${count}, i1 false)${elementAccess(emitter)}`)
+    return "void"
+  }
+  const slot = fn.emitAlloca("fill.at", "i64", 8)
+  fn.emit(`store i64 ${from}, i64* ${slot}, align 8`)
+  const condBlock = fn.newBlock("fill.cond")
+  const bodyBlock = fn.newBlock("fill.body")
+  const endBlock = fn.newBlock("fill.end")
+  fn.emit(`br label %${condBlock.label}`)
+  fn.placeBlock(condBlock)
+  const at = fn.emitValue(`load i64, i64* ${slot}, align 8`)
+  const more = fn.emitValue(`icmp slt i64 ${at}, ${to}`)
+  fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`)
+  fn.placeBlock(bodyBlock)
+  storeElement(emitter, elementPointer(emitter, new ArrayBase(arr, null), elem, at), elem, value)
+  const next = fn.emitValue(`add i64 ${at}, 1`)
+  fn.emit(`store i64 ${next}, i64* ${slot}, align 8`)
+  fn.emit(`br label %${condBlock.label}`)
+  fn.placeBlock(endBlock)
+  return "void"
+}
+
 export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32): string => {
   const elem = emitter.table.refOf(receiver)
   emitter.declareType(ARRAY_TYPE)
@@ -1329,6 +1450,12 @@ export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32)
   }
   if (name === "indexOf") {
     return emitArrayIndexOf(emitter, expr, arr, elem)
+  }
+  if (name === "set") {
+    return emitSet(emitter, expr, arr, elem)
+  }
+  if (name === "fill") {
+    return emitFill(emitter, expr, arr, elem)
   }
   return emitJoin(emitter, expr, arr)
 }

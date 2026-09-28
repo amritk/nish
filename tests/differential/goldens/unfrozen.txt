@@ -65,6 +65,11 @@ cases/arr_range_call_wrap added after R6: no rewriter to freeze it with
 cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
+cases/bytes_fill added after R6: no rewriter to freeze it with
+cases/bytes_read added after R6: no rewriter to freeze it with
+cases/bytes_set_disjoint added after R6: no rewriter to freeze it with
+cases/bytes_set_end added after R6: no rewriter to freeze it with
+cases/bytes_set_self added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with

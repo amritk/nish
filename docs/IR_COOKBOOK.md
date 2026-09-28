@@ -10417,6 +10417,230 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end arr-join -->
 
+### `set` and `fill`
+
+`dst.set(src, at)` is one byte copy behind the range check `s.slice` makes:
+`at <= at + src.length <= dst.length`, compared unsigned so a negative offset
+fails the first compare, and a cold `set.fail` block that calls
+`nish_panic_slice`. The copy is `llvm.memmove`, which is right whatever the two
+buffers share; it is `llvm.memcpy` only where the checker proved them distinct
+(`nodeDisjointCopy`), as it does for `out` and `head` below, two `const`s each
+bound to a fresh literal. `copyInto` receives its arrays from a caller that may
+pass one array twice, so its copy stays a `memmove`, and `src` is
+`readonly nocapture`: the copy reads it and keeps nothing. Either copy carries
+the element alias scope, because it touches element bytes and never a header.
+
+`out.fill(v, start, end)` clamps each end as JavaScript does — a literal end is
+never negative, so it takes only the `llvm.smin`, and `-1` counts back from the
+length — and on a `u8[]` stores with one `llvm.memset`. A wider element is a
+counted store loop, which `opt -O2` vectorises, or turns into a `memset` itself
+when the value is a repeated byte.
+
+<!-- cookbook:begin arr-bytes -->
+```ts
+// WP34 N2: `set` between two fresh `const` arrays is a `memcpy`; through a
+// parameter it is a `memmove`. `fill` on a `u8[]` is a `memset`.
+export const copyInto = (dst: u8[], src: u8[], at: number): void => {
+  dst.set(src, at)
+}
+
+export const packet = (): u8[] => {
+  const out: u8[] = [0, 0, 0, 0, 0, 0, 0, 0]
+  const head: u8[] = [0x16, 0x03, 0x01]
+  out.set(head, 0)
+  out.fill(0xff, 3, -1)
+  return out
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memmove.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+declare i64 @llvm.smin.i64(i64, i64) #3
+declare i64 @llvm.smax.i64(i64, i64) #3
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define void @copyInto(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %src, i32 noundef %at) #0 {
+entry:
+  %0 = sext i32 %at to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = add i64 %0, %2
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = icmp ule i64 %0, %3
+  %7 = icmp ule i64 %3, %5
+  %8 = and i1 %6, %7
+  br i1 %8, label %set.ok, label %set.fail
+
+set.fail:
+  call void @nish_panic_slice(i64 %0, i64 %3, i64 %5)
+  unreachable
+
+set.ok:
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 2
+  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %11 = bitcast i8* %10 to i8*
+  %12 = getelementptr inbounds i8, i8* %11, i64 %0
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %src, i64 0, i32 2
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %15 = bitcast i8* %14 to i8*
+  %16 = getelementptr inbounds i8, i8* %15, i64 0
+  call void @llvm.memmove.p0i8.p0i8.i64(i8* %12, i8* %16, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  ret void
+}
+
+define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @packet() #0 {
+entry:
+  %out.addr = alloca %struct.nish_array*, align 8
+  %head.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8], align 8
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 8, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 8, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = call i8* @nish_alloc_struct(i64 8)
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %4 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 0
+  store i8 0, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = getelementptr inbounds i8, i8* %6, i64 1
+  store i8 0, i8* %8, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %9 = getelementptr inbounds i8, i8* %6, i64 2
+  store i8 0, i8* %9, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %10 = getelementptr inbounds i8, i8* %6, i64 3
+  store i8 0, i8* %10, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %11 = getelementptr inbounds i8, i8* %6, i64 4
+  store i8 0, i8* %11, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %12 = getelementptr inbounds i8, i8* %6, i64 5
+  store i8 0, i8* %12, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %13 = getelementptr inbounds i8, i8* %6, i64 6
+  store i8 0, i8* %13, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %14 = getelementptr inbounds i8, i8* %6, i64 7
+  store i8 0, i8* %14, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %15, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %17 = bitcast [3 x i8]* %arr.data to i8*
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %17, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %19 = bitcast i8* %17 to i8*
+  %20 = getelementptr inbounds i8, i8* %19, i64 0
+  store i8 22, i8* %20, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %21 = getelementptr inbounds i8, i8* %19, i64 1
+  store i8 3, i8* %21, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %22 = getelementptr inbounds i8, i8* %19, i64 2
+  store i8 1, i8* %22, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %head.addr, align 8
+  %23 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %24 = load %struct.nish_array*, %struct.nish_array** %head.addr, align 8
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %24, i64 0, i32 0
+  %26 = load i64, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %27 = add i64 0, %26
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
+  %29 = load i64, i64* %28, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %30 = icmp ule i64 0, %27
+  %31 = icmp ule i64 %27, %29
+  %32 = and i1 %30, %31
+  br i1 %32, label %set.ok, label %set.fail
+
+set.fail:
+  call void @nish_panic_slice(i64 0, i64 %27, i64 %29)
+  unreachable
+
+set.ok:
+  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
+  %34 = load i8*, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %35 = bitcast i8* %34 to i8*
+  %36 = getelementptr inbounds i8, i8* %35, i64 0
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %24, i64 0, i32 2
+  %38 = load i8*, i8** %37, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %39 = bitcast i8* %38 to i8*
+  %40 = getelementptr inbounds i8, i8* %39, i64 0
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %36, i8* %40, i64 %26, i1 false), !alias.scope !4, !noalias !3
+  %41 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %42 = sub nsw i32 0, 1
+  %43 = sext i32 %42 to i64
+  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 0
+  %45 = load i64, i64* %44, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %46 = call i64 @llvm.smin.i64(i64 3, i64 %45)
+  %47 = icmp slt i64 %43, 0
+  %48 = add i64 %45, %43
+  %49 = call i64 @llvm.smax.i64(i64 %48, i64 0)
+  %50 = call i64 @llvm.smin.i64(i64 %43, i64 %45)
+  %51 = select i1 %47, i64 %49, i64 %50
+  %52 = sub i64 %51, %46
+  %53 = call i64 @llvm.smax.i64(i64 %52, i64 0)
+  %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %41, i64 0, i32 2
+  %55 = load i8*, i8** %54, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %56 = bitcast i8* %55 to i8*
+  %57 = getelementptr inbounds i8, i8* %56, i64 %46
+  call void @llvm.memset.p0i8.i64(i8* %57, i8 255, i64 %53, i1 false), !alias.scope !4, !noalias !3
+  %58 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  ret %struct.nish_array* %58
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!9, !7, i64 8}
+!13 = !{!"element i8", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end arr-bytes -->
+
 ### `new Array<T>(n)` and `.length`
 
 `new Array<number>(n)` allocates and zero-fills with `llvm.memset`;
@@ -13262,6 +13486,73 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin-realpath -->
 
+### `readFileBytesSync`
+
+One call, `nish_read_file_bytes`, answers the array header or null, which is the
+language's `u8[] | null` as it is. The runtime reads the file through the same
+path as `readFileSyncOrNull` and hands the bytes it put in the arena to a fresh
+header with `len == cap`, so nothing is copied twice and nothing assumes UTF-8.
+The declaration is `noalias` without `nonnull`, like `nish_readdir`'s, and the
+call is not `readnone`: it allocates, and the file is not memory LLVM tracks.
+
+<!-- cookbook:begin builtin-read-bytes -->
+```ts
+export const keyLength = (path: string): number => {
+  const der = readFileBytesSync(path)
+  if (der === null) {
+    return -1
+  }
+  return der.length
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @keyLength(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %der.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %struct.nish_array* @nish_read_file_bytes(i8* %path)
+  store %struct.nish_array* %0, %struct.nish_array** %der.addr, align 8
+  %1 = load %struct.nish_array*, %struct.nish_array** %der.addr, align 8
+  %2 = icmp eq %struct.nish_array* %1, null
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = sub nsw i32 0, 1
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %3
+
+if.end:
+  %4 = load %struct.nish_array*, %struct.nish_array** %der.addr, align 8
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = trunc i64 %6 to i32
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+}
+
+attributes #0 = { nounwind willreturn }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+```
+<!-- cookbook:end builtin-read-bytes -->
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
@@ -13493,6 +13784,7 @@ declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull re
 declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2

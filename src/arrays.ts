@@ -1,13 +1,15 @@
 // Arrays for stage1 (stage0's `src/checker/arrays.ts`, docs/wp14-selfhost.md milestone
-// S3, pass 2): literals, indexing, `length`, the four methods, `new Array<T>`
+// S3, pass 2): literals, indexing, `length`, the six methods, `new Array<T>`
 // and element assignment.
 
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
-import { checkBuiltinArity, isArgvExpression } from "./builtins"
+import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { unwrapParens } from "./emit-util"
+import { checkIndexArgument } from "./members"
 import {
+  N_ARRAY,
   N_BLOCK,
   N_CALL,
   N_CASE,
@@ -19,6 +21,7 @@ import {
   N_IDENT,
   N_INDEX,
   N_MEMBER,
+  N_NEW,
   N_THIS,
   N_VAR_DECL,
   N_WHILE,
@@ -29,7 +32,7 @@ import { Local, Scope } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
-const ARRAY_METHODS: string = "push, pop, indexOf, join"
+const ARRAY_METHODS: string = "push, pop, indexOf, join, set, fill"
 
 /**
  * `[a, b]`. An empty literal takes its type from context, since there is
@@ -163,7 +166,7 @@ export const checkArrayProperty = (ctx: CheckContext, expr: Node, receiver: i32)
   return T_ERROR
 }
 
-/** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`. */
+/** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */
 export const checkArrayMethod = (
   ctx: CheckContext,
   call: Node,
@@ -176,7 +179,8 @@ export const checkArrayMethod = (
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
     return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only")
   }
-  if ((name === "push" || name === "pop") && ctx.table.isReadonlyArray(receiver)) {
+  const writes = name === "push" || name === "pop" || name === "set" || name === "fill"
+  if (writes && ctx.table.isReadonlyArray(receiver)) {
     return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`))
   }
   const elem = ctx.table.refOf(receiver)
@@ -250,8 +254,127 @@ export const checkArrayMethod = (
     }
     return T_STRING
   }
+  if (name === "set" || name === "fill") {
+    return checkBulkMethod(ctx, call, access, args, receiver, scope)
+  }
   ctx.errorAtProperty(access, `Unknown method \`${name}\` on ${spelled} (supported: ${ARRAY_METHODS})`)
   return T_ERROR
+}
+
+/**
+ * WP34 N2: `dst.set(src, offset)` and `a.fill(value, start, end)`, the two
+ * bulk writes, with `TypedArray.prototype`'s meaning. Both are admitted on an
+ * array of numbers only — a `u8[]` packet above all, but any width, and a
+ * ranged integer too — because an element there is a fixed-size value, so the
+ * lowering is one `memmove`, `memcpy` or `memset` of bytes. A string, a class
+ * or a record element is a pointer or a struct, where a byte copy would share
+ * or tear what the language says is copied whole.
+ *
+ * Both are statements, as `writeFileSync` is: `set` answers `undefined` in
+ * JavaScript, and `fill` answers its receiver, which a program already holds,
+ * so refusing the value keeps the two readings identical at no cost.
+ */
+const checkBulkMethod = (
+  ctx: CheckContext,
+  call: Node,
+  access: Node,
+  args: Node,
+  receiver: i32,
+  scope: Scope
+): i32 => {
+  const name = access.text
+  const elem = ctx.table.refOf(receiver)
+  const spelled = ctx.table.typeName(receiver)
+  requireStatementPosition(ctx, call, name)
+  if (!isNumeric(ctx.table.baseOf(elem))) {
+    ctx.errorAtProperty(
+      access,
+      `\`${name}\` copies bytes, so it needs an array whose elements are numbers (\`u8[]\`, \`i32[]\`, \`f64[]\`, ...), got ${spelled}`
+    )
+    return T_VOID
+  }
+  const count = args.children.length
+  if (name === "set") {
+    if (count < 1 || count > 2) {
+      ctx.error(call, `\`set\` expects 1 or 2 arguments, got ${count}`)
+      return T_VOID
+    }
+    const source = args.children[0]
+    const got = checkExpression(ctx, source, scope, ctx.table.arrayOf(elem))
+    // The source is read, so a `readonly` array may be one; its elements must
+    // be the receiver's own type, which is what makes the copy one `memmove`
+    // with no conversion and a ranged source already in the receiver's range.
+    if (got !== T_ERROR && (!ctx.table.isArray(got) || ctx.table.refOf(got) !== elem)) {
+      ctx.error(
+        source,
+        `\`set\` copies from an array of the receiver's element type, so it expects ${ctx.table.typeName(ctx.table.arrayOf(elem))}, got ${ctx.table.typeName(got)}`
+      )
+    }
+    if (count === 2) {
+      checkIndexArgument(ctx, args.children[1], scope, "set")
+    }
+    ctx.program.nodeDisjointCopy[call.id] = disjointCopy(ctx, access.children[0], source)
+    return T_VOID
+  }
+  if (count < 1 || count > 3) {
+    ctx.error(call, `\`fill\` expects 1 to 3 arguments, got ${count}`)
+    return T_VOID
+  }
+  // The value enters every slot, so it is checked the way `push` checks what
+  // it stores: a bare literal takes the element type, and a ranged element is
+  // a sink its value enters once, before the fill (WP31 §6).
+  const value = args.children[0]
+  const got = checkExpression(ctx, value, scope, elem)
+  if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
+    const want = ctx.table.typeName(elem)
+    ctx.error(
+      value,
+      `\`fill\` expects ${want} (the element type of ${spelled}), got ${ctx.table.typeName(got)}`
+    )
+  }
+  let i = 1
+  while (i < count) {
+    checkIndexArgument(ctx, args.children[i], scope, "fill")
+    i = i + 1
+  }
+  return T_VOID
+}
+
+/**
+ * WP34 N2: whether the two arrays of `dst.set(src)` are proven to own
+ * different element buffers, which is what lets the copy be a `memcpy`.
+ *
+ * Two shapes prove it, and nothing else is trusted. An operand that is itself
+ * an array literal or a `new` allocates its buffer during the call, so no
+ * other array can reach it yet. And two different `const` locals that were
+ * each initialised with a fresh allocation (`Local.fresh`) each own the only
+ * binding of their buffer: an alias of either would be a second name, and a
+ * second name is never fresh. A parameter, a field, a `let` and the same local
+ * on both sides are all "not proven", which is a `memmove` and never wrong.
+ */
+const disjointCopy = (ctx: CheckContext, receiver: Node, source: Node): boolean => {
+  if (isFreshArrayExpression(receiver) || isFreshArrayExpression(source)) {
+    return true
+  }
+  const to = freshLocal(ctx, receiver)
+  const from = freshLocal(ctx, source)
+  return to !== null && from !== null && to !== from
+}
+
+/** An array literal or a `new`, whose buffer is allocated where it is written. */
+const isFreshArrayExpression = (expr: Node): boolean => {
+  const e = unwrapParens(expr)
+  return e.kind === N_ARRAY || e.kind === N_NEW
+}
+
+/** The `const` local `expr` names when that local holds a fresh allocation, else `null`. */
+const freshLocal = (ctx: CheckContext, expr: Node): Local | null => {
+  const e = unwrapParens(expr)
+  if (e.kind !== N_IDENT) {
+    return null
+  }
+  const local = ctx.program.nodeLocals[e.id]
+  return local !== null && local.fresh ? local : null
 }
 
 /**

@@ -90,6 +90,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "Number" ||
     name === "readFileSync" ||
     name === "readFileSyncOrNull" ||
+    name === "readFileBytesSync" ||
     name === "writeFileSync" ||
     name === "appendFileSync" ||
     name === "write" ||
@@ -130,7 +131,7 @@ export const checkBuiltinArity = (
 }
 
 /** A `void` builtin used as a value; the check stage0 makes against the parent node. */
-const requireStatementPosition = (ctx: CheckContext, call: Node, name: string): void => {
+export const requireStatementPosition = (ctx: CheckContext, call: Node, name: string): void => {
   const statement = ctx.statementExpression
   if (statement === null || statement !== call) {
     ctx.error(call, `\`${name}\` returns void and can only be used as a statement`)
@@ -465,6 +466,16 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
     }
     return name === "readFileSync" ? T_STRING : ctx.table.nullableOf(T_STRING)
+  }
+  // WP34 N2. The file's bytes as they are on disk, for a DER key or a packet
+  // capture: no UTF-8 is assumed, so a zero byte and a byte of 0x80 or above
+  // survive. Nullable for the reason `readFileSyncOrNull` is, and there is no
+  // exiting twin — a program that wants one writes the `panic` itself.
+  if (name === "readFileBytesSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return ctx.table.nullableOf(ctx.table.arrayOf(T_U8))
   }
   if (name === "writeFileSync" || name === "appendFileSync") {
     if (checkBuiltinArity(ctx, call, name, args, 2)) {
