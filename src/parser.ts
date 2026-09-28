@@ -23,12 +23,23 @@
 // not. `??` it builds as an operator (WP32), and the checker refuses it
 // wherever its left operand is not a `Map.get` result. Anything it cannot
 // make a node of is an `N_ERROR` with the reason.
+//
+// **A forbidden statement is parsed, not refused** (WP33 R1): `var`, `try`,
+// `with`, a label, `for...in`, `for await`, `for (x of a)`, a top-level `let`
+// and a top-level statement each become a node, and the phase that owns the
+// rule refuses it by name. The shape each takes is written down once, beside
+// the flags in `src/nodes.ts`. `var`, `try`, `with`, `await` and `in` are
+// identifiers to the lexer, so they are matched by text where they open a
+// construct, as `of` and `using` are.
 
 import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
 import {
+  FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_FOR_IN,
   FLAG_USING,
+  FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_FOREIGN,
@@ -66,6 +77,7 @@ import {
   N_IMPORT_SPEC,
   N_INDEX,
   N_INTERFACE,
+  N_LABELED,
   N_LIST,
   N_MEMBER,
   N_METHOD,
@@ -87,6 +99,7 @@ import {
   N_THIS,
   N_THROW,
   N_TRUE,
+  N_TRY,
   N_UNARY,
   N_ENUM,
   N_ENUM_MEMBER,
@@ -102,6 +115,7 @@ import {
   N_VAR,
   N_VAR_DECL,
   N_WHILE,
+  N_WITH,
   Node,
 } from "./nodes"
 import {
@@ -286,11 +300,20 @@ export class Parser {
   /** How many nodes this parser has made; also the next id it will hand out. */
   nodeCount: i32
 
+  /**
+   * The labels of the labelled statements around the current one, innermost
+   * last. A `break` or `continue` naming one of them is read, so that the
+   * refusal is the labelled statement's (NL1046) and there is only one; a
+   * label nothing declares stays a syntax error, as it is in TypeScript.
+   */
+  labels: string[]
+
   constructor(file: SourceFile) {
     this.file = file
     this.lexer = new Lexer(file.text)
     this.diagnostics = []
     this.nodeCount = 0
+    this.labels = []
     this.kind = TOK_END
     this.start = 0
     this.end = 0
@@ -508,7 +531,7 @@ export class Parser {
       declaration.flags = declaration.flags | FLAG_CONST
       return this.exportable(declaration, exported)
     }
-    if (this.at(TOK_CONST) || this.at(TOK_LET)) {
+    if (this.at(TOK_CONST) || this.at(TOK_LET) || this.varAhead()) {
       return this.exportable(this.parseModuleConst(start), exported)
     }
     // `type` and `enum` are contextual keywords, ordinary identifiers
@@ -530,9 +553,47 @@ export class Parser {
     if (this.at(TOK_IDENT) && this.value === "enum") {
       return this.exportable(this.parseEnum(start), exported)
     }
+    // A statement is read where a declaration was expected, and it is the
+    // checker that says a module has no top-level code (NL2230).
+    if (!exported && this.startsTopLevelStatement()) {
+      return this.parseStatement()
+    }
     return this.fail(
       `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\`, \`enum\` and \`import\`, found \`${tokenName(this.kind)}\``
     )
+  }
+
+  /**
+   * Whether the token in hand opens a statement rather than a declaration: a
+   * statement keyword, or a name that is not followed by another name or a
+   * keyword. That second half leaves the modifiers the language does not have
+   * — `async function`, `declare class`, `abstract class`, `namespace N` —
+   * to the refusal below, which is their own and not a statement's.
+   */
+  startsTopLevelStatement(): boolean {
+    switch (this.kind) {
+      case TOK_IF:
+      case TOK_WHILE:
+      case TOK_DO:
+      case TOK_FOR:
+      case TOK_SWITCH:
+      case TOK_RETURN:
+      case TOK_THROW:
+      case TOK_BREAK:
+      case TOK_CONTINUE:
+        return true
+      case TOK_IDENT: {
+        const next = this.peek()
+        return next !== TOK_IDENT && (next < TOK_FUNCTION || next > TOK_SUPER)
+      }
+      default:
+        return false
+    }
+  }
+
+  /** `var` followed by a name: the one place the word opens a declaration. */
+  varAhead(): boolean {
+    return this.at(TOK_IDENT) && this.value === "var" && this.peek() === TOK_IDENT
   }
 
   /** Mark a declaration `export`ed, which is a modifier rather than a child. */
@@ -1270,9 +1331,14 @@ export class Parser {
     const node = this.node(N_MODULE_CONST, start, this.end)
     if (this.at(TOK_CONST)) {
       node.flags = node.flags | FLAG_CONST
-    } else {
+    } else if (this.at(TOK_IDENT)) {
+      node.flags = node.flags | FLAG_VAR // Phase 0's (NL1036)
+    } else if (this.startsArrowDeclaration()) {
+      // A `let` bound to an arrow is still the parser's to refuse: its rule
+      // (NL2272) is a function declaration's, not a module constant's.
       this.report("a module holds no top-level `let`; use `const`", this.start, this.end)
     }
+    // Otherwise a top-level `let`, which the checker refuses (NL2084).
     this.advance()
     node.children.push(this.parseVariableDeclarations())
     this.expectSemicolon()
@@ -1510,8 +1576,17 @@ export class Parser {
       case TOK_CONST:
         return this.parseVariableStatement(start)
       case TOK_IDENT:
-        if (this.usingAhead()) {
+        if (this.usingAhead() || this.varAhead()) {
           return this.parseVariableStatement(start)
+        }
+        if (this.value === "try" && this.peek() === TOK_LBRACE) {
+          return this.parseTry(start)
+        }
+        if (this.value === "with" && this.peek() === TOK_LPAREN) {
+          return this.parseWith(start)
+        }
+        if (this.peek() === TOK_COLON) {
+          return this.parseLabeled(start)
         }
         return this.parseExpressionStatement(start)
       case TOK_IF:
@@ -1563,15 +1638,83 @@ export class Parser {
     const node = this.node(N_VAR, start, this.end)
     // A `using` binding is a `const` the scope rules then hold to more
     // (`src/parallel.ts`): it cannot be reassigned either.
-    if (this.at(TOK_CONST) || this.at(TOK_IDENT)) {
+    if (this.varAhead()) {
+      node.flags = node.flags | FLAG_VAR
+    } else if (this.at(TOK_CONST) || this.at(TOK_IDENT)) {
       node.flags = node.flags | FLAG_CONST
-    }
-    if (this.at(TOK_IDENT)) {
-      node.flags = node.flags | FLAG_USING
+      if (this.at(TOK_IDENT)) {
+        node.flags = node.flags | FLAG_USING
+      }
     }
     this.advance()
     node.children.push(this.parseVariableDeclarations())
     this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /**
+   * `try { } catch (e) { } finally { }`, for Phase 0 to refuse (NL1033). A
+   * catch binding's annotation, `catch (e: unknown)`, is read and dropped: the
+   * statement is refused whatever it says.
+   */
+  parseTry(start: i32): Node {
+    this.advance() // `try`
+    const node = this.node(N_TRY, start, this.end)
+    node.children.push(this.parseBlock())
+    let binding = this.empty()
+    let handler = this.empty()
+    let finalizer = this.empty()
+    if (this.at(TOK_IDENT) && this.value === "catch") {
+      this.advance()
+      if (this.eat(TOK_LPAREN)) {
+        binding = this.parseIdentifier()
+        if (this.at(TOK_COLON)) {
+          this.parseTypeAnnotation()
+        }
+        this.expect(TOK_RPAREN)
+      }
+      handler = this.parseBlock()
+    }
+    if (this.at(TOK_IDENT) && this.value === "finally") {
+      this.advance()
+      finalizer = this.parseBlock()
+    }
+    if (handler.kind === N_EMPTY && finalizer.kind === N_EMPTY) {
+      this.report(
+        `expected \`catch\` or \`finally\`, found \`${tokenName(this.kind)}\``,
+        this.start,
+        this.end
+      )
+    }
+    node.children.push(binding)
+    node.children.push(handler)
+    node.children.push(finalizer)
+    node.end = this.previousEnd
+    return node
+  }
+
+  /** `with (o) body`, for Phase 0 to refuse (NL1038). */
+  parseWith(start: i32): Node {
+    this.advance() // `with`
+    const node = this.node(N_WITH, start, this.end)
+    this.expect(TOK_LPAREN)
+    node.children.push(this.parseExpression())
+    this.expect(TOK_RPAREN)
+    node.children.push(this.parseStatement())
+    node.end = this.previousEnd
+    return node
+  }
+
+  /** `outer: body`, for Phase 0 to refuse (NL1046). */
+  parseLabeled(start: i32): Node {
+    const node = this.node(N_LABELED, start, this.end)
+    node.text = this.value
+    this.advance() // the label
+    this.advance() // `:`
+    this.labels.push(node.text)
+    node.children.push(this.parseStatement())
+    this.labels.pop()
     node.end = this.previousEnd
     return node
   }
@@ -1614,38 +1757,69 @@ export class Parser {
 
   /**
    * `for (init; cond; inc)` and `for (const x of a)`, told apart after the
-   * declaration by whether `of` follows.
+   * head by whether `of` follows. `for await`, `for...in`, a `var` head and a
+   * head that is an expression rather than a declaration are read too, for
+   * the phase that owns each rule to refuse (`src/nodes.ts`, FLAG_AWAIT).
    */
   parseFor(start: i32): Node {
     this.advance()
+    let flags = 0
+    if (this.at(TOK_IDENT) && this.value === "await") {
+      flags = FLAG_AWAIT
+      this.advance()
+    }
     this.expect(TOK_LPAREN)
-    if ((this.at(TOK_CONST) || this.at(TOK_LET)) && this.peek() === TOK_IDENT) {
+    const isVar = this.varAhead()
+    if ((this.at(TOK_CONST) || this.at(TOK_LET) || isVar) && this.peek() === TOK_IDENT) {
       const declStart = this.start
       const declaration = this.node(N_VAR, declStart, this.end)
       if (this.at(TOK_CONST)) {
         declaration.flags = declaration.flags | FLAG_CONST
+      } else if (isVar) {
+        declaration.flags = declaration.flags | FLAG_VAR
       }
       this.advance()
       declaration.children.push(this.parseVariableDeclarations())
       declaration.end = this.previousEnd
-      if (this.at(TOK_IDENT) && this.value === "of") {
-        this.advance()
-        const forOf = this.node(N_FOR_OF, start, this.end)
-        forOf.children.push(declaration)
-        forOf.children.push(this.parseExpression())
-        this.expect(TOK_RPAREN)
-        forOf.children.push(this.parseStatement())
-        forOf.end = this.previousEnd
-        return forOf
+      if (this.atForOfKeyword()) {
+        return this.parseForOfRest(start, declaration, flags)
       }
-      return this.parseForRest(start, declaration)
+      return this.parseForRest(start, declaration, flags)
     }
     const initializer = this.at(TOK_SEMICOLON) ? this.empty() : this.parseExpression()
-    return this.parseForRest(start, initializer)
+    if (initializer.kind !== N_EMPTY && this.atForOfKeyword()) {
+      return this.parseForOfRest(start, initializer, flags)
+    }
+    return this.parseForRest(start, initializer, flags)
   }
 
-  /** The `; cond; inc) body` of a classic `for`, with the initializer already parsed. */
-  parseForRest(start: i32, initializer: Node): Node {
+  /** The `of` of a `for...of`, or the `in` of a `for...in`. */
+  atForOfKeyword(): boolean {
+    return this.at(TOK_IDENT) && (this.value === "of" || this.value === "in")
+  }
+
+  /** The `of a) body` of a `for...of`, or `in a) body`, with the head already parsed. */
+  parseForOfRest(start: i32, head: Node, flags: i32): Node {
+    const forOf = this.node(N_FOR_OF, start, this.end)
+    forOf.flags = this.value === "in" ? flags | FLAG_FOR_IN : flags
+    this.advance()
+    forOf.children.push(head)
+    forOf.children.push(this.parseExpression())
+    this.expect(TOK_RPAREN)
+    forOf.children.push(this.parseStatement())
+    forOf.end = this.previousEnd
+    return forOf
+  }
+
+  /**
+   * The `; cond; inc) body` of a classic `for`, with the initializer already
+   * parsed. `await` belongs to a `for...of` only, and TypeScript says so as
+   * syntax.
+   */
+  parseForRest(start: i32, initializer: Node, flags: i32): Node {
+    if ((flags & FLAG_AWAIT) !== 0) {
+      this.report(`expected \`of\`, found \`${tokenName(this.kind)}\``, this.start, this.end)
+    }
     const node = this.node(N_FOR, start, this.end)
     node.children.push(initializer)
     this.expect(TOK_SEMICOLON)
@@ -1728,12 +1902,29 @@ export class Parser {
 
   parseJump(start: i32, kind: i32): Node {
     this.advance()
+    let label = ""
     if (this.at(TOK_IDENT) && !this.newlineBefore()) {
-      this.report("a label is not supported", this.start, this.end)
+      if (this.labelled(this.value)) {
+        label = this.value
+      } else {
+        this.report("a label is not supported", this.start, this.end)
+      }
       this.advance()
     }
     this.expectSemicolon()
-    return this.node(kind, start, this.previousEnd)
+    const node = this.node(kind, start, this.previousEnd)
+    node.text = label
+    return node
+  }
+
+  /** Whether a labelled statement around this point declares `name`. */
+  labelled(name: string): boolean {
+    for (const label of this.labels) {
+      if (label === name) {
+        return true
+      }
+    }
+    return false
   }
 
   parseExpressionStatement(start: i32): Node {

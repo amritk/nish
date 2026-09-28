@@ -121,6 +121,7 @@ rejects. This table is the highest-value part of the page.
 | `any`, `unknown` | forbidden | name the real type |
 | `undefined` | forbidden, except `x === undefined` on a `Map.get` result | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
+| `for (const k in o)` | `` `for...in` is forbidden `` | `for (const x of xs)` over an array, or `for (const k of m.keys())` over a `Map` |
 | a callback stored or returned: `const cb = (n: i32) => n`, a field `cb: (n: i32) => i32` | `An arrow may only be written as the argument for a function-typed parameter` / `` … is a function type, which may only annotate a parameter of a top-level function `` | there are **no function values**; a callback the call names is a [function parameter](#function-parameters) |
 | `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
@@ -1048,7 +1049,8 @@ export const main = (): i32 => {
 - `for (init; cond; update)` with every clause optional, and
   `for (const x of xs)` over an **array** only — `x` gets the element type and
   must not be annotated. The array's `length` is re-read each iteration, so a
-  `push` inside the body extends the loop.
+  `push` inside the body extends the loop. `for...in`, `for await` and
+  `for (x of xs)` over an existing `x` are each refused by name.
 - `switch` takes an **integer or enum** discriminant; every `case` label is an
   integer constant expression of that type. **There is no implicit
   fallthrough** — a clause with statements ends in `break`, `return`,

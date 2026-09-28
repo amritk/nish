@@ -32,6 +32,7 @@ import { unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
+  FLAG_AWAIT,
   FLAG_CONST,
   N_BLOCK,
   N_BREAK,
@@ -358,6 +359,17 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 }
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  // WP33 R1: two heads the parser reads for this to refuse, before anything
+  // looks at the head as a declaration. There is no event loop to wait on,
+  // so `for await` is refused at the modifier, whatever it walks.
+  if ((stmt.flags & FLAG_AWAIT) !== 0) {
+    ctx.error(stmt, "`for await` is not supported")
+    return false
+  }
+  if (stmt.children[0].kind !== N_VAR) {
+    ctx.error(stmt.children[0], "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`")
+    return false
+  }
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   // The head, before the iterable, in stage0's order (stage0's `src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of

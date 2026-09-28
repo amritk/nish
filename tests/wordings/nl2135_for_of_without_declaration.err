@@ -1,1 +1,1 @@
-syntax error: expected `;`, found `IDENT`
+`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`

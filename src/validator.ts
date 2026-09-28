@@ -8,23 +8,30 @@
 // with `Unsupported ... in Phase 1` is merely not implemented yet. Keeping
 // them apart is why a rejection message can say *why* rather than "no".
 //
-// It is smaller than stage0's, and for the same reason `src/declarations.ts`
-// is: the S2 parser refuses most of this syntax where it stands, by name.
-// What is left is what parses as ordinary source and is forbidden anyway —
-// a banned identifier, a `__proto__` or `.prototype` member, an `Object.*`
-// shape mutation, a string-keyed element access.
+// Part of it is what parses as ordinary source and is forbidden anyway — a
+// banned identifier, a `__proto__` or `.prototype` member, an `Object.*`
+// shape mutation, a string-keyed element access. The rest is syntax the
+// language forbids, which the parser reads into a node so that the rule is
+// stated here rather than as a syntax error (WP33 R1; the shapes are in
+// `src/nodes.ts`): `var`, `try`, `with`, a labelled statement and `for...in`
+// so far. What the parser still turns down itself is listed, case by case,
+// in `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { unwrapParens } from "./emit-util"
 import {
+  FLAG_FOR_IN,
+  FLAG_VAR,
   N_BIGINT,
   N_BINARY,
   N_CALL,
   N_EMPTY,
   N_ENUM,
+  N_FOR_OF,
   N_IDENT,
   N_INDEX,
+  N_LABELED,
   N_MEMBER,
   N_MODULE_CONST,
   N_NEW,
@@ -34,11 +41,13 @@ import {
   N_STRING,
   N_TEMPLATE,
   N_THROW,
+  N_TRY,
   N_TYPE_NULL,
   N_TYPE_REF,
   N_TYPE_UNION,
   N_UNARY,
   N_VAR,
+  N_WITH,
   Node,
 } from "./nodes"
 
@@ -227,6 +236,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       }
       break
     case N_VAR:
+      rejectVar(ctx, node)
       // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
       // type is spelled, and `V` itself is still swept. On a `let` the
       // checker refuses it, with the rewrite the unannotated `let` gets.
@@ -235,7 +245,33 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       }
       return
     case N_MODULE_CONST:
+      rejectVar(ctx, node)
       refuseUndefinedIn(ctx, node)
+      break
+    case N_TRY:
+      ctx.error(
+        node,
+        "`try`/`catch`/`finally` is forbidden in " + LANGUAGE + " (no unwinding; use `Result<T, E>`)"
+      )
+      break
+    case N_WITH:
+      ctx.error(node, "`with` is forbidden in " + LANGUAGE + " (no dynamic scope)")
+      break
+    case N_LABELED:
+      // A `break` or `continue` that names the label is part of this one
+      // refusal: the parser reads a label only inside the statement that
+      // declares it (`Parser.labels`).
+      ctx.error(node, "Labeled statements are forbidden in " + LANGUAGE + " (use structured loops)")
+      break
+    case N_FOR_OF:
+      if ((node.flags & FLAG_FOR_IN) !== 0) {
+        ctx.error(
+          node,
+          "`for...in` is forbidden in " +
+            LANGUAGE +
+            " (it enumerates property names, and object layout is fixed at compile time); use `for...of`"
+        )
+      }
       break
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
@@ -254,6 +290,13 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   }
   for (const child of node.children) {
     visit(ctx, child, inTypePosition)
+  }
+}
+
+/** `var`, in a function body, a `for` head or at the top level. */
+const rejectVar = (ctx: CheckContext, node: Node): void => {
+  if ((node.flags & FLAG_VAR) !== 0) {
+    ctx.error(node, "`var` is forbidden; use `let` or `const`")
   }
 }
 

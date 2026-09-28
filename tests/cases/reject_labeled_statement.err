@@ -1,1 +1,1 @@
-expected `;`, found `:`
+Labeled statements are forbidden in Nish (use structured loops)

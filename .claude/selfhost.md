@@ -252,8 +252,32 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   in minutes, all in the same direction: the front end having opinions the
   scanner does not.
 - **Lex and parse what is written; refuse in the phase that owns the rule.**
-  `??` is tokenised and then rejected by the parser with a message that names
-  the idiom to use instead.
+  A construct the language forbids is parsed into a node, and Phase 0 (an
+  NL1xxx code) or the checker (an NL2xxx code) refuses it with its rule's
+  message and exactly one diagnostic — never the parser, whose only sentence
+  is the token it expected. WP33 R1 fixed the shape, and every construct that
+  comes off `tests/self/parser-refusals.txt` follows it; the full statement is
+  beside the flags in `src/nodes.ts`:
+  - it **resembles a node that exists** → that node with a flag: `var` is an
+    `N_VAR` with `FLAG_VAR`, `for...in` and `for await` an `N_FOR_OF` with
+    `FLAG_FOR_IN` / `FLAG_AWAIT`, a top-level `let` an `N_MODULE_CONST`
+    without `FLAG_CONST`, `x?: T` and `static` a field or method with a flag;
+  - it **resembles nothing** → a kind of its own with its child layout written
+    beside it: `N_TRY`, `N_WITH`, `N_LABELED`;
+  - it **differs in what one child is** → the same node with that child, when
+    the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
+    is an expression, a top-level statement is the statement itself in the
+    `N_SOURCE_FILE`.
+
+  The refusal runs before anything else reads the node, so no later rule has
+  to know the shape exists, and `src/ast-text.ts` prints every flag so that
+  `--emit-ast` and `tests/parser-oracle.js` compare it. A word the lexer
+  treats as an identifier (`var`, `try`, `with`, `in`, `await`) is matched by
+  text where it opens the construct, as `of` and `using` are, so the lexer
+  and its oracle stay as they are. When a case comes off, it leaves both
+  parser-refusal registers and the R6 section of
+  `tests/wordings/unreachable.txt` in the same change, with its `.err`
+  re-pinned to the rule.
 - **A disagreement is triaged before the next phase starts.** Three stage0 bugs
   came out of S3 that way and three more out of S4 — all wrong *attributes*
   rather than wrong instructions, which is the class of bug a golden `.ll` is
