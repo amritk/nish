@@ -177,7 +177,7 @@ class Sha512Engine {
   block: u8[]
   /** The message schedule W_0 .. W_79, kept so a block allocates nothing. */
   schedule: u64[]
-  /** Shared, never written: a copy points at the same table. */
+  /** K (§4.2.3); read, never written. */
   constants: u64[]
   countLo: u64 = 0
   countHi: u64 = 0
