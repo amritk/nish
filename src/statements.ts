@@ -204,9 +204,8 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
   for (const decl of list.children[0].children) {
     const name = decl.children[0].text
     const annotation = decl.children[1]
-    // The annotation is resolved first so that, when the initializer is
-    // rejected, the variable is still declared with its declared type and
-    // later statements do not report it as unknown.
+    // The annotation is resolved first, so that a refused initializer still
+    // leaves the variable its declared type (see below).
     // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
     let declared = -1
     if (annotation.kind !== N_EMPTY) {
@@ -244,12 +243,9 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       ctx.error(decl, "Cannot declare a variable of type void")
       type = T_ERROR
     }
-    // A refused initializer still declares the variable, as the annotation
-    // says when it resolved and as `T_ERROR` when there is none to go by, so
-    // that its later uses are checked quietly rather than each reported as an
-    // `Unknown identifier` the programmer never wrote (#275). The error type
-    // is silent wherever it is read, and the emitter never sees it: the
-    // program stopped at the refusal.
+    // A refused initializer still declares the variable, as its annotation or
+    // else as `T_ERROR`, so later uses stay silent rather than each reporting
+    // an `Unknown identifier` (#275).
     if (ctx.errored && declared < 0) {
       type = T_ERROR
     }

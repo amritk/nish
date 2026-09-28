@@ -624,19 +624,19 @@ for (const name of [
   "reject_rng_array_zero_fill",
   "reject_arrow_as_value",
 ]) {
-  if (only && !name.includes(only)) {
+  const at = selectedCases.indexOf(name)
+  if (at < 0) {
     continue
   }
-  const r = spawnSync(
-    NISH,
-    [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, `${name}.ll`), "--json"],
-    { cwd: root, encoding: "utf8" }
-  )
-  const errors = diagnosticsOf(r.stdout).filter((d) => d.severity === "error")
+  // The compile the case loop already ran: one summary line per error.
+  const r = caseResults[at]
+  const errors = String(r.stderr)
+    .split("\n")
+    .filter((l) => /:\d+:\d+: error: /.test(l))
   check(
     `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
     r.status === 1 && errors.length === 1,
-    errors.map(diagnosticLine).join("\n") || `${r.stdout}${r.stderr}`
+    String(r.stderr)
   )
 }
 

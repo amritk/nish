@@ -112,12 +112,6 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (ctx.errored) {
     return T_ERROR
   }
-  // A value whose type only its context can say, where the context is a
-  // local whose initializer was refused: `y = null` after `let y = <refused>`
-  // repeats that refusal rather than finding a new one.
-  if (want === T_ERROR && typedByContext(ctx, expr)) {
-    return T_ERROR
-  }
   // WP32: a maybe (`V | undefined`, what `m.get(k)` answers) is checked into
   // one of three places, which say so by the `want` they pass: `WANT_MAYBE`,
   // or the maybe type itself for a `const` annotated with it. Parentheses pass
@@ -159,21 +153,6 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   ctx.program.nodeTypes[expr.id] = type
   return type
-}
-
-/** `null`, `{ ... }`, `[]`, `Ok(...)` and `Err(...)`: no type without a contextual one. */
-const typedByContext = (ctx: CheckContext, expr: Node): boolean => {
-  if (expr.kind === N_NULL || expr.kind === N_OBJECT) {
-    return true
-  }
-  if (expr.kind === N_ARRAY) {
-    return expr.children.length === 0
-  }
-  if (expr.kind !== N_CALL) {
-    return false
-  }
-  const callee = expr.children[0]
-  return callee.kind === N_IDENT && isResultConstructor(callee.text) && ctx.signature(callee.text) === null
 }
 
 /**
@@ -255,8 +234,16 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_INDEX:
       return checkIndex(ctx, expr, scope)
     case N_ARRAY:
+      // `[]` and `{ ... }` are typed by their context alone, so a context that
+      // was refused (`y = []` after `let y = <refused>`) repeats the refusal.
+      if (want === T_ERROR && expr.children.length === 0) {
+        return T_ERROR
+      }
       return checkArrayLiteral(ctx, expr, scope, want)
     case N_OBJECT:
+      if (want === T_ERROR) {
+        return T_ERROR
+      }
       return checkObjectLiteral(ctx, expr, scope, want)
     case N_ARROW:
       // WP29: an arrow is legal as the argument for a function-typed
@@ -393,6 +380,10 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 }
 
 const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
+  // A context that was refused: its refusal is the one diagnostic.
+  if (want === T_ERROR) {
+    return T_ERROR
+  }
   if (want < 0) {
     return ctx.errorType(
       expr,
@@ -1482,7 +1473,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   // WP29: a compile-time function parameter is a direct call to whichever
   // function this instantiation was given, and a function the arrow around
   // this call is written inside is one it cannot reach.
-  if (scope.lookup(callee.text) === null) {
+  const local = scope.lookup(callee.text)
+  if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
       refuseOnce(ctx, callee, capturedMessage(callee.text))
       return T_ERROR
@@ -1505,6 +1497,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       return checkImportedBuiltin(ctx, expr, scope, imported)
     }
     if (isResultConstructor(callee.text)) {
+      if (want === T_ERROR) {
+        return T_ERROR // typed by its context alone, and the context was refused
+      }
       return checkResultConstructor(ctx, expr, scope, want) // WP16: `Ok(v)` / `Err(e)`
     }
     if (isBuiltinFunction(callee.text)) {
@@ -1512,8 +1507,7 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     // A local whose initializer was refused is `T_ERROR`, and calling it
     // repeats that refusal rather than finding a new one.
-    const local = scope.lookup(callee.text)
-    if (local !== null && local.type === T_ERROR) {
+    if (local !== null && scope.typeOf(local) === T_ERROR) {
       return T_ERROR
     }
     return ctx.errorType(callee, `Unknown function \`${callee.text}\``)
