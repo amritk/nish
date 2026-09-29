@@ -234,8 +234,16 @@ const computeType = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_INDEX:
       return checkIndex(ctx, expr, scope)
     case N_ARRAY:
+      // `[]` and `{ ... }` are typed by their context alone, so a context that
+      // was refused (`y = []` after `let y = <refused>`) repeats the refusal.
+      if (want === T_ERROR && expr.children.length === 0) {
+        return T_ERROR
+      }
       return checkArrayLiteral(ctx, expr, scope, want)
     case N_OBJECT:
+      if (want === T_ERROR) {
+        return T_ERROR
+      }
       return checkObjectLiteral(ctx, expr, scope, want)
     case N_ARROW:
       // WP29: an arrow is legal as the argument for a function-typed
@@ -372,6 +380,10 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
 }
 
 const checkNull = (ctx: CheckContext, expr: Node, want: i32): i32 => {
+  // A context that was refused: its refusal is the one diagnostic.
+  if (want === T_ERROR) {
+    return T_ERROR
+  }
   if (want < 0) {
     return ctx.errorType(
       expr,
@@ -1461,7 +1473,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   // WP29: a compile-time function parameter is a direct call to whichever
   // function this instantiation was given, and a function the arrow around
   // this call is written inside is one it cannot reach.
-  if (scope.lookup(callee.text) === null) {
+  const local = scope.lookup(callee.text)
+  if (local === null) {
     if (ctx.capturesOuter(callee.text)) {
       refuseOnce(ctx, callee, capturedMessage(callee.text))
       return T_ERROR
@@ -1484,10 +1497,18 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       return checkImportedBuiltin(ctx, expr, scope, imported)
     }
     if (isResultConstructor(callee.text)) {
+      if (want === T_ERROR) {
+        return T_ERROR // typed by its context alone, and the context was refused
+      }
       return checkResultConstructor(ctx, expr, scope, want) // WP16: `Ok(v)` / `Err(e)`
     }
     if (isBuiltinFunction(callee.text)) {
       return checkBuiltinFunction(ctx, expr, scope)
+    }
+    // A local whose initializer was refused is `T_ERROR`, and calling it
+    // repeats that refusal rather than finding a new one.
+    if (local !== null && scope.typeOf(local) === T_ERROR) {
+      return T_ERROR
     }
     return ctx.errorType(callee, `Unknown function \`${callee.text}\``)
   }
