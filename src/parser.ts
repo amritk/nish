@@ -627,8 +627,15 @@ export class Parser {
     if (exported && this.at(TOK_IDENT) && this.value === "as") {
       return this.parseNamespaceExport(start)
     }
-    if (this.at(TOK_IMPORT) && this.importDeclarationAhead()) {
-      return this.exportable(this.parseImport(start), exported)
+    if (this.at(TOK_IMPORT) && this.peek() !== TOK_LPAREN) {
+      if (this.importDeclarationAhead()) {
+        return this.exportable(this.parseImport(start), exported)
+      }
+      // Neither an import nor `import(...)`: the syntax error it always was.
+      if (exported) {
+        return this.fail("`export` cannot introduce an import")
+      }
+      return this.parseMalformedImport(start)
     }
     if (this.at(TOK_FUNCTION)) {
       return this.exportable(this.parseFunction(start, false), exported)
@@ -727,8 +734,8 @@ export class Parser {
 
   /**
    * Whether the token in hand opens a statement rather than a declaration: a
-   * statement keyword, `import` where it is not an import declaration
-   * (`import("./m")`, for Phase 0 to refuse, NL1002), or a name that is not
+   * statement keyword, `import` before `(` (`import("./m")`, for Phase 0 to
+   * refuse, NL1002), or a name that is not
    * followed by another name or a keyword. That last half leaves the
    * modifiers the language does not have — `async function`, `declare
    * class`, `abstract class`, `namespace N` — to the refusal below, which is
@@ -737,6 +744,7 @@ export class Parser {
   startsTopLevelStatement(): boolean {
     switch (this.kind) {
       case TOK_IMPORT:
+        return this.peek() === TOK_LPAREN
       case TOK_IF:
       case TOK_WHILE:
       case TOK_DO:
@@ -1543,6 +1551,20 @@ export class Parser {
       name = this.parseMemberName(name, start)
     }
     return name
+  }
+
+  /**
+   * `import` followed by nothing an import or `import(...)` could open —
+   * `import;`, `import 5`, `import.meta` — reported as it always was, the `{`
+   * the one import form wants, so a malformed import costs no more
+   * diagnostics than it did.
+   */
+  parseMalformedImport(start: i32): Node {
+    this.advance() // `import`
+    const node = this.node(N_IMPORT, start, this.end)
+    const list = this.list()
+    this.expect(TOK_LBRACE)
+    return this.finish(node, this.closeList(list))
   }
 
   /** `from`, or the syntax error that it is missing. */

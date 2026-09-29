@@ -100,6 +100,7 @@ reject_cls_field_optional_untyped	a type annotation is required
 reject_cls_static_field_untyped	a type annotation is required
 reject_computed_property	an object literal key must be a plain identifier
 reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
+reject_import_malformed	expected `{`, found `;`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
