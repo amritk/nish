@@ -15,22 +15,10 @@
 // and a return type at the root of the body they belong to, and a field or a
 // module constant once per module, at the root of its first walked body.
 
-import {
-  N_ARROW,
-  N_BINARY,
-  N_CALL,
-  N_CONSTRUCTOR,
-  N_EMPTY,
-  N_FUNCTION,
-  N_IDENT,
-  N_MEMBER,
-  N_METHOD,
-  N_UNARY,
-  N_VAR_DECL,
-  Node,
-} from "./nodes"
+import { N_BINARY, N_CALL, N_CONSTRUCTOR, N_EMPTY, N_UNARY, N_VAR_DECL, Node } from "./nodes"
+import { dottedName, receiverIsValue } from "./emit-util"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { isFloat, isInteger, T_I32, T_I64, T_U16, T_U32, T_U64, T_U8 } from "./types"
+import { intBits, isFloat, isInteger, isUnsigned, T_I32 } from "./types"
 
 /**
  * The numbers rows, asked about one node at a time.
@@ -107,9 +95,11 @@ const stepFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[
 }
 
 /**
- * NL8007. The type is read as recorded, not through `baseOf`: a ranged value
- * is `i32` to the instruction, but every write into a ranged place is checked
- * and panics rather than wraps, so it is not this row's.
+ * NL8007. The type is read as recorded, not through `baseOf`, so a ranged
+ * value is left out by choice: its arithmetic is an `i32` instruction, but
+ * every write into a ranged place is checked afterwards, and a result that
+ * wrapped back inside the range under `--wrapping` is too rare to report at
+ * every `r++`.
  */
 const wrapFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   const operand = walk.program.nodeTypes[node.children[0].id]
@@ -125,7 +115,7 @@ const wrapFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[
  * and `u64` are NL8009's: the declaration is reported, not each operation.
  */
 const wrapsHere = (walk: PortabilityWalk, type: i32): boolean =>
-  type === T_U8 || type === T_U16 || type === T_U32 || (type === T_I32 && !walk.opts.nsw)
+  (isUnsigned(type) && !isWide(type)) || (type === T_I32 && !walk.opts.nsw)
 
 /** "this `/` on i32 truncates here, ...": the operator as written and the type it runs at. */
 const operatorFinding = (
@@ -139,47 +129,39 @@ const operatorFinding = (
 // ---- NL8010, NL8011: the builtins ---------------------------------------------
 
 /**
- * `Math.min`, `Math.max` and `Math.round` of a float are libm's `fmin`, `fmax`
- * and `round` (NL8010), and `console.log` or `console.error` of a float prints
+ * `Math.min` and `Math.max` of a float are `llvm.minnum` and `llvm.maxnum`,
+ * which drop a NaN, and `Math.round` rounds `-0.4` to +0 (NL8010); and `console.log` or `console.error` of a float prints
  * `-0` as `0` (NL8011). The operand types were settled by the checker: `min`
  * and `max` take two of one type, and `round` only takes an `f64`, so the
  * first argument answers for the call.
  */
 const builtinCallFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
+  // The emitter's own test for a builtin call (`emitCall`): a dotted name
+  // whose receiver the checker gave no type, because it is a namespace.
   const callee = node.children[0]
+  const name = dottedName(callee)
   const args = node.children[1].children
-  if (callee.kind !== N_MEMBER || args.length === 0 || walk.program.nodeCallees[node.id] !== null) {
-    return
-  }
-  const receiver = callee.children[0]
-  if (receiver.kind !== N_IDENT || walk.program.nodeLocals[receiver.id] !== null) {
+  if (name === "" || args.length === 0 || receiverIsValue(walk.program, callee.children[0])) {
     return
   }
   if (!isFloat(walk.table.baseOf(walk.program.nodeTypes[args[0].id]))) {
     return
   }
-  const name = `${receiver.text}.${callee.text}`
+  let fragment = ""
   if (name === "Math.min" || name === "Math.max" || name === "Math.round") {
-    out.push(
-      new PortabilityFinding(
-        node,
-        `\`${name}\` follows the native NaN and signed-zero rules here, not JavaScript's`
-      )
-    )
+    fragment = "follows the native NaN and signed-zero rules here, not JavaScript's"
   } else if (name === "console.log" || name === "console.error") {
-    out.push(
-      new PortabilityFinding(
-        node,
-        `\`${name}\` prints a negative zero as 0 here, and Node's console prints -0`
-      )
-    )
+    fragment = "prints a negative zero as 0 here, and Node's console prints -0"
+  } else {
+    return
   }
+  out.push(new PortabilityFinding(node, `\`${name}\` ${fragment}`))
 }
 
 // ---- NL8009: 64-bit declarations ----------------------------------------------
 
 /** Whether a declaration of `type` holds a double under TypeScript and 64 bits here. */
-const isWide = (type: i32): boolean => type === T_I64 || type === T_U64
+const isWide = (type: i32): boolean => intBits(type) === 64
 
 /** The whole NL8009 message, after the declaration's own words. */
 const wideFinding = (node: Node, what: string): PortabilityFinding =>
@@ -198,17 +180,15 @@ const localFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
 
 /**
  * The parameters and the return type of the function whose body this is. They
- * sit beside the body rather than in it, on the declaration above it: a
+ * sit beside the body rather than in it, on `sig.decl`, the declaration the
+ * body was read from (`FunctionSig.body`): a
  * constructor has its parameters first and no return type, and every other
  * function — a method, a declaration, an arrow — has a name, the parameters
  * and then the return type. The receiver of a method is `paramTypes[0]` with
  * no node, which is why the two lists are aligned from the end.
  */
 const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
-  const decl = walk.parents.parentOf(walk.body)
-  if (decl === null || !isFunctionShaped(decl)) {
-    return
-  }
+  const decl = walk.sig.decl
   const ctor = decl.kind === N_CONSTRUCTOR
   const at: i32 = ctor ? 0 : 1
   const params = decl.children[at].children
@@ -216,8 +196,9 @@ const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): vo
   const skip = types.length - params.length
   let i: i32 = 0
   while (i < params.length) {
+    const name = params[i].children[0]
     if (isWide(types[skip + i])) {
-      out.push(wideFinding(params[i].children[0], `\`${params[i].children[0].text}\``))
+      out.push(wideFinding(name, `\`${name.text}\``))
     }
     i = i + 1
   }
@@ -232,10 +213,6 @@ const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): vo
   }
 }
 
-/** The declarations a body hangs from, each with its parameters where `signatureFindings` reads them. */
-const isFunctionShaped = (decl: Node): boolean =>
-  decl.kind === N_FUNCTION || decl.kind === N_METHOD || decl.kind === N_ARROW || decl.kind === N_CONSTRUCTOR
-
 /**
  * Whether this is the first body `portabilityFindings` walks in the module,
  * which is where the declarations that belong to no body are reported, once.
@@ -245,7 +222,9 @@ const isFunctionShaped = (decl: Node): boolean =>
 const isFirstBody = (walk: PortabilityWalk): boolean => {
   const program = walk.program
   for (const sig of program.functions) {
-    if (sig.body() !== null && !sig.poisoned && sig.definedIn(program.source)) {
+    // `portabilityFindings`'s filter, with the imported signatures, which
+    // come first, turned away before `body()` is read.
+    if (sig.definedIn(program.source) && !sig.poisoned && sig.body() !== null) {
       return sig === walk.sig
     }
   }
