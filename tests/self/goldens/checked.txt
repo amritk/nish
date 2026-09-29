@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 794 programs, 52622 dump lines.
+# 795 programs, 52970 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4961,6 +4961,355 @@ function indexedLookup(table: u32[], secret: u32): u32 -> @indexedLookup [export
   calls: nish_panic_index
   pointer table: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+program tests/cases/ct_asm_x25519.ts
+module tests/cases/ct_asm_x25519.ts (entry)
+const HEX_DIGITS: string = "0123456789abcdef"
+function fieldWidth(i: i32): i64 -> @fieldWidth
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 35:9 odd: i64 (const)
+function fieldLimbMask(i: i32): i64 -> @fieldLimbMask
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: fieldWidth
+  stackSites=0 stackLocals=0
+  callee 40:53 fieldWidth -> @fieldWidth
+function fieldCopy(out: i64[], f: i64[]): void -> @fieldCopy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 45:5
+  calls: nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
+  pointer f: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 44:12 i: i32 (let)
+function fieldCarryChain(h: i64[]): void -> @fieldCarryChain
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 53:5
+  calls: fieldLimbMask fieldWidth nish_panic_index
+  pointer h: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 51:12 i: i32 (let)
+  local 52:11 c: i64 (const)
+  callee 52:28 fieldWidth -> @fieldWidth
+  callee 53:19 fieldLimbMask -> @fieldLimbMask
+function fieldCarry(h: i64[]): void -> @fieldCarry
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 62:3
+  calls: fieldCarryChain fieldLimbMask nish_panic_index
+  pointer h: size=0 writesThrough=true captured=false passedTo=fieldCarryChain#0
+  stackSites=0 stackLocals=0
+  callee 60:3 fieldCarryChain -> @fieldCarryChain
+  local 61:9 top: i64 (const)
+  callee 62:17 fieldLimbMask -> @fieldLimbMask
+  local 64:9 c0: i64 (const)
+  callee 65:17 fieldLimbMask -> @fieldLimbMask
+function fieldAdd(out: i64[], f: i64[], g: i64[]): void -> @fieldAdd [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 72:5
+  calls: nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
+  pointer f: size=0 writesThrough=false captured=false
+  pointer g: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 71:12 i: i32 (let)
+function fieldSub(out: i64[], f: i64[], g: i64[]): void -> @fieldSub [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 79:5
+  calls: nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
+  pointer f: size=0 writesThrough=false captured=false
+  pointer g: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 78:12 i: i32 (let)
+function fieldMulRow(wide: i64[], f: i64[], doubled: i64[], g: i64[], i: i32): void -> @fieldMulRow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 89:7
+  escaping: i
+  calls: nish_panic_index
+  pointer wide: size=0 writesThrough=true captured=false
+  pointer f: size=0 writesThrough=false captured=false
+  pointer doubled: size=0 writesThrough=false captured=false
+  pointer g: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 85:12 j: i32 (let)
+  local 86:11 k: i32 (const)
+  local 87:11 fi: i64 (const)
+function fieldMul(out: i64[], f: i64[], g: i64[]): void -> @fieldMul [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldMulRow
+  calls: fieldCarry fieldCopy fieldMulRow nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldCopy#0
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1 fieldMulRow#1
+  pointer g: size=0 writesThrough=false captured=false passedTo=fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3 fieldMulRow#3
+  stackSites=3 stackLocals=3
+  local 96:9 doubled: i64[] (const)
+  local 97:12 i: i32 (let)
+  local 100:9 wide: i64[] (const)
+  callee 101:3 fieldMulRow -> @fieldMulRow
+  callee 102:3 fieldMulRow -> @fieldMulRow
+  callee 103:3 fieldMulRow -> @fieldMulRow
+  callee 104:3 fieldMulRow -> @fieldMulRow
+  callee 105:3 fieldMulRow -> @fieldMulRow
+  callee 106:3 fieldMulRow -> @fieldMulRow
+  callee 107:3 fieldMulRow -> @fieldMulRow
+  callee 108:3 fieldMulRow -> @fieldMulRow
+  callee 109:3 fieldMulRow -> @fieldMulRow
+  callee 110:3 fieldMulRow -> @fieldMulRow
+  local 111:9 h: i64[] (const)
+  local 112:12 k: i32 (let)
+  callee 116:3 fieldCarry -> @fieldCarry
+  callee 117:3 fieldCopy -> @fieldCopy
+function fieldSquare(out: i64[], f: i64[]): void -> @fieldSquare [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldMul
+  calls: fieldMul
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldMul#0
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldMul#1 fieldMul#2
+  stackSites=0 stackLocals=0
+  callee 122:3 fieldMul -> @fieldMul
+function fieldMulA24(out: i64[], f: i64[]): void -> @fieldMulA24 [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 128:5
+  calls: fieldCarry nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldCarry#0
+  pointer f: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 127:12 i: i32 (let)
+  callee 130:3 fieldCarry -> @fieldCarry
+function condSwap(f: i64[], g: i64[], bit: i64): void -> @condSwap [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 138:5
+  calls: nish_panic_index
+  pointer f: size=0 writesThrough=true captured=false
+  pointer g: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 135:9 mask: i64 (const)
+  local 136:12 i: i32 (let)
+  local 137:11 t: i64 (const)
+function ladderStep(x2: i64[], z2: i64[], x3: i64[], z3: i64[], u: i64[], swap: i64): void -> @ladderStep [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via condSwap
+  escaping: swap
+  calls: condSwap fieldAdd fieldMul fieldMulA24 fieldSquare fieldSub
+  pointer x2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#1 fieldSub#1 fieldMul#0
+  pointer z2: size=0 writesThrough=true captured=false passedTo=condSwap#0 fieldAdd#2 fieldSub#2 fieldMul#0
+  pointer x3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#1 fieldSub#1 fieldSquare#0
+  pointer z3: size=0 writesThrough=true captured=false passedTo=condSwap#1 fieldAdd#2 fieldSub#2 fieldMul#0
+  pointer u: size=0 writesThrough=false captured=false passedTo=fieldMul#1
+  stackSites=10 stackLocals=10
+  local 149:9 a: i64[] (const)
+  local 150:9 aa: i64[] (const)
+  local 151:9 b: i64[] (const)
+  local 152:9 bb: i64[] (const)
+  local 153:9 e: i64[] (const)
+  local 154:9 c: i64[] (const)
+  local 155:9 d: i64[] (const)
+  local 156:9 da: i64[] (const)
+  local 157:9 cb: i64[] (const)
+  local 158:9 t: i64[] (const)
+  callee 159:3 condSwap -> @condSwap
+  callee 160:3 condSwap -> @condSwap
+  callee 161:3 fieldAdd -> @fieldAdd
+  callee 162:3 fieldSquare -> @fieldSquare
+  callee 163:3 fieldSub -> @fieldSub
+  callee 164:3 fieldSquare -> @fieldSquare
+  callee 165:3 fieldSub -> @fieldSub
+  callee 166:3 fieldAdd -> @fieldAdd
+  callee 167:3 fieldSub -> @fieldSub
+  callee 168:3 fieldMul -> @fieldMul
+  callee 169:3 fieldMul -> @fieldMul
+  callee 170:3 fieldAdd -> @fieldAdd
+  callee 171:3 fieldSquare -> @fieldSquare
+  callee 172:3 fieldSub -> @fieldSub
+  callee 173:3 fieldSquare -> @fieldSquare
+  callee 174:3 fieldMul -> @fieldMul
+  callee 175:3 fieldMul -> @fieldMul
+  callee 176:3 fieldMulA24 -> @fieldMulA24
+  callee 177:3 fieldAdd -> @fieldAdd
+  callee 178:3 fieldMul -> @fieldMul
+function indexAfterMul(f: i64[], g: i64[], table: i64[]): i64 -> @indexAfterMul [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldMul
+  calls: fieldMul nish_panic_index
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldMul#1
+  pointer g: size=0 writesThrough=false captured=false passedTo=fieldMul#2
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 187:9 h: i64[] (const)
+  callee 188:3 fieldMul -> @fieldMul
+function fieldDecode(bytes: u8[]): i64[] -> @fieldDecode
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 210:9
+  calls: fieldLimbMask fieldWidth nish_panic_index
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 196:9 f: i64[] (const)
+  local 197:7 acc: i64 (let)
+  local 198:7 bits: i64 (let)
+  local 199:7 limb: i32 (let)
+  local 200:12 i: i32 (let)
+  local 201:9 v: i64 (let)
+  local 208:13 width: i64 (const)
+  callee 208:26 fieldWidth -> @fieldWidth
+  callee 210:25 fieldLimbMask -> @fieldLimbMask
+function fieldEncode(f: i64[]): u8[] -> @fieldEncode
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 241:7
+  calls: fieldCarry fieldCarryChain fieldCopy fieldLimbMask fieldWidth
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldCopy#1
+  stackSites=1 stackLocals=1
+  local 222:9 h: i64[] (const)
+  callee 223:3 fieldCopy -> @fieldCopy
+  callee 224:3 fieldCarry -> @fieldCarry
+  callee 225:3 fieldCarry -> @fieldCarry
+  local 226:7 q: i64 (let)
+  local 227:12 i: i32 (let)
+  callee 228:23 fieldWidth -> @fieldWidth
+  callee 231:3 fieldCarryChain -> @fieldCarryChain
+  callee 232:17 fieldLimbMask -> @fieldLimbMask
+  local 233:9 out: u8[] (const)
+  local 234:7 acc: i64 (let)
+  local 235:7 bits: i64 (let)
+  local 236:7 at: i32 (let)
+  local 237:12 i: i32 (let)
+  callee 239:19 fieldWidth -> @fieldWidth
+function fieldSquareTimes(out: i64[], f: i64[], n: i32): void -> @fieldSquareTimes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldSquare
+  calls: fieldSquare
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldSquare#0 fieldSquare#0 fieldSquare#1
+  pointer f: size=0 writesThrough=false captured=false passedTo=fieldSquare#1
+  stackSites=0 stackLocals=0
+  callee 255:3 fieldSquare -> @fieldSquare
+  local 256:12 i: i32 (let)
+  callee 257:5 fieldSquare -> @fieldSquare
+function fieldInvert(out: i64[], z: i64[]): void -> @fieldInvert
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldSquare
+  calls: fieldMul fieldSquare fieldSquareTimes
+  pointer out: size=0 writesThrough=true captured=false passedTo=fieldMul#0
+  pointer z: size=0 writesThrough=false captured=false passedTo=fieldSquare#1 fieldMul#2 fieldMul#2
+  stackSites=8 stackLocals=8
+  local 263:9 z2: i64[] (const)
+  local 264:9 z11: i64[] (const)
+  local 265:9 e2: i64[] (const)
+  local 266:9 e5: i64[] (const)
+  local 267:9 e10: i64[] (const)
+  local 268:9 e50: i64[] (const)
+  local 269:9 t: i64[] (const)
+  local 270:9 acc: i64[] (const)
+  callee 271:3 fieldSquare -> @fieldSquare
+  callee 272:3 fieldMul -> @fieldMul
+  callee 273:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 274:3 fieldMul -> @fieldMul
+  callee 275:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 276:3 fieldMul -> @fieldMul
+  callee 277:3 fieldSquare -> @fieldSquare
+  callee 278:3 fieldMul -> @fieldMul
+  callee 279:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 280:3 fieldMul -> @fieldMul
+  callee 281:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 282:3 fieldMul -> @fieldMul
+  callee 283:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 284:3 fieldMul -> @fieldMul
+  callee 285:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 286:3 fieldMul -> @fieldMul
+  callee 287:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 288:3 fieldMul -> @fieldMul
+  callee 289:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 290:3 fieldMul -> @fieldMul
+  callee 291:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 292:3 fieldMul -> @fieldMul
+  callee 293:3 fieldSquareTimes -> @fieldSquareTimes
+  callee 294:3 fieldMul -> @fieldMul
+function ladder(scalar: u8[], uBytes: u8[]): u8[] -> @ladder
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fieldDecode
+  calls: condSwap fieldCopy fieldDecode fieldEncode fieldInvert fieldMul ladderStep nish_panic_index
+  pointer scalar: size=0 writesThrough=false captured=false
+  pointer uBytes: size=0 writesThrough=false captured=false passedTo=fieldDecode#0
+  stackSites=6 stackLocals=6
+  local 299:9 k: u8[] (const)
+  local 300:12 i: i32 (let)
+  local 305:9 u: i64[] (const)
+  callee 305:20 fieldDecode -> @fieldDecode
+  local 306:9 x2: i64[] (const)
+  local 308:9 z2: i64[] (const)
+  local 309:9 x3: i64[] (const)
+  callee 310:3 fieldCopy -> @fieldCopy
+  local 311:9 z3: i64[] (const)
+  local 313:7 swap: i64 (let)
+  local 314:12 byte: i32 (let)
+  local 315:14 shift: i32 (let)
+  local 319:13 bit: i64 (const)
+  callee 321:7 ladderStep -> @ladderStep
+  callee 325:3 condSwap -> @condSwap
+  callee 326:3 condSwap -> @condSwap
+  local 327:9 t: i64[] (const)
+  callee 328:3 fieldInvert -> @fieldInvert
+  callee 329:3 fieldMul -> @fieldMul
+  callee 330:10 fieldEncode -> @fieldEncode
+function hexNibble(code: i32): i32 -> @hexNibble
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fromHex(text: string): u8[] -> @fromHex
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 342:5
+  calls: hexNibble nish_panic_index
+  stackSites=0 stackLocals=0
+  local 338:9 out: u8[] (const)
+  local 339:12 i: i32 (let)
+  local 340:11 high: i32 (const)
+  callee 340:23 hexNibble -> @hexNibble
+  local 341:11 low: i32 (const)
+  callee 341:22 hexNibble -> @hexNibble
+function toHex(bytes: u8[] | null): string -> @toHex
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_panic_index nish_str_new
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 351:9 digits: string[] (const)
+  local 352:12 i: i32 (let)
+  local 353:11 v: i32 (const)
+function check(label: string, got: string, want: string): i32 -> @check
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_eq
+  stackSites=0 stackLocals=0
+function iterate(times: i32): string -> @iterate
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 373:3
+  calls: ladder toHex
+  stackSites=0 stackLocals=0
+  local 372:7 k: u8[] (let)
+  local 374:7 u: u8[] (let)
+  local 376:12 i: i32 (let)
+  local 377:11 next: u8[] (const)
+  callee 377:24 ladder -> @ladder
+  callee 381:10 toHex -> @toHex
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via check
+  calls: check fromHex iterate ladder nish_arena_mark nish_arena_release toHex
+  stackSites=0 stackLocals=0
+  local 385:7 failed: i32 (let)
+  callee 388:5 check -> @check
+  callee 390:7 toHex -> @toHex
+  callee 391:9 ladder -> @ladder
+  callee 392:11 fromHex -> @fromHex
+  callee 393:11 fromHex -> @fromHex
+  callee 400:5 check -> @check
+  callee 402:7 toHex -> @toHex
+  callee 403:9 ladder -> @ladder
+  callee 404:11 fromHex -> @fromHex
+  callee 405:11 fromHex -> @fromHex
+  callee 412:5 check -> @check
+  callee 414:7 toHex -> @toHex
+  callee 415:9 ladder -> @ladder
+  callee 416:11 fromHex -> @fromHex
+  callee 417:11 fromHex -> @fromHex
+  callee 424:5 check -> @check
+  callee 426:7 iterate -> @iterate
 program tests/cases/ct_eq_u32.ts --number-mode f64
 module tests/cases/ct_eq_u32.ts (entry)
 function show(a: u32, b: u32): void -> @show
