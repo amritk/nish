@@ -1,0 +1,1 @@
+declare noundef zeroext i1 @isHigh(i32 noundef)

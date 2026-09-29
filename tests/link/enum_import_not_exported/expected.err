@@ -1,0 +1,1 @@
+`Kind` is declared in `./kinds` but not exported (add `export`)
