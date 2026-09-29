@@ -317,7 +317,10 @@ class Taint {
   }
 }
 
-const X86_BRANCH = /^(j(?!mp\b)[a-z]+|loop\w*|j[er]?cxz)$/
+/** `jmp` in every width AT&T spells it; unconditional, so read as a jump and never as a branch. */
+const X86_JUMP = /^jmp[wlq]?$/
+/** The conditional jumps: every `j<cc>` (anything `X86_JUMP` is not), the `loop` family and `jcxz`. */
+const X86_BRANCH = /^(j[a-z]+|loop\w*)$/
 const X86_OVERWRITE =
   /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf|bsf|bsr|tzcnt|lzcnt|popcnt)/
 const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
@@ -331,7 +334,7 @@ const X86_WIDE = /^(i?mul|i?div)[bwlq]?$/
 
 /** One x86-64 (AT&T) instruction: the violation it is, if any, and its effect on `t`. */
 const stepX86 = (t, mnemonic, operands) => {
-  if (X86_BRANCH.test(mnemonic)) {
+  if (!X86_JUMP.test(mnemonic) && X86_BRANCH.test(mnemonic)) {
     return "branch"
   }
   if (mnemonic.startsWith("call")) {
@@ -339,7 +342,7 @@ const stepX86 = (t, mnemonic, operands) => {
   }
   // A jump to a local label is control flow inside the function; one anywhere
   // else is a tail call or an indirect jump, code this check does not read.
-  if (mnemonic === "jmp") {
+  if (X86_JUMP.test(mnemonic)) {
     return operands.length === 1 && operands[0].startsWith(".L") ? null : "call"
   }
   if (mnemonic.startsWith("ret") || mnemonic.startsWith("nop") || mnemonic === "endbr64") {

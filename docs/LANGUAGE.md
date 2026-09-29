@@ -3489,8 +3489,8 @@ choice (WP34 N6).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_i32_literal`, `reject_ct_select_f64`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
-| `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
+| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_i32_literal`, `reject_ct_select_f64`, `reject_ct_select_f32`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
+| `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_f64`, `reject_ct_eq_f32`, `reject_ct_eq_bool`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
 
 - **`T` is `u32` or `u64`, one type for every operand.** A mask is a bit
   pattern, and the unsigned words are the only types whose all-ones is not also

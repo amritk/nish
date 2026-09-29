@@ -2691,7 +2691,9 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // The model's own corners, on hand-written assembly: each of these hides a secret
     // from a model that is one rule short — flags a `not` leaves alone, a bit-set that
     // writes its operand, a byte write that keeps the upper bits, a spill reloaded after
-    // the stack pointer moved, a tail call — and each must still be refused.
+    // the stack pointer moved, a tail call — and each must still be refused. Beside
+    // them, a jump that must not be over-read: a size-suffixed `jmpq` is a jump, never
+    // a conditional branch.
     const [x86, arm] = CT_TARGETS
     const corners = [
       [x86, "a,b", "load", ["cmpl %esi, %edi", "notl %ecx", "sbbl %eax, %eax", "movl (%rdx,%rax,4), %eax"]],
@@ -2699,6 +2701,10 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       [x86, "b", "load", ["movl %esi, %ecx", "movb $0, %cl", "movl (%rdi,%rcx,4), %eax"]],
       [x86, "b", "load", ["pushq %rsi", "subq $8, %rsp", "movq 8(%rsp), %rax", "movl (%rdi,%rax,4), %eax"]],
       [x86, "a", "call", ["jmp helper"]],
+      // A size-suffixed jump is still a jump: out of the function it is a call,
+      // and to a local label it is nothing at all, never a conditional branch.
+      [x86, "a", "call", ["jmpq *%rax"]],
+      [x86, "a", null, ["jmpq .LBB0_2"]],
       [arm, "a,b", "load", ["cmp w0, w1", "mls w8, w9, w10, w11", "csetm x2, eq", "ldr w3, [x4, x2]"]],
       [
         arm,
@@ -2708,15 +2714,20 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       ],
       [arm, "a", "call", ["b helper"]],
     ]
+    // A `null` kind is a shape that must come through with no violation at all.
     const missed = corners.filter(([target, secret, kind, body]) => {
       const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
-      return !ctViolations(body, spec, target).some((v) => v.kind === kind)
+      const found = ctViolations(body, spec, target)
+      return kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)
     })
     check(
-      `ct_asm: tests/ct-asm.js refuses ${corners.length} hand-written leaks at the corners of its model`,
+      `ct_asm: tests/ct-asm.js reads ${corners.length} hand-written snippets at the corners of its model as it should`,
       missed.length === 0,
       missed
-        .map(([target, , kind, body]) => `${target.name}, expected ${kind}:\n  ${body.join("\n  ")}`)
+        .map(
+          ([target, , kind, body]) =>
+            `${target.name}, expected ${kind ?? "no violation"}:\n  ${body.join("\n  ")}`
+        )
         .join("\n")
     )
 
