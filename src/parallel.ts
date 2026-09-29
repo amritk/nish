@@ -46,7 +46,13 @@ import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
 import { numericLiteralValue } from "./constants"
 import { isScalarArgument } from "./escape"
-import { isArrayWriteMethod, isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
+import {
+  isArrayWriteMethod,
+  isAssignmentOperator,
+  isRandomFillCall,
+  isTemplateExpression,
+  unwrapParens,
+} from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
@@ -1191,6 +1197,13 @@ const regionCallMessage = (
     }
     if (state.isDestination(namedLocal(program, receiver))) {
       return regionReadMessage(state, receiver.text)
+    }
+    // WP34 N3: `crypto.getRandomValues(a)` writes `a`'s elements as `fill` does.
+    if (isRandomFillCall(program, node) && node.children[1].children.length > 0) {
+      const target = node.children[1].children[0]
+      if (!uses.isPrivate(namedLocal(program, target))) {
+        return regionWriteMessage(state, "`crypto.getRandomValues`")
+      }
     }
     // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
     // store to `a[i]` does, so they are refused where `push` and `pop` are.

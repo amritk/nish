@@ -135,6 +135,26 @@ export const isArrayWriteMethod = (name: string): boolean =>
   name === "push" || name === "pop" || name === "set" || name === "fill"
 
 /**
+ * `crypto.getRandomValues(bytes)` (WP34 N3): the one builtin call that writes
+ * the elements of an array it is handed as an argument rather than as a
+ * receiver. The parameter classification, the fact collector and a scope's
+ * region rule ask this, each for the reason it asks `isArrayWriteMethod`.
+ */
+export const isRandomFillCall = (program: CheckedProgram, call: Node): boolean => {
+  if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER) {
+    return false
+  }
+  const access = call.children[0]
+  const receiver = access.children[0]
+  return (
+    access.text === "getRandomValues" &&
+    receiver.kind === N_IDENT &&
+    receiver.text === "crypto" &&
+    !receiverIsValue(program, receiver)
+  )
+}
+
+/**
  * The builtin a plain-identifier call reaches: the one a `nish:` import bound,
  * which the checker recorded, or else the identifier's own text.
  */

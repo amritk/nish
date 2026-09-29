@@ -503,6 +503,17 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Arena.used") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_used")}()`)
   }
+  // WP34 N3: one call each into runtime-host.c. The array goes to the runtime
+  // as its header, which the runtime reads `len` and `data` from.
+  if (name === "Date.now") {
+    return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_date_now")}()`)
+  }
+  if (name === "crypto.getRandomValues") {
+    emitter.declareType(ARRAY_TYPE)
+    const bytes = emitter.emitExpression(firstArgument(expr))
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_random_fill")}(${ARRAY_STRUCT}* ${bytes})`)
+    return "void"
+  }
   process.exit(internalErrorFor(`emitter: unexpected builtin \`${name}\``, emitter.opts.json))
 }
 
@@ -596,6 +607,14 @@ export const builtinCalleesNamed = (
   }
   if (name === "Arena.used") {
     out.push("nish_arena_used")
+    return out
+  }
+  if (name === "Date.now") {
+    out.push("nish_date_now")
+    return out
+  }
+  if (name === "crypto.getRandomValues") {
+    out.push("nish_random_fill")
     return out
   }
   return out
@@ -741,6 +760,21 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call ${ARRAY_STRUCT}* ${emitter.useRuntime("nish_read_file_bytes")}(${stringArgs(emitter, expr)})`
     )
   }
+  // WP34 N3: runtime-host.c. `statMtimeSync` answers the runtime's double as
+  // it is, NaN included; the fd and the signal number are `i32` in either
+  // number mode, so nothing is widened.
+  if (name === "statMtimeSync") {
+    return emitter.fn.emitValue(
+      `call double ${emitter.useRuntime("nish_stat_mtime")}(${stringArgs(emitter, expr)})`
+    )
+  }
+  if (name === "signalFd") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_signal_fd")}()`)
+  }
+  if (name === "readSignal") {
+    const fd = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
   }
@@ -859,6 +893,18 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "readFileBytesSync") {
     out.push("nish_read_file_bytes")
+    return out
+  }
+  if (name === "statMtimeSync") {
+    out.push("nish_stat_mtime")
+    return out
+  }
+  if (name === "signalFd") {
+    out.push("nish_signal_fd")
+    return out
+  }
+  if (name === "readSignal") {
+    out.push("nish_read_signal")
     return out
   }
   if (name === "write" || name === "writeError") {

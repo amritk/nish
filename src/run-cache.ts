@@ -102,6 +102,7 @@ export const runCacheKey = (
   key.add(`runtime.c ${fileFingerprint(`${root}/runtime/runtime.c`)}\n`)
   key.add(`runtime-os.c ${fileFingerprint(`${root}/runtime/runtime-os.c`)}\n`)
   key.add(`runtime-parallel.c ${fileFingerprint(`${root}/runtime/runtime-parallel.c`)}\n`)
+  key.add(`runtime-host.c ${fileFingerprint(`${root}/runtime/runtime-host.c`)}\n`)
   key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)

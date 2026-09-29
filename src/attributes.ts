@@ -64,6 +64,7 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isPushCall,
+  isRandomFillCall,
   isStringMethodCall,
   isTemplateExpression,
   rangedStoreOf,
@@ -839,6 +840,11 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE)
     }
+    // WP34 N3: `crypto.getRandomValues(p)` writes every element of `p` and
+    // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
+    if (isRandomFillCall(program, owner)) {
+      return use(USE_WRITE)
+    }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
     // nothing — the elements are numbers, and the copy is a `memmove` whose
     // source is `nocapture readonly`.
@@ -1304,6 +1310,11 @@ class FactCollector {
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       this.addCallees(builtinCallees(program, table, node))
+      // WP34 N3: the entropy fill writes its argument's elements, which is
+      // a write to a shared array unless the array is this function's own.
+      if (isRandomFillCall(program, node) && node.children[1].children.length > 0) {
+        this.noteArrayWrite(node, node.children[1].children[0])
+      }
       return
     }
     if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {

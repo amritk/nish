@@ -27,6 +27,8 @@ import {
   checkBuiltinFunctionNamed,
   checkImportedDottedBuiltin,
   checkNamespaceProperty,
+  cryptoValueRefusal,
+  dateRefusal,
   isBuiltinFunction,
 } from "./builtins"
 import { BuiltinExport } from "./nish-modules"
@@ -457,6 +459,11 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     ctx.program.nodeBuiltins[expr.id] = imported.canonical
     return checkNamespaceProperty(ctx, expr, imported.namespace, imported.member)
+  }
+  // WP34 N3: `Date` and `crypto` are namespaces, reached only through their
+  // one member each; as a value either is named by its rule.
+  if (expr.text === "Date" || expr.text === "crypto") {
+    return ctx.errorType(expr, expr.text === "Date" ? dateRefusal("Date") : cryptoValueRefusal())
   }
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``)
 }
@@ -1509,6 +1516,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // repeats that refusal rather than finding a new one.
     if (local !== null && scope.typeOf(local) === T_ERROR) {
       return T_ERROR
+    }
+    if (callee.text === "Date") {
+      return ctx.errorType(expr, dateRefusal("Date()"))
     }
     return ctx.errorType(callee, `Unknown function \`${callee.text}\``)
   }

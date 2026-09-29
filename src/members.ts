@@ -10,7 +10,7 @@
 // keep in mind rather than something the shape enforces.
 
 import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays"
-import { checkBuiltinArity, checkNamespaceProperty } from "./builtins"
+import { checkBuiltinArity, checkNamespaceProperty, dateRefusal } from "./builtins"
 import { checkResultMethod, checkResultProperty } from "./result"
 import { CheckContext } from "./context"
 import { internalErrorFor } from "./ice"
@@ -397,6 +397,11 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     info = ctx.program.struct(name)
   }
   if (info === null) {
+    // WP34 N3: the one `new` a TypeScript reader reaches for most, named by
+    // its rule rather than as a class this program forgot to declare.
+    if (name === "Date") {
+      return ctx.errorType(expr, dateRefusal("new Date()"))
+    }
     return ctx.errorType(callee, `Unknown class \`${name}\``)
   }
   if (info.kind !== STRUCT_CLASS) {

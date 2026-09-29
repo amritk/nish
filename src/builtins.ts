@@ -13,6 +13,7 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
+import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
@@ -47,7 +48,42 @@ const isF64Unary = (name: string): boolean =>
 
 /** Whether a bare identifier names a builtin namespace rather than a value. */
 const isNamespace = (name: string): boolean =>
-  name === "console" || name === "Math" || name === "process" || name === "String" || name === "Arena"
+  name === "console" ||
+  name === "Math" ||
+  name === "process" ||
+  name === "String" ||
+  name === "Arena" ||
+  name === "Date" ||
+  name === "crypto"
+
+/**
+ * WP34 N3. `Date` is a namespace with one member, the wall clock. Everything
+ * else JavaScript hangs on it — `new Date()`, `Date.parse`, `Date.UTC`, a
+ * `Date` passed as a value — is an object with a time zone and a calendar, so
+ * each is refused by this one rule, wherever the checker meets it.
+ */
+export const dateRefusal = (what: string): string =>
+  `\`${what}\` is refused: Nish has no \`Date\` object; the one \`Date\` member is \`Date.now()\`, the wall clock in milliseconds`
+
+/** The same for `crypto`, whose one member is the entropy source. */
+const cryptoRefusal = (what: string): string =>
+  `\`${what}\` is refused: the one \`crypto\` member is \`crypto.getRandomValues(bytes)\``
+
+/** `crypto` itself as a value. */
+export const cryptoValueRefusal = (): string => cryptoRefusal("crypto")
+
+/**
+ * WP34 N3. The host builtins call `runtime-host.c`, which is empty on a wasm
+ * target, so there they are refused here rather than failing to link. True
+ * when the call was refused.
+ */
+const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
+  if (!ctx.wasm) {
+    return false
+  }
+  ctx.error(call, `\`${name}\` reaches the operating system, and a wasm32 build has none to reach`)
+  return true
+}
 
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
 const conversionTarget = (name: string): i32 => {
@@ -105,7 +141,10 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "monotonicNanos" ||
     name === "isDirectorySync" ||
     name === "getenv" ||
-    name === "realpathSync"
+    name === "realpathSync" ||
+    name === "statMtimeSync" ||
+    name === "signalFd" ||
+    name === "readSignal"
   )
 }
 
@@ -243,6 +282,12 @@ export const checkNamespaceProperty = (
   if (namespace === "process" && (member === "platform" || member === "arch")) {
     return T_STRING
   }
+  if (namespace === "Date") {
+    return ctx.errorType(expr, dateRefusal(`Date.${member}`))
+  }
+  if (namespace === "crypto") {
+    return ctx.errorType(expr, cryptoRefusal(`crypto.${member}`))
+  }
   if (!isNamespace(namespace)) {
     return ctx.errorType(expr.children[0], `Unknown identifier \`${namespace}\``)
   }
@@ -265,7 +310,8 @@ export const checkNamespaceProperty = (
 const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, Math.sqrt, Math.floor, Math.ceil, Math.trunc, " +
   "Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
-  "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used"
+  "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, " +
+  "crypto.getRandomValues"
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
 const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 =>
@@ -310,6 +356,12 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
   }
   if (namespace === "Arena") {
     return checkArena(ctx, call, args, name, member, scope)
+  }
+  if (namespace === "Date") {
+    return checkDate(ctx, call, args, name, member)
+  }
+  if (namespace === "crypto") {
+    return checkCrypto(ctx, call, args, name, member, scope)
   }
   if (member === "fromCharCode") {
     if (checkBuiltinArity(ctx, call, "String.fromCharCode", args, 1)) {
@@ -461,6 +513,56 @@ const checkArena = (
     return T_VOID
   }
   return unknownBuiltin(ctx, call.children[0], name)
+}
+
+/**
+ * WP34 N3: `Date.now()`, the wall clock in whole milliseconds since the epoch,
+ * as JavaScript answers it. An `f64` in either number mode: an `i32` of
+ * milliseconds overflowed in January 1970, and a double holds every
+ * millisecond exactly for the next 285,000 years.
+ */
+const checkDate = (ctx: CheckContext, call: Node, args: Node, name: string, member: string): i32 => {
+  if (member !== "now") {
+    return ctx.errorType(call.children[0], dateRefusal(name))
+  }
+  if (checkBuiltinArity(ctx, call, name, args, 0)) {
+    refuseOnWasm(ctx, call, name)
+  }
+  return T_F64
+}
+
+/**
+ * WP34 N3: `crypto.getRandomValues(bytes)` fills every byte of a `u8[]` from
+ * the kernel's CSPRNG. Only a `u8[]`, where the Web API takes any integer
+ * typed array: the bytes are the unit a key or a nonce is written in, and a
+ * wider element would make the byte order of the answer a fact about the
+ * machine. A statement, where the Web API also answers its argument, because
+ * the argument is already in the caller's hands and an alias of it as the
+ * value would be a second name for one buffer.
+ */
+const checkCrypto = (
+  ctx: CheckContext,
+  call: Node,
+  args: Node,
+  name: string,
+  member: string,
+  scope: Scope
+): i32 => {
+  if (member !== "getRandomValues") {
+    return ctx.errorType(call.children[0], cryptoRefusal(name))
+  }
+  if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+    const bytes = ctx.table.arrayOf(T_U8)
+    const arg = args.children[0]
+    const got = checkExpression(ctx, arg, scope, bytes)
+    if (got !== T_ERROR && ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === T_U8) {
+      ctx.error(arg, readonlyWriteMessage(ctx, got, `\`${name}\` through`))
+    } else if (got !== T_ERROR && got !== bytes) {
+      ctx.error(arg, `\`${name}\` fills a \`u8[]\`, got ${ctx.table.typeName(got)}`)
+    }
+  }
+  requireStatementPosition(ctx, call, name)
+  return T_VOID
 }
 
 // ---- Plain calls ----------------------------------------------------------------------
@@ -646,6 +748,33 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
     }
     return ctx.table.nullableOf(T_STRING)
+  }
+  // WP34 N3. The file's modification time in milliseconds, with the
+  // sub-millisecond part the file system keeps, as Node's `mtimeMs` is. An
+  // `f64` in either number mode, and NaN rather than `null` for a path that
+  // cannot be stat'd: a scalar has no null, and NaN is JavaScript's own answer
+  // for a time that is not one (`Date.parse`). A directory has a time.
+  if (name === "statMtimeSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_F64
+  }
+  // WP34 N3. A descriptor, rather than a handler a function value would need,
+  // that becomes readable when SIGTERM or SIGINT arrives, and the blocking
+  // read that says which. Both `i32` in either number mode, because a
+  // descriptor is one: an `f64` fd is refused, not converted.
+  if (name === "signalFd") {
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnWasm(ctx, call, name)
+    }
+    return T_I32
+  }
+  if (name === "readSignal") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+    }
+    return T_I32
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``)
 }

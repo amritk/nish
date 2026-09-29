@@ -632,6 +632,7 @@ export class Compilation {
       this.opts.strictExports,
       packageName
     )
+    checker.ctx.wasm = this.opts.profile === "wasi" || this.opts.target.startsWith("wasm")
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of

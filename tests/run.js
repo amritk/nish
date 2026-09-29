@@ -76,10 +76,12 @@ const buildDir = path.join(root, "build", "test")
 fs.mkdirSync(buildDir, { recursive: true })
 
 /**
- * The C runtime's two translation units, as a direct `clang` line has to spell
- * them: `runtime.c` is the core every program touches and `runtime-os.c` is the
- * half that wraps the system calls, split apart so that each carries its own
- * `.text*` budget (RUNTIME_TEXT_BUDGET and RUNTIME_OS_TEXT_BUDGET below).
+ * The C runtime's translation units, as a direct `clang` line has to spell
+ * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
+ * system calls, `runtime-parallel.c` divides work across threads and
+ * `runtime-host.c` holds the wall clock, entropy, file times and signals, split
+ * apart so that each carries its own `.text*` budget (the `*_TEXT_BUDGET`
+ * constants below).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -87,7 +89,12 @@ fs.mkdirSync(buildDir, { recursive: true })
  * line this suite gets wrong should fail as a link error rather than be quietly
  * repaired on the way past.
  */
-const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime-os.c", "runtime/runtime-parallel.c"]
+const RUNTIME_C = [
+  "runtime/runtime.c",
+  "runtime/runtime-os.c",
+  "runtime/runtime-parallel.c",
+  "runtime/runtime-host.c",
+]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c")
@@ -4663,7 +4670,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c and runtime-parallel.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -5148,6 +5155,27 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 320
  * and a program that never opens a scope still pays none of it.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
+ * -- the wall clock, entropy, a file's modification time and the signal descriptor
+ * (WP34 N3): `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and
+ * `readSignal`.
+ *
+ * Measured **506 bytes** on 2026-09-29 with clang 18 on linux-x64 (`.text` 449 plus
+ * `.text.unlikely.` 57, which is the entropy panic): `nish_date_now` 53,
+ * `nish_random_fill` 86 and its panic 57, `nish_stat_mtime` 83, `nish_signal_fd` 132 and
+ * `nish_read_signal` 95. They are a fourth translation unit rather than more of
+ * `runtime-os.c` because that file had 143 bytes of `RUNTIME_OS_TEXT_BUDGET` left and
+ * these are 506, and the rule is a new file with its own measured ceiling, never a
+ * raised one. The budget is the next 256-byte boundary above the measurement, which
+ * leaves 6: the next host builtin is a measurement and a decision, not free room.
+ *
+ * What N3 cost `runtime-os.c` itself is the child's signal mask: `posix_spawnp` now
+ * starts every child with no signal blocked, as libuv does for Node, because
+ * `signalFd()` blocks SIGTERM and SIGINT on Linux and `exec` keeps a mask. That is 69
+ * bytes, measured 1,462 of the unchanged 1,536 on the same day.
+ */
+const RUNTIME_HOST_TEXT_BUDGET = 512
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -5180,6 +5208,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
         ["-DNISH_THREADS=1"],
       ],
+      ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
     ]) {
       const name = path.basename(src)
       // The flags are in the check's name and in the object's, so the two rows for
@@ -9811,6 +9840,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // install a compiler whose every link fails to find `nish_parallel_range`,
       // because build.sh pairs all three from one named input.
       "runtime/runtime-parallel.c",
+      // And the fourth (WP34 N3): without it every link would fail to find
+      // `nish_date_now` and the other host calls the moment a program used one.
+      "runtime/runtime-host.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

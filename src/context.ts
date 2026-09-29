@@ -57,6 +57,14 @@ export class CheckContext {
    * emitter's business.
    */
   strictExports: boolean
+  /**
+   * The build is for wasm: `--target wasm32…` or `--profile wasi`, the test
+   * `src/visibility.ts` makes. The WP34 N3 host builtins (`Date.now`,
+   * `crypto.getRandomValues`, `statMtimeSync`, `signalFd`, `readSignal`) read
+   * it to refuse themselves there, since `runtime-host.c` is empty on that
+   * target; set by the driver after construction, and false everywhere else.
+   */
+  wasm: boolean
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -174,6 +182,7 @@ export class CheckContext {
     this.wrapping = wrapping
     this.uncheckedIndexing = uncheckedIndexing
     this.strictExports = strictExports
+    this.wasm = false
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.current = null
