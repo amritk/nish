@@ -391,7 +391,7 @@ export class DiagnosticSink {
    *
    * Inserting is what makes the order an invariant of `warnings` instead of a
    * promise one accessor keeps, and the list is read directly — `--json`
-   * prints it warning by warning and `formatWarnings` prints the first `max`
+   * prints it warning by warning and `formatList` prints the first `max`
    * of it. It has to be an order rather than the arrival sequence because the
    * analysis does not hand them over sorted: a generic instantiation's body is
    * checked when the instantiation is finished rather than where the generic
@@ -553,30 +553,16 @@ export class DiagnosticSink {
     lines.push(`${errors.length} errors`)
     return lines.join("\n")
   }
-
-  /**
-   * The performance report (WP15 §8), shaped exactly like `format` so there
-   * is one layout to read on either side: each warning's summary and excerpt,
-   * at most `max` of them, then `...and N more performance warnings` and a
-   * count line. A lone warning prints exactly its message, and no warnings
-   * print nothing at all.
-   */
-  formatWarnings(max: i32): string {
-    return formatList(this.warnings, PERFORMANCE, max)
-  }
-
-  /** The portability report (WP33), in the performance report's layout and with its own count. */
-  formatPortability(max: i32): string {
-    return formatList(this.portability, PORTABILITY, max)
-  }
 }
 
 /**
- * One warning list as a report: each warning's summary and excerpt, at most
+ * A warning report — the performance list (WP15 §8) or the portability one
+ * (WP33), `kind` naming which — shaped exactly like `format` so there is one
+ * layout to read on either side: each warning's summary and excerpt, at most
  * `max` of them, then `...and N more <kind> warnings` and a count line. A lone
  * warning prints exactly its message, and an empty list prints nothing.
  */
-const formatList = (list: Diagnostic[], kind: string, max: i32): string => {
+export const formatList = (list: Diagnostic[], kind: string, max: i32): string => {
   if (list.length === 0) {
     return ""
   }

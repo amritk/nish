@@ -538,6 +538,13 @@ for (const [at, name] of selectedCases.entries()) {
       warned.status === 0 && got === want,
       `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
     )
+    // Warnings never reach the IR (wp33 §1 rule 6): both compiles wrote the same bytes.
+    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
+    check(
+      `${name}: --warn-portability changes no byte of the IR`,
+      fs.existsSync(warnedLl) && fs.readFileSync(warnedLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+      "the two .ll files differ"
+    )
   }
   if (fs.existsSync(side("stdout"))) {
     // A dump flag (`--emit-ast`, `--emit-checked`): the compiler's stdout is the golden, no IR is written.
@@ -1796,14 +1803,11 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
   const objects = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{"))
   const zeroFill = path.join(casesDir, "port_array_zero_fill.ts")
 
-  // Off by default, and no cost to the IR when on: the same bytes either way.
+  // Off by default: without the flag the case says nothing, in either form.
+  // (That it costs the IR nothing is checked per `port_*` case, beside its golden.)
   const plain = compile(zeroFill, "port_class_plain.ll")
   const plainJson = compile(zeroFill, "port_class_plain_json.ll", ["--json"])
   const warned = compile(zeroFill, "port_class_warned.ll", ["--warn-portability"])
-  const irOf = (out) => {
-    const file = path.join(buildDir, out)
-    return fs.existsSync(file) ? stripHeader(fs.readFileSync(file, "utf8")) : null
-  }
   check(
     "portability: off by default -- port_array_zero_fill says nothing without --warn-portability, in either form",
     plain.status === 0 &&
@@ -1811,11 +1815,6 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       plainJson.status === 0 &&
       objects(plainJson.stdout).length === 0,
     plain.stderr + plainJson.stdout
-  )
-  check(
-    "portability: --warn-portability changes no byte of the IR",
-    irOf("port_class_plain.ll") !== null && irOf("port_class_plain.ll") === irOf("port_class_warned.ll"),
-    "the two .ll files differ"
   )
 
   // The human form: the summary line, the excerpt under it, and the count, and

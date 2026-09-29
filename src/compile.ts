@@ -65,6 +65,7 @@ import { Options } from "./options"
 import { basenameWithout, dirname } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
+import { Diagnostic, formatList } from "./diagnostics"
 import { internalErrorFor, simulatedInternalError } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run-cache"
@@ -200,31 +201,25 @@ const report = (compilation: Compilation, json: boolean): void => {
  * and the caller returns before this on an error.
  */
 const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
-  if (!enabled) {
-    return
+  if (enabled) {
+    reportWarnings(compilation.sink.warnings, "performance", json)
   }
-  if (compilation.sink.warnings.length === 0) {
-    return
-  }
-  if (json) {
-    for (const warning of compilation.sink.warnings) {
-      console.log(warning.json())
-    }
-    return
-  }
-  writeError(`${compilation.sink.formatWarnings(20)}\n`)
 }
 
 /**
- * The WP33 portability warnings, printed the way `reportPerformance` prints
- * its own and right after them: the human report on stderr, capped at the same
- * twenty, or one object per warning on stdout under `--json`. Only a clean
- * compilation reaches here, and the list is empty unless `--warn-portability`
- * ran the pass (`Compilation.reportPortability`), so there is no flag to test.
- * The exit code is not this function's to change.
+ * The WP33 portability warnings, printed the way the performance ones are and
+ * right after them. The list is empty unless `--warn-portability` ran the pass
+ * (`Compilation.reportPortability`), so there is no flag to test here.
  */
 const reportPortability = (compilation: Compilation, json: boolean): void => {
-  const warnings = compilation.sink.portability
+  reportWarnings(compilation.sink.portability, "portability", json)
+}
+
+/**
+ * One warning list: its objects on stdout under `--json`, else its report on
+ * stderr, capped at the twenty the error report is; nothing when it is empty.
+ */
+const reportWarnings = (warnings: Diagnostic[], kind: string, json: boolean): void => {
   if (warnings.length === 0) {
     return
   }
@@ -234,7 +229,7 @@ const reportPortability = (compilation: Compilation, json: boolean): void => {
     }
     return
   }
-  writeError(`${compilation.sink.formatPortability(20)}\n`)
+  writeError(`${formatList(warnings, kind, 20)}\n`)
 }
 
 /**

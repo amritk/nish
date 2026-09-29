@@ -393,7 +393,7 @@ the run you intend to quote.
 
 **Count from the machine-readable form, or count the thing itself; never a line
 that mentions it.** The human-readable diagnostic report is capped:
-`DiagnosticSink.format` / `formatWarnings` in `src/diagnostics.ts` print at
+`DiagnosticSink.format` / `formatList` in `src/diagnostics.ts` print at
 most 20, the cap `src/compile.ts` passes in, then `...and N more performance
 warnings`, then the total. The cap is the class's rule rather than an accident
 of the printer — `docs/LANGUAGE.md` states it for the warnings and
