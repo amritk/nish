@@ -49,6 +49,7 @@
 
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaLoopFindings } from "./escape"
+import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
 import { emitProgram } from "./emit"
@@ -1062,7 +1063,13 @@ export class Compilation {
     this.reportArenaLoops()
     this.checkParallel()
     this.keyEnumsBySymbol()
-    return !this.sink.hasErrors()
+    if (this.sink.hasErrors()) {
+      return false
+    }
+    if (this.opts.warnPortability) {
+      this.reportPortability()
+    }
+    return true
   }
 
   /** Every module's enum table, keyed for the emitter now that no name is resolved (`CheckedProgram.keyEnumsBySymbol`). */
@@ -1225,6 +1232,26 @@ export class Compilation {
     for (const unit of this.analysisUnits) {
       for (const finding of arenaLoopFindings(unit, facts)) {
         this.sink.reportPerformance(
+          unit.program.source,
+          finding.node.start,
+          finding.node.end,
+          finding.message
+        )
+      }
+    }
+  }
+
+  /**
+   * The WP33 portability warnings (`src/portability.ts`), under
+   * `--warn-portability` only. Last in `check`, after every error is in, so a
+   * program that does not compile is never walked; over the analysis units
+   * `reportArenaLoops` has already built, because they carry the parent links
+   * a row reads.
+   */
+  reportPortability(): void {
+    for (const unit of this.analysisUnits) {
+      for (const finding of portabilityFindings(unit, this.table, this.opts)) {
+        this.sink.reportPortability(
           unit.program.source,
           finding.node.start,
           finding.node.end,

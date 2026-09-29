@@ -1,0 +1,1 @@
+`new Array<f64>(n)` is filled with zeros here, and with holes in TypeScript, which read back as `undefined`
