@@ -1,9 +1,10 @@
 # WP33: The round trip — TypeScript into Nish, and back out
 
 **Decided (§7, 2026-09-28); R1's portability half is built: the class, its
-flag and all eleven codes, with NL8005 live and the other rows landing in their
-own stages.** This is the plan of record for one
-requirement with two directions, and one constraint on both:
+flag and its eleven codes (#293), the number, record and string rows (#301,
+#302, #304), and NL8011's retirement with NL8008 narrowed to the counts that
+can diverge (#309). Every row is live except NL8011.** This is the plan of
+record for one requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
    an agent can do most of that move by driving the compiler, with the
@@ -187,7 +188,7 @@ collected in §7.
 | `nish/<module>` and `nish:fs` specifiers | resolved by a Node loader hook | C | the package's own specifiers (`@amritk/nish/threads`, …; `package.json` already exports `./*` to `std/*.ts`) | — |
 | `export const main` is the entry, and its return is the exit code | nothing calls it under Node | C | a two-line entry module that calls `main` and exits with its answer | — |
 | `enum` | Node's `--experimental-strip-types` refuses it (not erasable); Bun accepts it | C | a `const` object and a type of the same name | — |
-| `console.log` prints `String(x)` | Node's console inspects: `-0` prints as `-0` | C | the runtime's `log` | — |
+| `console.log` prints `String(x)` | bare Node's console inspects, so `-0` prints as `-0`; `runtime/nish.mjs` replaces `console.log` and `console.error` with shims that print `String(x)`, so `-0` prints `0` in both readings | A under the prelude | the runtime's `log` | Not a class-C row: the reading the portability class is defined against prints what native prints, so NL8011, which flagged it, is retired. `--emit ts` keeps importing the runtime's `log`; output that did not would have to revive the row under a new code. |
 | the prelude needs Node | Bun cannot load it (`registerHooks` is not in Bun's `node:module`); a browser cannot load `shim.mjs` (`node:fs`, `node:child_process`, `process`) | — | — | Split the runtime by host (§4.3). |
 | scoped tasks, `using s = scope()` | the tasks run one after another at each `spawn` under Node, and together at the block's end natively; the checker refuses every program where the two could print differently ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)) | A | the source as written | Node 22 needs `--js-explicit-resource-management` for `using`, and Node 24 has it natively. `--emit ts` output targets the host's `using` support, or lowers the block to a `try`/`finally` for a host without it. |
 | `crypto.getRandomValues(bytes)` on a `u8[]` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | Node's global takes only a typed array, and a `u8[]` is a plain `Array` under Node: a `TypeError` without the prelude. `runtime/nish.mjs` replaces the method on Node's `crypto` with one that draws into a `Uint8Array` and copies across, and panics past 65,536 bytes with the native words where Node throws a `QuotaExceededError`; `os_random` and `os_random_limit` agree under it, and the `os_` block of `tests/run.js` checks the draws and the panic both ways | C (A under the prelude) | the source as written, with the prelude's `getRandomValues` imported (§4.3) | Keep. The bytes cannot agree, being random; what the reading keeps is every other fact: the length filled, the empty array, the limit and its exit status. |
@@ -346,9 +347,9 @@ diagnostic has, the summary line and the excerpt, with `portability` as the
 kind ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)):
 
 ```
-src/table.ts:41:17: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
-  41 |   const width = name.length;
-     |                 ^~~~~~~~~~~
+src/table.ts:41:23: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is taken from `width` to pad or align the output
+  41 |   const pad = width - name.length;
+     |                       ^~~~~~~~~~~
 ```
 
 Under `--json` it is one object with `"severity":"portability"` and its NL8xxx
@@ -470,10 +471,12 @@ and the stages in §9 build it.
 **R1's portability half is built.** `--warn-portability` runs the pass
 (`src/portability.ts`), the band is NL8xxx with every row's code registered
 (`portabilityRules` in `src/codes.ts`), and the rows are documented in
-[LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags). NL8005, the
-zero-filled `new Array<T>(n)`, is live; the number, string and record rows are
-three stages written against the pass's row signature, and
-`tests/wordings/unreachable.txt` names the ones not live yet. The parser half
+[LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags), the string and
+record rows with their exact predicates. Every row is live
+(#293, #301, #302, #304) except NL8011, which is retired: the `-0` it flagged
+prints `0` in both readings, because `runtime/nish.mjs` prints `String(x)`
+(§3.5). Its code stays reserved, and `tests/wordings/unreachable.txt` records
+it as retired. The parser half
 (§5.0) is not started.
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
