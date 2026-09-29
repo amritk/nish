@@ -2055,7 +2055,8 @@ const isLocalRef = (ctx: CheckContext, expr: Node, local: Local): boolean => {
 // warning nobody can act on is worse than no warning.
 
 /** The builtins that hand back freshly allocated memory by plain identifier. */
-const perfIsReadBuiltin = (name: string): boolean => name === "readFileSync" || name === "readFileSyncOrNull"
+const perfIsReadBuiltin = (name: string): boolean =>
+  name === "readFileSync" || name === "readFileSyncOrNull" || name === "readFileBytesSync"
 
 /**
  * `expr` allocates from the arena in a way the checker can see for itself: a

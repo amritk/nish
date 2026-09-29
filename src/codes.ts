@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 510
+export const RULE_COUNT: i32 = 514
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -190,6 +190,8 @@ const diagnosticRules = (): string[] => [
   "NL2359",
   "; a function name must be unique across the program, and an instantiation is named after its template",
   "NL3010",
+  "` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got ",
+  "NL2395",
   "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
   "NL2128",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
@@ -308,6 +310,8 @@ const diagnosticRules = (): string[] => [
   "NL2343",
   "` of `integer<Lo, Hi>` is outside i32 (a ranged integer is always an i32)",
   "NL2382",
+  "`set` copies from an array of the receiver's element type, so it expects ",
+  "NL2396",
   ": `static` members are not supported (use a top-level function or const)",
   "NL2027",
   ": initializers must be literals (assign other values in the constructor)",
@@ -638,6 +642,8 @@ const diagnosticRules = (): string[] => [
   "NL2272",
   "`break` outside of a loop or `switch`",
   "NL2122",
+  "`fill` expects 1 to 3 arguments, got ",
+  "NL2398",
   "`join` expects 0 or 1 arguments, got ",
   "NL2138",
   "A function declaration binds one name",
@@ -656,6 +662,8 @@ const diagnosticRules = (): string[] => [
   "NL1012",
   "`): the type name is part of the ABI",
   "NL2120",
+  "`set` expects 1 or 2 arguments, got ",
+  "NL2397",
   "`super(...)` in the constructor of `",
   "NL2154",
   "`void` expressions are forbidden in ",

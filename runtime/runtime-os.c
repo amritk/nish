@@ -102,6 +102,21 @@ nish_str *nish_read_file_or_null(const nish_str *path) {
   return s;
 }
 
+/* `readFileBytesSync(path)` (WP34 N2): the same read, handed to the language as
+   a `u8[]`. The bytes are not copied a second time: `nish_read_file_or_null`
+   has already put them in the arena behind their 8-byte length, 8-aligned, so
+   the header points `data` there with `len == cap`, and the NUL written after
+   them is simply never indexed. Nothing on the way assumes UTF-8, so a zero
+   byte and a byte of 0x80 or above come back as they are on disk. A `push`
+   onto the result grows it into a fresh block, as it would any full array. */
+nish_array *nish_read_file_bytes(const nish_str *path) {
+  nish_str *s = nish_read_file_or_null(path);
+  if (!s) return 0;
+  nish_array *a = nish_alloc_struct(sizeof *a);
+  *a = (nish_array){ s->len, s->len, s->data };
+  return a;
+}
+
 nish_str *nish_read_file(const nish_str *path) {
   nish_str *s = nish_read_file_or_null(path);
   if (!s) nish_io_fail("read ", path);

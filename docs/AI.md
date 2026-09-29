@@ -46,7 +46,7 @@ stdout, nothing on stderr, every field 1-based with `endLine`/`endColumn`
 exclusive:
 
 ```json
-{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join)"}
+{"file":"p.ts","line":3,"column":17,"endLine":3,"endColumn":20,"severity":"error","code":"NL2249","message":"Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill)"}
 ```
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
@@ -116,7 +116,7 @@ rejects. This table is the highest-value part of the page.
 | `x == y` | `Loose equality is forbidden` | `x === y` |
 | `throw new Error(m)` | `` `throw` is forbidden `` | `return Err(m)`, or `panic(m)` to end the process |
 | `try { … } catch { … }` | `` `try`/`catch`/`finally` is forbidden `` | `Result<T, E>` and `isErr()` |
-| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
+| `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | forbidden, except `m.get(k) ?? d` | `if (a !== null)` first |
 | `x as T`, `<T>x`, `x!` | `Unsupported expression in Phase 1: AsExpression` | there are no casts; `implements` is the only widening |
@@ -1142,7 +1142,11 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 
 **Arrays.** `a.length` (read-only), `a.push(v)`, `a.pop()` (panics when empty —
 there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` is
-`string[]` only**. That is every array method there is.
+`string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`
+(one `memmove`; a range past the end panics) and `a.fill(v[, start[, end]])`
+(ends clamped and counted back from the end when negative, as in JavaScript;
+never panics). Both are statements. That is every array method there is. A
+window into a buffer is `(buf, offset, length)`; there is no view type.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
 `s.substring(start[, end])`, `s.slice(start[, end])`, `s.indexOf(sub)`,
@@ -1158,7 +1162,8 @@ in half is possible.
 `process.platform`, `process.arch`.
 
 **Files and the system.** `readFileSync(path)` (exits 1 on failure),
-`readFileSyncOrNull(path)` (`string | null`), `writeFileSync(path, data)`,
+`readFileSyncOrNull(path)` (`string | null`), `readFileBytesSync(path)`
+(`u8[] | null`, the bytes as they are on disk), `writeFileSync(path, data)`,
 `appendFileSync(path, data)`, `mkdirSync(path)` (one level, `boolean`),
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by
 bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,

@@ -1,0 +1,5 @@
+1
+slice out of range: [4, 7) of length 6
+pastEnd exit 1
+slice out of range: [-1, 2) of length 6
+negative exit 1

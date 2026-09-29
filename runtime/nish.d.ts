@@ -182,6 +182,12 @@ declare function panic(message: string): never;
 declare function readFileSync(path: string): string;
 /** The same read, answering `null` for every path the other exits over. */
 declare function readFileSyncOrNull(path: string): string | null;
+/**
+ * The file's bytes as they are on disk — no UTF-8 assumed, so a zero byte and
+ * a byte of 0x80 or above survive — or `null` for every path
+ * `readFileSyncOrNull` answers `null` for.
+ */
+declare function readFileBytesSync(path: string): u8[] | null;
 declare function writeFileSync(path: string, data: string): void;
 declare function appendFileSync(path: string, data: string): void;
 /** One directory, not recursive; whether a directory is there afterwards. */
@@ -229,6 +235,7 @@ declare function monotonicNanos(): i64;
 declare module "nish:fs" {
   export function readFileSync(path: string): string;
   export function readFileSyncOrNull(path: string): string | null;
+  export function readFileBytesSync(path: string): u8[] | null;
   export function writeFileSync(path: string, data: string): void;
   export function appendFileSync(path: string, data: string): void;
   /** `true` when the directory was created, `false` when it already existed. */
@@ -301,6 +308,18 @@ declare const Arena: {
  */
 declare interface CPtr {
   readonly __nishForeignPointer: unique symbol;
+}
+
+// ---- `set` on an array ----------------------------------------------------------
+//
+// `dst.set(src, offset)` copies all of `src` into `dst` from `offset` on, with
+// `TypedArray.prototype.set`'s meaning (WP34 N2). A `u8[]` is an `Array` to
+// `tsc`, and `lib.es5.d.ts` gives `Array` a `fill` of the same meaning but no
+// `set`, so this is the one method added to it; `runtime/nish.mjs` installs it
+// under Node. Nish admits it on an array of numbers only.
+
+interface Array<T> {
+  set(source: readonly T[], offset?: number): void;
 }
 
 // ---- What this file cannot say ----------------------------------------------

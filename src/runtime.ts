@@ -458,6 +458,18 @@ export class RuntimeTable {
     this.add(
       plain("nish_realpath", `declare noalias noundef align 8 i8* @nish_realpath(${STR_NOCAP})`, EFFECT_WRITE)
     )
+    // WP34 N2: `readFileBytesSync`. `nish_readdir`'s shape — a fresh array
+    // header per call, so `noalias`, and null for a file that cannot be read,
+    // so no `nonnull` — for `nish_read_file_or_null`'s reasons: it allocates,
+    // and the file is not memory LLVM tracks, so two reads either side of a
+    // `writeFileSync` must not fold into one.
+    this.add(
+      plain(
+        "nish_read_file_bytes",
+        `declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

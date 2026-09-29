@@ -160,8 +160,19 @@ const newString = (emitter: Emitter, bytes: string, n: string): string =>
  * second compare is a tautology, so only the first is emitted.
  *
  * `--unchecked-indexing` drops it, exactly as it drops `a[i]`'s.
+ *
+ * `u8[]`'s `dst.set(src, at)` asks the same question of the range it writes,
+ * `[at, at + src.length)` of `dst.length`, so it shares this check and this
+ * panic; `label` names the two blocks after whichever of them asked.
  */
-const emitSliceCheck = (emitter: Emitter, from: string, to: string, len: string, hasEnd: boolean): void => {
+export const emitSliceCheck = (
+  emitter: Emitter,
+  from: string,
+  to: string,
+  len: string,
+  hasEnd: boolean,
+  label: string
+): void => {
   if (emitter.opts.uncheckedIndexing) {
     return
   }
@@ -171,8 +182,8 @@ const emitSliceCheck = (emitter: Emitter, from: string, to: string, len: string,
     const within = fn.emitValue(`icmp ule i64 ${to}, ${len}`)
     inRange = fn.emitValue(`and i1 ${inRange}, ${within}`)
   }
-  const failBlock = fn.newBlock("slice.fail")
-  const okBlock = fn.newBlock("slice.ok")
+  const failBlock = fn.newBlock(`${label}.fail`)
+  const okBlock = fn.newBlock(`${label}.ok`)
   fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`)
   fn.placeBlock(failBlock)
   fn.emit(`call void ${emitter.useRuntime("nish_panic_slice")}(i64 ${from}, i64 ${to}, i64 ${len})`)
@@ -194,7 +205,7 @@ const emitSlice = (emitter: Emitter, expr: Node, str: string): string => {
   if (hasEnd) {
     to = emitIndex(emitter, args.children[1])
   }
-  emitSliceCheck(emitter, from, to, len, hasEnd)
+  emitSliceCheck(emitter, from, to, len, hasEnd, "slice")
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`)
   return newString(emitter, at, n)

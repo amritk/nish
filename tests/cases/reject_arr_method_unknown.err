@@ -1,1 +1,1 @@
-Unknown method `shift` on i32[] (supported: push, pop, indexOf, join)
+Unknown method `shift` on i32[] (supported: push, pop, indexOf, join, set, fill)

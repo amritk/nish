@@ -401,6 +401,28 @@ export function updIdx(a, i, f) {
   return v;
 }
 
+/**
+ * `dst.set(src, offset)` (WP34 N2): `TypedArray.prototype.set`'s copy on the
+ * plain array a `u8[]` is here. The source is copied first, so a self-copy or
+ * an overlapping one reads what was there before, as `memmove` does natively;
+ * a range past the end fails with the native panic and its words, where a
+ * typed array would throw a `RangeError` for the same offsets.
+ */
+export function arraySet(dst, src, offset) {
+  // `ToIntegerOrInfinity`: NaN is 0, as `llvm.fptosi.sat` makes it natively.
+  // `Math.trunc` rather than `toIndex`, which converts a bigint: an `i64` or
+  // `u64` offset is a bigint here, and it throws the `TypeError` the typed
+  // array and `Array.prototype.fill` throw for one, instead of being rounded
+  // to the nearest double past 2^53 (docs/RUN_UNDER_NODE.md).
+  const at = offset === undefined ? 0 : Math.trunc(offset) || 0;
+  const end = at + src.length;
+  if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
+  // Two plain arrays overlap only when they are one array, which is the one
+  // case that must read the source before writing it.
+  const from = src === dst ? src.slice() : src;
+  for (let i = 0; i < from.length; i++) dst[at + i] = from[i];
+}
+
 /** `new Array<T>(n)`: `n` zero-filled elements (`0`, `0n`, or `false`). */
 export function newArray(n, zero) {
   return new Array(toIndex(n)).fill(zero);
@@ -429,6 +451,15 @@ export function readFileSync(path) {
 export function readFileSyncOrNull(path) {
   try {
     return fs.readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** `readFileBytesSync(path)` (WP34 N2): the bytes as a plain array of numbers, or null. */
+export function readFileBytesSync(path) {
+  try {
+    return Array.from(fs.readFileSync(path));
   } catch {
     return null;
   }

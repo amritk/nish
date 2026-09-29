@@ -39,6 +39,7 @@ import {
   yieldsInteriorPointer,
 } from "./attributes"
 import {
+  builtinNameOf,
   dottedName,
   intrinsicType,
   isAssignmentOperator,
@@ -119,6 +120,7 @@ const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
 const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileSync" ||
   name === "readFileSyncOrNull" ||
+  name === "readFileBytesSync" ||
   name === "getenv" ||
   name === "readdirSync" ||
   name === "realpathSync"
@@ -458,8 +460,11 @@ class EscapeAnalysis {
       // (`tests/cases/mem_read_or_null_scope`), and `getenv` and `readdirSync`
       // were missing for the same reason (`mem_getenv_scope`,
       // `mem_readdir_scope`), which is why the list is named above with the rule
-      // for extending it written beside it.
-      if (isAllocatingBuiltin(target.text)) {
+      // for extending it written beside it. Under a `nish:` import the
+      // identifier is the local name, so the builtin is the one the checker
+      // recorded: `import { readFileBytesSync as bytesOf }` is the same
+      // allocation spelled differently (`mem_read_import_scope`).
+      if (isAllocatingBuiltin(builtinNameOf(program, call))) {
         this.sites.push(new Site(call, false))
       }
       return

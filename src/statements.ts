@@ -28,13 +28,14 @@ import { resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { recordGuardFusion } from "./fusion"
-import { unwrapParens } from "./emit-util"
+import { builtinNameOf, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
   FLAG_CONST,
   N_BLOCK,
   N_BREAK,
+  N_CALL,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
@@ -42,6 +43,7 @@ import {
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
+  N_IDENT,
   N_IF,
   N_RETURN,
   N_SWITCH,
@@ -52,6 +54,7 @@ import {
   Node,
 } from "./nodes"
 import { caseValue } from "./constants"
+import { isFreshArrayExpression } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
 
@@ -250,7 +253,27 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       type = T_ERROR
     }
     declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
+    const local = ctx.program.nodeLocals[decl.id]
+    if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
+      local.fresh = allocatesArray(ctx, initializer)
+    }
   }
+}
+
+/**
+ * WP34 N2: `init` allocates the array it answers — a literal, a `new`, or a
+ * `readFileBytesSync`, whose buffer the runtime copies the file into — so a
+ * `const` bound to it names a buffer nothing else does (`Local.fresh`).
+ */
+const allocatesArray = (ctx: CheckContext, init: Node): boolean => {
+  if (isFreshArrayExpression(init)) {
+    return true
+  }
+  const e = unwrapParens(init)
+  if (e.kind !== N_CALL || e.children[0].kind !== N_IDENT || ctx.program.nodeCallees[e.id] !== null) {
+    return false
+  }
+  return builtinNameOf(ctx.program, e) === "readFileBytesSync"
 }
 
 /**

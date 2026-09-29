@@ -665,6 +665,14 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "getenv") {
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_getenv")}(${stringArgs(emitter, expr)})`)
   }
+  // WP34 N2: the header comes back from the runtime with `len == cap` and the
+  // bytes behind it, or null, which is the language's `u8[] | null` as it is.
+  if (name === "readFileBytesSync") {
+    emitter.declareType(ARRAY_TYPE)
+    return emitter.fn.emitValue(
+      `call ${ARRAY_STRUCT}* ${emitter.useRuntime("nish_read_file_bytes")}(${stringArgs(emitter, expr)})`
+    )
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
   }
@@ -779,6 +787,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "realpathSync") {
     out.push("nish_realpath")
+    return out
+  }
+  if (name === "readFileBytesSync") {
+    out.push("nish_read_file_bytes")
     return out
   }
   if (name === "write" || name === "writeError") {

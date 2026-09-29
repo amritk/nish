@@ -24,18 +24,27 @@ export const STORAGE_LOCAL: i32 = 1
 
 export class Local {
   name: string
-  /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
-  type: i32
-  mutable: boolean
-  storage: i32
   /**
    * The type as the *template* wrote it, when this local is declared in the
    * body of an instantiation (WP18 G6), and `null` everywhere else. `type` is
    * concrete — `T` is `Point` by the time a body is checked — so this is the
    * only record that the local came from `T`, which is what decides whether a
    * member may be read through it (`refuseParameterMember` in `src/generics.ts`).
+   * Declared second so the fields run widest first and pack into 32 bytes.
    */
   origin: TypeOrigin | null
+  /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
+  type: i32
+  storage: i32
+  mutable: boolean
+  /**
+   * WP34 N2: a `const` whose initialiser allocated a fresh array — a literal,
+   * a `new`, a `readFileBytesSync` — so the element buffer it names belongs to
+   * it and to no other binding. Two such locals name two buffers that cannot
+   * overlap, which is the whole of the proof `dst.set(src)` needs before it
+   * may copy with `memcpy` (`disjointCopy` in `src/arrays.ts`).
+   */
+  fresh: boolean
 
   constructor(name: string, type: i32, mutable: boolean, storage: i32) {
     this.name = name
@@ -43,6 +52,7 @@ export class Local {
     this.mutable = mutable
     this.storage = storage
     this.origin = null
+    this.fresh = false
   }
 }
 

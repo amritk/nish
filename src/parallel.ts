@@ -46,7 +46,7 @@ import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
 import { numericLiteralValue } from "./constants"
 import { isScalarArgument } from "./escape"
-import { isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
+import { isArrayWriteMethod, isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
@@ -1172,7 +1172,7 @@ const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses
 }
 
 /**
- * The refusal for a call in the region, or "": `Arena`, `push` or `pop` on
+ * The refusal for a call in the region, or "": `Arena`, `push`, `pop`, `set` or `fill` on
  * anything but a private local, a task of another scope, or a function that
  * writes through a pointer it is handed.
  */
@@ -1192,7 +1192,9 @@ const regionCallMessage = (
     if (state.isDestination(namedLocal(program, receiver))) {
       return regionReadMessage(state, receiver.text)
     }
-    if ((callee.text === "push" || callee.text === "pop") && !uses.isPrivate(namedLocal(program, receiver))) {
+    // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
+    // store to `a[i]` does, so they are refused where `push` and `pop` are.
+    if (isArrayWriteMethod(callee.text) && !uses.isPrivate(namedLocal(program, receiver))) {
       const type = program.nodeTypes[receiver.id]
       if (type >= 0 && program.nodeCallees[node.id] === null) {
         return regionWriteMessage(state, `\`${callee.text}\``)

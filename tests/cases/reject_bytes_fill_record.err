@@ -1,0 +1,1 @@
+`fill` copies bytes, so it needs an array whose elements are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got Point[]

@@ -1,0 +1,2 @@
+reject_thread_region_set_call.ts:24:5
+`reset` writes memory a task of `s` may read, before the scope joins
