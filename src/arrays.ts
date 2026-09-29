@@ -8,6 +8,7 @@ import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { storesInlineElements, unwrapParens } from "./emit-util"
 import {
+  N_ARRAY,
   N_BINARY,
   N_BLOCK,
   N_CALL,
@@ -19,12 +20,16 @@ import {
   N_FOR_OF,
   N_IDENT,
   N_INDEX,
+  N_LIST,
   N_MEMBER,
+  N_NEW,
+  N_PAREN,
   N_THIS,
   N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes"
+import { StringSet } from "./map"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import { Local, Scope } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
@@ -364,6 +369,12 @@ class ElementRef {
    * legal, and what it records is a difference from TypeScript, not an error.
    */
   overwrittenBy: Node | null
+  /**
+   * The reference points at a slot still inside the array: `a[i]` or a
+   * `for ... of` variable. `a.pop()` hands out the slot it dropped, which no
+   * in-bounds store can reach, so a store never overwrites what it reads.
+   */
+  inBounds: boolean
 
   constructor(local: Local, array: string, elem: string, arrayText: string) {
     this.local = local
@@ -372,6 +383,7 @@ class ElementRef {
     this.arrayText = arrayText
     this.invalidatedBy = ""
     this.overwrittenBy = null
+    this.inBounds = true
   }
 
   /** Whether a change to `root`'s `elem` slots may reach this reference. */
@@ -421,7 +433,7 @@ export const referenceRoot = (expr: Node): string => {
  * compared by when one of them cannot be named: element types are exact here,
  * so a `FunctionSig[]` and an `ImportBinding[]` are never the same array.
  */
-const inlineArrayElement = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
+export const inlineArrayElement = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
   const type = program.nodeTypes[expr.id]
   if (type < 0 || !table.isArray(type)) {
     return ""
@@ -529,12 +541,20 @@ class RefWalk {
   reported: boolean
   /** What an observing walk has found; `null` in the checker's, which skips that work. */
   overwrites: SlotOverwrite[] | null
+  /**
+   * The observing walk's `aliasedRecordElements`: a store into an array of one
+   * of these elements is taken to reach every reference of that element type,
+   * whatever the array is called. Empty in the checker's walk, whose rule this
+   * must not widen.
+   */
+  aliased: StringSet
 
   constructor(
     program: CheckedProgram,
     table: TypeTable,
     ctx: CheckContext | null,
-    overwrites: SlotOverwrite[] | null
+    overwrites: SlotOverwrite[] | null,
+    aliased: StringSet
   ) {
     this.program = program
     this.table = table
@@ -542,6 +562,7 @@ class RefWalk {
     this.live = []
     this.reported = false
     this.overwrites = overwrites
+    this.aliased = aliased
   }
 
   report(node: Node, message: string): void {
@@ -585,12 +606,12 @@ class RefWalk {
     if (array === null) {
       return
     }
-    const root = referenceRoot(array)
     const elem = inlineArrayElement(this.program, this.table, array)
+    const root = this.aliased.has(elem) ? UNNAMED : referenceRoot(array)
     let i = 0
     while (i < this.live.length) {
       const ref = this.live[i]
-      if (ref.overwrittenBy === null && ref.reachedBy(root, elem)) {
+      if (ref.inBounds && ref.overwrittenBy === null && ref.reachedBy(root, elem)) {
         this.live[i].overwrittenBy = node
       }
       i = i + 1
@@ -737,9 +758,14 @@ class RefWalk {
     }
     const elem = inlineArrayElement(this.program, this.table, source)
     if (elem !== "") {
-      this.live.push(
-        new ElementRef(local, referenceRoot(source), elem, rootText(this.program, this.table, source))
+      const ref = new ElementRef(
+        local,
+        referenceRoot(source),
+        elem,
+        rootText(this.program, this.table, source)
       )
+      ref.inBounds = unwrapParens(initializer).kind === N_INDEX
+      this.live.push(ref)
     }
   }
 }
@@ -749,7 +775,7 @@ class RefWalk {
  * warnings, so every type and binding the walk reads is already recorded.
  */
 export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
-  const walk = new RefWalk(ctx.program, ctx.table, ctx, null)
+  const walk = new RefWalk(ctx.program, ctx.table, ctx, null, new StringSet())
   walk.visit(body)
 }
 
@@ -757,11 +783,91 @@ export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
  * The same walk over a body that has checked cleanly, recording what it saw
  * rather than reporting: every whole-slot store that overwrote an element a
  * live reference then read (NL8004, `src/portability-records.ts`). `program`
- * carries the body's own side tables, as the portability pass installs them.
+ * carries the body's own side tables, as the portability pass installs them,
+ * and `aliased` is the body's `aliasedRecordElements`.
  */
-export const slotOverwrites = (program: CheckedProgram, table: TypeTable, body: Node): SlotOverwrite[] => {
+export const slotOverwrites = (
+  program: CheckedProgram,
+  table: TypeTable,
+  body: Node,
+  aliased: StringSet
+): SlotOverwrite[] => {
   const found: SlotOverwrite[] = []
-  const walk = new RefWalk(program, table, null, found)
+  const walk = new RefWalk(program, table, null, found, aliased)
   walk.visit(body)
   return found
+}
+
+/** Whether `value` makes an array no other name can hold yet: a literal or a `new`. */
+const isNewArrayValue = (value: Node): boolean => {
+  const inner = unwrapParens(value)
+  return inner.kind === N_ARRAY || inner.kind === N_NEW
+}
+
+/**
+ * Whether a use of the record array `node` under `parent` leaves it under its
+ * own name: indexed, a member read through it (`length`, `push`), iterated,
+ * handed to a call, or assigned a fresh array. Anything else — an initializer,
+ * the value of an assignment, a return, a field of a literal — puts the same
+ * array under a second name.
+ */
+const keepsItsName = (parent: Node, node: Node): boolean => {
+  const first = unwrapParens(parent.children[0]) === node
+  if (parent.kind === N_INDEX || parent.kind === N_MEMBER) {
+    return first
+  }
+  if (parent.kind === N_FOR_OF) {
+    return unwrapParens(parent.children[1]) === node
+  }
+  if (parent.kind === N_BINARY && parent.text === "=" && first) {
+    return isNewArrayValue(parent.children[1])
+  }
+  return parent.kind === N_LIST
+}
+
+const collectAliased = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  parent: Node,
+  out: StringSet
+): void => {
+  if (node.kind === N_IDENT || node.kind === N_MEMBER) {
+    const elem = inlineArrayElement(program, table, node)
+    if (elem !== "" && !keepsItsName(parent, node)) {
+      out.add(elem)
+    }
+  }
+  if (node.kind === N_VAR_DECL) {
+    const local = program.nodeLocals[node.id]
+    const initializer = node.children[2]
+    if (local !== null && initializer.kind !== N_EMPTY && !isNewArrayValue(initializer)) {
+      const elem = inlineArrayElement(program, table, initializer)
+      if (elem !== "") {
+        out.add(elem)
+      }
+    }
+  }
+  // A parenthesised use is judged by what is around the parentheses.
+  const next = node.kind === N_PAREN ? parent : node
+  for (const child of node.children) {
+    collectAliased(program, table, child, next, out)
+  }
+}
+
+/**
+ * The element types of the record arrays a body puts under more than one name
+ * (`const qs = ps`, `qs = ps`, `this.f = ps`, `return ps`, a binding from a
+ * call). Arrays are references, so after that a write through one name is a
+ * write through the other, and a rule that tells arrays apart by their
+ * spelling would miss it. The portability rows match an array of these
+ * elements by its element type instead, the answer an unnameable array
+ * already gets. An array handed to a call that keeps it is not seen here.
+ */
+export const aliasedRecordElements = (program: CheckedProgram, table: TypeTable, body: Node): StringSet => {
+  const out = new StringSet()
+  for (const child of body.children) {
+    collectAliased(program, table, child, body, out)
+  }
+  return out
 }
