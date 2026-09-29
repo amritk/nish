@@ -787,7 +787,7 @@ const literalHint = (other: i32, fallback: i32): i32 => (isNumeric(other) ? othe
  * (stage0's `src/checker/math.ts`): `!1` and `~1` are operators applied to a literal
  * rather than spellings of one.
  */
-const literalOperand = (node: Node): boolean => {
+export const literalOperand = (node: Node): boolean => {
   if (node.kind === N_PAREN) {
     return literalOperand(node.children[0])
   }

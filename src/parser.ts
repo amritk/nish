@@ -339,7 +339,13 @@ export class Parser {
   /**
    * Set while a `for` head's initialiser is read, where `in` opens a
    * `for...in` rather than being the operator, as TypeScript's `disallowIn`
-   * context does; a parenthesis clears it again.
+   * context does. Every bracket the ECMAScript grammar reads `[+In]` inside
+   * clears it again (`allowIn`): a parenthesis, an array literal, an argument
+   * list, an element access, an object literal, a template substitution and a
+   * block. A concise arrow body inherits it, as the grammar's `[?In]` does.
+   * TypeScript's parser keeps `in` disallowed inside an array literal, where
+   * Node follows the grammar; this parser follows the grammar too
+   * (`tests/cases/reject_in_for_head_array`).
    */
   noIn: boolean
 
@@ -1885,6 +1891,7 @@ export class Parser {
       block.end = this.previousEnd
       return block
     }
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const before = this.start
       block.children.push(this.parseStatement())
@@ -1892,6 +1899,7 @@ export class Parser {
         this.advance()
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACE)
     block.end = this.previousEnd
     return block
@@ -2298,6 +2306,16 @@ export class Parser {
     return left
   }
 
+  /**
+   * Clear `noIn` for a bracket that reads `in` as the operator again, and
+   * answer what it was, for the caller to put back when the bracket closes.
+   */
+  allowIn(): boolean {
+    const outer = this.noIn
+    this.noIn = false
+    return outer
+  }
+
   /** Assignment, the loosest expression. Right-associative, as in JavaScript. */
   parseExpression(): Node {
     const start = this.start
@@ -2595,7 +2613,9 @@ export class Parser {
     this.advance()
     const index = this.node(N_INDEX, start, this.end)
     index.children.push(receiver)
+    const outerNoIn = this.allowIn()
     index.children.push(this.parseExpression())
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACKET)
     index.end = this.previousEnd
     return index
@@ -2606,12 +2626,14 @@ export class Parser {
     if (!this.expect(TOK_LPAREN)) {
       return list
     }
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       list.children.push(this.parseExpression())
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RPAREN)
     return this.closeList(list)
   }
@@ -2675,8 +2697,7 @@ export class Parser {
         }
         this.advance()
         const node = this.node(N_PAREN, start, this.end)
-        const outerNoIn = this.noIn
-        this.noIn = false
+        const outerNoIn = this.allowIn()
         node.children.push(this.parseSequence())
         this.noIn = outerNoIn
         this.expect(TOK_RPAREN)
@@ -2832,6 +2853,7 @@ export class Parser {
       node.end = this.previousEnd
       return node
     }
+    const outerNoIn = this.allowIn()
     while (true) {
       node.children.push(this.parseExpression())
       if (this.at(TOK_TEMPLATE_MIDDLE) || this.at(TOK_TEMPLATE_TAIL)) {
@@ -2848,6 +2870,7 @@ export class Parser {
         break
       }
     }
+    this.noIn = outerNoIn
     node.end = this.previousEnd
     return node
   }
@@ -2882,6 +2905,7 @@ export class Parser {
   parseArrayLiteral(start: i32): Node {
     this.advance()
     const node = this.node(N_ARRAY, start, this.end)
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACKET) && !this.at(TOK_END)) {
       if (this.eat(TOK_COMMA)) {
         node.children.push(this.empty())
@@ -2900,6 +2924,7 @@ export class Parser {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACKET)
     node.end = this.previousEnd
     return node
@@ -2908,6 +2933,7 @@ export class Parser {
   parseObjectLiteral(start: i32): Node {
     this.advance()
     const node = this.node(N_OBJECT, start, this.end)
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
       const property = this.node(N_PROPERTY, propertyStart, this.end)
@@ -2932,6 +2958,7 @@ export class Parser {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACE)
     node.end = this.previousEnd
     return node

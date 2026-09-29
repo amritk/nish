@@ -134,6 +134,11 @@ provide("toU64", (x) => shim.convert(x, "f64", "u64"));
 provide("f64ToBits", shim.f64ToBits);
 provide("bitsToF64", shim.bitsToF64);
 
+// Constant time (WP34 N6). Pure functions of their operands, so the answers
+// agree with a native run; the timing does not, and is not claimed here.
+provide("ctSelect", shim.ctSelect);
+provide("ctEq", shim.ctEq);
+
 // `Result`. Everything works but `orReturn`, which needs the caller's control
 // flow and therefore the rewriter; see the header.
 provide("Ok", shim.Ok);

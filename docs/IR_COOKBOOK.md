@@ -12774,6 +12774,51 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end builtin-conversions -->
 
+### `ctSelect` and `ctEq`
+
+Constant time (WP34 N6). Both are bitwise instructions and one empty inline
+`asm` each, which hands the mask back in the same register and costs nothing,
+but is opaque to every pass: `opt -O2` cannot tell that the mask is all-ones or
+zero, so it has no `select` to rebuild and `llc` no branch to lower one to. The
+call carries `readnone nounwind`, which is true of an empty string, so the
+function stays `readnone`. `tests/run.js` reads the `-O2` assembly for x86-64
+and aarch64 ([LANGUAGE.md](LANGUAGE.md#constant-time-ctselect-and-cteq)).
+
+<!-- cookbook:begin builtin-ct -->
+```ts
+// WP34 N6: a secret select and a secret compare. The mask goes through an empty
+// `asm` that LLVM cannot see into, so no pass can rebuild a `select` from it.
+export const pick = (mask: u32, a: u32, b: u32): u32 => ctSelect(mask, a, b)
+
+export const same = (a: u64, b: u64): u64 => ctEq(a, b)
+```
+
+```llvm
+define noundef i32 @pick(i32 noundef %mask, i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = call i32 asm "", "=r,0"(i32 %mask) readnone nounwind
+  %1 = and i32 %a, %0
+  %2 = xor i32 %0, -1
+  %3 = and i32 %b, %2
+  %4 = or i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i64 @same(i64 noundef %a, i64 noundef %b) #0 {
+entry:
+  %0 = xor i64 %a, %b
+  %1 = sub i64 0, %0
+  %2 = or i64 %0, %1
+  %3 = lshr i64 %2, 63
+  %4 = sub i64 %3, 1
+  %5 = call i64 asm "", "=r,0"(i64 %4) readnone nounwind
+  ret i64 %5
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end builtin-ct -->
+
 ### `Math.random`
 
 `nish_random` mutates global state (effect `write`), so `coin` is not pure.

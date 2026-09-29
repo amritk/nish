@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 774 programs, 52073 dump lines.
+# 781 programs, 52189 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4906,6 +4906,121 @@ function test(): i32 -> @test [exported]
   local 4:9 f: f64 (const)
   local 5:9 big: i64 (const)
   local 12:9 zero: f64 (const)
+program tests/cases/ct_asm_mac.ts
+module tests/cases/ct_asm_mac.ts (entry)
+function macEqual(a: u8[], b: u8[]): u32 -> @macEqual [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 12:7 diff: u32 (let)
+  local 13:12 i: i32 (let)
+function tableLookup(table: u32[], secret: u32): u32 -> @tableLookup [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 22:7 found: u32 (let)
+  local 23:12 i: i32 (let)
+program tests/cases/ct_asm_primitives.ts
+module tests/cases/ct_asm_primitives.ts (entry)
+function selectU32(mask: u32, a: u32, b: u32): u32 -> @selectU32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function selectU64(mask: u64, a: u64, b: u64): u64 -> @selectU64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function eqU32(a: u32, b: u32): u32 -> @eqU32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function eqU64(a: u64, b: u64): u64 -> @eqU64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function pickU32(a: u32, b: u32, x: u32, y: u32): u32 -> @pickU32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function pickU64(a: u64, b: u64, x: u64, y: u64): u64 -> @pickU64 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function maxU32(a: u32, b: u32): u32 -> @maxU32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 25:9 borrow: u32 (const)
+program tests/cases/ct_asm_refused.ts
+module tests/cases/ct_asm_refused.ts (entry)
+function naiveEqual(a: u8[], b: u8[]): u32 -> @naiveEqual [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 10:12 i: i32 (let)
+function indexedLookup(table: u32[], secret: u32): u32 -> @indexedLookup [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/ct_eq_u32.ts --number-mode f64
+module tests/cases/ct_eq_u32.ts (entry)
+function show(a: u32, b: u32): void -> @show
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_u64
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via show
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_u64 show
+  stackSites=0 stackLocals=0
+  local 12:9 ONES: u32 (const)
+  local 13:9 TOP: u32 (const)
+  callee 14:3 show -> @show
+  callee 15:3 show -> @show
+  callee 16:3 show -> @show
+  callee 17:3 show -> @show
+  callee 18:3 show -> @show
+  callee 19:3 show -> @show
+  callee 20:3 show -> @show
+  callee 21:3 show -> @show
+  callee 22:3 show -> @show
+program tests/cases/ct_select_u32.ts --number-mode f64
+module tests/cases/ct_select_u32.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_u64
+  stackSites=1 stackLocals=1
+  local 7:9 ONES: u32 (const)
+  local 8:9 TOP: u32 (const)
+  local 9:9 values: u32[] (const)
+  local 10:14 a: u32 (const)
+  local 11:16 b: u32 (const)
+  local 17:9 half: u32 (const)
+program tests/cases/ct_u64.ts
+module tests/cases/ct_u64.ts (entry)
+function ones(): u64 -> @ones
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function top(): u64 -> @top
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_u64 ones top
+  stackSites=1 stackLocals=1
+  local 9:9 values: u64[] (const)
+  callee 9:46 top -> @top
+  callee 9:53 ones -> @ones
+  callee 9:61 top -> @top
+  local 10:14 a: u64 (const)
+  local 11:16 b: u64 (const)
+  callee 12:56 ones -> @ones
+  callee 15:24 top -> @top
+  callee 15:42 ones -> @ones
+  callee 16:23 ones -> @ones
+  callee 16:32 ones -> @ones
 program tests/cases/dbg_arrow.ts
 module tests/cases/dbg_arrow.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42381,6 +42496,14 @@ function narrow(x: f64): i32 -> @narrow
   calls: llvm.fptosi.sat.i32.f64
   stackSites=0 stackLocals=0
 function toDouble(n: i32): f64 -> @toDouble
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/builtin-ct.ts
+module docs/cookbook/builtin-ct.ts (entry)
+function pick(mask: u32, a: u32, b: u32): u32 -> @pick [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function same(a: u64, b: u64): u64 -> @same [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 program docs/cookbook/builtin-driver.ts
