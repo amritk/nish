@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 717 programs, 51069 dump lines.
+# 718 programs, 51079 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37140,13 +37140,24 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
-  stackSites=2 stackLocals=2
+  stackSites=4 stackLocals=4
   local 9:9 n: i32 (const)
   local 10:9 none: f64[] (const)
-  local 11:9 grown: i32[] (const)
-  local 12:12 i: i32 (let)
-  local 15:9 floats: f64[] (const)
-  local 16:9 points: Point | null[] (const)
+  local 12:9 hex: f64[] (const)
+  local 13:9 separated: boolean[] (const)
+  local 14:9 grown: i32[] (const)
+  local 15:12 i: i32 (let)
+  local 18:9 floats: f64[] (const)
+  local 19:9 points: Point | null[] (const)
+program tests/cases/port_array_quiet_f64.ts --number-mode f64
+module tests/cases/port_array_quiet_f64.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  stackSites=2 stackLocals=2
+  local 4:9 none: f64[] (const)
+  local 5:9 flags: boolean[] (const)
 program tests/cases/port_array_zero_fill.ts
 module tests/cases/port_array_zero_fill.ts (entry)
 struct Grid (class) size=8 align=8

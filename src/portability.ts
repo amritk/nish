@@ -38,6 +38,7 @@
 
 import { AnalysisUnit } from "./attributes"
 import { CLI } from "./branding"
+import { numericLiteralValue } from "./constants"
 import { StringSet } from "./map"
 import { N_ARROW, N_IDENT, N_NEW, N_NUMBER, Node } from "./nodes"
 import { Options } from "./options"
@@ -182,7 +183,8 @@ const walkPortability = (walk: PortabilityWalk, node: Node, out: PortabilityFind
 /**
  * NL8005: `new Array<T>(n)` of a number or a boolean is `n` zeros (or `false`s)
  * here, and `n` holes in TypeScript, which read back as `undefined` — so a sum
- * over it is `NaN` there and 0 here. `new Array<T>(0)` has no element to
+ * over it is `NaN` there and 0 here. `new Array<T>(0)`, however the zero is
+ * spelled (`0x0`, `0b0_0`, `0.0`), has no element to
  * differ, and `[]` is not this node at all. The typed-array aliases are not
  * reported: `new Float64Array(n)` is zero-filled in JavaScript too.
  */
@@ -191,7 +193,7 @@ const zeroFillFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFind
     return
   }
   const args = node.children[2].children
-  if (args.length !== 1 || (args[0].kind === N_NUMBER && args[0].text === "0")) {
+  if (args.length !== 1 || (args[0].kind === N_NUMBER && numericLiteralValue(args[0].text) === 0)) {
     return
   }
   const type = walk.program.nodeTypes[node.id]

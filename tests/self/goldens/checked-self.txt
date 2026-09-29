@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1121918 dump lines live, 76 distinct modules.
+# 76 programs, 1121946 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -25316,6 +25316,7 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
 module src/portability.ts
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit
 import CLI from "./branding" -> const CLI
+import numericLiteralValue from "./constants" -> function @numericLiteralValue
 import StringSet from "./map" -> struct StringSet
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_IDENT from "./nodes" -> const N_IDENT
@@ -25370,28 +25371,28 @@ function PortabilityWalk.textOf(this: PortabilityWalk, node: Node): string -> @P
   stackSites=0 stackLocals=0
 function portabilityFindings(unit: AnalysisUnit, table: TypeTable, opts: Options): PortabilityFinding[] -> @portabilityFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 157:9
+  sharedWrite: 158:9
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn PortabilityWalk.constructor StringSet.add StringSet.constructor nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 walkPortability
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=72 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#2
   pointer opts: size=96 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#3
   stackSites=3 stackLocals=2
-  local 135:9 program: CheckedProgram (const)
-  local 136:9 out: PortabilityFinding[] (const)
-  local 140:9 seen: StringSet (const)
-  callee 140:16 new StringSet -> @StringSet.constructor
-  local 141:14 sig: FunctionSig (const)
-  local 142:11 body: Node | null (const)
-  callee 142:18 FunctionSig.body -> @FunctionSig.body
-  callee 143:43 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 146:11 instance: Instantiation | null (const)
-  callee 148:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local 150:11 found: PortabilityFinding[] (const)
-  callee 151:5 walkPortability -> @walkPortability
-  callee 151:21 new PortabilityWalk -> @PortabilityWalk.constructor
-  callee 153:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local 155:16 finding: PortabilityFinding (const)
-  callee 156:11 StringSet.add -> @StringSet.add
+  local 136:9 program: CheckedProgram (const)
+  local 137:9 out: PortabilityFinding[] (const)
+  local 141:9 seen: StringSet (const)
+  callee 141:16 new StringSet -> @StringSet.constructor
+  local 142:14 sig: FunctionSig (const)
+  local 143:11 body: Node | null (const)
+  callee 143:18 FunctionSig.body -> @FunctionSig.body
+  callee 144:43 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 147:11 instance: Instantiation | null (const)
+  callee 149:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local 151:11 found: PortabilityFinding[] (const)
+  callee 152:5 walkPortability -> @walkPortability
+  callee 152:21 new PortabilityWalk -> @PortabilityWalk.constructor
+  callee 154:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 156:16 finding: PortabilityFinding (const)
+  callee 157:11 StringSet.add -> @StringSet.add
 function walkPortability(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @walkPortability
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via zeroFillFinding
@@ -25400,29 +25401,30 @@ function walkPortability(walk: PortabilityWalk, node: Node, out: PortabilityFind
   pointer node: size=40 writesThrough=true captured=true passedTo=zeroFillFinding#1 numberFindings#1 stringFindings#1 recordFindings#1
   pointer out: size=0 writesThrough=true captured=false passedTo=zeroFillFinding#2 numberFindings#2 stringFindings#2 recordFindings#2 walkPortability#2
   stackSites=0 stackLocals=0
-  callee 173:3 zeroFillFinding -> @zeroFillFinding
-  callee 174:3 numberFindings -> @numberFindings
-  callee 175:3 stringFindings -> @stringFindings
-  callee 176:3 recordFindings -> @recordFindings
-  local 177:14 child: Node (const)
-  callee 178:5 walkPortability -> @walkPortability
+  callee 174:3 zeroFillFinding -> @zeroFillFinding
+  callee 175:3 numberFindings -> @numberFindings
+  callee 176:3 stringFindings -> @stringFindings
+  callee 177:3 recordFindings -> @recordFindings
+  local 178:14 child: Node (const)
+  callee 179:5 walkPortability -> @walkPortability
 function zeroFillFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @zeroFillFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 205:3
-  calls: PortabilityFinding.constructor PortabilityWalk.textOf TypeTable.baseOf TypeTable.isArray TypeTable.refOf isNumeric nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
+  sharedWrite: 207:3
+  calls: PortabilityFinding.constructor PortabilityWalk.textOf TypeTable.baseOf TypeTable.isArray TypeTable.refOf isNumeric nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq numericLiteralValue
   pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1 PortabilityWalk.textOf#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 193:9 args: Node[] (const)
-  local 197:9 type: i32 (const)
-  callee 198:8 TypeTable.isArray -> @TypeTable.isArray
-  local 201:9 element: i32 (const)
-  callee 201:19 TypeTable.baseOf -> @TypeTable.baseOf
-  callee 201:37 TypeTable.refOf -> @TypeTable.refOf
-  callee 202:8 isNumeric -> @isNumeric
-  callee 206:5 new PortabilityFinding -> @PortabilityFinding.constructor
-  callee 208:12 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  local 195:9 args: Node[] (const)
+  callee 196:58 numericLiteralValue -> @numericLiteralValue
+  local 199:9 type: i32 (const)
+  callee 200:8 TypeTable.isArray -> @TypeTable.isArray
+  local 203:9 element: i32 (const)
+  callee 203:19 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 203:37 TypeTable.refOf -> @TypeTable.refOf
+  callee 204:8 isNumeric -> @isNumeric
+  callee 208:5 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 210:12 PortabilityWalk.textOf -> @PortabilityWalk.textOf
 module src/portability-numbers.ts
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding

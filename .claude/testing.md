@@ -39,10 +39,11 @@ test is **data, not code**: a source file next to the output it must produce.
     nothing may be reported. The flag is not written into `.args`, because
     the tools that compile `tests/cases/` with the last release would refuse
     it; `tests/diagnostic-coverage.js` adds it to every `port_*` case and
-    `nl8xxx_*` wording itself. The class's own checks (off by default, the
-    same IR with and without it, nothing for a program with an error,
-    independence from `--no-warn-performance`) are the WP33 block of
-    `tests/run.js`.
+    `nl8xxx_*` wording itself. That the second compile writes the same IR
+    bytes as the first is checked right there, beside the golden, for every
+    `port_*` case. The class's own checks (off by default, nothing for a
+    program with an error, independence from `--no-warn-performance`, the
+    human line and the cap) are the WP33 block of `tests/run.js`.
 
 - **Naming is by family prefix**, matching the module that owns the construct:
   `cf_*` control flow, `cls_*` classes, `str_*` strings, `arr_*` arrays,
