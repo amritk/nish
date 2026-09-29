@@ -173,12 +173,15 @@ static void ct_run(const ct_function *f, long samples) {
         ct_push(&tests[k + 1], x, c);
       }
     }
-    // dudect's rule for the second-order test: only once the uncropped mean
-    // has 10,000 measurements behind it. It is also kept below the top crop
-    // point here, because one preemption squared outweighs a thousand calls,
-    // and measured |t| of 30 to 47 on functions whose other tests read 1.
-    if (tests[0].n[c] > 10000 && x < crop[CT_PERCENTILES - 1]) {
-      double centred = x - tests[0].mean[c];
+    // The second-order test, once 10,000 measurements of the class are in, as
+    // dudect has it; but on the measurements below the top crop point, and
+    // centred on their own mean rather than the uncropped one. One preemption
+    // moves the uncropped mean of its class by thousands of ticks over n, and
+    // every squared distance after it inherits that: centred there, functions
+    // whose first-order tests read |t| = 1 measured 30 to 330.
+    const ct_ttest *top = &tests[CT_PERCENTILES];
+    if (x < crop[CT_PERCENTILES - 1] && top->n[c] > 10000) {
+      double centred = x - top->mean[c];
       ct_push(&tests[CT_TESTS - 1], centred * centred, c);
     }
   }
