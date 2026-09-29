@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1128099 dump lines live, 76 distinct modules.
+# 76 programs, 1130325 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -64,7 +64,7 @@ entry src/parallel.ts: src/parallel.ts src/attributes.ts src/emit-builtins.ts sr
 entry src/parents.ts: src/parents.ts src/nodes.ts
 entry src/parser.ts: src/parser.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts
 entry src/paths.ts: src/paths.ts src/strings.ts
-entry src/portability-numbers.ts: src/portability-numbers.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-records.ts src/portability-strings.ts
+entry src/portability-numbers.ts: src/portability-numbers.ts src/nodes.ts src/emit-util.ts src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-records.ts src/portability-strings.ts
 entry src/portability-records.ts: src/portability-records.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-strings.ts
 entry src/portability-strings.ts: src/portability-strings.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-records.ts
 entry src/portability.ts: src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts
@@ -25644,15 +25644,174 @@ function zeroFillFinding(walk: PortabilityWalk, node: Node, out: PortabilityFind
   callee 231:5 new PortabilityFinding -> @PortabilityFinding.constructor
   callee 233:12 PortabilityWalk.textOf -> @PortabilityWalk.textOf
 module src/portability-numbers.ts
+import N_BINARY from "./nodes" -> const N_BINARY
+import N_CALL from "./nodes" -> const N_CALL
+import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
+import N_EMPTY from "./nodes" -> const N_EMPTY
+import N_UNARY from "./nodes" -> const N_UNARY
+import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import dottedName from "./emit-util" -> function @dottedName
+import receiverIsValue from "./emit-util" -> function @receiverIsValue
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
-function numberFindings(_walk: PortabilityWalk, _node: Node, _out: PortabilityFinding[]): void -> @numberFindings [exported]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer _walk: size=48 writesThrough=false captured=false
-  pointer _node: size=40 writesThrough=false captured=false
-  pointer _out: size=0 writesThrough=false captured=false
+import intBits from "./types" -> function @intBits
+import isFloat from "./types" -> function @isFloat
+import isInteger from "./types" -> function @isInteger
+import isUnsigned from "./types" -> function @isUnsigned
+import T_I32 from "./types" -> const T_I32
+function numberFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @numberFindings [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via signatureFindings
+  calls: binaryFindings builtinCallFinding isFirstBody localFinding moduleFindings signatureFindings stepFinding
+  pointer walk: size=48 writesThrough=false captured=false passedTo=signatureFindings#0 isFirstBody#0 moduleFindings#0 binaryFindings#0 stepFinding#0 builtinCallFinding#0 localFinding#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=binaryFindings#1 stepFinding#1 builtinCallFinding#1 localFinding#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=signatureFindings#1 moduleFindings#1 binaryFindings#2 stepFinding#2 builtinCallFinding#2 localFinding#2
   stackSites=0 stackLocals=0
+  callee 43:5 signatureFindings -> @signatureFindings
+  callee 44:9 isFirstBody -> @isFirstBody
+  callee 45:7 moduleFindings -> @moduleFindings
+  callee 50:7 binaryFindings -> @binaryFindings
+  callee 53:7 stepFinding -> @stepFinding
+  callee 56:7 builtinCallFinding -> @builtinCallFinding
+  callee 59:7 localFinding -> @localFinding
+function binaryFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @binaryFindings
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 74:7
+  calls: TypeTable.baseOf isInteger nish_array_grow nish_panic_index nish_str_eq operatorFinding wrapFinding
+  pointer walk: size=48 writesThrough=false captured=false passedTo=operatorFinding#0 operatorFinding#0 wrapFinding#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=operatorFinding#1 operatorFinding#1 wrapFinding#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=wrapFinding#2
+  stackSites=0 stackLocals=0
+  local 70:9 op: string (const)
+  local 72:11 operand: i32 (const)
+  callee 72:21 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 73:9 isInteger -> @isInteger
+  callee 74:16 operatorFinding -> @operatorFinding
+  callee 80:9 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 81:16 operatorFinding -> @operatorFinding
+  callee 86:5 wrapFinding -> @wrapFinding
+function stepFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @stepFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via wrapFinding
+  calls: nish_str_eq wrapFinding
+  pointer walk: size=48 writesThrough=false captured=false passedTo=wrapFinding#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=wrapFinding#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=wrapFinding#2
+  stackSites=0 stackLocals=0
+  callee 93:5 wrapFinding -> @wrapFinding
+function wrapFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @wrapFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 107:5
+  calls: nish_array_grow nish_panic_index operatorFinding wrapsHere
+  pointer walk: size=48 writesThrough=false captured=false passedTo=wrapsHere#0 operatorFinding#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=operatorFinding#1
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 105:9 operand: i32 (const)
+  callee 106:7 wrapsHere -> @wrapsHere
+  callee 107:14 operatorFinding -> @operatorFinding
+function wrapsHere(walk: PortabilityWalk, type: i32): boolean -> @wrapsHere
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: isUnsigned isWide
+  pointer walk: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 118:4 isUnsigned -> @isUnsigned
+  callee 118:25 isWide -> @isWide
+function operatorFinding(walk: PortabilityWalk, node: Node, type: i32, fragment: string): PortabilityFinding -> @operatorFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: type
+  calls: PortabilityFinding.constructor TypeTable.typeName nish_alloc_struct nish_str_concat
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1
+  stackSites=0 stackLocals=0
+  callee 127:3 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 127:60 TypeTable.typeName -> @TypeTable.typeName
+function builtinCallFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @builtinCallFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 158:3
+  calls: PortabilityFinding.constructor TypeTable.baseOf dottedName isFloat nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq receiverIsValue
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 141:9 callee: Node (const)
+  local 142:9 name: string (const)
+  callee 142:16 dottedName -> @dottedName
+  local 143:9 args: Node[] (const)
+  callee 144:43 receiverIsValue -> @receiverIsValue
+  callee 147:8 isFloat -> @isFloat
+  callee 147:16 TypeTable.baseOf -> @TypeTable.baseOf
+  local 150:7 fragment: string (let)
+  callee 158:12 new PortabilityFinding -> @PortabilityFinding.constructor
+function isWide(type: i32): boolean -> @isWide
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: type
+  calls: intBits
+  stackSites=0 stackLocals=0
+  callee 164:40 intBits -> @intBits
+function wideFinding(node: Node, what: string): PortabilityFinding -> @wideFinding
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: PortabilityFinding.constructor nish_alloc_struct nish_str_concat
+  pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1
+  stackSites=0 stackLocals=0
+  callee 168:3 new PortabilityFinding -> @PortabilityFinding.constructor
+function localFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @localFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 177:5
+  calls: isWide nish_array_grow nish_panic_index nish_str_concat wideFinding
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 175:9 local: Local | null (const)
+  callee 176:25 isWide -> @isWide
+  callee 177:14 wideFinding -> @wideFinding
+function signatureFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @signatureFindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 201:7
+  calls: isWide nish_array_grow nish_panic_index nish_str_concat wideFinding
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 191:9 decl: Node (const)
+  local 192:9 ctor: boolean (const)
+  local 193:9 at: i32 (const)
+  local 194:9 params: Node[] (const)
+  local 195:9 types: i32[] (const)
+  local 196:9 skip: i32 (const)
+  local 197:7 i: i32 (let)
+  local 199:11 name: Node (const)
+  callee 200:9 isWide -> @isWide
+  callee 201:16 wideFinding -> @wideFinding
+  callee 205:16 isWide -> @isWide
+  local 210:9 annotation: Node (const)
+  callee 212:14 wideFinding -> @wideFinding
+function isFirstBody(walk: PortabilityWalk): boolean -> @isFirstBody
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: FunctionSig.body FunctionSig.definedIn
+  pointer walk: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 223:9 program: CheckedProgram (const)
+  local 224:14 sig: FunctionSig (const)
+  callee 227:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 227:59 FunctionSig.body -> @FunctionSig.body
+function moduleFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @moduleFindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 247:9
+  calls: isWide nish_array_grow nish_panic_index nish_str_concat wideFinding
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 240:9 program: CheckedProgram (const)
+  local 241:14 struct: StructInfo (const)
+  local 245:16 field: FieldInfo (const)
+  callee 246:11 isWide -> @isWide
+  callee 247:18 wideFinding -> @wideFinding
+  local 251:14 constant: ConstInfo (const)
+  callee 252:47 isWide -> @isWide
+  callee 253:16 wideFinding -> @wideFinding
 module src/portability-records.ts
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
