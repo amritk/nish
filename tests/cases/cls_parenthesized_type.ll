@@ -75,18 +75,17 @@ entry:
   br i1 %23, label %cond.true, label %cond.false
 
 cond.true:
-  %24 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.false:
-  %25 = load %struct.Node*, %struct.Node** %found.addr, align 8
-  %26 = getelementptr inbounds %struct.Node, %struct.Node* %25, i32 0, i32 0
-  %27 = load i32, i32* %26, align 4, !tbaa !15
+  %24 = load %struct.Node*, %struct.Node** %found.addr, align 8
+  %25 = getelementptr inbounds %struct.Node, %struct.Node* %24, i32 0, i32 0
+  %26 = load i32, i32* %25, align 4, !tbaa !15
   br label %cond.end
 
 cond.end:
-  %28 = phi i32 [ %24, %cond.true ], [ %27, %cond.false ]
-  ret i32 %28
+  %27 = phi i32 [ -1, %cond.true ], [ %26, %cond.false ]
+  ret i32 %27
 }
 
 attributes #0 = { nounwind willreturn }

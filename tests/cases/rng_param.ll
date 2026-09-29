@@ -91,15 +91,14 @@ entry:
   %25 = call i8* @nish_str_from_u64(i64 %24)
   %26 = call i8* @nish_str_concat(i8* %21, i8* %25)
   call void @nish_print(i8* %26)
-  %27 = sub nsw i32 0, 128
-  %28 = call i32 @offset(i32 %27)
-  %29 = call i8* @nish_str_from_i32(i32 %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %31 = load i32, i32* %n.addr, align 4
-  %32 = sub nsw i32 %31, 5
-  %33 = sub i32 %32, -128
-  %34 = icmp ult i32 %33, 256
-  br i1 %34, label %rng.ok, label %rng.fail
+  %27 = call i32 @offset(i32 -128)
+  %28 = call i8* @nish_str_from_i32(i32 %27)
+  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %30 = load i32, i32* %n.addr, align 4
+  %31 = sub nsw i32 %30, 5
+  %32 = sub i32 %31, -128
+  %33 = icmp ult i32 %32, 256
+  br i1 %33, label %rng.ok, label %rng.fail
 
 rng.fail:
   call void @nish_write(i8* bitcast ({ i64, [48 x i8] }* @.str.1 to i8*), i32 2, i1 true)
@@ -107,22 +106,22 @@ rng.fail:
   unreachable
 
 rng.ok:
-  %35 = call i32 @offset(i32 %32)
-  %36 = call i8* @nish_str_from_i32(i32 %35)
-  %37 = call i8* @nish_str_concat(i8* %30, i8* %36)
-  call void @nish_print(i8* %37)
+  %34 = call i32 @offset(i32 %31)
+  %35 = call i8* @nish_str_from_i32(i32 %34)
+  %36 = call i8* @nish_str_concat(i8* %29, i8* %35)
+  call void @nish_print(i8* %36)
   store i32 200, i32* %hex.addr, align 4
-  %38 = load i32, i32* %hex.addr, align 4
-  %39 = call i32 @echo$rng.p0.p255(i32 %38)
-  store i32 %39, i32* %bin.addr, align 4
-  %40 = load i32, i32* %bin.addr, align 4
-  %41 = call i32 @echo$rng.p0.p255(i32 %40)
-  store i32 %41, i32* %dec.addr, align 4
-  %42 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
-  %43 = load i32, i32* %dec.addr, align 4
-  %44 = sub nsw i32 %43, 197
-  %45 = icmp ult i32 %44, 256
-  br i1 %45, label %rng.ok.1, label %rng.fail.1
+  %37 = load i32, i32* %hex.addr, align 4
+  %38 = call i32 @echo$rng.p0.p255(i32 %37)
+  store i32 %38, i32* %bin.addr, align 4
+  %39 = load i32, i32* %bin.addr, align 4
+  %40 = call i32 @echo$rng.p0.p255(i32 %39)
+  store i32 %40, i32* %dec.addr, align 4
+  %41 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
+  %42 = load i32, i32* %dec.addr, align 4
+  %43 = sub nsw i32 %42, 197
+  %44 = icmp ult i32 %43, 256
+  br i1 %44, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
   call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.2 to i8*), i32 2, i1 true)
@@ -130,10 +129,10 @@ rng.fail.1:
   unreachable
 
 rng.ok.1:
-  %46 = call i8 @getByte(%struct.nish_array* %42, i32 %44)
-  %47 = zext i8 %46 to i64
-  %48 = call i8* @nish_str_from_u64(i64 %47)
-  call void @nish_print(i8* %48)
+  %45 = call i8 @getByte(%struct.nish_array* %41, i32 %43)
+  %46 = zext i8 %45 to i64
+  %47 = call i8* @nish_str_from_u64(i64 %46)
+  call void @nish_print(i8* %47)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

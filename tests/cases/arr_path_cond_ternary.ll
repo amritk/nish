@@ -128,12 +128,11 @@ bounds.ok:
   br label %cond.end
 
 cond.false:
-  %21 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.end:
-  %22 = phi i32 [ %20, %bounds.ok ], [ %21, %cond.false ]
-  ret i32 %22
+  %21 = phi i32 [ %20, %bounds.ok ], [ -1, %cond.false ]
+  ret i32 %21
 }
 
 define noundef i32 @nish_main() #1 {

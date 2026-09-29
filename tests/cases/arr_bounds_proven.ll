@@ -123,17 +123,16 @@ lor.end:
   br i1 %5, label %if.then, label %if.end
 
 if.then:
-  %6 = sub nsw i32 0, 1
-  ret i32 %6
+  ret i32 -1
 
 if.end:
-  %7 = sext i32 %i to i64
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %7
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %12
+  %6 = sext i32 %i to i64
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %11
 }
 
 define noundef i32 @test() #0 {

@@ -174,28 +174,27 @@ lor.end:
   br i1 %16, label %if.then, label %if.end, !dbg !82
 
 if.then:
-  %17 = sub nsw i32 0, 1, !dbg !87
   call void @nish_arena_release(i64 %arena.mark), !dbg !86
-  ret i32 %17, !dbg !86
+  ret i32 -1, !dbg !86
 
 if.end:
-  %18 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %r.addr, align 8, !dbg !91
-  %19 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 0, !dbg !90
-  %20 = load i1, i1* %19, align 1, !dbg !90
-  %21 = insertvalue { i1, i32, i32 } undef, i1 %20, 0, !dbg !90
-  %22 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 2, !dbg !90
-  %23 = load i32, i32* %22, align 4, !dbg !90
-  %24 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %18, i32 0, i32 1, !dbg !90
-  %25 = load i32, i32* %24, align 4, !dbg !90
-  %26 = insertvalue { i1, i32, i32 } %21, i32 %25, 1, !dbg !90
-  %27 = insertvalue { i1, i32, i32 } %26, i32 %23, 2, !dbg !90
-  %28 = call i32 @score({ i1, i32, i32 } %27), !dbg !90
-  %29 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %named.addr, align 8, !dbg !92
-  %30 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %29, i32 0, i32 1, !dbg !92
-  %31 = load i32, i32* %30, align 4, !dbg !92
-  %32 = add nsw i32 %28, %31, !dbg !90
-  call void @nish_arena_release(i64 %arena.mark), !dbg !89
-  ret i32 %32, !dbg !89
+  %17 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %r.addr, align 8, !dbg !90
+  %18 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %17, i32 0, i32 0, !dbg !89
+  %19 = load i1, i1* %18, align 1, !dbg !89
+  %20 = insertvalue { i1, i32, i32 } undef, i1 %19, 0, !dbg !89
+  %21 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %17, i32 0, i32 2, !dbg !89
+  %22 = load i32, i32* %21, align 4, !dbg !89
+  %23 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %17, i32 0, i32 1, !dbg !89
+  %24 = load i32, i32* %23, align 4, !dbg !89
+  %25 = insertvalue { i1, i32, i32 } %20, i32 %24, 1, !dbg !89
+  %26 = insertvalue { i1, i32, i32 } %25, i32 %22, 2, !dbg !89
+  %27 = call i32 @score({ i1, i32, i32 } %26), !dbg !89
+  %28 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %named.addr, align 8, !dbg !91
+  %29 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %28, i32 0, i32 1, !dbg !91
+  %30 = load i32, i32* %29, align 4, !dbg !91
+  %31 = add nsw i32 %27, %30, !dbg !89
+  call void @nish_arena_release(i64 %arena.mark), !dbg !88
+  ret i32 %31, !dbg !88
 }
 
 attributes #0 = { nounwind }
@@ -296,8 +295,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !85 = !DILocation(line: 34, column: 35, scope: !66)
 !86 = !DILocation(line: 35, column: 5, scope: !66)
 !87 = !DILocation(line: 35, column: 12, scope: !66)
-!88 = !DILocation(line: 35, column: 13, scope: !66)
-!89 = !DILocation(line: 37, column: 3, scope: !66)
-!90 = !DILocation(line: 37, column: 10, scope: !66)
-!91 = !DILocation(line: 37, column: 16, scope: !66)
-!92 = !DILocation(line: 37, column: 21, scope: !66)
+!88 = !DILocation(line: 37, column: 3, scope: !66)
+!89 = !DILocation(line: 37, column: 10, scope: !66)
+!90 = !DILocation(line: 37, column: 16, scope: !66)
+!91 = !DILocation(line: 37, column: 21, scope: !66)

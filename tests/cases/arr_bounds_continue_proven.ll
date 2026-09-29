@@ -18,95 +18,94 @@ entry:
   %n.addr = alloca i32, align 4
   store i32 0, i32* %s.addr, align 4
   store i32 0, i32* %last.addr, align 4
-  %0 = sub nsw i32 0, 1
-  store i32 %0, i32* %i.addr, align 4
+  store i32 -1, i32* %i.addr, align 4
   store i32 0, i32* %n.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %for.cond
 
 for.cond:
-  %5 = load i32, i32* %n.addr, align 4
-  %6 = icmp slt i32 %5, 100
-  br i1 %6, label %for.body, label %for.end
+  %4 = load i32, i32* %n.addr, align 4
+  %5 = icmp slt i32 %4, 100
+  br i1 %5, label %for.body, label %for.end
 
 for.body:
-  %7 = load i32, i32* %n.addr, align 4
-  %8 = add nsw i32 %7, 1
-  store i32 %8, i32* %n.addr, align 4
-  %9 = load i32, i32* %i.addr, align 4
-  %10 = add nsw i32 %9, 1
-  store i32 %10, i32* %i.addr, align 4
-  %11 = load i32, i32* %i.addr, align 4
-  %12 = icmp slt i32 %11, 0
-  br i1 %12, label %lor.end, label %lor.rhs
+  %6 = load i32, i32* %n.addr, align 4
+  %7 = add nsw i32 %6, 1
+  store i32 %7, i32* %n.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = add nsw i32 %8, 1
+  store i32 %9, i32* %i.addr, align 4
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %13 = load i32, i32* %i.addr, align 4
-  %14 = trunc i64 %2 to i32
-  %15 = icmp sge i32 %13, %14
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = trunc i64 %1 to i32
+  %14 = icmp sge i32 %12, %13
   br label %lor.end
 
 lor.end:
-  %16 = phi i1 [ true, %for.body ], [ %15, %lor.rhs ]
-  br i1 %16, label %if.then, label %if.end
+  %15 = phi i1 [ true, %for.body ], [ %14, %lor.rhs ]
+  br i1 %15, label %if.then, label %if.end
 
 if.then:
   br label %for.end
 
 if.end:
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = sext i32 %17 to i64
-  %19 = bitcast i8* %4 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 %18
-  %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %22 = icmp eq i32 2, 0
-  %23 = icmp eq i32 %21, -2147483648
-  %24 = icmp eq i32 2, -1
-  %25 = and i1 %23, %24
-  %26 = or i1 %22, %25
-  br i1 %26, label %div.fail, label %div.ok
+  %16 = load i32, i32* %i.addr, align 4
+  %17 = sext i32 %16 to i64
+  %18 = bitcast i8* %3 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 %17
+  %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %21 = icmp eq i32 2, 0
+  %22 = icmp eq i32 %20, -2147483648
+  %23 = icmp eq i32 2, -1
+  %24 = and i1 %22, %23
+  %25 = or i1 %21, %24
+  br i1 %25, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %22)
+  call void @nish_panic_div(i1 zeroext %21)
   unreachable
 
 div.ok:
-  %27 = srem i32 %21, 2
-  %28 = icmp eq i32 %27, 0
-  br i1 %28, label %if.then.1, label %if.end.1
+  %26 = srem i32 %20, 2
+  %27 = icmp eq i32 %26, 0
+  br i1 %27, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %for.inc
 
 if.end.1:
-  %29 = load i32, i32* %s.addr, align 4
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = sext i32 %30 to i64
-  %32 = bitcast i8* %4 to i32*
-  %33 = getelementptr inbounds i32, i32* %32, i64 %31
-  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %35 = add nsw i32 %29, %34
-  store i32 %35, i32* %s.addr, align 4
+  %28 = load i32, i32* %s.addr, align 4
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = sext i32 %29 to i64
+  %31 = bitcast i8* %3 to i32*
+  %32 = getelementptr inbounds i32, i32* %31, i64 %30
+  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %34 = add nsw i32 %28, %33
+  store i32 %34, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
-  %36 = load i32, i32* %i.addr, align 4
-  %37 = sext i32 %36 to i64
-  %38 = bitcast i8* %4 to i32*
-  %39 = getelementptr inbounds i32, i32* %38, i64 %37
-  %40 = load i32, i32* %39, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  store i32 %40, i32* %last.addr, align 4
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = sext i32 %35 to i64
+  %37 = bitcast i8* %3 to i32*
+  %38 = getelementptr inbounds i32, i32* %37, i64 %36
+  %39 = load i32, i32* %38, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %39, i32* %last.addr, align 4
   br label %for.cond
 
 for.end:
-  %41 = load i32, i32* %s.addr, align 4
-  %42 = load i32, i32* %last.addr, align 4
-  %43 = mul nsw i32 %42, 0
-  %44 = add nsw i32 %41, %43
-  ret i32 %44
+  %40 = load i32, i32* %s.addr, align 4
+  %41 = load i32, i32* %last.addr, align 4
+  %42 = mul nsw i32 %41, 0
+  %43 = add nsw i32 %40, %42
+  ret i32 %43
 }
 
 define internal noundef i32 @countOdd(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
@@ -114,78 +113,77 @@ entry:
   %odd.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
   store i32 0, i32* %odd.addr, align 4
-  %0 = sub nsw i32 0, 1
-  store i32 %0, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  store i32 -1, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %do.body
 
 do.body:
-  %5 = load i32, i32* %i.addr, align 4
-  %6 = add nsw i32 %5, 1
-  store i32 %6, i32* %i.addr, align 4
-  %7 = load i32, i32* %i.addr, align 4
-  %8 = icmp slt i32 %7, 0
-  br i1 %8, label %lor.end, label %lor.rhs
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = add nsw i32 %4, 1
+  store i32 %5, i32* %i.addr, align 4
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = icmp slt i32 %6, 0
+  br i1 %7, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %9 = load i32, i32* %i.addr, align 4
-  %10 = trunc i64 %2 to i32
-  %11 = icmp sge i32 %9, %10
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = trunc i64 %1 to i32
+  %10 = icmp sge i32 %8, %9
   br label %lor.end
 
 lor.end:
-  %12 = phi i1 [ true, %do.body ], [ %11, %lor.rhs ]
-  br i1 %12, label %if.then, label %if.end
+  %11 = phi i1 [ true, %do.body ], [ %10, %lor.rhs ]
+  br i1 %11, label %if.then, label %if.end
 
 if.then:
   br label %do.end
 
 if.end:
-  %13 = load i32, i32* %i.addr, align 4
-  %14 = sext i32 %13 to i64
-  %15 = bitcast i8* %4 to i32*
-  %16 = getelementptr inbounds i32, i32* %15, i64 %14
-  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %18 = icmp eq i32 2, 0
-  %19 = icmp eq i32 %17, -2147483648
-  %20 = icmp eq i32 2, -1
-  %21 = and i1 %19, %20
-  %22 = or i1 %18, %21
-  br i1 %22, label %div.fail, label %div.ok
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = sext i32 %12 to i64
+  %14 = bitcast i8* %3 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 %13
+  %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %17 = icmp eq i32 2, 0
+  %18 = icmp eq i32 %16, -2147483648
+  %19 = icmp eq i32 2, -1
+  %20 = and i1 %18, %19
+  %21 = or i1 %17, %20
+  br i1 %21, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %18)
+  call void @nish_panic_div(i1 zeroext %17)
   unreachable
 
 div.ok:
-  %23 = srem i32 %17, 2
-  %24 = icmp eq i32 %23, 0
-  br i1 %24, label %if.then.1, label %if.end.1
+  %22 = srem i32 %16, 2
+  %23 = icmp eq i32 %22, 0
+  br i1 %23, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %do.cond
 
 if.end.1:
-  %25 = load i32, i32* %odd.addr, align 4
-  %26 = add nsw i32 %25, 1
-  store i32 %26, i32* %odd.addr, align 4
+  %24 = load i32, i32* %odd.addr, align 4
+  %25 = add nsw i32 %24, 1
+  store i32 %25, i32* %odd.addr, align 4
   br label %do.cond
 
 do.cond:
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = sext i32 %27 to i64
-  %29 = bitcast i8* %4 to i32*
-  %30 = getelementptr inbounds i32, i32* %29, i64 %28
-  %31 = load i32, i32* %30, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %32 = icmp sgt i32 %31, 0
-  br i1 %32, label %do.body, label %do.end
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = sext i32 %26 to i64
+  %28 = bitcast i8* %3 to i32*
+  %29 = getelementptr inbounds i32, i32* %28, i64 %27
+  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %31 = icmp sgt i32 %30, 0
+  br i1 %31, label %do.body, label %do.end
 
 do.end:
-  %33 = load i32, i32* %odd.addr, align 4
-  ret i32 %33
+  %32 = load i32, i32* %odd.addr, align 4
+  ret i32 %32
 }
 
 define noundef i32 @nish_main() #0 {

@@ -32,11 +32,10 @@ if.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = sub nsw i32 0, 4
-  %1 = call i32 @abs(i32 %0)
-  %2 = call i32 @pick(i1 true, i32 10, i32 20)
-  %3 = add nsw i32 %1, %2
-  ret i32 %3
+  %0 = call i32 @abs(i32 -4)
+  %1 = call i32 @pick(i1 true, i32 10, i32 20)
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
 }
 
 attributes #0 = { nounwind willreturn readnone }

@@ -34,16 +34,15 @@ entry:
   %down.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   store i32 4, i32* %up.addr, align 4
-  %0 = sub nsw i32 0, 3
-  store i32 %0, i32* %down.addr, align 4
-  %1 = load i32, i32* %up.addr, align 4
-  %2 = call i32 @pass(i32 %1)
-  %3 = call i8* @nish_str_from_i32(i32 %2)
-  call void @nish_print(i8* %3)
-  %4 = load i32, i32* %down.addr, align 4
-  %5 = call i32 @pass(i32 %4)
-  %6 = call i8* @nish_str_from_i32(i32 %5)
-  call void @nish_print(i8* %6)
+  store i32 -3, i32* %down.addr, align 4
+  %0 = load i32, i32* %up.addr, align 4
+  %1 = call i32 @pass(i32 %0)
+  %2 = call i8* @nish_str_from_i32(i32 %1)
+  call void @nish_print(i8* %2)
+  %3 = load i32, i32* %down.addr, align 4
+  %4 = call i32 @pass(i32 %3)
+  %5 = call i8* @nish_str_from_i32(i32 %4)
+  call void @nish_print(i8* %5)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
