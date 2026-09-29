@@ -611,10 +611,7 @@ export const collectMethodSignature = (
   collectParams(ctx, sig, decl.children[1], owner.type, false)
   const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
-    ctx.error(
-      decl.children[0],
-      `Method \`${decl.children[0].text}\` of class \`${spelled(ctx, owner)}\` needs an explicit return type annotation`
-    )
+    // The pass 1 sweep has refused it (NL2096, `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx)

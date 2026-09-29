@@ -24,6 +24,7 @@
 // without changing the oracle in the same commit.
 
 import {
+  FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
   FLAG_AWAIT,
@@ -38,6 +39,7 @@ import {
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_READONLY,
+  FLAG_REST,
   FLAG_SATISFIES,
   FLAG_STATIC,
   N_STRING,
@@ -109,6 +111,12 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_DEFAULT) !== 0) {
     name = `${name}+default`
+  }
+  if ((node.flags & FLAG_REST) !== 0) {
+    name = `${name}+rest`
+  }
+  if ((node.flags & FLAG_ACCESSOR) !== 0) {
+    name = `${name}+accessor`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

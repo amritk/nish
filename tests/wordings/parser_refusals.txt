@@ -50,6 +50,15 @@
 # generic aliases — have no case here, because their programs are the
 # `reject_*` cases that came off `tests/self/parser-refusals.txt`.
 #
+# And again, from 31 to 23, when the fourth stage read the function and
+# binding forms (`nl2191_destructured_constant`, `nl2192_destructured_parameter`,
+# `nl2193_destructuring_local`, `nl2203_anonymous_default_function`,
+# `nl2204_function_without_body`, `nl2233_optional_parameter`,
+# `nl2235_rest_parameter`, `nl2274_two_names_one_declaration`): a destructuring
+# pattern is a node of its own where a name is bound, a default, optional or
+# rest parameter a flag on its parameter, and a missing name or body an EMPTY
+# child, each refused by the checker's pass 1 sweep.
+#
 # One warning from that change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
@@ -68,23 +77,15 @@ nl2129_export_default_value
 nl2131_export_default_class
 nl2137_implements_expression
 nl2189_constructor_return_type
-nl2191_destructured_constant
-nl2192_destructured_parameter
-nl2193_destructuring_local
-nl2203_anonymous_default_function
-nl2204_function_without_body
 nl2212_template_specifier
 nl2213_class_index_signature
 nl2214_interface_index_signature
 nl2215_interface_extends
 nl2223_string_object_key
 nl2226_export_import_equals
-nl2233_optional_parameter
 nl2234_parameter_property
-nl2235_rest_parameter
 nl2243_type_only_import
 nl2255_class_static_block
 nl2257_interface_construct_signature
 nl2258_object_literal_method
-nl2274_two_names_one_declaration
 nl2286_declare_enum

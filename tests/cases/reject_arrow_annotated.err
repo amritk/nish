@@ -1,1 +1,1 @@
-`(n: i32) => i32` is a function type, which may only annotate a parameter of a top-level function
+Function `double` takes its signature from the arrow; drop the annotation on `double`

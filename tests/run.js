@@ -727,16 +727,17 @@ if (!only || "diagnostics".includes(only)) {
   )
 
   const synSrc = path.join(buildDir, "diag_syntax.ts")
-  fs.writeFileSync(synSrc, "function f( {\n  return 1;\n}\n")
+  fs.writeFileSync(synSrc, "function f( ; {\n  return 1;\n}\n")
   const syn = spawnSync(NISH, [synSrc, "-o", path.join(buildDir, "diag_syntax.ll")], { cwd: root })
   const synErr = String(syn.stderr)
-  // stage1's parser stops at the `{` that cannot start a parameter, so the
-  // excerpt is the first line with the caret under it.
+  // stage1's parser stops at the `;` that cannot start a parameter, so the
+  // excerpt is the first line with the caret under it. (A `{` opens a
+  // destructured parameter, which the checker refuses, since WP33 R1.)
   check(
     "diagnostics: syntax errors keep the `syntax error:` prefix and add the excerpt",
     syn.status === 1 &&
       synErr.includes(":1:13: syntax error: ") &&
-      synErr.includes("  1 | function f( {\n    |             ^"),
+      synErr.includes("  1 | function f( ; {\n    |             ^"),
     synErr
   )
 
@@ -7896,6 +7897,35 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     `exit ${declCallsRun.status}, wrong call count for ${wrongDeclCalls.join(", ")}\n${declCallsRun.stdout}${declCallsRun.stderr}`
   )
 
+  // The fourth stage's forms open at `get`, `set`, `{`, `[`, `...`, `=` and
+  // `,` where a syntax error used to be, and `tests/parser/names-bindings.ts`
+  // holds the programs beside each that already compiled: `get` and `set` as
+  // class fields, methods and locals and as interface fields, `get` before a
+  // method's parameters or a field's type on the next line, a body on the line after its signature, and parenthesised
+  // assignments and literals where an arrow's parameters could open.
+  const bindingsLl = path.join(buildDir, "parser_names_bindings.ll")
+  const bindingsRun = spawnSync(NISH, ["tests/parser/names-bindings.ts", "-o", bindingsLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const bindingsIr = bindingsRun.status === 0 ? fs.readFileSync(bindingsLl, "utf8") : ""
+  const wantBindings = [
+    "%struct.Accessors = type { i32, i32, i32 }",
+    "%struct.Pair = type { i32, i32 }",
+    "%struct.Wrapped = type { i32, i32 }",
+    "@GetSet.get(",
+    "@GetSet.set(",
+    "@LineBreaks.get(",
+    "@body(",
+    "@twice(",
+  ]
+  const missingBindings = wantBindings.filter((want) => !bindingsIr.includes(want))
+  check(
+    "src/parser.ts keeps the readings beside the function and binding forms (tests/parser/names-bindings.ts)",
+    bindingsRun.status === 0 && missingBindings.length === 0,
+    `exit ${bindingsRun.status}, missing ${missingBindings.join(", ")}\n${bindingsRun.stdout}${bindingsRun.stderr}`
+  )
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
@@ -8352,6 +8382,20 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
       ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
+      // The function and binding forms, all the checker's: one per
+      // declaration, the first in source order.
+      [
+        "reject_fn_sweep_together",
+        [
+          "16:22-16:38 NL2235",
+          "18:14-18:19 NL2096",
+          "20:14-20:20 NL2254",
+          "22:23-22:33 NL2233",
+          "24:10-24:19 NL2096",
+          "26:24-26:30 NL2254",
+          "28:1-28:33 NL2084",
+        ],
+      ],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)

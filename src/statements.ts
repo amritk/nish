@@ -33,9 +33,18 @@ import { builtinNameOf, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
+  FLAG_ACCESSOR,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_DEFAULT,
+  FLAG_FOREIGN,
+  FLAG_OPTIONAL,
+  FLAG_READONLY,
+  FLAG_REST,
+  FLAG_STATIC,
+  FLAG_VAR,
   N_ARROW,
+  N_BINDING_PATTERN,
   N_BLOCK,
   N_BREAK,
   N_CALL,
@@ -52,6 +61,8 @@ import {
   N_IF,
   N_INTERFACE,
   N_METHOD,
+  N_MODULE_CONST,
+  N_PARAM,
   N_RETURN,
   N_SWITCH,
   N_THROW,
@@ -440,16 +451,27 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 /**
  * WP33 R1: the forms the parser reads for the checker to refuse, over the
  * whole module in source order — the two `for...of` heads here, the
- * expressions `refuseExpressionForm` names and the types `refuseTypeForm`
+ * function and binding forms `refuseBindingForm` and `refuseAtChild` name,
+ * the expressions `refuseExpressionForm` names and the types `refuseTypeForm`
  * does. It is a sweep in pass 1 rather
  * than a rule in `checkForOf` or `checkExpression` because none needs a type,
  * and a body pass 2 checks is not every body: a template nothing instantiates
  * is never checked, and a loop in one would compile. There is no event loop
  * to wait on, so `for await` is refused at the modifier, whatever it walks.
+ *
+ * Each rule is asked where its form is written — a missing return type after
+ * the parameters, a default after the parameter's type — so that the first
+ * form in the source is the one reported, alone.
  */
 export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
+  sweepForms(ctx, node, null)
+}
+
+/** The sweep over `node`, whose `owner` is its class or interface when it is a member. */
+const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => {
   refuseExpressionForm(ctx, node)
   refuseTypeForm(ctx, node)
+  refuseBindingForm(ctx, node)
   if (node.kind === N_FOR_OF) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
       ctx.error(node, "`for await` is not supported")
@@ -468,8 +490,149 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
   }
   for (let i: i32 = 0; i < node.children.length; i++) {
     if (i !== slot) {
-      refuseUnsupportedForms(ctx, node.children[i])
+      refuseAtChild(ctx, node, i, owner)
+      if (isMemberList(node, i)) {
+        refuseMembers(ctx, node, node.children[i])
+      } else if ((node.kind === N_MODULE_CONST || node.kind === N_VAR) && i === 0) {
+        for (const decl of node.children[0].children) {
+          refuseDeclarator(ctx, node, decl)
+          refuseUnsupportedForms(ctx, decl)
+        }
+      } else {
+        refuseUnsupportedForms(ctx, node.children[i])
+      }
     }
+  }
+  // After the type, where a default is written.
+  if (node.kind === N_PARAM && (node.flags & FLAG_DEFAULT) !== 0) {
+    ctx.error(node, "Optional/default parameters are not supported")
+  }
+}
+
+/**
+ * The function and binding forms a node's own head holds, asked before any of
+ * its children: an anonymous default function (NL2203), a top-level `let`
+ * (NL2084) or one bound to an arrow (NL2272), a destructuring pattern where a
+ * constant or a local binds its name (NL2191, NL2193), an annotated arrow
+ * binding (NL2273), and a rest, destructured or optional parameter (NL2235,
+ * NL2192, NL2233).
+ */
+const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
+  if (node.kind === N_FUNCTION && node.children[0].kind === N_EMPTY) {
+    ctx.error(node, "Functions must be named")
+  } else if (node.kind === N_MODULE_CONST) {
+    const first = node.children[0].children[0]
+    if ((node.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
+      if (first.children[0].kind === N_IDENT && first.children[2].kind === N_ARROW) {
+        ctx.error(node, `Function \`${first.children[0].text}\` must be declared \`const\`, not \`let\``)
+      } else {
+        ctx.error(
+          node,
+          "Top-level `let` is not supported; a module has no top-level code, so only `const` is available"
+        )
+      }
+    }
+  } else if (node.kind === N_PARAM) {
+    if ((node.flags & FLAG_REST) !== 0) {
+      ctx.error(node, "Rest parameters are not supported")
+    } else if (node.children[0].kind === N_BINDING_PATTERN) {
+      ctx.error(node, "Destructured parameters are not supported")
+    } else if ((node.flags & FLAG_OPTIONAL) !== 0) {
+      ctx.error(node, "Optional/default parameters are not supported")
+    }
+  }
+}
+
+/**
+ * The forms written just before a function's or a method's child `i`: a
+ * missing return type (NL2096), a missing body (NL2204) and a second name
+ * (NL2274), each where it would have been.
+ *
+ * A method's return type is the sweep's rather than its collector's because a
+ * generic class's members and a generic method are collected only once
+ * instantiated, and a template nothing instantiates would otherwise compile
+ * without one. The one exception is the member header — `static`,
+ * `readonly`, `?` — which `collectMethod` refuses and which is written first:
+ * in a class that is not a template it is left to be the one diagnostic.
+ */
+const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null): void => {
+  if (
+    node.kind === N_METHOD &&
+    owner !== null &&
+    owner.kind === N_CLASS &&
+    i === 2 &&
+    node.children[2].kind === N_EMPTY
+  ) {
+    const header = (node.flags & (FLAG_STATIC | FLAG_READONLY | FLAG_OPTIONAL)) !== 0
+    if (!header || owner.children[4].children.length > 0) {
+      ctx.error(
+        node.children[0],
+        `Method \`${node.children[0].text}\` of class \`${owner.children[0].text}\` needs an explicit return type annotation`
+      )
+    }
+    return
+  }
+  if (node.kind !== N_FUNCTION) {
+    return
+  }
+  if (i === 2 && node.children[2].kind === N_EMPTY) {
+    ctx.error(
+      node.children[0],
+      `Function \`${node.children[0].text}\` needs an explicit return type annotation`
+    )
+  } else if (i === 3 && node.children[3].kind === N_EMPTY && (node.flags & FLAG_FOREIGN) === 0) {
+    ctx.error(node, "Functions must have a body")
+  } else if (i === 5) {
+    ctx.error(node, "A function declaration binds one name")
+  }
+}
+
+/**
+ * One declarator of a module constant or a local, before the sweep reads its
+ * annotation and initialiser: a destructuring pattern (NL2191 for a constant,
+ * NL2193 for a local), and an annotation on a constant bound to an arrow
+ * (NL2273).
+ */
+const refuseDeclarator = (ctx: CheckContext, owner: Node, decl: Node): void => {
+  if (decl.children[0].kind === N_BINDING_PATTERN) {
+    ctx.error(
+      decl,
+      owner.kind === N_MODULE_CONST
+        ? "Destructured constants are not supported"
+        : "Destructuring is not supported"
+    )
+  } else if (
+    owner.kind === N_MODULE_CONST &&
+    decl.children[1].kind !== N_EMPTY &&
+    decl.children[2].kind === N_ARROW
+  ) {
+    const name = decl.children[0].text
+    ctx.error(
+      decl.children[1],
+      `Function \`${name}\` takes its signature from the arrow; drop the annotation on \`${name}\``
+    )
+  }
+}
+
+/** Whether child `i` of `node` is a class's or an interface's member LIST. */
+const isMemberList = (node: Node, i: i32): boolean =>
+  (node.kind === N_CLASS && i === 3) || (node.kind === N_INTERFACE && i === 1)
+
+/**
+ * A class's or an interface's members, each refused by the rule that names
+ * its owner — a getter or setter (NL2209), a method in an interface (NL2048),
+ * a method's missing return type (NL2096, `refuseAtChild`) — where it is
+ * written.
+ */
+const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
+  const name = owner.children[0].text
+  for (const member of members.children) {
+    if (member.kind === N_METHOD && owner.kind === N_INTERFACE) {
+      ctx.error(member, `Interface \`${name}\` cannot declare methods (interfaces describe layout only)`)
+    } else if (member.kind === N_METHOD && (member.flags & FLAG_ACCESSOR) !== 0) {
+      ctx.error(member, `Getters and setters are not supported in class \`${name}\` (use a method)`)
+    }
+    sweepForms(ctx, member, owner)
   }
 }
 

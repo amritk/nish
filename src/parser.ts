@@ -41,6 +41,7 @@ import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
+  FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
   FLAG_AWAIT,
@@ -57,6 +58,7 @@ import {
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
+  FLAG_REST,
   FLAG_SATISFIES,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
@@ -65,6 +67,7 @@ import {
   N_ARROW,
   N_BIGINT,
   N_BINARY,
+  N_BINDING_PATTERN,
   N_BLOCK,
   N_BREAK,
   N_CALL,
@@ -586,6 +589,14 @@ export class Parser {
       decorator.end = this.previousEnd
       return decorator
     }
+    // `export default function () { }`, anonymous, for the checker to refuse
+    // (NL2203). A named default export is not read yet.
+    if (exported && this.at(TOK_DEFAULT) && this.peek() === TOK_FUNCTION && this.anonymousFunctionAhead()) {
+      this.advance() // `default`
+      const declaration = this.parseFunction(start, true)
+      declaration.flags = declaration.flags | FLAG_DEFAULT
+      return this.exportable(declaration, exported)
+    }
     if (this.at(TOK_IMPORT)) {
       if (exported) {
         return this.fail("`export` cannot introduce an import")
@@ -593,7 +604,7 @@ export class Parser {
       return this.parseImport(start)
     }
     if (this.at(TOK_FUNCTION)) {
-      return this.exportable(this.parseFunction(start), exported)
+      return this.exportable(this.parseFunction(start, false), exported)
     }
     // `async function`, a modifier only with no line break before `function`,
     // which is TypeScript's rule; Phase 0 refuses it (NL1015).
@@ -604,7 +615,7 @@ export class Parser {
       this.aheadOnSameLine()
     ) {
       this.advance() // `async`
-      const declaration = this.parseFunction(start)
+      const declaration = this.parseFunction(start, false)
       declaration.flags = declaration.flags | FLAG_ASYNC
       return this.exportable(declaration, exported)
     }
@@ -1103,6 +1114,19 @@ export class Parser {
     }
   }
 
+  /**
+   * Whether the `function` after the `default` in hand has no name: a `(`, a
+   * `<` or the `*` of a generator and then one of those follows it, as
+   * nothing can after a named one.
+   */
+  anonymousFunctionAhead(): boolean {
+    const scan = this.scanAfterAhead()
+    if (scan.kind === TOK_STAR) {
+      scan.next()
+    }
+    return scan.kind === TOK_LPAREN || scan.kind === TOK_LT
+  }
+
   /** Mark a declaration `export`ed, which is a modifier rather than a child. */
   exportable(declaration: Node, exported: boolean): Node {
     if (exported) {
@@ -1160,7 +1184,11 @@ export class Parser {
     return node
   }
 
-  parseFunction(start: i32): Node {
+  /**
+   * `function f(...)`, with its name unless `anonymous`: only `export default`
+   * may leave it out, and TypeScript says so as syntax everywhere else.
+   */
+  parseFunction(start: i32, anonymous: boolean): Node {
     this.advance() // `function`
     const node = this.node(N_FUNCTION, start, this.end)
     // `function*`, for Phase 0 to refuse (NL1044): `*` cannot follow
@@ -1168,15 +1196,26 @@ export class Parser {
     if (this.eat(TOK_STAR)) {
       node.flags = FLAG_GENERATOR
     }
-    node.children.push(this.parseIdentifier())
+    // No name only after `export default`, which has looked for the `(`; the
+    // checker refuses it (NL2203).
+    node.children.push(anonymous ? this.empty() : this.parseIdentifier())
     // The type parameters are read here, where they are written, and pushed
     // last, where `nodes.ts` puts them: the first four children of an
     // `N_FUNCTION` mean what they have always meant, so nothing downstream
     // that indexes them moves (WP18).
     const typeParams = this.parseTypeParameters()
-    node.children.push(this.parseParameters())
+    node.children.push(this.parseParameters(true))
     node.children.push(this.parseReturnType())
-    node.children.push(this.parseBlock())
+    // `function f(): void;` is an overload signature, a function with no body
+    // that the checker refuses (NL2204). It ends where a statement would,
+    // which is TypeScript's rule too, so `{` on the next line is still the
+    // body.
+    if (this.at(TOK_LBRACE)) {
+      node.children.push(this.parseBlock())
+    } else {
+      node.children.push(this.empty())
+      this.expectSemicolon()
+    }
     node.children.push(typeParams)
     node.end = this.previousEnd
     return node
@@ -1197,7 +1236,7 @@ export class Parser {
     const node = this.node(N_FUNCTION, start, this.end)
     node.children.push(this.parseIdentifier())
     const typeParams = this.parseTypeParameters()
-    node.children.push(this.parseParameters())
+    node.children.push(this.parseParameters(true))
     node.children.push(this.parseReturnType())
     // A `;` ends the declaration. A `{` is a body, which is a mistake the
     // *checker* reports — so it is parsed into the body slot rather than left
@@ -1363,57 +1402,104 @@ export class Parser {
       node.flags = FLAG_ASYNC
     }
     const typeParams = this.parseTypeParameters()
-    node.children.push(this.parseParameters())
+    node.children.push(this.parseParameters(true))
     node.children.push(this.parseReturnType())
     this.expect(TOK_ARROW)
     node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression())
     node.children.push(typeParams)
+    // `const f = (): i32 => 1, g = 2`: the names after the first, a sixth
+    // child only when written, for the checker to refuse (NL2274).
+    if (this.eat(TOK_COMMA)) {
+      node.children.push(this.parseVariableDeclarations())
+    }
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
   }
 
-  parseParameters(): Node {
+  /**
+   * `(a: T, b: U)`. An arrow in expression position may leave a parameter's
+   * type out (`typed` false), because the function type it is passed for
+   * supplies it.
+   */
+  parseParameters(typed: boolean): Node {
     const list = this.list()
     if (!this.expect(TOK_LPAREN)) {
       return list
     }
+    // A default is an expression, and the list is a bracket that reads `in`
+    // as the operator again.
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
-      list.children.push(this.parseParameter())
+      list.children.push(this.parseParameter(typed))
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RPAREN)
     return this.closeList(list)
   }
 
-  /** `x: T`, or a decorator in front of one (NL1006). */
-  parseParameter(): Node {
+  /**
+   * `x: T`, or a decorator in front of one (NL1006). A rest parameter, a
+   * destructuring pattern, `x?` and a default `x = 1` are read for the
+   * checker to refuse (NL2235, NL2192, NL2233) — the default's value is read
+   * and dropped — and none of the four needs its annotation to reach that
+   * refusal, as none does in TypeScript.
+   */
+  parseParameter(typed: boolean): Node {
     const start = this.start
     if (this.at(TOK_AT)) {
       const decorator = this.parseDecoratorHead(start)
-      decorator.children.push(this.parseParameter())
+      decorator.children.push(this.parseParameter(typed))
       decorator.end = this.previousEnd
       return decorator
     }
     const param = this.node(N_PARAM, start, this.end)
-    param.children.push(this.parseIdentifier())
-    if (this.at(TOK_QUESTION)) {
-      this.report("optional parameters are not supported", this.start, this.end)
-      this.advance()
+    if (this.eat(TOK_DOT_DOT_DOT)) {
+      param.flags = FLAG_REST
     }
-    param.children.push(this.parseTypeAnnotation())
+    param.children.push(this.parseBindingName())
+    if (this.eat(TOK_QUESTION)) {
+      param.flags = param.flags | FLAG_OPTIONAL
+    }
+    const refused = param.flags !== 0 || param.children[0].kind === N_BINDING_PATTERN || this.at(TOK_ASSIGN)
+    if (this.at(TOK_COLON) || (typed && !refused)) {
+      param.children.push(this.parseTypeAnnotation())
+    } else {
+      param.children.push(this.empty())
+    }
+    if (this.eat(TOK_ASSIGN)) {
+      this.parseExpression()
+      param.flags = param.flags | FLAG_DEFAULT
+    }
     param.end = this.previousEnd
     return param
   }
 
-  /** `: T` after a signature; a missing one is an error the checker also wants named. */
+  /**
+   * The name a parameter or a declaration binds, or the destructuring
+   * pattern in its place (`src/nodes.ts`, N_BINDING_PATTERN).
+   */
+  parseBindingName(): Node {
+    if (!this.at(TOK_LBRACE) && !this.at(TOK_LBRACKET)) {
+      return this.parseIdentifier()
+    }
+    const pattern = this.node(N_BINDING_PATTERN, this.start, this.end)
+    this.skipBindingPattern()
+    pattern.end = this.previousEnd
+    return pattern
+  }
+
+  /**
+   * `: T` after a signature. A missing one is EMPTY, and the checker names
+   * the function it is missing from (NL2096).
+   */
   parseReturnType(): Node {
     if (this.eat(TOK_COLON)) {
       return this.parseType()
     }
-    this.report("a return type annotation is required", this.start, this.end)
     return this.empty()
   }
 
@@ -1603,7 +1689,7 @@ export class Parser {
    * carries the optional marker. That needs one token more lookahead than
    * `peek` has, so it is a scan over the same source, the shape
    * `startsConstEnum` uses. `m!(...)` is not a spelling TypeScript has, so
-   * only `?` is looked for.
+   * only `?` is looked for, before the parameters or a generic method's `<`.
    */
   markedMethodAhead(): boolean {
     if (this.peek() !== TOK_QUESTION) {
@@ -1614,7 +1700,7 @@ export class Parser {
     scan.next() // the name
     scan.next() // `?`
     scan.next()
-    return scan.kind === TOK_LPAREN
+    return scan.kind === TOK_LPAREN || scan.kind === TOK_LT
   }
 
   /**
@@ -1662,7 +1748,7 @@ export class Parser {
     this.advance() // `]`
     method.children.push(name)
     method.flags = modifiers
-    method.children.push(this.parseParameters())
+    method.children.push(this.parseParameters(true))
     method.children.push(this.parseReturnType())
     method.children.push(this.parseBlock())
     method.end = this.previousEnd
@@ -1724,13 +1810,21 @@ export class Parser {
       // compiled *and run* as the instance constructor once the parser stopped
       // refusing the word (docs/wp19-stage0-retirement.md R3).
       ctor.flags = modifiers
-      ctor.children.push(this.parseParameters())
+      ctor.children.push(this.parseParameters(true))
       ctor.children.push(this.parseBlock())
       ctor.end = this.previousEnd
       return ctor
     }
     if (this.at(TOK_LBRACKET) && this.disposeNameAhead()) {
       return this.parseDisposeMethod(start, modifiers)
+    }
+    // `get x()` and `set x(v)`, for the checker to refuse (NL2209). A member
+    // called `get` is followed by what follows a name, never by another name,
+    // so the word is the accessor's wherever one follows it, a line break
+    // between them included, as TypeScript reads it.
+    if (this.at(TOK_IDENT) && (this.value === "get" || this.value === "set") && this.peek() === TOK_IDENT) {
+      this.advance()
+      modifiers = modifiers | FLAG_ACCESSOR
     }
     if (!this.at(TOK_IDENT)) {
       return this.fail(
@@ -1745,16 +1839,19 @@ export class Parser {
     // `:`, `?`, `!`, `=` or `;`, so a `<` after a member's name can only open a
     // type parameter list.
     if (
-      (modifiers & FLAG_GENERATOR) !== 0 ||
+      (modifiers & (FLAG_GENERATOR | FLAG_ACCESSOR)) !== 0 ||
       this.peek() === TOK_LPAREN ||
       this.peek() === TOK_LT ||
       this.markedMethodAhead()
     ) {
       const method = this.node(N_METHOD, start, this.end)
       method.children.push(this.parseIdentifier())
-      const typeParams = this.parseTypeParameters()
+      // `m?<T>()`: the marker is written before the type parameters. An
+      // accessor is refused whole, so its parameter needs no annotation to
+      // reach the refusal, as `set x(v)` needs none in TypeScript.
       method.flags = modifiers | this.parseMemberMarker()
-      method.children.push(this.parseParameters())
+      const typeParams = this.parseTypeParameters()
+      method.children.push(this.parseParameters((modifiers & FLAG_ACCESSOR) === 0))
       method.children.push(this.parseReturnType())
       method.children.push(this.parseBlock())
       // The fifth child, where an `N_FUNCTION` keeps its list, and only when
@@ -1796,7 +1893,26 @@ export class Parser {
           // field on either compiler, and `static x: i32` is refused with the
           // sentence that says `of interface \`I\``. Reading `?` here and not
           // these would be an arbitrary split in one grammar rule.
-          const modifiers = this.parseMemberModifiers()
+          let modifiers = this.parseMemberModifiers()
+          // `get x(): T;` and `set x(v: T);`, accessor signatures, read as a
+          // class reads the word (`parseMember`): before another name only, so
+          // `get: i32` is still a field called `get`.
+          const accessor =
+            this.at(TOK_IDENT) && (this.value === "get" || this.value === "set") && this.peek() === TOK_IDENT
+          if (accessor) {
+            this.advance()
+            modifiers = modifiers | FLAG_ACCESSOR
+          }
+          // `m(): T;`, a method signature, for the checker to refuse (NL2048):
+          // a method with no body, among the fields. An accessor is one too.
+          if (
+            accessor ||
+            (this.at(TOK_IDENT) &&
+              (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
+          ) {
+            fields.children.push(this.parseMethodSignature(fieldStart, modifiers))
+            continue
+          }
           const field = this.node(N_FIELD, fieldStart, this.end)
           field.children.push(this.parseIdentifier())
           // `?` only, and not `!`: a definite-assignment assertion is not a
@@ -1825,6 +1941,29 @@ export class Parser {
     node.children.push(typeParams)
     node.end = this.previousEnd
     return node
+  }
+
+  /**
+   * An interface's `m<T>(x: T): R;`, shaped as a class's method is, with an
+   * EMPTY body: the checker refuses it before anything reads it (NL2048), so
+   * a parameter needs no annotation to get there.
+   */
+  parseMethodSignature(start: i32, modifiers: i32): Node {
+    const method = this.node(N_METHOD, start, this.end)
+    method.children.push(this.parseIdentifier())
+    method.flags = modifiers | this.parseMemberMarker()
+    const typeParams = this.parseTypeParameters()
+    method.children.push(this.parseParameters(false))
+    method.children.push(this.parseReturnType())
+    method.children.push(this.empty())
+    if (typeParams.children.length > 0) {
+      method.children.push(typeParams)
+    }
+    if (!this.eat(TOK_SEMICOLON)) {
+      this.eat(TOK_COMMA)
+    }
+    method.end = this.previousEnd
+    return method
   }
 
   /**
@@ -1906,12 +2045,9 @@ export class Parser {
       node.flags = node.flags | FLAG_CONST
     } else if (this.at(TOK_IDENT)) {
       node.flags = node.flags | FLAG_VAR // Phase 0's (NL1036)
-    } else if (this.startsArrowDeclaration()) {
-      // A `let` bound to an arrow is still the parser's to refuse: its rule
-      // (NL2272) is a function declaration's, not a module constant's.
-      this.report("a module holds no top-level `let`; use `const`", this.start, this.end)
     }
-    // Otherwise a top-level `let`, which the checker refuses (NL2084).
+    // Otherwise a top-level `let`, which the checker refuses (NL2084), or
+    // (NL2272) when it binds an arrow: the arrow is its initialiser.
     this.advance()
     node.children.push(this.parseVariableDeclarations())
     this.expectSemicolon()
@@ -1925,7 +2061,7 @@ export class Parser {
     while (true) {
       const start = this.start
       const declaration = this.node(N_VAR_DECL, start, this.end)
-      declaration.children.push(this.parseIdentifier())
+      declaration.children.push(this.parseBindingName())
       declaration.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty())
       declaration.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
       declaration.end = this.previousEnd
@@ -2092,8 +2228,27 @@ export class Parser {
     scan.pos = this.start
     scan.next() // `(`
     scan.next()
-    if (scan.kind === TOK_RPAREN) {
+    if (scan.kind === TOK_RPAREN || scan.kind === TOK_DOT_DOT_DOT) {
       return true
+    }
+    // A destructured parameter (NL2192): a parenthesised type cannot open
+    // with `{` or `[` in this grammar, so the list is a function type's when
+    // `=>` follows the `)` that closes it.
+    if (scan.kind === TOK_LBRACE || scan.kind === TOK_LBRACKET) {
+      let depth = 1
+      while (depth > 0) {
+        scan.next()
+        if (scan.kind === TOK_END) {
+          return false
+        }
+        if (scan.kind === TOK_LPAREN) {
+          depth = depth + 1
+        } else if (scan.kind === TOK_RPAREN) {
+          depth = depth - 1
+        }
+      }
+      scan.next()
+      return scan.kind === TOK_ARROW
     }
     if (scan.kind !== TOK_IDENT && scan.kind !== TOK_THIS) {
       return false
@@ -2124,7 +2279,7 @@ export class Parser {
    */
   parseFunctionType(start: i32): Node {
     const node = this.node(N_TYPE_FUNCTION, start, this.end)
-    node.children.push(this.parseParameters())
+    node.children.push(this.parseParameters(true))
     this.expect(TOK_ARROW)
     node.children.push(this.parseType())
     node.end = this.previousEnd
@@ -2304,7 +2459,8 @@ export class Parser {
 
   /**
    * Step over a destructuring pattern, from its `{` or `[` to the bracket that
-   * closes it. Only a refused `catch` reads one, so nothing is built from it.
+   * closes it. Only a refused form reads one — a `catch` binding, or the
+   * N_BINDING_PATTERN of `parseBindingName` — so nothing is built from it.
    */
   skipBindingPattern(): void {
     let depth = 0
@@ -2398,7 +2554,7 @@ export class Parser {
     this.expect(TOK_LPAREN)
     const outerNoIn = this.noIn
     this.noIn = true
-    if (((this.at(TOK_CONST) || this.at(TOK_LET)) && this.peek() === TOK_IDENT) || this.varAhead()) {
+    if (((this.at(TOK_CONST) || this.at(TOK_LET)) && this.bindingAhead()) || this.varAhead()) {
       const declStart = this.start
       const declaration = this.node(N_VAR, declStart, this.end)
       if (this.at(TOK_CONST)) {
@@ -2421,6 +2577,16 @@ export class Parser {
       return this.parseForOfRest(start, initializer, flags)
     }
     return this.parseForRest(start, initializer, flags)
+  }
+
+  /**
+   * Whether the `let` or `const` in hand declares: a name follows it, or the
+   * `{` or `[` of a destructuring pattern, which the checker refuses
+   * (NL2193).
+   */
+  bindingAhead(): boolean {
+    const next = this.peek()
+    return next === TOK_IDENT || next === TOK_LBRACE || next === TOK_LBRACKET
   }
 
   /** The `of` of a `for...of`, or the `in` of a `for...in`. */
@@ -3022,8 +3188,18 @@ export class Parser {
     // An arrow's list opens with a name or closes at once; anything else after
     // the `(` is an expression, known without scanning to its end, which keeps
     // nested parentheses from being rescanned at every level.
+    // `...`, `{` and `[` open a rest parameter and the two destructuring
+    // patterns, which the checker refuses (NL2235, NL2192); a `(` before a
+    // spread opens nothing else, and one before an object or array literal is
+    // told from them by the same scan.
     const next = this.peek()
-    if (next !== TOK_IDENT && next !== TOK_RPAREN) {
+    if (
+      next !== TOK_IDENT &&
+      next !== TOK_RPAREN &&
+      next !== TOK_DOT_DOT_DOT &&
+      next !== TOK_LBRACE &&
+      next !== TOK_LBRACKET
+    ) {
       return false
     }
     return this.arrowParametersAt(this.start)
@@ -3125,25 +3301,10 @@ export class Parser {
       param.children.push(this.empty())
       param.end = this.previousEnd
       params.children.push(param)
+      node.children.push(this.closeList(params))
     } else {
-      this.expect(TOK_LPAREN)
-      while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
-        const param = this.node(N_PARAM, this.start, this.end)
-        param.children.push(this.parseIdentifier())
-        if (this.at(TOK_QUESTION)) {
-          this.report("optional parameters are not supported", this.start, this.end)
-          this.advance()
-        }
-        param.children.push(this.at(TOK_COLON) ? this.parseTypeAnnotation() : this.empty())
-        param.end = this.previousEnd
-        params.children.push(param)
-        if (!this.eat(TOK_COMMA)) {
-          break
-        }
-      }
-      this.expect(TOK_RPAREN)
+      node.children.push(this.parseParameters(false))
     }
-    node.children.push(this.closeList(params))
     node.children.push(this.eat(TOK_COLON) ? this.parseType() : this.empty())
     this.expect(TOK_ARROW)
     node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression())
