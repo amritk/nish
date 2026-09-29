@@ -63,9 +63,10 @@ export const main = (): i32 => {
   );
 
   // The GCM specification's test case 2: X1 = C1 · H.
-  const y: u64[] = [toU64(0x0388dace) << toU64(32), toU64(0)];
-  y[0] = y[0] | toU64(0x60b6a392);
-  y[1] = (toU64(0xf328c2b9) << toU64(32)) | toU64(0x71b2fe78);
+  const y: u64[] = [
+    (toU64(0x0388dace) << toU64(32)) | toU64(0x60b6a392),
+    (toU64(0xf328c2b9) << toU64(32)) | toU64(0x71b2fe78),
+  ];
   ghashMultiply(y, (toU64(0x66e94bd4) << toU64(32)) | toU64(0xef8a2c3b), (toU64(0x884cfa59) << toU64(32)) | toU64(0xca342b2e));
   t.ok(
     "ghashMultiply: test case 2's X1",

@@ -171,15 +171,15 @@ const aesUnpack = (buf: u8[], q: u64[]): void => {
     return
   }
   aesTranspose(q)
-  const byte: u64 = toU64(0xff)
+  // `toU8` keeps the low eight bits, so each byte needs no mask.
   for (let k: i32 = 0; k < 4; k++) {
     const low: u64 = toU64(16 * k)
     const high: u64 = toU64(16 * k + 8)
     for (let c: i32 = 0; c < 4; c++) {
-      buf[16 * k + 4 * c] = toU8((q[c] >> low) & byte)
-      buf[16 * k + 4 * c + 2] = toU8((q[c] >> high) & byte)
-      buf[16 * k + 4 * c + 1] = toU8((q[c + 4] >> low) & byte)
-      buf[16 * k + 4 * c + 3] = toU8((q[c + 4] >> high) & byte)
+      buf[16 * k + 4 * c] = toU8(q[c] >> low)
+      buf[16 * k + 4 * c + 2] = toU8(q[c] >> high)
+      buf[16 * k + 4 * c + 1] = toU8(q[c + 4] >> low)
+      buf[16 * k + 4 * c + 3] = toU8(q[c + 4] >> high)
     }
   }
 }
@@ -468,13 +468,29 @@ const aesSubWord = (w: u32, q: u64[]): u32 => {
   return out
 }
 
+/** Four bytes of `data` from `at` as a big-endian word; the caller has checked the window. */
+const aesLoad32 = (data: u8[], at: i32): u32 =>
+  (toU32(data[at]) << toU32(24)) |
+  (toU32(data[at + 1]) << toU32(16)) |
+  (toU32(data[at + 2]) << toU32(8)) |
+  toU32(data[at + 3])
+
+/** `w` big-endian into `out[at .. at + 4)`; the caller has checked the window. */
+const aesStore32 = (out: u8[], at: i32, w: u32): void => {
+  out[at] = toU8(w >> toU32(24))
+  out[at + 1] = toU8(w >> toU32(16))
+  out[at + 2] = toU8(w >> toU32(8))
+  out[at + 3] = toU8(w)
+}
+
 /**
  * KeyExpansion (FIPS 197 §5.2) for Nk = 4 or 8, then every round key
  * bitsliced and replicated into the four block lanes. `w` holds the words
  * big-endian, byte 0 of the key in the high byte of `w[0]`, as the standard
  * writes them. Branches only on the word number.
  */
-const aesExpand = (key: u8[], nk: i32, rounds: i32): u64[] => {
+const aesExpand = (key: u8[], rounds: i32): u64[] => {
+  const nk: i32 = rounds - 6
   const total: i32 = (rounds + 1) * 4
   const w: u32[] = new Array<u32>(total)
   const q: u64[] = new Array<u64>(8)
@@ -485,12 +501,8 @@ const aesExpand = (key: u8[], nk: i32, rounds: i32): u64[] => {
   for (let i: i32 = 0; i < wLength; i++) {
     if (i < nk) {
       const at: i32 = 4 * i
-      if (at >= 0 && at < keyLength && at + 3 < keyLength) {
-        w[i] =
-          (toU32(key[at]) << toU32(24)) |
-          (toU32(key[at + 1]) << toU32(16)) |
-          (toU32(key[at + 2]) << toU32(8)) |
-          toU32(key[at + 3])
+      if (at >= 0 && at + 3 < keyLength) {
+        w[i] = aesLoad32(key, at)
       }
     } else {
       let temp: u32 = w[i - 1]
@@ -509,11 +521,7 @@ const aesExpand = (key: u8[], nk: i32, rounds: i32): u64[] => {
   for (let round: i32 = 0; round <= rounds; round++) {
     for (let k: i32 = 0; k < 4; k++) {
       for (let j: i32 = 0; j < 4; j++) {
-        const word: u32 = w[4 * round + j]
-        buf[16 * k + 4 * j] = toU8(word >> toU32(24))
-        buf[16 * k + 4 * j + 1] = toU8((word >> toU32(16)) & toU32(0xff))
-        buf[16 * k + 4 * j + 2] = toU8((word >> toU32(8)) & toU32(0xff))
-        buf[16 * k + 4 * j + 3] = toU8(word & toU32(0xff))
+        aesStore32(buf, 16 * k + 4 * j, w[4 * round + j])
       }
     }
     aesPack(q, buf)
@@ -548,7 +556,7 @@ const aesStore64 = (out: u8[], at: i32, v: u64): void => {
   for (let i: i32 = 0; i < 8; i++) {
     const to: i32 = at + i
     if (to >= 0 && to < length) {
-      out[to] = toU8((v >> toU64((7 - i) * 8)) & toU64(0xff))
+      out[to] = toU8(v >> toU64((7 - i) * 8))
     }
   }
 }
@@ -563,6 +571,17 @@ const aesCopyPrefix = (dst: u8[], src: u8[], count: i32): void => {
 }
 
 /**
+ * The first 16 bytes of `block` encrypted, in the first 16 bytes of a fresh
+ * batch; the rest of the batch is the cipher of zeros and is not read.
+ */
+const aesEncryptOne = (key: AesKey, block: u8[]): u8[] => {
+  const buf: u8[] = new Array<u8>(AES_BATCH)
+  aesCopyPrefix(buf, block, AES_BLOCK)
+  aesEncryptBatch(key, buf, new Array<u64>(8))
+  return buf
+}
+
+/**
  * Makes an `AesKey` from 16 bytes (AES-128) or 32 (AES-256): the key
  * schedule, bitsliced, and H = E(K, 0^128) for GCM. Any other length — 24
  * bytes included, since AES-192 is not offered — answers `null`.
@@ -573,10 +592,8 @@ export const aesKey = (key: u8[]): AesKey | null => {
     return null
   }
   const rounds: i32 = length === 16 ? 10 : 14
-  const expanded: AesKey = new AesKey(rounds, aesExpand(key, length >> 2, rounds))
-  const buf: u8[] = new Array<u8>(AES_BATCH)
-  const q: u64[] = new Array<u64>(8)
-  aesEncryptBatch(expanded, buf, q)
+  const expanded: AesKey = new AesKey(rounds, aesExpand(key, rounds))
+  const buf: u8[] = aesEncryptOne(expanded, [])
   expanded.hHi = aesLoad64(buf, 0, 8)
   expanded.hLo = aesLoad64(buf, 8, 16)
   return expanded
@@ -587,11 +604,8 @@ export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
   if (toI32(block.length) !== AES_BLOCK) {
     return null
   }
-  const buf: u8[] = new Array<u8>(AES_BATCH)
-  aesCopyPrefix(buf, block, AES_BLOCK)
-  aesEncryptBatch(key, buf, new Array<u64>(8))
   const out: u8[] = new Array<u8>(AES_BLOCK)
-  aesCopyPrefix(out, buf, AES_BLOCK)
+  aesCopyPrefix(out, aesEncryptOne(key, block), AES_BLOCK)
   return out
 }
 
@@ -601,12 +615,11 @@ export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
  * a sample of another length.
  */
 export const aesHeaderMask = (key: AesKey, sample: u8[]): u8[] | null => {
-  const block: u8[] | null = aesEncryptBlock(key, sample)
-  if (block === null) {
+  if (toI32(sample.length) !== AES_BLOCK) {
     return null
   }
   const mask: u8[] = new Array<u8>(5)
-  aesCopyPrefix(mask, block, 5)
+  aesCopyPrefix(mask, aesEncryptOne(key, sample), 5)
   return mask
 }
 
@@ -729,9 +742,6 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
 
 /** The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64 bits each. */
 const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): void => {
-  if (toI32(y.length) < 2) {
-    return
-  }
   y[0] = y[0] ^ (toU64(aadLength) << toU64(3))
   y[1] = y[1] ^ (toU64(textLength) << toU64(3))
   ghashMultiply(y, key.hHi, key.hLo)
@@ -768,8 +778,7 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
   if (toI32(j0.length) < 16) {
     return
   }
-  const counter: u32 =
-    (toU32(j0[12]) << toU32(24)) | (toU32(j0[13]) << toU32(16)) | (toU32(j0[14]) << toU32(8)) | toU32(j0[15])
+  const counter: u32 = aesLoad32(j0, 12)
   const buf: u8[] = new Array<u8>(AES_BATCH)
   const q: u64[] = new Array<u64>(8)
   const srcLength: i32 = toI32(src.length)
@@ -779,11 +788,7 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
       for (let i: i32 = 0; i < 12; i++) {
         buf[16 * k + i] = j0[i]
       }
-      const c: u32 = counter + toU32((base >> 4) + k + 1)
-      buf[16 * k + 12] = toU8(c >> toU32(24))
-      buf[16 * k + 13] = toU8((c >> toU32(16)) & toU32(0xff))
-      buf[16 * k + 14] = toU8((c >> toU32(8)) & toU32(0xff))
-      buf[16 * k + 15] = toU8(c & toU32(0xff))
+      aesStore32(buf, 16 * k + 12, counter + toU32((base >> 4) + k + 1))
     }
     aesEncryptBatch(key, buf, q)
     for (let j: i32 = 0; j < AES_BATCH && j < toI32(buf.length); j++) {
@@ -796,21 +801,18 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
 }
 
 /**
- * E(K, J0) ⊕ S, GCM's tag (SP 800-38D §7.1 step 6), as two big-endian words:
- * S is the GHASH of the AAD and the ciphertext `text[0 .. textLength)`.
+ * E(K, J0) ⊕ S, GCM's tag (SP 800-38D §7.1 step 6), into `y` (zero, two
+ * words) as two big-endian words: S is the GHASH of the AAD and the
+ * ciphertext `text[0 .. textLength)`.
  */
-const aesGcmTag = (key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): u64[] => {
+const aesGcmTag = (y: u64[], key: AesKey, j0: u8[], aad: u8[], text: u8[], textLength: i32): void => {
   const aadLength: i32 = toI32(aad.length)
-  const y: u64[] = new Array<u64>(2)
   ghashUpdate(y, key, aad, aadLength)
   ghashUpdate(y, key, text, textLength)
   ghashLengths(y, key, aadLength, textLength)
-  const buf: u8[] = new Array<u8>(AES_BATCH)
-  aesCopyPrefix(buf, j0, AES_BLOCK)
-  aesEncryptBatch(key, buf, new Array<u64>(8))
-  y[0] = y[0] ^ aesLoad64(buf, 0, 16)
-  y[1] = y[1] ^ aesLoad64(buf, 8, 16)
-  return y
+  const mask: u8[] = aesEncryptOne(key, j0)
+  y[0] = y[0] ^ aesLoad64(mask, 0, 16)
+  y[1] = y[1] ^ aesLoad64(mask, 8, 16)
 }
 
 /**
@@ -836,11 +838,10 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   const j0: u8[] = aesGcmJ0(key, iv)
   const out: u8[] = new Array<u8>(length + AES_GCM_TAG_SIZE)
   aesGcmCtr(key, j0, plaintext, out, length)
-  const tag: u64[] = aesGcmTag(key, j0, aad, out, length)
-  if (toI32(tag.length) >= 2) {
-    aesStore64(out, length, tag[0])
-    aesStore64(out, length + 8, tag[1])
-  }
+  const tag: u64[] = new Array<u64>(2)
+  aesGcmTag(tag, key, j0, aad, out, length)
+  aesStore64(out, length, tag[0])
+  aesStore64(out, length + 8, tag[1])
   return out
 }
 
@@ -858,10 +859,8 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   }
   const length: i32 = total - AES_GCM_TAG_SIZE
   const j0: u8[] = aesGcmJ0(key, iv)
-  const tag: u64[] = aesGcmTag(key, j0, aad, sealed, length)
-  if (toI32(tag.length) < 2) {
-    return null
-  }
+  const tag: u64[] = new Array<u64>(2)
+  aesGcmTag(tag, key, j0, aad, sealed, length)
   const same: u64 = aesGcmTagMask(
     tag[0],
     tag[1],
