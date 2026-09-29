@@ -68,17 +68,17 @@ export const isStdModuleName = (name: string): boolean => {
 }
 
 /**
- * The modules the library has, for the diagnostic that lists them.
- *
- * A literal, not a directory read. `src/` has to compile under the *last
- * released* compiler — that is the WP19 G2 gate `scripts/bootstrap.sh --verify`
- * runs — so it may only use builtins that release already had, and
- * `readdirSync` is newer than the current one. stage0 reads the real directory
- * instead, and `tests/run.js` fails when the two disagree, which is the same
- * arrangement that keeps `VERSION` in `branding.ts` honest against
- * `package.json`.
+ * The modules the library has, for the diagnostic that lists them, sorted and
+ * each by what follows `nish/` (`std/crypto/sha256.ts` is `crypto/sha256`).
+ * A literal, not a directory read: `src/` has to compile under the *last
+ * released* compiler (the WP19 G2 gate `scripts/bootstrap.sh --verify` runs),
+ * so it may only use builtins that release had, and `readdirSync` is newer.
+ * `tests/run.js` walks `std/` at every depth and fails when the two disagree,
+ * which is the same arrangement that keeps `VERSION` in `branding.ts` honest
+ * against `package.json`.
  */
-export const stdModuleNames = (): string => "collections, json, map, pair, testing, text, threads"
+export const stdModuleNames = (): string =>
+  "collections, crypto/base64url, crypto/ct, crypto/hkdf, crypto/hmac, crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
