@@ -1,12 +1,13 @@
-// Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof),
-// testvectors_v1/ecdsa_secp256r1_sha256_test.json at commit 3fa63dd. Used under
-// the Apache License, Version 2.0; see tests/link/crypto_wycheproof/LICENSE-wycheproof.
+// Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof).
+// Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License,
+// Version 2.0; see tests/link/crypto_wycheproof/LICENSE-wycheproof.
 //
-// Every case of the file, as data for tests/link/crypto_p256: each test group's
-// public key once, in the order the file lists the groups, and each case with
-// the index of its group's key. The hex is the file's; the JSON around it and
-// the per-case comments and flags are left out. The file has no case whose
-// result is "acceptable"; the reader counts them all the same.
+// Taken from testvectors_v1/ecdsa_secp256r1_sha256_test.json at commit
+// 3fa63dd0344abb611f1fb1d77e119938603ea230, and changed: the JSON is rewritten as
+// Nish source, each test group's public key is listed once and each case names
+// its group's key by index, and the per-case comments and flags are left out.
+// Every case is kept, and every value kept is as upstream wrote it. The file has
+// no case whose result is "acceptable". `tests/link/crypto_p256` runs them.
 
 /** One `EcdsaVerify` case: its id, its group's key, the expected result, and the message and DER signature in hex. */
 export interface WycheproofEcdsaCase {

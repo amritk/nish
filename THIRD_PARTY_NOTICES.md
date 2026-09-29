@@ -101,6 +101,7 @@ Those files are listed there rather than here, and the same check holds them.
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.rs` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/ecdsa_secp256r1_sha256_test.json` at `3fa63dd`: all 484 cases and the 113 group keys, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 
 ## Public-domain algorithms
 
