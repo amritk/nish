@@ -366,6 +366,19 @@ export class Parser {
   kind: i32
   start: i32
   end: i32
+
+  /**
+   * Where the diagnostics of the import or export form being read begin, or
+   * -1 outside one (`beginForm`). Inside one only the first syntax error is
+   * kept: a form the language refuses has no grammar of its own to recover
+   * by, so what follows its first error would be a cascade about the same
+   * statement, which the one import form never cost before it was read.
+   * Declared here, between the current token's offsets and its text, where
+   * an i32 fills the padding the three before it leave.
+   */
+  formStart: i32
+
+  /** The current token's text. */
   value: string
 
   /**
@@ -421,6 +434,7 @@ export class Parser {
     this.nodeCount = 0
     this.labels = []
     this.closingBraces = new StringMap()
+    this.formStart = -1
     this.noIn = false
     this.kind = TOK_END
     this.start = 0
@@ -475,6 +489,9 @@ export class Parser {
   }
 
   report(message: string, start: i32, end: i32): void {
+    if (this.formStart >= 0 && this.diagnostics.length > this.formStart) {
+      return
+    }
     this.diagnostics.push(new Diagnostic(this.file, start, end, "syntax error", message))
   }
 
@@ -619,17 +636,21 @@ export class Parser {
       return this.parseExportDefault(start)
     }
     if (exported && this.at(TOK_ASSIGN)) {
-      return this.parseExportAssignment(start)
+      const previous = this.beginForm()
+      return this.endForm(this.parseExportAssignment(start), previous, false)
     }
     if (exported && (this.at(TOK_LBRACE) || this.at(TOK_STAR) || this.exportTypeListAhead())) {
-      return this.parseExportDeclaration(start)
+      const previous = this.beginForm()
+      return this.endForm(this.parseExportDeclaration(start), previous, false)
     }
     if (exported && this.at(TOK_IDENT) && this.value === "as") {
-      return this.parseNamespaceExport(start)
+      const previous = this.beginForm()
+      return this.endForm(this.parseNamespaceExport(start), previous, false)
     }
     if (this.at(TOK_IMPORT) && this.peek() !== TOK_LPAREN) {
       if (this.importDeclarationAhead()) {
-        return this.exportable(this.parseImport(start), exported)
+        const previous = this.beginForm()
+        return this.exportable(this.endForm(this.parseImport(start), previous, false), exported)
       }
       // Neither an import nor `import(...)`: the syntax error it always was.
       if (exported) {
@@ -1288,7 +1309,8 @@ export class Parser {
       this.advance() // `async`
       return this.flagged(this.parseFunction(start, anonymous), flags | FLAG_ASYNC)
     }
-    return this.finishExportAssignment(start, "default")
+    const previous = this.beginForm()
+    return this.endForm(this.finishExportAssignment(start, "default"), previous, false)
   }
 
   /** After `export`, on `default`: whether `abstract class` follows, the two on one line. */
@@ -1551,6 +1573,46 @@ export class Parser {
       name = this.parseMemberName(name, start)
     }
     return name
+  }
+
+  /** Start reading an import or export form (`formStart`); answers the mark `endForm` restores. */
+  beginForm(): i32 {
+    const previous = this.formStart
+    this.formStart = this.diagnostics.length
+    return previous
+  }
+
+  /**
+   * Finish the form `beginForm` started. When it reported a syntax error, the
+   * rest of its statement is passed over — up to a `;`, which is consumed,
+   * a line break or the end of the file, or, in a body, the `}` that closes
+   * it — so the next declaration starts clean, as it did when the parser
+   * refused the form at its first token.
+   */
+  endForm(node: Node, previous: i32, nested: boolean): Node {
+    if (this.diagnostics.length > this.formStart) {
+      // The token the error named, when the parser still stands on it and it
+      // could not open the next declaration, is part of this statement too,
+      // on whatever line it stands — and so is a `;` after it.
+      const keyword = this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER
+      if (this.diagnostics[this.formStart].start === this.start && !keyword && !this.at(TOK_END)) {
+        this.advance()
+        if (this.eat(TOK_SEMICOLON)) {
+          this.formStart = previous
+          node.end = this.previousEnd
+          return node
+        }
+      }
+      while (!this.at(TOK_END) && !this.newlineBefore() && !(nested && this.at(TOK_RBRACE))) {
+        if (this.eat(TOK_SEMICOLON)) {
+          break
+        }
+        this.advance()
+      }
+      node.end = this.previousEnd
+    }
+    this.formStart = previous
+    return node
   }
 
   /**
@@ -3191,7 +3253,8 @@ export class Parser {
         return this.parseFunction(start, false)
       case TOK_IMPORT:
         if (this.importDeclarationAhead()) {
-          return this.parseImport(start)
+          const previous = this.beginForm()
+          return this.endForm(this.parseImport(start), previous, true)
         }
         return this.parseExpressionStatement(start)
       case TOK_CLASS: {
