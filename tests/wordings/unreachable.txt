@@ -53,6 +53,7 @@ NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 
 NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2322
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
 NL2288  retired: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2376 (tests/link/enum_import_not_exported)
+NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2376 (tests/link/alias_import_not_exported)
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but
