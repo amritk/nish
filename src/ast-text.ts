@@ -24,11 +24,13 @@
 // without changing the oracle in the same commit.
 
 import {
+  FLAG_ABSTRACT,
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_FOR_IN,
   FLAG_USING,
@@ -38,6 +40,7 @@ import {
   FLAG_GENERATOR,
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
+  FLAG_PROPERTY,
   FLAG_READONLY,
   FLAG_REST,
   FLAG_SATISFIES,
@@ -117,6 +120,15 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_ACCESSOR) !== 0) {
     name = `${name}+accessor`
+  }
+  if ((node.flags & FLAG_ABSTRACT) !== 0) {
+    name = `${name}+abstract`
+  }
+  if ((node.flags & FLAG_PROPERTY) !== 0) {
+    name = `${name}+property`
+  }
+  if ((node.flags & FLAG_CONSTRUCT) !== 0) {
+    name = `${name}+construct`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

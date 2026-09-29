@@ -1,1 +1,1 @@
-expected `{`, found `:`
+Constructors cannot declare a return type

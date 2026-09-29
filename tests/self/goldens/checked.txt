@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 793 programs, 52544 dump lines.
+# 794 programs, 52622 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51323,6 +51323,85 @@ function test(): i32 -> @test [exported]
   stackSites=1 stackLocals=0
   local 15:7 try: i32 (let)
   callee 20:3 catch -> @catch
+program tests/parser/names-classes.ts
+module tests/parser/names-classes.ts (entry)
+struct Words (class) size=28 align=4
+  field abstract: i32 index=0 offset=0 initialized
+  field declare: i32 index=1 offset=4 initialized
+  field static: i32 index=2 offset=8 initialized
+  field public: i32 index=3 offset=12 initialized
+  field readonly: i32 index=4 offset=16 initialized
+  field override: i32 index=5 offset=20 initialized
+  field async: i32 index=6 offset=24 initialized
+  method sum -> @Words.sum
+struct Lines (class) size=8 align=4
+  field abstract: i32 index=0 offset=0 initialized
+  field value: i32 index=1 offset=4 readonly initialized
+  method static -> @Lines.static
+  method declare -> @Lines.declare
+struct Params (class) size=4 align=4
+  field x: i32 index=0 offset=0
+  constructor -> @Params.constructor
+  method abstract -> @Params.abstract
+struct Keys (interface) size=28 align=4
+  field abstract: i32 index=0 offset=0
+  field declare: i32 index=1 offset=4
+  field static: i32 index=2 offset=8
+  field readonly: i32 index=3 offset=12
+  field get: i32 index=4 offset=16
+  field set: i32 index=5 offset=20
+  field async: i32 index=6 offset=24
+function Words.sum(this: Words): i32 -> @Words.sum [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=28 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Lines.static(this: Lines): i32 -> @Lines.static [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Lines.declare(this: Lines): i32 -> @Lines.declare [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Params.constructor(this: Params, public: i32, readonly: i32, private: i32): void -> @Params.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Params.abstract(this: Params, protected: i32): i32 -> @Params.abstract [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function declare(readonly: i32): i32 -> @declare
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function abstract(public: i32, override: i32): i32 -> @abstract
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function keys(): Keys -> @keys
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=28
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local 72:9 get: i32 (const)
+  local 73:9 set: i32 (const)
+  local 74:9 async: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Lines.declare Lines.static Params.abstract Params.constructor Words.sum abstract declare keys nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 79:9 words: Words (const)
+  local 80:9 lines: Lines (const)
+  local 81:9 params: Params (const)
+  callee 81:26 new Params -> @Params.constructor
+  local 82:9 k: Keys (const)
+  callee 82:19 keys -> @keys
+  local 83:9 static: i32 (const)
+  callee 84:18 Words.sum -> @Words.sum
+  callee 84:65 Lines.static -> @Lines.static
+  callee 84:83 Lines.declare -> @Lines.declare
+  callee 85:18 Params.abstract -> @Params.abstract
+  callee 85:40 declare -> @declare
+  callee 85:59 abstract -> @abstract
 program tests/parser/names-declaration-calls.ts
 module tests/parser/names-declaration-calls.ts (entry)
 function async(x: i32): i32 -> @async

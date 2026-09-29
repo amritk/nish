@@ -1,1 +1,1 @@
-syntax error: expected `{`, found `;`
+Method `m` of class `Point` must have a body

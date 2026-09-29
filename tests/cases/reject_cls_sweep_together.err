@@ -1,0 +1,11 @@
+Field `x` of class `Header`: `static` members are not supported (use a top-level function or const)
+Method `m` of class `Signature`: `static` members are not supported (use a top-level function)
+Method `m` of class `Body` must have a body
+Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it
+Abstract classes are not supported
+Method `m` of class `Member`: `static` members are not supported (use a top-level function)
+Index signatures are not supported in class `Table` (object layout is fixed)
+Interface inheritance (`extends`) is not supported; list every field
+Unsupported object literal member: MethodDeclaration (only `key: value`)
+`declare enum` is not supported
+Classes must be named

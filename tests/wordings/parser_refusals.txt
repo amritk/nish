@@ -59,6 +59,19 @@
 # rest parameter a flag on its parameter, and a missing name or body an EMPTY
 # child, each refused by the checker's pass 1 sweep.
 #
+# And again, from 23 to 8, when the fifth stage read the class, interface and
+# enum forms (`nl2018_anonymous_class`, `nl2083_declare_class`,
+# `nl2090_method_without_body`, `nl2091_constructor_without_body`,
+# `nl2092_string_member_name`, `nl2189_constructor_return_type`,
+# `nl2213_class_index_signature`, `nl2214_interface_index_signature`,
+# `nl2215_interface_extends`, `nl2223_string_object_key`,
+# `nl2234_parameter_property`, `nl2255_class_static_block`,
+# `nl2257_interface_construct_signature`, `nl2258_object_literal_method`,
+# `nl2286_declare_enum`): each is a flag, an EMPTY or a different child on the
+# node it resembles, or an index signature's node of its own, refused by the
+# checker's pass 1 sweep, or by pass 1a for an anonymous class and a declared
+# enum.
+#
 # One warning from that change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
@@ -66,26 +79,11 @@
 # could tell that a `static` constructor had stopped being refused at all. It
 # had. `tests/cases/reject_cls_ctor_static` is what pins it now, and a
 # `reject_*` case is the thing to write when a wording comes off this list.
-nl2018_anonymous_class
-nl2083_declare_class
-nl2090_method_without_body
-nl2091_constructor_without_body
-nl2092_string_member_name
 nl2118_override_method
 nl2128_export_list
 nl2129_export_default_value
 nl2131_export_default_class
 nl2137_implements_expression
-nl2189_constructor_return_type
 nl2212_template_specifier
-nl2213_class_index_signature
-nl2214_interface_index_signature
-nl2215_interface_extends
-nl2223_string_object_key
 nl2226_export_import_equals
-nl2234_parameter_property
 nl2243_type_only_import
-nl2255_class_static_block
-nl2257_interface_construct_signature
-nl2258_object_literal_method
-nl2286_declare_enum

@@ -33,12 +33,15 @@ import { builtinNameOf, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
+  FLAG_ABSTRACT,
   FLAG_ACCESSOR,
   FLAG_AWAIT,
   FLAG_CONST,
   FLAG_DEFAULT,
   FLAG_FOREIGN,
+  FLAG_CONSTRUCT,
   FLAG_OPTIONAL,
+  FLAG_PROPERTY,
   FLAG_READONLY,
   FLAG_REST,
   FLAG_STATIC,
@@ -49,16 +52,19 @@ import {
   N_BREAK,
   N_CALL,
   N_CLASS,
+  N_CONSTRUCTOR,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
   N_EMPTY,
   N_EXPR_STMT,
+  N_FIELD,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
   N_IF,
+  N_INDEX_SIGNATURE,
   N_INTERFACE,
   N_METHOD,
   N_MODULE_CONST,
@@ -467,11 +473,28 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
   sweepForms(ctx, node, null)
 }
 
+/**
+ * The sweep over a node inside a declaration. A class here is a class
+ * expression, which is never a value: an anonymous one is refused by the rule
+ * an anonymous declaration is (NL2018), a named one as the expression it is
+ * (NL2256), and nothing inside either is read.
+ */
+const sweepNested = (ctx: CheckContext, node: Node): void => {
+  if (node.kind !== N_CLASS) {
+    sweepForms(ctx, node, null)
+  } else if (node.children[0].kind === N_EMPTY) {
+    ctx.error(node, "Classes must be named")
+  } else {
+    ctx.error(node, "Unsupported expression in Phase 1: ClassExpression")
+  }
+}
+
 /** The sweep over `node`, whose `owner` is its class or interface when it is a member. */
 const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => {
   refuseExpressionForm(ctx, node)
   refuseTypeForm(ctx, node)
   refuseBindingForm(ctx, node)
+  refuseStructHeader(ctx, node)
   if (node.kind === N_FOR_OF) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
       ctx.error(node, "`for await` is not supported")
@@ -486,20 +509,26 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
   // so they are swept first, in the order the source has them.
   const slot = typeParameterSlot(node)
   if (slot >= 0) {
-    refuseUnsupportedForms(ctx, node.children[slot])
+    sweepNested(ctx, node.children[slot])
+  }
+  // An interface's `extends`, written after its type parameters (the fourth
+  // child, there only when written).
+  const heritage = node.kind === N_INTERFACE && node.children.length > 3
+  if (heritage) {
+    ctx.error(node.children[3], "Interface inheritance (`extends`) is not supported; list every field")
   }
   for (let i: i32 = 0; i < node.children.length; i++) {
-    if (i !== slot) {
+    if (i !== slot && !(heritage && i === 3)) {
       refuseAtChild(ctx, node, i, owner)
       if (isMemberList(node, i)) {
         refuseMembers(ctx, node, node.children[i])
       } else if ((node.kind === N_MODULE_CONST || node.kind === N_VAR) && i === 0) {
         for (const decl of node.children[0].children) {
           refuseDeclarator(ctx, node, decl)
-          refuseUnsupportedForms(ctx, decl)
+          sweepNested(ctx, decl)
         }
       } else {
-        refuseUnsupportedForms(ctx, node.children[i])
+        sweepNested(ctx, node.children[i])
       }
     }
   }
@@ -533,7 +562,12 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
       }
     }
   } else if (node.kind === N_PARAM) {
-    if ((node.flags & FLAG_REST) !== 0) {
+    if ((node.flags & FLAG_PROPERTY) !== 0) {
+      ctx.error(
+        node,
+        "Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it"
+      )
+    } else if ((node.flags & FLAG_REST) !== 0) {
       ctx.error(node, "Rest parameters are not supported")
     } else if (node.children[0].kind === N_BINDING_PATTERN) {
       ctx.error(node, "Destructured parameters are not supported")
@@ -556,20 +590,8 @@ const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
  * in a class that is not a template it is left to be the one diagnostic.
  */
 const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null): void => {
-  if (
-    node.kind === N_METHOD &&
-    owner !== null &&
-    owner.kind === N_CLASS &&
-    i === 2 &&
-    node.children[2].kind === N_EMPTY
-  ) {
-    const header = (node.flags & (FLAG_STATIC | FLAG_READONLY | FLAG_OPTIONAL)) !== 0
-    if (!header || owner.children[4].children.length > 0) {
-      ctx.error(
-        node.children[0],
-        `Method \`${node.children[0].text}\` of class \`${owner.children[0].text}\` needs an explicit return type annotation`
-      )
-    }
+  if (owner !== null && owner.kind === N_CLASS) {
+    refuseMemberAtChild(ctx, node, i, owner)
     return
   }
   if (node.kind !== N_FUNCTION) {
@@ -584,6 +606,61 @@ const refuseAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node | null
     ctx.error(node, "Functions must have a body")
   } else if (i === 5) {
     ctx.error(node, "A function declaration binds one name")
+  }
+}
+
+/**
+ * A class member's half of `refuseAtChild`: a method's missing return type
+ * (NL2096) and body (NL2090), and a constructor's return type (NL2189) and
+ * missing body (NL2091), each where it is written — a constructor's return
+ * type is its third child, but it comes before the body in the source.
+ *
+ * The one exception is the member header — `static`, `readonly`, `?` — which
+ * `collectMethod` and `collectConstructor` refuse and which is written first:
+ * in a class that is not a template it is left to be the one diagnostic.
+ */
+const refuseMemberAtChild = (ctx: CheckContext, node: Node, i: i32, owner: Node): void => {
+  if (leftToCollector(node, owner, FLAG_STATIC | FLAG_READONLY | FLAG_OPTIONAL)) {
+    return
+  }
+  const cls = owner.children[0].text
+  if (node.kind === N_METHOD && i === 2 && node.children[2].kind === N_EMPTY) {
+    ctx.error(
+      node.children[0],
+      `Method \`${node.children[0].text}\` of class \`${cls}\` needs an explicit return type annotation`
+    )
+  } else if (node.kind === N_METHOD && i === 3 && node.children[3].kind === N_EMPTY) {
+    ctx.error(node, `Method \`${node.children[0].text}\` of class \`${cls}\` must have a body`)
+  } else if (node.kind === N_CONSTRUCTOR && i === 1 && node.children.length > 2) {
+    ctx.error(node.children[2], "Constructors cannot declare a return type")
+  } else if (node.kind === N_CONSTRUCTOR && i === 1 && node.children[1].kind === N_EMPTY) {
+    ctx.error(node, `Constructor of class \`${cls}\` must have a body (no overload signatures)`)
+  }
+}
+
+/**
+ * Whether a rule the sweep would state about `member` is left to the
+ * collector, because a header in `flags` is written before it and the
+ * collector refuses that first. Only in a class or an interface that is not a
+ * template: a template's members are collected once instantiated, and one
+ * nothing instantiates never is.
+ */
+const leftToCollector = (member: Node, owner: Node, flags: i32): boolean =>
+  (member.flags & flags) !== 0 && owner.children[typeParameterSlot(owner)].children.length === 0
+
+/**
+ * The header of a class or an interface declaration, before its type
+ * parameters: `declare` (NL2083) and `abstract` (NL2168). An anonymous class
+ * is not swept at all: pass 1a named it (NL2018, `declareStruct`).
+ */
+const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
+  if (node.kind !== N_CLASS && node.kind !== N_INTERFACE) {
+    return
+  }
+  if ((node.flags & FLAG_FOREIGN) !== 0) {
+    ctx.error(node, `\`declare ${node.kind === N_CLASS ? "class" : "interface"}\` is not supported`)
+  } else if ((node.flags & FLAG_ABSTRACT) !== 0) {
+    ctx.error(node, "Abstract classes are not supported")
   }
 }
 
@@ -626,11 +703,28 @@ const isMemberList = (node: Node, i: i32): boolean =>
  */
 const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
   const name = owner.children[0].text
+  const kind = owner.kind === N_CLASS ? "class" : "interface"
   for (const member of members.children) {
-    if (member.kind === N_METHOD && owner.kind === N_INTERFACE) {
+    if (member.kind === N_BLOCK) {
+      // Named by TypeScript's `SyntaxKind`, as stage0 named every member it had no rule for.
+      ctx.error(member, `Unsupported class member in \`${name}\`: ClassStaticBlockDeclaration`)
+    } else if (member.kind === N_INDEX_SIGNATURE) {
+      ctx.error(member, `Index signatures are not supported in ${kind} \`${name}\` (object layout is fixed)`)
+    } else if ((member.flags & FLAG_ABSTRACT) !== 0) {
+      ctx.error(member, "Abstract classes are not supported")
+    } else if (member.kind === N_METHOD && member.children[0].kind === N_EMPTY) {
+      const signature = (member.flags & FLAG_CONSTRUCT) !== 0 ? "ConstructSignature" : "CallSignature"
+      ctx.error(member, `Unsupported interface member in \`${name}\`: ${signature}`)
+    } else if (member.kind === N_METHOD && owner.kind === N_INTERFACE) {
       ctx.error(member, `Interface \`${name}\` cannot declare methods (interfaces describe layout only)`)
     } else if (member.kind === N_METHOD && (member.flags & FLAG_ACCESSOR) !== 0) {
       ctx.error(member, `Getters and setters are not supported in class \`${name}\` (use a method)`)
+    } else if (
+      member.kind !== N_CONSTRUCTOR &&
+      member.children[0].kind !== N_IDENT &&
+      !leftToCollector(member, owner, member.kind === N_FIELD ? FLAG_STATIC : FLAG_STATIC | FLAG_READONLY)
+    ) {
+      ctx.error(member.children[0], `Members of \`${name}\` must have plain identifier names`)
     }
     sweepForms(ctx, member, owner)
   }

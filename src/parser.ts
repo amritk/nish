@@ -41,11 +41,13 @@ import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
+  FLAG_ABSTRACT,
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_CONSTRUCT,
   FLAG_DEFAULT,
   FLAG_FOR_IN,
   FLAG_USING,
@@ -57,6 +59,7 @@ import {
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_PREFIX,
+  FLAG_PROPERTY,
   FLAG_READONLY,
   FLAG_REST,
   FLAG_SATISFIES,
@@ -92,6 +95,7 @@ import {
   N_IMPORT,
   N_IMPORT_SPEC,
   N_INDEX,
+  N_INDEX_SIGNATURE,
   N_INTERFACE,
   N_LABELED,
   N_LIST,
@@ -597,6 +601,17 @@ export class Parser {
       declaration.flags = declaration.flags | FLAG_DEFAULT
       return this.exportable(declaration, exported)
     }
+    // `export default class { }`, anonymous, for the checker to refuse
+    // (NL2018), `abstract` or not. A named default export is not read yet.
+    if (exported && this.at(TOK_DEFAULT) && this.anonymousDefaultClassAhead()) {
+      this.advance() // `default`
+      let flags = FLAG_DEFAULT
+      if (this.at(TOK_IDENT)) {
+        this.advance() // `abstract`
+        flags = flags | FLAG_ABSTRACT
+      }
+      return this.exportable(this.flagged(this.parseClass(start), flags), exported)
+    }
     if (this.at(TOK_IMPORT)) {
       if (exported) {
         return this.fail("`export` cannot introduce an import")
@@ -621,6 +636,17 @@ export class Parser {
     }
     if (this.at(TOK_CLASS)) {
       return this.exportable(this.parseClass(start), exported)
+    }
+    // `abstract class`, for the checker to refuse (NL2168): a modifier only
+    // with `class` after it on its line, which is TypeScript's rule.
+    if (
+      this.at(TOK_IDENT) &&
+      this.value === "abstract" &&
+      this.peek() === TOK_CLASS &&
+      this.aheadOnSameLine()
+    ) {
+      this.advance() // `abstract`
+      return this.exportable(this.flagged(this.parseClass(start), FLAG_ABSTRACT), exported)
     }
     if (this.at(TOK_INTERFACE)) {
       return this.exportable(this.parseInterface(start), exported)
@@ -652,6 +678,9 @@ export class Parser {
       this.advance() // `declare`
       const foreign = this.parseForeignFunction(start)
       return this.exportable(foreign, exported)
+    }
+    if (this.declaredTypeAhead()) {
+      return this.exportable(this.parseDeclaredType(start), exported)
     }
     if (this.namespaceAhead()) {
       return this.exportable(this.parseNamespace(start, 0), exported)
@@ -710,6 +739,80 @@ export class Parser {
       default:
         return false
     }
+  }
+
+  /**
+   * After `export`, on `default`: whether an anonymous class follows —
+   * `class` (or `abstract class`, the two on one line) and then anything but
+   * a name, which is `{`, `<`, `extends` or `implements`.
+   */
+  anonymousDefaultClassAhead(): boolean {
+    const next = this.peek()
+    const isAbstract = next === TOK_IDENT && this.aheadValue === "abstract"
+    if (next !== TOK_CLASS && !isAbstract) {
+      return false
+    }
+    const scan = this.scanAfterAhead()
+    if (isAbstract) {
+      if (scan.kind !== TOK_CLASS || this.lineBreakBetween(this.aheadEnd, scan.start)) {
+        return false
+      }
+      scan.next()
+    }
+    return scan.kind !== TOK_IDENT
+  }
+
+  /**
+   * Whether `declare` opens a declared class, interface or enum (NL2083,
+   * NL2286): `class`, `abstract class`, `interface`, `enum` or `const enum`
+   * after it, each word on the line of the one before, which is TypeScript's
+   * rule for a modifier. Anywhere else `declare` is the name it always was.
+   */
+  declaredTypeAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "declare" || !this.aheadOnSameLine()) {
+      return false
+    }
+    const next = this.peek()
+    if (next === TOK_CLASS || next === TOK_INTERFACE) {
+      return true
+    }
+    if (next === TOK_IDENT && this.aheadValue === "enum") {
+      return true
+    }
+    if (next !== TOK_CONST && !(next === TOK_IDENT && this.aheadValue === "abstract")) {
+      return false
+    }
+    const scan = this.scanAfterAhead()
+    const sameLine = !this.lineBreakBetween(this.aheadEnd, scan.start)
+    if (next === TOK_IDENT && this.aheadValue === "abstract") {
+      return scan.kind === TOK_CLASS && sameLine
+    }
+    return next === TOK_CONST && scan.kind === TOK_IDENT && scan.value === "enum" && sameLine
+  }
+
+  /** The declaration `declaredTypeAhead` found, with FLAG_FOREIGN for `declare`. */
+  parseDeclaredType(start: i32): Node {
+    this.advance() // `declare`
+    if (this.at(TOK_IDENT) && this.value === "abstract") {
+      this.advance()
+      return this.flagged(this.parseClass(start), FLAG_FOREIGN | FLAG_ABSTRACT)
+    }
+    if (this.at(TOK_CLASS)) {
+      return this.flagged(this.parseClass(start), FLAG_FOREIGN)
+    }
+    if (this.at(TOK_INTERFACE)) {
+      return this.flagged(this.parseInterface(start), FLAG_FOREIGN)
+    }
+    if (this.eat(TOK_CONST)) {
+      return this.flagged(this.parseEnum(start), FLAG_FOREIGN | FLAG_CONST)
+    }
+    return this.flagged(this.parseEnum(start), FLAG_FOREIGN)
+  }
+
+  /** `declaration`, with `flags` added to its own. */
+  flagged(declaration: Node, flags: i32): Node {
+    declaration.flags = declaration.flags | flags
+    return declaration
   }
 
   /**
@@ -1457,8 +1560,16 @@ export class Parser {
       return decorator
     }
     const param = this.node(N_PARAM, start, this.end)
+    // `public x: i32`, a parameter property, for the checker to refuse
+    // (NL2234): the word is a modifier only before a name, a pattern or `...`
+    // on its line, which is TypeScript's rule, so `public: i32` is a
+    // parameter called `public`.
+    while (this.parameterModifierAhead()) {
+      this.advance()
+      param.flags = FLAG_PROPERTY
+    }
     if (this.eat(TOK_DOT_DOT_DOT)) {
-      param.flags = FLAG_REST
+      param.flags = param.flags | FLAG_REST
     }
     param.children.push(this.parseBindingName())
     if (this.eat(TOK_QUESTION)) {
@@ -1476,6 +1587,28 @@ export class Parser {
     }
     param.end = this.previousEnd
     return param
+  }
+
+  /** Whether the word in hand is an accessibility or `readonly` modifier on a parameter. */
+  parameterModifierAhead(): boolean {
+    if (!this.at(TOK_IDENT)) {
+      return false
+    }
+    const word = this.value
+    if (
+      word !== "public" &&
+      word !== "private" &&
+      word !== "protected" &&
+      word !== "readonly" &&
+      word !== "override"
+    ) {
+      return false
+    }
+    const next = this.peek()
+    return (
+      (next === TOK_IDENT || next === TOK_LBRACE || next === TOK_LBRACKET || next === TOK_DOT_DOT_DOT) &&
+      this.aheadOnSameLine()
+    )
   }
 
   /**
@@ -1512,10 +1645,16 @@ export class Parser {
     return this.empty()
   }
 
+  /**
+   * A class declaration, or a class expression where an operand stands. A
+   * class with no name — `export default class { }`, or an expression — has
+   * an EMPTY one, for the checker to refuse (NL2018): `extends` and
+   * `implements` are keywords, so a name is exactly an identifier here.
+   */
   parseClass(start: i32): Node {
     this.advance() // `class`
     const node = this.node(N_CLASS, start, this.end)
-    node.children.push(this.parseIdentifier())
+    node.children.push(this.at(TOK_IDENT) ? this.parseIdentifier() : this.empty())
     // Read where they are written and pushed last, where `nodes.ts` puts them:
     // the first four children of an `N_CLASS` mean what they have always meant,
     // so nothing downstream that indexes them moves (WP18 G5).
@@ -1612,8 +1751,23 @@ export class Parser {
     let flags = 0
     while (this.at(TOK_IDENT) && !this.startsMemberName()) {
       const word = this.value
+      if (word === "static" && this.peek() === TOK_LBRACE) {
+        // `static { }`, a static block, whatever line the brace is on.
+        return flags
+      }
       if (word === "readonly") {
         flags = flags | FLAG_READONLY
+      } else if (word === "abstract") {
+        // The checker's (NL2168), and a modifier only where TypeScript reads
+        // one: on the line of a name, a `[` or a `*` after it. After `static`
+        // it is left off, because `static` is written first and is the
+        // refusal (`collectField`, `collectMethod`).
+        if (!this.abstractModifierAhead()) {
+          return flags
+        }
+        if ((flags & FLAG_STATIC) === 0) {
+          flags = flags | FLAG_ABSTRACT
+        }
       } else if (word === "static") {
         // `static` before `readonly` is the one ordering the checker needs; see
         // FLAG_STATIC_FIRST in `src/nodes.ts`.
@@ -1635,6 +1789,19 @@ export class Parser {
       this.advance()
     }
     return flags
+  }
+
+  /** Whether the `abstract` in hand is followed, on its line, by what a modifier can be. */
+  abstractModifierAhead(): boolean {
+    const next = this.peek()
+    return (
+      (next === TOK_IDENT ||
+        next === TOK_STRING ||
+        next === TOK_NUMBER ||
+        next === TOK_LBRACKET ||
+        next === TOK_STAR) &&
+      this.aheadOnSameLine()
+    )
   }
 
   /** Whether the `async` in hand is followed, on its line, by what a modifier can be. */
@@ -1776,6 +1943,14 @@ export class Parser {
       return decorator
     }
     let modifiers = this.parseMemberModifiers()
+    // `static { }`, a static block, for the checker to refuse (NL2255): the
+    // BLOCK among the members, spanning the word.
+    if (this.at(TOK_IDENT) && this.value === "static" && this.peek() === TOK_LBRACE) {
+      this.advance() // `static`
+      const block = this.parseBlock()
+      block.start = start
+      return block
+    }
     // `*m()`, a generator method, for Phase 0 to refuse (NL1044): a member
     // never opened with `*` before, so it cannot be anything else.
     if (this.eat(TOK_STAR)) {
@@ -1811,22 +1986,31 @@ export class Parser {
       // refusing the word (docs/wp19-stage0-retirement.md R3).
       ctor.flags = modifiers
       ctor.children.push(this.parseParameters(true))
-      ctor.children.push(this.parseBlock())
+      // A return type (NL2189) is a third child, there only when written, and
+      // a missing body (NL2091) an EMPTY one: the checker refuses both.
+      const returnType: Node | null = this.eat(TOK_COLON) ? this.parseType() : null
+      ctor.children.push(this.parseBody())
+      if (returnType !== null) {
+        ctor.children.push(returnType)
+      }
       ctor.end = this.previousEnd
       return ctor
     }
     if (this.at(TOK_LBRACKET) && this.disposeNameAhead()) {
       return this.parseDisposeMethod(start, modifiers)
     }
+    if (this.at(TOK_LBRACKET) && this.indexSignatureAhead()) {
+      return this.parseIndexSignature(start, modifiers)
+    }
     // `get x()` and `set x(v)`, for the checker to refuse (NL2209). A member
     // called `get` is followed by what follows a name, never by another name,
     // so the word is the accessor's wherever one follows it, a line break
     // between them included, as TypeScript reads it.
-    if (this.at(TOK_IDENT) && (this.value === "get" || this.value === "set") && this.peek() === TOK_IDENT) {
+    if (this.accessorAhead()) {
       this.advance()
       modifiers = modifiers | FLAG_ACCESSOR
     }
-    if (!this.at(TOK_IDENT)) {
+    if (!this.atMemberName()) {
       return this.fail(
         `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
       )
@@ -1845,7 +2029,7 @@ export class Parser {
       this.markedMethodAhead()
     ) {
       const method = this.node(N_METHOD, start, this.end)
-      method.children.push(this.parseIdentifier())
+      method.children.push(this.parseMemberNameNode())
       // `m?<T>()`: the marker is written before the type parameters. An
       // accessor is refused whole, so its parameter needs no annotation to
       // reach the refusal, as `set x(v)` needs none in TypeScript.
@@ -1853,7 +2037,7 @@ export class Parser {
       const typeParams = this.parseTypeParameters()
       method.children.push(this.parseParameters((modifiers & FLAG_ACCESSOR) === 0))
       method.children.push(this.parseReturnType())
-      method.children.push(this.parseBlock())
+      method.children.push(this.parseBody())
       // The fifth child, where an `N_FUNCTION` keeps its list, and only when
       // there is one: a method without type parameters keeps exactly the tree
       // it always had, so `--emit-ast` and the parser oracle move for none.
@@ -1864,13 +2048,101 @@ export class Parser {
       return method
     }
     const field = this.node(N_FIELD, start, this.end)
-    field.children.push(this.parseIdentifier())
+    field.children.push(this.parseMemberNameNode())
     field.flags = modifiers | this.parseMemberMarker()
     field.children.push(this.parseTypeAnnotation())
     field.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
     this.expectSemicolon()
     field.end = this.previousEnd
     return field
+  }
+
+  /**
+   * Whether `get` or `set` is in hand before a member's name — an identifier,
+   * a string or a number — which makes it an accessor's word (NL2209). A
+   * member called `get` is followed by what follows a name, never by another
+   * name, so the word is the accessor's wherever one follows it, a line break
+   * between them included, as TypeScript reads it.
+   */
+  accessorAhead(): boolean {
+    if (!this.at(TOK_IDENT) || (this.value !== "get" && this.value !== "set")) {
+      return false
+    }
+    const next = this.peek()
+    return next === TOK_IDENT || next === TOK_STRING || next === TOK_NUMBER
+  }
+
+  /** Whether a member's name is in hand: an identifier, or a string or a number (NL2092). */
+  atMemberName(): boolean {
+    return this.at(TOK_IDENT) || this.at(TOK_STRING) || this.at(TOK_NUMBER)
+  }
+
+  /**
+   * A member's name: its IDENT, or the STRING or NUMBER a member named
+   * `"a b"` or `0` has in its place, for the checker to refuse (NL2092).
+   */
+  parseMemberNameNode(): Node {
+    if (this.at(TOK_STRING)) {
+      const name = this.node(N_STRING, this.start, this.end)
+      name.text = this.value
+      this.advance()
+      return name
+    }
+    if (this.at(TOK_NUMBER)) {
+      const name = this.node(N_NUMBER, this.start, this.end)
+      name.text = withoutSeparators(this.value)
+      this.advance()
+      return name
+    }
+    return this.parseIdentifier()
+  }
+
+  /**
+   * A method's or a constructor's body, or an EMPTY one where TypeScript
+   * reads a signature — a `;`, or the place it would insert one — for the
+   * checker to refuse (NL2090, NL2091). A `{` on the next line is the body.
+   */
+  parseBody(): Node {
+    if (!this.at(TOK_LBRACE) && (this.at(TOK_SEMICOLON) || this.at(TOK_RBRACE) || this.newlineBefore())) {
+      this.eat(TOK_SEMICOLON)
+      return this.empty()
+    }
+    return this.parseBlock()
+  }
+
+  /**
+   * Whether the `[` in hand opens an index signature, `[key: string]: T`,
+   * rather than a computed name: a name and then `:` inside it.
+   */
+  indexSignatureAhead(): boolean {
+    return this.peek() === TOK_IDENT && this.scanAfterAhead().kind === TOK_COLON
+  }
+
+  /** The `;` or `,` that may end an interface member or an index signature. */
+  eatMemberSeparator(): void {
+    if (!this.eat(TOK_SEMICOLON)) {
+      this.eat(TOK_COMMA)
+    }
+  }
+
+  /**
+   * `[key: string]: T` in a class or an interface, for the checker to refuse
+   * (NL2213, NL2214), with whatever modifiers were in front of it.
+   */
+  parseIndexSignature(start: i32, modifiers: i32): Node {
+    const node = this.node(N_INDEX_SIGNATURE, start, this.end)
+    node.flags = modifiers
+    this.advance() // `[`
+    const key = this.node(N_PARAM, this.start, this.end)
+    key.children.push(this.parseIdentifier())
+    key.children.push(this.parseTypeAnnotation())
+    key.end = this.previousEnd
+    node.children.push(key)
+    this.expect(TOK_RBRACKET)
+    node.children.push(this.parseTypeAnnotation())
+    this.eatMemberSeparator()
+    node.end = this.previousEnd
+    return node
   }
 
   parseInterface(start: i32): Node {
@@ -1880,57 +2152,28 @@ export class Parser {
     // Pushed last, like a class's and a function's, so the field list keeps
     // being child 1 for everything that already reads it (WP18 G5).
     const typeParams = this.parseTypeParameters()
+    // `extends A, B`, for the checker to refuse (NL2215): a fourth child,
+    // spanning the clause, there only when written.
+    let heritage: Node | null = null
+    if (this.at(TOK_EXTENDS)) {
+      const clauseStart = this.start
+      this.advance()
+      const clause = this.list()
+      while (true) {
+        clause.children.push(this.parseType())
+        if (!this.eat(TOK_COMMA)) {
+          break
+        }
+      }
+      this.closeList(clause)
+      clause.start = clauseStart
+      heritage = clause
+    }
     const fields = this.list()
     if (this.expect(TOK_LBRACE)) {
       while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
         const before = this.start
-        const fieldStart = this.start
-        if (!this.at(TOK_IDENT)) {
-          fields.children.push(this.fail("an interface holds only annotated fields"))
-        } else {
-          // The same modifiers a class member takes, because `collectField` is
-          // the same function for both: `readonly x: i32` is a real interface
-          // field on either compiler, and `static x: i32` is refused with the
-          // sentence that says `of interface \`I\``. Reading `?` here and not
-          // these would be an arbitrary split in one grammar rule.
-          let modifiers = this.parseMemberModifiers()
-          // `get x(): T;` and `set x(v: T);`, accessor signatures, read as a
-          // class reads the word (`parseMember`): before another name only, so
-          // `get: i32` is still a field called `get`.
-          const accessor =
-            this.at(TOK_IDENT) && (this.value === "get" || this.value === "set") && this.peek() === TOK_IDENT
-          if (accessor) {
-            this.advance()
-            modifiers = modifiers | FLAG_ACCESSOR
-          }
-          // `m(): T;`, a method signature, for the checker to refuse (NL2048):
-          // a method with no body, among the fields. An accessor is one too.
-          if (
-            accessor ||
-            (this.at(TOK_IDENT) &&
-              (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
-          ) {
-            fields.children.push(this.parseMethodSignature(fieldStart, modifiers))
-            continue
-          }
-          const field = this.node(N_FIELD, fieldStart, this.end)
-          field.children.push(this.parseIdentifier())
-          // `?` only, and not `!`: a definite-assignment assertion is not a
-          // spelling TypeScript allows on a property signature at all, so
-          // there is no stage0 sentence to agree with and the syntax error
-          // stays the right answer.
-          field.flags = modifiers
-          if (this.eat(TOK_QUESTION)) {
-            field.flags = field.flags | FLAG_OPTIONAL
-          }
-          field.children.push(this.parseTypeAnnotation())
-          field.children.push(this.empty())
-          if (!this.eat(TOK_SEMICOLON)) {
-            this.eat(TOK_COMMA)
-          }
-          field.end = this.previousEnd
-          fields.children.push(field)
-        }
+        fields.children.push(this.parseInterfaceMember())
         if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) {
           this.advance()
         }
@@ -1939,19 +2182,90 @@ export class Parser {
     }
     node.children.push(this.closeList(fields))
     node.children.push(typeParams)
+    if (heritage !== null) {
+      node.children.push(heritage)
+    }
     node.end = this.previousEnd
     return node
   }
 
   /**
+   * One member of an interface. A field is what the language has; a method or
+   * an accessor signature (NL2048), an index signature (NL2214), a call or
+   * construct signature (NL2257) and a member named by a string or a number
+   * (NL2092) are read for the checker to refuse.
+   */
+  parseInterfaceMember(): Node {
+    const start = this.start
+    // `(x: i32): T` and `new (): T`, a call and a construct signature: `new`
+    // is a keyword, so before `(` or `<` it is always this.
+    const construct = this.at(TOK_NEW) && (this.peek() === TOK_LPAREN || this.peek() === TOK_LT)
+    if (construct || this.at(TOK_LPAREN) || this.at(TOK_LT)) {
+      if (construct) {
+        this.advance() // `new`
+      }
+      return this.parseMethodSignature(start, construct ? FLAG_CONSTRUCT : 0, false)
+    }
+    if (this.at(TOK_LBRACKET) && this.indexSignatureAhead()) {
+      return this.parseIndexSignature(start, 0)
+    }
+    if (!this.atMemberName()) {
+      return this.fail("an interface holds only annotated fields")
+    }
+    // The same modifiers a class member takes, because `collectField` is
+    // the same function for both: `readonly x: i32` is a real interface
+    // field on either compiler, and `static x: i32` is refused with the
+    // sentence that says `of interface \`I\``. Reading `?` here and not
+    // these would be an arbitrary split in one grammar rule.
+    let modifiers = this.parseMemberModifiers()
+    if (this.at(TOK_LBRACKET) && this.indexSignatureAhead()) {
+      return this.parseIndexSignature(start, modifiers)
+    }
+    // `get x(): T;` and `set x(v: T);`, accessor signatures, read as a
+    // class reads the word (`parseMember`): before another name only, so
+    // `get: i32` is still a field called `get`.
+    const accessor = this.accessorAhead()
+    if (accessor) {
+      this.advance()
+      modifiers = modifiers | FLAG_ACCESSOR
+    }
+    // `m(): T;`, a method signature, for the checker to refuse (NL2048):
+    // a method with no body, among the fields. An accessor is one too.
+    if (
+      accessor ||
+      (this.atMemberName() &&
+        (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
+    ) {
+      return this.parseMethodSignature(start, modifiers, true)
+    }
+    const field = this.node(N_FIELD, start, this.end)
+    field.children.push(this.parseMemberNameNode())
+    // `?` only, and not `!`: a definite-assignment assertion is not a
+    // spelling TypeScript allows on a property signature at all, so
+    // there is no stage0 sentence to agree with and the syntax error
+    // stays the right answer.
+    field.flags = modifiers
+    if (this.eat(TOK_QUESTION)) {
+      field.flags = field.flags | FLAG_OPTIONAL
+    }
+    field.children.push(this.parseTypeAnnotation())
+    field.children.push(this.empty())
+    this.eatMemberSeparator()
+    field.end = this.previousEnd
+    return field
+  }
+
+  /**
    * An interface's `m<T>(x: T): R;`, shaped as a class's method is, with an
    * EMPTY body: the checker refuses it before anything reads it (NL2048), so
-   * a parameter needs no annotation to get there.
+   * a parameter needs no annotation to get there. A call signature
+   * `(x: i32): T` is the same with an EMPTY name (`named` false), and a
+   * construct signature `new (): T` that with FLAG_CONSTRUCT (NL2257).
    */
-  parseMethodSignature(start: i32, modifiers: i32): Node {
+  parseMethodSignature(start: i32, modifiers: i32, named: boolean): Node {
     const method = this.node(N_METHOD, start, this.end)
-    method.children.push(this.parseIdentifier())
-    method.flags = modifiers | this.parseMemberMarker()
+    method.children.push(named ? this.parseMemberNameNode() : this.empty())
+    method.flags = named ? modifiers | this.parseMemberMarker() : modifiers
     const typeParams = this.parseTypeParameters()
     method.children.push(this.parseParameters(false))
     method.children.push(this.parseReturnType())
@@ -1959,9 +2273,7 @@ export class Parser {
     if (typeParams.children.length > 0) {
       method.children.push(typeParams)
     }
-    if (!this.eat(TOK_SEMICOLON)) {
-      this.eat(TOK_COMMA)
-    }
+    this.eatMemberSeparator()
     method.end = this.previousEnd
     return method
   }
@@ -2376,6 +2688,16 @@ export class Parser {
       case TOK_SEMICOLON:
         this.advance()
         return this.node(N_EMPTY, start, this.previousEnd)
+      case TOK_CLASS: {
+        // A class declaration inside a body is not an expression statement,
+        // and TypeScript does not read one as a class expression either: it
+        // stays the syntax error it was.
+        const node = this.node(N_EXPR_STMT, start, this.end)
+        node.children.push(this.fail(`expected an expression, found \`${tokenName(this.kind)}\``))
+        this.expectSemicolon()
+        node.end = this.previousEnd
+        return node
+      }
       default:
         return this.parseExpressionStatement(start)
     }
@@ -3156,6 +3478,10 @@ export class Parser {
       }
       case TOK_NEW:
         return this.parseNew(start)
+      // A class expression, for the checker to refuse: an anonymous one
+      // (NL2018) and a named one alike, since a class is never a value.
+      case TOK_CLASS:
+        return this.parseClass(start)
       case TOK_SLASH:
       case TOK_SLASH_ASSIGN:
         return this.parseRegex(start)
@@ -3413,9 +3739,28 @@ export class Parser {
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
       const property = this.node(N_PROPERTY, propertyStart, this.end)
+      // `{ m() { } }`, a method (or an accessor), for the checker to refuse
+      // (NL2258): the property's value is the N_METHOD.
+      if (this.objectMethodAhead()) {
+        const method = this.parseObjectMethod(propertyStart)
+        property.text = method.children[0].text
+        property.children.push(method)
+        property.end = this.previousEnd
+        node.children.push(property)
+        if (!this.eat(TOK_COMMA)) {
+          break
+        }
+        continue
+      }
+      // `{ "a": 1 }` and `{ 0: 1 }`: the key is a second child, for the
+      // checker to refuse (NL2223). Read only when written, so an ordinary
+      // property allocates no node it would drop.
+      let key: Node | null = null
       if (this.at(TOK_IDENT)) {
         property.text = this.value
         this.advance()
+      } else if ((this.at(TOK_STRING) || this.at(TOK_NUMBER)) && this.peek() === TOK_COLON) {
+        key = this.parseMemberNameNode()
       } else {
         this.report("an object literal key must be a plain identifier", this.start, this.end)
         this.advance()
@@ -3428,6 +3773,9 @@ export class Parser {
         shorthand.text = property.text
         property.children.push(shorthand)
       }
+      if (key !== null) {
+        property.children.push(key)
+      }
       property.end = this.previousEnd
       node.children.push(property)
       if (!this.eat(TOK_COMMA)) {
@@ -3438,6 +3786,59 @@ export class Parser {
     this.expect(TOK_RBRACE)
     node.end = this.previousEnd
     return node
+  }
+
+  /**
+   * Whether an object literal's member in hand is a method: a key followed by
+   * `(` or `<`, `get` or `set` before a key, `async` before a key or a `*` on
+   * its line, or a `*`. `{ get: 1 }`, `{ get }` and `{ async }` stay the
+   * properties they are.
+   */
+  objectMethodAhead(): boolean {
+    if (this.at(TOK_STAR)) {
+      return true
+    }
+    if (!this.atMemberName()) {
+      return false
+    }
+    const next = this.peek()
+    if (next === TOK_LPAREN || next === TOK_LT) {
+      return true
+    }
+    if (this.accessorAhead()) {
+      return true
+    }
+    return this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead() && next !== TOK_LBRACKET
+  }
+
+  /**
+   * `m(): T { }` in an object literal, with `async`, `*`, `get` or `set` in
+   * front of it: an N_METHOD shaped as a class's is. It is refused whole, so a
+   * parameter needs no annotation to get there.
+   */
+  parseObjectMethod(start: i32): Node {
+    const method = this.node(N_METHOD, start, this.end)
+    if (this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead()) {
+      this.advance()
+      method.flags = FLAG_ASYNC
+    }
+    if (this.eat(TOK_STAR)) {
+      method.flags = method.flags | FLAG_GENERATOR
+    }
+    if (this.accessorAhead()) {
+      this.advance()
+      method.flags = method.flags | FLAG_ACCESSOR
+    }
+    method.children.push(this.parseMemberNameNode())
+    const typeParams = this.parseTypeParameters()
+    method.children.push(this.parseParameters(false))
+    method.children.push(this.parseReturnType())
+    method.children.push(this.parseBlock())
+    if (typeParams.children.length > 0) {
+      method.children.push(typeParams)
+    }
+    method.end = this.previousEnd
+    return method
   }
 
   /**

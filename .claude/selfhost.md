@@ -266,8 +266,11 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `async` and `function*` a function, method or arrow with `FLAG_ASYNC` /
     `FLAG_GENERATOR`, a default type argument the type parameter with
     `FLAG_DEFAULT`, a default, optional or rest parameter the parameter with
-    `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST`, and `get x()` / `set x(v)`
-    a method with `FLAG_ACCESSOR`. An operator is the operator node whose text it is: `==`,
+    `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST`, `get x()` / `set x(v)`
+    a method with `FLAG_ACCESSOR`, `abstract` the class or member with
+    `FLAG_ABSTRACT`, `declare class`, `declare interface` and `declare enum`
+    theirs with `FLAG_FOREIGN`, and a parameter property the parameter with
+    `FLAG_PROPERTY`. An operator is the operator node whose text it is: `==`,
     `in`, `**` and the comma an `N_BINARY`, `typeof`, `void`, `delete`,
     `await` and `yield` an `N_UNARY`;
   - it **resembles nothing** → a kind of its own with its child layout written
@@ -275,8 +278,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `N_SPREAD`,
     `N_DECORATOR` (around what it decorates), `N_NAMESPACE` (`namespace`,
     `module` and `declare global`, its body passed over unread) and
-    `N_TYPE_OPERATOR` (`keyof T`) and `N_BINDING_PATTERN` (a destructuring
-    pattern where a name is bound, passed over unread);
+    `N_TYPE_OPERATOR` (`keyof T`), `N_BINDING_PATTERN` (a destructuring
+    pattern where a name is bound, passed over unread) and
+    `N_INDEX_SIGNATURE` (`[k: string]: T`, in a class or an interface);
   - it **differs in what one child is** → the same node with that child, when
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
@@ -286,9 +290,19 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     when written, a missing name, return type or body an EMPTY child of the
     `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an
     interface's fields, a top-level `let` bound to an arrow the module
-    constant whose initialiser is the `N_ARROW`, and the names after the
+    constant whose initialiser is the `N_ARROW`, the names after the
     first in `const f = (): i32 => 1, g = 2` a sixth child of the
-    `N_FUNCTION`.
+    `N_FUNCTION`, an anonymous class (`export default class { }` with
+    `FLAG_DEFAULT`, or a class expression, an `N_CLASS` where an operand
+    stands) an EMPTY name, a method or constructor without a body an EMPTY
+    body, a constructor's return type a third child of the `N_CONSTRUCTOR`,
+    a member named `"a b"` or `0` the `N_STRING` or `N_NUMBER` where its
+    name would be, `static { }` the `N_BLOCK` among a class's members, an
+    interface's call signature an `N_METHOD` with an EMPTY name (a construct
+    signature with `FLAG_CONSTRUCT`), `interface I extends A` a fourth child
+    of the `N_INTERFACE`, a key written as a string or a number a second
+    child of the `N_PROPERTY`, and a method in an object literal the
+    `N_METHOD` that is the property's value.
 
   The refusal runs before anything else reads the node, so no later rule has
   to know the shape exists. An NL2xxx rule that needs no type is a sweep over
@@ -320,9 +334,12 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   (`Parser.operandAhead`), an infix one only after an operand, a declaration
   word only where TypeScript reads it as one — `async` before `function`, an
   arrow's parameters or a member's name on its line, `namespace` and `module`
-  before a name or a string on theirs, `keyof` before a type on its line
-  (`asyncArrowAhead`, `namespaceAhead`, `keyofAhead`) — and
-  `tests/parser/names*.ts` pin the name readings. Check a new word against the
+  before a name or a string on theirs, `keyof` before a type on its line,
+  `abstract`, `declare` and the accessibility words before what they modify
+  on theirs, and `static` before `{` on any (`asyncArrowAhead`,
+  `namespaceAhead`, `keyofAhead`, `declaredTypeAhead`,
+  `parameterModifierAhead`) — and `tests/parser/names*.ts` pin the name
+  readings. Check a new word against the
   seed in every position a name can stand, line breaks included, before it
   goes in. A regex is the one token the lexer cannot decide alone: the parser
   asks it again where an operand is due (`Lexer.scanRegex`). When a case comes off, it leaves both

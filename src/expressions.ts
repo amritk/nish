@@ -43,6 +43,7 @@ import {
   structOf,
 } from "./members"
 import {
+  FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_CONST,
   FLAG_SATISFIES,
@@ -60,6 +61,7 @@ import {
   N_INDEX,
   N_LIST,
   N_MEMBER,
+  N_METHOD,
   N_NEW,
   N_NULL,
   N_NUMBER,
@@ -133,6 +135,9 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
         ctx.error(node.children[0], "`new` requires a class name")
       }
       break
+    case N_PROPERTY:
+      refusePropertyForm(ctx, node)
+      break
     case N_AS:
       // Named by TypeScript's `SyntaxKind`, as every Phase 1 gap is.
       if ((node.flags & FLAG_SATISFIES) !== 0) {
@@ -145,6 +150,25 @@ export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
       break
     default:
       break
+  }
+}
+
+/**
+ * An object literal's member that is not `key: value` or `{ key }`: a method
+ * or an accessor, named by TypeScript's `SyntaxKind` (NL2258), and a key
+ * written as a string or a number (NL2223), which is the property's second
+ * child. An accessor's span opens at its `get` or `set`.
+ */
+const refusePropertyForm = (ctx: CheckContext, node: Node): void => {
+  const value = node.children[0]
+  if (value.kind === N_METHOD) {
+    let kind = "MethodDeclaration"
+    if ((value.flags & FLAG_ACCESSOR) !== 0) {
+      kind = ctx.textOf(value).startsWith("get") ? "GetAccessor" : "SetAccessor"
+    }
+    ctx.error(node, `Unsupported object literal member: ${kind} (only \`key: value\`)`)
+  } else if (node.children.length > 1) {
+    ctx.error(node.children[1], "Object literal keys must be plain identifiers")
   }
 }
 

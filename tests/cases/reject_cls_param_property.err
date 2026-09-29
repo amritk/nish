@@ -1,1 +1,1 @@
-a type annotation is required
+Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it

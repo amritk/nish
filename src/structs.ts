@@ -801,7 +801,8 @@ export const checkImplements = (ctx: CheckContext, cls: StructInfo): void => {
     // — the class's own, or its template's, to which `instantiateStruct`
     // forwards every request — so the name finds the declaration it found then.
     const iface = ctx.program.struct(name)
-    if (iface === null) {
+    // A refused interface has been reported where it is declared.
+    if (iface === null || iface.poisoned) {
       continue
     }
     // WP15 section 2a: an interface with an implementer is a *view*, not a

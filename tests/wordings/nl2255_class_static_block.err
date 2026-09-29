@@ -1,1 +1,1 @@
-syntax error: a class member is a field, a method or a constructor, found `{`
+Unsupported class member in `Point`: ClassStaticBlockDeclaration

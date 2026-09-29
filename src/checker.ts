@@ -166,6 +166,10 @@ export class Checker {
         // a struct. It declares no layout, so it is registered beside the
         // function templates and the member loop below skips it: its members
         // are collected once per instantiation instead.
+        // One diagnostic per declaration, as an enum's is: an anonymous class
+        // is refused here and nowhere else (NL2018), so an earlier
+        // declaration's refusal must not silence it.
+        this.ctx.errored = false
         const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE
         const what = kind === STRUCT_CLASS ? "class" : "interface"
         // Nothing is declared for a refused `integer`: the name is refused as a
@@ -174,7 +178,6 @@ export class Checker {
           continue
         }
         if (isGenericStruct(stmt)) {
-          this.ctx.errored = false
           this.registerStructTemplate(stmt, kind)
         } else {
           // A `class Box$i32` would be one struct type with the instantiation
@@ -219,6 +222,11 @@ export class Checker {
       // rejected class or constant costs its own diagnostic and no more
       // (`collectSignatures` in stage0's `src/checker/index.ts`).
       this.ctx.errored = false
+      // An anonymous class is pass 1a's to refuse (NL2018, `declareStruct`),
+      // and that is its one diagnostic: nothing in it is swept or collected.
+      if (stmt.kind === N_CLASS && stmt.children[0].kind === N_EMPTY) {
+        continue
+      }
       // WP33 R1: the forms the parser reads for pass 1 to refuse, before the
       // declaration is collected, so a declaration that has one reports that
       // and nothing else — an unannotated constant holding `[1, , 2]` is the
@@ -234,22 +242,32 @@ export class Checker {
         refuseUnsupportedForms(this.ctx, stmt)
       }
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+        const refused = this.ctx.errored
         const info = this.program.struct(stmt.children[0].text)
         if (info !== null && info.decl === stmt) {
           collectStructMembers(this.ctx, info)
+          // A struct the sweep refused is registered, so its name resolves,
+          // but it has no layout worth checking: `implements` and definite
+          // assignment would be a second diagnostic about the same declaration.
+          info.poisoned = info.poisoned || refused
         }
         // WP18 G6: a generic one's constraints, for the reason
         // `registerTemplate` resolves a function's. In this loop rather than
         // at registration because a constraint may name a class declared
         // further down, which the loop above has declared by now.
-        const template = this.program.structTemplate(stmt.children[0].text)
-        if (template !== null && template.decl === stmt) {
-          resolveStructTemplateConstraints(template)
+        // WP18 G8: then the rules about a generic method that are its
+        // declaration's, once per class, for the reason the constraints are
+        // resolved here: a generic class's members are collected once per
+        // instantiation. Both clear `errored` per parameter, so neither runs
+        // for a declaration the sweep refused, whose refusal is its one
+        // diagnostic; an instantiation still resolves the constraints lazily.
+        if (!refused) {
+          const template = this.program.structTemplate(stmt.children[0].text)
+          if (template !== null && template.decl === stmt) {
+            resolveStructTemplateConstraints(template)
+          }
+          declareMethodTypeParameters(this.ctx, stmt)
         }
-        // WP18 G8: the rules about a generic method that are its declaration's,
-        // once per class, for the reason the constraints above are resolved
-        // here: a generic class's members are collected once per instantiation.
-        declareMethodTypeParameters(this.ctx, stmt)
       } else if (stmt.kind === N_MODULE_CONST) {
         this.collectConstants(stmt)
       } else if (stmt.kind === N_FUNCTION) {
@@ -270,7 +288,7 @@ export class Checker {
     // and definite assignment needs the fields.
     for (const info of this.declared) {
       this.ctx.errored = false
-      if (info.kind === STRUCT_CLASS) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
       }
@@ -420,6 +438,11 @@ export class Checker {
   declareEnum(stmt: Node): void {
     const nameNode = stmt.children[0]
     const name = nameNode.text
+    // `declare` is written first, so it is the refusal (WP33 R1).
+    if ((stmt.flags & FLAG_FOREIGN) !== 0) {
+      this.ctx.error(stmt, "`declare enum` is not supported")
+      return
+    }
     if (builtinTypeName(name)) {
       this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for an enum`)
       return
