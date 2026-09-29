@@ -5117,9 +5117,10 @@ word is the operator only where the name could not stand:
   next line when an operand follows them there (`reject_in_newline`). `in` in
   a `for` head's initialiser is the loop's, except inside a bracket that
   ECMAScript's grammar reads it in again — a parenthesis, an array or object
-  literal, an argument list, an element access, a template substitution or a
-  block (`reject_in_for_head_array`, `_call`, `_arrow`, `_element`,
-  `_template`, `_object`, `_block`). TypeScript's parser differs on the array
+  literal, an argument list, an element access, a template substitution, a
+  block, or the branch between a conditional's `?` and `:`
+  (`reject_in_for_head_array`, `_call`, `_arrow`, `_element`, `_template`,
+  `_object`, `_block`, `_conditional`). TypeScript's parser differs on the array
   literal, which it reports as a syntax error; Node follows the grammar.
 - `as` and `satisfies` after an operand on its line, which is TypeScript's own
   rule for them.

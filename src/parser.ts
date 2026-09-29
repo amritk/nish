@@ -341,8 +341,9 @@ export class Parser {
    * `for...in` rather than being the operator, as TypeScript's `disallowIn`
    * context does. Every bracket the ECMAScript grammar reads `[+In]` inside
    * clears it again (`allowIn`): a parenthesis, an array literal, an argument
-   * list, an element access, an object literal, a template substitution and a
-   * block. A concise arrow body inherits it, as the grammar's `[?In]` does.
+   * list, an element access, an object literal, a template substitution, a
+   * block and the branch between a conditional's `?` and `:`. A concise arrow
+   * body and the branch after `:` inherit it, as the grammar's `[?In]` does.
    * TypeScript's parser keeps `in` disallowed inside an array literal, where
    * Node follows the grammar; this parser follows the grammar too
    * (`tests/cases/reject_in_for_head_array`).
