@@ -52,8 +52,9 @@ NL2227  retired: `Only relative import specifiers are supported`, from before WP
 NL2304  retired: the scalar-only `declare function` return rule, before WP27 S2 let a `CPtr` through; the live one is NL2321
 NL2305  retired: the scalar-only `declare function` parameter rule, before WP27 S2 let a `CPtr` through; the live one is NL2322
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
-NL2288  retired: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2376 (tests/link/enum_import_not_exported)
-NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2376 (tests/link/alias_import_not_exported)
+NL2288  retired: `Enums cannot be exported`, the refusal WP34 N1 replaced; an exported enum is imported now (tests/link/enum_export_uses), and importing one that is not exported is NL2045 (tests/link/enum_import_not_exported)
+NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced; an exported alias is imported now (tests/link/alias_export_class), and importing one that is not exported is NL2045 (tests/link/alias_import_not_exported)
+NL8011  retired: WP33's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but
@@ -141,11 +142,3 @@ NL4003  an error string in the generated N-API shim
 NL4004  a sentence in the `--emit-dts` loader's marshalling report
 NL4005  an error string in the generated N-API shim
 NL4006  an error string in the generated N-API shim
-
-# --- Not live yet: WP33 R1's portability rows land in three stages. ---------
-# Every NL8xxx code was registered at once, with the class, so that the stages
-# that write the analyses cannot race each other for a number. Each block below
-# is one stage's, and that stage deletes exactly its own block when its rows go
-# live; the blank comment lines keep the three deletions from touching.
-#
-#

@@ -15,7 +15,7 @@
 // three modules this pass hands every node to:
 //
 //   `portability-numbers.ts`  integer division, wrapping, `>>>`, 64-bit
-//                             integers, libm's NaN and signed zero, `-0` printed
+//                             integers, libm's NaN and signed zero
 //   `portability-strings.ts`  UTF-8 offsets that meet an outside fact, `slice`
 //   `portability-records.ts`  a record copied into an array, a store over an
 //                             element a reference still reads
