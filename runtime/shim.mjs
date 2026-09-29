@@ -410,7 +410,11 @@ export function updIdx(a, i, f) {
  */
 export function arraySet(dst, src, offset) {
   // `ToIntegerOrInfinity`: NaN is 0, as `llvm.fptosi.sat` makes it natively.
-  const at = offset === undefined ? 0 : toIndex(offset) || 0;
+  // `Math.trunc` rather than `toIndex`, which converts a bigint: an `i64` or
+  // `u64` offset is a bigint here, and it throws the `TypeError` the typed
+  // array and `Array.prototype.fill` throw for one, instead of being rounded
+  // to the nearest double past 2^53 (docs/RUN_UNDER_NODE.md).
+  const at = offset === undefined ? 0 : Math.trunc(offset) || 0;
   const end = at + src.length;
   if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
   // Two plain arrays overlap only when they are one array, which is the one

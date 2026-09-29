@@ -2252,6 +2252,34 @@ if (has("opt") && fs.existsSync(fillZeroLl)) {
   )
 }
 
+// WP34 N2: under `runtime/nish.mjs` an `i64` or `u64` is a bigint, and a bigint offset
+// of `set` or `fill` throws a `TypeError`, as `docs/LANGUAGE.md` says. `fill` is
+// `Array.prototype.fill`, which throws by itself; `set` is the prelude's own, and a
+// conversion that accepted the bigint would copy silently, rounding past 2^53.
+if (!only || "bytes_prelude_bigint".includes(only)) {
+  const probe = [
+    "const tryIt = (f) => { try { f(); return 'no error'; } catch (e) { return e.constructor.name; } };",
+    "const a = [0, 0, 0, 0, 0];",
+    "process.stdout.write([",
+    "  tryIt(() => a.set([7], 3n)),",
+    "  tryIt(() => a.set([7], 2n ** 53n + 1n)),",
+    "  tryIt(() => a.fill(9, 3n)),",
+    "  tryIt(() => a.fill(9, 0, 3n)),",
+    "  a.join(' '),",
+    "].join('\\n'));",
+  ].join("\n")
+  const r = spawnSync("node", ["--import", path.join(root, "runtime", "nish.mjs"), "-e", probe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const want = "TypeError\nTypeError\nTypeError\nTypeError\n0 0 0 0 0"
+  check(
+    "bytes_prelude_bigint: under runtime/nish.mjs a bigint offset of set or fill throws a TypeError and writes nothing",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
 // ---- WP18: generics ---------------------------------------------------------------
 // The acceptance test of the whole package, and a golden cannot express it: an
 // instantiation's `define` must be *byte-identical* to the `define` of the
