@@ -15,7 +15,7 @@
 // `reject_arr_element_across_push` — which already knows which references are
 // live where, rather than tracking them a second time.
 
-import { inlineArrayElement, referenceRoot, slotOverwrites } from "./arrays"
+import { inlineArrayElement, referenceRoot, SlotOverwrite, slotOverwrites } from "./arrays"
 import { isAssignmentOperator, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
@@ -289,13 +289,39 @@ const readAfter = (
   return false
 }
 
+/** Which copy a write goes unseen by: none, the array, the source binding, or the array's other copy. */
+const SEEN_BY_NONE: i32 = 0
+const SEEN_BY_ARRAY: i32 = 1
+const SEEN_BY_SOURCE: i32 = 2
+const SEEN_BY_OTHER_COPY: i32 = 3
+
+/**
+ * The NL8003 message for one copy. Built here rather than in the loop that
+ * finds it, so the strings it spells are the finding the loop keeps and not
+ * scratch the loop leaves behind on every pass (NL9011).
+ */
+const copyFinding = (walk: PortabilityWalk, copy: CopySite, write: Node, seenBy: i32): PortabilityFinding => {
+  const name = copy.source.text
+  let other = `the other copy in \`${copy.into.text}\``
+  if (seenBy === SEEN_BY_SOURCE) {
+    other = `\`${name}\``
+  } else if (seenBy === SEEN_BY_ARRAY) {
+    other = `\`${copy.into.text}\``
+  }
+  return new PortabilityFinding(
+    copy.source,
+    `\`${name}\` is copied into the array here, and TypeScript stores the same object, so the later write \`${walk.textOf(write)}\` (line ${walk.program.source.lineOf(write.start)}) is not seen through ${other}`
+  )
+}
+
 /**
  * NL8003. A binding `p` copied into an array `ps` of records, then one of the
  * two written and the other read afterwards: natively the write stays on its
  * own side of the copy, and in TypeScript both names are one object. A write
  * through `ps[i].x` counts as a write to the array's copy whichever slot `i`
  * is; when `p` went into `ps` twice (`[p, p]`), a read of `ps` after it is a
- * read of the other copy too.
+ * read of the other copy too. Each copy is reported once, at its first such
+ * write.
  */
 const copyFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const copies: CopySite[] = []
@@ -319,23 +345,20 @@ const copyFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void =>
         continue
       }
       const record = writtenRecord(write)
-      let seenBy = ""
+      let seenBy = SEEN_BY_NONE
       if (source.names(walk, record)) {
-        seenBy = readAfter(walk, walk.body, copy.into, write, decl) ? `\`${copy.into.text}\`` : ""
+        if (readAfter(walk, walk.body, copy.into, write, decl)) {
+          seenBy = SEEN_BY_ARRAY
+        }
       } else if (record.kind === N_INDEX && copy.into.names(walk, unwrapParens(record.children[0]))) {
         if (readAfter(walk, walk.body, source, write, decl)) {
-          seenBy = `\`${source.text}\``
+          seenBy = SEEN_BY_SOURCE
         } else if (twice && readAfter(walk, walk.body, copy.into, write, decl)) {
-          seenBy = `the other copy in \`${copy.into.text}\``
+          seenBy = SEEN_BY_OTHER_COPY
         }
       }
-      if (seenBy !== "") {
-        out.push(
-          new PortabilityFinding(
-            copy.source,
-            `\`${source.text}\` is copied into the array here, and TypeScript stores the same object, so the later write \`${walk.textOf(write)}\` (line ${walk.program.source.lineOf(write.start)}) is not seen through ${seenBy}`
-          )
-        )
+      if (seenBy !== SEEN_BY_NONE) {
+        out.push(copyFinding(walk, copy, write, seenBy))
         break
       }
     }
@@ -343,6 +366,13 @@ const copyFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void =>
 }
 
 // ---- NL8004: a store over an element a reference still reads ----------------------
+
+/** The NL8004 message for one overwrite, built outside the loop for the reason `copyFinding` gives. */
+const overwriteFinding = (walk: PortabilityWalk, found: SlotOverwrite): PortabilityFinding =>
+  new PortabilityFinding(
+    found.store,
+    `\`${walk.textOf(found.store)}\` overwrites the element a reference still reads, and TypeScript replaces the object instead (\`${found.reference.name}\`, line ${walk.program.source.lineOf(found.read.start)})`
+  )
 
 /**
  * NL8004. `ps[i] = q` while `r = ps[j]` is live and read afterwards: natively
@@ -353,11 +383,6 @@ const copyFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void =>
  */
 const overwriteFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   for (const found of slotOverwrites(walk.program, walk.table, walk.body)) {
-    out.push(
-      new PortabilityFinding(
-        found.store,
-        `\`${walk.textOf(found.store)}\` overwrites the element a reference still reads, and TypeScript replaces the object instead (\`${found.reference.name}\`, line ${walk.program.source.lineOf(found.read.start)})`
-      )
-    )
+    out.push(overwriteFinding(walk, found))
   }
 }

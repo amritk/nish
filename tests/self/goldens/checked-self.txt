@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1130024 dump lines live, 76 distinct modules.
+# 76 programs, 1130332 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -25556,6 +25556,7 @@ function numberFindings(_walk: PortabilityWalk, _node: Node, _out: PortabilityFi
 module src/portability-records.ts
 import inlineArrayElement from "./arrays" -> function @inlineArrayElement
 import referenceRoot from "./arrays" -> function @referenceRoot
+import SlotOverwrite from "./arrays" -> struct SlotOverwrite
 import slotOverwrites from "./arrays" -> function @slotOverwrites
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
 import unwrapParens from "./emit-util" -> function @unwrapParens
@@ -25577,6 +25578,10 @@ import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
 import Local from "./symbols" -> struct Local
+const SEEN_BY_NONE: i32 = 0
+const SEEN_BY_ARRAY: i32 = 1
+const SEEN_BY_SOURCE: i32 = 2
+const SEEN_BY_OTHER_COPY: i32 = 3
 struct Side (class) size=24 align=8
   field local: Local | null index=0 offset=0
   field root: string index=1 offset=8
@@ -25773,51 +25778,68 @@ function readAfter(walk: PortabilityWalk, node: Node, side: Side, write: Node, d
   callee 281:33 runsAfter -> @runsAfter
   local 284:14 child: Node (const)
   callee 285:9 readAfter -> @readAfter
+function copyFinding(walk: PortabilityWalk, copy: CopySite, write: Node, seenBy: i32): PortabilityFinding -> @copyFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
+  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  pointer copy: size=24 writesThrough=false captured=false
+  pointer write: size=40 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#1
+  stackSites=0 stackLocals=0
+  local 304:9 name: string (const)
+  local 305:7 other: string (let)
+  callee 311:10 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 313:111 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee 313:141 SourceFile.lineOf -> @SourceFile.lineOf
 function copyFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @copyFindings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 333:9
-  calls: PortabilityFinding.constructor PortabilityWalk.textOf Side.constructor Side.names Side.same SourceFile.lineOf bindingDeclaration collectCopies collectFieldWrites nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 readAfter runsAfter unwrapParens writtenRecord
-  pointer walk: size=48 writesThrough=false captured=false passedTo=collectCopies#0 bindingDeclaration#0 runsAfter#0 Side.names#1 readAfter#0 Side.names#1 readAfter#0 readAfter#0 PortabilityWalk.textOf#0
+  sharedWrite: 361:9
+  calls: Side.constructor Side.names Side.same bindingDeclaration collectCopies collectFieldWrites copyFinding nish_array_grow nish_panic_index readAfter runsAfter unwrapParens writtenRecord
+  pointer walk: size=48 writesThrough=false captured=false passedTo=collectCopies#0 bindingDeclaration#0 runsAfter#0 Side.names#1 readAfter#0 Side.names#1 readAfter#0 readAfter#0 copyFinding#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=3 stackLocals=3
-  local 301:9 copies: CopySite[] (const)
-  callee 302:3 collectCopies -> @collectCopies
-  local 306:9 writes: Node[] (const)
-  callee 307:3 collectFieldWrites -> @collectFieldWrites
-  local 308:14 copy: CopySite (const)
-  local 309:11 decl: Node | null (const)
-  callee 309:18 bindingDeclaration -> @bindingDeclaration
-  local 310:11 source: Side (const)
-  callee 310:20 new Side -> @Side.constructor
-  local 311:9 twice: boolean (let)
-  local 312:16 other: CopySite (const)
-  callee 313:59 Side.same -> @Side.same
-  local 317:16 write: Node (const)
-  callee 318:12 runsAfter -> @runsAfter
-  local 321:13 record: Node (const)
-  callee 321:22 writtenRecord -> @writtenRecord
-  local 322:11 seenBy: string (let)
-  callee 323:11 Side.names -> @Side.names
-  callee 324:18 readAfter -> @readAfter
-  callee 325:45 Side.names -> @Side.names
-  callee 325:67 unwrapParens -> @unwrapParens
-  callee 326:13 readAfter -> @readAfter
-  callee 328:29 readAfter -> @readAfter
-  callee 334:11 new PortabilityFinding -> @PortabilityFinding.constructor
-  callee 336:126 PortabilityWalk.textOf -> @PortabilityWalk.textOf
-  callee 336:156 SourceFile.lineOf -> @SourceFile.lineOf
+  local 327:9 copies: CopySite[] (const)
+  callee 328:3 collectCopies -> @collectCopies
+  local 332:9 writes: Node[] (const)
+  callee 333:3 collectFieldWrites -> @collectFieldWrites
+  local 334:14 copy: CopySite (const)
+  local 335:11 decl: Node | null (const)
+  callee 335:18 bindingDeclaration -> @bindingDeclaration
+  local 336:11 source: Side (const)
+  callee 336:20 new Side -> @Side.constructor
+  local 337:9 twice: boolean (let)
+  local 338:16 other: CopySite (const)
+  callee 339:59 Side.same -> @Side.same
+  local 343:16 write: Node (const)
+  callee 344:12 runsAfter -> @runsAfter
+  local 347:13 record: Node (const)
+  callee 347:22 writtenRecord -> @writtenRecord
+  local 348:11 seenBy: i32 (let)
+  callee 349:11 Side.names -> @Side.names
+  callee 350:13 readAfter -> @readAfter
+  callee 353:45 Side.names -> @Side.names
+  callee 353:67 unwrapParens -> @unwrapParens
+  callee 354:13 readAfter -> @readAfter
+  callee 356:29 readAfter -> @readAfter
+  callee 361:18 copyFinding -> @copyFinding
+function overwriteFinding(walk: PortabilityWalk, found: SlotOverwrite): PortabilityFinding -> @overwriteFinding
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32
+  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  pointer found: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 372:3 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 374:10 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee 374:166 SourceFile.lineOf -> @SourceFile.lineOf
 function overwriteFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @overwriteFindings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 356:5
-  calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32 slotOverwrites
-  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  sharedWrite: 386:5
+  calls: nish_array_grow overwriteFinding slotOverwrites
+  pointer walk: size=48 writesThrough=false captured=false passedTo=overwriteFinding#0
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 355:14 found: SlotOverwrite (const)
-  callee 355:23 slotOverwrites -> @slotOverwrites
-  callee 357:7 new PortabilityFinding -> @PortabilityFinding.constructor
-  callee 359:14 PortabilityWalk.textOf -> @PortabilityWalk.textOf
-  callee 359:170 SourceFile.lineOf -> @SourceFile.lineOf
+  local 385:14 found: SlotOverwrite (const)
+  callee 385:23 slotOverwrites -> @slotOverwrites
+  callee 386:14 overwriteFinding -> @overwriteFinding
 module src/portability-strings.ts
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
