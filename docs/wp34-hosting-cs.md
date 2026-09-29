@@ -194,17 +194,18 @@ Each piece is required by something the relay does today:
 four before deciding where they go. If they do not fit, the precedent is the
 split that created `runtime-os.c`, not a higher ceiling.
 
-**State.** Done in #312. They measured 503 bytes of `.text*`
+**State.** Done in #312. They measured 571 bytes of `.text*`
 against the 143 `runtime-os.c` had left of its (by then 1,536-byte) ceiling, so
 they are a fourth translation unit, `runtime/runtime-host.c`, with a ceiling of
-its own of 512; `runtime-os.c`'s is unchanged. `Date.now()` answers whole
+its own of 768; `runtime-os.c`'s is unchanged. `Date.now()` answers whole
 milliseconds, and every other `Date` member is refused by one rule.
 `crypto.getRandomValues` fills a `u8[]` only, at most 65,536 bytes a call, and
 panics rather than return weak bytes. `statMtimeSync` answers NaN, not `null`,
 for a path it cannot stat, because an `f64` has no `null`. The signal
 descriptor is `signalFd()` and `readSignal(fd)` in `nish:process` and the
-globals: a `signalfd` on Linux, a self-pipe written from a `sigaction` handler
-elsewhere. LANGUAGE.md §"The host" has the rules; the signal pair is WP33 class
+globals: a pipe written from a `sigaction` handler on every platform, not the
+`signalfd` this note proposed, because a `signalfd` hears only a signal
+blocked in every thread and a running `scope()` task keeps its own mask. LANGUAGE.md §"The host" has the rules; the signal pair is WP33 class
 C with no synchronous shim, and the ledger says why.
 
 ### N5. Sockets and the loop a program owns (L, runtime lane)

@@ -7,8 +7,8 @@ export const main = (): number => {
   const fd = signalFd();
   console.log(signalFd() === fd);
   console.log(readSignal(fd + 1));
-  // A child starts with neither signal blocked, so it can still be stopped by
-  // one: 128 + 15 when it signals itself.
+  // A child spawned after `signalFd()` can still be stopped by either signal,
+  // because `exec` resets a caught one: 128 + 15 when it signals itself.
   console.log(spawnSync(["sh", "-c", "kill -TERM $$"]));
   console.log("ready");
   console.log(readSignal(fd));

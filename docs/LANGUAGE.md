@@ -3750,7 +3750,7 @@ beside `runtime.c` as it does the others.
 | `Date.now(): f64` | the wall clock, `CLOCK_REALTIME`, in **whole milliseconds** since 1970-01-01 UTC, as JavaScript answers it: the milliseconds are counted as integers and then converted, so the value is exact and a time before 1970 floors. An `f64` in both number modes, because an `i32` of milliseconds overflowed in January 1970. It can go backwards when the clock is corrected, so an interval is `monotonicNanos`'s job, not this one's | write | `os_now`, `os_now_i32`; `reject_os_date_now_arity` |
 | `crypto.getRandomValues(bytes: u8[]): void` | every byte of `bytes` from the kernel's CSPRNG: `getrandom(2)` on Linux, looping over `EINTR` and short reads, and `getentropy(3)` in 256-byte chunks on macOS. **A `u8[]` only**, where the Web API takes any integer typed array: the byte is the unit a key or a nonce is written in, and a wider element would make the answer's byte order a fact about the machine. **A statement**, where the Web API also answers its argument, which the caller already holds. An empty array is filled with nothing. **At most 65,536 bytes a call**, the Web API's limit: more is a panic, `crypto.getRandomValues: <n> bytes asked for, and one call fills at most 65536`, exit 1. A source that fails is a panic too; nothing weaker is ever substituted | write | `os_random`, `os_random_limit`; `reject_os_random_i32`, `reject_os_random_u32`, `reject_os_random_string`, `reject_os_random_readonly`, `reject_os_random_value`, `reject_os_random_arity`, `reject_os_crypto_member`, `reject_os_crypto_value`, `reject_thread_region_random` |
 | `statMtimeSync(path: string): f64` | the modification time in milliseconds since the epoch, **with the sub-millisecond fraction** the file system keeps, computed as Node's `mtimeMs` is (seconds × 1e3 plus nanoseconds ÷ 1e6, in doubles), so the two print the same digits. **NaN** when the path cannot be stat'd — missing, or a parent that cannot be searched — because an `f64` has no `null` ([Nullable types](#nullable-types)) and NaN is JavaScript's own answer for a time that is not one; test it with `m !== m`. `stat` follows a symbolic link, and a directory has a time of its own. Also exported by `nish:fs` | write | `os_mtime`, `os_mtime_import`; `reject_os_mtime_type`, `reject_os_mtime_arity`, `reject_os_mtime_nullable` |
-| `signalFd(): i32` | a descriptor that becomes readable when **SIGTERM or SIGINT** arrives. On Linux it is a `signalfd` with both signals blocked, so their default action (ending the process) never runs, and with their dispositions reset to the default first, since an ignored signal is discarded before it could be read. Elsewhere it is the read end of a pipe that a `sigaction` handler in the runtime's C writes one byte to per signal. Made **once**: every later call answers the same descriptor. `-1` when it cannot be made. Call it before starting a thread, because the mask is the calling thread's and a thread started later inherits it. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity` |
+| `signalFd(): i32` | a descriptor that becomes readable when **SIGTERM or SIGINT** arrives. It is the read end of a pipe that a `sigaction` handler in the runtime's C writes one byte to per signal, so the signals' default action (ending the process) never runs. The handler runs in whichever thread the signal lands on, so a `scope()` task or a parallel worker running when `signalFd()` is called cannot take the signal and end the process, and nothing is blocked for a spawned child to inherit. Installing the handler overrides a disposition the process started with, so a signal its parent ignored is heard, as `process.on("SIGTERM")` hears it under Node. Made **once**: every later call answers the same descriptor. `-1` when it cannot be made. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_fd_arity` |
 | `readSignal(fd: i32): i32` | block until one of the two signals arrives and answer its number, **15** or **2**. `-1` for any `fd` that is not `signalFd()`'s, and for a read that fails. The argument is an `i32` in both number modes, as a descriptor is, and an `f64`, an `i64` or a string is refused rather than converted. Not `willreturn`: it can wait forever. Also exported by `nish:process` | write | `os_signal`, `os_signal_import`; `reject_os_signal_f64`, `reject_os_signal_i64`, `reject_os_signal_string`, `reject_os_signal_arity` |
 
 **`Date` has one member.** `new Date()`, `Date()`, `Date.parse`, `Date.UTC`,
@@ -3758,7 +3758,9 @@ any other member, and `Date` or `Date.now` used as a value are all refused under
 one rule: `` `new Date()` is refused: Nish has no `Date` object; the one `Date`
 member is `Date.now()`, the wall clock in milliseconds `` (NL2401;
 `reject_os_date_new`, `reject_os_date_call`, `reject_os_date_parse`,
-`reject_os_date_utc`, `reject_os_date_value`, `reject_os_date_bare`). **`crypto`
+`reject_os_date_utc`, `reject_os_date_value`, `reject_os_date_bare`). A local
+named `Date` shadows the global as any local does, so calling it is the
+ordinary `` Unknown function `Date` `` (`reject_os_date_shadowed`). **`crypto`
 has one member** the same way: `` `crypto.randomUUID` is refused: the one
 `crypto` member is `crypto.getRandomValues(bytes)` `` (NL2403). The array
 `getRandomValues` fills is written, so a `readonly u8[]` is refused as a store
@@ -3770,11 +3772,13 @@ but a `u8[]` is `` `crypto.getRandomValues` fills a `u8[]`, got i32[] ``
 **A descriptor, not a handler.** A handler would be a function value, which the
 language does not have, and would run between any two instructions of the
 program. A descriptor is what a server's loop can wait on beside its sockets
-(WP34 N5 will add that wait); until then `readSignal` is the blocking read. A
-child that `spawnSync` or `spawnSyncTo` starts has **no signal blocked**, as a
-child of Node's `spawnSync` has: `exec` keeps the mask, and without the reset a
-child started after `signalFd()` could not be stopped by either signal
-(`os_signal`). Signals other than SIGTERM and SIGINT are not in the language.
+(WP34 N5 will add that wait); until then `readSignal` is the blocking read.
+Underneath it is a handler rather than a Linux `signalfd`, because a `signalfd`
+hears only a signal blocked in every thread, and a mask reaches only the thread
+that sets it. A child that `spawnSync` or `spawnSyncTo` starts after
+`signalFd()` can still be stopped by either signal, because `exec` resets a
+caught signal to its default (`os_signal`). Signals other than SIGTERM and
+SIGINT are not in the language.
 
 **On wasm.** A `wasm32` target and the `wasi` profile have no host for these to
 reach, and `runtime-host.c` is empty there, so all five are refused by the

@@ -42635,7 +42635,7 @@ function stamp(): f64 -> @stamp [exported]
   stackSites=0 stackLocals=0
 function rekey(key: u8[]): void -> @rekey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 7:3
+  sharedWrite: 8:3
   calls: nish_random_fill
   pointer key: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

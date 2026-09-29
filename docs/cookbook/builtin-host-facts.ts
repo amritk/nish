@@ -1,6 +1,7 @@
 // WP34 N3: the four host facts. Each is one call into runtime-host.c; the array
 // `getRandomValues` fills is written, so `key` is `nocapture` but not
-// `readonly`, and `readSignal` is the one call that is not `willreturn`.
+// `readonly`, and neither the fill nor `readSignal` is `willreturn`: one waits
+// for the kernel's pool to be seeded, the other for a signal.
 export const stamp = (): f64 => Date.now()
 
 export const rekey = (key: u8[]): void => {

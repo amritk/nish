@@ -12826,14 +12826,16 @@ with the effect of what it does to the world rather than to memory: none of
 them is `readnone`, so two clock reads or two `stat`s around a piece of work
 never fold into one. The array `crypto.getRandomValues` fills is written
 through, so the parameter it arrives in is `nocapture` without `readonly`, and
-`nish_read_signal` alone lacks `willreturn`, since it can wait forever
+neither `nish_random_fill` nor `nish_read_signal` is `willreturn`: the first
+waits for the kernel's entropy pool to be seeded, the second can wait forever
 ([LANGUAGE.md](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
 
 <!-- cookbook:begin builtin-host-facts -->
 ```ts
 // WP34 N3: the four host facts. Each is one call into runtime-host.c; the array
 // `getRandomValues` fills is written, so `key` is `nocapture` but not
-// `readonly`, and `readSignal` is the one call that is not `willreturn`.
+// `readonly`, and neither the fill nor `readSignal` is `willreturn`: one waits
+// for the kernel's pool to be seeded, the other for a signal.
 export const stamp = (): f64 => Date.now()
 
 export const rekey = (key: u8[]): void => {

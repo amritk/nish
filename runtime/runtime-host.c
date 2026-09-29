@@ -12,9 +12,9 @@
  * the other two halves, so a link line still names one runtime.
  *
  * Every function here is platform code, and the two platforms differ in three
- * of the four: `getrandom` on Linux and `getentropy` elsewhere, `st_mtim`
- * against Darwin's `st_mtimespec`, and `signalfd` on Linux against a self-pipe
- * written from a `sigaction` handler elsewhere. A WASI build has none of this
+ * places: `getrandom` on Linux and `getentropy` elsewhere, `st_mtim`
+ * against Darwin's `st_mtimespec`, and `pipe2` against `pipe` for the signal
+ * descriptor. A WASI build has none of this
  * (the checker refuses all four under a wasm target), so there the file is
  * empty.
  */
@@ -22,12 +22,12 @@
 /* ISO C wants at least one declaration in a translation unit. */
 typedef int nish_host_unused;
 #else
-#if !defined(__APPLE__)
-/* Darwin declares everything by default and hides `getentropy` and the
-   `st_mtimespec` spelling behind a strict feature level, so the macro is for
-   glibc alone, which declares `clock_gettime` and `sigaction` under
-   `-std=c11` only with it. */
-#define _POSIX_C_SOURCE 200809L
+#if defined(__linux__)
+/* glibc declares `clock_gettime`, `sigaction` and `pipe2` under `-std=c11`
+   only with a feature macro, and `pipe2` only with this one. Darwin declares
+   everything by default and hides `getentropy` and the `st_mtimespec`
+   spelling behind a strict feature level, so it gets none. */
+#define _GNU_SOURCE
 #endif
 #include <errno.h>
 #include <signal.h>
@@ -36,12 +36,8 @@ typedef int nish_host_unused;
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/random.h>
-#if defined(__linux__)
-#include <sys/signalfd.h>
-#else
 #include <fcntl.h>
-#endif
+#include <sys/random.h>
 
 #include "nish.h"
 
@@ -113,51 +109,28 @@ double nish_stat_mtime(const nish_str *path) {
 
 /* ---- Signals: `signalFd()` and `readSignal(fd)`
  *
- * A descriptor rather than a handler, because a handler would be a function
- * value the language does not have, and because a descriptor is what a loop
- * waiting in `epoll` or `poll` can wait on beside its sockets. The descriptor
- * is made once and every later `signalFd()` answers the same one. Call it
- * before any thread starts: the mask it sets is the calling thread's, and a
- * thread started later inherits it. */
+ * A descriptor rather than a handler in the language, because a handler would
+ * be a function value the language does not have, and because a descriptor is
+ * what a loop waiting in `epoll` or `poll` can wait on beside its sockets.
+ *
+ * Underneath it is a C handler writing each signal's number, one byte, to a
+ * pipe. It is not a `signalfd` on Linux, deliberately: a `signalfd` only
+ * hears a signal that is blocked in **every** thread, and a mask reaches only
+ * the calling thread, so a `scope()` task or a parallel worker already
+ * running when `signalFd()` was called would take the signal at its default
+ * action and end the process. A handler runs in whichever thread the kernel
+ * picks, so no thread's mask matters, and nothing is blocked for a child
+ * `spawnSync` starts to inherit: `exec` resets a caught signal to its
+ * default. Installing the handler also overrides a disposition the process
+ * was started with, so a signal its parent ignored is heard, as
+ * `process.on('SIGTERM')` hears it under Node.
+ *
+ * The handler is the whole of what runs in signal context, and `write` is
+ * async-signal-safe. The write end is non-blocking, so a thousand unread
+ * signals lose the newest rather than wedge the handler, and `errno` is put
+ * back for the code the signal interrupted. The descriptor is made once and
+ * every later `signalFd()` answers the same one. */
 static int nish_signal_read_end = -1;
-
-#if defined(__linux__)
-/* The two signals go to a `signalfd`, blocked in the process mask so that
-   their default action — ending the process — never runs. A signal the
-   process was started ignoring is discarded before it could be queued, so the
-   disposition goes back to the default first: `process.on('SIGTERM')` hears
-   one under Node whatever the parent ignored, and so does this. The fd is made
-   before anything is blocked, so a failure leaves the process as it was. */
-int32_t nish_signal_fd(void) {
-  if (nish_signal_read_end >= 0) return nish_signal_read_end;
-  sigset_t set;
-  sigemptyset(&set);
-  sigaddset(&set, SIGINT);
-  sigaddset(&set, SIGTERM);
-  int fd = signalfd(-1, &set, SFD_CLOEXEC);
-  if (fd < 0) return -1;
-  signal(SIGINT, SIG_DFL);
-  signal(SIGTERM, SIG_DFL);
-  sigprocmask(SIG_BLOCK, &set, 0);
-  return nish_signal_read_end = fd;
-}
-
-int32_t nish_read_signal(int32_t fd) {
-  if (fd != nish_signal_read_end) return -1;
-  struct signalfd_siginfo si;
-  ssize_t n;
-  do n = read(fd, &si, sizeof si);
-  while (n < 0 && errno == EINTR);
-  return n == (ssize_t)sizeof si ? (int32_t)si.ssi_signo : -1;
-}
-#else
-/* No `signalfd` here, so the handler turns each signal into one byte on a
-   pipe: its number. The handler is the whole of what runs in signal context,
-   and `write` is async-signal-safe; the write end is non-blocking, so a
-   thousand unread signals lose the newest rather than wedge the handler, and
-   `errno` is put back for the code the signal interrupted. Both ends are
-   close-on-exec, and `exec` resets a caught signal to its default, so a child
-   `spawnSync` starts inherits neither. */
 static int nish_signal_write_end = -1;
 
 static void nish_on_signal(int sig) {
@@ -170,9 +143,17 @@ static void nish_on_signal(int sig) {
 int32_t nish_signal_fd(void) {
   if (nish_signal_read_end >= 0) return nish_signal_read_end;
   int p[2];
+#if defined(__linux__)
+  /* Both ends close-on-exec from the moment they exist, so a child a sibling
+     thread spawns meanwhile cannot inherit either. */
+  if (pipe2(p, O_CLOEXEC) != 0) return -1;
+#else
+  /* Darwin has no `pipe2`, so there is a window between `pipe` and the two
+     `fcntl`s in which a child spawned by another thread inherits the ends. */
   if (pipe(p) != 0) return -1;
   fcntl(p[0], F_SETFD, FD_CLOEXEC);
   fcntl(p[1], F_SETFD, FD_CLOEXEC);
+#endif
   fcntl(p[1], F_SETFL, O_NONBLOCK);
   nish_signal_write_end = p[1];
   struct sigaction sa;
@@ -184,6 +165,8 @@ int32_t nish_signal_fd(void) {
   return nish_signal_read_end = p[0];
 }
 
+/* Block until a signal's byte arrives and answer it: 15 or 2, or -1 for any
+   `fd` that is not the signal descriptor and for a read that fails. */
 int32_t nish_read_signal(int32_t fd) {
   if (fd != nish_signal_read_end) return -1;
   unsigned char b;
@@ -192,5 +175,4 @@ int32_t nish_read_signal(int32_t fd) {
   while (n < 0 && errno == EINTR);
   return n == 1 ? (int32_t)b : -1;
 }
-#endif
 #endif

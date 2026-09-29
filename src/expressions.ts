@@ -1569,7 +1569,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (local !== null && scope.typeOf(local) === T_ERROR) {
       return T_ERROR
     }
-    if (callee.text === "Date") {
+    // The global `Date` called as a function; a local of that name is a value
+    // like any other, and calling it is the unknown function below.
+    if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
     }
     return ctx.errorType(callee, `Unknown function \`${callee.text}\``)

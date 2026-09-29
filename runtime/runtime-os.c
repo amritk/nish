@@ -45,7 +45,6 @@
 #include <unistd.h>
 #ifndef __wasi__
 /* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
-#include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 extern char **environ;
@@ -195,20 +194,9 @@ static int32_t nish_spawn_impl(const nish_array *argv, const char *out, const ch
     if (out) posix_spawn_file_actions_addopen(fap, 1, out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (err) posix_spawn_file_actions_addopen(fap, 2, err, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   }
-  /* The child starts with no signal blocked, as libuv starts one for Node's
-     `spawnSync`. `signalFd()` blocks SIGTERM and SIGINT in this process on
-     Linux (runtime-host.c), and `exec` keeps the mask: without this a child
-     spawned after it could not be stopped by either (`os_signal`). */
-  posix_spawnattr_t attr;
-  sigset_t none;
-  sigemptyset(&none);
-  posix_spawnattr_init(&attr);
-  posix_spawnattr_setsigmask(&attr, &none);
-  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK);
   pid_t pid;
   int status;
-  int failed = posix_spawnp(&pid, v[0], fap, &attr, v, environ);
-  posix_spawnattr_destroy(&attr);
+  int failed = posix_spawnp(&pid, v[0], fap, 0, v, environ);
   if (fap) posix_spawn_file_actions_destroy(fap);
   if (failed) return -1;
   if (waitpid(pid, &status, 0) < 0) return -1;

@@ -328,10 +328,10 @@ void nish_random_fill(nish_array *bytes);
  * `stat` fails. Follows a symbolic link. */
 double nish_stat_mtime(const nish_str *path);
 /* `signalFd()`: a descriptor that becomes readable when SIGTERM or SIGINT
- * arrives — a `signalfd` with both signals blocked on Linux, the read end of a
- * pipe written by a `sigaction` handler elsewhere. Made once; every call
- * answers the same descriptor, and -1 when it could not be made. Call it
- * before starting a thread. `readSignal(fd)`: block until one arrives and
+ * arrives: the read end of a pipe that a `sigaction` handler writes each
+ * signal's number to, whichever thread the signal lands on. Nothing is
+ * blocked. Made once; every call answers the same descriptor, and -1 when it
+ * could not be made. `readSignal(fd)`: block until one arrives and
  * answer its number (15 or 2), or -1 for any `fd` that is not that descriptor
  * or a read that fails. */
 int32_t nish_signal_fd(void);

@@ -101,12 +101,11 @@ Design rules that every WP must respect:
   `runtime-parallel.c` (WP20/wp29) and `runtime-host.c`, the wall clock,
   entropy, file times and signals (WP34 N3). Measured 2026-09-29 with clang 18
   on linux-x64, every `.text*` section summed at `-Oz`: `runtime.c` 3,515 of
-  3,584 (3,640 of 3,840 with `-DNISH_THREADS=1`), `runtime-os.c` 1,462 of 1,536,
+  3,584 (3,640 of 3,840 with `-DNISH_THREADS=1`), `runtime-os.c` 1,393 of 1,536,
   `runtime-parallel.c` 286 of 320 (901 of 1,024 threaded) and `runtime-host.c`
-  503 of 512. N3's four builtins measured 503 bytes against the 143
-  `runtime-os.c` had left, which is why they are a file of their own; the 69
-  bytes they did cost `runtime-os.c` start every spawned child with no signal
-  blocked, since `signalFd()` blocks two on Linux and `exec` keeps the mask.
+  571 of 768. N3's four builtins measured 571 bytes against the 143
+  `runtime-os.c` had left, which is why they are a file of their own, and
+  `runtime-os.c` itself is unchanged by them.
 
 ## 3. Consolidated language specification (Nish)
 
