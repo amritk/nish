@@ -1,0 +1,4 @@
+{"file":"tests/cases/port_num_wrap_wrapping.ts","line":6,"column":7,"endLine":6,"endColumn":12,"severity":"portability","code":"NL8007","message":"this `+` on i32 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap_wrapping.ts","line":7,"column":3,"endLine":7,"endColumn":6,"severity":"portability","code":"NL8007","message":"this `++` on i32 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap_wrapping.ts","line":8,"column":3,"endLine":8,"endColumn":9,"severity":"portability","code":"NL8007","message":"this `-=` on i32 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap_wrapping.ts","line":9,"column":23,"endLine":9,"endColumn":36,"severity":"portability","code":"NL8007","message":"this `*` on i32 wraps here, and TypeScript keeps counting past the range"}

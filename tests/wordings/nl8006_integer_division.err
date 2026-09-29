@@ -1,0 +1,1 @@
+this `/` on i32 truncates here, and TypeScript divides exactly

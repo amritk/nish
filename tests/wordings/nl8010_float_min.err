@@ -1,0 +1,1 @@
+`Math.min` follows the native NaN and signed-zero rules here, not JavaScript's
