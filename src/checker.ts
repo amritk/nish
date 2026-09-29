@@ -108,6 +108,8 @@ import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable, intB
 export class Checker {
   ctx: CheckContext
   program: CheckedProgram
+  /** The classes `declareNames` declared, whose layout checks run at the end of pass 1. */
+  declared: StructInfo[]
 
   constructor(
     table: TypeTable,
@@ -123,6 +125,7 @@ export class Checker {
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
+    this.declared = []
     this.ctx = new CheckContext(
       table,
       this.program,
@@ -135,13 +138,16 @@ export class Checker {
   }
 
   /**
-   * Pass 1. Names first — imports and structs — then members and signatures,
-   * then the layout checks. A struct that fails at any step is left in the
-   * registry so annotations still resolve; it is the diagnostics that stop
-   * the compilation, not a missing entry.
+   * Pass 1a: every name this module declares or imports — imports, classes,
+   * interfaces, aliases and enums — with nothing resolved yet.
+   *
+   * It runs as the module is loaded, and `collectSignatures` only once every
+   * module of the program has run it and bound its imported enums
+   * (`bindTypeImports`): an enum is a type with no layout, so a signature in
+   * another module that names one has to find it declared, where a class can
+   * be resolved provisionally and bound later.
    */
-  collectSignatures(): void {
-    const declared: StructInfo[] = []
+  declareNames(): void {
     for (const stmt of this.program.file.children) {
       if (stmt.kind === N_IMPORT) {
         collectImports(this.ctx, stmt)
@@ -169,7 +175,7 @@ export class Checker {
           rejectDollarInSymbolName(this.ctx, stmt.children[0].text, what, stmt.children[0])
           const info = declareStruct(this.ctx, stmt, kind)
           if (info !== null) {
-            declared.push(info)
+            this.declared.push(info)
           }
         }
       } else if (stmt.kind === N_TYPE_ALIAS) {
@@ -185,8 +191,19 @@ export class Checker {
       }
     }
     // WP32: the global `Map` and `Set`, bound before any annotation is resolved.
+    // Here rather than in pass 1 because it is an import, and the module it
+    // names has to be loaded with the rest.
     this.importCollections()
+    this.ctx.errored = false
+  }
 
+  /**
+   * Pass 1, after `declareNames` and `bindTypeImports`: members and
+   * signatures, then the layout checks. A struct that fails at any step is left
+   * in the registry so annotations still resolve; it is the diagnostics that
+   * stop the compilation, not a missing entry.
+   */
+  collectSignatures(): void {
     for (const stmt of this.program.file.children) {
       // Per declaration: stage0 wraps each of these in `sink.recover`, so one
       // rejected class or constant costs its own diagnostic and no more
@@ -219,7 +236,7 @@ export class Checker {
 
     // The checks that need every layout: `implements` compares field lists,
     // and definite assignment needs the fields.
-    for (const info of declared) {
+    for (const info of this.declared) {
       this.ctx.errored = false
       if (info.kind === STRUCT_CLASS) {
         checkImplements(this.ctx, info)
@@ -377,13 +394,6 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for an enum`)
       return
     }
-    if (isExported(stmt)) {
-      this.ctx.error(
-        stmt,
-        "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)"
-      )
-      return
-    }
     if ((stmt.flags & FLAG_CONST) !== 0) {
       this.ctx.error(
         stmt,
@@ -396,7 +406,15 @@ export class Checker {
       this.ctx.error(nameNode, `Enum \`${name}\` must declare at least one member`)
       return
     }
-    const info = new EnumInfo(name, stmt, this.program.source, this.ctx.table.enumOf(name))
+    const type = this.ctx.table.declaredEnumOf(name)
+    const info = new EnumInfo(
+      name,
+      stmt,
+      this.program.source,
+      type,
+      this.ctx.table.nameOf(type),
+      isExported(stmt)
+    )
     let next = toI64(0)
     for (const member of members.children) {
       const memberName = member.children[0].text
@@ -839,6 +857,72 @@ export class Checker {
   }
 
   /**
+   * The pre-pass between `declareNames` and pass 1: bind every import that
+   * names an enum its target declares, so that pass 1 resolves `Kind` in a
+   * signature to that enum. `targets` runs beside `imports`, with `null` for a
+   * builtin or an import whose module did not load. The enum imports leave
+   * `imports` (`CheckedProgram.enumImports` says why) and every other import
+   * is left to pass 1b. An imported alias belongs here too, once an alias can
+   * be exported, for the same reason: a signature has to resolve it.
+   */
+  bindTypeImports(targets: (CheckedProgram | null)[]): void {
+    const rest: ImportBinding[] = []
+    let i = 0
+    while (i < this.program.imports.length && i < targets.length) {
+      const imp = this.program.imports[i]
+      const declared = declaredEnum(targets[i], imp.importedName)
+      if (declared !== null) {
+        this.ctx.errored = false
+        this.bindEnumImport(imp, declared)
+      } else {
+        rest.push(imp)
+      }
+      i = i + 1
+    }
+    this.program.imports = rest
+    this.ctx.errored = false
+  }
+
+  /**
+   * An imported enum is the exporter's enum: the same record and the same type
+   * id under the importer's local name, so `Kind.If` folds to the exporter's
+   * integer here and a `Kind` value crosses the boundary as itself. Unlike a
+   * class it may be renamed, because it has no symbol for a name to be part of.
+   */
+  bindEnumImport(imp: ImportBinding, info: EnumInfo): void {
+    // Reported, and bound all the same, as an unexported class is: the name
+    // still means the enum, and nothing downstream reports it a second time.
+    if (!info.exported) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
+      )
+    }
+    if (this.nameTaken(imp.localName)) {
+      const other = this.importedEnum(imp.localName)
+      this.ctx.error(
+        imp.node,
+        other !== null
+          ? `\`${imp.localName}\` is already imported from \`${other.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`
+      )
+      return
+    }
+    this.program.enumImports.push(imp)
+    this.program.addEnumAs(imp.localName, info)
+  }
+
+  /** The import that bound `localName` to an enum, or `null`. */
+  importedEnum(localName: string): ImportBinding | null {
+    for (const imp of this.program.enumImports) {
+      if (imp.localName === localName) {
+        return imp
+      }
+    }
+    return null
+  }
+
+  /**
    * `import { readFileSync } from "nish:fs"`: bind a local name to a builtin
    * the checker already has.
    *
@@ -895,6 +979,13 @@ export class Checker {
     // no module behind it.
     if (isNishSpecifier(imp.specifier)) {
       this.bindBuiltinImport(index)
+      return
+    }
+    // An enum was bound before pass 1 (`bindTypeImports`), and a second import
+    // under the name it took is the duplicate-import mistake whatever it names.
+    const enumImport = this.importedEnum(imp.localName)
+    if (enumImport !== null) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${enumImport.specifier}\``)
       return
     }
     const constant = target.constant(imp.importedName)
@@ -1183,6 +1274,19 @@ export class Checker {
     this.program.constants.set(localName, this.program.constantList.length)
     this.program.constantList.push(constant)
   }
+}
+
+/**
+ * The enum `target` itself declares as `name`, or `null`. `origin` tells a
+ * declaration from the target's own import, as it does for a class: an enum is
+ * not re-exported by a module that imported it.
+ */
+const declaredEnum = (target: CheckedProgram | null, name: string): EnumInfo | null => {
+  if (target === null) {
+    return null
+  }
+  const info = target.enumNamed(name)
+  return info !== null && info.origin === target.source ? info : null
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
