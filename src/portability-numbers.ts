@@ -1,7 +1,11 @@
 // The WP33 portability rows for numbers (docs/wp33-round-trip.md §3.1 and 3.5):
 // integer division (NL8006), wrapping arithmetic (NL8007), the i32 `>>>`
-// (NL8008), 64-bit integers (NL8009), libm's NaN and signed-zero rules (NL8010)
-// and a printed negative zero (NL8011).
+// (NL8008), 64-bit integers (NL8009) and libm's NaN and signed-zero rules
+// (NL8010).
+//
+// NL8011, a printed negative zero, is retired: `runtime/nish.mjs` installs a
+// console that prints `String(x)`, and `String(-0)` is `"0"`, so `-0` prints
+// `0` in both readings and there is no site left for the row to name.
 //
 // Every row reads the type the checker recorded at the node, the way the
 // emitter does before it picks an instruction: an operator's operand type is
@@ -15,7 +19,19 @@
 // and a return type at the root of the body they belong to, and a field or a
 // module constant once per module, at the root of its first walked body.
 
-import { N_BINARY, N_CALL, N_CONSTRUCTOR, N_EMPTY, N_UNARY, N_VAR_DECL, Node } from "./nodes"
+import { isFractional, parseIntegerLiteral } from "./constants"
+import {
+  FLAG_PREFIX,
+  N_BINARY,
+  N_CALL,
+  N_CONSTRUCTOR,
+  N_EMPTY,
+  N_NUMBER,
+  N_PAREN,
+  N_UNARY,
+  N_VAR_DECL,
+  Node,
+} from "./nodes"
 import { dottedName, receiverIsValue } from "./emit-util"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
 import { intBits, isFloat, isInteger, isUnsigned, T_I32 } from "./types"
@@ -77,7 +93,10 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   }
   if (op === ">>>" || op === ">>>=") {
     // The result, not the operand: an `i32` result is what reads back signed.
-    if (walk.table.baseOf(walk.program.nodeTypes[node.id]) === T_I32) {
+    if (
+      walk.table.baseOf(walk.program.nodeTypes[node.id]) === T_I32 &&
+      !clearsSignBit(walk, node.children[1])
+    ) {
       out.push(operatorFinding(walk, node, T_I32, "reads back signed here, and unsigned in TypeScript"))
     }
     return
@@ -85,6 +104,31 @@ const binaryFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFindi
   if (op === "+" || op === "-" || op === "*" || op === "+=" || op === "-=" || op === "*=") {
     wrapFinding(walk, node, out)
   }
+}
+
+/**
+ * Whether a `>>>` count is a constant `k` with `k & 31` not 0. Such a shift
+ * moves at least one zero into the sign bit, so the result is at most 2^31 - 1
+ * and reads back the same signed here and unsigned in TypeScript. A count that
+ * is 0 mod 32, or that is not known until the program runs, can leave the sign
+ * bit set, and that is the site NL8008 is for.
+ *
+ * A constant is a literal, one in parentheses or behind a sign, or a named
+ * constant, whose folded value the checker recorded in `nodeConstants`. A sign
+ * does not change the answer, because `-k & 31` is 0 exactly when `k & 31` is.
+ */
+const clearsSignBit = (walk: PortabilityWalk, count: Node): boolean => {
+  if (count.kind === N_NUMBER) {
+    return !isFractional(count.text) && (parseIntegerLiteral(count.text) & toI64(31)) !== toI64(0)
+  }
+  if (count.kind === N_PAREN) {
+    return clearsSignBit(walk, count.children[0])
+  }
+  if (count.kind === N_UNARY && count.flags === FLAG_PREFIX && (count.text === "-" || count.text === "+")) {
+    return clearsSignBit(walk, count.children[0])
+  }
+  const constant = walk.program.nodeConstants[count.id]
+  return constant !== null && isInteger(constant.type) && (constant.intValue & toI64(31)) !== toI64(0)
 }
 
 /** `++` and `--`, prefix or postfix; every other unary operator is quiet. */
@@ -126,14 +170,13 @@ const operatorFinding = (
 ): PortabilityFinding =>
   new PortabilityFinding(node, `this \`${node.text}\` on ${walk.table.typeName(type)} ${fragment}`)
 
-// ---- NL8010, NL8011: the builtins ---------------------------------------------
+// ---- NL8010: the builtins ----------------------------------------------------
 
 /**
  * `Math.min` and `Math.max` of a float are `llvm.minnum` and `llvm.maxnum`,
- * which drop a NaN, and `Math.round` rounds `-0.4` to +0 (NL8010); and `console.log` or `console.error` of a float prints
- * `-0` as `0` (NL8011). The operand types were settled by the checker: `min`
- * and `max` take two of one type, and `round` only takes an `f64`, so the
- * first argument answers for the call.
+ * which drop a NaN, and `Math.round` rounds `-0.4` to +0 (NL8010). The operand
+ * types were settled by the checker: `min` and `max` take two of one type, and
+ * `round` only takes an `f64`, so the first argument answers for the call.
  */
 const builtinCallFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   // The emitter's own test for a builtin call (`emitCall`): a dotted name
@@ -147,15 +190,14 @@ const builtinCallFinding = (walk: PortabilityWalk, node: Node, out: PortabilityF
   if (!isFloat(walk.table.baseOf(walk.program.nodeTypes[args[0].id]))) {
     return
   }
-  let fragment = ""
   if (name === "Math.min" || name === "Math.max" || name === "Math.round") {
-    fragment = "follows the native NaN and signed-zero rules here, not JavaScript's"
-  } else if (name === "console.log" || name === "console.error") {
-    fragment = "prints a negative zero as 0 here, and Node's console prints -0"
-  } else {
-    return
+    out.push(
+      new PortabilityFinding(
+        node,
+        `\`${name}\` follows the native NaN and signed-zero rules here, not JavaScript's`
+      )
+    )
   }
-  out.push(new PortabilityFinding(node, `\`${name}\` ${fragment}`))
 }
 
 // ---- NL8009: 64-bit declarations ----------------------------------------------

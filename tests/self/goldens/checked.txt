@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 795 programs, 52712 dump lines.
+# 797 programs, 52737 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37910,7 +37910,7 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_write
   stackSites=0 stackLocals=0
-  local 4:9 zero: f64 (const)
+  local 5:9 zero: f64 (const)
 program tests/cases/port_num_negzero_quiet.ts
 module tests/cases/port_num_negzero_quiet.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -37930,6 +37930,33 @@ function main(): i32 -> @nish_main [exported entry]
   local 5:9 x: i32 (const)
   local 6:9 same: i32 (const)
   local 7:7 y: i32 (let)
+program tests/cases/port_num_ushr_const_quiet.ts
+module tests/cases/port_num_ushr_const_quiet.ts (entry)
+const K: i32 = 5
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 8:9 x: i32 (const)
+  local 9:9 a: i32 (const)
+  local 10:9 b: i32 (const)
+  local 11:9 c: i32 (const)
+  local 12:7 d: i32 (let)
+program tests/cases/port_num_ushr_count.ts
+module tests/cases/port_num_ushr_count.ts (entry)
+const NONE: i32 = 0
+function shift(x: i32, n: i32): i32 -> @shift
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 shift
+  stackSites=0 stackLocals=0
+  local 9:7 y: i32 (let)
+  local 11:9 z: i32 (const)
+  callee 12:15 shift -> @shift
 program tests/cases/port_num_ushr_quiet.ts
 module tests/cases/port_num_ushr_quiet.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
