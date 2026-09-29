@@ -126,6 +126,23 @@ export const arrayMethodName = (program: CheckedProgram, table: TypeTable, call:
   return type >= 0 && table.isArray(type) ? call.children[0].text : ""
 }
 
+/**
+ * The array methods that write their receiver: `push` and `pop` move its
+ * header, and `set` and `fill` (WP34 N2) write its elements. The readonly
+ * rule, the parameter classification and a scope's region rule all ask this.
+ */
+export const isArrayWriteMethod = (name: string): boolean =>
+  name === "push" || name === "pop" || name === "set" || name === "fill"
+
+/**
+ * The builtin a plain-identifier call reaches: the one a `nish:` import bound,
+ * which the checker recorded, or else the identifier's own text.
+ */
+export const builtinNameOf = (program: CheckedProgram, call: Node): string => {
+  const imported = program.nodeBuiltins[call.id]
+  return imported.length > 0 ? imported : call.children[0].text
+}
+
 /** `recv.push(v)` on an array receiver. */
 export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean =>
   arrayMethodName(program, table, node) === "push"

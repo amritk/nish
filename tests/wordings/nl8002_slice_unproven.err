@@ -1,0 +1,1 @@
+`s.slice(0, at)` panics here outside its receiver's bounds, where TypeScript clamps: `at` is not proven inside `[0, length]`, and `substring` clamps in both

@@ -56,6 +56,14 @@ the same commit.
 - `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`,
   `mkdirSync`, `isDirectorySync`, `spawnSync` — globals in Nish, not
   imports from `node:fs`
+- `readFileBytesSync` — `Array.from(fs.readFileSync(path))` in a `try`, a
+  plain array of byte values or `null`, because a `u8[]` is a plain array here
+- `dst.set(src, offset)` — the one method a plain `Array` lacks, added to
+  `Array.prototype` (non-enumerable, and only when nothing got there first)
+  with `TypedArray.prototype.set`'s copy-first meaning and the native
+  `slice out of range` panic; `fill` needs nothing, since `Array.prototype.fill`
+  already means what the language's does
+  ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill))
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the

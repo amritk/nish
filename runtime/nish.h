@@ -243,6 +243,12 @@ bool nish_is_dir(const nish_str *path);
  * under WASI: `fd_readdir` lists a preopened directory rather than a path, so
  * porting this there is a different contract and not a translation. */
 nish_array *nish_readdir(const nish_str *path);
+/* `readFileBytesSync(path)` (WP34 N2): the file's bytes as a `u8[]` with
+ * `len == cap`, zero bytes and bytes of 0x80 and above kept as they are, or
+ * NULL for every path `nish_read_file_or_null` answers NULL for. The header
+ * and the bytes live in the arena, so copy what you keep before the next reset
+ * or release. */
+nish_array *nish_read_file_bytes(const nish_str *path);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the

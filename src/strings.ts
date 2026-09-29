@@ -218,3 +218,21 @@ export const repeatString = (s: string, count: i32): string => {
   }
   return out.toText()
 }
+
+/**
+ * Whether every byte of `s` is below 128. Such a string is the same sequence
+ * whether it is counted in UTF-8 bytes or in UTF-16 code units, so each of
+ * its offsets, its length and each code it reads means the same number here
+ * and in TypeScript — which is what lets the WP33 portability pass
+ * (`src/portability-strings.ts`) stay quiet about one.
+ */
+export const isAsciiText = (s: string): boolean => {
+  let i = 0
+  while (i < s.length) {
+    if (s.charCodeAt(i) >= 128) {
+      return false
+    }
+    i = i + 1
+  }
+  return true
+}

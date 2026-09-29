@@ -3383,7 +3383,7 @@ and `io_nish_import_global` and comparing the two bodies.
 
 | Module | Exports |
 | --- | --- |
-| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync` |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 
@@ -3518,6 +3518,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). `null` when the path cannot be read *as a file* — missing, a **directory**, a parent that cannot be searched, a pipe with no length to ask for — which is the same set `readFileSync` prints `nish: cannot read <path>` for. It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
+| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
@@ -3645,6 +3646,8 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
+| `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
+| `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below. `--unchecked-indexing` does not remove the clamp: it is the semantics, not a check | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -3659,9 +3662,112 @@ and a code-point index would need a decode per access. Cutting a multi-byte
 character in half is therefore possible and produces bytes that are not a
 valid string (docs/wp13-differential.md notes what Node then does with them).
 
-A numeric literal argument to `push` or `indexOf` takes the element type, so
-`wide.push(3)` on an `i64[]` is an `i64` three
+A numeric literal argument to `push`, `indexOf` or `fill` takes the element
+type, so `wide.push(3)` on an `i64[]` is an `i64` three
 ([Numeric literals](#numeric-literals)).
+
+### Bulk writes: `set` and `fill`
+
+A packet is copied, cleared and filled through `u8[]` without a loop per byte
+(WP34 N2). Both methods take their meaning from `TypedArray.prototype`, and both
+are admitted **on an array of numbers only** — `u8[]` above all, but any width,
+`f64[]` and a ranged `integer<Lo, Hi>[]` included — because an element there is
+a fixed-size value, so the lowering is one copy or one store of bytes. On any
+other array each is `` `set` copies bytes, so it needs an array whose elements
+are numbers (`u8[]`, `i32[]`, `f64[]`, ...), got string[] `` (NL2395,
+`reject_bytes_set_string`, `reject_bytes_fill_record`): a `string` or a `class`
+element is a pointer a byte copy would share, and a record is a struct stored
+whole.
+
+- **`a.set(src, offset)`** copies all of `src` into `a` starting at `offset`,
+  which defaults to `0`. `src` has `a`'s own element type — a `readonly` array
+  may be the source, since it is only read — and anything else is
+  `` `set` copies from an array of the receiver's element type, so it expects u8[], got i32[] ``
+  (NL2396, `reject_bytes_set_type`), because a conversion per element is not a
+  byte copy. One or two arguments (NL2397, `reject_bytes_set_arity`).
+- **The range written is checked.** `0 <= offset` and
+  `offset + src.length <= a.length`, or the program **panics** with
+  `slice out of range: [offset, offset + src.length) of length a.length` and
+  exits 1 — the same check and the same message as `s.slice`, since it asks
+  the same question of a range (`bytes_set_oob`). A range that ends exactly at
+  `a.length`, and an empty `src` at `a.length`, are in range
+  (`bytes_set_end`). JavaScript throws a `RangeError` for exactly these
+  offsets. `--unchecked-indexing` drops the compares, as it drops `a[i]`'s.
+- **An overlapping copy behaves as if `src` were read first**, which is
+  `TypedArray.prototype.set`'s promise, so `set` lowers to `llvm.memmove`.
+  Nish itself can overlap an array only with itself (`a.set(a)`), but a C host
+  may hand in two headers over one buffer, and then the copy is right in either
+  direction (`bytes_set_overlap`). It lowers to `llvm.memcpy` only where the
+  checker **proves** the two buffers distinct, and records the proof for the
+  emitter: when either operand is an array literal or a `new` written at the
+  call, or when both are different `const` locals each initialised with a
+  fresh allocation — a literal, a `new` or a `readFileBytesSync` — since a
+  second name for either buffer would not be such a local
+  (`bytes_set_disjoint`). A parameter, a field, a `let` and a self-copy are
+  "not proven", which is the `memmove` and never wrong (`bytes_set_self`).
+- **`a.fill(value, start, end)`** stores `value` into every slot of
+  `[start, end)`. `value` is the element type (`` `fill` expects u8 (the element
+  type of u8[]), got string ``, `reject_bytes_fill_value`), and a ranged
+  element checks it once, before the fill. `start` defaults to `0` and `end` to
+  `a.length`; **a negative end counts back from `a.length`, and each is then
+  clamped into `[0, a.length]`**, so no range is out of range, a reversed range
+  fills nothing, and `fill` never panics (`bytes_fill`). One to three
+  arguments (NL2398, `reject_bytes_fill_arity`), each end a number
+  (`reject_bytes_fill_index`).
+- **A float offset is converted as JavaScript's `ToIntegerOrInfinity`
+  converts it**, for `set`'s offset and for both of `fill`'s ends: an `f64`
+  (every `number` in f64 mode) or `f32` goes through `llvm.fptosi.sat`, never a
+  bare `fptosi`, whose answer for NaN or an infinity is poison. **NaN is `0`,
+  a fraction truncates toward zero** (`2.7` is `2`, `-0.5` is `0`), and **an
+  infinity or a value past the `i64` range saturates** to the `i64` bound on
+  its side. `fill` then clamps that bound to an end of the array, so
+  `a.fill(v, 0, Infinity)` fills all of it, as `Uint8Array.prototype.fill`
+  does (`bytes_offset_float`). `set` fails its range check with the saturated
+  offset in the message — `slice out of range: [9223372036854775807,
+  -9223372036854775808) of length 4` for `1e300` or `Infinity`, where the end
+  has wrapped — and exits 1 where JavaScript throws a `RangeError`
+  (`bytes_set_float_oob`, `bytes_set_float_panic`).
+- **An unsigned offset is never negative**, whatever its width. A `u64` of
+  2^63 or more has the `i64` sign bit set, and `fill` still reads it as past
+  the end: as a start it fills nothing, and as an end it fills to the length
+  (`llvm.umin`, where a signed clamp would count it back from the end).
+  `set`'s range check compares unsigned, so the same offset panics, printed
+  signed as every range panic prints (`bytes_offset_u64`, `bytes_set_u64_oob`).
+  An `i64` at `INT64_MIN` or `INT64_MAX` keeps the signed clamp above. The
+  TypeScript reading of a 64-bit offset is class C: `i64` and `u64` are
+  `bigint` under `runtime/nish.mjs`, and `fill` or `set` with a `bigint`
+  offset throws a `TypeError` there, as all 64-bit arithmetic does
+  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+- **`fill` on a `u8[]` is one `llvm.memset`.** On a wider element it is a
+  counted store loop of the one value, the shape LLVM vectorises; `opt -O2`'s
+  loop-idiom pass makes a `memset` of that loop by itself when the value is a
+  repeated byte, zero above all, which `tests/run.js` checks on
+  `bytes_fill_zero`.
+- **Both are statements**, as `writeFileSync` is: `` `set` returns void and
+  can only be used as a statement `` (`reject_bytes_set_value`,
+  `reject_bytes_fill_value_position`). `set` answers
+  `undefined` in JavaScript and `fill` answers the array the program already
+  holds, so refusing the value costs nothing and keeps the two readings the
+  same.
+- **Both write their receiver**, so a `readonly` array refuses them under their
+  own names (`` Cannot `set` through readonly u8[] (declare it u8[] to write
+  through it) ``, `reject_bytes_set_readonly`, `reject_bytes_fill_readonly`), a scope's region refuses them
+  on memory a task may read (`reject_thread_region_fill`,
+  `reject_thread_region_set_call`), and a parameter they write is never
+  `readonly`. Neither moves `length`, so neither disturbs a hoisted header or a
+  length the bounds proof holds.
+- **A window into a buffer is `(buf, offset, length)` by convention**, not a
+  view type: a second array layout would be one every array path in the emitter
+  has to handle ([wp34-hosting-cs.md](wp34-hosting-cs.md) §4 N2).
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2): `fill` is
+**class A** — a `u8[]` is a plain `Array` under Node, and `Array.prototype.fill`
+has `TypedArray.prototype.fill`'s meaning for every argument Nish admits. `set`
+is **class A under `runtime/nish.mjs`**, which adds the one method `Array` lacks
+to `Array.prototype` with the copy-first semantics and the native panic, and
+**class C** in a TypeScript host without it, where a plain array has no `set`
+([wp33-round-trip.md](wp33-round-trip.md) §3.3). Every `bytes_*` program with
+a `main` runs under both and agrees byte for byte.
 
 ### Readonly arrays
 
@@ -3678,7 +3784,8 @@ and not a value.
   `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
   (`reject_arr_readonly_store`), and `push` / `pop` are
   `` Cannot `push` through readonly i32[] (...) `` under their own names
-  (`reject_arr_readonly_push`, `reject_arr_readonly_pop`). `a.length = n` was
+  (`reject_arr_readonly_push`, `reject_arr_readonly_pop`), and so are `set`
+  and `fill` (`reject_bytes_set_readonly`). `a.length = n` was
   already refused for every array.
 - **A `T[]` widens into a `readonly T[]`, and never back.** The conversion
   emits nothing, because the two are the same pointer; the reverse is
