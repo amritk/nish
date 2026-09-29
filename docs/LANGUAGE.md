@@ -2879,8 +2879,9 @@ under [Semantics decisions](#semantics-decisions).
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
-| `?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
-| `** +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
+| `== != ?. in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
+| `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
+| `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
 
 ### Checked integer division
 
@@ -3228,7 +3229,9 @@ one type (`Array literal elements must all have the same type`,
 (annotation, return type, assignment target, `push` argument, enclosing
 literal, or parameter) (`Empty array literal needs a type annotation`,
 `reject_arr_empty_literal`; `tests/cases/arr_push`, `arr_literal`). Holes and
-spread are not supported.
+spread are not supported (`Holes in array literals are not supported`,
+`reject_arr_hole`; `Spread in array literals is not supported`,
+`reject_arr_spread`).
 
 ### Arrays of records are contiguous
 
@@ -4393,8 +4396,8 @@ export const main = (): i32 => {
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
-    second report (`reject_map_iter_recovery`). A spread does not parse
-    (`reject_map_iter_spread`), `for...in` is Phase 0's NL1056 as it is over
+    second report (`reject_map_iter_recovery`). A spread is refused as it is
+    in any array literal (`reject_map_iter_spread`, NL2237), `for...in` is Phase 0's NL1056 as it is over
     anything (`reject_map_iter_for_in`), `keys()` takes
     no argument (`reject_map_iter_arity`), and the variable has the type it
     walks (`reject_map_iter_variable_type`).
@@ -5091,7 +5094,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
 | `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in Nish (no dynamic function values) `` (and analogous) | `reject_function_type` |
 | `import("x").T` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
-| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in Nish `` | `reject_as_any` |
+| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in Nish `` | `reject_as_any`, `reject_as_any_angle` |
 | `x as unknown`, `<unknown>x` | `` Type assertion to `unknown` is forbidden in Nish `` | `reject_as_unknown` |
 
 ### Declarations
@@ -5139,16 +5142,16 @@ fragment `tests/run.js` matches and the case that proves it.
 | `undefined` as a value, except compared with a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_undefined_value`, `reject_map_get_undefined_compare` |
 | `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
-| `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator` |
-| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain` |
+| `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
+| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain`, `reject_optional_call` |
 | `a ?? b`, unless `a` is a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |
 | `delete x.y` | `` `delete` is forbidden in Nish (object layout is fixed) `` | `reject_delete` |
 | `await` | `` `await` is forbidden in Nish (no event loop or promises) `` | `reject_await` |
-| `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | (validator; generators are rejected first, `reject_generator`) |
-| regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex` |
+| `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
+| regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
 | object spread `{ ...a }` | `Object spread is forbidden in Nish (object layout is fixed at compile time)` | `reject_object_spread` |
 | `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
@@ -5162,6 +5165,34 @@ fragment `tests/run.js` matches and the case that proves it.
 "Numeric-shaped" index keys pass the validator (identifiers, numeric
 literals, parentheses, unary `+`/`-`, `+ - * / %` over those, calls,
 property and element access); the checker then requires a numeric type.
+
+Each of these is parsed and refused by its rule, once: a module with several
+reports the first in source order (`reject_expr_forms_together`). `typeof`,
+`void`, `delete`, `await`, `yield`, `in`, `instanceof`, `as` and `satisfies`
+are not reserved, and a variable, a parameter, a field or a function may be
+called one (`tests/parser/names-operators.ts`, `names-operator-calls.ts`). A
+word is the operator only where the name could not stand:
+
+- `typeof`, `void`, `delete`, `await` and `yield` when an operand follows on
+  the same line — a name, a literal, `this`, `super`, `new`, `!` or `~`. After
+  a line break, or before `(`, `[`, `+`, `-`, `++`, `--`, `/` or `<`, the word
+  is a name as it always was: `typeof(x)` and `void (0)` call a function of
+  that name, `typeof -x` subtracts, and each is refused as the name it is when
+  nothing declares it, where TypeScript reads the operator.
+- `in` and `instanceof` after an operand on its line, or at the start of the
+  next line when an operand follows them there (`reject_in_newline`). `in` in
+  a `for` head's initialiser is the loop's, except inside a bracket that
+  ECMAScript's grammar reads it in again — a parenthesis, an array or object
+  literal, an argument list, an element access, a template substitution, a
+  block, or the branch between a conditional's `?` and `:`
+  (`reject_in_for_head_array`, `_call`, `_arrow`, `_element`, `_template`,
+  `_object`, `_block`, `_conditional`). TypeScript's parser differs on the array
+  literal, which it reports as a syntax error; Node follows the grammar.
+- `as` and `satisfies` after an operand on its line, which is TypeScript's own
+  rule for them.
+
+A regular expression literal is read where an operand is due, which is where
+TypeScript reads one; anywhere else a `/` divides.
 
 ## Rejected by the checker
 
@@ -5200,6 +5231,13 @@ messages are exact for the cases cited; other rows quote the checker
 | top-level `let` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
 | `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
 | `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
+| `a ** b`, in any body, a template nothing instantiates included | `` Unsupported binary operator `**` `` | `reject_op_exponent`, `reject_op_exponent_template`, `nl2254_unsupported_binary` |
+| `x **= e`, to a local, a field or an element | `` Unsupported assignment operator `**=` `` | `reject_exponent_assign_local`, `reject_cls_compound_operator`, `nl2253_field_compound_operator` |
+| a hole in an array literal, `[1, , 2]` | `Holes in array literals are not supported` | `reject_arr_hole`, `nl2210_array_hole` |
+| a spread in an array literal, `[...a]` | `Spread in array literals is not supported` | `reject_arr_spread`, `reject_map_iter_spread`, `nl2237_array_spread` |
+| `new` of anything but a class name, `new a.B()`, `new cs[0]()` | `` `new` requires a class name `` | `reject_cls_new_not_identifier`, `reject_new_parenthesized`, `nl2144_new_non_identifier` |
+| `x as T`, `<T>x`, `x satisfies T`, to anything but `any` and `unknown` ([Phase 0's](#types-1)) | `Unsupported expression in Phase 1: AsExpression` / `TypeAssertionExpression` / `SatisfiesExpression` | `reject_as_type`, `reject_angle_assertion`, `reject_satisfies`, `nl2256_satisfies_expression` |
+| more than one of these in one declaration | the first, alone: the refusal comes before the declaration is collected | `reject_expr_sweep_together` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
 | assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |

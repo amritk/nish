@@ -247,6 +247,19 @@ const printTypeScriptTree = (source, sf) => {
     }
   }
 
+  /** `x as T`, `<T>x` and `x satisfies T`: one N_AS, the expression and then the type. */
+  const assertion = (node, depth, kind) => {
+    const [s, e] = span(node)
+    emit(depth, kind, s, e)
+    expressionOf()(node.expression, depth + 1)
+    type(node.type, depth + 1)
+  }
+  // `expression` is declared below `assertion`, and a `const` is not hoisted.
+  const expressionOf = () => expression
+
+  /** `+optional` for the link of a chain written with `?.` (FLAG_OPTIONAL). */
+  const optionalChain = (node) => (node.questionDotToken === undefined ? "" : "+optional")
+
   const expression = (node, depth) => {
     const [s, e] = span(node)
     switch (node.kind) {
@@ -313,6 +326,44 @@ const printTypeScriptTree = (source, sf) => {
           expression(element, depth + 1)
         }
         return
+      // WP33 R1: the forbidden expressions stage1 parses for the phase that
+      // owns each rule to refuse (`src/nodes.ts`). A hole is an EMPTY element.
+      case ts.SyntaxKind.OmittedExpression:
+        empty(depth)
+        return
+      case ts.SyntaxKind.SpreadElement:
+        emit(depth, "SPREAD", s, e)
+        expression(node.expression, depth + 1)
+        return
+      case ts.SyntaxKind.RegularExpressionLiteral:
+        emit(depth, "REGEX", s, e, node.text)
+        return
+      // The keyword of a dynamic `import(...)`, which stage1 reads as a name.
+      case ts.SyntaxKind.ImportKeyword:
+        emit(depth, "IDENT", s, e, "import")
+        return
+      // `typeof`, `void`, `delete`, `await` and `yield` are prefix operators
+      // there, whose text is the word.
+      case ts.SyntaxKind.TypeOfExpression:
+      case ts.SyntaxKind.VoidExpression:
+      case ts.SyntaxKind.DeleteExpression:
+      case ts.SyntaxKind.AwaitExpression:
+      case ts.SyntaxKind.YieldExpression:
+        if (node.expression === undefined || node.asteriskToken !== undefined) {
+          unsupported(node)
+        }
+        emit(depth, "UNARY+prefix", s, e, source.slice(node.getStart(sf)).match(/^[a-z]+/)[0])
+        expression(node.expression, depth + 1)
+        return
+      case ts.SyntaxKind.AsExpression:
+        assertion(node, depth, "AS")
+        return
+      case ts.SyntaxKind.TypeAssertionExpression:
+        assertion(node, depth, "AS+angle")
+        return
+      case ts.SyntaxKind.SatisfiesExpression:
+        assertion(node, depth, "AS+satisfies")
+        return
       case ts.SyntaxKind.ObjectLiteralExpression:
         emit(depth, "OBJECT", s, e)
         for (const property of node.properties) {
@@ -350,35 +401,32 @@ const printTypeScriptTree = (source, sf) => {
         expression(node.whenTrue, depth + 1)
         expression(node.whenFalse, depth + 1)
         return
+      // `?.` is the member, element or call it precedes, flagged `+optional`.
       case ts.SyntaxKind.CallExpression:
-        if (node.typeArguments !== undefined || node.questionDotToken !== undefined) {
+        if (node.typeArguments !== undefined) {
           unsupported(node)
         }
-        emit(depth, "CALL", s, e)
+        emit(depth, `CALL${optionalChain(node)}`, s, e)
         expression(node.expression, depth + 1)
         list(depth + 1, node.arguments, expression)
         return
+      // A callee that is not a name is read as the expression it is, for the
+      // checker to refuse (NL2144).
       case ts.SyntaxKind.NewExpression:
-        if (!ts.isIdentifier(node.expression)) {
-          unsupported(node)
-        }
         emit(depth, "NEW", s, e)
-        identifier(node.expression, depth + 1)
+        expression(node.expression, depth + 1)
         list(depth + 1, node.typeArguments ?? [], type)
         list(depth + 1, node.arguments ?? [], expression)
         return
       case ts.SyntaxKind.PropertyAccessExpression:
-        if (node.questionDotToken !== undefined || !ts.isIdentifier(node.name)) {
+        if (!ts.isIdentifier(node.name)) {
           unsupported(node)
         }
-        emit(depth, "MEMBER", s, e, node.name.text)
+        emit(depth, `MEMBER${optionalChain(node)}`, s, e, node.name.text)
         expression(node.expression, depth + 1)
         return
       case ts.SyntaxKind.ElementAccessExpression:
-        if (node.questionDotToken !== undefined) {
-          unsupported(node)
-        }
-        emit(depth, "INDEX", s, e)
+        emit(depth, `INDEX${optionalChain(node)}`, s, e)
         expression(node.expression, depth + 1)
         expression(node.argumentExpression, depth + 1)
         return

@@ -72,19 +72,13 @@
 #      `.err`, §A3's declaration and this entry all updated together, not to a
 #      line edited until the run goes green.
 
-reject_arr_hole	expected an expression, found `,`
-reject_arr_spread	expected an expression, found `...`
 reject_arrow_let	a module holds no top-level `let`; use `const`
 reject_arrow_return_type	a return type annotation is required
-reject_as_any	expected `;`, found `IDENT`
-reject_as_unknown	expected an expression, found `<`
 reject_asi_for_header	expected `;`, found `IDENT`
 reject_asi_same_line	expected `;`, found `const`
 reject_asi_template	expected `;`, found `TEMPLATE`
 reject_async_function	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
-reject_await	expected `;`, found `NUMBER`
 reject_cls_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
-reject_cls_compound_operator	expected `;`, found `**=`
 reject_cls_ctor_no_body	expected `{`, found `;`
 reject_cls_ctor_return_type	expected `{`, found `:`
 reject_cls_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
@@ -98,19 +92,15 @@ reject_cls_literal_key	an object literal key must be a plain identifier
 reject_cls_literal_member	expected `}`, found `(`
 reject_cls_method_no_body	expected `{`, found `;`
 reject_cls_method_optional_untyped	a return type annotation is required
-reject_cls_new_not_identifier	expected `(`, found `[`
 reject_cls_param_property	a type annotation is required
 reject_cls_static_block	a class member is a field, a method or a constructor, found `{`
 reject_cls_static_field_untyped	a type annotation is required
-reject_comma_expression	expected `)`, found `,`
 reject_computed_property	an object literal key must be a plain identifier
 reject_const_destructured	expected a name, found `{`
 reject_declare_global	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_decorator	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `@`
 reject_default_import	expected `{`, found `IDENT`
-reject_delete	expected `;`, found `IDENT`
 reject_destructure_local	expected a name, found `[`
-reject_dynamic_import	expected an expression, found `import`
 reject_enum_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_export_assignment	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `=`
 reject_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
@@ -130,16 +120,10 @@ reject_iface_index_signature	an interface holds only annotated fields
 reject_iface_member_unsupported	an interface holds only annotated fields
 reject_import_template_specifier	a module specifier must be a string literal
 reject_import_type_only	expected `{`, found `IDENT`
-reject_in_operator	expected `;`, found `IDENT`
-reject_instanceof	expected `;`, found `IDENT`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
-reject_loose_equality	expected `;`, found `==`
-reject_loose_inequality	expected `;`, found `!=`
-reject_map_iter_spread	expected an expression, found `...`
 reject_missing_return_type	a return type annotation is required
 reject_multi_decl	a type annotation is required
-reject_multi_forbidden	expected `;`, found `IDENT`
 reject_namespace	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_namespace_import	expected `{`, found `*`
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
@@ -147,13 +131,9 @@ reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses
 reject_nullish_mixed_chain_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_object_spread	an object literal key must be a plain identifier
-reject_op_exponent	expected `;`, found `**`
-reject_optional_chain	expected `;`, found `?.`
 reject_param_default	expected `)`, found `=`
 reject_param_destructured	expected a name, found `{`
 reject_param_rest	expected a name, found `...`
-reject_regex	expected an expression, found `/`
-reject_satisfies	expected `;`, found `IDENT`
 reject_separator_after_dot	Numeric separators are not allowed here
 reject_separator_after_prefix	Numeric separators are not allowed here
 reject_separator_before_bigint_suffix	Numeric separators are not allowed here
@@ -169,6 +149,3 @@ reject_surrogate_escape_too_large	An extended Unicode escape value must be betwe
 reject_surrogate_escape_wraps	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive
 reject_type_alias_generic	expected `=`, found `<`
 reject_type_keyof	expected `)`, found `IDENT`
-reject_typeof_operator	expected `;`, found `IDENT`
-reject_void_expression	expected `;`, found `NUMBER`
-reject_yield	expected `;`, found `NUMBER`

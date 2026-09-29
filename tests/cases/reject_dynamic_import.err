@@ -1,1 +1,1 @@
-expected an expression, found `import`
+Dynamic `import()` is forbidden in Nish (modules are resolved at compile time)

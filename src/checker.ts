@@ -104,7 +104,7 @@ import {
 } from "./program"
 import { BoundsWalk, analyzeBounds } from "./bounds"
 import { checkResultLocalsHandled } from "./result"
-import { checkReturnValue, checkStatements, refuseForOfHeads } from "./statements"
+import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
   checkImplements,
@@ -219,6 +219,13 @@ export class Checker {
       // rejected class or constant costs its own diagnostic and no more
       // (`collectSignatures` in stage0's `src/checker/index.ts`).
       this.ctx.errored = false
+      // WP33 R1: the forms the parser reads for pass 1 to refuse, before the
+      // declaration is collected, so a declaration that has one reports that
+      // and nothing else — an unannotated constant holding `[1, , 2]` is the
+      // hole, not the missing annotation (`tests/cases/reject_expr_sweep_together`).
+      if (stmt.kind === N_CLASS || stmt.kind === N_MODULE_CONST || stmt.kind === N_FUNCTION) {
+        refuseUnsupportedForms(this.ctx, stmt)
+      }
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
         const info = this.program.struct(stmt.children[0].text)
         if (info !== null && info.decl === stmt) {
@@ -276,11 +283,6 @@ export class Checker {
         this.ctx.errored = false
         aliasType(alias)
       }
-    }
-    // Per declaration, as the rest of pass 1 recovers: one refusal each.
-    for (const stmt of this.program.file.children) {
-      this.ctx.errored = false
-      refuseForOfHeads(this.ctx, stmt)
     }
     this.ctx.errored = false
     this.qualifySymbols()

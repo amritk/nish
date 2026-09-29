@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 788 programs, 52179 dump lines.
+# 790 programs, 52296 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51229,6 +51229,125 @@ function test(): i32 -> @test [exported]
   stackSites=1 stackLocals=0
   local 15:7 try: i32 (let)
   callee 20:3 catch -> @catch
+program tests/parser/names-operator-calls.ts
+module tests/parser/names-operator-calls.ts (entry)
+function typeof(x: i32): i32 -> @typeof
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function delete(x: i32): i32 -> @delete
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function void(x: i32): i32 -> @void
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function instanceof(x: i32): i32 -> @instanceof
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function in(x: i32): i32 -> @in
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function yield(x: i32): i32 -> @yield
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function await(x: i32): i32 -> @await
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function satisfies(x: i32): i32 -> @satisfies
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function as(x: i32): i32 -> @as
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function of(x: i32): i32 -> @of
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function through(x: i32): i32 -> @through
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: in instanceof
+  stackSites=0 stackLocals=0
+  callee 47:34 in -> @in
+  callee 47:37 instanceof -> @instanceof
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: as await delete in instanceof nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 of satisfies through typeof void yield
+  stackSites=0 stackLocals=0
+  local 50:7 n: i32 (let)
+  callee 50:16 typeof -> @typeof
+  callee 50:28 delete -> @delete
+  callee 50:40 void -> @void
+  callee 50:50 instanceof -> @instanceof
+  callee 50:66 in -> @in
+  callee 51:11 yield -> @yield
+  callee 51:22 await -> @await
+  callee 51:33 satisfies -> @satisfies
+  callee 51:48 as -> @as
+  callee 51:56 of -> @of
+  callee 52:3 typeof -> @typeof
+  callee 53:3 void -> @void
+  callee 54:3 delete -> @delete
+  callee 55:3 await -> @await
+  callee 56:3 yield -> @yield
+  callee 58:3 in -> @in
+  callee 60:3 instanceof -> @instanceof
+  callee 62:3 as -> @as
+  callee 64:3 satisfies -> @satisfies
+  callee 65:7 typeof -> @typeof
+  callee 65:14 typeof -> @typeof
+  callee 66:7 void -> @void
+  callee 66:18 await -> @await
+  callee 67:7 through -> @through
+  local 68:9 s: string (const)
+  callee 68:16 typeof -> @typeof
+  callee 68:28 in -> @in
+  callee 68:36 as -> @as
+program tests/parser/names-operators.ts
+module tests/parser/names-operators.ts (entry)
+struct Words (class) size=40 align=4
+  field typeof: i32 index=0 offset=0 initialized
+  field delete: i32 index=1 offset=4 initialized
+  field void: i32 index=2 offset=8 initialized
+  field instanceof: i32 index=3 offset=12 initialized
+  field in: i32 index=4 offset=16 initialized
+  field yield: i32 index=5 offset=20 initialized
+  field await: i32 index=6 offset=24 initialized
+  field satisfies: i32 index=7 offset=28 initialized
+  field as: i32 index=8 offset=32 initialized
+  field of: i32 index=9 offset=36 initialized
+struct Pair (interface) size=8 align=4
+  field in: i32 index=0 offset=0
+  field as: i32 index=1 offset=4
+function scale(typeof: i32, void: i32): i32 -> @scale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function offset(in: i32, instanceof: i32): i32 -> @offset
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_div nish_panic_index nish_str_concat nish_str_from_i32 offset scale
+  stackSites=5 stackLocals=3
+  local 38:7 typeof: i32 (let)
+  local 39:7 delete: i32 (let)
+  local 40:7 void: i32 (let)
+  local 41:7 instanceof: i32 (let)
+  local 42:7 in: i32 (let)
+  local 43:7 yield: i32 (let)
+  local 44:7 await: i32 (let)
+  local 45:7 satisfies: i32 (let)
+  local 46:7 as: i32 (let)
+  local 47:7 of: i32 (let)
+  local 48:9 w: Words (const)
+  local 49:9 p: Pair (const)
+  local 50:7 n: i32 (let)
+  local 67:9 xs: i32[] (const)
+  local 69:12 i: i32 (let)
+  local 75:14 of: i32 (const)
+  local 78:14 in: i32 (const)
+  local 81:14 x: i32 (const)
+  local 84:9 s: string (const)
+  callee 85:22 scale -> @scale
+  callee 85:44 offset -> @offset
 program tests/parser/names.ts
 module tests/parser/names.ts (entry)
 function with(x: i32): i32 -> @with

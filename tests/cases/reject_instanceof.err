@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+`instanceof` is forbidden in Nish (no prototype chain)

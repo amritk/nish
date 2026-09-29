@@ -1,1 +1,1 @@
-syntax error: expected `(`, found `.`
+`new` requires a class name

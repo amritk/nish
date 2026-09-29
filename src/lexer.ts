@@ -217,6 +217,9 @@ const isIdentStart = (c: i32): boolean => {
 
 const isIdentPart = (c: i32): boolean => isIdentStart(c) || isDigit(c)
 
+/** The end of a line, or of the file: where a regular expression literal cannot go on. */
+const isLineEnd = (c: i32): boolean => c === CH_EOF || c === CH_LF || c === CH_CR
+
 /** The value of a hex digit, or -1. */
 const hexValue = (c: i32): i32 => {
   if (isDigit(c)) {
@@ -555,6 +558,42 @@ export class Lexer {
       return
     }
     this.scanPunctuation(c)
+  }
+
+  /**
+   * The end of the regular expression literal whose `/` is at `start`, or -1
+   * when its line ends first, with the cursor at the end of that line. `next()` cannot tell a regex from a division and
+   * leaves the `/` a slash, as the `typescript` scanner does; the parser knows
+   * an operand is due there and asks again, as TypeScript's `reScanSlashToken`
+   * does, so that Phase 0 can refuse the literal by name (NL1050). The cursor
+   * moves past the flags, and the next token is the one after the literal.
+   */
+  scanRegex(start: i32): i32 {
+    let i = start + 1
+    let inClass = false
+    while (true) {
+      const c = this.at(i)
+      if (isLineEnd(c)) {
+        this.pos = i
+        return -1
+      }
+      if (c === CH_BACKSLASH && !isLineEnd(this.at(i + 1))) {
+        i = i + 1
+      } else if (c === CH_LBRACKET) {
+        inClass = true
+      } else if (c === CH_RBRACKET) {
+        inClass = false
+      } else if (c === CH_SLASH && !inClass) {
+        break
+      }
+      i = i + 1
+    }
+    i = i + 1
+    while (isIdentPart(this.at(i))) {
+      i = i + 1
+    }
+    this.pos = i
+    return i
   }
 
   /** `#name`, a private class member: one token, which the parser then refuses. */

@@ -13,16 +13,21 @@
 // shape mutation, a string-keyed element access. The rest is syntax the
 // language forbids, which the parser reads into a node so that the rule is
 // stated here rather than as a syntax error (WP33 R1; the shapes are in
-// `src/nodes.ts`): `var`, `try`, `with`, a labelled statement and `for...in`
-// so far. What the parser still turns down itself is listed, case by case,
-// in `tests/self/parser-refusals.txt`.
+// `src/nodes.ts`): `var`, `try`, `with`, a labelled statement, `for...in`, and
+// the forbidden expressions — `==`, `?.`, `typeof` and the rest of the
+// operators the language does not have, a regex, a dynamic `import()` and an
+// assertion to `any` or `unknown`. What the parser still turns down itself is
+// listed, case by case, in `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { unwrapParens } from "./emit-util"
 import {
   FLAG_FOR_IN,
+  FLAG_OPTIONAL,
+  FLAG_SATISFIES,
   FLAG_VAR,
+  N_AS,
   N_BIGINT,
   N_BINARY,
   N_CALL,
@@ -38,6 +43,7 @@ import {
   N_NUMBER,
   N_PAREN,
   N_PROPERTY,
+  N_REGEX,
   N_STRING,
   N_TEMPLATE,
   N_THROW,
@@ -122,6 +128,38 @@ const forbiddenType = (name: string): string => {
   return ""
 }
 
+/** The message for an operator the language forbids, by its text on an N_BINARY or N_UNARY, or "". */
+const forbiddenOperator = (operator: string): string => {
+  if (operator === "==" || operator === "!=") {
+    return "Loose equality is forbidden; use === / !=="
+  }
+  if (operator === "in") {
+    return "`in` operator is forbidden in " + LANGUAGE + " (no dynamic property lookup)"
+  }
+  if (operator === "instanceof") {
+    return "`instanceof` is forbidden in " + LANGUAGE + " (no prototype chain)"
+  }
+  if (operator === ",") {
+    return "Comma expressions are forbidden in " + LANGUAGE + " (write separate statements)"
+  }
+  if (operator === "typeof") {
+    return "`typeof` is forbidden in " + LANGUAGE + " (no runtime type tags)"
+  }
+  if (operator === "void") {
+    return "`void` expressions are forbidden in " + LANGUAGE + " (no `undefined` value)"
+  }
+  if (operator === "delete") {
+    return "`delete` is forbidden in " + LANGUAGE + " (object layout is fixed)"
+  }
+  if (operator === "await") {
+    return "`await` is forbidden in " + LANGUAGE + " (no event loop or promises)"
+  }
+  if (operator === "yield") {
+    return "`yield` is forbidden in " + LANGUAGE + " (no coroutine runtime)"
+  }
+  return ""
+}
+
 /** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
 const isShapeMutation = (member: string): boolean =>
   member === "assign" ||
@@ -181,6 +219,17 @@ export const validate = (ctx: CheckContext, node: Node): void => {
 }
 
 const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => {
+  // `a?.b`, `a?.[i]` and `f?.()` are the member, element and call they
+  // resemble, with a flag (`src/nodes.ts`).
+  if (
+    (node.flags & FLAG_OPTIONAL) !== 0 &&
+    (node.kind === N_MEMBER || node.kind === N_INDEX || node.kind === N_CALL)
+  ) {
+    ctx.error(
+      node,
+      "Optional chaining `?.` is forbidden in " + LANGUAGE + " (narrow with `!== null` instead)"
+    )
+  }
   switch (node.kind) {
     case N_IDENT: {
       const message = forbiddenValue(node.text)
@@ -221,10 +270,30 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
     case N_CALL:
       rejectForbiddenCall(ctx, node)
       break
+    case N_UNARY: {
+      const message = forbiddenOperator(node.text)
+      if (message.length > 0) {
+        ctx.error(node, message)
+      }
+      break
+    }
+    case N_REGEX:
+      ctx.error(
+        node,
+        "Regular expression literals are forbidden in " + LANGUAGE + " (no regex engine in the runtime)"
+      )
+      break
+    case N_AS:
+      rejectForbiddenAssertion(ctx, node)
+      break
     case N_ENUM:
       rejectComputedEnumMembers(ctx, node)
       break
-    case N_BINARY:
+    case N_BINARY: {
+      const message = forbiddenOperator(node.text)
+      if (message.length > 0) {
+        ctx.error(node, message)
+      }
       // WP32: `x === undefined` and `x !== undefined` are how a maybe is
       // tested, so `undefined` is let through as an operand of those two and
       // nowhere else. Whether `x` is a maybe is the checker's question.
@@ -237,6 +306,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         return
       }
       break
+    }
     case N_VAR:
       rejectVar(ctx, node)
       // WP32: `const a: V | undefined = m.get(k)` is the one place the maybe
@@ -454,10 +524,34 @@ const rejectForbiddenCall = (ctx: CheckContext, node: Node): void => {
   if (callee.kind !== N_IDENT) {
     return
   }
-  if (callee.text === "eval") {
+  // `import` is a keyword, so an IDENT of that name is only ever the
+  // parser's callee of a dynamic `import(...)` (`src/nodes.ts`).
+  if (callee.text === "import") {
+    ctx.error(
+      node,
+      "Dynamic `import()` is forbidden in " + LANGUAGE + " (modules are resolved at compile time)"
+    )
+  } else if (callee.text === "eval") {
     ctx.error(node, "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)")
   } else if (callee.text === "Function") {
     ctx.error(node, "`Function` constructor is forbidden in " + LANGUAGE + " (no interpreter at runtime)")
+  }
+}
+
+/**
+ * `x as any`, `<any>x`, and the same to `unknown`: stated here, ahead of the
+ * type's own refusal, because the assertion is what the program wrote. Every
+ * other assertion, and `satisfies`, is the checker's (NL2256).
+ */
+const rejectForbiddenAssertion = (ctx: CheckContext, node: Node): void => {
+  const type = node.children[1]
+  if ((node.flags & FLAG_SATISFIES) !== 0 || type.kind !== N_TYPE_REF) {
+    return
+  }
+  if (type.text === "any") {
+    ctx.error(node, "Type assertion to `any` is forbidden in " + LANGUAGE)
+  } else if (type.text === "unknown") {
+    ctx.error(node, "Type assertion to `unknown` is forbidden in " + LANGUAGE)
   }
 }
 

@@ -1,0 +1,1 @@
+Element access requires a numeric index in Nish (no dynamic property lookup)

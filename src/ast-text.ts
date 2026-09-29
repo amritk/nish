@@ -24,6 +24,7 @@
 // without changing the oracle in the same commit.
 
 import {
+  FLAG_ANGLE,
   FLAG_AWAIT,
   FLAG_CONST,
   FLAG_FOR_IN,
@@ -34,6 +35,7 @@ import {
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_READONLY,
+  FLAG_SATISFIES,
   FLAG_STATIC,
   N_STRING,
   N_TEMPLATE_TEXT,
@@ -89,6 +91,12 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_FOR_IN) !== 0) {
     name = `${name}+in`
+  }
+  if ((node.flags & FLAG_ANGLE) !== 0) {
+    name = `${name}+angle`
+  }
+  if ((node.flags & FLAG_SATISFIES) !== 0) {
+    name = `${name}+satisfies`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`
