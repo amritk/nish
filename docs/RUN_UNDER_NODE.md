@@ -139,7 +139,9 @@ no prelude can reach it. They are language decisions
   JavaScript's fixed-length typed array. A receiver spelled with the name
   refuses `push` and `pop` at compile time (NL2415), so the
   `TypeError: t.push is not a function` a program could once reach here is a
-  compile error natively too
+  compile error natively too. A value the spelling does not reach — through
+  another module's `type` alias, out of a `Map` or `Set`, or a generic's `T`
+  result — still pushes natively and throws here
   ([LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and

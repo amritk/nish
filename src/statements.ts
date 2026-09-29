@@ -78,7 +78,7 @@ import {
   Node,
 } from "./nodes"
 import { caseValue } from "./constants"
-import { annotationSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
+import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
 
@@ -459,6 +459,11 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // and an element of a `T[]` came from `T` (WP18 G6).
   const origin = elementOrigin(ctx, stmt.children[1], scope)
   declareLocal(ctx, outer, decl, name, element, (stmt.children[0].flags & FLAG_CONST) === 0, origin)
+  // WP33 R2: an element of a `Float64Array[]` is a `Float64Array` to TypeScript.
+  const local = ctx.program.nodeLocals[decl.id]
+  if (local !== null && walked === null) {
+    local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
+  }
   ctx.pushLoop(LOOP_ITERATION)
   checkStatement(ctx, stmt.children[2], outer.child())
   ctx.popLoop()

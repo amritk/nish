@@ -4105,11 +4105,25 @@ it when it is:
   infers as the typed array (`reject_typed_push_inferred`), or `const u = t`;
 - **a field read** `o.f` whose field is declared with one of the names;
 - **a call** whose callee declares one of the names as its return type
-  (`reject_typed_pop_receivers` has one of each).
+  (`reject_typed_pop_receivers` has one of each);
+- **an element of an array spelled with a name**: `rows[i]` or a `for...of`
+  variable over `rows`, where `rows` is any of the above spelled
+  `Float64Array[]` or `Array<Float64Array>`, or is an array literal of
+  receivers that carry it, `[new Float64Array(n)]`
+  (`reject_typed_push_element`). The array itself is an ordinary array, and
+  `rows.push(new Float64Array(n))` compiles;
+- **a ternary** either of whose branches carries it: `c ? xs : t` is
+  `number[] | Float64Array` to TypeScript, which has no `pop` either
+  (`reject_typed_push_ternary`).
 
-A field or return type declared in another module carries it when it writes
-the name itself; that module's `type` aliases are not followed. Nothing else
-carries it — an element of a `Float64Array[]`, a ternary, an index.
+What does not carry it is narrower, and each is a program that compiles and
+pushes natively where the same source throws a `TypeError` under Node: a field
+or return type written through **another module's** `type` alias (a
+declaration in another module carries the spelling only when it writes the
+name itself, `[]` and `Array<>` included); a value read out of a `Map` or
+`Set` of typed arrays; and the `T` result of a generic function instantiated
+at one of the names. Declare such a value `f64[]` where it is bound, which is
+what TypeScript needs to accept the push as well.
 
 **A typed array that flows into a binding spelled `T[]` may be pushed there**:
 `const a: f64[] = t; a.push(v)`, or a `Float64Array` passed to a parameter
