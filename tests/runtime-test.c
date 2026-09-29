@@ -361,6 +361,7 @@ static void test_threads(void) {
 #endif
 
 #ifdef NISH_THREADS
+#include <fcntl.h>
 #include <signal.h>
 
 /* A thread that was running, with nothing blocked, before `nish_signal_fd()`
@@ -388,6 +389,9 @@ static void test_host_signal_threads(void) {
   int32_t fd = nish_signal_fd();
   assert(fd >= 0);
   assert(nish_signal_fd() == fd);
+  /* R1-2: the pipe is close-on-exec, so a child spawned meanwhile does not
+     inherit it; on Linux it is from the moment `pipe2` makes it. */
+  assert((fcntl(fd, F_GETFD) & FD_CLOEXEC) != 0);
   assert(pthread_kill(t, SIGINT) == 0);
   expect_i64(nish_read_signal(fd), 2, "SIGINT on a thread started before signalFd");
   assert(pthread_kill(t, SIGTERM) == 0);
