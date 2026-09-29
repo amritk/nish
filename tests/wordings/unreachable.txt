@@ -219,9 +219,6 @@ NL8009  not live yet: an i64/u64 declaration is a double in TypeScript
 NL8010  not live yet: Math.min/max/round on f64 follow libm's NaN and signed-zero rules
 NL8011  not live yet: console.log prints a negative zero as 0 here
 #
-# --- WP33 R1: lands with portability-strings
-NL8001  not live yet: a UTF-8 offset that meets an outside fact
-NL8002  not live yet: a `slice` whose bounds are not proven inside its receiver
 #
 # --- WP33 R1: lands with portability-records
 NL8003  not live yet: a record copied into an array while the original is still used
