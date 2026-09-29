@@ -178,7 +178,6 @@ export class Checker {
           continue
         }
         if (isGenericStruct(stmt)) {
-          this.ctx.errored = false
           this.registerStructTemplate(stmt, kind)
         } else {
           // A `class Box$i32` would be one struct type with the instantiation
@@ -256,14 +255,19 @@ export class Checker {
         // `registerTemplate` resolves a function's. In this loop rather than
         // at registration because a constraint may name a class declared
         // further down, which the loop above has declared by now.
-        const template = this.program.structTemplate(stmt.children[0].text)
-        if (template !== null && template.decl === stmt) {
-          resolveStructTemplateConstraints(template)
+        // WP18 G8: then the rules about a generic method that are its
+        // declaration's, once per class, for the reason the constraints are
+        // resolved here: a generic class's members are collected once per
+        // instantiation. Both clear `errored` per parameter, so neither runs
+        // for a declaration the sweep refused, whose refusal is its one
+        // diagnostic; an instantiation still resolves the constraints lazily.
+        if (!refused) {
+          const template = this.program.structTemplate(stmt.children[0].text)
+          if (template !== null && template.decl === stmt) {
+            resolveStructTemplateConstraints(template)
+          }
+          declareMethodTypeParameters(this.ctx, stmt)
         }
-        // WP18 G8: the rules about a generic method that are its declaration's,
-        // once per class, for the reason the constraints above are resolved
-        // here: a generic class's members are collected once per instantiation.
-        declareMethodTypeParameters(this.ctx, stmt)
       } else if (stmt.kind === N_MODULE_CONST) {
         this.collectConstants(stmt)
       } else if (stmt.kind === N_FUNCTION) {

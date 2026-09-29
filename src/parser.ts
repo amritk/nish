@@ -1988,9 +1988,9 @@ export class Parser {
       ctor.children.push(this.parseParameters(true))
       // A return type (NL2189) is a third child, there only when written, and
       // a missing body (NL2091) an EMPTY one: the checker refuses both.
-      const returnType = this.parseReturnType()
+      const returnType: Node | null = this.eat(TOK_COLON) ? this.parseType() : null
       ctor.children.push(this.parseBody())
-      if (returnType.kind !== N_EMPTY) {
+      if (returnType !== null) {
         ctor.children.push(returnType)
       }
       ctor.end = this.previousEnd
@@ -2157,18 +2157,20 @@ export class Parser {
     const typeParams = this.parseTypeParameters()
     // `extends A, B`, for the checker to refuse (NL2215): a fourth child,
     // spanning the clause, there only when written.
-    const heritage = this.list()
+    let heritage: Node | null = null
     if (this.at(TOK_EXTENDS)) {
       const clauseStart = this.start
       this.advance()
+      const clause = this.list()
       while (true) {
-        heritage.children.push(this.parseType())
+        clause.children.push(this.parseType())
         if (!this.eat(TOK_COMMA)) {
           break
         }
       }
-      this.closeList(heritage)
-      heritage.start = clauseStart
+      this.closeList(clause)
+      clause.start = clauseStart
+      heritage = clause
     }
     const fields = this.list()
     if (this.expect(TOK_LBRACE)) {
@@ -2183,7 +2185,7 @@ export class Parser {
     }
     node.children.push(this.closeList(fields))
     node.children.push(typeParams)
-    if (heritage.children.length > 0) {
+    if (heritage !== null) {
       node.children.push(heritage)
     }
     node.end = this.previousEnd
@@ -3779,8 +3781,9 @@ export class Parser {
         continue
       }
       // `{ "a": 1 }` and `{ 0: 1 }`: the key is a second child, for the
-      // checker to refuse (NL2223).
-      let key = this.empty()
+      // checker to refuse (NL2223). Read only when written, so an ordinary
+      // property allocates no node it would drop.
+      let key: Node | null = null
       if (this.at(TOK_IDENT)) {
         property.text = this.value
         this.advance()
@@ -3798,7 +3801,7 @@ export class Parser {
         shorthand.text = property.text
         property.children.push(shorthand)
       }
-      if (key.kind !== N_EMPTY) {
+      if (key !== null) {
         property.children.push(key)
       }
       property.end = this.previousEnd
