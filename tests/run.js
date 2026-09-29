@@ -2600,10 +2600,14 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
           ["-O2", "-S", "-Wno-override-module", `--target=${target.triple}`, ll, "-o", s],
           { encoding: "utf8" }
         )
-        if (cc.status !== 0) {
+        if (cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)) {
           skip(
             `ct_asm: ${name} on ${target.name}: clang cannot target ${target.triple} (${cc.stderr.trim()})`
           )
+          continue
+        }
+        if (cc.status !== 0) {
+          check(`ct_asm: ${name} compiles to ${target.name} assembly`, false, cc.stderr)
           continue
         }
         const asm = fs.readFileSync(s, "utf8")
@@ -2648,6 +2652,26 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         /asm ""/.test(barriered) && !/\bselect\b/.test(barriered) && /\bselect i1\b/.test(stripped),
         `--- with the barrier\n${barriered}\n--- without\n${stripped}`
       )
+    }
+
+    // wasm32 is not read for branches (the engine compiles the module again, so this
+    // `.s` is not what runs), but the rule says the builtins compile there with the
+    // same barrier, and that sentence needs something that could fail.
+    if (fs.existsSync(primitivesLl)) {
+      const wasm = spawnSync(
+        "clang",
+        ["-O2", "-S", "-Wno-override-module", "--target=wasm32-unknown-wasi", primitivesLl, "-o", "-"],
+        { encoding: "utf8" }
+      )
+      if (wasm.status !== 0 && /unknown target|No available targets/i.test(wasm.stderr)) {
+        skip(`ct_asm: clang cannot target wasm32 (${wasm.stderr.trim()})`)
+      } else {
+        check(
+          "ct_asm: the constant-time fixtures compile for wasm32, barrier and all",
+          wasm.status === 0 && /^pickU32:/m.test(wasm.stdout) && /#APP/.test(wasm.stdout),
+          wasm.stderr
+        )
+      }
     }
 
     // The fixtures themselves: every `ct-check` names a function its source declares,
