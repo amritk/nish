@@ -2,8 +2,10 @@
 // them as names. WP33 R1 parses the statements they open, and does it only
 // where the words cannot mean anything else, so each of these compiles as it
 // did before: a call of a function named `with`, a variable `try` followed by
-// a block on the next line, and a variable `var` followed by an assignment on
-// the next line (two statements under semicolon insertion).
+// a block on the next line that no `catch` or `finally` follows (an Allman
+// `try` that has one is the statement, `reject_try_allman_catch`), and a
+// variable `var` followed by an assignment on the next line (two statements
+// under semicolon insertion).
 //
 // It is not TypeScript — `tsc` reserves all three words — so it lives here
 // rather than in `tests/cases/`, whose programs `tsc` must accept, and

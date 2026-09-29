@@ -50016,11 +50016,11 @@ function test(): i32 -> @test [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: with
   stackSites=0 stackLocals=0
-  local 16:7 try: i32 (let)
-  callee 16:18 with -> @with
-  local 17:7 var: i32 (let)
-  local 18:7 n: i32 (let)
-  callee 19:3 with -> @with
+  local 18:7 try: i32 (let)
+  callee 18:18 with -> @with
+  local 19:7 var: i32 (let)
+  local 20:7 n: i32 (let)
+  callee 21:3 with -> @with
 reject tests/parser/nullish.ts: error: Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)
 reject tests/parser/precedence.ts: error: Operator `||` requires boolean operands, got i32 and i32
 program tests/parser/types.ts

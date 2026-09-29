@@ -597,12 +597,13 @@ export class Parser {
   }
 
   /**
-   * Whether the token after the current one starts on the same line. `var`,
-   * `try` and `with` are identifiers to the lexer, and a program may use them
-   * as names: `var` then `x` on the next line is two expression statements
-   * under TypeScript's semicolon insertion, and compiled as that before these
-   * words opened a construct, so a construct is read only where the words
-   * stand on one line (WP33 R1).
+   * Whether the token after the current one starts on the same line. `var`
+   * and `with` are identifiers to the lexer, and a program may use them as
+   * names: `var` then `x` on the next line is two expression statements under
+   * TypeScript's semicolon insertion, and compiled as that before these words
+   * opened a construct, so a construct is read only where the words stand on
+   * one line (WP33 R1). A line break inside a block comment counts, as it does
+   * for semicolon insertion. `try` has a rule of its own (`tryStatementAhead`).
    */
   aheadOnSameLine(): boolean {
     this.peek()
@@ -613,6 +614,41 @@ export class Parser {
       }
     }
     return true
+  }
+
+  /**
+   * Whether `try` opens a `try` statement rather than naming a variable. It
+   * does when a block follows it on the same line, and, whatever line breaks
+   * and comments sit between, when a block follows it and a `catch` or a
+   * `finally` follows that block: an Allman-style `try` is a statement. What
+   * stays a name is `try` alone on a line before a block that nothing
+   * handles, the one shape that compiled, as two statements, before `try`
+   * opened one (`tests/parser/names.ts`). A scratch lexer runs to the brace
+   * that closes the block and looks at the word after it.
+   */
+  tryStatementAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "try" || this.peek() !== TOK_LBRACE) {
+      return false
+    }
+    if (this.aheadOnSameLine()) {
+      return true
+    }
+    const scan = new Lexer(this.file.text)
+    scan.pos = this.aheadEnd
+    let depth = 1
+    while (depth > 0) {
+      scan.next()
+      if (scan.kind === TOK_END) {
+        return false
+      }
+      if (scan.kind === TOK_LBRACE) {
+        depth = depth + 1
+      } else if (scan.kind === TOK_RBRACE) {
+        depth = depth - 1
+      }
+    }
+    scan.next()
+    return scan.kind === TOK_IDENT && (scan.value === "catch" || scan.value === "finally")
   }
 
   /**
@@ -1660,9 +1696,7 @@ export class Parser {
         if (this.usingAhead() || this.varAhead()) {
           return this.parseVariableStatement(start)
         }
-        // `try` then a block on the next line is a name and a block, as it
-        // was before `try` opened a statement (`aheadOnSameLine`).
-        if (this.value === "try" && this.peek() === TOK_LBRACE && this.aheadOnSameLine()) {
+        if (this.tryStatementAhead()) {
           return this.parseTry(start)
         }
         if (this.withStatementAhead()) {

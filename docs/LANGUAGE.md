@@ -2786,10 +2786,17 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 `namespace` (`reject_namespace`), `declare global` (`reject_declare_global`).
 `with`, `try` and `var` are not reserved: a function or a variable may be
 called one, and a statement opens only where the word could not be that
-name — `with (…)` followed on the same line by a statement, `try` followed on
-the same line by a block, `var` followed on the same line by a name
-(`tests/parser/names.ts`; `tsc` reserves all three, so this is Nish accepting
-what TypeScript does not, as it did before these statements parsed).
+name. `with (…)` is the statement when a statement follows it on the same
+line, and `var` when a name follows it on the same line. `try` is the
+statement when a block follows it on the same line, or when a block follows
+it and a `catch` or `finally` follows that block, whatever line breaks and
+comments sit between (`reject_try_allman_catch`, `reject_try_allman_finally`,
+`reject_try_comment_newline`). A line break inside a block comment counts as
+one, as it does for semicolon insertion. So `try` alone on a line before a
+block that nothing handles is a name and a block, as it was before
+(`tests/parser/names.ts`). `tsc` reserves all three, so this is Nish
+accepting what TypeScript does not, as it did before these statements
+parsed.
 `enum` and `type` are top-level declarations ([Enums](#enums),
 [Type aliases](#type-aliases)); it is only inside a function body that they are
 a rejected statement.
