@@ -140,7 +140,6 @@ rejects. This table is the highest-value part of the page.
 | `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
-| `export type T = …` | `Type aliases cannot be exported` | declare the alias in each module that needs it (an `export enum` is fine) |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
@@ -999,19 +998,21 @@ export const main = (): i32 => {
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
   no bitwise, so **bit flags stay `i32` module constants**.
-- **An enum can be exported; an alias cannot, yet.** `export enum Kind` is
-  imported like a function, `import { Kind } from "./kinds"` (renamed with
-  `as` if you like), and in the importer it *is* the exporter's `Kind`: the
-  members fold to the exporter's integers and a `Kind` value crosses a call
-  as itself. A `Kind` a second module declares for itself is a different
-  type, however alike the two are. A `type` alias is still module-local:
-  declare it in every module that needs it.
+- **Both can be exported.** `export enum Kind` is imported like a function,
+  `import { Kind } from "./kinds"` (renamed with `as` if you like), and in the
+  importer it *is* the exporter's `Kind`: the members fold to the exporter's
+  integers and a `Kind` value crosses a call as itself. A `Kind` a second
+  module declares for itself is a different type, however alike the two are.
+  `export type Conn = Socket | null` is imported the same way and is, in the
+  importer, the type it names; its right-hand side is resolved in the module
+  that wrote it, so the importer need not import `Socket`. A module does not
+  re-export an enum or alias it imported.
 - Both are top-level only.
 
 ### Modules
 
-- `export` goes on `const` (function or constant), `class`, `interface` and
-  `enum` declarations. No `export default`, no `export { … }`, no `export *`.
+- `export` goes on `const` (function or constant), `class`, `interface`,
+  `enum` and `type` declarations. No `export default`, no `export { … }`, no `export *`.
 - The only import form is a **named import**:
   `import { square, cube as pow3 } from "./math"`. `.ts` is optional. Default
   imports, namespace imports, side-effect imports and type-only imports are all
