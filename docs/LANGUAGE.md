@@ -3546,8 +3546,8 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
-| `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
-| `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index` |
+| `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
+| `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. Each bound is proven against the facts that hold **where that bound is evaluated** — the arguments run left to right and the receiver's length is read before either of them, so an assignment in argument 1 cannot prove argument 0 and an argument that rebinds the receiver takes the proof with it (`perf_clamp_order`, `perf_clamp_rebind`). A bound it could not prove keeps the clamp and is reported by the performance warning below. `--unchecked-indexing` does not remove the clamp: it is the semantics, not a check | `str_bytes`, `perf_clamp_quiet`, `perf_clamp_order`, `perf_clamp_rebind`; `reject_str_substring_arity` |
@@ -3614,19 +3614,33 @@ whole.
   fills nothing, and `fill` never panics (`bytes_fill`). One to three
   arguments (NL2398, `reject_bytes_fill_arity`), each end a number
   (`reject_bytes_fill_index`).
+- **A float offset is converted as JavaScript's `ToIntegerOrInfinity`
+  converts it**, for `set`'s offset and for both of `fill`'s ends: an `f64`
+  (every `number` in f64 mode) or `f32` goes through `llvm.fptosi.sat`, never a
+  bare `fptosi`, whose answer for NaN or an infinity is poison. **NaN is `0`,
+  a fraction truncates toward zero** (`2.7` is `2`, `-0.5` is `0`), and **an
+  infinity or a value past the `i64` range saturates** to the `i64` bound on
+  its side. `fill` then clamps that bound to an end of the array, so
+  `a.fill(v, 0, Infinity)` fills all of it, as `Uint8Array.prototype.fill`
+  does (`bytes_offset_float`). `set` fails its range check with the saturated
+  offset in the message — `slice out of range: [9223372036854775807,
+  -9223372036854775808) of length 4` for `1e300` or `Infinity`, where the end
+  has wrapped — and exits 1 where JavaScript throws a `RangeError`
+  (`bytes_set_float_oob`, `bytes_set_float_panic`).
 - **`fill` on a `u8[]` is one `llvm.memset`.** On a wider element it is a
   counted store loop of the one value, the shape LLVM vectorises; `opt -O2`'s
   loop-idiom pass makes a `memset` of that loop by itself when the value is a
   repeated byte, zero above all, which `tests/run.js` checks on
   `bytes_fill_zero`.
 - **Both are statements**, as `writeFileSync` is: `` `set` returns void and
-  can only be used as a statement `` (`reject_bytes_set_value`). `set` answers
+  can only be used as a statement `` (`reject_bytes_set_value`,
+  `reject_bytes_fill_value_position`). `set` answers
   `undefined` in JavaScript and `fill` answers the array the program already
   holds, so refusing the value costs nothing and keeps the two readings the
   same.
 - **Both write their receiver**, so a `readonly` array refuses them under their
   own names (`` Cannot `set` through readonly u8[] (declare it u8[] to write
-  through it) ``, `reject_bytes_set_readonly`), a scope's region refuses them
+  through it) ``, `reject_bytes_set_readonly`, `reject_bytes_fill_readonly`), a scope's region refuses them
   on memory a task may read (`reject_thread_region_fill`,
   `reject_thread_region_set_call`), and a parameter they write is never
   `readonly`. Neither moves `length`, so neither disturbs a hoisted header or a

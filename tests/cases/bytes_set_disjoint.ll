@@ -13,8 +13,9 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
+declare i64 @llvm.fptosi.sat.i64.f64(double) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -230,7 +231,7 @@ entry:
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %src.addr, align 8
   %19 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
   %20 = load %struct.nish_array*, %struct.nish_array** %src.addr, align 8
-  %21 = fptosi double 0x4000000000000000 to i64
+  %21 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4000000000000000)
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %24 = add i64 %21, %23
@@ -342,7 +343,8 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -1345,7 +1345,7 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const fn = emitter.fn
   const args = expr.children[1].children
   const src = emitter.emitExpression(args[0])
-  const at = args.length > 1 ? emitIndex(emitter, args[1]) : "0"
+  const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
   const end = fn.emitValue(`add i64 ${at}, ${count}`)
   if (!emitter.opts.uncheckedIndexing) {
@@ -1363,6 +1363,26 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const from = elementBytes(emitter, src, elem, "0")
   fn.emit(`call void @${copy}(i8* ${to}, i8* ${from}, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)
   return "void"
+}
+
+/**
+ * An offset of `set` or an end of `fill` as an `i64`, converted the way
+ * JavaScript's `ToIntegerOrInfinity` converts it. A float goes through
+ * `llvm.fptosi.sat`, never a bare `fptosi`, whose answer for NaN, an infinity
+ * or a value past the `i64` range is poison: NaN is 0, a fraction truncates
+ * toward zero, and an infinity or 1e300 saturates to the `i64` bound on its
+ * side, which the clamp of `fill` and the range check of `set` then answer as
+ * JavaScript does. Every integer width is `emitIndex`'s widening, exact.
+ */
+const emitOffset = (emitter: Emitter, expr: Node): string => {
+  const type = emitter.typeOf(expr)
+  if (!isFloat(type)) {
+    return emitIndex(emitter, expr)
+  }
+  const ty = emitter.llvm(type)
+  const value = emitter.emitExpression(expr)
+  const intrinsic = emitter.useRuntime(`llvm.fptosi.sat.i64.${ty === "float" ? "f32" : "f64"}`)
+  return emitter.fn.emitValue(`call i64 ${intrinsic}(${ty} ${value})`)
 }
 
 /**
@@ -1400,8 +1420,8 @@ const emitFill = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   const fn = emitter.fn
   const args = expr.children[1].children
   const value = emitter.emitExpression(args[0])
-  const start = args.length > 1 ? emitIndex(emitter, args[1]) : ""
-  const stop = args.length > 2 ? emitIndex(emitter, args[2]) : ""
+  const start = args.length > 1 ? emitOffset(emitter, args[1]) : ""
+  const stop = args.length > 2 ? emitOffset(emitter, args[2]) : ""
   const len = loadLength(emitter, arr)
   const from = start.length > 0 ? relativeIndex(emitter, start, len, isIntegerLiteral(emitter, args[1])) : "0"
   const to = stop.length > 0 ? relativeIndex(emitter, stop, len, isIntegerLiteral(emitter, args[2])) : len

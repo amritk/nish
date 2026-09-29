@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 729 programs, 51212 dump lines.
+# 732 programs, 51273 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3361,6 +3361,33 @@ function test(): i32 -> @test [exported]
   stackSites=1 stackLocals=1
   local 10:9 xs: i32[] (const)
   callee 11:3 clear -> @clear
+program tests/cases/bytes_offset_float.ts --number-mode f64
+module tests/cases/bytes_offset_float.ts (entry)
+function show(xs: u8[]): string -> @show
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_from_u64
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 8:9 parts: string[] (const)
+  local 9:14 x: u8 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_slice nish_print nish_str_concat nish_str_from_i32 show
+  stackSites=3 stackLocals=3
+  local 16:9 nan: f64 (const)
+  local 17:9 inf: f64 (const)
+  local 18:9 a: u8[] (const)
+  callee 20:15 show -> @show
+  callee 22:15 show -> @show
+  callee 24:15 show -> @show
+  callee 27:15 show -> @show
+  local 28:9 half: f32 (const)
+  callee 30:15 show -> @show
+  local 31:9 b: u8[] (const)
+  callee 33:15 show -> @show
+  callee 36:15 show -> @show
+  local 37:9 wide: i32[] (const)
 program tests/cases/bytes_read.ts --number-mode f64
 module tests/cases/bytes_read.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -3415,6 +3442,43 @@ function main(): i32 -> @nish_main [exported entry]
   local 13:9 pair: i32[] (const)
   local 16:9 reals: f64[] (const)
   local 17:9 halves: f64[] (const)
+program tests/cases/bytes_set_float_oob.ts --number-mode f64
+module tests/cases/bytes_set_float_oob.ts (entry)
+function into(at: f64): i32 -> @into
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_slice
+  stackSites=2 stackLocals=2
+  local 8:9 dst: u8[] (const)
+  local 9:9 src: u8[] (const)
+function huge(): i32 -> @huge [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 14:32 into -> @into
+function infinite(): i32 -> @infinite [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 16:36 into -> @into
+function negativeInfinite(): i32 -> @negativeInfinite [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 18:44 into -> @into
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 20:32 into -> @into
+program tests/cases/bytes_set_float_panic.ts --number-mode f64
+module tests/cases/bytes_set_float_panic.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_slice nish_print nish_str_from_u64
+  stackSites=2 stackLocals=2
+  local 7:9 dst: u8[] (const)
+  local 8:9 src: u8[] (const)
 program tests/cases/bytes_set_oob.ts
 module tests/cases/bytes_set_oob.ts (entry)
 function into(at: i32): i32 -> @into

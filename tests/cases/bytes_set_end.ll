@@ -13,6 +13,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+declare i64 @llvm.fptosi.sat.i64.f64(double) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -80,7 +81,7 @@ entry:
   %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
   %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %24 = sitofp i64 %23 to double
-  %25 = fptosi double %24 to i64
+  %25 = call i64 @llvm.fptosi.sat.i64.f64(double %24)
   %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
   %27 = load i64, i64* %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %28 = add i64 %25, %27
@@ -116,7 +117,7 @@ set.ok:
   %50 = load i64, i64* %49, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %51 = sitofp i64 %50 to double
   %52 = fsub double %47, %51
-  %53 = fptosi double %52 to i64
+  %53 = call i64 @llvm.fptosi.sat.i64.f64(double %52)
   %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %43, i64 0, i32 0
   %55 = load i64, i64* %54, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %56 = add i64 %53, %55
@@ -255,7 +256,7 @@ bounds.ok.3:
   store %struct.nish_array* %arr.hdr.4, %struct.nish_array** %pair.addr, align 8
   %140 = load %struct.nish_array*, %struct.nish_array** %wide.addr, align 8
   %141 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
-  %142 = fptosi double 0x3FF0000000000000 to i64
+  %142 = call i64 @llvm.fptosi.sat.i64.f64(double 0x3FF0000000000000)
   %143 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %141, i64 0, i32 0
   %144 = load i64, i64* %143, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %145 = add i64 %142, %144
@@ -368,7 +369,7 @@ bounds.ok.6:
   store %struct.nish_array* %arr.hdr.6, %struct.nish_array** %halves.addr, align 8
   %212 = load %struct.nish_array*, %struct.nish_array** %reals.addr, align 8
   %213 = load %struct.nish_array*, %struct.nish_array** %halves.addr, align 8
-  %214 = fptosi double 0x3FF0000000000000 to i64
+  %214 = call i64 @llvm.fptosi.sat.i64.f64(double 0x3FF0000000000000)
   %215 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %213, i64 0, i32 0
   %216 = load i64, i64* %215, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %217 = add i64 %214, %216
@@ -449,6 +450,7 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

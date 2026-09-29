@@ -19,6 +19,7 @@ declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapt
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare i64 @llvm.smin.i64(i64, i64) #4
 declare i64 @llvm.smax.i64(i64, i64) #4
+declare i64 @llvm.fptosi.sat.i64.f64(double) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -236,7 +237,7 @@ entry:
   %21 = call i8* @show(%struct.nish_array* %20)
   call void @nish_print(i8* %21)
   %22 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %23 = fptosi double 0x4000000000000000 to i64
+  %23 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4000000000000000)
   %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
   %25 = load i64, i64* %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %26 = icmp slt i64 %23, 0
@@ -255,8 +256,8 @@ entry:
   %38 = call i8* @show(%struct.nish_array* %37)
   call void @nish_print(i8* %38)
   %39 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %40 = fptosi double 0x3FF0000000000000 to i64
-  %41 = fptosi double 0x4008000000000000 to i64
+  %40 = call i64 @llvm.fptosi.sat.i64.f64(double 0x3FF0000000000000)
+  %41 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4008000000000000)
   %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 0
   %43 = load i64, i64* %42, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %44 = icmp slt i64 %40, 0
@@ -281,7 +282,7 @@ entry:
   call void @nish_print(i8* %61)
   %62 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
   %63 = fneg double 0x4000000000000000
-  %64 = fptosi double %63 to i64
+  %64 = call i64 @llvm.fptosi.sat.i64.f64(double %63)
   %65 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 0
   %66 = load i64, i64* %65, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %67 = icmp slt i64 %64, 0
@@ -301,9 +302,9 @@ entry:
   call void @nish_print(i8* %79)
   %80 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
   %81 = fneg double 0x4059000000000000
-  %82 = fptosi double %81 to i64
+  %82 = call i64 @llvm.fptosi.sat.i64.f64(double %81)
   %83 = fneg double 0x4010000000000000
-  %84 = fptosi double %83 to i64
+  %84 = call i64 @llvm.fptosi.sat.i64.f64(double %83)
   %85 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %80, i64 0, i32 0
   %86 = load i64, i64* %85, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %87 = icmp slt i64 %82, 0
@@ -327,8 +328,8 @@ entry:
   %104 = call i8* @show(%struct.nish_array* %103)
   call void @nish_print(i8* %104)
   %105 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %106 = fptosi double 0x4010000000000000 to i64
-  %107 = fptosi double 0x3FF0000000000000 to i64
+  %106 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4010000000000000)
+  %107 = call i64 @llvm.fptosi.sat.i64.f64(double 0x3FF0000000000000)
   %108 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %105, i64 0, i32 0
   %109 = load i64, i64* %108, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %110 = icmp slt i64 %106, 0
@@ -349,8 +350,8 @@ entry:
   %125 = getelementptr inbounds i8, i8* %124, i64 %114
   call void @llvm.memset.p0i8.i64(i8* %125, i8 5, i64 %121, i1 false), !alias.scope !4, !noalias !3
   %126 = load %struct.nish_array*, %struct.nish_array** %a.addr, align 8
-  %127 = fptosi double 0x4024000000000000 to i64
-  %128 = fptosi double 0x4034000000000000 to i64
+  %127 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4024000000000000)
+  %128 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4034000000000000)
   %129 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %126, i64 0, i32 0
   %130 = load i64, i64* %129, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %131 = icmp slt i64 %127, 0
@@ -392,8 +393,8 @@ entry:
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %wide.addr, align 8
   %158 = load %struct.nish_array*, %struct.nish_array** %wide.addr, align 8
   %159 = sub nsw i32 0, 7
-  %160 = fptosi double 0x3FF0000000000000 to i64
-  %161 = fptosi double 0x4008000000000000 to i64
+  %160 = call i64 @llvm.fptosi.sat.i64.f64(double 0x3FF0000000000000)
+  %161 = call i64 @llvm.fptosi.sat.i64.f64(double 0x4008000000000000)
   %162 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %158, i64 0, i32 0
   %163 = load i64, i64* %162, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %164 = icmp slt i64 %160, 0
@@ -521,7 +522,7 @@ bounds.ok.3:
   store %struct.nish_array* %arr.hdr.2, %struct.nish_array** %reals.addr, align 8
   %239 = load %struct.nish_array*, %struct.nish_array** %reals.addr, align 8
   %240 = fneg double 0x3FF0000000000000
-  %241 = fptosi double %240 to i64
+  %241 = call i64 @llvm.fptosi.sat.i64.f64(double %240)
   %242 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %239, i64 0, i32 0
   %243 = load i64, i64* %242, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %244 = icmp slt i64 %241, 0

@@ -409,7 +409,8 @@ export function updIdx(a, i, f) {
  * typed array would throw a `RangeError` for the same offsets.
  */
 export function arraySet(dst, src, offset) {
-  const at = offset === undefined ? 0 : toIndex(offset);
+  // `ToIntegerOrInfinity`: NaN is 0, as `llvm.fptosi.sat` makes it natively.
+  const at = offset === undefined ? 0 : toIndex(offset) || 0;
   const end = at + src.length;
   if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
   // Two plain arrays overlap only when they are one array, which is the one
