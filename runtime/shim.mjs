@@ -91,6 +91,37 @@ export function bitsToF64(b) {
   return BITS.getFloat64(0);
 }
 
+/**
+ * `ctSelect` / `ctEq` (WP34 N6). A `u32` is a `number` here and a `u64` a
+ * BigInt, so the operands' kind picks the width, and a mix of the two — which
+ * the native checker refuses, and which a `u64` written as a bare literal is
+ * under an unrewritten run — throws the `TypeError` BigInt arithmetic throws
+ * rather than comparing a number with a BigInt and answering zero. JavaScript's
+ * `&` reads a `number` as a signed 32-bit integer, so each answer is put back in
+ * range with `>>> 0` or `asUintN(64, ...)`. These branch: only the native
+ * lowering promises constant time.
+ */
+function ctWide(name, first, second, third) {
+  const wide = typeof first === "bigint";
+  if ((typeof second === "bigint") !== wide || (typeof third === "bigint") !== wide) {
+    throw new TypeError(`${name}: cannot mix a u64 (BigInt) with a u32 (number)`);
+  }
+  return wide;
+}
+
+const U64_ONES = (1n << 64n) - 1n;
+
+export function ctSelect(mask, a, b) {
+  if (ctWide("ctSelect", mask, a, b)) return wrapU64((a & mask) | (b & ~mask));
+  return ((a & mask) | (b & ~mask)) >>> 0;
+}
+
+export function ctEq(a, b) {
+  // `ctEq` has two operands, so the second one stands in for the third.
+  if (ctWide("ctEq", a, b, b)) return wrapU64(a ^ b) === 0n ? U64_ONES : 0n;
+  return (a ^ b) === 0 ? 0xffffffff : 0;
+}
+
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
 export function wrapI64(x) {
   return BigInt.asIntN(64, x);

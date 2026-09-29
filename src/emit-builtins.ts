@@ -235,6 +235,68 @@ const emitMathMinMax = (emitter: Emitter, expr: Node, which: string): string => 
   return callIntrinsic(emitter, minMaxIntrinsic(emitter.table, which, type), ty, `${ty} ${a}, ${ty} ${b}`)
 }
 
+// ---- Constant time (WP34 N6) -----------------------------------------------------------
+
+/**
+ * The optimisation barrier: an empty inline assembly statement that hands its
+ * operand back in the same register. LLVM cannot look inside an `asm`, so the
+ * value that comes out is one it knows nothing about — in particular not that
+ * it is all-ones or zero — and it has no `select` to rebuild and so no branch
+ * to lower one to. It is the barrier BoringSSL's `value_barrier_w` and the
+ * `subtle` crate put on a mask, and it costs no instruction: the string is
+ * empty, the register is the same one.
+ *
+ * `readnone nounwind` is what clang writes on the same statement, and it is
+ * true of an empty string: it reads and writes no memory and cannot unwind.
+ * Leaving it off would make the call look like an unknown store to every pass,
+ * and the fixpoint already calls the enclosing function pure because the
+ * builtin reaches no runtime symbol. There is no `sideeffect`, because the
+ * barrier only has to hide a value, not to keep an unused one alive.
+ */
+const emitValueBarrier = (emitter: Emitter, ty: string, value: string): string =>
+  emitter.fn.emitValue(`call ${ty} asm "", "=r,0"(${ty} ${value}) readnone nounwind`)
+
+/**
+ * `ctSelect(mask, a, b)`: `(a & mask) | (b & ~mask)`, with the mask behind the
+ * barrier. The operands are evaluated left to right like any call's, and only
+ * then is the mask hidden, so nothing about how it was computed survives into
+ * the blend.
+ */
+const emitCtSelect = (emitter: Emitter, expr: Node): string => {
+  const args = expr.children[1].children
+  const ty = emitter.llvm(emitter.typeOf(expr))
+  const mask = emitter.emitExpression(args[0])
+  const a = emitter.emitExpression(args[1])
+  const b = emitter.emitExpression(args[2])
+  const hidden = emitValueBarrier(emitter, ty, mask)
+  const fromA = emitter.fn.emitValue(`and ${ty} ${a}, ${hidden}`)
+  const inverse = emitter.fn.emitValue(`xor ${ty} ${hidden}, -1`)
+  const fromB = emitter.fn.emitValue(`and ${ty} ${b}, ${inverse}`)
+  return emitter.fn.emitValue(`or ${ty} ${fromA}, ${fromB}`)
+}
+
+/**
+ * `ctEq(a, b)`: all-ones when the two are equal and zero otherwise, from the
+ * difference alone. `d | -d` has its top bit set exactly when `d` is not zero,
+ * so shifting that bit down and subtracting one gives the mask. LLVM may
+ * recognise the idiom as a compare and lower it to `sete` / `csetm`, which is a
+ * flag write and not a branch; the barrier on the answer is what stops it from
+ * then treating the mask as a boolean in the caller's code.
+ */
+const emitCtEq = (emitter: Emitter, expr: Node): string => {
+  const args = expr.children[1].children
+  const type = emitter.typeOf(expr)
+  const ty = emitter.llvm(type)
+  const a = emitter.emitExpression(args[0])
+  const b = emitter.emitExpression(args[1])
+  const diff = emitter.fn.emitValue(`xor ${ty} ${a}, ${b}`)
+  const negated = emitter.fn.emitValue(`sub ${ty} 0, ${diff}`)
+  const either = emitter.fn.emitValue(`or ${ty} ${diff}, ${negated}`)
+  const top = emitter.fn.emitValue(`lshr ${ty} ${either}, ${intBits(type) - 1}`)
+  const mask = emitter.fn.emitValue(`sub ${ty} ${top}, 1`)
+  return emitValueBarrier(emitter, ty, mask)
+}
+
 // ---- Process, files and the arena ------------------------------------------------------
 
 /** Every argument as an `i8*`, which is what the file and stream builtins take. */
@@ -561,6 +623,12 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "bitsToF64") {
     return emitter.fn.emitValue(`bitcast i64 ${emitter.emitExpression(firstArgument(expr))} to double`)
   }
+  if (name === "ctSelect") {
+    return emitCtSelect(emitter, expr)
+  }
+  if (name === "ctEq") {
+    return emitCtEq(emitter, expr)
+  }
   if (name === "parseInt") {
     const value = emitParseCall(emitter, emitter.emitExpression(firstArgument(expr)), 2)
     return callIntrinsic(emitter, SAT_I32, "i32", `double ${value}`)
@@ -801,7 +869,13 @@ export const identifierBuiltinCalleesNamed = (
     panicTailCallees(out)
     return out
   }
-  return out // f64ToBits / bitsToF64: one bitcast, no call
+  // Declared here rather than left to fall through, so the table says it:
+  // `f64ToBits` / `bitsToF64` are one bitcast, and `ctSelect` / `ctEq` are
+  // bitwise instructions and an empty asm (WP34 N6). None calls anything.
+  if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+    return out
+  }
+  return out
 }
 
 // ---- Namespace properties -----------------------------------------------------------------

@@ -14,7 +14,7 @@
 // builtin can compare against it. One field instead of a parent chain.
 
 import { CheckContext } from "./context"
-import { checkExpression } from "./expressions"
+import { checkExpression, literalOperand } from "./expressions"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
@@ -85,6 +85,8 @@ export const isBuiltinFunction = (name: string): boolean => {
   return (
     name === "f64ToBits" ||
     name === "bitsToF64" ||
+    name === "ctSelect" ||
+    name === "ctEq" ||
     name === "parseInt" ||
     name === "parseFloat" ||
     name === "Number" ||
@@ -149,6 +151,65 @@ const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: str
       `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`
     )
   }
+}
+
+/**
+ * `ctSelect(mask, a, b)` and `ctEq(a, b)` (WP34 N6): every operand one type,
+ * and that type `u32` or `u64`, which is also the answer.
+ *
+ * Only the two unsigned words, because a mask is a bit pattern: all-ones in a
+ * signed type reads as -1, and a mask narrower than a word is not what the
+ * limb arithmetic the crypto lanes write deals in. A bare numeric literal takes
+ * its type from the first operand that is not one, so `ctEq(x, 0)` and
+ * `ctSelect(m, a, 0)` read naturally whichever side the literal is on; what
+ * counts as the literal (`-1` and `(0)` do) is the operators' rule,
+ * `literalOperand`.
+ */
+const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
+  const arity = name === "ctSelect" ? 3 : 2
+  if (!checkBuiltinArity(ctx, call, name, args, arity)) {
+    return T_ERROR
+  }
+  let lead = 0
+  while (lead < arity - 1 && literalOperand(args.children[lead])) {
+    lead = lead + 1
+  }
+  const type = checkExpression(ctx, args.children[lead], scope, -1)
+  // The type is judged first, at the operand it was read from: a boolean mask
+  // is told the types the builtin takes rather than that it differs from `a`,
+  // and a literal is never measured against a type that was not admissible
+  // (`ctSelect(m, 0x80000000, 0)` on an `i32` mask is NL2399, not "does not
+  // fit in i32"). Every other operand is still checked, so an error inside
+  // one is reported too.
+  const admitted = type === T_U32 || type === T_U64
+  if (type !== T_ERROR && !admitted) {
+    ctx.error(
+      args.children[lead],
+      `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
+    )
+  }
+  let other = -1
+  let failed = !admitted
+  for (let i = 0; i < arity; i++) {
+    if (i !== lead && (admitted || !literalOperand(args.children[i]))) {
+      const got = checkExpression(ctx, args.children[i], scope, admitted ? type : -1)
+      if (got === T_ERROR) {
+        failed = true
+      } else if (admitted && got !== type && other < 0) {
+        other = got
+      }
+    }
+  }
+  if (failed) {
+    return T_ERROR
+  }
+  if (other >= 0) {
+    return ctx.errorType(
+      call,
+      `\`${name}\` needs every operand of one type, got ${ctx.table.typeName(type)} and ${ctx.table.typeName(other)}`
+    )
+  }
+  return type
 }
 
 // ---- Namespace properties -----------------------------------------------------------
@@ -439,6 +500,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[0], scope, name, from)
     }
     return name === "f64ToBits" ? T_I64 : T_F64
+  }
+  if (name === "ctSelect" || name === "ctEq") {
+    return checkConstantTime(ctx, call, scope, name, args)
   }
   if (name === "parseInt" || name === "parseFloat") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {

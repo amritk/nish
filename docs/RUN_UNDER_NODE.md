@@ -71,6 +71,12 @@ the same commit.
   not a directory); Node's answer is already absolute and normalised, which is
   what POSIX guarantees, so nothing has to normalise it
 - `toI32`, `toI64`, `toF32`, `toF64`, `toU8`…`toU64`, `f64ToBits`, `bitsToF64`
+- `ctSelect`, `ctEq` — the same bitwise answers, put back in range with
+  `>>> 0` over a `u32` (a `number`) and `BigInt.asUintN(64, …)` over a `u64` (a
+  BigInt). A `number` mixed with a BigInt throws a `TypeError`, as BigInt
+  arithmetic does. The answers agree with a native run; the timing does not,
+  and nothing here claims it
+  ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq))
 - `Ok`, `Err`
 - `parseInt`, `parseFloat` — Nish's, whose deviations from JavaScript are
   documented rules
