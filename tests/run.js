@@ -668,6 +668,41 @@ if (selectedCases.includes("io_nish_import") && selectedCases.includes("io_nish_
   )
 }
 
+// ---- A refused `const` is one diagnostic (#275) --------------------------------------
+// A `.err` is a substring match, so it cannot see a cascade after the line it
+// names. A `const` whose initializer is refused is declared as the error type,
+// and each case here uses one afterwards; the count is what says those uses
+// stayed silent rather than each reporting `Unknown identifier` or `Unknown function`.
+for (const name of [
+  "reject_const_refused_initializer",
+  "reject_rng_array_zero_fill",
+  "reject_arrow_as_value",
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  // A case renamed or deleted fails here rather than leaving the check empty.
+  const at = selectedCases.indexOf(name)
+  if (at < 0) {
+    check(
+      `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+      false,
+      "(no such case)"
+    )
+    continue
+  }
+  // The compile the case loop already ran: one summary line per error.
+  const r = caseResults[at]
+  const errors = String(r.stderr)
+    .split("\n")
+    .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+    r.status === 1 && errors.length === 1,
+    String(r.stderr)
+  )
+}
+
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
