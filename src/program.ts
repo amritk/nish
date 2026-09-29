@@ -845,20 +845,29 @@ export class AliasInfo {
 export class EnumInfo {
   name: string
   decl: Node
-  /** The module that declares it; an enum never leaves the one that wrote it. */
+  /**
+   * The module that declares it. An importer holds this same record under its
+   * own local name, so this is what tells a declaration from an import.
+   */
   origin: SourceFile
-  /** The distinct type id, shared by every annotation that names it. */
+  /** What `TypeTable.nameOf` answers for `type`: the name, or `Kind.2` for a second `Kind`. */
+  symbol: string
+  /** The distinct type id, shared by every annotation that names it, in every module. */
   type: i32
+  /** `export enum`: another module may import it. */
+  exported: boolean
   /** Member name -> index into `memberValues`; iteration order is declaration order. */
   members: StringMap
   memberNames: string[]
   memberValues: i32[]
 
-  constructor(name: string, decl: Node, origin: SourceFile, type: i32) {
+  constructor(name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean) {
     this.name = name
     this.decl = decl
     this.origin = origin
     this.type = type
+    this.symbol = symbol
+    this.exported = exported
     this.members = new StringMap()
     this.memberNames = []
     this.memberValues = []
@@ -1133,9 +1142,20 @@ export class CheckedProgram {
   savedNodeProvenClamp: boolean[]
   savedNodeProvenRange: boolean[]
   savedFusion: FusionTable
-  /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
+  /**
+   * Local name -> index into `enumList`, for the numeric `enum`s this module
+   * declares or imports (WP23).
+   */
   enums: StringMap
   enumList: EnumInfo[]
+  /**
+   * The imports that name an enum. They are bound before pass 1 rather than in
+   * pass 1b — an enum is a type with no layout, so a signature naming one has
+   * to find it, where a class can be resolved provisionally — and they leave
+   * `imports` when they are, because an enum declares no symbol for the
+   * emitter to declare and binds nothing pass 1b binds.
+   */
+  enumImports: ImportBinding[]
 
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null
@@ -1291,6 +1311,7 @@ export class CheckedProgram {
     this.savedFusion = this.fusion
     this.enums = new StringMap()
     this.enumList = []
+    this.enumImports = []
     this.entryMain = null
     this.parallelCalls = []
     this.spawnCalls = []
@@ -1586,14 +1607,52 @@ export class CheckedProgram {
     return table.isEnum(this.nodeTypes[node.id])
   }
 
-  /** The numeric `enum` called `name` in this module, or `null` (WP23). */
+  /**
+   * The numeric `enum` this module binds to `name`, declared or imported, or
+   * `null` (WP23). Once the program is checked the key is the symbol instead
+   * (`keyEnumsBySymbol`).
+   */
   enumNamed(name: string): EnumInfo | null {
     const at = this.enums.get(name, -1)
     return at < 0 ? null : this.enumList[at]
   }
 
+  /**
+   * The enum this module itself declares as `name`, or `null`: `origin` tells
+   * a declaration from an import, which binds the same record under a name.
+   */
+  ownEnum(name: string): EnumInfo | null {
+    const info = this.enumNamed(name)
+    return info !== null && info.origin === this.source ? info : null
+  }
+
+  /**
+   * Hand the emitter every enum of the program, keyed by its symbol.
+   *
+   * The emitter asks for an enum by what `TypeTable.nameOf` answers — the
+   * debug info names its members — and a type reaches a module without its
+   * name: `const k = pick()` holds a `Kind` this module never imported, and
+   * `import { Kind as K }` binds a name that is not the symbol. Keyed by local
+   * name, the first was an internal error under `-g` and the second would have
+   * been. It is done once every body is checked, because from then on no name
+   * is resolved: before it, keying by symbol would let a module spell an enum
+   * it never imported.
+   */
+  keyEnumsBySymbol(every: EnumInfo[]): void {
+    this.enums = new StringMap()
+    this.enumList = []
+    for (const info of every) {
+      this.addEnumAs(info.symbol, info)
+    }
+  }
+
   addEnum(info: EnumInfo): void {
-    this.enums.set(info.name, this.enumList.length)
+    this.addEnumAs(info.name, info)
+  }
+
+  /** An enum under `localName`: its own name when declared here, the import's when bound (`import { Kind as K }`). */
+  addEnumAs(localName: string, info: EnumInfo): void {
+    this.enums.set(localName, this.enumList.length)
     this.enumList.push(info)
   }
 
