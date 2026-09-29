@@ -50299,6 +50299,33 @@ function pair<(p, q) => ...>(f: void, n: string | null[]): i32 -> @pair$fn.13.sh
   pointer n: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 11:10 (p, q) => ... -> @shapes$arrow4
+program tests/parser/names-catch-array.ts
+module tests/parser/names-catch-array.ts (entry)
+function catch(xs: i32[]): i32 -> @catch
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: catch
+  stackSites=1 stackLocals=0
+  local 12:7 try: i32 (let)
+  callee 17:3 catch -> @catch
+program tests/parser/names-catch-object.ts
+module tests/parser/names-catch-object.ts (entry)
+struct Pair (interface) size=8 align=4
+  field first: i32 index=0 offset=0
+  field second: i32 index=1 offset=4
+function catch(p: Pair): i32 -> @catch
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer p: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: catch
+  stackSites=1 stackLocals=0
+  local 15:7 try: i32 (let)
+  callee 20:3 catch -> @catch
 program tests/parser/names.ts
 module tests/parser/names.ts (entry)
 function with(x: i32): i32 -> @with
@@ -50321,33 +50348,6 @@ function test(): i32 -> @test [exported]
   callee 31:3 with -> @with
   callee 42:3 finally -> @finally
   callee 47:3 catch -> @catch
-program tests/parser/names_catch_array.ts
-module tests/parser/names_catch_array.ts (entry)
-function catch(xs: i32[]): i32 -> @catch
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer xs: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function test(): i32 -> @test [exported]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: catch
-  stackSites=1 stackLocals=0
-  local 12:7 try: i32 (let)
-  callee 17:3 catch -> @catch
-program tests/parser/names_catch_object.ts
-module tests/parser/names_catch_object.ts (entry)
-struct Pair (interface) size=8 align=4
-  field first: i32 index=0 offset=0
-  field second: i32 index=1 offset=4
-function catch(p: Pair): i32 -> @catch
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer p: size=8 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function test(): i32 -> @test [exported]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: catch
-  stackSites=1 stackLocals=0
-  local 15:7 try: i32 (let)
-  callee 20:3 catch -> @catch
 reject tests/parser/nullish.ts: error: Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)
 reject tests/parser/precedence.ts: error: Operator `||` requires boolean operands, got i32 and i32
 program tests/parser/types.ts

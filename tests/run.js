@@ -7493,7 +7493,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // A literal argument is not a catch binding, so `catch([1, 2])` and
   // `catch({ first: 1, second: 2 })` after a `try`-named block stay calls;
   // each needs a `catch` of its own type, hence a file each.
-  for (const literal of ["names_catch_array", "names_catch_object"]) {
+  for (const literal of ["names-catch-array", "names-catch-object"]) {
     const literalLl = path.join(buildDir, `parser_${literal}.ll`)
     const literalRun = spawnSync(NISH, [`tests/parser/${literal}.ts`, "-o", literalLl], {
       cwd: root,
