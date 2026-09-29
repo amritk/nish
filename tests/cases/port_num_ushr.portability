@@ -1,0 +1,2 @@
+{"file":"tests/cases/port_num_ushr.ts","line":6,"column":21,"endLine":6,"endColumn":28,"severity":"portability","code":"NL8008","message":"this `>>>` on i32 reads back signed here, and unsigned in TypeScript"}
+{"file":"tests/cases/port_num_ushr.ts","line":8,"column":3,"endLine":8,"endColumn":11,"severity":"portability","code":"NL8008","message":"this `>>>=` on i32 reads back signed here, and unsigned in TypeScript"}
