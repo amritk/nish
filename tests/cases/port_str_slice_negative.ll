@@ -12,21 +12,20 @@ define internal noundef nonnull align 8 i8* @lastTwo(i8* noundef nonnull noalias
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
-  %2 = sub nsw i32 0, 2
-  %3 = sext i32 %2 to i64
-  %4 = icmp ule i64 %3, %1
-  br i1 %4, label %slice.ok, label %slice.fail
+  %2 = sext i32 -2 to i64
+  %3 = icmp ule i64 %2, %1
+  br i1 %3, label %slice.ok, label %slice.fail
 
 slice.fail:
-  call void @nish_panic_slice(i64 %3, i64 %1, i64 %1)
+  call void @nish_panic_slice(i64 %2, i64 %1, i64 %1)
   unreachable
 
 slice.ok:
-  %5 = sub i64 %1, %3
-  %6 = getelementptr inbounds i8, i8* %s, i64 8
-  %7 = getelementptr inbounds i8, i8* %6, i64 %3
-  %8 = call i8* @nish_str_new(i8* %7, i64 %5)
-  ret i8* %8
+  %4 = sub i64 %1, %2
+  %5 = getelementptr inbounds i8, i8* %s, i64 8
+  %6 = getelementptr inbounds i8, i8* %5, i64 %2
+  %7 = call i8* @nish_str_new(i8* %6, i64 %4)
+  ret i8* %7
 }
 
 define internal noundef nonnull align 8 i8* @window(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %from, i32 noundef %to) #0 {

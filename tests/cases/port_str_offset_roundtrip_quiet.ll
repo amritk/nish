@@ -93,9 +93,8 @@ define internal noundef zeroext i1 @hasArrow(i8* noundef nonnull noalias readonl
 entry:
   %0 = call i64 @nish_str_index_of(i8* %text, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
   %1 = trunc i64 %0 to i32
-  %2 = sub nsw i32 0, 1
-  %3 = icmp ne i32 %1, %2
-  ret i1 %3
+  %2 = icmp ne i32 %1, -1
+  ret i1 %2
 }
 
 define internal noundef nonnull align 8 i8* @tail(i8* noundef nonnull noalias readonly align 8 nocapture %text, i32 noundef %from) #0 {
