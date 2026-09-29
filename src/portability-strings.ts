@@ -22,7 +22,8 @@
 // `substring`, and warns about every bound it could not place.
 
 import { numericLiteralValue } from "./constants"
-import { unwrapParens } from "./emit-util"
+import { isIdentifierBuiltinCall } from "./emit-builtins"
+import { dottedName, isPushCall, unwrapParens } from "./emit-util"
 import { isAsciiText } from "./strings"
 import {
   FLAG_PREFIX,
@@ -45,7 +46,6 @@ import {
   Node,
 } from "./nodes"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { ROLE_FUNCTION } from "./program"
 import { Local } from "./symbols"
 import { isFloat, isNumeric, T_BOOL, T_STRING } from "./types"
 
@@ -78,9 +78,11 @@ const CODE_UNIT: i32 = 2
  * **NL8001**, exactly. A *source* is `s.length`, `s.indexOf(t)` or
  * `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) whose
  * receiver `s` has the type `string` — an array's `.length` is not one — and
- * whose receiver is not provably ASCII. A receiver is provably ASCII when it
- * is a string literal of bytes below 128, a module constant whose folded value
- * is one, or a `const` local of this body initialised with one of those.
+ * whose receiver is not provably ASCII (`isProvablyAscii`): a string literal
+ * of bytes below 128, a module constant whose folded value is one, a template,
+ * `+` or `?:` built only of ASCII parts and number or boolean holes, or a
+ * local declared in this body with an initialiser whose every written value
+ * is one of those, the local itself included (`s = s + "x"`).
  * From a source the value is followed outward through parentheses, `toI32` /
  * `toI64` / `toF64`, either arm of a `?:`, and arithmetic (`+ - * / %` and the
  * bitwise operators) with an operand that is not a literal; and into a local
@@ -101,7 +103,10 @@ const CODE_UNIT: i32 = 2
  *   string gives in both units (`s.length === 0`, `s.indexOf(t) < 0`,
  *   `=== -1`), or — for a code unit — 128 or more, the codes an ASCII byte
  *   never has (a literal below 128 names the same character in both units, and
- *   a byte of a longer UTF-8 sequence is never below it);
+ *   a byte of a longer UTF-8 sequence is never below it) — except `+ k` on the
+ *   offset an `indexOf` or `lastIndexOf` of a provably ASCII needle answers,
+ *   for `0 < k <= needle.length`, which steps inside the match and so lands
+ *   on the same character in both readings (`needleSpan`);
  * - as the right operand of a `-` whose left operand does not itself hold an
  *   offset: `width - s.length` is the room left in a column, and the column
  *   was not counted in bytes (it pads or aligns output — the language has no
@@ -128,14 +133,13 @@ export const stringFindings = (walk: PortabilityWalk, node: Node, out: Portabili
   if (kind === NOT_A_SOURCE || isProvablyAscii(walk, sourceReceiver(node), [])) {
     return
   }
-  const trail = new Trail(walk, `\`${walk.textOf(node)}\``, kind, needleSpan(walk, node), out)
-  followValue(trail, node, trail.source)
+  followValue(new Trail(walk, node, kind, needleSpan(walk, node), out), node, null)
 }
 
 // ---- NL8001 ----------------------------------------------------------------
 
 /**
- * One source being followed: the walk, how the message names the source, what
+ * One source being followed: the walk, the source node, what
  * kind of number it is, how many bytes of ASCII it is known to point at
  * (`needleSpan`), the locals it has already been followed into — so a
  * value that goes round a loop through `n = n + k` is followed once — and
@@ -143,13 +147,13 @@ export const stringFindings = (walk: PortabilityWalk, node: Node, out: Portabili
  */
 class Trail {
   walk: PortabilityWalk
-  source: string
+  source: Node
   kind: i32
   span: f64
   locals: Local[]
   out: PortabilityFinding[]
 
-  constructor(walk: PortabilityWalk, source: string, kind: i32, span: f64, out: PortabilityFinding[]) {
+  constructor(walk: PortabilityWalk, source: Node, kind: i32, span: f64, out: PortabilityFinding[]) {
     this.walk = walk
     this.source = source
     this.kind = kind
@@ -158,8 +162,15 @@ class Trail {
     this.out = out
   }
 
-  /** Report the value at `at`, which the message calls `quote`, as meeting an outside fact. */
-  report(at: Node, quote: string, reason: string): void {
+  /**
+   * Report the value at `at` as meeting an outside fact: the source itself, or
+   * a read of `holder`, the local it was followed into. The quote is built
+   * here, because most sources are never reported and the arena keeps every
+   * string it is asked for.
+   */
+  report(at: Node, holder: Local | null, reason: string): void {
+    const source = `\`${this.walk.textOf(this.source)}\``
+    const quote = holder === null ? source : `\`${holder.name}\`, which holds ${source},`
     this.out.push(new PortabilityFinding(at, `${quote} ${NL8001}, ${reason}`))
   }
 }
@@ -195,6 +206,10 @@ const sourceKind = (walk: PortabilityWalk, node: Node): i32 => {
  */
 const needleSpan = (walk: PortabilityWalk, source: Node): f64 => {
   if (source.kind !== N_CALL || source.children[1].children.length !== 1) {
+    return 0
+  }
+  const method = unwrapParens(source.children[0]).text
+  if (method !== "indexOf" && method !== "lastIndexOf") {
     return 0
   }
   const needle = asciiValue(walk, source.children[1].children[0])
@@ -245,9 +260,8 @@ const isProvablyAscii = (walk: PortabilityWalk, expr: Node, assumed: Local[]): b
   if (e.kind !== N_IDENT) {
     return false
   }
-  const constant = walk.program.nodeConstants[e.id]
-  if (constant !== null) {
-    return constant.type === T_STRING && constant.folded && isAsciiText(constant.textValue)
+  if (walk.program.nodeConstants[e.id] !== null) {
+    return asciiConstant(walk, e) !== null
   }
   const local = walk.program.nodeLocals[e.id]
   if (local === null) {
@@ -258,12 +272,11 @@ const isProvablyAscii = (walk: PortabilityWalk, expr: Node, assumed: Local[]): b
       return true
     }
   }
-  if (localDeclaration(walk, walk.body, local) === null) {
-    return false
-  }
   assumed.push(local)
   const writes: Node[] = []
-  writesOf(walk, walk.body, local, writes)
+  if (!writesOf(walk, walk.body, local, writes)) {
+    return false
+  }
   for (const write of writes) {
     if (!isProvablyAscii(walk, write, assumed)) {
       return false
@@ -273,13 +286,18 @@ const isProvablyAscii = (walk: PortabilityWalk, expr: Node, assumed: Local[]): b
 }
 
 /**
- * Every value written to `local` under `node`: its initialiser (`N_EMPTY` when
- * it has none) and the right of each `=`. A string takes no compound
- * assignment, so there is no other way to write one.
+ * Every value written to `local` under `node`, in source order: its
+ * initialiser (`N_EMPTY` when it has none) and the right of each `=`. A
+ * string takes no compound assignment, so there is no other way to write one,
+ * and a number's `+=` or `++` leaves an offset an offset. Answers whether the
+ * declaration was among them, which a parameter's is not: its first value
+ * comes from the caller.
  */
-const writesOf = (walk: PortabilityWalk, node: Node, local: Local, writes: Node[]): void => {
+const writesOf = (walk: PortabilityWalk, node: Node, local: Local, writes: Node[]): boolean => {
+  let declared = false
   if (node.kind === N_VAR_DECL && names(walk, node, local)) {
     writes.push(node.children[2])
+    declared = true
   } else if (node.kind === N_BINARY && node.text === "=") {
     const target = unwrapParens(node.children[0])
     if (target.kind === N_IDENT && names(walk, target, local)) {
@@ -287,61 +305,60 @@ const writesOf = (walk: PortabilityWalk, node: Node, local: Local, writes: Node[
     }
   }
   for (const child of node.children) {
-    writesOf(walk, child, local, writes)
+    if (writesOf(walk, child, local, writes)) {
+      declared = true
+    }
   }
+  return declared
+}
+
+/** The folded value of the module constant `ident` names, when it is a string of ASCII bytes. */
+const asciiConstant = (walk: PortabilityWalk, ident: Node): string | null => {
+  const constant = walk.program.nodeConstants[ident.id]
+  if (constant === null || constant.type !== T_STRING || !constant.folded) {
+    return null
+  }
+  return isAsciiText(constant.textValue) ? constant.textValue : null
 }
 
 /**
- * The value of `expr` when it is a string whose every byte is ASCII, read off
- * what the program says rather than what it may hold: a literal, a module
- * constant whose folded value is one, or a `const` local of this body whose
- * initialiser is one of those. `null` for every other expression.
+ * The value of `expr` when the program spells it out and every byte is ASCII:
+ * a literal, a module constant, or a `const` local of this body initialised
+ * with one of those. `null` for every other expression, including one
+ * `isProvablyAscii` accepts without knowing the exact text.
  */
 const asciiValue = (walk: PortabilityWalk, expr: Node): string | null => {
   const e = unwrapParens(expr)
-  let text: string | null = null
   if (e.kind === N_STRING) {
-    text = e.text
-  } else if (e.kind === N_IDENT) {
-    const constant = walk.program.nodeConstants[e.id]
-    const local = walk.program.nodeLocals[e.id]
-    if (constant !== null) {
-      text = constant.type === T_STRING && constant.folded ? constant.textValue : null
-    } else if (local !== null && !local.mutable) {
-      const decl = localDeclaration(walk, walk.body, local)
-      return decl === null ? null : asciiValue(walk, decl.children[2])
-    }
+    return isAsciiText(e.text) ? e.text : null
   }
-  return text !== null && isAsciiText(text) ? text : null
-}
-
-/** The `N_VAR_DECL` under `node` that declares `local`, or `null` for a parameter. */
-const localDeclaration = (walk: PortabilityWalk, node: Node, local: Local): Node | null => {
-  if (node.kind === N_VAR_DECL && names(walk, node, local)) {
-    return node
+  if (e.kind !== N_IDENT) {
+    return null
   }
-  for (const child of node.children) {
-    const found = localDeclaration(walk, child, local)
-    if (found !== null) {
-      return found
-    }
+  if (walk.program.nodeConstants[e.id] !== null) {
+    return asciiConstant(walk, e)
   }
-  return null
+  const local = walk.program.nodeLocals[e.id]
+  const writes: Node[] = []
+  if (local === null || local.mutable || !writesOf(walk, walk.body, local, writes)) {
+    return null
+  }
+  return asciiValue(walk, writes[0])
 }
 
 /**
- * Follow the value at `value`, which the message calls `quote`, outward until
- * it meets something, and report it there if that something is an outside
- * fact.
+ * Follow the value at `value` — the source, or a read of `holder` — outward
+ * until it meets something, and report it there if that something is an
+ * outside fact.
  */
-const followValue = (trail: Trail, value: Node, quote: string): void => {
+const followValue = (trail: Trail, value: Node, holder: Local | null): void => {
   const walk = trail.walk
   let at = value
   while (true) {
     if (at === walk.body) {
       // A concise arrow body is its function's answer.
       if (isEntryMain(walk)) {
-        trail.report(value, quote, "and `main` returns it as the exit code")
+        trail.report(value, holder, "and `main` returns it as the exit code")
       }
       return
     }
@@ -358,49 +375,42 @@ const followValue = (trail: Trail, value: Node, quote: string): void => {
         return
       }
       if (!isConversion(walk, call)) {
-        followIntoCall(trail, call, value, quote)
+        followIntoCall(trail, call, value, holder)
         return
       }
       at = call
     } else if (parent.kind === N_BINARY) {
-      if (!followThroughBinary(trail, parent, at, value, quote)) {
+      if (!followThroughBinary(trail, parent, at, value, holder)) {
         return
       }
       at = parent
     } else {
-      followIntoPlace(trail, parent, at, value, quote)
+      followIntoPlace(trail, parent, at, value, holder)
       return
     }
   }
 }
 
 /** A value handed to a call: printed by `console`, pushed on to an array, or neither. */
-const followIntoCall = (trail: Trail, call: Node, value: Node, quote: string): void => {
+const followIntoCall = (trail: Trail, call: Node, value: Node, holder: Local | null): void => {
   const walk = trail.walk
   const callee = unwrapParens(call.children[0])
   if (callee.kind !== N_MEMBER) {
     return
   }
-  const receiver = unwrapParens(callee.children[0])
-  if (isBuiltin(walk, call) && receiver.kind === N_IDENT && receiver.text === "console") {
-    trail.report(value, quote, "and it is printed")
-  } else if (callee.text === "push" && walk.table.isArray(walk.program.nodeTypes[receiver.id])) {
-    trail.report(value, quote, "and it is stored in an array")
+  const name = dottedName(callee)
+  if ((name === "console.log" || name === "console.error") && walk.program.nodeCallees[call.id] === null) {
+    trail.report(value, holder, "and it is printed")
+  } else if (isPushCall(walk.program, walk.table, call)) {
+    trail.report(value, holder, "and it is stored in an array")
   }
 }
 
-/** Whether `call` is a builtin the checker resolved, not a user function or an import renaming one. */
-const isBuiltin = (walk: PortabilityWalk, call: Node): boolean =>
-  walk.program.nodeCallees[call.id] === null && walk.program.nodeBuiltins[call.id] === ""
-
 /** `toI32(x)`, `toI64(x)` or `toF64(x)`: the same count in another type. */
 const isConversion = (walk: PortabilityWalk, call: Node): boolean => {
-  const callee = call.children[0]
+  const name = call.children[0].text
   return (
-    callee.kind === N_IDENT &&
-    (callee.text === "toI32" || callee.text === "toI64" || callee.text === "toF64") &&
-    call.children[1].children.length === 1 &&
-    isBuiltin(walk, call)
+    isIdentifierBuiltinCall(walk.program, call) && (name === "toI32" || name === "toI64" || name === "toF64")
   )
 }
 
@@ -410,14 +420,20 @@ const isConversion = (walk: PortabilityWalk, call: Node): boolean => {
  * anything but a literal, and stops at a comparison, an assignment and a
  * logical operator, reporting what it met there.
  */
-const followThroughBinary = (trail: Trail, binary: Node, at: Node, value: Node, quote: string): boolean => {
+const followThroughBinary = (
+  trail: Trail,
+  binary: Node,
+  at: Node,
+  value: Node,
+  holder: Local | null
+): boolean => {
   const walk = trail.walk
   const op = binary.text
   const isLeft = at === binary.children[0]
   const other = isLeft ? binary.children[1] : binary.children[0]
   if (op === "=") {
     if (!isLeft) {
-      storeInto(trail, binary.children[0], value, quote)
+      storeInto(trail, binary.children[0], value, holder)
     }
     return false
   }
@@ -430,7 +446,7 @@ const followThroughBinary = (trail: Trail, binary: Node, at: Node, value: Node, 
       const verb = isComparison(op) ? "compared with" : "combined with"
       trail.report(
         value,
-        quote,
+        holder,
         `and it is ${verb} \`${walk.textOf(other)}\`, which was not counted in that unit`
       )
     }
@@ -439,37 +455,37 @@ const followThroughBinary = (trail: Trail, binary: Node, at: Node, value: Node, 
   if (isComparison(op)) {
     return false
   }
-  if (op === "-" && !isLeft && trail.kind === OFFSET && !holdsOffset(walk, other)) {
-    trail.report(value, quote, `and it is taken from \`${walk.textOf(other)}\` to pad or align the output`)
+  if (op === "-" && !isLeft && trail.kind === OFFSET && !holdsOffset(walk, other, true)) {
+    trail.report(value, holder, `and it is taken from \`${walk.textOf(other)}\` to pad or align the output`)
     return false
   }
   return true
 }
 
 /** `value` is stored at `target`: a field or an element is outside, a local is followed. */
-const storeInto = (trail: Trail, target: Node, value: Node, quote: string): void => {
+const storeInto = (trail: Trail, target: Node, value: Node, holder: Local | null): void => {
   const place = unwrapParens(target)
   if (place.kind === N_MEMBER) {
-    trail.report(value, quote, "and it is stored in a field")
+    trail.report(value, holder, "and it is stored in a field")
   } else if (place.kind === N_IDENT) {
     followLocal(trail, trail.walk.program.nodeLocals[place.id])
   } else {
-    trail.report(value, quote, "and it is stored in an array")
+    trail.report(value, holder, "and it is stored in an array")
   }
 }
 
 /** The value has reached a node that is not an expression it flows through. */
-const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, quote: string): void => {
+const followIntoPlace = (trail: Trail, parent: Node, at: Node, value: Node, holder: Local | null): void => {
   if (parent.kind === N_TEMPLATE) {
-    trail.report(value, quote, "and it is printed into a template")
+    trail.report(value, holder, "and it is printed into a template")
   } else if (parent.kind === N_RETURN) {
     if (isEntryMain(trail.walk)) {
-      trail.report(value, quote, "and `main` returns it as the exit code")
+      trail.report(value, holder, "and `main` returns it as the exit code")
     }
   } else if (parent.kind === N_ARRAY) {
-    trail.report(value, quote, "and it is stored in an array")
+    trail.report(value, holder, "and it is stored in an array")
   } else if (parent.kind === N_PROPERTY) {
-    trail.report(value, quote, "and it is stored in a field")
+    trail.report(value, holder, "and it is stored in a field")
   } else if (parent.kind === N_VAR_DECL && at === parent.children[2]) {
     followLocal(trail, trail.walk.program.nodeLocals[parent.id])
   }
@@ -493,7 +509,7 @@ const followLocal = (trail: Trail, local: Local | null): void => {
   const reads: Node[] = []
   readsOf(trail.walk, trail.walk.body, local, reads)
   for (const read of reads) {
-    followValue(trail, read, `\`${local.name}\`, which holds ${trail.source},`)
+    followValue(trail, read, local)
   }
 }
 
@@ -517,51 +533,32 @@ const readsOf = (walk: PortabilityWalk, node: Node, local: Local, reads: Node[])
   }
 }
 
-/** Whether `expr` holds an offset itself, so that subtracting one from it is a distance, not a column. */
-const holdsOffset = (walk: PortabilityWalk, expr: Node): boolean => {
+/**
+ * Whether `expr` holds an offset itself, so that subtracting one from it is a
+ * distance, not a column: a source, arithmetic on one, or — when
+ * `throughLocals` — a local some write gives such a value. A local the
+ * program only fills from elsewhere is the outside fact itself. One level of
+ * locals is enough to tell `end - s.length` from `width - s.length`, and
+ * stopping there is what keeps the question from going round a cycle.
+ */
+const holdsOffset = (walk: PortabilityWalk, expr: Node, throughLocals: boolean): boolean => {
   const e = unwrapParens(expr)
   if (sourceKind(walk, e) === OFFSET) {
     return true
   }
   if (e.kind === N_BINARY && isArithmetic(e.text)) {
-    return holdsOffset(walk, e.children[0]) || holdsOffset(walk, e.children[1])
+    return holdsOffset(walk, e.children[0], throughLocals) || holdsOffset(walk, e.children[1], throughLocals)
   }
-  if (e.kind !== N_IDENT) {
+  const local: Local | null = e.kind === N_IDENT && throughLocals ? walk.program.nodeLocals[e.id] : null
+  if (local === null) {
     return false
   }
-  // A local counts when it is ever given a value that holds one; a local the
-  // program only ever fills from elsewhere is the outside fact itself.
-  const local = walk.program.nodeLocals[e.id]
-  return local !== null && isGivenOffset(walk, walk.body, local)
-}
-
-/** Whether some declaration or plain `=` under `node` gives `local` a value holding an offset. */
-const isGivenOffset = (walk: PortabilityWalk, node: Node, local: Local): boolean => {
-  if (node.kind === N_VAR_DECL && names(walk, node, local)) {
-    return holdsSourceDirectly(walk, node.children[2])
-  }
-  if (node.kind === N_BINARY && node.text === "=") {
-    const target = unwrapParens(node.children[0])
-    if (target.kind === N_IDENT && names(walk, target, local)) {
-      return holdsSourceDirectly(walk, node.children[1])
-    }
-  }
-  for (const child of node.children) {
-    if (isGivenOffset(walk, child, local)) {
+  const writes: Node[] = []
+  writesOf(walk, walk.body, local, writes)
+  for (const write of writes) {
+    if (holdsOffset(walk, write, false)) {
       return true
     }
-  }
-  return false
-}
-
-/** `holdsOffset` without looking through a local, which is what keeps it from going round a cycle. */
-const holdsSourceDirectly = (walk: PortabilityWalk, expr: Node): boolean => {
-  const e = unwrapParens(expr)
-  if (sourceKind(walk, e) === OFFSET) {
-    return true
-  }
-  if (e.kind === N_BINARY && isArithmetic(e.text)) {
-    return holdsSourceDirectly(walk, e.children[0]) || holdsSourceDirectly(walk, e.children[1])
   }
   return false
 }
@@ -623,13 +620,11 @@ const numberValue = (walk: PortabilityWalk, expr: Node): f64 => {
   return isFloat(constant.type) ? constant.floatValue : toF64(constant.intValue)
 }
 
-/** Whether the function being walked is the program's entry, `export const main`. */
-const isEntryMain = (walk: PortabilityWalk): boolean =>
-  walk.program.isEntry &&
-  walk.sig.exported &&
-  walk.sig.role === ROLE_FUNCTION &&
-  walk.sig.owner === null &&
-  walk.sig.sourceName === "main"
+/** Whether the function being walked is the program's entry, `export const main`, as the checker marked it. */
+const isEntryMain = (walk: PortabilityWalk): boolean => {
+  const main = walk.program.entryMain
+  return main !== null && main === walk.sig
+}
 
 // ---- NL8002 ----------------------------------------------------------------
 
@@ -639,37 +634,45 @@ const sliceFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
     return
   }
   const callee = unwrapParens(node.children[0])
-  const bounds = node.children[1].children
   if (callee.kind !== N_MEMBER || callee.text !== "slice" || !isString(walk, callee.children[0])) {
     return
   }
-  const call = `\`${walk.textOf(node)}\` ${NL8002}`
-  const receiver = walk.textOf(callee.children[0])
-  for (const bound of bounds) {
-    const text = walk.textOf(bound)
-    if (isNumberLiteral(walk, bound) && numberValue(walk, bound) < 0) {
-      // `-2` is `s.length - 2`; a constant that folds negative is added as it is.
-      const literal = unwrapParens(bound)
-      const spelled =
-        literal.kind === N_UNARY && literal.text === "-"
-          ? `${receiver}.length - ${walk.textOf(literal.children[0])}`
-          : `${receiver}.length + ${text}`
-      out.push(
-        new PortabilityFinding(
-          node,
-          `${call}; TypeScript counts \`${text}\` from the end, which \`${spelled}\` spells in both`
-        )
-      )
-      return
-    }
-    if (!walk.program.nodeProvenClamp[bound.id]) {
-      out.push(
-        new PortabilityFinding(
-          node,
-          `${call}: \`${text}\` is not proven inside \`[0, length]\`, and \`substring\` clamps in both`
-        )
-      )
-      return
+  // The first bound TypeScript would treat differently, found before any
+  // message text is built so that the search allocates nothing.
+  let found: Node | null = null
+  let negative = false
+  for (const bound of node.children[1].children) {
+    negative = isNumberLiteral(walk, bound) && numberValue(walk, bound) < 0
+    if (negative || !walk.program.nodeProvenClamp[bound.id]) {
+      found = bound
+      break
     }
   }
+  if (found === null) {
+    return
+  }
+  const call = `\`${walk.textOf(node)}\` ${NL8002}`
+  const text = walk.textOf(found)
+  if (!negative) {
+    out.push(
+      new PortabilityFinding(
+        node,
+        `${call}: \`${text}\` is not proven inside \`[0, length]\`, and \`substring\` clamps in both`
+      )
+    )
+    return
+  }
+  // `-2` is `s.length - 2`; a constant that folds negative is added as it is.
+  const receiver = walk.textOf(callee.children[0])
+  const literal = unwrapParens(found)
+  const spelled =
+    literal.kind === N_UNARY && literal.text === "-"
+      ? `${receiver}.length - ${walk.textOf(literal.children[0])}`
+      : `${receiver}.length + ${text}`
+  out.push(
+    new PortabilityFinding(
+      node,
+      `${call}; TypeScript counts \`${text}\` from the end, which \`${spelled}\` spells in both`
+    )
+  )
 }

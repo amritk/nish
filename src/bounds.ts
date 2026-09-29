@@ -16,12 +16,12 @@
 // once the two are swapped into order — and that clamp is the semantics rather
 // than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
 // analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
-// clamp is dead code: `program.nodeProvenClamp` says which bounds those are
-// and `src/emit-strings.ts` writes them through. The two bounds of a
-// `s.slice(a, b)` are judged by the same proof and land in the same table,
-// though nothing emitted reads them there: `slice` checks rather than clamps,
-// and what the verdict answers is the WP33 portability question of whether
-// TypeScript's clamp could have moved the bound (`src/portability-strings.ts`).
+// clamp is dead code. `program.nodeProvenClamp` holds exactly that verdict,
+// a bound of a string range call proven inside `[0, s.length]`, for the
+// bounds of `substring` and of `slice` alike (`isStringRangeCall`), and
+// `src/emit-strings.ts` writes a `substring` bound through where it holds.
+// `slice` checks rather than clamps, so nothing emitted reads its verdicts;
+// the WP33 portability pass does (`src/portability-strings.ts`, NL8002).
 //
 // A third question is a range entry (WP31 §8, docs/wp31-ranged-integers.md).
 // A value entering an `integer<Lo, Hi>` is compared once where it enters, and
@@ -1798,23 +1798,20 @@ const judge = (
  * is the arity the checker accepts; a third is already an error and is never
  * judged here.
  */
-const isSubstringCall = (ctx: CheckContext, call: Node): boolean => isStringRangeCall(ctx, call, "substring")
+const isSubstringCall = (ctx: CheckContext, call: Node): boolean =>
+  isStringRangeCall(ctx, call) && unwrapBoundsParens(call.children[0]).text === "substring"
+
+/** `substring` or `slice`: the string methods that take a range of offsets. */
+const isStringRangeMethod = (name: string): boolean => name === "substring" || name === "slice"
 
 /**
- * `s.slice(a)` / `s.slice(a, b)` on a string receiver. Its bounds are checked
- * rather than clamped, and nothing the emitter writes reads a verdict on them:
- * `emitSlice` keeps its two compares whatever this file proves. The verdict
- * is recorded all the same, in `nodeProvenClamp` beside `substring`'s, because
- * it is the answer the WP33 portability pass needs — a bound proven inside
- * `[0, s.length]` is one where TypeScript's clamp would not have moved it
- * either (`src/portability-strings.ts`, NL8002).
+ * `s.substring(...)` or `s.slice(...)` on a string receiver, with the one or
+ * two bounds the checker accepts: the calls whose bounds are judged into
+ * `nodeProvenClamp` (see the header for who reads which).
  */
-const isSliceCall = (ctx: CheckContext, call: Node): boolean => isStringRangeCall(ctx, call, "slice")
-
-/** A call of the string method `name` with the one or two bounds the checker accepts. */
-const isStringRangeCall = (ctx: CheckContext, call: Node, name: string): boolean => {
+const isStringRangeCall = (ctx: CheckContext, call: Node): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || callee.text !== name) {
+  if (callee.kind !== N_MEMBER || !isStringRangeMethod(callee.text)) {
     return false
   }
   const count = call.children[1].children.length
@@ -2068,11 +2065,11 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     // may reach back. The receiver's length is read before either, so the
     // holder is dropped the moment an argument rebinds it — a literal `0`
     // still folds after that, because no string has a negative length.
-    // `slice` is judged the same way, for the record only (`isSliceCall`):
-    // `emitSlice` also reads the length first and each bound in order.
-    const clamped = isSubstringCall(ctx, e) || isSliceCall(ctx, e)
+    // `emitSlice` reads the length and the bounds in the same order, so a
+    // `slice` is judged the same way.
+    const rangeCall = isStringRangeCall(ctx, e)
     let holder: Local | null = null
-    if (clamped) {
+    if (rangeCall) {
       holder = lengthHolder(ctx, callee.children[0])
     }
     const target = ctx.program.nodeCallees[e.id]
@@ -2080,7 +2077,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     for (const arg of e.children[1].children) {
       walkArgument(walk, state, arg, target, at)
       at = at + 1
-      if (clamped) {
+      if (rangeCall) {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null
         }
@@ -3056,8 +3053,7 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
  * Whether `node` holds anything `judge`, `judgeClampBound` or `judgeRange` is
  * ever called on: an element access, a call spelled `.charCodeAt(...)`,
  * `.substring(...)` or `.slice(...)` whatever its receiver, or a value
- * entering a range. Read
- * off the syntax and the entries the checker recorded, so it answers `true`
+ * entering a range. Read off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
  */
 const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
@@ -3066,10 +3062,7 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   }
   if (node.kind === N_CALL) {
     const callee = unwrapBoundsParens(node.children[0])
-    if (
-      callee.kind === N_MEMBER &&
-      (callee.text === "charCodeAt" || callee.text === "substring" || callee.text === "slice")
-    ) {
+    if (callee.kind === N_MEMBER && (callee.text === "charCodeAt" || isStringRangeMethod(callee.text))) {
       return true
     }
   }
