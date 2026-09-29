@@ -333,15 +333,18 @@ ignores unknown fields is unaffected, but the shape is part of the contract
 
 A warning at every class-C site in the program, with `--json` and a code in a
 new band, off by default and on under `--compat` and `--emit ts`, and
-`--warn-portability` until they exist:
+`--warn-portability` until they exist. It prints in the shape every
+diagnostic has, the summary line and the excerpt, with `portability` as the
+kind ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)):
 
 ```
-warning[NL8001]: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
-  --> src/table.ts:41:18
-   = it is flagged because it pads a printed column, where the unit shows
-   = the two agree when `name` is ASCII
-   = your TypeScript tests do not check this line's meaning
+src/table.ts:41:18: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
+  41 |   const width = name.length;
+     |                 ^~~~~~~~~~~
 ```
+
+Under `--json` it is one object with `"severity":"portability"` and its NL8xxx
+`code`.
 
 It is the map both directions need. On the way in, it lists exactly where "the
 tests still pass" stops being evidence, which is what an agent should look at
