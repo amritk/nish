@@ -1287,18 +1287,9 @@ export class Checker {
   }
 }
 
-/**
- * The enum `target` itself declares as `name`, or `null`. `origin` tells a
- * declaration from the target's own import, as it does for a class: an enum is
- * not re-exported by a module that imported it.
- */
-const declaredEnum = (target: CheckedProgram | null, name: string): EnumInfo | null => {
-  if (target === null) {
-    return null
-  }
-  const info = target.enumNamed(name)
-  return info !== null && info.origin === target.source ? info : null
-}
+/** The enum `target` itself declares as `name`, or `null`: a module does not re-export one it imported. */
+const declaredEnum = (target: CheckedProgram | null, name: string): EnumInfo | null =>
+  target === null ? null : target.ownEnum(name)
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
 // A lifted arrow (WP29) has no name to point at, so the arrow itself is the span.

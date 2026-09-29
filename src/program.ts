@@ -1618,6 +1618,15 @@ export class CheckedProgram {
   }
 
   /**
+   * The enum this module itself declares as `name`, or `null`: `origin` tells
+   * a declaration from an import, which binds the same record under a name.
+   */
+  ownEnum(name: string): EnumInfo | null {
+    const info = this.enumNamed(name)
+    return info !== null && info.origin === this.source ? info : null
+  }
+
+  /**
    * Hand the emitter every enum of the program, keyed by its symbol.
    *
    * The emitter asks for an enum by what `TypeTable.nameOf` answers — the

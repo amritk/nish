@@ -370,7 +370,7 @@ export class TypeTable {
       n = n + 1
     }
     const id = this.enumOf(symbol)
-    this.displays[id] = name
+    this.setDisplayName(id, name)
     return id
   }
 

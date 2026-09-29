@@ -472,6 +472,11 @@ export class Compilation {
       }
       i = i + 1
     }
+    // A load that reported nothing has nothing to drop or reorder, and every
+    // parse or Phase 0 failure reports, so `discovered` is already the answer.
+    if (this.sink.count() === firstDiagnostic) {
+      return discovered
+    }
     return this.settleLoad(first, firstDiagnostic, filesBefore)
   }
 
@@ -1069,6 +1074,9 @@ export class Compilation {
           every.push(info)
         }
       }
+    }
+    if (every.length === 0) {
+      return
     }
     for (const unit of this.modules) {
       unit.checker.program.keyEnumsBySymbol(every)
@@ -1690,8 +1698,8 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
   if (alias !== null) {
     return alias.decl.children[0]
   }
-  const declared = program.enumNamed(name)
-  return declared !== null && declared.origin === program.source ? declared.decl.children[0] : null
+  const declared = program.ownEnum(name)
+  return declared === null ? null : declared.decl.children[0]
 }
 
 /**
