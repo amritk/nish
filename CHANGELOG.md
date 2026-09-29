@@ -26,6 +26,54 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-29
+
+### Breaking changes
+
+- checker: Refuse forbidden statements by their rule, not NL0001 ([#292](https://github.com/amritk/nish/pull/292))
+
+### Added
+
+- checker: Export an enum and import it into another module ([#296](https://github.com/amritk/nish/pull/296))
+- std: X25519 in nish/crypto/x25519 ([#289](https://github.com/amritk/nish/pull/289))
+- std: SHA-384 and SHA-512 in nish/crypto/sha512 ([#291](https://github.com/amritk/nish/pull/291))
+- std: A constant-time compare and base64url in nish/crypto ([#294](https://github.com/amritk/nish/pull/294))
+- std: SHA-256 in nish/crypto/sha256 ([#288](https://github.com/amritk/nish/pull/288))
+- checker: The portability diagnostic class, NL8xxx, behind --warn-portability ([#293](https://github.com/amritk/nish/pull/293))
+- std: HMAC and HKDF over SHA-256 and SHA-384 in nish/crypto ([#298](https://github.com/amritk/nish/pull/298))
+- checker: Portability warnings for integer and libm divergences ([#301](https://github.com/amritk/nish/pull/301))
+- checker: Export a type alias and import it into another module ([#300](https://github.com/amritk/nish/pull/300))
+- checker: Portability warnings for record copies into arrays and stores over a live element ([#302](https://github.com/amritk/nish/pull/302))
+- checker: Portability warnings where UTF-8 string offsets meet an outside fact ([#304](https://github.com/amritk/nish/pull/304))
+- checker: Byte plumbing — u8[] set and fill, readFileBytesSync (WP34 N2) ([#295](https://github.com/amritk/nish/pull/295))
+- codegen: Constant-time ctSelect and ctEq behind an optimisation barrier (WP34 N6) ([#310](https://github.com/amritk/nish/pull/310))
+- checker: Refuse forbidden expressions by their rule, not NL0001 ([#311](https://github.com/amritk/nish/pull/311))
+- checker: Refuse forbidden declarations by their rule, not NL0001 ([#313](https://github.com/amritk/nish/pull/313))
+- checker: Refuse forbidden function and binding forms by their rule, not NL0001 ([#314](https://github.com/amritk/nish/pull/314))
+- runtime: Date.now, crypto.getRandomValues, statMtimeSync and a signal descriptor (WP34 N3) ([#312](https://github.com/amritk/nish/pull/312))
+- checker: Refuse forbidden class, interface and enum forms by their rule, not NL0001 ([#315](https://github.com/amritk/nish/pull/315))
+
+### Fixed
+
+- checker: A refused const reports once, not at every later use ([#290](https://github.com/amritk/nish/pull/290))
+- codegen: Fold a negated integer literal into its constant ([#297](https://github.com/amritk/nish/pull/297))
+
+### Documentation
+
+- Make the RUN_UNDER_NODE command call main ([#285](https://github.com/amritk/nish/pull/285))
+- std: Document nish/crypto and list it where the library is listed ([#299](https://github.com/amritk/nish/pull/299))
+- Agent guidelines for runtime units, self-golden conflicts and reviews ([#318](https://github.com/amritk/nish/pull/318))
+
+### Tests
+
+- checker: Pin the T | null twins of the keeps-proof refusals ([#286](https://github.com/amritk/nish/pull/286))
+- std: Hold modules in std/ subdirectories to the same gates as top-level ones ([#287](https://github.com/amritk/nish/pull/287))
+
+### Build
+
+- Regenerate package-lock.json for v0.13.0 ([#284](https://github.com/amritk/nish/pull/284))
+
+
 ## [0.13.0] - 2026-09-28
 
 ### Breaking changes
@@ -513,3 +561,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.11.0]: https://github.com/amritk/nish/releases/tag/v0.11.0
 [0.12.0]: https://github.com/amritk/nish/releases/tag/v0.12.0
 [0.13.0]: https://github.com/amritk/nish/releases/tag/v0.13.0
+[0.14.0]: https://github.com/amritk/nish/releases/tag/v0.14.0
