@@ -108,6 +108,9 @@ export class RuntimeFunction {
 
 const STR_NOCAP: string = "i8* noundef nonnull readonly align 8 nocapture"
 
+/** A `u8[]` header a `nish:net` call reads `len` and `data` from and keeps nothing of. */
+const NET_BUFFER: string = "%struct.nish_array* noundef nonnull align 8 nocapture"
+
 const attrs1 = (a: string): string[] => {
   const out: string[] = []
   out.push(a)
@@ -497,6 +500,72 @@ export class RuntimeTable {
       new RuntimeFunction(
         "nish_read_signal",
         "declare noundef i32 @nish_read_signal(i32 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // WP34 N5, runtime/runtime-net.c, `nish:net`. Every one is a write: each
+    // changes the kernel's state of a socket, which is not memory LLVM
+    // tracks, so two calls must never fold into one, and the ones handed a
+    // `u8[]` write or read its bytes. Each keeps nothing of an argument, so
+    // every pointer is `nocapture`. `willreturn` goes only where no call can
+    // wait: `netAddress` makes no system call, and `getsockname`, `socket`,
+    // `bind`, `listen` and `shutdown` never block. `accept`, `recv` and
+    // `send` block on a blocking socket, which a descriptor the program
+    // inherited can be, and `close` can linger on one, so those four get
+    // `nounwind` alone. A written array loses `readonly`; `netWrite`'s keeps it.
+    this.add(
+      plain(
+        "nish_net_address",
+        `declare noundef i32 @nish_net_address(${NET_BUFFER}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain("nish_net_local_port", "declare noundef i32 @nish_net_local_port(i32 noundef)", EFFECT_WRITE)
+    )
+    this.add(
+      plain(
+        "nish_tcp_listen",
+        `declare noundef i32 @nish_tcp_listen(${STR_NOCAP}, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_tcp_accept",
+        `declare noundef i32 @nish_tcp_accept(i32 noundef, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_net_read",
+        `declare noundef i32 @nish_net_read(i32 noundef, ${NET_BUFFER}, i64 noundef, i64 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_net_write",
+        `declare noundef i32 @nish_net_write(i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_net_shutdown",
+        "declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_net_close",
+        "declare noundef i32 @nish_net_close(i32 noundef)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )

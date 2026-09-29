@@ -29,6 +29,7 @@
  */
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
+import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -78,10 +79,10 @@ fs.mkdirSync(buildDir, { recursive: true })
 /**
  * The C runtime's translation units, as a direct `clang` line has to spell
  * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
- * system calls, `runtime-parallel.c` divides work across threads and
- * `runtime-host.c` holds the wall clock, entropy, file times and signals, split
- * apart so that each carries its own `.text*` budget (the `*_TEXT_BUDGET`
- * constants below).
+ * system calls, `runtime-parallel.c` divides work across threads,
+ * `runtime-host.c` holds the wall clock, entropy, file times and signals and
+ * `runtime-net.c` the sockets of `nish:net`, split apart so that each carries
+ * its own `.text*` budget (the `*_TEXT_BUDGET` constants below).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -94,6 +95,7 @@ const RUNTIME_C = [
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
   "runtime/runtime-host.c",
+  "runtime/runtime-net.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -649,6 +651,50 @@ for (const [at, name] of selectedCases.entries()) {
   }
 }
 
+// ---- Programs the world answers, built and run by the blocks below -----------------
+
+/**
+ * A `tests/cases/` program with a `main`, compiled into `dir` and linked against
+ * the runtime objects this run already built (`linkNative`), rather than with
+ * `--link`, which would build the runtime from source again for every case.
+ * Answers the executable, or null once the failed link is a counted check.
+ */
+const buildCaseIn = (dir, name) => {
+  const exe = path.join(dir, name)
+  const ll = path.join(dir, `${name}.ll`)
+  const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", ll], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const cc = r.status === 0 ? linkNative(exe, ll, { libm: true }) : r
+  return check(`${name}: links`, cc.status === 0, String(cc.stderr)) ? exe : null
+}
+
+/**
+ * The same case's source run under `runtime/nish.mjs`. Under `node -e` the extra
+ * arguments start at `process.argv[1]`, and the prelude's `process.argv` drops
+ * index 0, so the case's name stands where the program path stands natively and
+ * the arguments after it line up.
+ */
+const runCaseUnderPrelude = (name, args) =>
+  spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(path.join(casesDir, `${name}.ts`))}); process.exit(m.main());`,
+      name,
+      ...args,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+
+/** A spawned run's status and both streams, for a failed check's message. */
+const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
+
 // ---- The host builtins, against the clock, the kernel and Node (WP34 N3) ----------
 //
 // What a golden cannot say about `Date.now`, `crypto.getRandomValues`,
@@ -661,50 +707,17 @@ if (!only || "os_host".includes(only)) {
   const osDir = path.join(buildDir, "os")
   fs.rmSync(osDir, { recursive: true, force: true })
   fs.mkdirSync(osDir, { recursive: true })
-  const prelude = path.join(root, "runtime", "nish.mjs")
-  // Compiled here and linked against the runtime objects this run already
-  // built (`linkNative`), rather than with `--link`, which would build the
-  // runtime from source again for every case.
-  const osBuild = (name) => {
-    const exe = path.join(osDir, name)
-    const ll = path.join(osDir, `${name}.ll`)
-    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", ll], {
-      cwd: root,
-      encoding: "utf8",
-    })
-    const cc = r.status === 0 ? linkNative(exe, ll, { libm: true }) : r
-    return check(`${name}: links`, cc.status === 0, String(cc.stderr)) ? exe : null
-  }
-  // Under `node -e` the extra arguments start at `process.argv[1]`, and the
-  // prelude's `process.argv` drops index 0, so the case's name stands where the
-  // program path stands natively and the arguments after it line up.
-  const osNode = (name, args) =>
-    spawnSync(
-      "node",
-      [
-        "--experimental-strip-types",
-        "--no-warnings",
-        "--import",
-        prelude,
-        "-e",
-        `const m = await import(${JSON.stringify(path.join(casesDir, `${name}.ts`))}); process.exit(m.main());`,
-        name,
-        ...args,
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
   const osNative = (exe, args) => spawnSync(exe, args, { cwd: root, encoding: "utf8" })
   const linesOf = (r) => r.stdout.split("\n").filter((l) => l.length > 0)
-  const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
 
   // Date.now: a whole number of milliseconds held between two readings of Node's
   // own clock, taken either side of the run. Both are CLOCK_REALTIME floored to
   // the millisecond, so the bracket is exact rather than a tolerance: seconds,
   // microseconds or the monotonic clock would each fall outside it.
-  const nowExe = osBuild("os_now")
+  const nowExe = buildCaseIn(osDir, "os_now")
   for (const [side, run] of [
     ["natively", (args) => osNative(nowExe, args)],
-    ["under the prelude", (args) => osNode("os_now", args)],
+    ["under the prelude", (args) => runCaseUnderPrelude("os_now", args)],
   ]) {
     if (nowExe === null) {
       break
@@ -729,12 +742,12 @@ if (!only || "os_host".includes(only)) {
   // getRandomValues: two draws in a run differ, two runs differ, and each draw
   // is 32 bytes of hex. The Node run fills through the prelude's wrapper, which
   // is what a plain array needs there.
-  const randomExe = osBuild("os_random")
+  const randomExe = buildCaseIn(osDir, "os_random")
   if (randomExe !== null) {
     const draws = [
       osNative(randomExe, ["print"]),
       osNative(randomExe, ["print"]),
-      osNode("os_random", ["print"]),
+      runCaseUnderPrelude("os_random", ["print"]),
     ]
     const hexes = draws.map((r) => linesOf(r).slice(4))
     const all = hexes.flat()
@@ -750,12 +763,12 @@ if (!only || "os_host".includes(only)) {
 
   // The limit: 65,536 bytes fill, 65,537 panic, with the same words and status
   // under the prelude.
-  const limitExe = osBuild("os_random_limit")
+  const limitExe = buildCaseIn(osDir, "os_random_limit")
   if (limitExe !== null) {
     const words = "crypto.getRandomValues: 65537 bytes asked for, and one call fills at most 65536"
     for (const [side, r] of [
       ["natively", osNative(limitExe, [])],
-      ["under the prelude", osNode("os_random_limit", [])],
+      ["under the prelude", runCaseUnderPrelude("os_random_limit", [])],
     ]) {
       check(
         `os_random_limit: 65,537 bytes panic ${side}, after 65,536 filled`,
@@ -769,7 +782,7 @@ if (!only || "os_host".includes(only)) {
   // natively and under the prelude, and both held to `fs.statSync().mtimeMs`
   // printed as JavaScript prints it. The fraction is the point: a runtime that
   // truncated to milliseconds, or computed in another order, prints other digits.
-  const mtimeExe = osBuild("os_mtime")
+  const mtimeExe = buildCaseIn(osDir, "os_mtime")
   if (mtimeExe !== null) {
     const file = path.join(osDir, "mtime.txt")
     fs.writeFileSync(file, "x")
@@ -782,7 +795,7 @@ if (!only || "os_host".includes(only)) {
     )
     for (const [side, r] of [
       ["natively", osNative(mtimeExe, [file])],
-      ["under the prelude", osNode("os_mtime", [file])],
+      ["under the prelude", runCaseUnderPrelude("os_mtime", [file])],
     ]) {
       check(
         `os_mtime: statMtimeSync ${side} prints Node's mtimeMs, ${want}`,
@@ -830,7 +843,7 @@ if (!only || "os_host".includes(only)) {
     ["os_signal", "SIGTERM", "SIGINT", "-1\ntrue\n-1\n143\nready\n15\n2\n"],
     ["os_signal_import", "SIGINT", "SIGTERM", "ready\n2\n15\n"],
   ]) {
-    const exe = osBuild(name)
+    const exe = buildCaseIn(osDir, name)
     if (exe === null) {
       continue
     }
@@ -844,12 +857,195 @@ if (!only || "os_host".includes(only)) {
   }
   // No synchronous reading exists under Node (docs/wp33-round-trip.md), and the
   // prelude says so rather than answering something else.
-  const loud = osNode("os_signal", [])
+  const loud = runCaseUnderPrelude("os_signal", [])
   check(
     "os_signal: under the prelude signalFd fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("signalFd has no synchronous reading under Node"),
     shown(loud)
   )
+}
+
+// ---- `nish:net`, against Node's sockets (WP34 N5) ---------------------------------
+//
+// What a golden cannot say about the sockets, because the other end is the
+// world's: `tests/cases/net_tcp_echo` listens, prints its port and echoes, and
+// Node is the peer that connects, sends and reads the echo back. The program
+// also measures the arena around both connections, which is the pass scope of
+// its echo loop at work, and prints `flat` when the second, busy connection
+// moved it no further than the first. The section-GC check here is the other
+// half of the unit's budget: a program that calls no `nish:net` function links
+// none of runtime-net.c.
+if (!only || "net_tcp".includes(only)) {
+  const netDir = path.join(buildDir, "net")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  // One connection that sends `messages` lines, each once the one before it has
+  // come back, then ends its side; true when every byte came back in order.
+  const talk = (port, messages) =>
+    new Promise((resolve) => {
+      const socket = net.connect(port, "127.0.0.1")
+      let sent = ""
+      let got = ""
+      let next = 0
+      const send = () => {
+        if (next === messages) {
+          socket.end()
+          return
+        }
+        const line = `message ${next}\n`
+        next++
+        sent += line
+        socket.write(line)
+      }
+      socket.on("connect", send)
+      socket.on("data", (chunk) => {
+        got += chunk
+        if (got.length === sent.length) {
+          send()
+        }
+      })
+      socket.on("error", (e) => {
+        got += `<${e.code}>`
+      })
+      socket.on("close", () => resolve(next === messages && got === sent))
+    })
+  const echoRun = (exe, rounds) =>
+    new Promise((resolve) => {
+      const child = spawn(exe, [], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      let out = ""
+      let err = ""
+      let timedOut = false
+      let talks = null
+      const timer = setTimeout(() => {
+        timedOut = true
+        child.kill("SIGKILL")
+      }, 10000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+        const port = /^port (\d+)\n/.exec(out)
+        if (talks === null && port !== null) {
+          talks = (async () => {
+            const results = []
+            for (const messages of rounds) {
+              results.push(await talk(Number(port[1]), messages))
+            }
+            return results
+          })()
+        }
+      })
+      child.stderr.on("data", (chunk) => {
+        err += chunk
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        const done = talks ?? Promise.resolve([])
+        done.then((results) => resolve({ code, signal, out, err, timedOut, results }))
+      })
+    })
+
+  const echoExe = buildCaseIn(netDir, "net_tcp_echo")
+  if (echoExe !== null) {
+    const rounds = [1, 200]
+    const echoed = (messages) => Array.from({ length: messages }, (_, i) => `message ${i}\n`).join("").length
+    const want =
+      rounds.map((m) => `peer 127.0.0.1\nechoed ${echoed(m)} bytes\nclosed 0\n`).join("") + "flat\n"
+    const r = await echoRun(echoExe, rounds)
+    const body = r.out.replace(/^port \d+\n/, "")
+    check(
+      "net_tcp_echo: Node's two connections come back byte for byte, both close cleanly, the arena stays flat, and the program exits 0",
+      !r.timedOut && r.code === 0 && body === want && r.results.every((ok) => ok),
+      `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `connections: ${JSON.stringify(r.results)}\nstdout: ${JSON.stringify(r.out)}\n` +
+        `want:   ${JSON.stringify(`port <n>\n${want}`)}\nstderr: ${r.err}`
+    )
+  }
+
+  // No synchronous reading exists under Node (docs/wp33-round-trip.md), and the
+  // prelude says so, naming the call, rather than answering -11 forever.
+  const loud = runCaseUnderPrelude("net_tcp_calls", [])
+  check(
+    "net_tcp_calls: under the prelude netAddress fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`netAddress` has no synchronous reading under Node"),
+    shown(loud)
+  )
+
+  // Section GC keeps runtime-net.c out of a program that calls none of it. The
+  // link is the speed profile's `--gc-sections` without its LTO, so no call is
+  // inlined away, and the linker itself names every section it drops; the echo,
+  // which calls six of the eight, is the control that shows a kept one is not
+  // named and that the flag reports at all.
+  if (process.platform !== "linux") {
+    skip(`net_tcp section GC: measured with GNU-style --gc-sections, and this host is ${process.platform}`)
+  } else {
+    // The runtime objects are built once for both links, with the sections split
+    // so that each function can be dropped on its own.
+    const rt = runtimeObjects(["-ffunction-sections", "-fdata-sections"])
+    const collected = (name, ll) => {
+      const cc =
+        rt.error === null
+          ? spawnSync(
+              "clang",
+              [
+                "-Wno-override-module",
+                "-O2",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-Wl,--gc-sections",
+                "-Wl,--print-gc-sections",
+                ll,
+                ...rt.objects,
+                "-lm",
+                "-o",
+                path.join(netDir, `${name}.gc`),
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : { status: 1, stderr: rt.error }
+      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp)_\w+)/g)].map((m) => m[1])
+      return { ok: cc.status === 0, removed, why: String(cc.stderr) }
+    }
+    const quietLl = path.join(netDir, "net_quiet.ll")
+    const quietTs = path.join(netDir, "net_quiet.ts")
+    fs.writeFileSync(
+      quietTs,
+      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
+    )
+    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
+    const none =
+      compiled.status === 0
+        ? collected("net_quiet", quietLl)
+        : { ok: false, removed: [], why: compiled.stderr }
+    // The echo's IR is the one `buildCaseIn` wrote above.
+    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
+    const exported = [
+      "nish_net_address",
+      "nish_net_local_port",
+      "nish_tcp_listen",
+      "nish_tcp_accept",
+      "nish_net_read",
+      "nish_net_write",
+      "nish_net_shutdown",
+      "nish_net_close",
+    ]
+    const used = [
+      "nish_net_local_port",
+      "nish_tcp_listen",
+      "nish_tcp_accept",
+      "nish_net_read",
+      "nish_net_write",
+    ]
+    check(
+      "net_tcp: section GC drops every function of runtime-net.c from a program that calls none, and keeps the ones the echo calls",
+      none.ok &&
+        exported.every((f) => none.removed.includes(f)) &&
+        echo.ok &&
+        echo.removed.includes("nish_net_address") &&
+        used.every((f) => !echo.removed.includes(f)),
+      `dropped without nish:net: ${none.removed.join(" ")}\ndropped from the echo: ${echo.removed.join(" ")}\n` +
+        `${none.why}${echo.why}`
+    )
+  }
 }
 
 // ---- A `nish:` import is the same builtin, not another one -----------------------
@@ -4874,7 +5070,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c and runtime-net.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -5381,6 +5577,20 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
  * in tests/runtime-test.c).
  */
 const RUNTIME_HOST_TEXT_BUDGET = 768
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
+ * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
+ * `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`.
+ *
+ * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`.
+ * They are a fifth translation unit rather than more of `runtime-host.c` because the
+ * surface grows -- UDP and the readiness loop are the next two slices of N5, and each
+ * raises this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
+ * the rule is a new file with its own measured ceiling, never a raised one. The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here
+ * was set.
+ */
+const NET_TEXT_BUDGET = 1024
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -5414,6 +5624,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         ["-DNISH_THREADS=1"],
       ],
       ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
+      ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
     ]) {
       const name = path.basename(src)
       // The flags are in the check's name and in the object's, so the two rows for
@@ -10246,6 +10457,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // And the fourth (WP34 N3): without it every link would fail to find
       // `nish_date_now` and the other host calls the moment a program used one.
       "runtime/runtime-host.c",
+      // And the fifth (WP34 N5): without it every link of a program that
+      // imports `nish:net` would fail to find `nish_tcp_listen` and the rest.
+      "runtime/runtime-net.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
