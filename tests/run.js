@@ -624,8 +624,17 @@ for (const name of [
   "reject_rng_array_zero_fill",
   "reject_arrow_as_value",
 ]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  // A case renamed or deleted fails here rather than leaving the check empty.
   const at = selectedCases.indexOf(name)
   if (at < 0) {
+    check(
+      `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+      false,
+      "(no such case)"
+    )
     continue
   }
   // The compile the case loop already ran: one summary line per error.
