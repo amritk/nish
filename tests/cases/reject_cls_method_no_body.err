@@ -1,1 +1,1 @@
-expected `{`, found `;`
+Method `scale` of class `Point` must have a body

@@ -166,6 +166,10 @@ export class Checker {
         // a struct. It declares no layout, so it is registered beside the
         // function templates and the member loop below skips it: its members
         // are collected once per instantiation instead.
+        // One diagnostic per declaration, as an enum's is: an anonymous class
+        // is refused here and nowhere else (NL2018), so an earlier
+        // declaration's refusal must not silence it.
+        this.ctx.errored = false
         const kind = stmt.kind === N_CLASS ? STRUCT_CLASS : STRUCT_INTERFACE
         const what = kind === STRUCT_CLASS ? "class" : "interface"
         // Nothing is declared for a refused `integer`: the name is refused as a
@@ -219,6 +223,11 @@ export class Checker {
       // rejected class or constant costs its own diagnostic and no more
       // (`collectSignatures` in stage0's `src/checker/index.ts`).
       this.ctx.errored = false
+      // An anonymous class is pass 1a's to refuse (NL2018, `declareStruct`),
+      // and that is its one diagnostic: nothing in it is swept or collected.
+      if (stmt.kind === N_CLASS && stmt.children[0].kind === N_EMPTY) {
+        continue
+      }
       // WP33 R1: the forms the parser reads for pass 1 to refuse, before the
       // declaration is collected, so a declaration that has one reports that
       // and nothing else — an unannotated constant holding `[1, , 2]` is the
@@ -420,6 +429,11 @@ export class Checker {
   declareEnum(stmt: Node): void {
     const nameNode = stmt.children[0]
     const name = nameNode.text
+    // `declare` is written first, so it is the refusal (WP33 R1).
+    if ((stmt.flags & FLAG_FOREIGN) !== 0) {
+      this.ctx.error(stmt, "`declare enum` is not supported")
+      return
+    }
     if (builtinTypeName(name)) {
       this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for an enum`)
       return

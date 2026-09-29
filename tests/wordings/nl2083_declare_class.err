@@ -1,1 +1,1 @@
-syntax error: a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+`declare class` is not supported

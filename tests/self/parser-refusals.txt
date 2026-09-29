@@ -75,43 +75,24 @@
 reject_asi_for_header	expected `;`, found `IDENT`
 reject_asi_same_line	expected `;`, found `const`
 reject_asi_template	expected `;`, found `TEMPLATE`
-reject_cls_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
-reject_cls_ctor_no_body	expected `{`, found `;`
-reject_cls_ctor_return_type	expected `{`, found `:`
-reject_cls_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_cls_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_cls_field_declare	a type annotation is required
 reject_cls_field_no_type	a type annotation is required
 reject_cls_field_optional_untyped	a type annotation is required
-reject_cls_field_string_name	a class member is a field, a method or a constructor, found `STRING`
-reject_cls_index_signature	a class member is a field, a method or a constructor, found `[`
-reject_cls_literal_key	an object literal key must be a plain identifier
-reject_cls_literal_member	expected `}`, found `(`
-reject_cls_method_no_body	expected `{`, found `;`
-reject_cls_param_property	a type annotation is required
-reject_cls_static_block	a class member is a field, a method or a constructor, found `{`
 reject_cls_static_field_untyped	a type annotation is required
 reject_computed_property	an object literal key must be a plain identifier
 reject_default_import	expected `{`, found `IDENT`
-reject_enum_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_export_assignment	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `=`
 reject_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_export_import_equals	`export` cannot introduce an import
 reject_export_list	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `{`
 reject_fn_nested	expected an expression, found `function`
-reject_generic_abstract	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
-reject_generic_declare_class	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
-reject_generic_interface_extends	expected `{`, found `extends`
 reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
-reject_iface_extends	expected `{`, found `extends`
-reject_iface_index_signature	an interface holds only annotated fields
-reject_iface_member_unsupported	an interface holds only annotated fields
 reject_import_template_specifier	a module specifier must be a string literal
 reject_import_type_only	expected `{`, found `IDENT`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
-reject_multi_decl	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_namespace_import	expected `{`, found `*`
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first

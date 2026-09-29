@@ -1,1 +1,1 @@
-expected `{`, found `;`
+Constructor of class `Point` must have a body (no overload signatures)

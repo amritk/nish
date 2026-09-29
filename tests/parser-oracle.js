@@ -149,9 +149,15 @@ const printTypeScriptTree = (source, sf) => {
     name.expression.expression.text === "Symbol" &&
     name.expression.name.text === "dispose"
 
-  /** The two modifiers stage1's grammar reads on an `enum`; `declare` is not one (WP23). */
+  /**
+   * The modifiers stage1's grammar reads on an `enum`: `export`, `const`, and
+   * `declare` (WP33 R1), which is a flag the dump does not print, as a
+   * `declare function`'s is not.
+   */
   const isEnumModifier = (m) =>
-    m.kind === ts.SyntaxKind.ExportKeyword || m.kind === ts.SyntaxKind.ConstKeyword
+    m.kind === ts.SyntaxKind.ExportKeyword ||
+    m.kind === ts.SyntaxKind.ConstKeyword ||
+    m.kind === ts.SyntaxKind.DeclareKeyword
 
   const identifier = (node, depth) => {
     const [s, e] = span(node)
@@ -200,6 +206,7 @@ const printTypeScriptTree = (source, sf) => {
   const parameterOf = () => parameter
   const arrowParameterOf = () => arrowParameter
   const blockOf = () => block
+  const classLikeOf = () => classLike
 
   const type = (node, depth) => {
     const [s, e] = span(node)
@@ -406,6 +413,9 @@ const printTypeScriptTree = (source, sf) => {
       case ts.SyntaxKind.AsExpression:
         assertion(node, depth, "AS")
         return
+      case ts.SyntaxKind.ClassExpression:
+        classLikeOf()(node, depth)
+        return
       case ts.SyntaxKind.TypeAssertionExpression:
         assertion(node, depth, "AS+angle")
         return
@@ -416,12 +426,30 @@ const printTypeScriptTree = (source, sf) => {
         emit(depth, "OBJECT", s, e)
         for (const property of node.properties) {
           const [ps, pe] = span(property)
-          if (ts.isPropertyAssignment(property)) {
-            if (!ts.isIdentifier(property.name)) {
-              unsupported(property)
-            }
+          if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text)
             expression(property.initializer, depth + 2)
+          } else if (ts.isPropertyAssignment(property)) {
+            // A key written as a string or a number is a second child (NL2223).
+            emit(depth + 1, "PROPERTY", ps, pe)
+            expression(property.initializer, depth + 2)
+            memberName(property.name, depth + 2)
+          } else if (
+            ts.isMethodDeclaration(property) ||
+            ts.isGetAccessorDeclaration(property) ||
+            ts.isSetAccessorDeclaration(property)
+          ) {
+            // A method is the METHOD that is the property's value (NL2258).
+            const accessor = ts.isMethodDeclaration(property) ? "" : "+accessor"
+            emit(depth + 1, "PROPERTY", ps, pe, propertyText(property.name))
+            emit(depth + 2, `METHOD${functionFlags(property)}${accessor}`, ps, pe)
+            memberName(property.name, depth + 3)
+            list(depth + 3, property.parameters, arrowParameter)
+            optional(depth + 3, property.type, type)
+            block(property.body, depth + 3)
+            if (property.typeParameters !== undefined) {
+              typeParameters(property.typeParameters, depth + 3)
+            }
           } else if (ts.isShorthandPropertyAssignment(property)) {
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text)
             emit(depth + 2, "IDENT", ps, pe, property.name.text)
@@ -549,9 +577,11 @@ const printTypeScriptTree = (source, sf) => {
   const parameter = (node, parameterDepth, typed = true) => {
     const depth = decorated(node, parameterDepth)
     const [s, e] = span(node)
+    // A modifier in front of the name is a parameter property (NL2234).
+    const property = (node.modifiers ?? []).some((m) => m.kind !== ts.SyntaxKind.Decorator)
     const flags = `${node.initializer === undefined ? "" : "+default"}${
       node.dotDotDotToken === undefined ? "" : "+rest"
-    }${node.questionToken === undefined ? "" : "+optional"}`
+    }${property ? "+property" : ""}${node.questionToken === undefined ? "" : "+optional"}`
     emit(depth, `PARAM${flags}`, s, e)
     bindingName(node.name, depth + 1)
     if (node.type === undefined && typed && flags === "" && ts.isIdentifier(node.name)) {
@@ -746,80 +776,24 @@ const printTypeScriptTree = (source, sf) => {
         return
       }
       case ts.SyntaxKind.ClassDeclaration: {
-        if (node.name === undefined) {
-          unsupported(node)
-        }
-        emit(depth, `CLASS${exported(node)}`, s, e)
-        identifier(node.name, depth + 1)
-        const heritage = node.heritageClauses ?? []
-        const extendsClause = heritage.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)
-        const implementsClause = heritage.find((h) => h.token === ts.SyntaxKind.ImplementsKeyword)
-        if (extendsClause === undefined) {
-          empty(depth + 1)
-        } else {
-          const base = extendsClause.types[0].expression
-          if (!ts.isIdentifier(base)) {
-            unsupported(node)
-          }
-          identifier(base, depth + 1)
-        }
-        // WP18 G5: an implemented interface may be an instantiation, so stage1
-        // reads each entry with `parseType` and the node is a TYPE_REF whose
-        // child is the type-argument list — empty for the ungeneric spelling.
-        const implemented = implementsClause?.types ?? []
-        list(depth + 1, implemented, (t, d) => {
-          if (!ts.isIdentifier(t.expression)) {
-            unsupported(node)
-          }
-          const [tStart, tEnd] = span(t)
-          emit(d, "TYPE_REF", tStart, tEnd, t.expression.text)
-          list(d + 1, t.typeArguments ?? [], type)
-        })
-        list(depth + 1, node.members, member)
-        // The type parameters are the fifth child, after the members, because
-        // `src/nodes.ts` appends rather than renumbers (WP18 G5).
-        typeParameters(node.typeParameters, depth + 1)
+        classLike(node, depth)
         return
       }
       case ts.SyntaxKind.InterfaceDeclaration: {
-        if (node.heritageClauses !== undefined) {
-          unsupported(node)
-        }
+        const heritage = node.heritageClauses ?? []
         emit(depth, `INTERFACE${exported(node)}`, s, e)
         identifier(node.name, depth + 1)
-        list(depth + 1, node.members, (m, d) => {
-          // A method signature is a METHOD among the fields, with an EMPTY
-          // body, for the checker to refuse (NL2048).
-          if (
-            (ts.isMethodSignature(m) || ts.isGetAccessorDeclaration(m) || ts.isSetAccessorDeclaration(m)) &&
-            ts.isIdentifier(m.name) &&
-            m.body === undefined
-          ) {
-            const [ms, me] = span(m)
-            emit(d, `METHOD${memberFlags(m)}${memberMarker(m)}`, ms, me)
-            identifier(m.name, d + 1)
-            list(d + 1, m.parameters, arrowParameter)
-            optional(d + 1, m.type, type)
-            empty(d + 1)
-            if (m.typeParameters !== undefined) {
-              typeParameters(m.typeParameters, d + 1)
-            }
-            return
-          }
-          if (!ts.isPropertySignature(m) || !ts.isIdentifier(m.name) || m.type === undefined) {
-            unsupported(m)
-          }
-          // An interface field takes the same modifiers and the same `?` a
-          // class field does, and stage1's parser reads them with the same two
-          // functions, so the same two suffixes are compared here. `!` is not a
-          // spelling a property signature has at all.
-          const [ms, me] = span(m)
-          emit(d, `FIELD${memberFlags(m)}${memberMarker(m)}`, ms, me)
-          identifier(m.name, d + 1)
-          type(m.type, d + 1)
-          empty(d + 1)
-        })
+        list(depth + 1, node.members, interfaceMember)
         typeParameters(node.typeParameters, depth + 1)
+        // `extends A, B` is a fourth child spanning the clause, there only
+        // when written, for the checker to refuse (NL2215).
+        if (heritage.length > 0) {
+          const [hs, he] = span(heritage[0])
+          emit(depth + 1, "LIST", hs, he)
+          for (const t of heritage[0].types) {
+            heritageType(node, t, depth + 2)
+          }
+        }
         return
       }
       // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a
@@ -881,7 +855,7 @@ const printTypeScriptTree = (source, sf) => {
       // member is auto-numbered — which is TypeScript's shape flattened.
       // `const enum` is read too, and refused by the checker rather than the
       // grammar, so the `const` is a flag here exactly as it is on a module
-      // constant; `declare enum` is the parser's to refuse and is skipped.
+      // constant; so is `declare enum` (NL2286), whose flag is not printed.
       case ts.SyntaxKind.EnumDeclaration: {
         const modifiers = node.modifiers ?? []
         if (modifiers.some((m) => !isEnumModifier(m))) {
@@ -982,6 +956,7 @@ const printTypeScriptTree = (source, sf) => {
   const memberFlags = (node) => {
     let readonly = false
     let isStatic = false
+    let abstract = false
     for (const modifier of node.modifiers ?? []) {
       // `async`, the `*` and a decorator are read for Phase 0 to refuse, and
       // printed by `functionFlags` and `decorated`.
@@ -992,6 +967,9 @@ const printTypeScriptTree = (source, sf) => {
         readonly = true
       } else if (modifier.kind === ts.SyntaxKind.StaticKeyword) {
         isStatic = true
+      } else if (modifier.kind === ts.SyntaxKind.AbstractKeyword) {
+        // Left off after `static`, which is written first and is the refusal.
+        abstract = !isStatic
       } else if (
         modifier.kind !== ts.SyntaxKind.PublicKeyword &&
         modifier.kind !== ts.SyntaxKind.PrivateKeyword &&
@@ -1001,7 +979,9 @@ const printTypeScriptTree = (source, sf) => {
       }
     }
     const accessor = ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ? "+accessor" : ""
-    return `${functionFlags(node)}${accessor}${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`
+    return `${functionFlags(node)}${accessor}${abstract ? "+abstract" : ""}${isStatic ? "+static" : ""}${
+      readonly ? "+readonly" : ""
+    }`
   }
 
   /** `?` and `!` after a member's name, in `kindWithFlags`'s order. */
@@ -1010,18 +990,156 @@ const printTypeScriptTree = (source, sf) => {
       node.exclamationToken === undefined ? "" : "+definite"
     }`
 
+  /**
+   * A member's name: its IDENT, or the STRING or NUMBER stage1 keeps in its
+   * place for the checker to refuse (NL2092).
+   */
+  const memberName = (name, depth) => {
+    if (!ts.isIdentifier(name) && !ts.isStringLiteral(name) && !ts.isNumericLiteral(name)) {
+      unsupported(name)
+    }
+    expression(name, depth)
+  }
+
+  /** The text stage1 keeps on an object literal's PROPERTY for a method named `name`. */
+  const propertyText = (name) =>
+    ts.isNumericLiteral(name) ? source.slice(name.getStart(sf), name.end).replaceAll("_", "") : name.text
+
+  /**
+   * A class, declared or written where an operand stands: an anonymous one
+   * (NL2018) has an EMPTY name, and `export default` and `abstract` are flags
+   * (NL2168); `declare` (NL2083) is one the dump does not print.
+   */
+  const classLike = (node, depth) => {
+    const [s, e] = span(node)
+    const modifiers = node.modifiers ?? []
+    const isDefault = modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
+    const isAbstract = modifiers.some((m) => m.kind === ts.SyntaxKind.AbstractKeyword)
+    if (isDefault && node.name !== undefined) {
+      unsupported(node)
+    }
+    emit(depth, `CLASS${exported(node)}${isDefault ? "+default" : ""}${isAbstract ? "+abstract" : ""}`, s, e)
+    optional(depth + 1, node.name, identifier)
+    const heritage = node.heritageClauses ?? []
+    const extendsClause = heritage.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)
+    const implementsClause = heritage.find((h) => h.token === ts.SyntaxKind.ImplementsKeyword)
+    if (extendsClause === undefined) {
+      empty(depth + 1)
+    } else {
+      const base = extendsClause.types[0].expression
+      if (!ts.isIdentifier(base)) {
+        unsupported(node)
+      }
+      identifier(base, depth + 1)
+    }
+    // WP18 G5: an implemented interface may be an instantiation, so stage1
+    // reads each entry with `parseType` and the node is a TYPE_REF whose
+    // child is the type-argument list — empty for the ungeneric spelling.
+    list(depth + 1, implementsClause?.types ?? [], (t, d) => heritageType(node, t, d))
+    list(depth + 1, node.members, member)
+    // The type parameters are the fifth child, after the members, because
+    // `src/nodes.ts` appends rather than renumbers (WP18 G5).
+    typeParameters(node.typeParameters, depth + 1)
+  }
+
+  /** One name in an `implements` or an interface's `extends`, as the TYPE_REF `parseType` reads. */
+  const heritageType = (owner, t, d) => {
+    if (!ts.isIdentifier(t.expression)) {
+      unsupported(owner)
+    }
+    const [tStart, tEnd] = span(t)
+    emit(d, "TYPE_REF", tStart, tEnd, t.expression.text)
+    list(d + 1, t.typeArguments ?? [], type)
+  }
+
+  /** `[k: string]: T` in a class or an interface (NL2213, NL2214). */
+  const indexSignature = (node, depth) => {
+    const [s, e] = span(node)
+    const key = node.parameters[0]
+    if (node.parameters.length !== 1 || key.type === undefined || !ts.isIdentifier(key.name)) {
+      unsupported(node)
+    }
+    emit(depth, `INDEX_SIGNATURE${memberFlags(node)}`, s, e)
+    const [ks, ke] = span(key)
+    emit(depth + 1, "PARAM", ks, ke)
+    identifier(key.name, depth + 2)
+    type(key.type, depth + 2)
+    type(node.type, depth + 1)
+  }
+
+  /**
+   * One member of an interface: a field, or — for the checker to refuse — a
+   * method or accessor signature (NL2048), an index signature (NL2214), or a
+   * call or construct signature, a METHOD whose name is EMPTY (NL2257).
+   */
+  const interfaceMember = (m, d) => {
+    const [ms, me] = span(m)
+    if (ts.isIndexSignatureDeclaration(m)) {
+      indexSignature(m, d)
+      return
+    }
+    if (ts.isCallSignatureDeclaration(m) || ts.isConstructSignatureDeclaration(m)) {
+      emit(d, `METHOD${ts.isConstructSignatureDeclaration(m) ? "+construct" : ""}`, ms, me)
+      empty(d + 1)
+      list(d + 1, m.parameters, arrowParameter)
+      optional(d + 1, m.type, type)
+      empty(d + 1)
+      if (m.typeParameters !== undefined) {
+        typeParameters(m.typeParameters, d + 1)
+      }
+      return
+    }
+    if (
+      (ts.isMethodSignature(m) || ts.isGetAccessorDeclaration(m) || ts.isSetAccessorDeclaration(m)) &&
+      m.body === undefined
+    ) {
+      emit(d, `METHOD${memberFlags(m)}${memberMarker(m)}`, ms, me)
+      memberName(m.name, d + 1)
+      list(d + 1, m.parameters, arrowParameter)
+      optional(d + 1, m.type, type)
+      empty(d + 1)
+      if (m.typeParameters !== undefined) {
+        typeParameters(m.typeParameters, d + 1)
+      }
+      return
+    }
+    if (!ts.isPropertySignature(m) || m.type === undefined) {
+      unsupported(m)
+    }
+    // An interface field takes the same modifiers and the same `?` a class
+    // field does, and stage1's parser reads them with the same two functions,
+    // so the same two suffixes are compared here. `!` is not a spelling a
+    // property signature has at all.
+    emit(d, `FIELD${memberFlags(m)}${memberMarker(m)}`, ms, me)
+    memberName(m.name, d + 1)
+    type(m.type, d + 1)
+    empty(d + 1)
+  }
+
   const member = (node, memberDepth) => {
     const depth = decorated(node, memberDepth)
     const [s, e] = span(node)
+    // `static { }` is the BLOCK among the members, spanning the word (NL2255).
+    if (ts.isClassStaticBlockDeclaration(node)) {
+      emit(depth, "BLOCK", s, e)
+      for (const inner of node.body.statements) {
+        statement(inner, depth + 1)
+      }
+      return
+    }
+    if (ts.isIndexSignatureDeclaration(node)) {
+      indexSignature(node, depth)
+      return
+    }
     if (ts.isPropertyDeclaration(node)) {
-      if (!ts.isIdentifier(node.name) || node.type === undefined) {
+      if (node.type === undefined) {
         unsupported(node)
       }
       // `x?: T` and `x!: T` are parsed on both sides and refused by the
       // checker, so the marker changes no node and no span — but it does change
       // a flag, and the flag is compared.
       emit(depth, `FIELD${memberFlags(node)}${memberMarker(node)}`, s, e)
-      identifier(node.name, depth + 1)
+      memberName(node.name, depth + 1)
       type(node.type, depth + 1)
       optional(depth + 1, node.initializer, expression)
       return
@@ -1033,10 +1151,8 @@ const printTypeScriptTree = (source, sf) => {
       ts.isGetAccessorDeclaration(node) ||
       ts.isSetAccessorDeclaration(node)
     ) {
+      // A missing body is EMPTY (NL2090).
       const dispose = isDisposeName(node.name)
-      if ((!ts.isIdentifier(node.name) && !dispose) || node.body === undefined) {
-        unsupported(node)
-      }
       if (node.typeParameters !== undefined) {
         unsupported(node)
       }
@@ -1045,21 +1161,23 @@ const printTypeScriptTree = (source, sf) => {
         const [ns, ne] = span(node.name)
         emit(depth + 1, "IDENT", ns, ne, "[Symbol.dispose]")
       } else {
-        identifier(node.name, depth + 1)
+        memberName(node.name, depth + 1)
       }
       // An accessor's parameter may leave its type out: the accessor is refused whole.
       list(depth + 1, node.parameters, ts.isMethodDeclaration(node) ? parameter : arrowParameter)
       optional(depth + 1, node.type, type)
-      block(node.body, depth + 1)
+      optional(depth + 1, node.body, block)
       return
     }
+    // A missing body is EMPTY (NL2091), and a return type (NL2189) a third
+    // child, there only when written.
     if (ts.isConstructorDeclaration(node)) {
-      if (node.body === undefined) {
-        unsupported(node)
-      }
       emit(depth, `CONSTRUCTOR${memberFlags(node)}`, s, e)
       list(depth + 1, node.parameters, parameter)
-      block(node.body, depth + 1)
+      optional(depth + 1, node.body, block)
+      if (node.type !== undefined) {
+        type(node.type, depth + 1)
+      }
       return
     }
     unsupported(node)

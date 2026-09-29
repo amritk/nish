@@ -1,1 +1,1 @@
-syntax error: expected `}`, found `(`
+Unsupported object literal member: MethodDeclaration (only `key: value`)

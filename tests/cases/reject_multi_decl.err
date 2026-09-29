@@ -1,1 +1,3 @@
-a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+Getters and setters are not supported in class `Box` (use a method)
+Interface `Shape` cannot declare methods (interfaces describe layout only)
+Abstract classes are not supported

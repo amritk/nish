@@ -202,8 +202,32 @@ export const N_TYPE_OPERATOR: i32 = 72
 // declaration that holds one is refused whatever it binds.
 export const N_BINDING_PATTERN: i32 = 73
 
+// ---- Refused class, interface and enum forms (WP33 R1) -------------------------------
+//
+// The class, interface and enum forms. All but one are a node that exists:
+// `abstract` is FLAG_ABSTRACT on the class or the member, `declare class`,
+// `declare interface` and `declare enum` FLAG_FOREIGN on theirs, and a
+// parameter property (`constructor(public x: i32)`) FLAG_PROPERTY on its
+// PARAM. An anonymous class — `export default class { }` (FLAG_DEFAULT), or a
+// class expression, which is an N_CLASS where an operand stands — has an
+// EMPTY name. A method or constructor without a body has an EMPTY body, a
+// constructor's return type is a third child of the N_CONSTRUCTOR, there only
+// when written, and a member named by a string or a number has that N_STRING
+// or N_NUMBER where its IDENT would be. A `static { }` block is the N_BLOCK
+// among the members, and an interface's call signature `(x: i32): T` an
+// N_METHOD among its fields whose name is EMPTY — a construct signature
+// `new (): T` the same with FLAG_CONSTRUCT. `interface I extends A, B` has a
+// fourth child, a LIST of the TYPE_REFs it names, there only when written. In
+// an object literal a key written as a string or a number is a second child
+// of the N_PROPERTY, there only when written, and a method `{ m() { } }`
+// (an accessor, FLAG_ACCESSOR) is the N_METHOD that is the property's value.
+
+// `[key: string]: T` in a class or an interface (NL2213, NL2214): flags: the
+// member's modifiers; children: the key's PARAM, the value's type.
+export const N_INDEX_SIGNATURE: i32 = 74
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 74
+export const N_COUNT: i32 = 75
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -265,12 +289,15 @@ export const FLAG_USING: i32 = 256
 //     FLAG_GENERATOR), and a default type argument its type parameter
 //     (FLAG_DEFAULT); a default, optional or rest parameter is its PARAM
 //     (FLAG_DEFAULT, FLAG_OPTIONAL, FLAG_REST) and a getter or setter a
-//     method (FLAG_ACCESSOR). An operator is the N_BINARY or N_UNARY whose
-//     text it is.
+//     method (FLAG_ACCESSOR); `abstract` is its class or member
+//     (FLAG_ABSTRACT), `declare class`, `declare interface` and `declare enum`
+//     theirs (FLAG_FOREIGN), and a parameter property its PARAM
+//     (FLAG_PROPERTY). An operator is the N_BINARY or N_UNARY whose text it
+//     is.
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
 //     N_LABELED, N_REGEX, N_AS, N_SPREAD, N_DECORATOR, N_NAMESPACE,
-//     N_TYPE_OPERATOR, N_BINDING_PATTERN.
+//     N_TYPE_OPERATOR, N_BINDING_PATTERN, N_INDEX_SIGNATURE.
 //   - A variant that differs only in what one child is keeps the node and
 //     puts the other thing in that child, when the child's own kind is the
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
@@ -278,8 +305,9 @@ export const FLAG_USING: i32 = 256
 //     in the SOURCE_FILE where a declaration would, type parameters on an
 //     alias are an N_TYPE_ALIAS's third child, there only when written, a
 //     missing name, return type or body is an EMPTY child, a method in an
-//     interface an N_METHOD among its fields, and a `let` bound to an arrow
-//     a module constant whose initialiser is the N_ARROW.
+//     interface an N_METHOD among its fields, a `let` bound to an arrow
+//     a module constant whose initialiser is the N_ARROW, and the class,
+//     interface and enum forms listed beside N_INDEX_SIGNATURE.
 //
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
@@ -309,12 +337,22 @@ export const FLAG_GENERATOR: i32 = 32768
 // `flags` on a type parameter's IDENT: bit 16 is a default, `<T = i32>`
 // (NL2292). The default type is read and dropped, as a `catch` binding's
 // annotation is: the declaration is refused whatever it names.
-export const FLAG_DEFAULT: i32 = 65536 // and on N_PARAM, `x = 1` (NL2233); on N_FUNCTION, `export default` (NL2203)
+export const FLAG_DEFAULT: i32 = 65536 // and on N_PARAM, `x = 1` (NL2233); on N_FUNCTION and N_CLASS, `export default` (NL2203, NL2018)
 // `flags` on N_PARAM: bit 17 is `...xs` (NL2235). `x?: T` is FLAG_OPTIONAL and
 // a default FLAG_DEFAULT, whose value is read and dropped.
 export const FLAG_REST: i32 = 131072
 // `flags` on N_METHOD: bit 18 is `get` or `set` in front of its name (NL2209).
 export const FLAG_ACCESSOR: i32 = 262144
+// `flags` on N_CLASS, N_FIELD, N_METHOD and N_CONSTRUCTOR: bit 19 is
+// `abstract` (NL2168). A member's `static abstract` leaves it off: `static` is
+// written first, and it is the refusal (`Parser.parseMemberModifiers`).
+export const FLAG_ABSTRACT: i32 = 524288
+// `flags` on N_PARAM: bit 20 is an accessibility or `readonly` modifier in
+// front of it, a parameter property (NL2234).
+export const FLAG_PROPERTY: i32 = 1048576
+// `flags` on an interface's N_METHOD with an EMPTY name: bit 21 is `new`, a
+// construct signature rather than a call signature (NL2257).
+export const FLAG_CONSTRUCT: i32 = 2097152
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -501,6 +539,8 @@ export const nodeName = (kind: i32): string => {
       return "TYPE_OPERATOR"
     case N_BINDING_PATTERN:
       return "BINDING_PATTERN"
+    case N_INDEX_SIGNATURE:
+      return "INDEX_SIGNATURE"
     default:
       return "?"
   }

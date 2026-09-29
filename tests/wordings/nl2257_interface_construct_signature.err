@@ -1,1 +1,1 @@
-syntax error: an interface holds only annotated fields
+Unsupported interface member in `Point`: ConstructSignature

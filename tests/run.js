@@ -7926,6 +7926,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     `exit ${bindingsRun.status}, missing ${missingBindings.join(", ")}\n${bindingsRun.stdout}${bindingsRun.stderr}`
   )
 
+  // The fifth stage's forms open at `abstract`, `declare`, `static`, the
+  // accessibility words, a string or number member name, `[`, `(`, `new`,
+  // `extends` and `class` where a syntax error used to be, and
+  // `tests/parser/names-classes.ts` holds the programs beside each that already
+  // compiled: the words as fields, methods, parameters, locals, functions and
+  // object keys, alone on their line before a member's type or parameters,
+  // and a body on the line after its signature.
+  const classesLl = path.join(buildDir, "parser_names_classes.ll")
+  const classesRun = spawnSync(NISH, ["tests/parser/names-classes.ts", "-o", classesLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const classesIr = classesRun.status === 0 ? fs.readFileSync(classesLl, "utf8") : ""
+  const wantClasses = [
+    "%struct.Words = type { i32, i32, i32, i32, i32, i32, i32 }",
+    "%struct.Lines = type { i32, i32 }",
+    "%struct.Keys = type { i32, i32, i32, i32, i32, i32, i32 }",
+    "@Lines.static(",
+    "@Lines.declare(",
+    "@Params.abstract(",
+    "@Params.constructor(",
+    "@declare(",
+    "@abstract(",
+  ]
+  const missingClasses = wantClasses.filter((want) => !classesIr.includes(want))
+  check(
+    "src/parser.ts keeps the readings beside the class, interface and enum forms (tests/parser/names-classes.ts)",
+    classesRun.status === 0 && missingClasses.length === 0,
+    `exit ${classesRun.status}, missing ${missingClasses.join(", ")}\n${classesRun.stdout}${classesRun.stderr}`
+  )
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
@@ -8394,6 +8425,24 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           "24:10-24:19 NL2096",
           "26:24-26:30 NL2254",
           "28:1-28:33 NL2084",
+        ],
+      ],
+      // The class, interface and enum forms: one per declaration, the first
+      // in source order, and a member header the collector refuses first.
+      [
+        "reject_cls_sweep_together",
+        [
+          "4:3-4:22 NL2027",
+          "7:3-7:19 NL2116",
+          "10:3-10:12 NL2090",
+          "14:15-14:28 NL2234",
+          "16:1-18:2 NL2168",
+          "20:3-20:28 NL2116",
+          "23:3-23:19 NL2213",
+          "26:17-26:31 NL2215",
+          "29:19-29:40 NL2258",
+          "30:1-30:24 NL2286",
+          "31:1-33:2 NL2018",
         ],
       ],
     ]

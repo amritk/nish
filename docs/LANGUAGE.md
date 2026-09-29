@@ -1286,7 +1286,9 @@ and their `.ll` goldens are byte-identical files.
   inlining every member already gets —
   `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
   (`tests/cases/reject_enum_const_enum`) — and `` `declare enum` is not supported ``
-  is the ambient form, which has nothing to declare against *(CLI only)*.
+  is the ambient form, which has nothing to declare against
+  (`tests/cases/reject_enum_declare`; `declare const enum` too, since `declare`
+  is written first).
 - **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
   and `--emit-napi` have no spelling for one, so a function whose signature
   mentions an enum is skipped with the note those generators write for every
@@ -1621,8 +1623,16 @@ class Point {
   (`initializers must be literals` *(CLI only)*; `tests/cases/cls_initializers`).
   Layout is declaration order with natural alignment and padding, exactly
   as clang lays out the same C struct (`tests/layout/structs.ts`).
-- **Constructor**: at most one, with a body, no return type annotation, and
-  no parameter properties (`Parameter properties (`constructor(public x: number)`) are not supported`).
+- **Constructor**: at most one, with a body
+  (`` Constructor of class `Point` must have a body (no overload signatures) ``,
+  `tests/cases/reject_cls_ctor_no_body`), no return type annotation
+  (`Constructors cannot declare a return type`, `reject_cls_ctor_return_type`),
+  and no parameter properties
+  (``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it``,
+  `reject_cls_param_property`; `public`, `private`, `protected`, `readonly`
+  and `override` are a parameter's modifier only before its name on their
+  line, so `constructor(public: i32)` is a parameter called `public`,
+  `tests/parser/names-classes.ts`).
   `new C(args)` takes exactly the constructor's arity
   (`` `new Point` expects 2 argument(s), got 1 ``, `tests/cases/reject_cls_ctor_arity`).
   A class without a constructor may be `new`ed with zero arguments and gets
@@ -1637,7 +1647,9 @@ class Point {
   `this` as a value before every field is assigned is an error. A class
   with no constructor must initialise every field
   (`` has no initializer and no constructor assigns it ``).
-- **Methods** need a body and an explicit return type; they are ordinary
+- **Methods** need a body (`` Method `scale` of class `Point` must have a body ``,
+  `tests/cases/reject_cls_method_no_body`: a signature without one is an
+  overload, and there are none) and an explicit return type; they are ordinary
   functions `@Class.method` with `this` first. `this` is valid only inside
   a method or constructor (`` `this` is only valid inside a method or constructor ``,
   `tests/cases/reject_cls_this_outside`) and may be aliased or passed on
@@ -1685,8 +1697,18 @@ class Point {
   (`` Getters and setters are not supported in class `Box` (use a method) ``,
   `reject_cls_accessor`; `get` and `set` are still member names,
   `tests/parser/names-bindings.ts`), optional fields
-  (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, type parameters on the constructor
+  (`cannot be optional`), index signatures
+  (`` Index signatures are not supported in class `Point` (object layout is fixed) ``,
+  `reject_cls_index_signature`), `!` assertions, `abstract` on the class or a
+  member (`Abstract classes are not supported`, `reject_generic_abstract`),
+  `declare class` (`` `declare class` is not supported ``, `reject_cls_declare`),
+  a class with no name — `export default class { }` or a class expression —
+  (`Classes must be named`, `reject_cls_anonymous`; a named class expression is
+  `Unsupported expression in Phase 1: ClassExpression`), a member named by a
+  string or a number (`` Members of `Point` must have plain identifier names ``,
+  `reject_cls_field_string_name`), a `static { }` block
+  (`` Unsupported class member in `Point`: ClassStaticBlockDeclaration ``,
+  `reject_cls_static_block`), type parameters on the constructor
   (`reject_generic_method_constructor`; a *method* may declare its own — see
   [Generic methods](#generic-methods)),
   decorators
@@ -2492,13 +2514,26 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
   (`tests/cases/reject_iface_method`, `reject_iface_accessor`; a field may
   still be called `get` or `set`), `extends`
-  is `Interface inheritance (`extends`) is not supported`, and `new` on an
+  is ``Interface inheritance (`extends`) is not supported; list every field``
+  (`tests/cases/reject_iface_extends`, `reject_generic_interface_extends`),
+  an index signature is
+  `` Index signatures are not supported in interface `Point` (object layout is fixed) ``
+  (`reject_iface_index_signature`), a construct or call signature,
+  `new (): Point` or `(x: i32): i32`, is
+  `` Unsupported interface member in `Point`: ConstructSignature `` (or
+  `CallSignature`, `reject_iface_member_unsupported`), `declare interface` is
+  `` `declare interface` is not supported ``, and `new` on an
   interface is `` Cannot `new` interface `Pair` `` (`tests/cases/reject_cls_new_interface`).
 - An **object literal** allocates in the arena and stores every property in
   source order. It must set every field exactly once (`` is missing field `second` ``,
   `tests/cases/reject_cls_literal_missing`; `` `Pair` has no field `third` ``,
   `reject_cls_literal_extra`), with plain identifier keys and `key: value`
-  or shorthand members. It takes its type from the context: a variable
+  or shorthand members: a key written as a string or a number is
+  `Object literal keys must be plain identifiers` (`reject_cls_literal_key`),
+  and a method or an accessor is
+  ``Unsupported object literal member: MethodDeclaration (only `key: value`)``
+  (`GetAccessor`, `SetAccessor`; `reject_cls_literal_member`) — `get`, `set`
+  and `async` stay keys and shorthands (`{ get: 1 }`, `{ get }`). It takes its type from the context: a variable
   annotation, the enclosing function's return type, the parameter it is
   passed to, the field or variable it is assigned to, or the field of an
   enclosing literal; otherwise
@@ -5184,7 +5219,7 @@ messages are exact for the cases cited; other rows quote the checker
 | importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |
 | a declaration named like an imported enum or alias, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function`, `alias_import_clash`, `alias_import_duplicate` |
 | `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
-| `declare enum` | `` `declare enum` is not supported `` | *(CLI only)* |
+| `declare enum` | `` `declare enum` is not supported `` | `reject_enum_declare`, `nl2286_declare_enum` |
 | enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |
 | two enum members of one name | `` Duplicate member `If` in enum `Kind` `` | `reject_enum_duplicate_member` |
 | enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
@@ -5211,6 +5246,13 @@ messages are exact for the cases cited; other rows quote the checker
 | an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
 | a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
 | more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |
+| a class with no name: `export default class { }`, a class expression | `Classes must be named` (a named class expression: `Unsupported expression in Phase 1: ClassExpression`) | `reject_cls_anonymous`, `nl2018_anonymous_class` |
+| `declare class`, `declare interface`; `abstract` on a class or a member | `` `declare class` is not supported `` / `Abstract classes are not supported` | `reject_cls_declare`, `reject_generic_declare_class`, `reject_generic_abstract` |
+| a method or a constructor with no body, a constructor's return type | `` Method `m` of class `Point` must have a body `` / `` Constructor of class `Point` must have a body (no overload signatures) `` / `Constructors cannot declare a return type` | `reject_cls_method_no_body`, `reject_cls_ctor_no_body`, `reject_cls_ctor_return_type` |
+| a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
+| an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
+| an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
