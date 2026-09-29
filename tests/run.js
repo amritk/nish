@@ -712,7 +712,12 @@ if (!only || "os_host".includes(only)) {
     const t = Number(lines[2])
     check(
       `os_now: Date.now() ${side} is a whole millisecond between two readings of Node's clock`,
-      r.status === 0 && lines[0] === "true" && lines[1] === "true" && Number.isInteger(t) && before <= t && t <= after,
+      r.status === 0 &&
+        lines[0] === "true" &&
+        lines[1] === "true" &&
+        Number.isInteger(t) &&
+        before <= t &&
+        t <= after,
       `${before} <= ${lines[2]} <= ${after}?\n${shown(r)}`
     )
   }
@@ -722,7 +727,11 @@ if (!only || "os_host".includes(only)) {
   // is what a plain array needs there.
   const randomExe = osBuild("os_random")
   if (randomExe !== null) {
-    const draws = [osNative(randomExe, ["print"]), osNative(randomExe, ["print"]), osNode("os_random", ["print"])]
+    const draws = [
+      osNative(randomExe, ["print"]),
+      osNative(randomExe, ["print"]),
+      osNode("os_random", ["print"]),
+    ]
     const hexes = draws.map((r) => linesOf(r).slice(4))
     const all = hexes.flat()
     check(
