@@ -46,7 +46,7 @@ import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
 import { numericLiteralValue } from "./constants"
 import { isScalarArgument } from "./escape"
-import { isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
+import { isArrayWriteMethod, isAssignmentOperator, isTemplateExpression, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
@@ -1194,9 +1194,7 @@ const regionCallMessage = (
     }
     // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
     // store to `a[i]` does, so they are refused where `push` and `pop` are.
-    const method = callee.text
-    const writes = method === "push" || method === "pop" || method === "set" || method === "fill"
-    if (writes && !uses.isPrivate(namedLocal(program, receiver))) {
+    if (isArrayWriteMethod(callee.text) && !uses.isPrivate(namedLocal(program, receiver))) {
       const type = program.nodeTypes[receiver.id]
       if (type >= 0 && program.nodeCallees[node.id] === null) {
         return regionWriteMessage(state, `\`${callee.text}\``)

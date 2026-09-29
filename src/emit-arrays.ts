@@ -1353,17 +1353,12 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   }
   const size = elementSize(emitter, elem)
   const bytes = size === 1 ? count : fn.emitValue(`mul i64 ${count}, ${size}`)
-  let copy = MEMMOVE
-  if (emitter.program.nodeDisjointCopy[expr.id]) {
-    copy = MEMCPY
-    emitter.declare(
-      `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
-    )
-  } else {
-    emitter.declare(
-      `declare void @${MEMMOVE}(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)`
-    )
-  }
+  const disjoint = emitter.program.nodeDisjointCopy[expr.id]
+  const copy = disjoint ? MEMCPY : MEMMOVE
+  const noalias = disjoint ? "noalias " : ""
+  emitter.declare(
+    `declare void @${copy}(i8* ${noalias}nocapture writeonly, i8* ${noalias}nocapture readonly, i64, i1 immarg)`
+  )
   const to = elementBytes(emitter, dst, elem, at)
   const from = elementBytes(emitter, src, elem, "0")
   fn.emit(`call void @${copy}(i8* ${to}, i8* ${from}, i64 ${bytes}, i1 false)${elementAccess(emitter)}`)

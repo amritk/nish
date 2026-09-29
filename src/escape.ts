@@ -39,6 +39,7 @@ import {
   yieldsInteriorPointer,
 } from "./attributes"
 import {
+  builtinNameOf,
   dottedName,
   intrinsicType,
   isAssignmentOperator,
@@ -463,8 +464,7 @@ class EscapeAnalysis {
       // identifier is the local name, so the builtin is the one the checker
       // recorded: `import { readFileBytesSync as bytesOf }` is the same
       // allocation spelled differently (`mem_read_import_scope`).
-      const imported = program.nodeBuiltins[call.id]
-      if (isAllocatingBuiltin(imported.length > 0 ? imported : target.text)) {
+      if (isAllocatingBuiltin(builtinNameOf(program, call))) {
         this.sites.push(new Site(call, false))
       }
       return

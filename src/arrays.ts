@@ -6,7 +6,7 @@ import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotati
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
-import { unwrapParens } from "./emit-util"
+import { isArrayWriteMethod, unwrapParens } from "./emit-util"
 import { checkIndexArgument } from "./members"
 import {
   N_ARRAY,
@@ -179,8 +179,7 @@ export const checkArrayMethod = (
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
     return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only")
   }
-  const writes = name === "push" || name === "pop" || name === "set" || name === "fill"
-  if (writes && ctx.table.isReadonlyArray(receiver)) {
+  if (isArrayWriteMethod(name) && ctx.table.isReadonlyArray(receiver)) {
     return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`))
   }
   const elem = ctx.table.refOf(receiver)
@@ -362,7 +361,7 @@ const disjointCopy = (ctx: CheckContext, receiver: Node, source: Node): boolean 
 }
 
 /** An array literal or a `new`, whose buffer is allocated where it is written. */
-const isFreshArrayExpression = (expr: Node): boolean => {
+export const isFreshArrayExpression = (expr: Node): boolean => {
   const e = unwrapParens(expr)
   return e.kind === N_ARRAY || e.kind === N_NEW
 }

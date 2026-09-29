@@ -412,8 +412,10 @@ export function arraySet(dst, src, offset) {
   const at = offset === undefined ? 0 : toIndex(offset);
   const end = at + src.length;
   if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
-  const copy = src.slice();
-  for (let i = 0; i < copy.length; i++) dst[at + i] = copy[i];
+  // Two plain arrays overlap only when they are one array, which is the one
+  // case that must read the source before writing it.
+  const from = src === dst ? src.slice() : src;
+  for (let i = 0; i < from.length; i++) dst[at + i] = from[i];
 }
 
 /** `new Array<T>(n)`: `n` zero-filled elements (`0`, `0n`, or `false`). */

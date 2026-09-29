@@ -58,6 +58,7 @@ import {
 } from "./escape"
 import {
   arrayMethodName,
+  isArrayWriteMethod,
   dottedName,
   intrinsicType,
   isAssignmentOperator,
@@ -753,7 +754,7 @@ const classifyMemberUse = (unit: AnalysisUnit, table: TypeTable, access: Node): 
     // are all `nocapture readonly` and whose `substring` copies what it keeps.
     // Anything else is treated as retaining the receiver.
     const method = arrayMethodName(program, table, above)
-    if (method === "push" || method === "pop" || method === "set" || method === "fill") {
+    if (isArrayWriteMethod(method)) {
       return use(USE_WRITE)
     }
     if (method.length > 0) {
@@ -1541,21 +1542,18 @@ class FactCollector {
       this.facts.callees.add("nish_alloc_struct")
       return
     }
-    // WP34 N2: a byte copy into the receiver's elements, which also reads the
-    // source's, and fails a range check through the slice panic.
-    if (method === "set") {
+    // WP34 N2: both write the receiver's elements. `fill` stores into a
+    // clamped range and calls nothing; `set` also reads its source's elements
+    // and fails a range check through the slice panic.
+    if (method === "set" || method === "fill") {
       this.facts.effect = EFFECT_WRITE
-      this.facts.readsMemory = true
       this.noteArrayWrite(call, methodReceiver(call))
-      if (!this.opts.uncheckedIndexing) {
-        this.facts.callees.add("nish_panic_slice")
+      if (method === "set") {
+        this.facts.readsMemory = true
+        if (!this.opts.uncheckedIndexing) {
+          this.facts.callees.add("nish_panic_slice")
+        }
       }
-      return
-    }
-    // A store of one value into a clamped range of slots: no check, no call.
-    if (method === "fill") {
-      this.facts.effect = EFFECT_WRITE
-      this.noteArrayWrite(call, methodReceiver(call))
       return
     }
     this.facts.readsMemory = true // `indexOf` scans the elements

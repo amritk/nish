@@ -28,12 +28,11 @@ import { resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { recordGuardFusion } from "./fusion"
-import { unwrapParens } from "./emit-util"
+import { builtinNameOf, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
   FLAG_CONST,
-  N_ARRAY,
   N_BLOCK,
   N_BREAK,
   N_CALL,
@@ -46,7 +45,6 @@ import {
   N_FOR_OF,
   N_IDENT,
   N_IF,
-  N_NEW,
   N_RETURN,
   N_SWITCH,
   N_THROW,
@@ -56,6 +54,7 @@ import {
   Node,
 } from "./nodes"
 import { caseValue } from "./constants"
+import { isFreshArrayExpression } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
 
@@ -273,15 +272,14 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
  * `const` bound to it names a buffer nothing else does (`Local.fresh`).
  */
 const allocatesArray = (ctx: CheckContext, init: Node): boolean => {
-  const e = unwrapParens(init)
-  if (e.kind === N_ARRAY || e.kind === N_NEW) {
+  if (isFreshArrayExpression(init)) {
     return true
   }
+  const e = unwrapParens(init)
   if (e.kind !== N_CALL || e.children[0].kind !== N_IDENT || ctx.program.nodeCallees[e.id] !== null) {
     return false
   }
-  const imported = ctx.program.nodeBuiltins[e.id]
-  return (imported.length > 0 ? imported : e.children[0].text) === "readFileBytesSync"
+  return builtinNameOf(ctx.program, e) === "readFileBytesSync"
 }
 
 /**
