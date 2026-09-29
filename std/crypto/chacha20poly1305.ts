@@ -260,6 +260,17 @@ const chacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[
 }
 
 /**
+ * The one-time key and the ChaCha20 state for the AEAD's payload: block 0
+ * of the keystream gives the Poly1305 key (RFC 8439 §2.6), and `state` is
+ * left at counter 1, where §2.8 starts the encryption.
+ */
+const chacha20Poly1305Setup = (state: u32[]): u8[] => {
+  const polyKey: u8[] = new Array<u8>(POLY1305_KEY_SIZE)
+  chacha20XorInto(state, polyKey, 0, POLY1305_KEY_SIZE, polyKey, 0)
+  return polyKey
+}
+
+/**
  * Whether the blocks `len` bytes need, from `counter` on, fit before the
  * 32-bit counter wraps.
  * RFC 8439 §2.4 leaves a wrap undefined, and a wrapped counter repeats the
@@ -302,11 +313,11 @@ export const chacha20QuarterRound = (state: u32[], a: i32, b: i32, c: i32, d: i3
  * `CHACHA20_KEY_SIZE` bytes and `nonce` is `CHACHA20POLY1305_NONCE_SIZE`.
  */
 export const chacha20Block = (key: u8[], counter: u32, nonce: u8[]): u8[] | null => {
-  if (toI32(key.length) !== 32 || toI32(nonce.length) !== 12) {
+  if (toI32(key.length) !== CHACHA20_KEY_SIZE || toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE) {
     return null
   }
-  const out: u8[] = new Array<u8>(64)
-  chacha20XorInto(chacha20State(key, counter, nonce, 0), out, 0, 64, out, 0)
+  const out: u8[] = new Array<u8>(CHACHA20_BLOCK_SIZE)
+  chacha20XorInto(chacha20State(key, counter, nonce, 0), out, 0, CHACHA20_BLOCK_SIZE, out, 0)
   return out
 }
 
@@ -319,7 +330,11 @@ export const chacha20Block = (key: u8[], counter: u32, nonce: u8[]): u8[] | null
  */
 export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[] | null => {
   const len: i32 = toI32(data.length)
-  if (toI32(key.length) !== 32 || toI32(nonce.length) !== 12 || !chacha20CounterFits(counter, len)) {
+  if (
+    toI32(key.length) !== CHACHA20_KEY_SIZE ||
+    toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
+    !chacha20CounterFits(counter, len)
+  ) {
     return null
   }
   const out: u8[] = new Array<u8>(len)
@@ -526,14 +541,14 @@ const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
  * `POLY1305_KEY_SIZE` bytes.
  */
 export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
-  if (toI32(key.length) !== 32) {
+  if (toI32(key.length) !== POLY1305_KEY_SIZE) {
     return null
   }
   const h: u64[] = new Array<u64>(5)
   const r: u64[] = new Array<u64>(5)
   poly1305Clamp(key, r)
   poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
-  const tag: u8[] = new Array<u8>(16)
+  const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
   poly1305Finish(h, key, tag)
   return tag
 }
@@ -545,7 +560,7 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
  * `CHACHA20POLY1305_NONCE_SIZE`.
  */
 export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
-  if (toI32(key.length) !== 32 || toI32(nonce.length) !== 12) {
+  if (toI32(key.length) !== CHACHA20_KEY_SIZE || toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE) {
     return null
   }
   return chacha20Poly1305Setup(chacha20State(key, 0, nonce, 0))
@@ -569,7 +584,7 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
     lengths[8 + i] = toU8(len >>> (8 * i))
   }
   poly1305Block(h, r, lengths, 0, toU64(POLY1305_HIGH_BIT))
-  const tag: u8[] = new Array<u8>(16)
+  const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
   poly1305Finish(h, polyKey, tag)
   return tag
 }
@@ -605,17 +620,6 @@ const chacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
 }
 
 /**
- * The one-time key and the ChaCha20 state for the AEAD's payload: block 0
- * of the keystream gives the Poly1305 key (RFC 8439 §2.6), and `state` is
- * left at counter 1, where §2.8 starts the encryption.
- */
-const chacha20Poly1305Setup = (state: u32[]): u8[] => {
-  const polyKey: u8[] = new Array<u8>(32)
-  chacha20XorInto(state, polyKey, 0, 32, polyKey, 0)
-  return polyKey
-}
-
-/**
  * AEAD_CHACHA20_POLY1305 encryption (RFC 8439 §2.8): the ciphertext of
  * `plaintext` followed by the 16-byte tag over it and `aad`. A nonce must
  * never be used twice with one key. Answers `null` unless `key` is
@@ -627,12 +631,16 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
   // is still an array length.
   const longest: i32 = 0x7fffffef
-  if (toI32(key.length) !== 32 || toI32(nonce.length) !== 12 || len > longest) {
+  if (
+    toI32(key.length) !== CHACHA20_KEY_SIZE ||
+    toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
+    len > longest
+  ) {
     return null
   }
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
-  const sealed: u8[] = new Array<u8>(len + 16)
+  const sealed: u8[] = new Array<u8>(len + POLY1305_TAG_SIZE)
   chacha20XorInto(state, plaintext, 0, len, sealed, 0)
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
   for (let i: i32 = 0; i < toI32(tag.length); i++) {
@@ -652,10 +660,14 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
  */
 export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null => {
   const total: i32 = toI32(sealed.length)
-  if (toI32(key.length) !== 32 || toI32(nonce.length) !== 12 || total < 16) {
+  if (
+    toI32(key.length) !== CHACHA20_KEY_SIZE ||
+    toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
+    total < POLY1305_TAG_SIZE
+  ) {
     return null
   }
-  const len: i32 = total - 16
+  const len: i32 = total - POLY1305_TAG_SIZE
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
@@ -677,10 +689,10 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
  * `CHACHA20_KEY_SIZE` bytes and `sample` is `CHACHA20_HEADER_SAMPLE_SIZE`.
  */
 export const chacha20HeaderMask = (hpKey: u8[], sample: u8[]): u8[] | null => {
-  if (toI32(hpKey.length) !== 32 || toI32(sample.length) !== 16) {
+  if (toI32(hpKey.length) !== CHACHA20_KEY_SIZE || toI32(sample.length) !== CHACHA20_HEADER_SAMPLE_SIZE) {
     return null
   }
-  const mask: u8[] = new Array<u8>(5)
+  const mask: u8[] = new Array<u8>(CHACHA20_HEADER_MASK_SIZE)
   chacha20XorInto(chacha20State(hpKey, chacha20Word(sample, 0), sample, 4), mask, 0, 5, mask, 0)
   return mask
 }

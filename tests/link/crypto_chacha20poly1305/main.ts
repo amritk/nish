@@ -32,6 +32,21 @@ import {
   ctPoly1305Finish,
 } from "../../cases/ct_asm_chacha20poly1305";
 import { fromHex, toHex } from "./hex";
+import {
+  A5_AAD,
+  A5_NONCE,
+  A5_PLAIN,
+  A5_SEALED,
+  AEAD_AAD,
+  AEAD_KEY,
+  AEAD_NONCE,
+  AEAD_SEALED,
+  IETF_SUBMISSION,
+  JABBERWOCKY,
+  KEY_1C92,
+  SUNSCREEN,
+  SUNSCREEN_CIPHER,
+} from "./vectors";
 
 const WORD_DIGITS: string = "0123456789abcdef";
 
@@ -68,10 +83,7 @@ const flip = (bytes: u8[] | null, at: i32, bit: i32): u8[] => {
 };
 
 /** `n` zero bytes. */
-const zeros = (n: i32): u8[] => {
-  const out: u8[] = new Array<u8>(n);
-  return out;
-};
+const zeros = (n: i32): u8[] => new Array<u8>(n);
 
 /** `n` bytes counting up from `start`, wrapping at 256. */
 const counting = (n: i32, start: i32): u8[] => {
@@ -101,14 +113,23 @@ const fixtureTag = (key: u8[], msg: u8[]): string => {
     for (let i: i32 = 0; at + i < len && i < 16; i++) {
       last[i] = msg[at + i];
     }
-    if (len - at < 16) {
-      last[len - at] = toU8(1);
-    }
+    last[len - at] = toU8(1);
     ctPoly1305Block(h, r, last, 0, toU64(0));
   }
   const tag: u8[] = new Array<u8>(16);
   ctPoly1305Finish(h, key, tag);
   return toHex(tag);
+};
+
+/**
+ * One RFC 8439 A.3 vector, twice: through the module's `poly1305` and through
+ * the ct_asm fixture's copies of its cores, which must agree with it.
+ */
+const tagBoth = (t: Suite, name: string, keyHex: string, msgHex: string, want: string): void => {
+  const key: u8[] = fromHex(keyHex);
+  const msg: u8[] = fromHex(msgHex);
+  t.eqStr(name, toHex(poly1305(key, msg)), want);
+  t.eqStr(`${name}, on the ct_asm fixture's copies`, fixtureTag(key, msg), want);
 };
 
 /** The fixture's tag compare as a word: all ones for a match, zero otherwise. */
@@ -157,17 +178,8 @@ export const main = (): i32 => {
     "10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4e" +
       "d2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e"
   );
-  const sunscreen: u8[] = fromHex(
-    "4c616469657320616e642047656e746c656d656e206f662074686520636c6173" +
-    "73206f66202739393a204966204920636f756c64206f6666657220796f75206f" +
-    "6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73" +
-    "637265656e20776f756c642062652069742e"
-  );
-  const sunscreenCipher: string =
-    "6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0b" +
-    "f91b65c5524733ab8f593dabcd62b3571639d624e65152ab8f530c359f0861d8" +
-    "07ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab7793736" +
-    "5af90bbf74a35be6b40b8eedf2785e42874d";
+  const sunscreen: u8[] = fromHex(SUNSCREEN);
+  const sunscreenCipher: string = SUNSCREEN_CIPHER;
   t.eqStr("§2.4.2 encryption", toHex(chacha20(key0to31, 1, fromHex("000000000000004a00000000"), sunscreen)), sunscreenCipher);
   t.eqStr(
     "§2.4.2 decryption is the same function",
@@ -182,20 +194,15 @@ export const main = (): i32 => {
   t.eqStr("§2.5.2 Poly1305", toHex(poly1305(polyKey252, forum)), "a8061dc1305136c6c22b8baf0c0127a9");
   t.eqStr(
     "§2.6.2 Poly1305 key generation",
-    toHex(poly1305KeyGen(fromHex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f"), fromHex("000000000001020304050607"))),
+    toHex(poly1305KeyGen(fromHex(AEAD_KEY), fromHex("000000000001020304050607"))),
     "8ad5a08b905f81cc815040274ab29471a833b637e3fd0da508dbb8e2fdd1a646"
   );
 
   // --- RFC 8439 §2.8.2: the AEAD ---------------------------------------------
-  const aeadKey: u8[] = fromHex("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
-  const aeadNonce: u8[] = fromHex("070000004041424344454647");
-  const aeadAad: u8[] = fromHex("50515253c0c1c2c3c4c5c6c7");
-  const aeadSealed: string =
-    "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d6" +
-    "3dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b36" +
-    "92ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc" +
-    "3ff4def08e4b7a9de576d26586cec64b61161ae10b594f09e26a7e902ecbd060" +
-    "0691";
+  const aeadKey: u8[] = fromHex(AEAD_KEY);
+  const aeadNonce: u8[] = fromHex(AEAD_NONCE);
+  const aeadAad: u8[] = fromHex(AEAD_AAD);
+  const aeadSealed: string = AEAD_SEALED;
   t.eqStr("§2.8.2 seal: the ciphertext and then the tag", toHex(chacha20Poly1305Seal(aeadKey, aeadNonce, aeadAad, sunscreen)), aeadSealed);
   t.eqStr("§2.8.2 open", toHex(chacha20Poly1305Open(aeadKey, aeadNonce, aeadAad, fromHex(aeadSealed))), toHex(sunscreen));
 
@@ -239,10 +246,8 @@ export const main = (): i32 => {
         fromHex("0000000000000000000000000000000000000000000000000000000000000000"),
         0,
         fromHex("000000000000000000000000"),
-        fromHex(
-          "0000000000000000000000000000000000000000000000000000000000000000" +
-          "0000000000000000000000000000000000000000000000000000000000000000"
-        )
+        fromHex("0000000000000000000000000000000000000000000000000000000000000000" +
+          "0000000000000000000000000000000000000000000000000000000000000000")
       )
     ),
     "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7" +
@@ -255,20 +260,7 @@ export const main = (): i32 => {
         fromHex("0000000000000000000000000000000000000000000000000000000000000001"),
         1,
         fromHex("000000000000000000000002"),
-        fromHex(
-          "416e79207375626d697373696f6e20746f20746865204945544620696e74656e" +
-          "6465642062792074686520436f6e7472696275746f7220666f72207075626c69" +
-          "636174696f6e20617320616c6c206f722070617274206f6620616e2049455446" +
-          "20496e7465726e65742d4472616674206f722052464320616e6420616e792073" +
-          "746174656d656e74206d6164652077697468696e2074686520636f6e74657874" +
-          "206f6620616e204945544620616374697669747920697320636f6e7369646572" +
-          "656420616e20224945544620436f6e747269627574696f6e222e205375636820" +
-          "73746174656d656e747320696e636c756465206f72616c2073746174656d656e" +
-          "747320696e20494554462073657373696f6e732c2061732077656c6c20617320" +
-          "7772697474656e20616e6420656c656374726f6e696320636f6d6d756e696361" +
-          "74696f6e73206d61646520617420616e792074696d65206f7220706c6163652c" +
-          "207768696368206172652061646472657373656420746f"
-        )
+        fromHex(IETF_SUBMISSION)
       )
     ),
     "a3fbf07df3fa2fde4f376ca23e82737041605d9f4f4f57bd8cff2c1d4b7955ec" +
@@ -288,15 +280,10 @@ export const main = (): i32 => {
     "A.2 test vector #3",
     toHex(
       chacha20(
-        fromHex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"),
+        fromHex(KEY_1C92),
         42,
         fromHex("000000000000000000000002"),
-        fromHex(
-          "2754776173206272696c6c69672c20616e642074686520736c6974687920746f" +
-          "7665730a446964206779726520616e642067696d626c6520696e207468652077" +
-          "6162653a0a416c6c206d696d737920776572652074686520626f726f676f7665" +
-          "732c0a416e6420746865206d6f6d65207261746873206f757467726162652e"
-        )
+        fromHex(JABBERWOCKY)
       )
     ),
     "62e6347f95ed87a45ffae7426f27a1df5fb69110044c0d73118effa95b01e5cf" +
@@ -306,155 +293,100 @@ export const main = (): i32 => {
   );
 
   // --- RFC 8439 A.3: Poly1305, on the module and on the fixture's copies --------
-  {
-    const key: u8[] = fromHex("0000000000000000000000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "0000000000000000000000000000000000000000000000000000000000000000" +
-      "0000000000000000000000000000000000000000000000000000000000000000"
-    );
-    t.eqStr("A.3 test vector #1", toHex(poly1305(key, msg)), "00000000000000000000000000000000");
-    t.eqStr("A.3 test vector #1, on the ct_asm fixture's copies", fixtureTag(key, msg), "00000000000000000000000000000000");
-  }
-  {
-    const key: u8[] = fromHex("0000000000000000000000000000000036e5f6b5c5e06070f0efca96227a863e");
-    const msg: u8[] = fromHex(
-      "416e79207375626d697373696f6e20746f20746865204945544620696e74656e" +
-      "6465642062792074686520436f6e7472696275746f7220666f72207075626c69" +
-      "636174696f6e20617320616c6c206f722070617274206f6620616e2049455446" +
-      "20496e7465726e65742d4472616674206f722052464320616e6420616e792073" +
-      "746174656d656e74206d6164652077697468696e2074686520636f6e74657874" +
-      "206f6620616e204945544620616374697669747920697320636f6e7369646572" +
-      "656420616e20224945544620436f6e747269627574696f6e222e205375636820" +
-      "73746174656d656e747320696e636c756465206f72616c2073746174656d656e" +
-      "747320696e20494554462073657373696f6e732c2061732077656c6c20617320" +
-      "7772697474656e20616e6420656c656374726f6e696320636f6d6d756e696361" +
-      "74696f6e73206d61646520617420616e792074696d65206f7220706c6163652c" +
-      "207768696368206172652061646472657373656420746f"
-    );
-    t.eqStr("A.3 test vector #2", toHex(poly1305(key, msg)), "36e5f6b5c5e06070f0efca96227a863e");
-    t.eqStr("A.3 test vector #2, on the ct_asm fixture's copies", fixtureTag(key, msg), "36e5f6b5c5e06070f0efca96227a863e");
-  }
-  {
-    const key: u8[] = fromHex("36e5f6b5c5e06070f0efca96227a863e00000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "416e79207375626d697373696f6e20746f20746865204945544620696e74656e" +
-      "6465642062792074686520436f6e7472696275746f7220666f72207075626c69" +
-      "636174696f6e20617320616c6c206f722070617274206f6620616e2049455446" +
-      "20496e7465726e65742d4472616674206f722052464320616e6420616e792073" +
-      "746174656d656e74206d6164652077697468696e2074686520636f6e74657874" +
-      "206f6620616e204945544620616374697669747920697320636f6e7369646572" +
-      "656420616e20224945544620436f6e747269627574696f6e222e205375636820" +
-      "73746174656d656e747320696e636c756465206f72616c2073746174656d656e" +
-      "747320696e20494554462073657373696f6e732c2061732077656c6c20617320" +
-      "7772697474656e20616e6420656c656374726f6e696320636f6d6d756e696361" +
-      "74696f6e73206d61646520617420616e792074696d65206f7220706c6163652c" +
-      "207768696368206172652061646472657373656420746f"
-    );
-    t.eqStr("A.3 test vector #3", toHex(poly1305(key, msg)), "f3477e7cd95417af89a6b8794c310cf0");
-    t.eqStr("A.3 test vector #3, on the ct_asm fixture's copies", fixtureTag(key, msg), "f3477e7cd95417af89a6b8794c310cf0");
-  }
-  {
-    const key: u8[] = fromHex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0");
-    const msg: u8[] = fromHex(
-      "2754776173206272696c6c69672c20616e642074686520736c6974687920746f" +
-      "7665730a446964206779726520616e642067696d626c6520696e207468652077" +
-      "6162653a0a416c6c206d696d737920776572652074686520626f726f676f7665" +
-      "732c0a416e6420746865206d6f6d65207261746873206f757467726162652e"
-    );
-    t.eqStr("A.3 test vector #4", toHex(poly1305(key, msg)), "4541669a7eaaee61e708dc7cbcc5eb62");
-    t.eqStr("A.3 test vector #4, on the ct_asm fixture's copies", fixtureTag(key, msg), "4541669a7eaaee61e708dc7cbcc5eb62");
-  }
-  {
-    const key: u8[] = fromHex("0200000000000000000000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "ffffffffffffffffffffffffffffffff"
-    );
-    t.eqStr("A.3 test vector #5: the partially reduced result is not fully reduced", toHex(poly1305(key, msg)), "03000000000000000000000000000000");
-    t.eqStr("A.3 test vector #5: the partially reduced result is not fully reduced, on the ct_asm fixture's copies", fixtureTag(key, msg), "03000000000000000000000000000000");
-  }
-  {
-    const key: u8[] = fromHex("02000000000000000000000000000000ffffffffffffffffffffffffffffffff");
-    const msg: u8[] = fromHex(
-      "02000000000000000000000000000000"
-    );
-    t.eqStr("A.3 test vector #6: adding s overflows modulo 2^128", toHex(poly1305(key, msg)), "03000000000000000000000000000000");
-    t.eqStr("A.3 test vector #6: adding s overflows modulo 2^128, on the ct_asm fixture's copies", fixtureTag(key, msg), "03000000000000000000000000000000");
-  }
-  {
-    const key: u8[] = fromHex("0100000000000000000000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "fffffffffffffffffffffffffffffffff0ffffffffffffffffffffffffffffff" +
-      "11000000000000000000000000000000"
-    );
-    t.eqStr("A.3 test vector #7: a data limb of all ones with a carry from the limb below", toHex(poly1305(key, msg)), "05000000000000000000000000000000");
-    t.eqStr("A.3 test vector #7: a data limb of all ones with a carry from the limb below, on the ct_asm fixture's copies", fixtureTag(key, msg), "05000000000000000000000000000000");
-  }
-  {
-    const key: u8[] = fromHex("0100000000000000000000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "fffffffffffffffffffffffffffffffffbfefefefefefefefefefefefefefefe" +
-      "01010101010101010101010101010101"
-    );
-    t.eqStr("A.3 test vector #8: the polynomial part is exactly 2^130 - 5", toHex(poly1305(key, msg)), "00000000000000000000000000000000");
-    t.eqStr("A.3 test vector #8: the polynomial part is exactly 2^130 - 5, on the ct_asm fixture's copies", fixtureTag(key, msg), "00000000000000000000000000000000");
-  }
-  {
-    const key: u8[] = fromHex("0200000000000000000000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "fdffffffffffffffffffffffffffffff"
-    );
-    t.eqStr("A.3 test vector #9: the polynomial part is exactly 2^130 - 6", toHex(poly1305(key, msg)), "faffffffffffffffffffffffffffffff");
-    t.eqStr("A.3 test vector #9: the polynomial part is exactly 2^130 - 6, on the ct_asm fixture's copies", fixtureTag(key, msg), "faffffffffffffffffffffffffffffff");
-  }
-  {
-    const key: u8[] = fromHex("0100000000000000040000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "e33594d7505e43b900000000000000003394d7505e4379cd0100000000000000" +
-      "0000000000000000000000000000000001000000000000000000000000000000"
-    );
-    t.eqStr("A.3 test vector #10: 5*H+L reduction makes a 131-bit intermediate", toHex(poly1305(key, msg)), "14000000000000005500000000000000");
-    t.eqStr("A.3 test vector #10: 5*H+L reduction makes a 131-bit intermediate, on the ct_asm fixture's copies", fixtureTag(key, msg), "14000000000000005500000000000000");
-  }
-  {
-    const key: u8[] = fromHex("0100000000000000040000000000000000000000000000000000000000000000");
-    const msg: u8[] = fromHex(
-      "e33594d7505e43b900000000000000003394d7505e4379cd0100000000000000" +
-      "00000000000000000000000000000000"
-    );
-    t.eqStr("A.3 test vector #11: 5*H+L reduction makes a 131-bit final result", toHex(poly1305(key, msg)), "13000000000000000000000000000000");
-    t.eqStr("A.3 test vector #11: 5*H+L reduction makes a 131-bit final result, on the ct_asm fixture's copies", fixtureTag(key, msg), "13000000000000000000000000000000");
-  }
+  tagBoth(
+    t,
+    "A.3 test vector #1",
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0000000000000000000000000000000000000000000000000000000000000000" +
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "00000000000000000000000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #2",
+    "0000000000000000000000000000000036e5f6b5c5e06070f0efca96227a863e",
+    IETF_SUBMISSION,
+    "36e5f6b5c5e06070f0efca96227a863e"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #3",
+    "36e5f6b5c5e06070f0efca96227a863e00000000000000000000000000000000",
+    IETF_SUBMISSION,
+    "f3477e7cd95417af89a6b8794c310cf0"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #4",
+    KEY_1C92,
+    JABBERWOCKY,
+    "4541669a7eaaee61e708dc7cbcc5eb62"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #5: the partially reduced result is not fully reduced",
+    "0200000000000000000000000000000000000000000000000000000000000000",
+    "ffffffffffffffffffffffffffffffff",
+    "03000000000000000000000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #6: adding s overflows modulo 2^128",
+    "02000000000000000000000000000000ffffffffffffffffffffffffffffffff",
+    "02000000000000000000000000000000",
+    "03000000000000000000000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #7: a data limb of all ones with a carry from the limb below",
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "fffffffffffffffffffffffffffffffff0ffffffffffffffffffffffffffffff" +
+    "11000000000000000000000000000000",
+    "05000000000000000000000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #8: the polynomial part is exactly 2^130 - 5",
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "fffffffffffffffffffffffffffffffffbfefefefefefefefefefefefefefefe" +
+    "01010101010101010101010101010101",
+    "00000000000000000000000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #9: the polynomial part is exactly 2^130 - 6",
+    "0200000000000000000000000000000000000000000000000000000000000000",
+    "fdffffffffffffffffffffffffffffff",
+    "faffffffffffffffffffffffffffffff"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #10: 5*H+L reduction makes a 131-bit intermediate",
+    "0100000000000000040000000000000000000000000000000000000000000000",
+    "e33594d7505e43b900000000000000003394d7505e4379cd0100000000000000" +
+    "0000000000000000000000000000000001000000000000000000000000000000",
+    "14000000000000005500000000000000"
+  );
+  tagBoth(
+    t,
+    "A.3 test vector #11: 5*H+L reduction makes a 131-bit final result",
+    "0100000000000000040000000000000000000000000000000000000000000000",
+    "e33594d7505e43b900000000000000003394d7505e4379cd0100000000000000" +
+    "00000000000000000000000000000000",
+    "13000000000000000000000000000000"
+  );
 
   // --- RFC 8439 A.4: Poly1305 key generation -----------------------------------
   t.eqStr("A.4 test vector #1", toHex(poly1305KeyGen(fromHex("0000000000000000000000000000000000000000000000000000000000000000"), fromHex("000000000000000000000000"))), "76b8e0ada0f13d90405d6ae55386bd28bdd219b8a08ded1aa836efcc8b770dc7");
   t.eqStr("A.4 test vector #2", toHex(poly1305KeyGen(fromHex("0000000000000000000000000000000000000000000000000000000000000001"), fromHex("000000000000000000000002"))), "ecfa254f845f647473d3cb140da9e87606cb33066c447b87bc2666dde3fbb739");
-  t.eqStr("A.4 test vector #3", toHex(poly1305KeyGen(fromHex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0"), fromHex("000000000000000000000002"))), "965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae");
+  t.eqStr("A.4 test vector #3", toHex(poly1305KeyGen(fromHex(KEY_1C92), fromHex("000000000000000000000002"))), "965e3bc6f9ec7ed9560808f4d229f94b137ff275ca9b3fcbdd59deaad23310ae");
 
   // --- RFC 8439 A.5: AEAD decryption ------------------------------------------
-  const a5Key: u8[] = fromHex("1c9240a5eb55d38af333888604f6b5f0473917c1402b80099dca5cbc207075c0");
-  const a5Nonce: u8[] = fromHex("000000000102030405060708");
-  const a5Aad: u8[] = fromHex("f33388860000000000004e91");
-  const a5Sealed: u8[] = fromHex(
-    "64a0861575861af460f062c79be643bd5e805cfd345cf389f108670ac76c8cb2" +
-    "4c6cfc18755d43eea09ee94e382d26b0bdb7b73c321b0100d4f03b7f355894cf" +
-    "332f830e710b97ce98c8a84abd0b948114ad176e008d33bd60f982b1ff37c855" +
-    "9797a06ef4f0ef61c186324e2b3506383606907b6a7c02b0f9f6157b53c867e4" +
-    "b9166c767b804d46a59b5216cde7a4e99040c5a40433225ee282a1b0a06c523e" +
-    "af4534d7f83fa1155b0047718cbc546a0d072b04b3564eea1b422273f548271a" +
-    "0bb2316053fa76991955ebd63159434ecebb4e466dae5a1073a6727627097a10" +
-    "49e617d91d361094fa68f0ff77987130305beaba2eda04df997b714d6c6f2c29" +
-    "a6ad5cb4022b02709beead9d67890cbb22392336fea1851f38"
-  );
-  const a5Plain: string =
-    "496e7465726e65742d4472616674732061726520647261667420646f63756d65" +
-    "6e74732076616c696420666f722061206d6178696d756d206f6620736978206d" +
-    "6f6e74687320616e64206d617920626520757064617465642c207265706c6163" +
-    "65642c206f72206f62736f6c65746564206279206f7468657220646f63756d65" +
-    "6e747320617420616e792074696d652e20497420697320696e617070726f7072" +
-    "6961746520746f2075736520496e7465726e65742d4472616674732061732072" +
-    "65666572656e6365206d6174657269616c206f7220746f206369746520746865" +
-    "6d206f74686572207468616e206173202fe2809c776f726b20696e2070726f67" +
-    "726573732e2fe2809d";
+  const a5Key: u8[] = fromHex(KEY_1C92);
+  const a5Nonce: u8[] = fromHex(A5_NONCE);
+  const a5Aad: u8[] = fromHex(A5_AAD);
+  const a5Sealed: u8[] = fromHex(A5_SEALED);
+  const a5Plain: string = A5_PLAIN;
   t.eqStr("A.5 decryption", toHex(chacha20Poly1305Open(a5Key, a5Nonce, a5Aad, a5Sealed)), a5Plain);
   t.eqStr("A.5 sealing the plaintext again gives the same message", toHex(chacha20Poly1305Seal(a5Key, a5Nonce, a5Aad, fromHex(a5Plain))), toHex(a5Sealed));
 
