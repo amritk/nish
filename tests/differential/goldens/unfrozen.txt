@@ -189,6 +189,7 @@ cases/port_array_quiet_f64 added after R6: no rewriter to freeze it with
 cases/port_array_zero_fill added after R6: no rewriter to freeze it with
 cases/port_str_ascii_literal_quiet added after R6: no rewriter to freeze it with
 cases/port_str_length_printed added after R6: no rewriter to freeze it with
+cases/port_str_needle_step_printed added after R6: no rewriter to freeze it with
 cases/port_str_nonascii_charcode added after R6: no rewriter to freeze it with
 cases/port_str_offset_roundtrip_quiet added after R6: no rewriter to freeze it with
 cases/port_str_slice_negative added after R6: no rewriter to freeze it with

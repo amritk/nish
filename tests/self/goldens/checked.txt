@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 724 programs, 51213 dump lines.
+# 725 programs, 51246 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37213,12 +37213,13 @@ program tests/cases/port_str_ascii_literal_quiet.ts
 module tests/cases/port_str_ascii_literal_quiet.ts (entry)
 const GREETING: string = "hello there"
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_at nish_str_concat nish_str_from_i32
+  calls: nish_panic_index nish_print nish_str_at nish_str_concat nish_str_from_i32
   stackSites=1 stackLocals=1
-  local 9:9 word: string (const)
-  local 13:9 sizes: i32[] (const)
+  local 10:9 word: string (const)
+  local 14:9 sizes: i32[] (const)
+  local 18:7 built: string (let)
 program tests/cases/port_str_length_printed.ts
 module tests/cases/port_str_length_printed.ts (entry)
 struct Label (class) size=4 align=4
@@ -37247,6 +37248,39 @@ function main(): i32 -> @nish_main [exported entry]
   local 25:9 widths: i32[] (const)
   callee 27:15 describe -> @describe
   callee 28:15 room -> @room
+program tests/cases/port_str_needle_step_printed.ts
+module tests/cases/port_str_needle_step_printed.ts (entry)
+function printPos(line: string): void -> @printPos
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_at nish_str_from_i32
+  stackSites=0 stackLocals=0
+function storePos(line: string, into: i32[]): void -> @storePos
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  calls: nish_array_grow nish_str_at
+  pointer into: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 12:9 at: i32 (const)
+function afterColon(line: string): string -> @afterColon
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_new
+  stackSites=0 stackLocals=0
+function afterGap(line: string): string -> @afterGap
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via printPos
+  calls: afterColon afterGap nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32 printPos storePos
+  stackSites=1 stackLocals=1
+  local 21:9 line: string (const)
+  callee 22:3 printPos -> @printPos
+  local 23:9 positions: i32[] (const)
+  callee 24:3 storePos -> @storePos
+  callee 26:15 afterColon -> @afterColon
+  callee 27:15 afterGap -> @afterGap
 program tests/cases/port_str_nonascii_charcode.ts
 module tests/cases/port_str_nonascii_charcode.ts (entry)
 function isAccented(s: string, i: i32): boolean -> @isAccented
