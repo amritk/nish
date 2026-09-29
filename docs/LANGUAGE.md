@@ -191,7 +191,7 @@ Type rules:
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
-  a `type` alias or a numeric `enum` declared in the module
+  a `type` alias or a numeric `enum` declared or imported in the module
   ([Type aliases](#type-aliases), [Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
@@ -1108,17 +1108,44 @@ program twice, with one golden between them.
   interfaces and module constants: a clash is
   `` `Point` is already declared in this module `` whichever came first
   (`tests/cases/reject_type_alias_duplicate`).
-- **An alias is module-local and cannot be exported.**
-  `export type Byte = u8` is
-  `` Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it) ``
-  (`tests/cases/reject_type_alias_export`). This is a limitation rather than a
-  design decision, and no longer the load order's: every module declares its
-  aliases before any module collects a signature, which is what lets an
-  exported [enum](#enums) be imported. What an alias still lacks is its
-  right-hand side resolved in the scope of the module that wrote it, when the
-  module using it may not see the classes that side names. Declare the alias
-  in each module that needs it; a class, an interface or an enum is what
-  crosses a module boundary.
+- **An exported alias is imported, and in the importer it is the type it
+  names.** `export type Pt = Point` in `shapes.ts` and
+  `import { Pt } from "./shapes"` elsewhere make `Pt` a second spelling of
+  `Point` there too: a field, parameter or return type, a local, an array
+  element, and a `Point` from `new` passes where a `Pt` is declared
+  (`tests/link/alias_export_class`). The right-hand side is resolved **in the
+  module that wrote it**, whichever module asks first, so
+  `export type Conn = Socket | null` works when `Socket` is a class the
+  exporter itself imported, and the importer never has to import `Socket`
+  (`alias_export_imported_class`). An array, a `T | null` and a `Result`
+  alias are the types they name (`alias_export_array`,
+  `alias_export_nullable`, `alias_export_result`), a chain of aliases across
+  modules resolves by need (`alias_export_chain`: `Table` is `Line[]`, `Line`
+  is an imported `Row`, `Row` is `Cell[]`, `Cell` is `i32`), and unlike a
+  class an alias may be renamed on import — `import { Conn as Handle }` —
+  because it has no symbol for its name to be part of (`alias_export_rename`).
+  Nothing is emitted in either module, so the importer's IR is
+  byte-identical to the same program with every alias written out
+  (`alias_export_ir` and `alias_export_ir_local`, whose `.ll` goldens are the
+  same files).
+  - **A mistake on the right-hand side is the exporter's.** It is reported
+    against the module that wrote the alias, even when another module asked
+    for the alias first (`tests/link/alias_export_broken`), and a cycle that
+    runs through two modules' aliases is
+    `` Type alias `B` is defined in terms of itself ``, at the first alias of
+    the cycle the report reaches (`alias_export_cycle`).
+  - **The import errors are the ones every import has.** An alias declared
+    without `export` is
+    `` `Conn` is declared in `./conn` but not exported (add `export`) ``
+    (`tests/link/alias_import_not_exported`); a declaration of the imported
+    name is `` `Conn` is already declared in this module ``
+    (`alias_import_clash`); a second import of it is
+    `` `Conn` is already imported from `./conn` `` (`alias_import_duplicate`);
+    and an alias is a type, not a value: `new Conn()` is
+    `` Unknown class `Conn` ``, as it is for a local alias
+    (`alias_import_as_value`). A module does not re-export an alias it
+    imported. An imported alias is bound before the signatures, for the
+    reason an imported [enum](#enums) is.
 - **Aliases are top-level only.** `type X = i32` inside a function body is
   `Unsupported statement in Phase 1: TypeAliasDeclaration` *(CLI only)*.
 
@@ -1251,9 +1278,10 @@ and their `.ll` goldens are byte-identical files.
 
 ### `export` and `import`
 
-- `export` is accepted on `function`, `class`, `interface`, `enum` and `const`
-  declarations (`tests/cases/export_fn`, `tests/link/class_export`,
-  `tests/link/enum_export_uses`, `tests/link/const_export`). `export default`, `export { ... }`,
+- `export` is accepted on `function`, `class`, `interface`, `enum`, `type`
+  and `const` declarations (`tests/cases/export_fn`, `tests/link/class_export`,
+  `tests/link/enum_export_uses`, `tests/link/alias_export_class`,
+  `tests/link/const_export`). `export default`, `export { ... }`,
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
@@ -4809,10 +4837,9 @@ messages are exact for the cases cited; other rows quote the checker
 | a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
 | type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
-| `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
-| importing an enum its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported` |
-| a declaration named like an imported enum, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function` |
+| importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |
+| a declaration named like an imported enum or alias, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function`, `alias_import_clash`, `alias_import_duplicate` |
 | `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
 | `declare enum` | `` `declare enum` is not supported `` | *(CLI only)* |
 | enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |

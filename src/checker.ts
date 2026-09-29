@@ -252,7 +252,7 @@ export class Checker {
     // diagnostics in one order: every alias is resolved even when nothing
     // names it, so a broken right-hand side and a cycle are reported where
     // they are written rather than at the first use -- or never. An imported
-    // one is its own module's to resolve, so it is reported there, once.
+    // one is the module that wrote it to resolve, and to report.
     for (const alias of this.program.aliasList) {
       if (alias.origin === this.program.source) {
         this.ctx.errored = false

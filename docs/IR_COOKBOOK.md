@@ -6616,6 +6616,14 @@ attributes #2 = { nounwind }
 ```
 <!-- cookbook:end decl-type-alias -->
 
+**An imported alias lowers exactly as this one does.** `import { Conn } from
+"./conn"` makes `Conn` a second spelling of the type `conn.ts` wrote on its
+right-hand side, so a `Conn` parameter is that type's parameter and neither
+module gains a symbol for the alias: `tests/link/alias_export_ir` and
+`alias_export_ir_local` are one program with its types imported through
+aliases and with them written out, and both modules' `.ll` goldens are
+byte-identical files.
+
 ### `declare function`: calling C
 
 A `declare function` is a C function this program **calls but does not define**

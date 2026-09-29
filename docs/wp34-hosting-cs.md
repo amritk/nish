@@ -133,7 +133,7 @@ Items in the checker lane (N1) do not overlap each other.
 ### N1. Exported enums and type aliases (S–M, checker lane)
 
 A protocol stack is enums crossing module boundaries: frame types, error codes,
-stream states and settings identifiers. Today an enum or an alias cannot be
+stream states and settings identifiers. Before N1 an enum or an alias could not be
 exported (LANGUAGE.md §Enums, §Type aliases).
 
 **Acceptance.** An exported enum is used in a second module as a field type, a
@@ -141,12 +141,15 @@ parameter type, a `switch` discriminant and a `Map` key. An exported alias is
 used the same way for a class, an array and a `T | null`. The rules that stay
 keep their negative tests: no string enum, no `const enum`, no default export.
 
-**State.** The enum half is done: an exported enum is imported and used as all
-four (`tests/link/enum_export_uses`), and LANGUAGE.md §Enums has the rule. The
-load order it needed — every module's enums and aliases declared, and its
-imported enums bound, before any signature — covers aliases too, so what is
-left of N1 is binding an exported alias and resolving its right-hand side in
-the module that wrote it.
+**State.** Done. An exported enum is imported and used as all four
+(`tests/link/enum_export_uses`), and LANGUAGE.md §Enums has the rule. An
+exported alias is imported and resolves to the class, array or `T | null` it
+names (`tests/link/alias_export_class`, `alias_export_array`,
+`alias_export_nullable`), its right-hand side resolved in the module that
+wrote it, so it may name a class that module imported
+(`alias_export_imported_class`); LANGUAGE.md §Type aliases has the rule. Both
+are bound by the same pre-pass: every module's enums and aliases declared, and
+its imported ones bound, before any signature.
 
 ### N2. Byte plumbing (S–M, builtins lane)
 

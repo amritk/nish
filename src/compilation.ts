@@ -995,8 +995,8 @@ export class Compilation {
     }
     // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
     // Pass 1 could only write the request down — it runs before any import but
-    // an enum or an alias is bound — and it is made here, once every module can answer one
-    // and can resolve its own imports while doing so.
+    // an enum or an alias is bound — and it is made here, once every module
+    // can answer one and can resolve its own imports while doing so.
     for (const unit of this.modules) {
       unit.checker.makeDeferredInstantiations()
     }
