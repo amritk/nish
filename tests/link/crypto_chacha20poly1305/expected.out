@@ -1,0 +1,92 @@
+PASS  CHACHA20_KEY_SIZE is 32 bytes
+PASS  CHACHA20POLY1305_NONCE_SIZE is 12 bytes
+PASS  CHACHA20_BLOCK_SIZE is 64 bytes
+PASS  POLY1305_KEY_SIZE is 32 bytes
+PASS  POLY1305_TAG_SIZE is 16 bytes
+PASS  CHACHA20_HEADER_SAMPLE_SIZE is 16 bytes
+PASS  CHACHA20_HEADER_MASK_SIZE is 5 bytes
+PASS  §2.1.1 quarter round
+PASS  §2.1.1 the input is not changed
+PASS  §2.2.1 QUARTERROUND(2, 7, 8, 13) on a state
+PASS  a quarter round at position 16 of 16 answers null
+PASS  a quarter round at position -1 answers null
+PASS  §2.3.2 block function
+PASS  §2.4.2 encryption
+PASS  §2.4.2 decryption is the same function
+PASS  §2.5.2 Poly1305
+PASS  §2.6.2 Poly1305 key generation
+PASS  §2.8.2 seal: the ciphertext and then the tag
+PASS  §2.8.2 open
+PASS  A.1 test vector #1
+PASS  A.1 test vector #2
+PASS  A.1 test vector #3
+PASS  A.1 test vector #4
+PASS  A.1 test vector #5
+PASS  A.2 test vector #1
+PASS  A.2 test vector #2
+PASS  A.2 test vector #3
+PASS  A.3 test vector #1
+PASS  A.3 test vector #1, on the ct_asm fixture's copies
+PASS  A.3 test vector #2
+PASS  A.3 test vector #2, on the ct_asm fixture's copies
+PASS  A.3 test vector #3
+PASS  A.3 test vector #3, on the ct_asm fixture's copies
+PASS  A.3 test vector #4
+PASS  A.3 test vector #4, on the ct_asm fixture's copies
+PASS  A.3 test vector #5: the partially reduced result is not fully reduced
+PASS  A.3 test vector #5: the partially reduced result is not fully reduced, on the ct_asm fixture's copies
+PASS  A.3 test vector #6: adding s overflows modulo 2^128
+PASS  A.3 test vector #6: adding s overflows modulo 2^128, on the ct_asm fixture's copies
+PASS  A.3 test vector #7: a data limb of all ones with a carry from the limb below
+PASS  A.3 test vector #7: a data limb of all ones with a carry from the limb below, on the ct_asm fixture's copies
+PASS  A.3 test vector #8: the polynomial part is exactly 2^130 - 5
+PASS  A.3 test vector #8: the polynomial part is exactly 2^130 - 5, on the ct_asm fixture's copies
+PASS  A.3 test vector #9: the polynomial part is exactly 2^130 - 6
+PASS  A.3 test vector #9: the polynomial part is exactly 2^130 - 6, on the ct_asm fixture's copies
+PASS  A.3 test vector #10: 5*H+L reduction makes a 131-bit intermediate
+PASS  A.3 test vector #10: 5*H+L reduction makes a 131-bit intermediate, on the ct_asm fixture's copies
+PASS  A.3 test vector #11: 5*H+L reduction makes a 131-bit final result
+PASS  A.3 test vector #11: 5*H+L reduction makes a 131-bit final result, on the ct_asm fixture's copies
+PASS  A.4 test vector #1
+PASS  A.4 test vector #2
+PASS  A.4 test vector #3
+PASS  A.5 decryption
+PASS  A.5 sealing the plaintext again gives the same message
+PASS  RFC 9001 A.5 payload ciphertext
+PASS  RFC 9001 A.5 mask
+PASS  RFC 9001 A.5 protected packet
+PASS  seal then open gives the plaintext back for every length from 0 to 130
+PASS  an empty plaintext seals to the tag alone
+PASS  the tag alone opens to an empty plaintext
+PASS  the tag alone with a bit flipped answers null
+PASS  the last bit of the tag flipped answers null
+PASS  the first bit of the tag flipped answers null
+PASS  a bit of the ciphertext flipped answers null
+PASS  a bit of the AAD flipped answers null
+PASS  a bit of the nonce flipped answers null
+PASS  a bit of the key flipped answers null
+PASS  the AAD left out answers null
+PASS  a sealed message shorter than a tag answers null
+PASS  sixteen zero bytes are not the tag of nothing
+PASS  seal with a 31-byte key answers null
+PASS  seal with a 33-byte key answers null
+PASS  seal with an 11-byte nonce answers null
+PASS  seal with a 13-byte nonce answers null
+PASS  open with a 31-byte key answers null
+PASS  open with an 8-byte nonce answers null
+PASS  chacha20 with a 16-byte key answers null
+PASS  chacha20 with an 8-byte nonce answers null
+PASS  chacha20Block with a 31-byte key answers null
+PASS  chacha20Block with a 13-byte nonce answers null
+PASS  poly1305 with a 16-byte key answers null
+PASS  poly1305KeyGen with a 31-byte key answers null
+PASS  poly1305KeyGen with an 11-byte nonce answers null
+PASS  a header mask with a 31-byte key answers null
+PASS  a header mask from a 15-byte sample answers null
+PASS  a header mask from a 17-byte sample answers null
+PASS  counter 2^32 - 1 encrypts one block
+PASS  a 65th byte at counter 2^32 - 1 would wrap the counter, and answers null
+PASS  nothing to encrypt at counter 2^32 - 1 is an empty answer
+PASS  the fixture's tag compare matches the §2.8.2 tag in place
+PASS  the fixture's tag compare refuses a flipped bit in each of the sixteen bytes
+chacha20poly1305: 91 passed, 0 failed, 0 skipped
