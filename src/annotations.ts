@@ -338,7 +338,8 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   }
 
   // An enum is a type of its own, and its name is the only way to spell it
-  // (docs/LANGUAGE.md, Enums).
+  // (docs/LANGUAGE.md, Enums). An imported one answers here too: it is bound
+  // before pass 1, so it never reaches the provisional class below.
   const declaredEnum = ctx.program.enumNamed(name)
   if (declaredEnum !== null) {
     return declaredEnum.type
