@@ -138,6 +138,7 @@ import {
   TOK_DEFAULT,
   TOK_DO,
   TOK_DOT,
+  TOK_DOT_DOT_DOT,
   TOK_ELSE,
   TOK_END,
   TOK_EQ,
@@ -660,29 +661,133 @@ export class Parser {
       return true
     }
     // `catch (e) {`, `catch (e: unknown) {` and a destructured `catch ({ message }) {`
-    // or `catch ([a]) {`, and not a call `catch(1)`: a binding is a name or a
-    // pattern, and a call's argument that is neither is not a handler.
+    // or `catch ([a]) {`. A call's argument that is not a binding — `catch(1)`,
+    // `catch([1, 2])`, `catch({ first: 1 })` — makes it the call it was.
     if (handler !== "catch" || scan.kind !== TOK_LPAREN) {
       return false
     }
     scan.next()
-    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_LBRACE && scan.kind !== TOK_LBRACKET) {
+    if (!this.scanBinding(scan)) {
       return false
     }
-    let depth = 1
-    while (depth > 0) {
+    if (scan.kind === TOK_COLON) {
+      // The annotation, to the parenthesis that closes the binding.
       scan.next()
-      if (scan.kind === TOK_END || scan.kind === TOK_SEMICOLON) {
-        return false
+      let depth = 0
+      while (depth > 0 || scan.kind !== TOK_RPAREN) {
+        if (scan.kind === TOK_END || scan.kind === TOK_SEMICOLON) {
+          return false
+        }
+        if (scan.kind === TOK_LPAREN) {
+          depth = depth + 1
+        } else if (scan.kind === TOK_RPAREN) {
+          depth = depth - 1
+        }
+        scan.next()
       }
-      if (scan.kind === TOK_LPAREN) {
-        depth = depth + 1
-      } else if (scan.kind === TOK_RPAREN) {
-        depth = depth - 1
-      }
+    }
+    if (scan.kind !== TOK_RPAREN) {
+      return false
     }
     scan.next()
     return scan.kind === TOK_LBRACE
+  }
+
+  /**
+   * Step `scan` over one binding TypeScript allows in a `catch`, from its first
+   * token to the token after it, and answer whether it was one: a name, or an
+   * object or array pattern whose leaves are names, with `key: pattern`,
+   * `= default`, `...rest` and array holes. A literal is not a binding, which
+   * is what tells a handler from a call of a function named `catch`.
+   */
+  scanBinding(scan: Lexer): boolean {
+    if (scan.kind === TOK_IDENT) {
+      scan.next()
+      return true
+    }
+    if (scan.kind === TOK_LBRACKET) {
+      scan.next()
+      while (scan.kind !== TOK_RBRACKET) {
+        if (scan.kind === TOK_COMMA) {
+          scan.next() // a hole
+          continue
+        }
+        if (scan.kind === TOK_DOT_DOT_DOT) {
+          scan.next()
+        }
+        if (!this.scanBinding(scan) || !this.scanDefault(scan)) {
+          return false
+        }
+        if (scan.kind === TOK_COMMA) {
+          scan.next()
+        } else if (scan.kind !== TOK_RBRACKET) {
+          return false
+        }
+      }
+      scan.next()
+      return true
+    }
+    if (scan.kind === TOK_LBRACE) {
+      scan.next()
+      while (scan.kind !== TOK_RBRACE) {
+        if (scan.kind === TOK_DOT_DOT_DOT) {
+          scan.next()
+          if (scan.kind !== TOK_IDENT) {
+            return false
+          }
+          scan.next()
+        } else {
+          if (scan.kind !== TOK_IDENT && scan.kind !== TOK_STRING && scan.kind !== TOK_NUMBER) {
+            return false
+          }
+          const shorthand = scan.kind === TOK_IDENT
+          scan.next()
+          if (scan.kind === TOK_COLON) {
+            scan.next()
+            if (!this.scanBinding(scan)) {
+              return false
+            }
+          } else if (!shorthand) {
+            return false
+          }
+          if (!this.scanDefault(scan)) {
+            return false
+          }
+        }
+        if (scan.kind === TOK_COMMA) {
+          scan.next()
+        } else if (scan.kind !== TOK_RBRACE) {
+          return false
+        }
+      }
+      scan.next()
+      return true
+    }
+    return false
+  }
+
+  /** Step over a binding's `= default`, if it has one, to the `,` or bracket after it. */
+  scanDefault(scan: Lexer): boolean {
+    if (scan.kind !== TOK_ASSIGN) {
+      return true
+    }
+    scan.next()
+    let depth = 0
+    while (true) {
+      if (scan.kind === TOK_END || scan.kind === TOK_SEMICOLON) {
+        return false
+      }
+      const closes = scan.kind === TOK_RPAREN || scan.kind === TOK_RBRACE || scan.kind === TOK_RBRACKET
+      if (depth === 0 && (closes || scan.kind === TOK_COMMA)) {
+        return true
+      }
+      if (scan.kind === TOK_LPAREN || scan.kind === TOK_LBRACE || scan.kind === TOK_LBRACKET) {
+        depth = depth + 1
+      } else if (closes) {
+        depth = depth - 1
+      }
+      scan.next()
+    }
   }
 
   /**

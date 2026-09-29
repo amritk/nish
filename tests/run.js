@@ -7240,6 +7240,22 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       namesIr.includes("%try.addr = alloca i32"),
     `exit ${namesRun.status}\n${namesRun.stdout}${namesRun.stderr}`
   )
+  // A literal argument is not a catch binding, so `catch([1, 2])` and
+  // `catch({ first: 1, second: 2 })` after a `try`-named block stay calls;
+  // each needs a `catch` of its own type, hence a file each.
+  for (const literal of ["names_catch_array", "names_catch_object"]) {
+    const literalLl = path.join(buildDir, `parser_${literal}.ll`)
+    const literalRun = spawnSync(NISH, [`tests/parser/${literal}.ts`, "-o", literalLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const literalIr = literalRun.status === 0 ? fs.readFileSync(literalLl, "utf8") : ""
+    check(
+      `src/parser.ts reads \`catch(<literal>)\` after a \`try\`-named block as a call (tests/parser/${literal}.ts)`,
+      literalRun.status === 0 && literalIr.includes("call i32 @catch("),
+      `exit ${literalRun.status}\n${literalRun.stdout}${literalRun.stderr}`
+    )
+  }
 
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to

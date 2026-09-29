@@ -2795,9 +2795,13 @@ between (`reject_try_allman_catch`, `reject_try_allman_finally`,
 `reject_try_comment_newline`). A catch binding may be a name or a
 destructuring pattern, with or without an annotation, and is refused the same
 way (`reject_try_catch_destructured`). So a `try`-named block followed by
-`catch(name)` and then a block is a `try` statement, even where 0.13.0 read a
-call to a function named `catch` (`reject_try_catch_call_newline`): the one
-program this rule stopped compiling. A line break inside a block comment counts as
+`catch(<a binding>)` — a name or a pattern, `catch(n)` or `catch([n])` — and
+then a block is a `try` statement, even where 0.13.0 read a call to a function
+named `catch` (`reject_try_catch_call_newline`,
+`reject_try_catch_pattern_call_newline`): the one shape of program this rule
+stopped compiling. An argument that is no binding, such as `catch([1, 2])` or
+`catch({ first: 1 })`, is the call it was (`tests/parser/names_catch_array.ts`,
+`names_catch_object.ts`). A line break inside a block comment counts as
 one, as it does for semicolon insertion. So `try` alone on a line before a
 block that nothing handles is a name and a block, as it was before
 (`tests/parser/names.ts`). `tsc` reserves all three, so this is Nish
