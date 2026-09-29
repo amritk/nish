@@ -856,8 +856,10 @@ Shipped from the earlier list: the data-parallel call, threads P1
 (`using s = scope()`, 0.13.0, [#262](https://github.com/amritk/nish/pull/262)),
 from [wp29-thread-surface.md](wp29-thread-surface.md); the global `Map` and
 `Set` (0.11.0, [#229](https://github.com/amritk/nish/pull/229)), from
-[wp32-map.md](wp32-map.md); and ranged integers, W1 to W3 in 0.13.0 and W4's
-measurements after them, from [wp31-ranged-integers.md](wp31-ranged-integers.md).
+[wp32-map.md](wp32-map.md); and ranged integers, W1 to W4 in 0.13.0
+([#261](https://github.com/amritk/nish/pull/261) to
+[#274](https://github.com/amritk/nish/pull/274)), from
+[wp31-ranged-integers.md](wp31-ranged-integers.md).
 
 #### Additive and unscheduled
 
