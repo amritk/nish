@@ -199,7 +199,15 @@ it is not there yet:
   failing test is a failing test. Never skip, disable or quarantine one to get
   green, and never push an empty commit to kick CI.
 - **A conflict** → merge `main` in and resolve it, regenerating lockfiles and
-  generated files with the repo's own tooling rather than by hand.
+  generated files with the repo's own tooling rather than by hand. **Expect it
+  on the self-goldens:** `tests/self/goldens/checked-self.txt` (and often
+  `checked.txt`) is a dump of `src/`, so every `src/` commit on `main`
+  conflicts with every open pull request that touches `src/`, and `main` can
+  move faster than one CI run. Merge `main` in (never rebase), regenerate with
+  `node tests/self/goldens.js --update` after `npm run build`, re-check that a
+  new diagnostic still has the next free code in `src/codes.ts`, run
+  `npm run check` and `node tests/run.js self` plus your change's own prefix,
+  and push; CI is the full gate. A pure merge of `main` carries nothing else.
 - **A review** → implement the small, local asks and push; reply with a proposal
   for the large ones. Resolve the threads you addressed.
 
@@ -212,6 +220,22 @@ The one thing that ends this without a merge is a blocker you cannot clear
 alone: a failure that is not this change's and has no fix to port, or a design
 question only the author can settle. Say so once, on the pull request, naming
 what is blocking and what you need — and keep watching.
+
+### Reviewing a pull request
+
+- **Read the diff from a checkout, not the API.** The GitHub API truncates the
+  diff and the file list of a large pull request; one review here saw 33 of
+  126 files and reported tests "missing" that were in the PR (#295). Review
+  `git diff origin/main...<head>` in a local checkout, and confirm any "file X
+  is missing" claim with `git ls-tree <head>` before raising it.
+- **A runtime race or leak needs a reproduction in Nish.** A defect shown only
+  by a C harness calling the runtime directly is not confirmed until a program
+  the checker accepts reaches it. The checker already refuses every runtime
+  call that writes shared state inside a `scope()` task or a parallel region,
+  so a thread-interleaving scenario is often unreachable from the language
+  (#312 had two such findings, which were fixed and later found unreachable).
+  Compile the program and show it failing before calling the finding
+  confirmed.
 
 ## House rules
 
@@ -231,10 +255,14 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is two translation units
-  with a budget each — `runtime.c` for the core and `runtime-os.c` for whatever
-  wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
-  and report the size of whichever you changed in the PR.
+  commit** and extends a layout test. The C runtime is four translation units
+  with a budget each — `runtime.c` for the core, `runtime-os.c` for the
+  syscall wrappers, `runtime-parallel.c` for threads and `runtime-host.c` for
+  the clock, entropy, file times and signals — so keep each inside its own
+  (`node tests/run.js budget`) and report the size of whichever you changed in
+  the PR. An addition that does not fit goes in a new unit with its own
+  ceiling rather than a raised one, and a new unit is named in the five places
+  `.claude/architecture.md` lists, `scripts/build.sh` first.
 - **Third-party code keeps its licence.** A file ported, translated or
   adapted from elsewhere carries the upstream copyright and licence notice, its
   licence text is in the repository (and in the package if the file ships), it

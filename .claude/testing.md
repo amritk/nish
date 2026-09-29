@@ -19,8 +19,8 @@ test is **data, not code**: a source file next to the output it must produce.
   - `<name>.err` — one expected message fragment per line; the compile must
     fail with exit 1 and every fragment must appear. No `.ll` is needed.
   - `<name>.out` — expected stdout once the case is linked with `<name>.c`
-    (or `tests/driver.c`, which prints `test()`) and both runtime `.c` files
-    (`runtime/runtime.c` and `runtime/runtime-os.c`) and run. A source with
+    (or `tests/driver.c`, which prints `test()`) and every runtime `.c` file
+    (`RUNTIME_C` in `tests/run.js`) and run. A source with
     `export const main` (or the legacy `export function main`) is linked without
     the driver.
   - `<name>.args` — extra CLI flags, whitespace separated.
@@ -88,7 +88,7 @@ test is **data, not code**: a source file next to the output it must produce.
   under the repository (`build/`), because `src/compile.ts` finds
   `scripts/build.sh` and `std/` by climbing from its own path.
 - **The C a case links against is built once per run, not once per case.**
-  `runtime/runtime.c`, `runtime/runtime-os.c` and `tests/driver.c` become object
+  The runtime's `.c` files and `tests/driver.c` become object
   files on their first use and every `.out` case links against those: measured,
   470 ms a link became 91 ms, with 362 ms paid once. `runtimeObjects(defines)`
   owns them and `linkNative` is the one place a case is linked.
@@ -155,11 +155,11 @@ about one thing, and hand-check the IR before committing it rather than
 accepting whatever `test:update` wrote. A golden that changes for an unrelated
 construct is a regression until proven otherwise.
 
-Structural guards (the runtime's two `.text*` budgets — every `.text*` section
-of `clang -Oz -c runtime/runtime.c` summed, and the same for
-`runtime/runtime-os.c`, which is neither file's source size and neither is
-`size`'s text column; they are separate so that a new syscall wrapper cannot
-move the core's ceiling — the runtime symbol table agreeing across
+Structural guards (the runtime's `.text*` budgets — every `.text*` section of
+`clang -Oz -c` on each runtime translation unit, summed per unit, which is
+neither the file's source size nor `size`'s text column; they are separate so
+that a new syscall wrapper cannot move the core's ceiling — the runtime symbol
+table agreeing across
 `src/runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising
 `cf_sum_loop`) pin properties that have been broken before. When one fails, the
 change is what is wrong, not the test. Never delete a guard, and never move a

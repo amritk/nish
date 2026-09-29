@@ -70,8 +70,8 @@ src/               the compiler, in Nish — see .claude/selfhost.md
   interop-*.ts      C header, wasm .d.ts, N-API shim
 std/                the standard library, in Nish — testing.ts, text.ts, json.ts,
                     std/README.md
-runtime/            runtime.c, runtime-os.c, nish.h, nish.d.ts, runtime-wasm.c,
-                    shim.mjs
+runtime/            runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c,
+                    nish.h, nish.d.ts, runtime-wasm.c, shim.mjs
 bin/                the npm command: hands over to the prebuilt native compiler
 tests/              run.js + cases/ (goldens), link/, ir/, layout/,
                     differential/, self/ (goldens, bootstrap, the surviving
