@@ -48,7 +48,7 @@ const RUNTIME_C = fs
   .filter((f) => /^runtime(-[a-z]+)?\.c$/.test(f) && f !== "runtime-wasm.c")
   .map((f) => path.join(root, "runtime", f))
 
-/** dudect's threshold: a |t| above it is read as a difference between the classes. */
+/** dudect's threshold (public domain; see tests/ct-timing/dudect.c): a |t| above it is read as a difference. */
 const THRESHOLD = 4.5
 /** Enough measurements a function for a |t| near the threshold to mean something. */
 const SAMPLES = 1000000

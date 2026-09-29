@@ -1,7 +1,12 @@
 /*
  * A dudect-style timing test (O. Reparaz, J. Balasch and I. Verbauwhede,
- * "Dude, is my code constant time?", DATE 2017), written from the paper's
- * description: nothing here is taken from dudect's own source.
+ * "Dude, is my code constant time?", DATE 2017). The structure and the code
+ * are this file's own, but three of its parameters follow dudect's reference
+ * implementation, `src/dudect.h` in github.com/oreparaz/dudect, which its
+ * authors dedicate to the public domain (the Unlicense), so no notice is owed:
+ * the cropping schedule `1 - 0.5^(10 (i + 1) / 100)`, its 100 percentiles, and
+ * running the second-order test only after 10,000 measurements. The threshold
+ * of 4.5 that tests/ct-timing.js applies is dudect's too.
  *
  * For each function the generated table names, it times calls on two classes
  * of secret input, a fixed one (all zeros) and a fresh random one per call,
