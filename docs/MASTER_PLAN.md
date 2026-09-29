@@ -779,14 +779,15 @@ chosen with a `Release-As:` trailer ([#200](https://github.com/amritk/nish/pull/
 adds the trailer and is parked until then) on a commit, followed by the Release
 PR, which a human merges.
 
-Two breaking changes are in 0.10.0, the next release. Each would cost a major
-after 1.0, so both were taken while a break is still a minor:
+Two breaking changes shipped in 0.10.0. Each would have cost a major after
+1.0, so both were taken while a break is still a minor:
 
 - **The name `integer` is reserved** ([#201](https://github.com/amritk/nish/pull/201)).
   A class, interface or function called `integer` is `NL2332`, an alias or
   enum of that name is refused as `type Result = …` is, and `integer` written
-  as a type is `NL2333`, so ranged integers ([wp31-ranged-integers.md](wp31-ranged-integers.md))
-  can land by turning `NL2333` into the type, and break nothing.
+  as a type is `NL2333`, so that ranged integers ([wp31-ranged-integers.md](wp31-ranged-integers.md))
+  could land by turning `NL2333` into the type and break nothing, which is
+  how they landed in 0.13.0 ([#261](https://github.com/amritk/nish/pull/261)).
 - **A module is its real path and a package its real directory**
   ([#202](https://github.com/amritk/nish/pull/202)), as in Node and in `tsc`.
   That closes [#198](https://github.com/amritk/nish/issues/198) and the identity
@@ -811,7 +812,7 @@ place the numbers are current.
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` — **done** | `slice`, not `sliceFast` or `subarray`: both names the note proposed are `TS2339` under `tsc --strict`. 1.18x on a lexer-shaped scan and 8.3% fewer instructions retired whole-program, and the check folds away entirely where the bounds are provable, which is the half item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`, `reject_str_slice_arity` and `reject_str_slice_type` pin it |
-| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and is now next after the data-parallel call ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
+| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` waited on item 8's generics and shipped after them, in 0.13.0 ([wp31-ranged-integers.md](wp31-ranged-integers.md)), and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays — **done for `interface` elements, and closed for class elements** | the layout change, the escape rule (`NL2290`/`NL2291`) that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI, in both compilers. 2.27x where allocation order and traversal order differ, and nothing at all where they agree. Class elements are not a deferred half: the migration was costed against `src/` and it changes what `T[]` means for every class `T` — one `FunctionSig` held in three places and written through whichever is to hand, 54 identity comparisons over `Local[]` and `Node[]` elements across ten modules with 20 in `src/bounds.ts` where a never-matching test means a fact is never retracted and a needed bounds check is not emitted, and the syntax tree itself becoming storage. An array of classes is one pointer per slot by decision; the contiguous shape is spelled `interface` ([wp15-performance.md](wp15-performance.md) §2a) |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | **done**: generic functions, classes, interfaces and methods, constraints, the whole-program rule and the peripheries (`-g`, the interop sidecars, the fuzzer) have all landed — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 what stays deferred, each with its trigger. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
@@ -828,31 +829,37 @@ major. Whether it happens at all is still wp22 §10's open question.
 
 #### Next
 
-1. **The data-parallel call's next stage** — [wp29-thread-surface.md](wp29-thread-surface.md)
-   §4.1's stage P1 is built: `parallelMapInto` and `parallelReduce` from
-   `nish/threads`, over [wp23-language-surface.md](wp23-language-surface.md)
-   §6's compile-time function parameter, with allocating bodies recycled per
-   element (NL9012) and a grain sized from the body. Measured on four cores
-   (`docs/BENCHMARKS.md`, wp29 §8a): **3.71x** for a compute kernel, 3.49x for
-   n-body partitioned, 2.23x for a body that allocates a string per element at
-   flat peak memory, and an eight-element map within noise of the loop. The
-   scope and the lock (wp29 P2 and P3) follow it in wp29's order.
-2. **Ranged integers**, [wp31-ranged-integers.md](wp31-ranged-integers.md) W1 to
-   W4, none of them breaking now that the name is reserved.
-3. **The global `Map` and `Set`**, [wp32-map.md](wp32-map.md). S1, the design
-   note and four layout prototypes, has decided every open question. The
-   layout is insertion-ordered, with a `u32` bucket of eight fingerprint bits
-   over a 24-bit entry index and the full hash stored with each entry. Its cap
-   is 2^24 − 1 entries, Node's own. `get` answers `V | undefined`, narrowed or
-   defaulted with `??`. Each instance is emitted into the module that uses it.
-   Measured against Node's `Map` on the same workloads, the chosen layout is
-   1.7x to 4.9x ahead at 2^20 keys, and within 10% of an unordered table on
-   eight of ten workloads. S2 to S6 built it, and S7 measured it:
-   the shipped `Map` is 1.47x to 4.5x ahead of Node's on all ten workloads at
-   2^16 and 2^20 keys. Fusion runs word count in 1.82x fewer instructions, and
-   `reserve` runs insert in 1.41x fewer with 13% less peak memory. An unordered
-   map is not needed for v1 (wp32 §10): it would win integer lookups by 1.13x
-   to 1.35x, and integer keys out of cache are the shape that would reopen it.
+1. **WP34 wave 1, hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)):
+   the port of a browser game and its servers, starting with its Rust relay on
+   a Nish network stack (HTTP/1.1, HTTP/2, HTTP/3, WebTransport) that is
+   standard library, `nish/crypto/*` and `nish/net/*`. Of the compiler's
+   phase-one items, exported enums and aliases (N1), byte plumbing (N2), the
+   clock, entropy, file times and signals (N3) and the constant-time builtins
+   (N6) are built; **N5**, the `nish:net` sockets and the loop a program
+   owns, is next. Of the stack's first lanes, K1 (SHA-2, HMAC, HKDF,
+   base64url) and K4 (X25519) are built, and **K2, K3, K5 and K6** —
+   ChaCha20-Poly1305, AES-GCM, P-256 ECDSA and X.509 — are next. The port's
+   order is in the game's repository.
+2. **WP33 R2 to R4, the round trip** ([wp33-round-trip.md](wp33-round-trip.md)):
+   R1's portability half is built, the `portability` class behind
+   `--warn-portability`. Next are R2, closing the rows that are free to close
+   (the typed-array names lose `push` and `pop`); R3, the runtime split by
+   host; and R4, `--emit ts` with its live differential. Its rule binds now:
+   every construct states its TypeScript reading, and no stage moves a `.ll`
+   golden or raises `bench/instructions.json`.
+3. **Threads P3, a lock that owns its data** ([wp29-thread-surface.md](wp29-thread-surface.md)
+   §4.3), proposed. P1 and P2 are built.
+
+Shipped from the earlier list: the data-parallel call, threads P1
+(`parallelMapInto` and `parallelReduce`, 0.11.0,
+[#219](https://github.com/amritk/nish/pull/219)), and the scope, P2
+(`using s = scope()`, 0.13.0, [#262](https://github.com/amritk/nish/pull/262)),
+from [wp29-thread-surface.md](wp29-thread-surface.md); the global `Map` and
+`Set` (0.11.0, [#229](https://github.com/amritk/nish/pull/229)), from
+[wp32-map.md](wp32-map.md); and ranged integers, W1 to W4 in 0.13.0
+([#261](https://github.com/amritk/nish/pull/261) to
+[#274](https://github.com/amritk/nish/pull/274)), from
+[wp31-ranged-integers.md](wp31-ranged-integers.md).
 
 #### Additive and unscheduled
 
@@ -861,28 +868,9 @@ major. Whether it happens at all is still wp22 §10's open question.
   is a diagnostic for a program that already fails, so neither withdraws
   anything. S4's build cache and S5's prebuilt distribution follow them
   ([wp21-packages.md](wp21-packages.md) §8).
-- **Hosting cs** ([wp34-hosting-cs.md](wp34-hosting-cs.md)), proposed: the
-  port of a browser game and its servers, starting with its Rust relay on a
-  Nish network stack (HTTP/1.1, HTTP/2, HTTP/3, WebTransport). Phase one asks
-  five things of the compiler and runtime — exported enums, byte plumbing, a
-  clock and entropy, sockets with a loop the program owns, constant-time
-  builtins — and the stack itself is standard library, `nish/crypto/*` and
-  `nish/net/*` over a `nish:net` builtin module. The port's order is in the
-  game's repository.
 - **Compatibility mode** ([wp28-compatibility-mode.md](wp28-compatibility-mode.md)),
   proposed and unbuilt. It may only add acceptance, behind a flag, and strict
   does not grow, so it fits a minor.
-- **The round trip** ([wp33-round-trip.md](wp33-round-trip.md)), decided
-  and unbuilt: `--emit ts` as the way back out to TypeScript, a `portability`
-  warning at each place the two readings differ, and fixes in `--json` for an
-  agent porting a TypeScript project in. Its rule binds now: every construct
-  states its TypeScript reading. None of it may cost the native build: no
-  stage moves a `.ll` golden or raises `bench/instructions.json`, and where
-  JavaScript's meaning is the slower one, Nish's stays and is translated on
-  the way out. Its §7 records the six decisions: strings stay UTF-8 bytes,
-  `slice` keeps its check, record arrays stay contiguous with the aliasing
-  flagged on the way in, the typed-array names lose `push` and `pop`, `--json`
-  gains a `fix` field, and `number` stays i32 in strict and f64 in compat.
 
 #### Settled, with the note that settles it
 
