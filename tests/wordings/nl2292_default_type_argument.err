@@ -1,1 +1,1 @@
-syntax error: a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments
+a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments

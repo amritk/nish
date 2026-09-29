@@ -196,6 +196,12 @@ Type rules:
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
+  `keyof T` is one of those, `` Unsupported type `keyof T` `` (NL2038), and it
+  is refused in a generic declaration nothing instantiates too, because the
+  rule is a pass over the whole module rather than a step in resolving an
+  annotation (`reject_type_keyof`, `reject_type_keyof_template`). `keyof` is
+  the operator only before a type on its own line, so a class a program names
+  `keyof` is still a type everywhere else (`tests/parser/names-declarations.ts`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
   array, or string; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
@@ -1097,9 +1103,9 @@ program twice, with one golden between them.
   side is reported where it is written rather than never.
 - **Generic aliases are forbidden**, unlike a generic *function*: an alias
   only renames a type that already exists, so there is nothing for a type
-  argument to apply to. There is no message of its own: the parser reads
-  `type Box` and expects `=`, so `type Box<T> = T[]` is the syntax error
-  `` expected `=`, found `<` `` (NL0001, `tests/cases/reject_type_alias_generic`).
+  argument to apply to. `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
+  (NL1054, `tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
   (`tests/cases/reject_type_alias_builtin`). A keyword like `string` is
@@ -1868,9 +1874,12 @@ export const main = (): i32 => {
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
   clause (`reject_generic_unsatisfied_constraint_positions`).
-- **Not supported yet**: a default type argument (`<T = string>`) and type
-  parameters on a constructor, each with its own message, and type parameters
-  on a type alias, which is the parser's plain `` expected `=`, found `<` ``.
+- **Not supported yet**: a default type argument (`<T = string>`,
+  `` a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments ``,
+  NL2292, refused on a template nothing instantiates too,
+  `tests/cases/reject_decl_sweep_together`) and type parameters on a
+  constructor, each with its own message. Type parameters on a type alias are
+  forbidden rather than unsupported (NL1054, [Type aliases](#type-aliases)).
   A generic `main` is refused too, in words of its own: the entry point is
   called by the C runtime, which has no type arguments to give it. Multiple bounds (`T extends A & B`), a bound
   that mentions the parameter it constrains, and a bound that is "any type with
@@ -5105,17 +5114,17 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on a type alias | `` expected `=`, found `<` `` (a syntax error; a generic function, class, interface or method is monomorphised, and an alias only renames a type that already exists) | `reject_type_alias_generic` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
 | type parameters on a constructor | `` a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`) `` (a syntax error; a *method* may declare its own, see [Generic methods](#generic-methods)) | `reject_generic_method_constructor` |
 | a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
 | type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
-| generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
-| `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
+| generators (`function*`, `*m()`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator`, `reject_generator_method` |
+| `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function`, `reject_async_method`, `reject_async_arrow`, `reject_async_arrow_declaration` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
 | enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
-| `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace` |
+| `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
 | `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
-| decorators | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator` |
+| decorators, on a class, a member or a parameter | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator`, `reject_decorator_member`, `reject_decl_shapes` |
 | computed property names | `` Computed property names are forbidden in Nish (object layout is fixed at compile time) `` | `reject_computed_property` |
 
 ### Statements

@@ -96,7 +96,7 @@ export const N_TYPE_READONLY: i32 = 57 // `readonly T[]`; children: the type the
 // A declaration rather than a type, but numbered here because the numbers are
 // appended and never moved: forty constants and a `nodeName` switch read the
 // same either way, and renumbering them would churn every one of them.
-export const N_TYPE_ALIAS: i32 = 58 // `type X = T;`; children: name, the aliased type
+export const N_TYPE_ALIAS: i32 = 58 // `type X = T;`; children: name, the aliased type, and a LIST of type parameters only when it has one (refused, NL1054)
 // `enum X { A = 1 }` (WP23); children: name, LIST of ENUM_MEMBER.
 export const N_ENUM: i32 = 59
 // One member; children: name, initializer (N_EMPTY when it is auto-numbered).
@@ -158,8 +158,33 @@ export const N_AS: i32 = 68
 // `...a` in an array literal (NL2237): children: the expression spread.
 export const N_SPREAD: i32 = 69
 
+// ---- Refused declarations (WP33 R1) --------------------------------------------------
+//
+// The declarations that resemble nothing above. `async` and `function*` are a
+// function, method or arrow with FLAG_ASYNC or FLAG_GENERATOR, type parameters
+// on an alias are the alias with a third child, and a default type argument is
+// the type parameter with FLAG_DEFAULT.
+
+// `@dec` (NL1006), in front of a class, a member, a parameter or another
+// decorator: children: the decorator's expression, the thing it decorates.
+// Phase 0 refuses it before anything else reads the tree, so no later phase
+// finds one where it expects the declaration inside.
+export const N_DECORATOR: i32 = 70
+// `namespace N { }`, `module M { }` (NL1027) and `declare global { }`
+// (NL1019): text: the keyword, `namespace`, `module` or `global`; flags:
+// FLAG_FOREIGN when it was `declare`d; children: the name (an IDENT, a dotted
+// MEMBER, or the STRING of `module "m"`), and the body: a BLOCK spanning the
+// braces whose contents are passed over unread — Phase 0 refuses the block
+// whatever it holds, and a declared one holds ambient declarations this
+// grammar does not have — or EMPTY for the body-less `declare module "m";`.
+export const N_NAMESPACE: i32 = 71
+// `keyof T` (NL2038), a type operator the language does not have: text: the
+// operator; children: the type it applies to. The checker's annotation
+// resolver has no case for it, which is the rule.
+export const N_TYPE_OPERATOR: i32 = 72
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 70
+export const N_COUNT: i32 = 73
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -216,16 +241,20 @@ export const FLAG_USING: i32 = 256
 //     of one bit. `var` is a `let` (FLAG_VAR), `for...in` and `for await` are
 //     a `for...of` (FLAG_FOR_IN, FLAG_AWAIT), a top-level `let` is a module
 //     constant without FLAG_CONST, the member headers above are fields
-//     and methods, and `?.` is a member, element or call (FLAG_OPTIONAL). An
-//     operator is the N_BINARY or N_UNARY whose text it is.
+//     and methods, `?.` is a member, element or call (FLAG_OPTIONAL), `async`
+//     and `function*` a function, method or arrow (FLAG_ASYNC,
+//     FLAG_GENERATOR), and a default type argument its type parameter
+//     (FLAG_DEFAULT). An operator is the N_BINARY or N_UNARY whose text it is.
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
-//     N_LABELED, N_REGEX, N_AS, N_SPREAD.
+//     N_LABELED, N_REGEX, N_AS, N_SPREAD, N_DECORATOR, N_NAMESPACE,
+//     N_TYPE_OPERATOR.
 //   - A variant that differs only in what one child is keeps the node and
 //     puts the other thing in that child, when the child's own kind is the
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
-//     than a VAR, and a top-level statement is the statement itself, sitting
-//     in the SOURCE_FILE where a declaration would.
+//     than a VAR, a top-level statement is the statement itself, sitting
+//     in the SOURCE_FILE where a declaration would, and type parameters on an
+//     alias are an N_TYPE_ALIAS's third child, there only when written.
 //
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
@@ -247,6 +276,15 @@ export const FLAG_FOR_IN: i32 = 2048
 // rather than `as`, each the TypeScript construct NL2256 names.
 export const FLAG_ANGLE: i32 = 4096
 export const FLAG_SATISFIES: i32 = 8192
+// `flags` on N_FUNCTION, N_METHOD and N_ARROW: bit 14 is `async` (NL1015) and
+// bit 15 the `*` of a generator (NL1044). `async` is a member modifier, so a
+// field or a constructor that writes it carries the bit too.
+export const FLAG_ASYNC: i32 = 16384
+export const FLAG_GENERATOR: i32 = 32768
+// `flags` on a type parameter's IDENT: bit 16 is a default, `<T = i32>`
+// (NL2292). The default type is read and dropped, as a `catch` binding's
+// annotation is: the declaration is refused whatever it names.
+export const FLAG_DEFAULT: i32 = 65536
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -425,6 +463,12 @@ export const nodeName = (kind: i32): string => {
       return "AS"
     case N_SPREAD:
       return "SPREAD"
+    case N_DECORATOR:
+      return "DECORATOR"
+    case N_NAMESPACE:
+      return "NAMESPACE"
+    case N_TYPE_OPERATOR:
+      return "TYPE_OPERATOR"
     default:
       return "?"
   }

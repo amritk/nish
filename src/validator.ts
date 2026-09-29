@@ -16,29 +16,40 @@
 // `src/nodes.ts`): `var`, `try`, `with`, a labelled statement, `for...in`, and
 // the forbidden expressions — `==`, `?.`, `typeof` and the rest of the
 // operators the language does not have, a regex, a dynamic `import()` and an
-// assertion to `any` or `unknown`. What the parser still turns down itself is
+// assertion to `any` or `unknown` — and the forbidden declarations: `async`,
+// a generator, a decorator, a `namespace` or `module` block, `declare global`
+// and type parameters on an alias. What the parser still turns down itself is
 // listed, case by case, in `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { unwrapParens } from "./emit-util"
 import {
+  FLAG_ASYNC,
   FLAG_FOR_IN,
+  FLAG_GENERATOR,
   FLAG_OPTIONAL,
   FLAG_SATISFIES,
   FLAG_VAR,
   N_AS,
   N_BIGINT,
   N_BINARY,
+  N_ARROW,
   N_CALL,
+  N_CONSTRUCTOR,
+  N_DECORATOR,
   N_EMPTY,
   N_ENUM,
+  N_FIELD,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_INDEX,
   N_LABELED,
   N_MEMBER,
+  N_METHOD,
   N_MODULE_CONST,
+  N_NAMESPACE,
   N_NEW,
   N_NUMBER,
   N_PAREN,
@@ -48,6 +59,7 @@ import {
   N_TEMPLATE,
   N_THROW,
   N_TRY,
+  N_TYPE_ALIAS,
   N_TYPE_NULL,
   N_TYPE_REF,
   N_TYPE_UNION,
@@ -219,6 +231,7 @@ export const validate = (ctx: CheckContext, node: Node): void => {
 }
 
 const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => {
+  rejectFunctionModifiers(ctx, node)
   // `a?.b`, `a?.[i]` and `f?.()` are the member, element and call they
   // resemble, with a flag (`src/nodes.ts`).
   if (
@@ -345,6 +358,30 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         )
       }
       break
+    case N_DECORATOR:
+      ctx.error(node, "Decorators are forbidden in " + LANGUAGE + " (no runtime metadata or class rewriting)")
+      break
+    case N_NAMESPACE:
+      if (node.text === "global") {
+        ctx.error(node, "`declare global` is forbidden in " + LANGUAGE + " (no global object to augment)")
+      } else {
+        ctx.error(
+          node,
+          "`namespace` and `module` blocks are forbidden in " + LANGUAGE + " (use ES module files)"
+        )
+      }
+      break
+    case N_TYPE_ALIAS:
+      // The third child is the type parameter list, there only when written.
+      if (node.children.length > 2) {
+        ctx.error(
+          node,
+          "Generic type parameters are forbidden on a type alias in " +
+            LANGUAGE +
+            "; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists"
+        )
+      }
+      break
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -362,6 +399,28 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   }
   for (const child of node.children) {
     visit(ctx, child, inTypePosition)
+  }
+}
+
+/**
+ * `async` and the `*` of a generator, on a function, a method or an arrow —
+ * and `async` on a field or a constructor, which the parser reads as the
+ * modifier it is there too. `async` is written first, so it is the refusal.
+ */
+const rejectFunctionModifiers = (ctx: CheckContext, node: Node): void => {
+  const holdsModifiers =
+    node.kind === N_FUNCTION ||
+    node.kind === N_METHOD ||
+    node.kind === N_ARROW ||
+    node.kind === N_FIELD ||
+    node.kind === N_CONSTRUCTOR
+  if (!holdsModifiers) {
+    return
+  }
+  if ((node.flags & FLAG_ASYNC) !== 0) {
+    ctx.error(node, "`async` functions are forbidden in " + LANGUAGE + " (no event loop or promises)")
+  } else if ((node.flags & FLAG_GENERATOR) !== 0) {
+    ctx.error(node, "Generators are forbidden in " + LANGUAGE + " (no coroutine runtime)")
   }
 }
 

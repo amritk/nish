@@ -75,6 +75,7 @@ import {
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
   N_TYPE_NULL,
+  N_TYPE_OPERATOR,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
   N_TYPE_REF,
@@ -2233,6 +2234,11 @@ const resolveConstraints = (
  */
 const resolveConstraint = (ctx: CheckContext, param: Node, names: StringSet): i32 => {
   const node = param.children[0]
+  // WP33 R1: a `keyof` in it was refused by the pass 1 sweep, which reads
+  // the constraint where the source has it (`refuseUnsupportedForms`).
+  if (holdsTypeOperator(node)) {
+    return -1
+  }
   if (mentionsTypeParam(node, names)) {
     ctx.error(
       node,
@@ -2255,6 +2261,19 @@ const resolveConstraint = (ctx: CheckContext, param: Node, names: StringSet): i3
     return -1
   }
   return type
+}
+
+/** Whether a type annotation holds a type operator anywhere (`keyof T`, N_TYPE_OPERATOR). */
+const holdsTypeOperator = (node: Node): boolean => {
+  if (node.kind === N_TYPE_OPERATOR) {
+    return true
+  }
+  for (const child of node.children) {
+    if (holdsTypeOperator(child)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** `resolveConstraints` for a generic function, in its home module. */
