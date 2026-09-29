@@ -5,8 +5,10 @@
  * implementation, `src/dudect.h` in github.com/oreparaz/dudect, which its
  * authors dedicate to the public domain (the Unlicense), so no notice is owed:
  * the cropping schedule `1 - 0.5^(10 (i + 1) / 100)`, its 100 percentiles, and
- * running the second-order test only after 10,000 measurements. The threshold
- * of 4.5 that tests/ct-timing.js applies is dudect's too.
+ * running the second-order test only after 10,000 measurements. The |t|
+ * threshold is not dudect.h's: it fails at 10 (and at 500 for "definitely"),
+ * where tests/ct-timing.js applies 4.5, the convention of the side-channel
+ * literature the paper follows, which is the stricter of the two.
  *
  * For each function the generated table names, it times calls on two classes
  * of secret input, a fixed one (all zeros) and a fresh random one per call,
@@ -19,9 +21,8 @@
  * and on the squared distance from each class's mean (a second-order test,
  * for a difference in spread rather than in mean, once 10,000 measurements
  * of a class are in). The answer for a function
- * is the largest |t| of the tests that saw enough measurements. dudect reads
- * |t| above 4.5 as a leak, and tests/ct-timing.js applies that threshold; this
- * file only measures.
+ * is the largest |t| of the tests that saw enough measurements. This file only
+ * measures; tests/ct-timing.js reads |t| above 4.5 as a leak.
  *
  * A call to a small function is shorter than some timers tick, notably the
  * aarch64 generic timer, so each measurement times `batch` calls on the same

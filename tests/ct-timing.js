@@ -25,7 +25,7 @@
  *   node tests/ct-timing.js --samples <n> [--seed <n>] [--nish <compiler>] [<fixture substring>]
  *
  * It prints a Markdown table and exits 1 when any function's largest |t| is
- * above dudect's threshold of 4.5, 2 when it could not run, and 0 otherwise. It
+ * above 4.5, 2 when it could not run, and 0 otherwise. It
  * is not part of `npm test`: the numbers are about the machine it runs on, and
  * a shared runner is noisy, so `.github/workflows/ct-timing.yml` runs it weekly
  * and files what it finds as an issue rather than as a red pull request.
@@ -48,7 +48,11 @@ const RUNTIME_C = fs
   .filter((f) => /^runtime(-[a-z]+)?\.c$/.test(f) && f !== "runtime-wasm.c")
   .map((f) => path.join(root, "runtime", f))
 
-/** dudect's threshold (public domain; see tests/ct-timing/dudect.c): a |t| above it is read as a difference. */
+/**
+ * A |t| above this is read as a difference between the classes: the
+ * side-channel literature's 4.5, which the dudect paper follows. dudect's own
+ * code fails at 10, so this is the stricter reading.
+ */
 const THRESHOLD = 4.5
 /** Enough measurements a function for a |t| near the threshold to mean something. */
 const SAMPLES = 1000000
