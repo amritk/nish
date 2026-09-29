@@ -107,51 +107,50 @@ res.ok:
   %12 = load i32, i32* %11, align 4
   store i32 %12, i32* %v.addr, align 4
   store i32 50, i32* %i.addr, align 4
-  %13 = sub nsw i32 0, 1
-  store i32 %13, i32* %c.addr, align 4
-  %14 = load i32, i32* %i.addr, align 4
-  %15 = icmp sge i32 %14, 0
-  br i1 %15, label %land.rhs, label %land.end
+  store i32 -1, i32* %c.addr, align 4
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = icmp sge i32 %13, 0
+  br i1 %14, label %land.rhs, label %land.end
 
 land.rhs:
-  %16 = load i32, i32* %i.addr, align 4
-  %17 = load i32, i32* %k.addr, align 4
-  %18 = icmp slt i32 %16, %17
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = load i32, i32* %k.addr, align 4
+  %17 = icmp slt i32 %15, %16
   br label %land.end
 
 land.end:
-  %19 = phi i1 [ false, %res.ok ], [ %18, %land.rhs ]
-  br i1 %19, label %if.then, label %if.end
+  %18 = phi i1 [ false, %res.ok ], [ %17, %land.rhs ]
+  br i1 %18, label %if.then, label %if.end
 
 if.then:
-  %20 = load i8*, i8** %s.addr, align 8
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = sext i32 %21 to i64
-  %23 = bitcast i8* %20 to i64*
-  %24 = load i64, i64* %23, align 8
-  %25 = icmp ult i64 %22, %24
-  br i1 %25, label %bounds.ok, label %bounds.fail
+  %19 = load i8*, i8** %s.addr, align 8
+  %20 = load i32, i32* %i.addr, align 4
+  %21 = sext i32 %20 to i64
+  %22 = bitcast i8* %19 to i64*
+  %23 = load i64, i64* %22, align 8
+  %24 = icmp ult i64 %21, %23
+  br i1 %24, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %22, i64 %24)
+  call void @nish_panic_index(i64 %21, i64 %23)
   unreachable
 
 bounds.ok:
-  %26 = getelementptr inbounds i8, i8* %20, i64 8
-  %27 = getelementptr inbounds i8, i8* %26, i64 %22
-  %28 = load i8, i8* %27, align 1
-  %29 = zext i8 %28 to i32
-  store i32 %29, i32* %c.addr, align 4
+  %25 = getelementptr inbounds i8, i8* %19, i64 8
+  %26 = getelementptr inbounds i8, i8* %25, i64 %21
+  %27 = load i8, i8* %26, align 1
+  %28 = zext i8 %27 to i32
+  store i32 %28, i32* %c.addr, align 4
   br label %if.end
 
 if.end:
-  %30 = load i32, i32* %v.addr, align 4
-  %31 = call i8* @nish_str_from_i32(i32 %30)
-  %32 = call i8* @nish_str_concat(i8* %31, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  %33 = load i32, i32* %c.addr, align 4
-  %34 = call i8* @nish_str_from_i32(i32 %33)
-  %35 = call i8* @nish_str_concat(i8* %32, i8* %34)
-  call void @nish_print(i8* %35)
+  %29 = load i32, i32* %v.addr, align 4
+  %30 = call i8* @nish_str_from_i32(i32 %29)
+  %31 = call i8* @nish_str_concat(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %32 = load i32, i32* %c.addr, align 4
+  %33 = call i8* @nish_str_from_i32(i32 %32)
+  %34 = call i8* @nish_str_concat(i8* %31, i8* %33)
+  call void @nish_print(i8* %34)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

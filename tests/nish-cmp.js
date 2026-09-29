@@ -669,6 +669,18 @@ const DECLARED = [
   {
     program: "tests/link/std_json/main.ts",
     file: "json.ll",
+    changelog: "Fold a negated integer literal into its constant",
+    why: "std/json's `return -1` is the constant `-1` rather than a `sub nsw i32 0, 1`, and the values after it renumber",
+  },
+  {
+    program: "tests/link/std_text_f64/main.ts",
+    file: "json.ll",
+    changelog: "Fold a negated integer literal into its constant",
+    why: "the same std/json constants under --number-mode f64",
+  },
+  {
+    program: "tests/link/std_json/main.ts",
+    file: "json.ll",
     changelog: "Hold std/ and examples/ to zero performance warnings and ratchet src/",
     why: "std/json's reads and `substring` clamps are proven by the guards it now states, through `toI32(w.length)`, which the reference compiler still checks",
   },

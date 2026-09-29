@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 738 programs, 51418 dump lines.
+# 741 programs, 51445 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -36256,6 +36256,36 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 33:9 xs: Point[] (const)
   callee 33:14 makePoints -> @makePoints
+program tests/cases/neg_literal_i64_min.ts
+module tests/cases/neg_literal_i64_min.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 6:9 lo: i64 (const)
+  local 7:9 hex: i64 (const)
+  local 8:9 min: i64 (const)
+program tests/cases/neg_literal_int_min_hex.ts
+module tests/cases/neg_literal_int_min_hex.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 5:9 lo: i32 (const)
+  local 6:9 one: i32 (const)
+program tests/cases/neg_literal_unsigned.ts
+module tests/cases/neg_literal_unsigned.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_u64
+  stackSites=0 stackLocals=0
+  local 5:9 a: u8 (const)
+  local 6:9 b: u16 (const)
+  local 7:9 c: u32 (const)
+  local 8:9 d: u64 (const)
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4

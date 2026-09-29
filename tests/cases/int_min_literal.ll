@@ -12,22 +12,21 @@ entry:
   %lo.addr = alloca i32, align 4
   %hi.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = sub nsw i32 0, -2147483648
-  store i32 %0, i32* %lo.addr, align 4
+  store i32 -2147483648, i32* %lo.addr, align 4
   store i32 2147483647, i32* %hi.addr, align 4
-  %1 = load i32, i32* %lo.addr, align 4
-  %2 = call i8* @nish_str_from_i32(i32 %1)
-  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %4 = load i32, i32* %hi.addr, align 4
-  %5 = call i8* @nish_str_from_i32(i32 %4)
-  %6 = call i8* @nish_str_concat(i8* %3, i8* %5)
-  %7 = call i8* @nish_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %8 = load i32, i32* %lo.addr, align 4
-  %9 = load i32, i32* %hi.addr, align 4
-  %10 = add nsw i32 %8, %9
-  %11 = call i8* @nish_str_from_i32(i32 %10)
-  %12 = call i8* @nish_str_concat(i8* %7, i8* %11)
-  call void @nish_print(i8* %12)
+  %0 = load i32, i32* %lo.addr, align 4
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %3 = load i32, i32* %hi.addr, align 4
+  %4 = call i8* @nish_str_from_i32(i32 %3)
+  %5 = call i8* @nish_str_concat(i8* %2, i8* %4)
+  %6 = call i8* @nish_str_concat(i8* %5, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %7 = load i32, i32* %lo.addr, align 4
+  %8 = load i32, i32* %hi.addr, align 4
+  %9 = add nsw i32 %7, %8
+  %10 = call i8* @nish_str_from_i32(i32 %9)
+  %11 = call i8* @nish_str_concat(i8* %6, i8* %10)
+  call void @nish_print(i8* %11)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1138717 dump lines live, 76 distinct modules.
+# 76 programs, 1139347 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -19179,6 +19179,7 @@ import emitUndefinedTest from "./emit-map" -> function @emitUndefinedTest
 import isUndefinedTest from "./emit-map" -> function @isUndefinedTest
 import emitConcat from "./emit-strings" -> function @emitConcat
 import emitStrictEquality from "./emit-strings" -> function @emitStrictEquality
+import unwrapParens from "./emit-util" -> function @unwrapParens
 import N_INDEX from "./nodes" -> const N_INDEX
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import N_NUMBER from "./nodes" -> const N_NUMBER
@@ -19207,19 +19208,19 @@ function floatText(value: f64, type: i32): string -> @floatText [exported]
   escaping: value
   calls: f32Hex f64Hex
   stackSites=0 stackLocals=0
-  callee 44:79 f32Hex -> @f32Hex
-  callee 44:95 f64Hex -> @f64Hex
+  callee 45:79 f32Hex -> @f32Hex
+  callee 45:95 f64Hex -> @f64Hex
 function numericConstant(text: string, type: i32): string -> @numericConstant [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via parseIntegerLiteral
   escaping: text type
   calls: floatText isInteger nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
   stackSites=0 stackLocals=0
-  callee 52:7 isInteger -> @isInteger
-  local 53:11 value: i64 (const)
-  callee 53:19 parseIntegerLiteral -> @parseIntegerLiteral
-  callee 56:10 floatText -> @floatText
-  callee 56:20 numericLiteralValue -> @numericLiteralValue
+  callee 53:7 isInteger -> @isInteger
+  local 54:11 value: i64 (const)
+  callee 54:19 parseIntegerLiteral -> @parseIntegerLiteral
+  callee 57:10 floatText -> @floatText
+  callee 57:20 numericLiteralValue -> @numericLiteralValue
 function constantText(emitter: Emitter, info: ConstInfo): string -> @constantText [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.stringConstant
@@ -19227,22 +19228,22 @@ function constantText(emitter: Emitter, info: ConstInfo): string -> @constantTex
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.stringConstant#0
   pointer info: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 65:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 67:7 isFloat -> @isFloat
-  callee 68:12 floatText -> @floatText
+  callee 66:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 68:7 isFloat -> @isFloat
+  callee 69:12 floatText -> @floatText
 function intOpcode(emitter: Emitter, opcode: string, type: i32): string -> @intOpcode [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: opcode type
   calls: isUnsigned nish_str_concat nish_str_eq
   pointer emitter: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 88:28 isUnsigned -> @isUnsigned
+  callee 89:28 isUnsigned -> @isUnsigned
 function signedOpcode(opcode: string, type: i32): string -> @signedOpcode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: opcode type
   calls: isUnsigned nish_str_eq
   stackSites=0 stackLocals=0
-  callee 103:8 isUnsigned -> @isUnsigned
+  callee 104:8 isUnsigned -> @isUnsigned
 function isDivision(opcode: string): boolean -> @isDivision
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -19258,51 +19259,51 @@ function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: string,
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock intMin intOpcode isDivision isUnsigned nish_str_concat signedOpcode
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.llvm#0 intOpcode#0 Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  local 148:9 ty: string (const)
-  callee 148:14 Emitter.llvm -> @Emitter.llvm
-  local 149:9 op: string (const)
-  callee 149:14 signedOpcode -> @signedOpcode
-  local 150:9 fn: IRFunction (const)
-  callee 151:8 isDivision -> @isDivision
-  callee 152:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 152:28 intOpcode -> @intOpcode
-  local 154:9 byZero: string (const)
-  callee 154:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 157:7 bad: string (let)
-  callee 158:8 isUnsigned -> @isUnsigned
-  local 159:11 minLhs: string (const)
-  callee 159:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 159:58 intMin -> @intMin
-  local 160:11 negOne: string (const)
+  local 149:9 ty: string (const)
+  callee 149:14 Emitter.llvm -> @Emitter.llvm
+  local 150:9 op: string (const)
+  callee 150:14 signedOpcode -> @signedOpcode
+  local 151:9 fn: IRFunction (const)
+  callee 152:8 isDivision -> @isDivision
+  callee 153:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 153:28 intOpcode -> @intOpcode
+  local 155:9 byZero: string (const)
+  callee 155:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 158:7 bad: string (let)
+  callee 159:8 isUnsigned -> @isUnsigned
+  local 160:11 minLhs: string (const)
   callee 160:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local 161:11 overflow: string (const)
-  callee 161:22 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 162:11 IRFunction.emitValue -> @IRFunction.emitValue
-  local 164:9 failBlock: IRBlock (const)
-  callee 164:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 165:9 okBlock: IRBlock (const)
-  callee 165:19 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 166:3 IRFunction.emit -> @IRFunction.emit
-  callee 167:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 168:3 IRFunction.emit -> @IRFunction.emit
-  callee 168:24 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 160:58 intMin -> @intMin
+  local 161:11 negOne: string (const)
+  callee 161:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 162:11 overflow: string (const)
+  callee 162:22 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 163:11 IRFunction.emitValue -> @IRFunction.emitValue
+  local 165:9 failBlock: IRBlock (const)
+  callee 165:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 166:9 okBlock: IRBlock (const)
+  callee 166:19 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 167:3 IRFunction.emit -> @IRFunction.emit
+  callee 168:3 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee 169:3 IRFunction.emit -> @IRFunction.emit
-  callee 170:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 171:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 169:24 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 170:3 IRFunction.emit -> @IRFunction.emit
+  callee 171:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 172:10 IRFunction.emitValue -> @IRFunction.emitValue
 function integerOpcode(op: string, json: boolean): string -> @integerOpcode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   escaping: json
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-  callee 211:16 internalErrorFor -> @internalErrorFor
+  callee 212:16 internalErrorFor -> @internalErrorFor
 function floatOpcode(op: string, json: boolean): string -> @floatOpcode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   escaping: json
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-  callee 249:16 internalErrorFor -> @internalErrorFor
+  callee 250:16 internalErrorFor -> @internalErrorFor
 function bitwiseOpcode(op: string): string -> @bitwiseOpcode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -19312,7 +19313,7 @@ function shiftOpcodeFor(opcode: string, type: i32): string -> @shiftOpcodeFor
   escaping: opcode type
   calls: isUnsigned nish_str_eq
   stackSites=0 stackLocals=0
-  callee 281:24 isUnsigned -> @isUnsigned
+  callee 282:24 isUnsigned -> @isUnsigned
 function isShiftOpcode(opcode: string): boolean -> @isShiftOpcode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -19329,12 +19330,12 @@ function constantCount(expr: Node): ConstantCount -> @constantCount
   calls: ConstantCount.constructor nish_alloc_struct nish_panic_index nish_str_eq parseIntegerLiteral
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 301:7 inner: Node (let)
-  local 302:7 negative: boolean (let)
-  callee 314:12 new ConstantCount -> @ConstantCount.constructor
-  local 316:9 value: i64 (const)
-  callee 316:17 parseIntegerLiteral -> @parseIntegerLiteral
-  callee 317:10 new ConstantCount -> @ConstantCount.constructor
+  local 302:7 inner: Node (let)
+  local 303:7 negative: boolean (let)
+  callee 315:12 new ConstantCount -> @ConstantCount.constructor
+  local 317:9 value: i64 (const)
+  callee 317:17 parseIntegerLiteral -> @parseIntegerLiteral
+  callee 318:10 new ConstantCount -> @ConstantCount.constructor
 function emitShiftCount(emitter: Emitter, type: i32, count: Node): string -> @emitShiftCount
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -19343,14 +19344,14 @@ function emitShiftCount(emitter: Emitter, type: i32, count: Node): string -> @em
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0
   pointer count: size=40 writesThrough=true captured=true passedTo=constantCount#0 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
-  local 327:9 ty: string (const)
-  callee 327:14 Emitter.llvm -> @Emitter.llvm
-  local 328:9 mask: i64 (const)
-  callee 328:22 intBits -> @intBits
-  local 329:9 literal: ConstantCount (const)
-  callee 329:19 constantCount -> @constantCount
-  callee 333:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 333:44 Emitter.emitExpression -> @Emitter.emitExpression
+  local 328:9 ty: string (const)
+  callee 328:14 Emitter.llvm -> @Emitter.llvm
+  local 329:9 mask: i64 (const)
+  callee 329:22 intBits -> @intBits
+  local 330:9 literal: ConstantCount (const)
+  callee 330:19 constantCount -> @constantCount
+  callee 334:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 334:44 Emitter.emitExpression -> @Emitter.emitExpression
 function emitRightOperand(emitter: Emitter, opcode: string, type: i32, right: Node): string -> @emitRightOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitShiftCount
@@ -19359,9 +19360,9 @@ function emitRightOperand(emitter: Emitter, opcode: string, type: i32, right: No
   pointer emitter: size=200 writesThrough=false captured=false passedTo=emitShiftCount#0 Emitter.emitExpression#0
   pointer right: size=40 writesThrough=true captured=true passedTo=emitShiftCount#2 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
-  callee 338:3 isShiftOpcode -> @isShiftOpcode
-  callee 338:27 emitShiftCount -> @emitShiftCount
-  callee 338:66 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 339:3 isShiftOpcode -> @isShiftOpcode
+  callee 339:27 emitShiftCount -> @emitShiftCount
+  callee 339:66 Emitter.emitExpression -> @Emitter.emitExpression
 function emitBinary(emitter: Emitter, expr: Node): string -> @emitBinary [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitLogical
@@ -19369,31 +19370,31 @@ function emitBinary(emitter: Emitter, expr: Node): string -> @emitBinary [export
   pointer emitter: size=200 writesThrough=false captured=false passedTo=emitLogical#0 isUndefinedTest#0 emitUndefinedTest#0 emitStrictEquality#0 emitCoalesce#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitConcat#0 emitBitwise#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitLogical#1 isUndefinedTest#1 emitUndefinedTest#1 emitStrictEquality#1 emitCoalesce#1 emitBitwise#1
   stackSites=0 stackLocals=0
-  local 344:9 op: string (const)
-  callee 346:12 emitLogical -> @emitLogical
-  callee 350:12 isUndefinedTest -> @isUndefinedTest
-  callee 351:9 emitUndefinedTest -> @emitUndefinedTest
-  callee 352:9 emitStrictEquality -> @emitStrictEquality
-  callee 355:12 emitCoalesce -> @emitCoalesce
-  local 357:9 type: i32 (const)
-  callee 357:16 Emitter.typeOf -> @Emitter.typeOf
-  local 359:11 lhs: string (const)
-  callee 359:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local 360:11 rhs: string (const)
+  local 345:9 op: string (const)
+  callee 347:12 emitLogical -> @emitLogical
+  callee 351:12 isUndefinedTest -> @isUndefinedTest
+  callee 352:9 emitUndefinedTest -> @emitUndefinedTest
+  callee 353:9 emitStrictEquality -> @emitStrictEquality
+  callee 356:12 emitCoalesce -> @emitCoalesce
+  local 358:9 type: i32 (const)
+  callee 358:16 Emitter.typeOf -> @Emitter.typeOf
+  local 360:11 lhs: string (const)
   callee 360:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 361:12 emitConcat -> @emitConcat
-  callee 363:7 bitwiseOpcode -> @bitwiseOpcode
-  callee 364:12 emitBitwise -> @emitBitwise
-  local 367:9 lhs: string (const)
-  callee 367:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 368:9 rhs: string (const)
+  local 361:11 rhs: string (const)
+  callee 361:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 362:12 emitConcat -> @emitConcat
+  callee 364:7 bitwiseOpcode -> @bitwiseOpcode
+  callee 365:12 emitBitwise -> @emitBitwise
+  local 368:9 lhs: string (const)
   callee 368:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 369:7 isInteger -> @isInteger
-  callee 370:12 emitIntBinary -> @emitIntBinary
-  callee 370:35 integerOpcode -> @integerOpcode
-  callee 372:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 372:34 floatOpcode -> @floatOpcode
-  callee 372:72 Emitter.llvm -> @Emitter.llvm
+  local 369:9 rhs: string (const)
+  callee 369:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 370:7 isInteger -> @isInteger
+  callee 371:12 emitIntBinary -> @emitIntBinary
+  callee 371:35 integerOpcode -> @integerOpcode
+  callee 373:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 373:34 floatOpcode -> @floatOpcode
+  callee 373:72 Emitter.llvm -> @Emitter.llvm
 function emitBitwise(emitter: Emitter, expr: Node, type: i32): string -> @emitBitwise
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -19402,43 +19403,57 @@ function emitBitwise(emitter: Emitter, expr: Node, type: i32): string -> @emitBi
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 emitRightOperand#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 377:9 opcode: string (const)
-  callee 377:18 shiftOpcodeFor -> @shiftOpcodeFor
-  callee 377:33 bitwiseOpcode -> @bitwiseOpcode
-  local 378:9 lhs: string (const)
-  callee 378:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 379:9 rhs: string (const)
-  callee 379:15 emitRightOperand -> @emitRightOperand
-  callee 380:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 380:44 Emitter.llvm -> @Emitter.llvm
+  local 378:9 opcode: string (const)
+  callee 378:18 shiftOpcodeFor -> @shiftOpcodeFor
+  callee 378:33 bitwiseOpcode -> @bitwiseOpcode
+  local 379:9 lhs: string (const)
+  callee 379:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 380:9 rhs: string (const)
+  callee 380:15 emitRightOperand -> @emitRightOperand
+  callee 381:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 381:44 Emitter.llvm -> @Emitter.llvm
+function negatedLiteral(text: string, type: i32): string -> @negatedLiteral
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via parseIntegerLiteral
+  escaping: text type
+  calls: intBits nish_str_from_i64 parseIntegerLiteral
+  stackSites=0 stackLocals=0
+  local 395:9 negated: i64 (const)
+  callee 395:42 parseIntegerLiteral -> @parseIntegerLiteral
+  local 396:9 spare: i64 (const)
+  callee 396:28 intBits -> @intBits
 function emitUnary(emitter: Emitter, expr: Node): string -> @emitUnary [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIncDec
-  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue emitIncDec intOpcode internalErrorFor isInteger nish_exit nish_panic_index nish_str_concat nish_str_eq
+  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue emitIncDec intOpcode internalErrorFor isInteger negatedLiteral nish_exit nish_panic_index nish_str_concat nish_str_eq unwrapParens
   pointer emitter: size=200 writesThrough=false captured=false passedTo=emitIncDec#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 intOpcode#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitIncDec#1
   stackSites=0 stackLocals=0
-  local 386:9 op: string (const)
-  callee 388:12 emitIncDec -> @emitIncDec
-  local 390:9 operand: Node (const)
-  local 392:11 type: i32 (const)
-  callee 392:18 Emitter.typeOf -> @Emitter.typeOf
-  local 393:11 value: string (const)
-  callee 393:19 Emitter.emitExpression -> @Emitter.emitExpression
-  local 394:11 ty: string (const)
-  callee 394:16 Emitter.llvm -> @Emitter.llvm
-  callee 395:9 isInteger -> @isInteger
-  callee 396:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 396:38 intOpcode -> @intOpcode
-  callee 398:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 401:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 401:43 Emitter.emitExpression -> @Emitter.emitExpression
-  local 405:11 ty: string (const)
-  callee 405:16 Emitter.llvm -> @Emitter.llvm
-  callee 405:29 Emitter.typeOf -> @Emitter.typeOf
-  callee 406:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 406:46 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 408:16 internalErrorFor -> @internalErrorFor
+  local 401:9 op: string (const)
+  callee 403:12 emitIncDec -> @emitIncDec
+  local 405:9 operand: Node (const)
+  local 407:11 type: i32 (const)
+  callee 407:18 Emitter.typeOf -> @Emitter.typeOf
+  local 408:11 literal: Node (const)
+  callee 408:21 unwrapParens -> @unwrapParens
+  callee 409:9 isInteger -> @isInteger
+  callee 410:14 negatedLiteral -> @negatedLiteral
+  local 412:11 value: string (const)
+  callee 412:19 Emitter.emitExpression -> @Emitter.emitExpression
+  local 413:11 ty: string (const)
+  callee 413:16 Emitter.llvm -> @Emitter.llvm
+  callee 414:9 isInteger -> @isInteger
+  callee 415:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 415:38 intOpcode -> @intOpcode
+  callee 417:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 420:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 420:43 Emitter.emitExpression -> @Emitter.emitExpression
+  local 424:11 ty: string (const)
+  callee 424:16 Emitter.llvm -> @Emitter.llvm
+  callee 424:29 Emitter.typeOf -> @Emitter.typeOf
+  callee 425:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 425:46 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 427:16 internalErrorFor -> @internalErrorFor
 function loadLocal(emitter: Emitter, local: Local): string -> @loadLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -19446,11 +19461,11 @@ function loadLocal(emitter: Emitter, local: Local): string -> @loadLocal [export
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer local: size=32 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
-  local 415:9 ty: string (const)
-  callee 415:14 Emitter.llvm -> @Emitter.llvm
-  callee 416:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 416:53 Emitter.slotOf -> @Emitter.slotOf
-  callee 416:77 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 434:9 ty: string (const)
+  callee 434:14 Emitter.llvm -> @Emitter.llvm
+  callee 435:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 435:53 Emitter.slotOf -> @Emitter.slotOf
+  callee 435:77 Emitter.alignSuffix -> @Emitter.alignSuffix
 function storeLocal(emitter: Emitter, local: Local, value: string): void -> @storeLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
@@ -19458,11 +19473,11 @@ function storeLocal(emitter: Emitter, local: Local, value: string): void -> @sto
   pointer emitter: size=200 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer local: size=32 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
-  local 421:9 ty: string (const)
-  callee 421:14 Emitter.llvm -> @Emitter.llvm
-  callee 422:3 IRFunction.emit -> @IRFunction.emit
-  callee 422:51 Emitter.slotOf -> @Emitter.slotOf
-  callee 422:75 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 440:9 ty: string (const)
+  callee 440:14 Emitter.llvm -> @Emitter.llvm
+  callee 441:3 IRFunction.emit -> @IRFunction.emit
+  callee 441:51 Emitter.slotOf -> @Emitter.slotOf
+  callee 441:75 Emitter.alignSuffix -> @Emitter.alignSuffix
 function targetLocal(emitter: Emitter, target: Node): Local -> @targetLocal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via nish_exit
@@ -19470,8 +19485,8 @@ function targetLocal(emitter: Emitter, target: Node): Local -> @targetLocal [exp
   pointer emitter: size=200 writesThrough=false captured=false
   pointer target: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 427:9 local: Local | null (const)
-  callee 432:5 internalErrorFor -> @internalErrorFor
+  local 446:9 local: Local | null (const)
+  callee 451:5 internalErrorFor -> @internalErrorFor
 function emitAssignment(emitter: Emitter, expr: Node): string -> @emitAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitFieldAssignment
@@ -19479,28 +19494,28 @@ function emitAssignment(emitter: Emitter, expr: Node): string -> @emitAssignment
   pointer emitter: size=200 writesThrough=false captured=false passedTo=emitFieldAssignment#0 emitElementAssignment#0 targetLocal#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.slotOf#0 Emitter.alignSuffix#0 emitBitwiseAssignment#0 emitCompoundAssignment#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitFieldAssignment#1 emitElementAssignment#1 emitBitwiseAssignment#1 emitCompoundAssignment#1
   stackSites=0 stackLocals=0
-  local 440:9 target: Node (const)
-  callee 442:12 emitFieldAssignment -> @emitFieldAssignment
-  callee 445:12 emitElementAssignment -> @emitElementAssignment
-  local 447:9 op: string (const)
-  local 450:11 local: Local (const)
-  callee 450:19 targetLocal -> @targetLocal
-  local 451:11 ty: string (const)
-  callee 451:16 Emitter.llvm -> @Emitter.llvm
-  local 452:11 value: string (const)
-  callee 452:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 453:5 IRFunction.emit -> @IRFunction.emit
-  callee 453:53 Emitter.slotOf -> @Emitter.slotOf
-  callee 453:77 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee 456:7 bitwiseOpcode -> @bitwiseOpcode
-  callee 457:12 emitBitwiseAssignment -> @emitBitwiseAssignment
-  callee 459:10 emitCompoundAssignment -> @emitCompoundAssignment
+  local 459:9 target: Node (const)
+  callee 461:12 emitFieldAssignment -> @emitFieldAssignment
+  callee 464:12 emitElementAssignment -> @emitElementAssignment
+  local 466:9 op: string (const)
+  local 469:11 local: Local (const)
+  callee 469:19 targetLocal -> @targetLocal
+  local 470:11 ty: string (const)
+  callee 470:16 Emitter.llvm -> @Emitter.llvm
+  local 471:11 value: string (const)
+  callee 471:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 472:5 IRFunction.emit -> @IRFunction.emit
+  callee 472:53 Emitter.slotOf -> @Emitter.slotOf
+  callee 472:77 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee 475:7 bitwiseOpcode -> @bitwiseOpcode
+  callee 476:12 emitBitwiseAssignment -> @emitBitwiseAssignment
+  callee 478:10 emitCompoundAssignment -> @emitCompoundAssignment
 function isBitwiseAssignment(op: string): boolean -> @isBitwiseAssignment [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: op
   calls: bitwiseOpcode nish_str_at
   stackSites=0 stackLocals=0
-  callee 464:40 bitwiseOpcode -> @bitwiseOpcode
+  callee 483:40 bitwiseOpcode -> @bitwiseOpcode
 function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string, right: Node): string -> @emitBitwiseCombine [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitRightOperand
@@ -19509,15 +19524,15 @@ function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string
   pointer emitter: size=200 writesThrough=false captured=false passedTo=emitRightOperand#0 Emitter.llvm#0
   pointer right: size=40 writesThrough=true captured=true passedTo=emitRightOperand#3
   stackSites=0 stackLocals=0
-  local 482:9 operand: i32 (const)
-  callee 482:19 TypeTable.baseOf -> @TypeTable.baseOf
-  local 483:9 opcode: string (const)
-  callee 483:18 shiftOpcodeFor -> @shiftOpcodeFor
-  callee 483:33 bitwiseOpcode -> @bitwiseOpcode
-  local 484:9 rhs: string (const)
-  callee 484:15 emitRightOperand -> @emitRightOperand
-  callee 485:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 485:44 Emitter.llvm -> @Emitter.llvm
+  local 501:9 operand: i32 (const)
+  callee 501:19 TypeTable.baseOf -> @TypeTable.baseOf
+  local 502:9 opcode: string (const)
+  callee 502:18 shiftOpcodeFor -> @shiftOpcodeFor
+  callee 502:33 bitwiseOpcode -> @bitwiseOpcode
+  local 503:9 rhs: string (const)
+  callee 503:15 emitRightOperand -> @emitRightOperand
+  callee 504:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 504:44 Emitter.llvm -> @Emitter.llvm
 function emitBitwiseAssignment(emitter: Emitter, expr: Node): string -> @emitBitwiseAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via targetLocal
@@ -19525,14 +19540,14 @@ function emitBitwiseAssignment(emitter: Emitter, expr: Node): string -> @emitBit
   pointer emitter: size=200 writesThrough=false captured=false passedTo=targetLocal#0 loadLocal#0 emitBitwiseCombine#0 emitRangedStore#0 storeLocal#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitRangedStore#1
   stackSites=0 stackLocals=0
-  local 490:9 local: Local (const)
-  callee 490:17 targetLocal -> @targetLocal
-  local 491:9 old: string (const)
-  callee 491:15 loadLocal -> @loadLocal
-  local 492:9 value: string (const)
-  callee 492:17 emitBitwiseCombine -> @emitBitwiseCombine
-  callee 493:3 emitRangedStore -> @emitRangedStore
-  callee 494:3 storeLocal -> @storeLocal
+  local 509:9 local: Local (const)
+  callee 509:17 targetLocal -> @targetLocal
+  local 510:9 old: string (const)
+  callee 510:15 loadLocal -> @loadLocal
+  local 511:9 value: string (const)
+  callee 511:17 emitBitwiseCombine -> @emitBitwiseCombine
+  callee 512:3 emitRangedStore -> @emitRangedStore
+  callee 513:3 storeLocal -> @storeLocal
 function withoutEquals(op: string): string -> @withoutEquals
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
@@ -19543,16 +19558,16 @@ function compoundIntegerOpcode(op: string, json: boolean): string -> @compoundIn
   escaping: json op
   calls: integerOpcode withoutEquals
   stackSites=0 stackLocals=0
-  callee 503:3 integerOpcode -> @integerOpcode
-  callee 503:17 withoutEquals -> @withoutEquals
+  callee 522:3 integerOpcode -> @integerOpcode
+  callee 522:17 withoutEquals -> @withoutEquals
 function compoundFloatOpcode(op: string, json: boolean): string -> @compoundFloatOpcode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via floatOpcode
   escaping: json op
   calls: floatOpcode withoutEquals
   stackSites=0 stackLocals=0
-  callee 506:75 floatOpcode -> @floatOpcode
-  callee 506:87 withoutEquals -> @withoutEquals
+  callee 525:75 floatOpcode -> @floatOpcode
+  callee 525:87 withoutEquals -> @withoutEquals
 module src/emit-control.ts
 import closeHeaderScope from "./emit-arrays" -> function @closeHeaderScope
 import openHeaderScope from "./emit-arrays" -> function @openHeaderScope

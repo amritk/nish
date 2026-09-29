@@ -236,29 +236,28 @@ bounds.ok:
   br i1 %21, label %if.then, label %if.end
 
 if.then:
-  %22 = sub nsw i32 0, 1
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %22
+  ret i32 -1
 
 if.end:
-  %23 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
-  %24 = getelementptr inbounds %struct.Towers, %struct.Towers* %23, i32 0, i32 1
-  %25 = load i32, i32* %24, align 4, !tbaa !8
-  %26 = mul nsw i32 %25, 100
-  %27 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
-  %28 = getelementptr inbounds %struct.Disk, %struct.Disk* %27, i32 0, i32 0
-  %29 = load i32, i32* %28, align 4, !tbaa !6
-  %30 = mul nsw i32 %29, 10
-  %31 = add nsw i32 %26, %30
-  %32 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
-  %33 = getelementptr inbounds %struct.Towers, %struct.Towers* %32, i32 0, i32 0
-  %34 = load %struct.nish_array*, %struct.nish_array** %33, align 8, !tbaa !20
-  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0
-  %36 = load i64, i64* %35, align 8, !alias.scope !12, !noalias !13, !tbaa !17
-  %37 = trunc i64 %36 to i32
-  %38 = add nsw i32 %31, %37
+  %22 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
+  %23 = getelementptr inbounds %struct.Towers, %struct.Towers* %22, i32 0, i32 1
+  %24 = load i32, i32* %23, align 4, !tbaa !8
+  %25 = mul nsw i32 %24, 100
+  %26 = load %struct.Disk*, %struct.Disk** %top.addr, align 8
+  %27 = getelementptr inbounds %struct.Disk, %struct.Disk* %26, i32 0, i32 0
+  %28 = load i32, i32* %27, align 4, !tbaa !6
+  %29 = mul nsw i32 %28, 10
+  %30 = add nsw i32 %25, %29
+  %31 = load %struct.Towers*, %struct.Towers** %t.addr, align 8
+  %32 = getelementptr inbounds %struct.Towers, %struct.Towers* %31, i32 0, i32 0
+  %33 = load %struct.nish_array*, %struct.nish_array** %32, align 8, !tbaa !20
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
+  %35 = load i64, i64* %34, align 8, !alias.scope !12, !noalias !13, !tbaa !17
+  %36 = trunc i64 %35 to i32
+  %37 = add nsw i32 %30, %36
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %38
+  ret i32 %37
 }
 
 attributes #0 = { nounwind willreturn }

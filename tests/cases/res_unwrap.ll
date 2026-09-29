@@ -86,17 +86,16 @@ res.ok:
   br label %res.end
 
 res.alt:
-  %5 = sub nsw i32 0, 1
   br label %res.end
 
 res.end:
-  %6 = phi i32 [ %4, %res.ok ], [ %5, %res.alt ]
-  %7 = call i8* @nish_str_from_i32(i32 %6)
-  call void @nish_print(i8* %7)
-  %8 = call %struct.nish_result.i32.str* @parsePort(i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
-  %9 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %8, i32 0, i32 0
-  %10 = load i1, i1* %9, align 1
-  br i1 %10, label %res.ok.1, label %res.panic
+  %5 = phi i32 [ %4, %res.ok ], [ -1, %res.alt ]
+  %6 = call i8* @nish_str_from_i32(i32 %5)
+  call void @nish_print(i8* %6)
+  %7 = call %struct.nish_result.i32.str* @parsePort(i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*))
+  %8 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %7, i32 0, i32 0
+  %9 = load i1, i1* %8, align 1
+  br i1 %9, label %res.ok.1, label %res.panic
 
 res.panic:
   call void @nish_write(i8* bitcast ({ i64, [15 x i8] }* @.str.3 to i8*), i32 2, i1 true)
@@ -104,10 +103,10 @@ res.panic:
   unreachable
 
 res.ok.1:
-  %11 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %8, i32 0, i32 1
-  %12 = load i32, i32* %11, align 4
-  %13 = call i8* @nish_str_from_i32(i32 %12)
-  call void @nish_print(i8* %13)
+  %10 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %7, i32 0, i32 1
+  %11 = load i32, i32* %10, align 4
+  %12 = call i8* @nish_str_from_i32(i32 %11)
+  call void @nish_print(i8* %12)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

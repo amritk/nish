@@ -324,37 +324,35 @@ lor.end:
   br i1 %47, label %if.then, label %if.end
 
 if.then:
-  %48 = sub nsw i32 0, 1
-  ret i32 %48
+  ret i32 -1
 
 if.end:
-  %49 = load %struct.Disk*, %struct.Disk** %first.addr, align 8
-  %50 = getelementptr inbounds %struct.Disk, %struct.Disk* %49, i32 0, i32 1
-  %51 = load %struct.Disk*, %struct.Disk** %50, align 8, !tbaa !6
-  store %struct.Disk* %51, %struct.Disk** %below.addr, align 8
-  %52 = load %struct.Disk*, %struct.Disk** %below.addr, align 8
-  %53 = icmp eq %struct.Disk* %52, null
-  br i1 %53, label %if.then.1, label %if.end.1
+  %48 = load %struct.Disk*, %struct.Disk** %first.addr, align 8
+  %49 = getelementptr inbounds %struct.Disk, %struct.Disk* %48, i32 0, i32 1
+  %50 = load %struct.Disk*, %struct.Disk** %49, align 8, !tbaa !6
+  store %struct.Disk* %50, %struct.Disk** %below.addr, align 8
+  %51 = load %struct.Disk*, %struct.Disk** %below.addr, align 8
+  %52 = icmp eq %struct.Disk* %51, null
+  br i1 %52, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %54 = sub nsw i32 0, 2
-  ret i32 %54
+  ret i32 -2
 
 if.end.1:
-  %55 = load %struct.Disk*, %struct.Disk** %first.addr, align 8
-  %56 = getelementptr inbounds %struct.Disk, %struct.Disk* %55, i32 0, i32 0
-  %57 = load i32, i32* %56, align 4, !tbaa !5
-  %58 = mul nsw i32 %57, 100
-  %59 = load %struct.Disk*, %struct.Disk** %second.addr, align 8
-  %60 = getelementptr inbounds %struct.Disk, %struct.Disk* %59, i32 0, i32 0
-  %61 = load i32, i32* %60, align 4, !tbaa !5
-  %62 = mul nsw i32 %61, 10
-  %63 = add nsw i32 %58, %62
-  %64 = load %struct.Disk*, %struct.Disk** %below.addr, align 8
-  %65 = getelementptr inbounds %struct.Disk, %struct.Disk* %64, i32 0, i32 0
-  %66 = load i32, i32* %65, align 4, !tbaa !5
-  %67 = add nsw i32 %63, %66
-  ret i32 %67
+  %53 = load %struct.Disk*, %struct.Disk** %first.addr, align 8
+  %54 = getelementptr inbounds %struct.Disk, %struct.Disk* %53, i32 0, i32 0
+  %55 = load i32, i32* %54, align 4, !tbaa !5
+  %56 = mul nsw i32 %55, 100
+  %57 = load %struct.Disk*, %struct.Disk** %second.addr, align 8
+  %58 = getelementptr inbounds %struct.Disk, %struct.Disk* %57, i32 0, i32 0
+  %59 = load i32, i32* %58, align 4, !tbaa !5
+  %60 = mul nsw i32 %59, 10
+  %61 = add nsw i32 %56, %60
+  %62 = load %struct.Disk*, %struct.Disk** %below.addr, align 8
+  %63 = getelementptr inbounds %struct.Disk, %struct.Disk* %62, i32 0, i32 0
+  %64 = load i32, i32* %63, align 4, !tbaa !5
+  %65 = add nsw i32 %61, %64
+  ret i32 %65
 }
 
 define noundef i32 @test() #1 {

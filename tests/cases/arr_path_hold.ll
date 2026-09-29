@@ -241,8 +241,7 @@ if.then:
   ret i32 %12
 
 if.end:
-  %13 = sub nsw i32 0, 1
-  ret i32 %13
+  ret i32 -1
 }
 
 define noundef i32 @nish_main() #1 {

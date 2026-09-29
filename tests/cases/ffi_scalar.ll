@@ -24,21 +24,19 @@ entry:
   %wide.addr = alloca i64, align 8
   %back.addr = alloca i64, align 8
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = sub nsw i64 0, 5
-  store i64 %0, i64* %wide.addr, align 8
-  %1 = load i64, i64* %wide.addr, align 8
-  %2 = call i64 @labs(i64 %1)
-  store i64 %2, i64* %back.addr, align 8
-  %3 = sub nsw i32 0, 7
-  %4 = call i32 @callsC(i32 %3)
+  store i64 -5, i64* %wide.addr, align 8
+  %0 = load i64, i64* %wide.addr, align 8
+  %1 = call i64 @labs(i64 %0)
+  store i64 %1, i64* %back.addr, align 8
+  %2 = call i32 @callsC(i32 -7)
+  %3 = call i8* @nish_str_from_i32(i32 %2)
+  call void @nish_print(i8* %3)
+  %4 = call i32 @pureDouble(i32 3)
   %5 = call i8* @nish_str_from_i32(i32 %4)
   call void @nish_print(i8* %5)
-  %6 = call i32 @pureDouble(i32 3)
-  %7 = call i8* @nish_str_from_i32(i32 %6)
-  call void @nish_print(i8* %7)
-  %8 = load i64, i64* %back.addr, align 8
-  %9 = icmp eq i64 %8, 5
-  br i1 %9, label %cond.true, label %cond.false
+  %6 = load i64, i64* %back.addr, align 8
+  %7 = icmp eq i64 %6, 5
+  br i1 %7, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -47,9 +45,9 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %10 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  %8 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %10
+  ret i32 %8
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {

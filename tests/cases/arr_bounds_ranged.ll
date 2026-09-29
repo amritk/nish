@@ -21,17 +21,16 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 0, 1
-  ret i32 %4
+  ret i32 -1
 
 if.end:
-  %5 = sext i32 %i to i64
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 %5
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %10
+  %4 = sext i32 %i to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %4
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %9
 }
 
 define internal noundef i32 @byByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i8 noundef %b) #0 {
@@ -43,17 +42,16 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 0, 1
-  ret i32 %4
+  ret i32 -1
 
 if.end:
-  %5 = zext i8 %b to i64
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 %5
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %10
+  %4 = zext i8 %b to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %4
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %9
 }
 
 define internal noundef i32 @byHalf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i16 noundef %h) #0 {
@@ -65,17 +63,16 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 0, 1
-  ret i32 %4
+  ret i32 -1
 
 if.end:
-  %5 = zext i16 %h to i64
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %8 = bitcast i8* %7 to i32*
-  %9 = getelementptr inbounds i32, i32* %8, i64 %5
-  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %10
+  %4 = zext i16 %h to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 %4
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %9
 }
 
 define internal noundef i32 @converted(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i8 noundef %b) #0 {
@@ -90,18 +87,17 @@ entry:
   br i1 %4, label %if.then, label %if.end
 
 if.then:
-  %5 = sub nsw i32 0, 1
-  ret i32 %5
+  ret i32 -1
 
 if.end:
-  %6 = load i32, i32* %k.addr, align 4
-  %7 = sext i32 %6 to i64
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %10 = bitcast i8* %9 to i32*
-  %11 = getelementptr inbounds i32, i32* %10, i64 %7
-  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %12
+  %5 = load i32, i32* %k.addr, align 4
+  %6 = sext i32 %5 to i64
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %11
 }
 
 define internal noundef i32 @short(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i32 noundef %i) #1 {
@@ -113,27 +109,26 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 0, 1
-  ret i32 %4
+  ret i32 -1
 
 if.end:
-  %5 = sext i32 %i to i64
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %8 = icmp ult i64 %5, %7
-  br i1 %8, label %bounds.ok, label %bounds.fail
+  %4 = sext i32 %i to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = icmp ult i64 %4, %6
+  br i1 %7, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %5, i64 %7)
+  call void @nish_panic_index(i64 %4, i64 %6)
   unreachable
 
 bounds.ok:
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 %5
-  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %13
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %4
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %12
 }
 
 define internal noundef i32 @wide(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i32 noundef %w) #1 {
@@ -145,27 +140,26 @@ entry:
   br i1 %3, label %if.then, label %if.end
 
 if.then:
-  %4 = sub nsw i32 0, 1
-  ret i32 %4
+  ret i32 -1
 
 if.end:
-  %5 = zext i32 %w to i64
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %8 = icmp ult i64 %5, %7
-  br i1 %8, label %bounds.ok, label %bounds.fail
+  %4 = zext i32 %w to i64
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = icmp ult i64 %4, %6
+  br i1 %7, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 %5, i64 %7)
+  call void @nish_panic_index(i64 %4, i64 %6)
   unreachable
 
 bounds.ok:
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 %5
-  %13 = load i32, i32* %12, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  ret i32 %13
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %4
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %12
 }
 
 define noundef i32 @nish_main() #1 {

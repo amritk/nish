@@ -238,13 +238,12 @@ cond.true:
   br label %cond.end
 
 cond.false:
-  %37 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.end:
-  %38 = phi i32 [ %36, %cond.true ], [ %37, %cond.false ]
+  %37 = phi i32 [ %36, %cond.true ], [ -1, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %38
+  ret i32 %37
 }
 
 attributes #0 = { nounwind willreturn readnone }
