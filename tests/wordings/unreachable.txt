@@ -223,6 +223,3 @@ NL8011  not live yet: console.log prints a negative zero as 0 here
 NL8001  not live yet: a UTF-8 offset that meets an outside fact
 NL8002  not live yet: a `slice` whose bounds are not proven inside its receiver
 #
-# --- WP33 R1: lands with portability-records
-NL8003  not live yet: a record copied into an array while the original is still used
-NL8004  not live yet: a store over an element a live reference still reads

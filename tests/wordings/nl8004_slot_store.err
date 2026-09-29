@@ -1,0 +1,1 @@
+`ps[0] = { x: 3, y: 4 }` overwrites the element a reference still reads, and TypeScript replaces the object instead (`r`, line 11)

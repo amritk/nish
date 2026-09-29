@@ -187,6 +187,11 @@ cases/perf_rng_quiet added after R6: no rewriter to freeze it with
 cases/port_array_quiet added after R6: no rewriter to freeze it with
 cases/port_array_quiet_f64 added after R6: no rewriter to freeze it with
 cases/port_array_zero_fill added after R6: no rewriter to freeze it with
+cases/port_rec_literal_twice added after R6: no rewriter to freeze it with
+cases/port_rec_push_never_written_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_push_then_write added after R6: no rewriter to freeze it with
+cases/port_rec_slot_store_dead_ref_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_slot_store_live_ref added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with

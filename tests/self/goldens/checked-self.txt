@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1122170 dump lines live, 76 distinct modules.
+# 76 programs, 1130024 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -65,7 +65,7 @@ entry src/parents.ts: src/parents.ts src/nodes.ts
 entry src/parser.ts: src/parser.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts
 entry src/paths.ts: src/paths.ts src/strings.ts
 entry src/portability-numbers.ts: src/portability-numbers.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-records.ts src/portability-strings.ts
-entry src/portability-records.ts: src/portability-records.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-strings.ts
+entry src/portability-records.ts: src/portability-records.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts src/portability.ts src/portability-numbers.ts src/portability-strings.ts
 entry src/portability-strings.ts: src/portability-strings.ts src/nodes.ts src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-records.ts
 entry src/portability.ts: src/portability.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/expressions.ts src/constants.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/emit-util.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/emit.ts src/debug.ts src/ir.ts src/result.ts src/structs.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/options.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts
 entry src/program.ts: src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts
@@ -7300,6 +7300,7 @@ import checkExpression from "./expressions" -> function @checkExpression
 import isBitwiseCompound from "./expressions" -> function @isBitwiseCompound
 import unproven from "./expressions" -> function @unproven
 import unwrapParens from "./emit-util" -> function @unwrapParens
+import N_BINARY from "./nodes" -> const N_BINARY
 import N_BLOCK from "./nodes" -> const N_BLOCK
 import N_CALL from "./nodes" -> const N_CALL
 import N_CASE from "./nodes" -> const N_CASE
@@ -7315,6 +7316,7 @@ import N_THIS from "./nodes" -> const N_THIS
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
+import CheckedProgram from "./program" -> struct CheckedProgram
 import inlineElementStruct from "./program" -> function @inlineElementStruct
 import Local from "./symbols" -> struct Local
 import Scope from "./symbols" -> struct Scope
@@ -7322,6 +7324,7 @@ import isNumeric from "./types" -> function @isNumeric
 import T_ERROR from "./types" -> const T_ERROR
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
+import TypeTable from "./types" -> struct TypeTable
 const ARRAY_METHODS: string = "push, pop, indexOf, join"
 const UNNAMED: string = ""
 struct Mutation (class) size=24 align=8
@@ -7329,21 +7332,34 @@ struct Mutation (class) size=24 align=8
   field elem: string index=1 offset=8
   field what: string index=2 offset=16
   constructor -> @Mutation.constructor
-struct ElementRef (class) size=40 align=8
+struct ElementRef (class) size=48 align=8
   field local: Local index=0 offset=0
   field array: string index=1 offset=8
   field elem: string index=2 offset=16
   field arrayText: string index=3 offset=24
   field invalidatedBy: string index=4 offset=32
+  field overwrittenBy: Node | null index=5 offset=40
   constructor -> @ElementRef.constructor
-struct RefWalk (class) size=24 align=8
-  field ctx: CheckContext index=0 offset=0
-  field live: ElementRef[] index=1 offset=8
-  field reported: boolean index=2 offset=16
+  method reachedBy -> @ElementRef.reachedBy
+struct SlotOverwrite (class) size=24 align=8 exported
+  field store: Node index=0 offset=0
+  field reference: Local index=1 offset=8
+  field read: Node index=2 offset=16
+  constructor -> @SlotOverwrite.constructor
+struct RefWalk (class) size=48 align=8
+  field program: CheckedProgram index=0 offset=0
+  field table: TypeTable index=1 offset=8
+  field ctx: CheckContext | null index=2 offset=16
+  field live: ElementRef[] index=3 offset=24
+  field reported: boolean index=4 offset=32
+  field overwrites: SlotOverwrite[] | null index=5 offset=40
   constructor -> @RefWalk.constructor
+  method report -> @RefWalk.report
   method dropTo -> @RefWalk.dropTo
   method invalidate -> @RefWalk.invalidate
+  method overwrite -> @RefWalk.overwrite
   method mutationsWithin -> @RefWalk.mutationsWithin
+  method overwriteWithin -> @RefWalk.overwriteWithin
   method visit -> @RefWalk.visit
   method visitChildren -> @RefWalk.visitChildren
   method visitIdentifier -> @RefWalk.visitIdentifier
@@ -7359,22 +7375,22 @@ function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i3
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  callee 42:22 TypeTable.isArray -> @TypeTable.isArray
-  callee 43:14 CheckContext.errorType -> @CheckContext.errorType
-  local 50:9 hint: i32 (const)
-  callee 50:29 TypeTable.isArray -> @TypeTable.isArray
-  callee 50:55 TypeTable.refOf -> @TypeTable.refOf
-  local 51:7 elem: i32 (let)
-  local 52:14 element: Node (const)
-  local 53:11 type: i32 (const)
-  callee 53:18 unproven -> @unproven
-  callee 53:32 checkExpression -> @checkExpression
-  callee 58:7 CheckContext.error -> @CheckContext.error
-  local 64:13 a: string (const)
-  callee 64:17 TypeTable.typeName -> @TypeTable.typeName
-  callee 65:7 CheckContext.error -> @CheckContext.error
-  callee 67:77 TypeTable.typeName -> @TypeTable.typeName
-  callee 71:31 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 43:22 TypeTable.isArray -> @TypeTable.isArray
+  callee 44:14 CheckContext.errorType -> @CheckContext.errorType
+  local 51:9 hint: i32 (const)
+  callee 51:29 TypeTable.isArray -> @TypeTable.isArray
+  callee 51:55 TypeTable.refOf -> @TypeTable.refOf
+  local 52:7 elem: i32 (let)
+  local 53:14 element: Node (const)
+  local 54:11 type: i32 (const)
+  callee 54:18 unproven -> @unproven
+  callee 54:32 checkExpression -> @checkExpression
+  callee 59:7 CheckContext.error -> @CheckContext.error
+  local 65:13 a: string (const)
+  callee 65:17 TypeTable.typeName -> @TypeTable.typeName
+  callee 66:7 CheckContext.error -> @CheckContext.error
+  callee 68:77 TypeTable.typeName -> @TypeTable.typeName
+  callee 72:31 TypeTable.arrayOf -> @TypeTable.arrayOf
 function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIndex [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -7383,21 +7399,21 @@ function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkI
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 76:9 base: i32 (const)
-  callee 76:16 checkExpression -> @checkExpression
-  callee 80:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 81:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 83:25 TypeTable.typeName -> @TypeTable.typeName
-  callee 86:8 TypeTable.isArray -> @TypeTable.isArray
-  callee 87:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 89:39 TypeTable.typeName -> @TypeTable.typeName
-  local 92:9 index: i32 (const)
-  callee 92:17 checkExpression -> @checkExpression
-  callee 92:63 CheckContext.numberType -> @CheckContext.numberType
-  callee 93:29 isNumeric -> @isNumeric
-  callee 94:5 CheckContext.error -> @CheckContext.error
-  callee 94:70 TypeTable.typeName -> @TypeTable.typeName
-  callee 96:10 TypeTable.refOf -> @TypeTable.refOf
+  local 77:9 base: i32 (const)
+  callee 77:16 checkExpression -> @checkExpression
+  callee 81:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 82:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 84:25 TypeTable.typeName -> @TypeTable.typeName
+  callee 87:8 TypeTable.isArray -> @TypeTable.isArray
+  callee 88:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 90:39 TypeTable.typeName -> @TypeTable.typeName
+  local 93:9 index: i32 (const)
+  callee 93:17 checkExpression -> @checkExpression
+  callee 93:63 CheckContext.numberType -> @CheckContext.numberType
+  callee 94:29 isNumeric -> @isNumeric
+  callee 95:5 CheckContext.error -> @CheckContext.error
+  callee 95:70 TypeTable.typeName -> @TypeTable.typeName
+  callee 97:10 TypeTable.refOf -> @TypeTable.refOf
 function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): string -> @readonlyWriteMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.arrayOf
@@ -7405,49 +7421,49 @@ function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): s
   calls: TypeTable.arrayOf TypeTable.refOf TypeTable.typeName nish_str_concat
   pointer ctx: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 106:9 mutable: string (const)
-  callee 106:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 106:38 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 106:56 TypeTable.refOf -> @TypeTable.refOf
-  callee 107:28 TypeTable.typeName -> @TypeTable.typeName
+  local 107:9 mutable: string (const)
+  callee 107:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 107:38 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 107:56 TypeTable.refOf -> @TypeTable.refOf
+  callee 108:28 TypeTable.typeName -> @TypeTable.typeName
 function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIndexAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 118:3
+  sharedWrite: 119:3
   calls: CheckContext.errorType TypeTable.arrayOf TypeTable.assignable TypeTable.baseOf TypeTable.isReadonlyArray TypeTable.typeName checkBitwiseAssignOperands checkExpression checkIndex isArgvExpression isBitwiseCompound isNumeric nish_panic_index nish_str_concat nish_str_eq readonlyWriteMessage unwrapParens
   pointer ctx: size=192 writesThrough=true captured=true passedTo=isArgvExpression#0 CheckContext.errorType#0 checkIndex#0 CheckContext.errorType#0 readonlyWriteMessage#0 checkExpression#0 CheckContext.errorType#0 checkBitwiseAssignOperands#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkBitwiseAssignOperands#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=isArgvExpression#2 checkIndex#2 checkExpression#2
   stackSites=0 stackLocals=0
-  callee 112:7 isArgvExpression -> @isArgvExpression
-  callee 115:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 115:26 unwrapParens -> @unwrapParens
-  local 117:9 elem: i32 (const)
-  callee 117:16 checkIndex -> @checkIndex
-  local 119:9 target: i32 (const)
-  callee 120:7 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee 121:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 121:44 readonlyWriteMessage -> @readonlyWriteMessage
-  local 123:9 op: string (const)
-  local 124:9 value: Node (const)
-  local 127:9 operand: i32 (const)
-  callee 127:39 TypeTable.baseOf -> @TypeTable.baseOf
-  local 128:9 rhs: i32 (const)
-  callee 128:15 checkExpression -> @checkExpression
-  callee 133:10 TypeTable.assignable -> @TypeTable.assignable
-  local 134:13 base: i32 (const)
-  local 135:13 spelled: string (const)
-  callee 135:34 TypeTable.typeName -> @TypeTable.typeName
-  callee 135:53 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 135:80 TypeTable.typeName -> @TypeTable.typeName
-  callee 136:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 136:52 TypeTable.typeName -> @TypeTable.typeName
-  callee 142:7 isBitwiseCompound -> @isBitwiseCompound
-  callee 143:12 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
-  callee 145:8 isNumeric -> @isNumeric
-  local 146:11 a: string (const)
-  callee 146:15 TypeTable.typeName -> @TypeTable.typeName
-  callee 147:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 152:90 TypeTable.typeName -> @TypeTable.typeName
+  callee 113:7 isArgvExpression -> @isArgvExpression
+  callee 116:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 116:26 unwrapParens -> @unwrapParens
+  local 118:9 elem: i32 (const)
+  callee 118:16 checkIndex -> @checkIndex
+  local 120:9 target: i32 (const)
+  callee 121:7 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 122:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 122:44 readonlyWriteMessage -> @readonlyWriteMessage
+  local 124:9 op: string (const)
+  local 125:9 value: Node (const)
+  local 128:9 operand: i32 (const)
+  callee 128:39 TypeTable.baseOf -> @TypeTable.baseOf
+  local 129:9 rhs: i32 (const)
+  callee 129:15 checkExpression -> @checkExpression
+  callee 134:10 TypeTable.assignable -> @TypeTable.assignable
+  local 135:13 base: i32 (const)
+  local 136:13 spelled: string (const)
+  callee 136:34 TypeTable.typeName -> @TypeTable.typeName
+  callee 136:53 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 136:80 TypeTable.typeName -> @TypeTable.typeName
+  callee 137:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 137:52 TypeTable.typeName -> @TypeTable.typeName
+  callee 143:7 isBitwiseCompound -> @isBitwiseCompound
+  callee 144:12 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
+  callee 146:8 isNumeric -> @isNumeric
+  local 147:11 a: string (const)
+  callee 147:15 TypeTable.typeName -> @TypeTable.typeName
+  callee 148:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 153:90 TypeTable.typeName -> @TypeTable.typeName
 function checkArrayProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @checkArrayProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
@@ -7456,9 +7472,9 @@ function checkArrayProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
-  callee 160:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 162:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 162:69 TypeTable.typeName -> @TypeTable.typeName
+  callee 161:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 163:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 163:69 TypeTable.typeName -> @TypeTable.typeName
 function checkArrayMethod(ctx: CheckContext, call: Node, access: Node, args: Node, receiver: i32, scope: Scope): i32 -> @checkArrayMethod [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -7470,47 +7486,47 @@ function checkArrayMethod(ctx: CheckContext, call: Node, access: Node, args: Nod
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=isArgvExpression#2 checkExpression#2 checkExpression#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 175:9 name: string (const)
-  callee 176:46 isArgvExpression -> @isArgvExpression
-  callee 177:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 177:26 unwrapParens -> @unwrapParens
-  callee 179:46 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee 180:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 180:32 readonlyWriteMessage -> @readonlyWriteMessage
-  local 182:9 elem: i32 (const)
-  callee 182:16 TypeTable.refOf -> @TypeTable.refOf
-  local 183:9 spelled: string (const)
-  callee 183:19 TypeTable.typeName -> @TypeTable.typeName
-  local 193:9 elemContext: i32 (const)
-  callee 193:62 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 195:10 checkBuiltinArity -> @checkBuiltinArity
-  callee 196:14 CheckContext.numberType -> @CheckContext.numberType
-  local 198:11 got: i32 (const)
-  callee 198:17 checkExpression -> @checkExpression
-  callee 199:29 TypeTable.assignable -> @TypeTable.assignable
-  callee 200:7 CheckContext.error -> @CheckContext.error
-  callee 200:50 TypeTable.typeName -> @TypeTable.typeName
-  callee 202:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 207:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 211:10 checkBuiltinArity -> @checkBuiltinArity
-  callee 212:14 CheckContext.numberType -> @CheckContext.numberType
-  local 216:11 probe: i32 (const)
-  callee 216:19 TypeTable.baseOf -> @TypeTable.baseOf
-  local 217:11 got: i32 (const)
-  callee 217:17 checkExpression -> @checkExpression
-  callee 223:29 TypeTable.assignable -> @TypeTable.assignable
-  local 224:13 want: string (const)
-  callee 224:20 TypeTable.typeName -> @TypeTable.typeName
-  callee 225:7 CheckContext.error -> @CheckContext.error
-  callee 227:78 TypeTable.typeName -> @TypeTable.typeName
-  callee 230:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 237:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 244:7 CheckContext.error -> @CheckContext.error
-  local 246:13 got: i32 (const)
-  callee 246:19 checkExpression -> @checkExpression
-  callee 248:9 CheckContext.error -> @CheckContext.error
-  callee 248:69 TypeTable.typeName -> @TypeTable.typeName
-  callee 253:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 176:9 name: string (const)
+  callee 177:46 isArgvExpression -> @isArgvExpression
+  callee 178:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 178:26 unwrapParens -> @unwrapParens
+  callee 180:46 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 181:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 181:32 readonlyWriteMessage -> @readonlyWriteMessage
+  local 183:9 elem: i32 (const)
+  callee 183:16 TypeTable.refOf -> @TypeTable.refOf
+  local 184:9 spelled: string (const)
+  callee 184:19 TypeTable.typeName -> @TypeTable.typeName
+  local 194:9 elemContext: i32 (const)
+  callee 194:62 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 196:10 checkBuiltinArity -> @checkBuiltinArity
+  callee 197:14 CheckContext.numberType -> @CheckContext.numberType
+  local 199:11 got: i32 (const)
+  callee 199:17 checkExpression -> @checkExpression
+  callee 200:29 TypeTable.assignable -> @TypeTable.assignable
+  callee 201:7 CheckContext.error -> @CheckContext.error
+  callee 201:50 TypeTable.typeName -> @TypeTable.typeName
+  callee 203:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 208:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 212:10 checkBuiltinArity -> @checkBuiltinArity
+  callee 213:14 CheckContext.numberType -> @CheckContext.numberType
+  local 217:11 probe: i32 (const)
+  callee 217:19 TypeTable.baseOf -> @TypeTable.baseOf
+  local 218:11 got: i32 (const)
+  callee 218:17 checkExpression -> @checkExpression
+  callee 224:29 TypeTable.assignable -> @TypeTable.assignable
+  local 225:13 want: string (const)
+  callee 225:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 226:7 CheckContext.error -> @CheckContext.error
+  callee 228:78 TypeTable.typeName -> @TypeTable.typeName
+  callee 231:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 238:7 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 245:7 CheckContext.error -> @CheckContext.error
+  local 247:13 got: i32 (const)
+  callee 247:19 checkExpression -> @checkExpression
+  callee 249:9 CheckContext.error -> @CheckContext.error
+  callee 249:69 TypeTable.typeName -> @TypeTable.typeName
+  callee 254:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
 function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope: Scope): i32 -> @checkNewArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -7520,36 +7536,36 @@ function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope: Scope
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 262:9 typeArgs: Node (const)
-  local 263:9 args: Node (const)
-  local 264:7 elem: i32 (let)
-  callee 267:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 269:12 resolveType -> @resolveType
-  callee 270:9 rejectForeignPointer -> @rejectForeignPointer
-  local 274:11 alias: i32 (const)
-  callee 274:19 typedArrayElement -> @typedArrayElement
-  local 279:13 spelled: string (const)
-  callee 279:23 TypeTable.typeName -> @TypeTable.typeName
-  callee 280:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 288:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 293:7 TypeTable.isPointer -> @TypeTable.isPointer
-  local 294:11 spelled: string (const)
-  callee 294:21 TypeTable.typeName -> @TypeTable.typeName
-  callee 295:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 302:7 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 302:36 TypeTable.rangeLo -> @TypeTable.rangeLo
-  callee 302:67 TypeTable.rangeHi -> @TypeTable.rangeHi
-  local 303:11 spelled: string (const)
-  callee 303:21 TypeTable.typeName -> @TypeTable.typeName
-  callee 304:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 310:12 CheckContext.errorType -> @CheckContext.errorType
-  local 315:9 length: i32 (const)
-  callee 315:18 checkExpression -> @checkExpression
-  callee 315:64 CheckContext.numberType -> @CheckContext.numberType
-  callee 316:30 isNumeric -> @isNumeric
-  callee 317:5 CheckContext.error -> @CheckContext.error
-  callee 317:71 TypeTable.typeName -> @TypeTable.typeName
-  callee 319:10 TypeTable.arrayOf -> @TypeTable.arrayOf
+  local 263:9 typeArgs: Node (const)
+  local 264:9 args: Node (const)
+  local 265:7 elem: i32 (let)
+  callee 268:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 270:12 resolveType -> @resolveType
+  callee 271:9 rejectForeignPointer -> @rejectForeignPointer
+  local 275:11 alias: i32 (const)
+  callee 275:19 typedArrayElement -> @typedArrayElement
+  local 280:13 spelled: string (const)
+  callee 280:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 281:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 289:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 294:7 TypeTable.isPointer -> @TypeTable.isPointer
+  local 295:11 spelled: string (const)
+  callee 295:21 TypeTable.typeName -> @TypeTable.typeName
+  callee 296:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 303:7 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 303:36 TypeTable.rangeLo -> @TypeTable.rangeLo
+  callee 303:67 TypeTable.rangeHi -> @TypeTable.rangeHi
+  local 304:11 spelled: string (const)
+  callee 304:21 TypeTable.typeName -> @TypeTable.typeName
+  callee 305:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 311:12 CheckContext.errorType -> @CheckContext.errorType
+  local 316:9 length: i32 (const)
+  callee 316:18 checkExpression -> @checkExpression
+  callee 316:64 CheckContext.numberType -> @CheckContext.numberType
+  callee 317:30 isNumeric -> @isNumeric
+  callee 318:5 CheckContext.error -> @CheckContext.error
+  callee 318:71 TypeTable.typeName -> @TypeTable.typeName
+  callee 320:10 TypeTable.arrayOf -> @TypeTable.arrayOf
 function Mutation.constructor(this: Mutation, root: string, elem: string, what: string): void -> @Mutation.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: elem root what
@@ -7558,211 +7574,297 @@ function Mutation.constructor(this: Mutation, root: string, elem: string, what: 
 function ElementRef.constructor(this: ElementRef, local: Local, array: string, elem: string, arrayText: string): void -> @ElementRef.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: array arrayText elem local
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   pointer local: size=32 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function referenceRoot(expr: Node): string -> @referenceRoot
+function ElementRef.reachedBy(this: ElementRef, root: string, elem: string): boolean -> @ElementRef.reachedBy [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function SlotOverwrite.constructor(this: SlotOverwrite, store: Node, reference: Local, read: Node): void -> @SlotOverwrite.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: read reference store
+  pointer this: size=24 writesThrough=true captured=false
+  pointer store: size=40 writesThrough=true captured=true
+  pointer reference: size=32 writesThrough=true captured=true
+  pointer read: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function referenceRoot(expr: Node): string -> @referenceRoot [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat nish_str_eq referenceRoot unwrapParens
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 372:9 inner: Node (const)
-  callee 372:17 unwrapParens -> @unwrapParens
-  local 380:11 base: string (const)
-  callee 380:18 referenceRoot -> @referenceRoot
-function inlineArrayElement(ctx: CheckContext, expr: Node): string -> @inlineArrayElement
+  local 404:9 inner: Node (const)
+  callee 404:17 unwrapParens -> @unwrapParens
+  local 412:11 base: string (const)
+  callee 412:18 referenceRoot -> @referenceRoot
+function inlineArrayElement(program: CheckedProgram, table: TypeTable, expr: Node): string -> @inlineArrayElement [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray TypeTable.refOf inlineElementStruct nish_panic_index
-  pointer ctx: size=192 writesThrough=false captured=false
+  pointer program: size=536 writesThrough=false captured=false passedTo=inlineElementStruct#0
+  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.isArray#0 inlineElementStruct#1 TypeTable.refOf#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 393:9 type: i32 (const)
-  callee 394:20 TypeTable.isArray -> @TypeTable.isArray
-  local 397:9 info: StructInfo | null (const)
-  callee 397:16 inlineElementStruct -> @inlineElementStruct
-  callee 397:60 TypeTable.refOf -> @TypeTable.refOf
-function rootText(ctx: CheckContext, expr: Node): string -> @rootText
+  local 425:9 type: i32 (const)
+  callee 426:20 TypeTable.isArray -> @TypeTable.isArray
+  local 429:9 info: StructInfo | null (const)
+  callee 429:16 inlineElementStruct -> @inlineElementStruct
+  callee 429:52 TypeTable.refOf -> @TypeTable.refOf
+function rootText(program: CheckedProgram, table: TypeTable, expr: Node): string -> @rootText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_panic_index nish_str_eq referenceRoot
-  pointer ctx: size=192 writesThrough=false captured=false
+  pointer program: size=536 writesThrough=false captured=false
+  pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=referenceRoot#0
   stackSites=0 stackLocals=0
-  local 403:9 root: string (const)
-  callee 403:16 referenceRoot -> @referenceRoot
-  local 407:9 type: i32 (const)
-  callee 408:35 TypeTable.typeName -> @TypeTable.typeName
-function elementSource(ctx: CheckContext, expr: Node): Node | null -> @elementSource
+  local 435:9 root: string (const)
+  callee 435:16 referenceRoot -> @referenceRoot
+  local 439:9 type: i32 (const)
+  callee 440:35 TypeTable.typeName -> @TypeTable.typeName
+function elementSource(program: CheckedProgram, table: TypeTable, expr: Node): Node | null -> @elementSource
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: inlineArrayElement nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=192 writesThrough=false captured=false passedTo=inlineArrayElement#0 inlineArrayElement#0
+  pointer program: size=536 writesThrough=false captured=false passedTo=inlineArrayElement#0 inlineArrayElement#0
+  pointer table: size=72 writesThrough=false captured=false passedTo=inlineArrayElement#1 inlineArrayElement#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 413:9 inner: Node (const)
-  callee 413:17 unwrapParens -> @unwrapParens
-  callee 414:33 inlineArrayElement -> @inlineArrayElement
-  local 418:11 receiver: Node (const)
-  callee 419:9 inlineArrayElement -> @inlineArrayElement
-function collectMutations(ctx: CheckContext, call: Node, out: Mutation[]): void -> @collectMutations
+  local 445:9 inner: Node (const)
+  callee 445:17 unwrapParens -> @unwrapParens
+  callee 446:33 inlineArrayElement -> @inlineArrayElement
+  local 450:11 receiver: Node (const)
+  callee 451:9 inlineArrayElement -> @inlineArrayElement
+function collectMutations(program: CheckedProgram, table: TypeTable, call: Node, out: Mutation[]): void -> @collectMutations
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 439:7
+  sharedWrite: 471:7
   calls: Mutation.constructor TypeTable.isReadonlyArray inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq referenceRoot rootText
-  pointer ctx: size=192 writesThrough=false captured=false passedTo=inlineArrayElement#0 rootText#0 inlineArrayElement#0
+  pointer program: size=536 writesThrough=false captured=false passedTo=inlineArrayElement#0 rootText#0 inlineArrayElement#0
+  pointer table: size=72 writesThrough=false captured=false passedTo=inlineArrayElement#1 rootText#1 inlineArrayElement#1 TypeTable.isReadonlyArray#0
   pointer call: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 434:11 method: string (const)
-  local 435:11 receiver: Node (const)
-  local 436:11 elem: string (const)
-  callee 436:18 inlineArrayElement -> @inlineArrayElement
-  local 438:13 args: string (const)
-  callee 439:16 new Mutation -> @Mutation.constructor
-  callee 439:29 referenceRoot -> @referenceRoot
-  callee 439:63 rootText -> @rootText
-  local 442:9 callee: FunctionSig | null (const)
-  local 446:9 offset: i32 (const)
-  local 447:9 args: Node (const)
-  local 448:7 i: i32 (let)
-  local 450:11 arg: Node (const)
-  local 451:11 elem: string (const)
-  callee 451:18 inlineArrayElement -> @inlineArrayElement
-  local 452:11 at: i32 (const)
-  callee 453:58 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee 454:16 new Mutation -> @Mutation.constructor
-  callee 454:29 referenceRoot -> @referenceRoot
-function RefWalk.constructor(this: RefWalk, ctx: CheckContext): void -> @RefWalk.constructor [constructor]
+  local 466:11 method: string (const)
+  local 467:11 receiver: Node (const)
+  local 468:11 elem: string (const)
+  callee 468:18 inlineArrayElement -> @inlineArrayElement
+  local 470:13 args: string (const)
+  callee 472:9 new Mutation -> @Mutation.constructor
+  callee 473:11 referenceRoot -> @referenceRoot
+  callee 475:14 rootText -> @rootText
+  local 480:9 callee: FunctionSig | null (const)
+  local 484:9 offset: i32 (const)
+  local 485:9 args: Node (const)
+  local 486:7 i: i32 (let)
+  local 488:11 arg: Node (const)
+  local 489:11 elem: string (const)
+  callee 489:18 inlineArrayElement -> @inlineArrayElement
+  local 490:11 at: i32 (const)
+  callee 491:58 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 492:16 new Mutation -> @Mutation.constructor
+  callee 492:29 referenceRoot -> @referenceRoot
+function slotStoreArray(program: CheckedProgram, table: TypeTable, node: Node): Node | null -> @slotStoreArray
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: inlineArrayElement nish_panic_index nish_str_eq unwrapParens
+  pointer program: size=536 writesThrough=false captured=false passedTo=inlineArrayElement#0
+  pointer table: size=72 writesThrough=false captured=false passedTo=inlineArrayElement#1
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 507:9 target: Node (const)
+  callee 507:18 unwrapParens -> @unwrapParens
+  callee 508:34 inlineArrayElement -> @inlineArrayElement
+function RefWalk.constructor(this: RefWalk, program: CheckedProgram, table: TypeTable, ctx: CheckContext | null): void -> @RefWalk.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: ctx
-  pointer this: size=24 writesThrough=true captured=false
+  escaping: ctx program table
+  pointer this: size=48 writesThrough=true captured=false
+  pointer program: size=536 writesThrough=true captured=true
+  pointer table: size=72 writesThrough=true captured=true
   pointer ctx: size=192 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function RefWalk.report(this: RefWalk, node: Node, message: string): void -> @RefWalk.report [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 547:5
+  escaping: message
+  calls: CheckContext.error
+  pointer this: size=48 writesThrough=true captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  local 543:11 ctx: CheckContext | null (const)
+  callee 545:7 CheckContext.error -> @CheckContext.error
 function RefWalk.dropTo(this: RefWalk, depth: i32): void -> @RefWalk.dropTo [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 476:7
+  sharedWrite: 553:7
   calls: nish_panic_index
-  pointer this: size=24 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RefWalk.invalidate(this: RefWalk, m: Mutation): void -> @RefWalk.invalidate [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 487:9
-  calls: nish_str_eq
-  pointer this: size=24 writesThrough=false captured=false
+  sharedWrite: 563:9
+  calls: ElementRef.reachedBy nish_str_eq
+  pointer this: size=48 writesThrough=false captured=false
   pointer m: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 482:9 i: i32 (let)
-  local 484:13 ref: ElementRef (const)
-  local 485:13 unrelated: boolean (const)
+  local 559:9 i: i32 (let)
+  local 561:13 ref: ElementRef (const)
+  callee 562:39 ElementRef.reachedBy -> @ElementRef.reachedBy
+function RefWalk.overwrite(this: RefWalk, store: Node, array: Node): void -> @RefWalk.overwrite [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 581:9
+  escaping: store
+  calls: ElementRef.reachedBy inlineArrayElement nish_arena_mark nish_arena_release referenceRoot
+  pointer this: size=48 writesThrough=false captured=false
+  pointer store: size=40 writesThrough=true captured=true
+  pointer array: size=40 writesThrough=true captured=true passedTo=referenceRoot#0 inlineArrayElement#2
+  stackSites=0 stackLocals=0
+  local 575:11 root: string (const)
+  callee 575:18 referenceRoot -> @referenceRoot
+  local 576:11 elem: string (const)
+  callee 576:18 inlineArrayElement -> @inlineArrayElement
+  local 577:9 i: i32 (let)
+  local 579:13 ref: ElementRef (const)
+  callee 580:41 ElementRef.reachedBy -> @ElementRef.reachedBy
 function RefWalk.mutationsWithin(this: RefWalk, node: Node, out: Mutation[]): void -> @RefWalk.mutationsWithin [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectMutations
   calls: RefWalk.mutationsWithin collectMutations
-  pointer this: size=24 writesThrough=false captured=false passedTo=RefWalk.mutationsWithin#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=collectMutations#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=collectMutations#2 RefWalk.mutationsWithin#2
+  pointer this: size=48 writesThrough=false captured=false passedTo=RefWalk.mutationsWithin#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=collectMutations#2
+  pointer out: size=0 writesThrough=true captured=false passedTo=collectMutations#3 RefWalk.mutationsWithin#2
   stackSites=0 stackLocals=0
-  callee 496:7 collectMutations -> @collectMutations
-  local 498:16 child: Node (const)
-  callee 499:7 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
+  callee 590:7 collectMutations -> @collectMutations
+  local 592:16 child: Node (const)
+  callee 593:7 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
+function RefWalk.overwriteWithin(this: RefWalk, node: Node): void -> @RefWalk.overwriteWithin [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RefWalk.overwrite
+  calls: RefWalk.overwrite RefWalk.overwriteWithin slotStoreArray
+  pointer this: size=48 writesThrough=false captured=false passedTo=RefWalk.overwrite#0 RefWalk.overwriteWithin#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=slotStoreArray#2 RefWalk.overwrite#1
+  stackSites=0 stackLocals=0
+  local 599:11 array: Node | null (const)
+  callee 599:19 slotStoreArray -> @slotStoreArray
+  callee 601:7 RefWalk.overwrite -> @RefWalk.overwrite
+  local 603:16 child: Node (const)
+  callee 604:7 RefWalk.overwriteWithin -> @RefWalk.overwriteWithin
 function RefWalk.visit(this: RefWalk, node: Node): void -> @RefWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visitIdentifier
-  calls: RefWalk.dropTo RefWalk.visitCall RefWalk.visitChildren RefWalk.visitDeclaration RefWalk.visitIdentifier RefWalk.visitLoop
-  pointer this: size=24 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0 RefWalk.visitChildren#0 RefWalk.dropTo#0 RefWalk.visitLoop#0 RefWalk.visitCall#0 RefWalk.visitDeclaration#0 RefWalk.visitChildren#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitIdentifier#1 RefWalk.visitChildren#1 RefWalk.visitLoop#1 RefWalk.visitCall#1 RefWalk.visitDeclaration#1 RefWalk.visitChildren#1
+  calls: RefWalk.dropTo RefWalk.overwrite RefWalk.visitCall RefWalk.visitChildren RefWalk.visitDeclaration RefWalk.visitIdentifier RefWalk.visitLoop slotStoreArray
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0 RefWalk.visitChildren#0 RefWalk.dropTo#0 RefWalk.visitLoop#0 RefWalk.visitCall#0 RefWalk.visitDeclaration#0 RefWalk.visitChildren#0 RefWalk.overwrite#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefWalk.visitIdentifier#1 RefWalk.visitChildren#1 RefWalk.visitLoop#1 RefWalk.visitCall#1 RefWalk.visitDeclaration#1 RefWalk.visitChildren#1 slotStoreArray#2 RefWalk.overwrite#1
   stackSites=0 stackLocals=0
-  callee 505:7 RefWalk.visitIdentifier -> @RefWalk.visitIdentifier
-  local 509:13 depth: i32 (const)
-  callee 510:7 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee 511:7 RefWalk.dropTo -> @RefWalk.dropTo
-  callee 515:7 RefWalk.visitLoop -> @RefWalk.visitLoop
-  callee 519:7 RefWalk.visitCall -> @RefWalk.visitCall
-  callee 523:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
-  callee 526:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee 610:7 RefWalk.visitIdentifier -> @RefWalk.visitIdentifier
+  local 614:13 depth: i32 (const)
+  callee 615:7 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee 616:7 RefWalk.dropTo -> @RefWalk.dropTo
+  callee 620:7 RefWalk.visitLoop -> @RefWalk.visitLoop
+  callee 624:7 RefWalk.visitCall -> @RefWalk.visitCall
+  callee 628:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
+  callee 631:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  local 635:13 array: Node | null (const)
+  callee 635:21 slotStoreArray -> @slotStoreArray
+  callee 637:9 RefWalk.overwrite -> @RefWalk.overwrite
 function RefWalk.visitChildren(this: RefWalk, node: Node): void -> @RefWalk.visitChildren [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
   calls: RefWalk.visit
-  pointer this: size=24 writesThrough=true captured=false passedTo=RefWalk.visit#0
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.visit#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 530:16 child: Node (const)
-  callee 531:7 RefWalk.visit -> @RefWalk.visit
+  local 643:16 child: Node (const)
+  callee 644:7 RefWalk.visit -> @RefWalk.visit
 function RefWalk.visitIdentifier(this: RefWalk, node: Node): void -> @RefWalk.visitIdentifier [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 548:9
-  calls: CheckContext.error nish_panic_index nish_str_concat nish_str_eq
-  pointer this: size=24 writesThrough=true captured=false
-  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  sharedWrite: 659:9
+  calls: RefWalk.report SlotOverwrite.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.report#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=SlotOverwrite.constructor#3 RefWalk.report#1
   stackSites=0 stackLocals=0
-  local 536:11 local: Local | null (const)
-  local 540:9 i: i32 (let)
-  local 542:13 ref: ElementRef (const)
-  callee 544:9 CheckContext.error -> @CheckContext.error
+  local 649:11 local: Local | null (const)
+  local 653:9 i: i32 (let)
+  local 655:13 ref: ElementRef (const)
+  local 656:13 store: Node | null (const)
+  local 657:13 overwrites: SlotOverwrite[] | null (const)
+  callee 659:25 new SlotOverwrite -> @SlotOverwrite.constructor
+  callee 663:9 RefWalk.report -> @RefWalk.report
 function RefWalk.visitLoop(this: RefWalk, node: Node): void -> @RefWalk.visitLoop [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 573:9
-  calls: ElementRef.constructor RefWalk.dropTo RefWalk.invalidate RefWalk.mutationsWithin RefWalk.visitChildren inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText
-  pointer this: size=24 writesThrough=true captured=false passedTo=RefWalk.mutationsWithin#0 RefWalk.invalidate#0 RefWalk.visitChildren#0 RefWalk.dropTo#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.mutationsWithin#1 RefWalk.visitChildren#1
+  sharedWrite: 694:9
+  calls: ElementRef.constructor RefWalk.dropTo RefWalk.invalidate RefWalk.mutationsWithin RefWalk.overwriteWithin RefWalk.visitChildren inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.mutationsWithin#0 RefWalk.invalidate#0 RefWalk.overwriteWithin#0 RefWalk.visitChildren#0 RefWalk.dropTo#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefWalk.mutationsWithin#1 RefWalk.overwriteWithin#1 RefWalk.visitChildren#1
   stackSites=1 stackLocals=1
-  local 558:11 found: Mutation[] (const)
-  callee 559:5 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
-  local 560:16 m: Mutation (const)
-  callee 561:7 RefWalk.invalidate -> @RefWalk.invalidate
-  local 563:11 depth: i32 (const)
-  local 568:13 iterable: Node (const)
-  local 569:13 elem: string (const)
-  callee 569:20 inlineArrayElement -> @inlineArrayElement
-  local 570:13 decl: Node (const)
-  local 571:13 local: Local | null (const)
-  callee 573:24 new ElementRef -> @ElementRef.constructor
-  callee 573:46 referenceRoot -> @referenceRoot
-  callee 573:77 rootText -> @rootText
-  callee 576:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee 577:5 RefWalk.dropTo -> @RefWalk.dropTo
+  local 676:11 found: Mutation[] (const)
+  callee 677:5 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
+  local 678:16 m: Mutation (const)
+  callee 679:7 RefWalk.invalidate -> @RefWalk.invalidate
+  callee 682:7 RefWalk.overwriteWithin -> @RefWalk.overwriteWithin
+  local 684:11 depth: i32 (const)
+  local 689:13 iterable: Node (const)
+  local 690:13 elem: string (const)
+  callee 690:20 inlineArrayElement -> @inlineArrayElement
+  local 691:13 decl: Node (const)
+  local 692:13 local: Local | null (const)
+  callee 695:11 new ElementRef -> @ElementRef.constructor
+  callee 695:33 referenceRoot -> @referenceRoot
+  callee 695:64 rootText -> @rootText
+  callee 699:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee 700:5 RefWalk.dropTo -> @RefWalk.dropTo
 function RefWalk.visitCall(this: RefWalk, node: Node): void -> @RefWalk.visitCall [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 595:13
-  calls: CheckContext.error RefWalk.invalidate RefWalk.visitChildren collectMutations elementSource nish_panic_index nish_str_concat nish_str_eq referenceRoot
-  pointer this: size=24 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0 RefWalk.invalidate#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitChildren#1 collectMutations#1
+  sharedWrite: via RefWalk.visitChildren
+  calls: RefWalk.invalidate RefWalk.report RefWalk.visitChildren collectMutations elementSource nish_panic_index nish_str_concat nish_str_eq referenceRoot
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0 RefWalk.report#0 RefWalk.invalidate#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitChildren#1 collectMutations#2
   stackSites=1 stackLocals=1
-  callee 581:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  local 582:11 found: Mutation[] (const)
-  callee 583:5 collectMutations -> @collectMutations
-  local 584:16 m: Mutation (const)
-  local 588:20 arg: Node (const)
-  local 589:17 source: Node | null (const)
-  callee 589:26 elementSource -> @elementSource
-  callee 590:34 referenceRoot -> @referenceRoot
-  callee 591:13 CheckContext.error -> @CheckContext.error
-  callee 599:7 RefWalk.invalidate -> @RefWalk.invalidate
+  callee 704:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  local 705:11 found: Mutation[] (const)
+  callee 706:5 collectMutations -> @collectMutations
+  local 707:16 m: Mutation (const)
+  local 711:20 arg: Node (const)
+  local 712:17 source: Node | null (const)
+  callee 712:26 elementSource -> @elementSource
+  callee 713:34 referenceRoot -> @referenceRoot
+  callee 714:13 RefWalk.report -> @RefWalk.report
+  callee 721:7 RefWalk.invalidate -> @RefWalk.invalidate
 function RefWalk.visitDeclaration(this: RefWalk, node: Node): void -> @RefWalk.visitDeclaration [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 616:7
+  sharedWrite: 738:7
   calls: ElementRef.constructor RefWalk.visitChildren elementSource inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText
-  pointer this: size=24 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0
+  pointer this: size=48 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0
   pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitChildren#1
   stackSites=0 stackLocals=0
-  callee 604:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  local 605:11 local: Local | null (const)
-  local 606:11 initializer: Node (const)
-  local 610:11 source: Node | null (const)
-  callee 610:20 elementSource -> @elementSource
-  local 614:11 elem: string (const)
-  callee 614:18 inlineArrayElement -> @inlineArrayElement
-  callee 616:22 new ElementRef -> @ElementRef.constructor
-  callee 616:44 referenceRoot -> @referenceRoot
-  callee 616:73 rootText -> @rootText
+  callee 726:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  local 727:11 local: Local | null (const)
+  local 728:11 initializer: Node (const)
+  local 732:11 source: Node | null (const)
+  callee 732:20 elementSource -> @elementSource
+  local 736:11 elem: string (const)
+  callee 736:18 inlineArrayElement -> @inlineArrayElement
+  callee 739:9 new ElementRef -> @ElementRef.constructor
+  callee 739:31 referenceRoot -> @referenceRoot
+  callee 739:60 rootText -> @rootText
 function checkElementReferences(ctx: CheckContext, body: Node): void -> @checkElementReferences [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RefWalk.visit
+  calls: RefWalk.constructor RefWalk.visit
+  pointer ctx: size=192 writesThrough=true captured=true passedTo=RefWalk.constructor#3
+  pointer body: size=40 writesThrough=true captured=true passedTo=RefWalk.visit#1
+  stackSites=1 stackLocals=1
+  local 750:9 walk: RefWalk (const)
+  callee 750:16 new RefWalk -> @RefWalk.constructor
+  callee 751:3 RefWalk.visit -> @RefWalk.visit
+function slotOverwrites(program: CheckedProgram, table: TypeTable, body: Node): SlotOverwrite[] -> @slotOverwrites [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
   calls: RefWalk.constructor RefWalk.visit
-  pointer ctx: size=192 writesThrough=true captured=true passedTo=RefWalk.constructor#1
-  pointer body: size=40 writesThrough=false captured=false passedTo=RefWalk.visit#1
+  pointer program: size=536 writesThrough=true captured=true passedTo=RefWalk.constructor#1
+  pointer table: size=72 writesThrough=true captured=true passedTo=RefWalk.constructor#2
+  pointer body: size=40 writesThrough=true captured=true passedTo=RefWalk.visit#1
   stackSites=1 stackLocals=1
-  local 626:9 walk: RefWalk (const)
-  callee 626:16 new RefWalk -> @RefWalk.constructor
-  callee 627:3 RefWalk.visit -> @RefWalk.visit
+  local 761:9 walk: RefWalk (const)
+  callee 761:16 new RefWalk -> @RefWalk.constructor
+  local 762:9 found: SlotOverwrite[] (const)
+  callee 764:3 RefWalk.visit -> @RefWalk.visit
 module src/builtins.ts
 import CheckContext from "./context" -> struct CheckContext
 import checkExpression from "./expressions" -> function @checkExpression
@@ -25452,15 +25554,270 @@ function numberFindings(_walk: PortabilityWalk, _node: Node, _out: PortabilityFi
   pointer _out: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 module src/portability-records.ts
+import inlineArrayElement from "./arrays" -> function @inlineArrayElement
+import referenceRoot from "./arrays" -> function @referenceRoot
+import slotOverwrites from "./arrays" -> function @slotOverwrites
+import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
+import unwrapParens from "./emit-util" -> function @unwrapParens
+import N_ARRAY from "./nodes" -> const N_ARRAY
+import N_ARROW from "./nodes" -> const N_ARROW
+import N_BINARY from "./nodes" -> const N_BINARY
+import N_CALL from "./nodes" -> const N_CALL
+import N_DO from "./nodes" -> const N_DO
+import N_FOR from "./nodes" -> const N_FOR
+import N_FOR_OF from "./nodes" -> const N_FOR_OF
+import N_IDENT from "./nodes" -> const N_IDENT
+import N_INDEX from "./nodes" -> const N_INDEX
+import N_MEMBER from "./nodes" -> const N_MEMBER
+import N_PAREN from "./nodes" -> const N_PAREN
+import N_UNARY from "./nodes" -> const N_UNARY
+import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
+import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
-function recordFindings(_walk: PortabilityWalk, _node: Node, _out: PortabilityFinding[]): void -> @recordFindings [exported]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer _walk: size=48 writesThrough=false captured=false
-  pointer _node: size=40 writesThrough=false captured=false
-  pointer _out: size=0 writesThrough=false captured=false
+import Local from "./symbols" -> struct Local
+struct Side (class) size=24 align=8
+  field local: Local | null index=0 offset=0
+  field root: string index=1 offset=8
+  field text: string index=2 offset=16
+  constructor -> @Side.constructor
+  method names -> @Side.names
+  method same -> @Side.same
+struct CopySite (class) size=24 align=8
+  field source: Node index=0 offset=0
+  field local: Local index=1 offset=8
+  field into: Side index=2 offset=16
+  constructor -> @CopySite.constructor
+function recordFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @recordFindings [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via copyFindings
+  calls: copyFindings overwriteFindings
+  pointer walk: size=48 writesThrough=false captured=false passedTo=copyFindings#0 overwriteFindings#0
+  pointer node: size=40 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false passedTo=copyFindings#1 overwriteFindings#1
   stackSites=0 stackLocals=0
+  callee 65:3 copyFindings -> @copyFindings
+  callee 66:3 overwriteFindings -> @overwriteFindings
+function Side.constructor(this: Side, local: Local | null, root: string, text: string): void -> @Side.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: local root text
+  pointer this: size=24 writesThrough=true captured=false
+  pointer local: size=32 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Side.names(this: Side, walk: PortabilityWalk, node: Node): boolean -> @Side.names [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_str_eq referenceRoot
+  pointer this: size=24 writesThrough=false captured=false
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true passedTo=referenceRoot#0
+  stackSites=0 stackLocals=0
+  local 90:11 local: Local | null (const)
+  local 92:13 bound: Local | null (const)
+  callee 95:38 referenceRoot -> @referenceRoot
+function Side.same(this: Side, other: Side): boolean -> @Side.same [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  pointer this: size=24 writesThrough=false captured=false
+  pointer other: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 99:11 local: Local | null (const)
+  local 100:11 theirs: Local | null (const)
+function CopySite.constructor(this: CopySite, source: Node, local: Local, into: Side): void -> @CopySite.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: into local source
+  pointer this: size=24 writesThrough=true captured=false
+  pointer source: size=40 writesThrough=true captured=true
+  pointer local: size=32 writesThrough=true captured=true
+  pointer into: size=24 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function sideOf(walk: PortabilityWalk, expr: Node): Side | null -> @sideOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: PortabilityWalk.textOf Side.constructor nish_alloc_struct nish_panic_index nish_str_eq referenceRoot unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local 123:9 inner: Node (const)
+  callee 123:17 unwrapParens -> @unwrapParens
+  local 125:11 local: Local | null (const)
+  callee 126:36 new Side -> @Side.constructor
+  local 131:9 root: string (const)
+  callee 131:16 referenceRoot -> @referenceRoot
+  callee 132:31 new Side -> @Side.constructor
+  callee 132:52 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+function literalSide(walk: PortabilityWalk, literal: Node): Side | null -> @literalSide
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: literal
+  calls: ParentTable.parentOf Side.constructor nish_alloc_struct nish_panic_index nish_str_eq sideOf
+  pointer walk: size=48 writesThrough=false captured=false passedTo=sideOf#0
+  pointer literal: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1
+  stackSites=0 stackLocals=0
+  local 141:7 child: Node (let)
+  local 142:7 parent: Node | null (let)
+  callee 142:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 145:14 ParentTable.parentOf -> @ParentTable.parentOf
+  local 151:11 local: Local | null (const)
+  callee 152:36 new Side -> @Side.constructor
+  callee 155:12 sideOf -> @sideOf
+function addCopy(walk: PortabilityWalk, value: Node, into: Side | null, out: CopySite[]): void -> @addCopy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 168:5
+  calls: CopySite.constructor nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  pointer into: size=24 writesThrough=true captured=true passedTo=CopySite.constructor#3
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 162:9 source: Node (const)
+  callee 162:18 unwrapParens -> @unwrapParens
+  local 166:9 local: Local | null (const)
+  callee 168:14 new CopySite -> @CopySite.constructor
+function holdsRecords(walk: PortabilityWalk, array: Node): boolean -> @holdsRecords
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: inlineArrayElement nish_str_eq
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer array: size=40 writesThrough=false captured=false passedTo=inlineArrayElement#2
+  stackSites=0 stackLocals=0
+  callee 174:3 inlineArrayElement -> @inlineArrayElement
+function collectCopies(walk: PortabilityWalk, node: Node, out: CopySite[]): void -> @collectCopies
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via addCopy
+  calls: addCopy collectCopies holdsRecords literalSide nish_panic_index nish_str_eq sideOf unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false passedTo=holdsRecords#0 sideOf#0 addCopy#0 holdsRecords#0 literalSide#0 addCopy#0 holdsRecords#0 addCopy#0 sideOf#0 collectCopies#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=holdsRecords#1 literalSide#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=addCopy#3 addCopy#3 addCopy#3 collectCopies#2
+  stackSites=0 stackLocals=0
+  local 182:11 receiver: Node (const)
+  callee 183:9 holdsRecords -> @holdsRecords
+  local 184:13 into: Side | null (const)
+  callee 184:20 sideOf -> @sideOf
+  local 185:18 arg: Node (const)
+  callee 186:9 addCopy -> @addCopy
+  callee 190:32 holdsRecords -> @holdsRecords
+  local 191:11 into: Side | null (const)
+  callee 191:18 literalSide -> @literalSide
+  local 192:16 element: Node (const)
+  callee 193:7 addCopy -> @addCopy
+  local 197:11 target: Node (const)
+  callee 197:20 unwrapParens -> @unwrapParens
+  callee 198:36 holdsRecords -> @holdsRecords
+  callee 199:7 addCopy -> @addCopy
+  callee 199:39 sideOf -> @sideOf
+  local 202:14 child: Node (const)
+  callee 203:5 collectCopies -> @collectCopies
+function collectFieldWrites(node: Node, out: Node[]): void -> @collectFieldWrites
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 220:5
+  escaping: node
+  calls: collectFieldWrites isAssignmentOperator nish_array_grow nish_panic_index nish_str_eq unwrapParens
+  pointer node: size=40 writesThrough=true captured=true
+  pointer out: size=0 writesThrough=true captured=false passedTo=collectFieldWrites#1
+  stackSites=0 stackLocals=0
+  local 216:9 writes: boolean (const)
+  callee 217:32 isAssignmentOperator -> @isAssignmentOperator
+  callee 219:17 unwrapParens -> @unwrapParens
+  local 222:14 child: Node (const)
+  callee 223:5 collectFieldWrites -> @collectFieldWrites
+function writtenRecord(write: Node): Node -> @writtenRecord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  calls: nish_panic_index unwrapParens
+  pointer write: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 228:46 unwrapParens -> @unwrapParens
+  callee 228:59 unwrapParens -> @unwrapParens
+function bindingDeclaration(walk: PortabilityWalk, node: Node, local: Local): Node | null -> @bindingDeclaration
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: node
+  calls: bindingDeclaration nish_panic_index
+  pointer walk: size=48 writesThrough=false captured=false passedTo=bindingDeclaration#0
+  pointer node: size=40 writesThrough=true captured=true
+  pointer local: size=32 writesThrough=false captured=false passedTo=bindingDeclaration#2
+  stackSites=0 stackLocals=0
+  local 232:9 declared: Local | null (const)
+  local 236:14 child: Node (const)
+  local 237:11 found: Node | null (const)
+  callee 237:19 bindingDeclaration -> @bindingDeclaration
+function isInside(inner: Node, outer: Node): boolean -> @isInside
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer inner: size=40 writesThrough=false captured=false
+  pointer outer: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function isLoop(node: Node): boolean -> @isLoop
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function runsAfter(walk: PortabilityWalk, earlier: Node, later: Node, decl: Node | null): boolean -> @runsAfter
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: ParentTable.parentOf isInside isLoop
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer earlier: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
+  pointer later: size=40 writesThrough=false captured=false passedTo=isInside#0
+  pointer decl: size=40 writesThrough=false captured=false passedTo=isInside#0
+  stackSites=0 stackLocals=0
+  local 260:7 at: Node | null (let)
+  callee 260:12 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 262:9 isLoop -> @isLoop
+  callee 262:23 isInside -> @isInside
+  callee 262:65 isInside -> @isInside
+  callee 265:10 ParentTable.parentOf -> @ParentTable.parentOf
+function readAfter(walk: PortabilityWalk, node: Node, side: Side, write: Node, decl: Node | null): boolean -> @readAfter
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: Side.names readAfter runsAfter
+  pointer walk: size=48 writesThrough=false captured=false passedTo=Side.names#1 runsAfter#0 readAfter#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=Side.names#2 runsAfter#2
+  pointer side: size=24 writesThrough=false captured=false passedTo=Side.names#0 readAfter#2
+  pointer write: size=40 writesThrough=false captured=false passedTo=runsAfter#1 readAfter#3
+  pointer decl: size=40 writesThrough=false captured=false passedTo=runsAfter#3 readAfter#4
+  stackSites=0 stackLocals=0
+  callee 281:7 Side.names -> @Side.names
+  callee 281:33 runsAfter -> @runsAfter
+  local 284:14 child: Node (const)
+  callee 285:9 readAfter -> @readAfter
+function copyFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @copyFindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 333:9
+  calls: PortabilityFinding.constructor PortabilityWalk.textOf Side.constructor Side.names Side.same SourceFile.lineOf bindingDeclaration collectCopies collectFieldWrites nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 readAfter runsAfter unwrapParens writtenRecord
+  pointer walk: size=48 writesThrough=false captured=false passedTo=collectCopies#0 bindingDeclaration#0 runsAfter#0 Side.names#1 readAfter#0 Side.names#1 readAfter#0 readAfter#0 PortabilityWalk.textOf#0
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=3 stackLocals=3
+  local 301:9 copies: CopySite[] (const)
+  callee 302:3 collectCopies -> @collectCopies
+  local 306:9 writes: Node[] (const)
+  callee 307:3 collectFieldWrites -> @collectFieldWrites
+  local 308:14 copy: CopySite (const)
+  local 309:11 decl: Node | null (const)
+  callee 309:18 bindingDeclaration -> @bindingDeclaration
+  local 310:11 source: Side (const)
+  callee 310:20 new Side -> @Side.constructor
+  local 311:9 twice: boolean (let)
+  local 312:16 other: CopySite (const)
+  callee 313:59 Side.same -> @Side.same
+  local 317:16 write: Node (const)
+  callee 318:12 runsAfter -> @runsAfter
+  local 321:13 record: Node (const)
+  callee 321:22 writtenRecord -> @writtenRecord
+  local 322:11 seenBy: string (let)
+  callee 323:11 Side.names -> @Side.names
+  callee 324:18 readAfter -> @readAfter
+  callee 325:45 Side.names -> @Side.names
+  callee 325:67 unwrapParens -> @unwrapParens
+  callee 326:13 readAfter -> @readAfter
+  callee 328:29 readAfter -> @readAfter
+  callee 334:11 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 336:126 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee 336:156 SourceFile.lineOf -> @SourceFile.lineOf
+function overwriteFindings(walk: PortabilityWalk, out: PortabilityFinding[]): void -> @overwriteFindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 356:5
+  calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32 slotOverwrites
+  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 355:14 found: SlotOverwrite (const)
+  callee 355:23 slotOverwrites -> @slotOverwrites
+  callee 357:7 new PortabilityFinding -> @PortabilityFinding.constructor
+  callee 359:14 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee 359:170 SourceFile.lineOf -> @SourceFile.lineOf
 module src/portability-strings.ts
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding

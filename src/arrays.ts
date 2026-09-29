@@ -8,6 +8,7 @@ import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import {
+  N_BINARY,
   N_BLOCK,
   N_CALL,
   N_CASE,
@@ -24,9 +25,9 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
-import { inlineElementStruct } from "./program"
+import { CheckedProgram, inlineElementStruct } from "./program"
 import { Local, Scope } from "./symbols"
-import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types"
+import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The method set, in the order the "supported:" message lists them. */
 const ARRAY_METHODS: string = "push, pop, indexOf, join"
@@ -357,6 +358,12 @@ class ElementRef {
   arrayText: string
   /** The mutation that may have moved the storage, or the empty string while the reference is good. */
   invalidatedBy: string
+  /**
+   * A whole-slot store into the array since the reference was last read, or
+   * `null`. Only an observing walk sets it (`slotOverwrites`): the store is
+   * legal, and what it records is a difference from TypeScript, not an error.
+   */
+  overwrittenBy: Node | null
 
   constructor(local: Local, array: string, elem: string, arrayText: string) {
     this.local = local
@@ -364,11 +371,36 @@ class ElementRef {
     this.elem = elem
     this.arrayText = arrayText
     this.invalidatedBy = ""
+    this.overwrittenBy = null
+  }
+
+  /** Whether a change to `root`'s `elem` slots may reach this reference. */
+  reachedBy(root: string, elem: string): boolean {
+    return this.elem === elem && (root === UNNAMED || this.array === UNNAMED || this.array === root)
+  }
+}
+
+/**
+ * NL8004's fact: `store` (`ps[i] = q`) wrote a whole slot of the array the
+ * element reference `reference` points into while it was live, and `read` is
+ * the first use of `reference` after it. Natively `reference` then reads what
+ * the store wrote, because it points at the slot; under TypeScript it still
+ * holds the object the slot held before.
+ */
+export class SlotOverwrite {
+  store: Node
+  reference: Local
+  read: Node
+
+  constructor(store: Node, reference: Local, read: Node) {
+    this.store = store
+    this.reference = reference
+    this.read = read
   }
 }
 
 /** `xs`, `this.bodies`, `a.b.c` — how two references are told apart. */
-const referenceRoot = (expr: Node): string => {
+export const referenceRoot = (expr: Node): string => {
   const inner = unwrapParens(expr)
   if (inner.kind === N_IDENT) {
     return inner.text
@@ -389,34 +421,34 @@ const referenceRoot = (expr: Node): string => {
  * compared by when one of them cannot be named: element types are exact here,
  * so a `FunctionSig[]` and an `ImportBinding[]` are never the same array.
  */
-const inlineArrayElement = (ctx: CheckContext, expr: Node): string => {
-  const type = ctx.program.nodeTypes[expr.id]
-  if (type < 0 || !ctx.table.isArray(type)) {
+export const inlineArrayElement = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
+  const type = program.nodeTypes[expr.id]
+  if (type < 0 || !table.isArray(type)) {
     return ""
   }
-  const info = inlineElementStruct(ctx.program, ctx.table, ctx.table.refOf(type))
+  const info = inlineElementStruct(program, table, table.refOf(type))
   return info === null ? "" : info.name
 }
 
 /** How the root is spelled in a message; an unnameable receiver borrows the type's name. */
-const rootText = (ctx: CheckContext, expr: Node): string => {
+const rootText = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
   const root = referenceRoot(expr)
   if (root !== UNNAMED) {
     return root
   }
-  const type = ctx.program.nodeTypes[expr.id]
-  return type < 0 ? "the array" : ctx.table.typeName(type)
+  const type = program.nodeTypes[expr.id]
+  return type < 0 ? "the array" : table.typeName(type)
 }
 
 /** The array `expr` reads an element of (`a[i]`, `a.pop()`), or `null`. */
-const elementSource = (ctx: CheckContext, expr: Node): Node | null => {
+const elementSource = (program: CheckedProgram, table: TypeTable, expr: Node): Node | null => {
   const inner = unwrapParens(expr)
-  if (inner.kind === N_INDEX && inlineArrayElement(ctx, inner.children[0]) !== "") {
+  if (inner.kind === N_INDEX && inlineArrayElement(program, table, inner.children[0]) !== "") {
     return inner.children[0]
   }
   if (inner.kind === N_CALL && inner.children[0].kind === N_MEMBER && inner.children[0].text === "pop") {
     const receiver = inner.children[0].children[0]
-    if (inlineArrayElement(ctx, receiver) !== "") {
+    if (inlineArrayElement(program, table, receiver) !== "") {
       return receiver
     }
   }
@@ -429,17 +461,23 @@ const elementSource = (ctx: CheckContext, expr: Node): Node | null => {
  * callee is free to push through it. A `readonly T[]` parameter is exactly the
  * promise that it does not, and is skipped.
  */
-const collectMutations = (ctx: CheckContext, call: Node, out: Mutation[]): void => {
+const collectMutations = (program: CheckedProgram, table: TypeTable, call: Node, out: Mutation[]): void => {
   if (call.children[0].kind === N_MEMBER) {
     const method = call.children[0].text
     const receiver = call.children[0].children[0]
-    const elem = inlineArrayElement(ctx, receiver)
+    const elem = inlineArrayElement(program, table, receiver)
     if ((method === "push" || method === "pop") && elem !== "") {
       const args = method === "push" ? "..." : ""
-      out.push(new Mutation(referenceRoot(receiver), elem, `${rootText(ctx, receiver)}.${method}(${args})`))
+      out.push(
+        new Mutation(
+          referenceRoot(receiver),
+          elem,
+          `${rootText(program, table, receiver)}.${method}(${args})`
+        )
+      )
     }
   }
-  const callee = ctx.program.nodeCallees[call.id]
+  const callee = program.nodeCallees[call.id]
   if (callee === null) {
     return
   }
@@ -448,26 +486,65 @@ const collectMutations = (ctx: CheckContext, call: Node, out: Mutation[]): void 
   let i = 0
   while (i < args.children.length) {
     const arg = args.children[i]
-    const elem = inlineArrayElement(ctx, arg)
+    const elem = inlineArrayElement(program, table, arg)
     const at = i + offset
-    if (elem !== "" && at < callee.paramTypes.length && !ctx.table.isReadonlyArray(callee.paramTypes[at])) {
+    if (elem !== "" && at < callee.paramTypes.length && !table.isReadonlyArray(callee.paramTypes[at])) {
       out.push(new Mutation(referenceRoot(arg), elem, `${callee.sourceName}(...)`))
     }
     i = i + 1
   }
 }
 
-/** The walk's state, a class because Nish-0 has no closures (as `PerfWalk` is). */
+/**
+ * The array a whole-slot store writes into — `ps` of `ps[i] = q` when `ps`
+ * stores its elements inline — or `null`. A field store `ps[i].x = 1` is not
+ * one: it writes into the element a reference points at, in both readings.
+ */
+const slotStoreArray = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
+  if (node.kind !== N_BINARY || node.text !== "=") {
+    return null
+  }
+  const target = unwrapParens(node.children[0])
+  if (target.kind !== N_INDEX || inlineArrayElement(program, table, target.children[0]) === "") {
+    return null
+  }
+  return target.children[0]
+}
+
+/**
+ * The walk's state, a class because Nish-0 has no closures (as `PerfWalk` is).
+ *
+ * It runs in one of two modes. The checker's (`ctx` set) reports a reference
+ * used after a mutation that may have moved it. The observing one (`ctx`
+ * `null`, `overwrites` set) runs over a body that has already checked, for the
+ * portability pass, and records every `SlotOverwrite` instead; the references
+ * it tracks, and when each one dies, are the same in both.
+ */
 class RefWalk {
-  ctx: CheckContext
+  program: CheckedProgram
+  table: TypeTable
+  ctx: CheckContext | null
   live: ElementRef[]
   /** One report per body: `ctx.error` suppresses the rest anyway, and stage0 stops here too. */
   reported: boolean
+  /** What an observing walk has found; `null` in the checker's. */
+  overwrites: SlotOverwrite[] | null
 
-  constructor(ctx: CheckContext) {
+  constructor(program: CheckedProgram, table: TypeTable, ctx: CheckContext | null) {
+    this.program = program
+    this.table = table
     this.ctx = ctx
     this.live = []
     this.reported = false
+    this.overwrites = null
+  }
+
+  report(node: Node, message: string): void {
+    const ctx = this.ctx
+    if (ctx !== null) {
+      ctx.error(node, message)
+    }
+    this.reported = true
   }
 
   /** Forget every reference declared since `depth`: its block has ended. */
@@ -482,9 +559,26 @@ class RefWalk {
     let i = 0
     while (i < this.live.length) {
       const ref = this.live[i]
-      const unrelated = ref.invalidatedBy !== "" || ref.elem !== m.elem
-      if (!unrelated && (m.root === UNNAMED || ref.array === UNNAMED || ref.array === m.root)) {
+      if (ref.invalidatedBy === "" && ref.reachedBy(m.root, m.elem)) {
         this.live[i].invalidatedBy = m.what
+      }
+      i = i + 1
+    }
+  }
+
+  /**
+   * Mark every live reference a whole-slot store into `array` may have
+   * overwritten. Which slot is not asked: `ps[i] = q` and `r = ps[j]` are
+   * taken to meet whatever `i` and `j` are, the conservative answer.
+   */
+  overwrite(store: Node, array: Node): void {
+    const root = referenceRoot(array)
+    const elem = inlineArrayElement(this.program, this.table, array)
+    let i = 0
+    while (i < this.live.length) {
+      const ref = this.live[i]
+      if (ref.overwrittenBy === null && ref.reachedBy(root, elem)) {
+        this.live[i].overwrittenBy = store
       }
       i = i + 1
     }
@@ -493,10 +587,21 @@ class RefWalk {
   /** Every mutation anywhere inside `node`, for the pre-scan of a loop. */
   mutationsWithin(node: Node, out: Mutation[]): void {
     if (node.kind === N_CALL) {
-      collectMutations(this.ctx, node, out)
+      collectMutations(this.program, this.table, node, out)
     }
     for (const child of node.children) {
       this.mutationsWithin(child, out)
+    }
+  }
+
+  /** Every whole-slot store anywhere inside `node`, for the same pre-scan. */
+  overwriteWithin(node: Node): void {
+    const array = slotStoreArray(this.program, this.table, node)
+    if (array !== null) {
+      this.overwrite(node, array)
+    }
+    for (const child of node.children) {
+      this.overwriteWithin(child)
     }
   }
 
@@ -524,6 +629,14 @@ class RefWalk {
       return
     }
     this.visitChildren(node)
+    // The store happens after both sides are evaluated, so a reference read
+    // on its right-hand side is read before it is overwritten.
+    if (this.overwrites !== null) {
+      const array = slotStoreArray(this.program, this.table, node)
+      if (array !== null) {
+        this.overwrite(node, array)
+      }
+    }
   }
 
   visitChildren(node: Node): void {
@@ -533,19 +646,24 @@ class RefWalk {
   }
 
   visitIdentifier(node: Node): void {
-    const local = this.ctx.program.nodeLocals[node.id]
-    if (local === null || this.reported) {
+    const local = this.program.nodeLocals[node.id]
+    if (local === null) {
       return
     }
     let i = 0
     while (i < this.live.length) {
       const ref = this.live[i]
-      if (ref.local === local && ref.invalidatedBy !== "") {
-        this.ctx.error(
+      const store = ref.overwrittenBy
+      const overwrites = this.overwrites
+      if (ref.local === local && store !== null && overwrites !== null) {
+        overwrites.push(new SlotOverwrite(store, local, node))
+        this.live[i].overwrittenBy = null
+      }
+      if (ref.local === local && ref.invalidatedBy !== "" && !this.reported) {
+        this.report(
           node,
           `\`${ref.local.name}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
         )
-        this.reported = true
         return
       }
       i = i + 1
@@ -560,17 +678,22 @@ class RefWalk {
     for (const m of found) {
       this.invalidate(m)
     }
+    if (this.overwrites !== null) {
+      this.overwriteWithin(node)
+    }
     const depth = this.live.length
     // `for (const p of ps)` binds an element reference too. It is re-derived
     // from the header at the top of every pass, so it starts each iteration
     // valid and is only invalidated by a mutation inside the body.
     if (node.kind === N_FOR_OF) {
       const iterable = node.children[1]
-      const elem = inlineArrayElement(this.ctx, iterable)
+      const elem = inlineArrayElement(this.program, this.table, iterable)
       const decl = node.children[0].children[0].children[0]
-      const local = this.ctx.program.nodeLocals[decl.id]
+      const local = this.program.nodeLocals[decl.id]
       if (elem !== "" && local !== null) {
-        this.live.push(new ElementRef(local, referenceRoot(iterable), elem, rootText(this.ctx, iterable)))
+        this.live.push(
+          new ElementRef(local, referenceRoot(iterable), elem, rootText(this.program, this.table, iterable))
+        )
       }
     }
     this.visitChildren(node)
@@ -580,19 +703,18 @@ class RefWalk {
   visitCall(node: Node): void {
     this.visitChildren(node)
     const found: Mutation[] = []
-    collectMutations(this.ctx, node, found)
+    collectMutations(this.program, this.table, node, found)
     for (const m of found) {
       // `xs.push(xs[0])`: the argument is read before `nish_array_grow` runs,
       // and the copy into the new slot reads it after.
       if (m.root !== UNNAMED && !this.reported) {
         for (const arg of node.children[1].children) {
-          const source = elementSource(this.ctx, arg)
+          const source = elementSource(this.program, this.table, arg)
           if (source !== null && referenceRoot(source) === m.root && !this.reported) {
-            this.ctx.error(
+            this.report(
               arg,
               `\`${m.what}\` reads an element of \`${m.root}\`, and the push may move that storage first; copy the fields you need into locals before pushing`
             )
-            this.reported = true
           }
         }
       }
@@ -602,18 +724,20 @@ class RefWalk {
 
   visitDeclaration(node: Node): void {
     this.visitChildren(node)
-    const local = this.ctx.program.nodeLocals[node.id]
+    const local = this.program.nodeLocals[node.id]
     const initializer = node.children[2]
     if (local === null || initializer.kind === N_EMPTY) {
       return
     }
-    const source = elementSource(this.ctx, initializer)
+    const source = elementSource(this.program, this.table, initializer)
     if (source === null) {
       return
     }
-    const elem = inlineArrayElement(this.ctx, source)
+    const elem = inlineArrayElement(this.program, this.table, source)
     if (elem !== "") {
-      this.live.push(new ElementRef(local, referenceRoot(source), elem, rootText(this.ctx, source)))
+      this.live.push(
+        new ElementRef(local, referenceRoot(source), elem, rootText(this.program, this.table, source))
+      )
     }
   }
 }
@@ -623,6 +747,20 @@ class RefWalk {
  * warnings, so every type and binding the walk reads is already recorded.
  */
 export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
-  const walk = new RefWalk(ctx)
+  const walk = new RefWalk(ctx.program, ctx.table, ctx)
   walk.visit(body)
+}
+
+/**
+ * The same walk over a body that has checked cleanly, recording what it saw
+ * rather than reporting: every whole-slot store that overwrote an element a
+ * live reference then read (NL8004, `src/portability-records.ts`). `program`
+ * carries the body's own side tables, as the portability pass installs them.
+ */
+export const slotOverwrites = (program: CheckedProgram, table: TypeTable, body: Node): SlotOverwrite[] => {
+  const walk = new RefWalk(program, table, null)
+  const found: SlotOverwrite[] = []
+  walk.overwrites = found
+  walk.visit(body)
+  return found
 }
