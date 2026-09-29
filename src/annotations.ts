@@ -334,7 +334,7 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   // never learns that a name was involved (docs/LANGUAGE.md, Type aliases).
   const declared = ctx.program.alias(name)
   if (declared !== null) {
-    return aliasType(declared, ctx)
+    return aliasType(declared)
   }
 
   // An enum is a type of its own, and its name is the only way to spell it
@@ -567,16 +567,16 @@ export const rejectRangedIntegerName = (ctx: CheckContext, nameNode: Node, what:
  * A failed resolution clears the mark instead of memoising `T_ERROR`, so a
  * second use reports the same real error rather than a spurious cycle.
  */
-export const aliasType = (info: AliasInfo, ctx: CheckContext): i32 => {
+export const aliasType = (info: AliasInfo): i32 => {
   if (info.resolving) {
-    ctx.error(info.decl, `Type alias \`${info.name}\` is defined in terms of itself`)
+    info.home.error(info.decl, `Type alias \`${info.name}\` is defined in terms of itself`)
     return T_ERROR
   }
   if (info.type >= 0) {
     return info.type
   }
   info.resolving = true
-  const resolved = resolveType(info.decl.children[1], ctx)
+  const resolved = resolveType(info.decl.children[1], info.home)
   info.resolving = false
   if (resolved === T_ERROR) {
     return T_ERROR

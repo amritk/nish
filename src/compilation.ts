@@ -7,9 +7,10 @@
 //      imports. Each file is parsed exactly once, keyed by its resolved path,
 //      so an import cycle simply terminates. Every module declares its names
 //      as it is parsed (pass 1a); once the whole graph is read, each binds the
-//      enums it imports and then collects its signatures (pass 1). That is
-//      what makes cycles legal: no body is checked until every module's
-//      exports are known, and no signature until every module's enums are.
+//      enums and aliases it imports and then collects its signatures (pass 1).
+//      That is what makes cycles legal: no body is checked until every
+//      module's exports are known, and no signature until every module's enums
+//      and aliases are.
 //   2. **Check.** Bind each import to the exporter's signature (pass 1b),
 //      close the reachable-struct set once every module is bound, reject the
 //      symbol clashes that would fail at link time, then check bodies (pass 2).
@@ -430,12 +431,13 @@ export class Compilation {
    *
    * Three steps, each over every module the root brings in before the next
    * starts. `discover` parses the import graph, sweeps each module with Phase 0
-   * and declares its names (pass 1a); `bindTypeImports` binds the enums each
-   * one imports; then pass 1 collects the signatures. Pass 1 used to run as
-   * each module was parsed, before anything it imports had been read, so a
-   * name it imported was resolved provisionally as a class — which an enum,
-   * having no layout, cannot stand in for. A module an earlier root loaded is
-   * already through all three, so a later root's modules may bind to it.
+   * and declares its names (pass 1a); `bindTypeImports` binds the enums and
+   * aliases each one imports; then pass 1 collects the signatures. Pass 1 used
+   * to run as each module was parsed, before anything it imports had been
+   * read, so a name it imported was resolved provisionally as a class — which
+   * an enum or an alias, having no layout, cannot stand in for. A module an
+   * earlier root loaded is already through all three, so a later root's
+   * modules may bind to it.
    */
   load(path: string, name: string, packageOverride: string): boolean {
     const first = this.modules.length
@@ -466,8 +468,15 @@ export class Compilation {
       if (!unit.refused) {
         const before = this.sink.count()
         unit.checker.collectSignatures() // pass 1
-        if (this.sink.count() > before) {
-          unit.signaturesFailed = true
+        // Only what it reported against itself: an imported alias is resolved
+        // in its own module, so a broken one is that module's diagnostic, and
+        // the walk has to reach that module to keep it.
+        let k = before
+        while (k < this.sink.count()) {
+          if (this.sink.items[k].source === unit.source) {
+            unit.signaturesFailed = true
+          }
+          k = k + 1
         }
       }
       i = i + 1
@@ -986,7 +995,7 @@ export class Compilation {
     }
     // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
     // Pass 1 could only write the request down — it runs before any import but
-    // an enum is bound — and it is made here, once every module can answer one
+    // an enum or an alias is bound — and it is made here, once every module can answer one
     // and can resolve its own imports while doing so.
     for (const unit of this.modules) {
       unit.checker.makeDeferredInstantiations()
@@ -1694,7 +1703,7 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
   if (template !== null && template.origin === program.source) {
     return template.decl.children[0]
   }
-  const alias = program.alias(name)
+  const alias = program.ownAlias(name)
   if (alias !== null) {
     return alias.decl.children[0]
   }

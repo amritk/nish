@@ -251,10 +251,13 @@ export class Checker {
     // Last, exactly where stage0 puts it, so two compilers report one file's
     // diagnostics in one order: every alias is resolved even when nothing
     // names it, so a broken right-hand side and a cycle are reported where
-    // they are written rather than at the first use -- or never.
+    // they are written rather than at the first use -- or never. An imported
+    // one is its own module's to resolve, so it is reported there, once.
     for (const alias of this.program.aliasList) {
-      this.ctx.errored = false
-      aliasType(alias, this.ctx)
+      if (alias.origin === this.program.source) {
+        this.ctx.errored = false
+        aliasType(alias)
+      }
     }
     this.ctx.errored = false
     this.qualifySymbols()
@@ -346,18 +349,13 @@ export class Checker {
       this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for a type alias`)
       return
     }
-    if (isExported(stmt)) {
-      this.ctx.error(
-        stmt,
-        "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)"
-      )
-      return
-    }
     if (this.nameTaken(name)) {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`)
       return
     }
-    this.program.addAlias(new AliasInfo(name, stmt, this.program.source))
+    const info = new AliasInfo(name, stmt, this.program.source, this.ctx)
+    info.exported = isExported(stmt)
+    this.program.addAlias(info)
   }
 
   /**
@@ -858,22 +856,33 @@ export class Checker {
 
   /**
    * The pre-pass between `declareNames` and pass 1: bind every import that
-   * names an enum its target declares, so that pass 1 resolves `Kind` in a
-   * signature to that enum. `targets` runs beside `imports`, with `null` for a
-   * builtin or an import whose module did not load. The enum imports leave
-   * `imports` (`CheckedProgram.enumImports` says why) and every other import
-   * is left to pass 1b. An imported alias belongs here too, once an alias can
-   * be exported, for the same reason: a signature has to resolve it.
+   * names an enum or a type alias its target declares, so that pass 1 resolves
+   * `Kind` or `Conn` in a signature to what it names. `targets` runs beside
+   * `imports`, with `null` for a builtin or an import whose module did not
+   * load. These imports leave `imports` (`CheckedProgram.typeImports` says
+   * why) and every other import is left to pass 1b.
    */
   bindTypeImports(targets: (CheckedProgram | null)[]): void {
     const rest: ImportBinding[] = []
     let i = 0
     while (i < this.program.imports.length) {
       const imp = this.program.imports[i]
-      const declared = declaredEnum(i < targets.length ? targets[i] : null, imp.importedName)
+      const target: CheckedProgram | null = i < targets.length ? targets[i] : null
+      const declared = declaredEnum(target, imp.importedName)
+      const alias = declaredAlias(target, imp.importedName)
+      this.ctx.errored = false
       if (declared !== null) {
-        this.ctx.errored = false
-        this.bindEnumImport(imp, declared, rest)
+        if (this.claimTypeImport(imp, declared.exported, rest)) {
+          this.program.addEnumAs(imp.localName, declared)
+        }
+      } else if (alias !== null) {
+        // The alias record itself, not its type: its right-hand side is
+        // resolved by need, in its own module (`aliasType`), so a chain of
+        // aliases across modules and a cycle through them resolve as they do
+        // within one.
+        if (this.claimTypeImport(imp, alias.exported, rest)) {
+          this.program.addAliasAs(imp.localName, alias)
+        }
       } else {
         rest.push(imp)
       }
@@ -884,16 +893,20 @@ export class Checker {
   }
 
   /**
-   * An imported enum is the exporter's enum: the same record and the same type
+   * Whether `imp`, naming an enum or an alias, may take its local name. An
+   * imported enum is the exporter's enum: the same record and the same type
    * id under the importer's local name, so `Kind.If` folds to the exporter's
-   * integer here and a `Kind` value crosses the boundary as itself. Unlike a
-   * class it may be renamed, because it has no symbol for a name to be part of.
-   * `earlier` holds the imports written above this one that pass 1b will bind.
+   * integer here and a `Kind` value crosses the boundary as itself; an
+   * imported alias is the exporter's alias, and so the type it names. Unlike
+   * a class either may be renamed, because neither has a symbol for a name to
+   * be part of. `earlier` holds the imports written above this one that pass
+   * 1b will bind.
    */
-  bindEnumImport(imp: ImportBinding, info: EnumInfo, earlier: ImportBinding[]): void {
+  claimTypeImport(imp: ImportBinding, exported: boolean, earlier: ImportBinding[]): boolean {
     // Reported, and bound all the same, as an unexported class is: the name
-    // still means the enum, and nothing downstream reports it a second time.
-    if (!info.exported) {
+    // still means the enum or the alias, and nothing downstream reports it a
+    // second time.
+    if (!exported) {
       this.ctx.error(
         imp.node,
         `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
@@ -901,30 +914,30 @@ export class Checker {
     }
     // An import of the name written above this one is the first binding,
     // whatever it names, so this one is the duplicate — not the other way
-    // round because the enum happens to be bound first.
+    // round because the enum or alias happens to be bound first.
     for (const other of earlier) {
       if (other.localName === imp.localName) {
         this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${other.specifier}\``)
-        return
+        return false
       }
     }
     if (this.nameTaken(imp.localName)) {
-      const other = this.importedEnum(imp.localName)
+      const other = this.importedType(imp.localName)
       this.ctx.error(
         imp.node,
         other !== null
           ? `\`${imp.localName}\` is already imported from \`${other.specifier}\``
           : `\`${imp.localName}\` is already declared in this module`
       )
-      return
+      return false
     }
-    this.program.enumImports.push(imp)
-    this.program.addEnumAs(imp.localName, info)
+    this.program.typeImports.push(imp)
+    return true
   }
 
-  /** The import that bound `localName` to an enum, or `null`. */
-  importedEnum(localName: string): ImportBinding | null {
-    for (const imp of this.program.enumImports) {
+  /** The import that bound `localName` to an enum or an alias, or `null`. */
+  importedType(localName: string): ImportBinding | null {
+    for (const imp of this.program.typeImports) {
       if (imp.localName === localName) {
         return imp
       }
@@ -985,12 +998,12 @@ export class Checker {
 
   bindImport(index: i32, target: CheckedProgram): void {
     const imp = this.program.imports[index]
-    // An enum written above this import was bound before pass 1
+    // An enum or alias written above this import was bound before pass 1
     // (`bindTypeImports`), and a second import of the name it took is the
     // duplicate-import mistake whatever it names, a builtin included.
-    const enumImport = this.importedEnum(imp.localName)
-    if (enumImport !== null) {
-      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${enumImport.specifier}\``)
+    const typeImport = this.importedType(imp.localName)
+    if (typeImport !== null) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${typeImport.specifier}\``)
       return
     }
     // A `nish:` import names a builtin, so it never looks at `target`: there is
@@ -1290,6 +1303,10 @@ export class Checker {
 /** The enum `target` itself declares as `name`, or `null`: a module does not re-export one it imported. */
 const declaredEnum = (target: CheckedProgram | null, name: string): EnumInfo | null =>
   target === null ? null : target.ownEnum(name)
+
+/** The alias `target` itself declares as `name`, or `null`, for the reason `declaredEnum` answers so. */
+const declaredAlias = (target: CheckedProgram | null, name: string): AliasInfo | null =>
+  target === null ? null : target.ownAlias(name)
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
 // A lifted arrow (WP29) has no name to point at, so the arrow itself is the span.
