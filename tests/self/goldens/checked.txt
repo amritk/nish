@@ -36754,20 +36754,20 @@ function bytes(a: u8[]): string -> @bytes
   calls: nish_alloc_struct nish_array_grow nish_str_from_u64
   pointer a: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 8:9 parts: string[] (const)
-  local 9:12 i: i32 (let)
+  local 9:9 parts: string[] (const)
+  local 10:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: bytes nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_net_read nish_net_shutdown nish_net_write nish_panic_slice nish_print nish_str_from_i32 nish_tcp_accept nish_tcp_listen
   stackSites=2 stackLocals=2
-  local 16:9 out: u8[] (const)
-  local 17:9 short: u8[] (const)
-  callee 19:15 bytes -> @bytes
-  callee 21:15 bytes -> @bytes
-  local 27:9 fd: i32 (const)
-  local 28:9 port: i32 (const)
-  local 39:9 both: i32 (const)
+  local 17:9 out: u8[] (const)
+  local 18:9 short: u8[] (const)
+  callee 20:15 bytes -> @bytes
+  callee 22:15 bytes -> @bytes
+  local 29:9 fd: i32 (const)
+  local 30:9 port: i32 (const)
+  local 41:9 both: i32 (const)
 program tests/cases/net_tcp_echo.ts
 module tests/cases/net_tcp_echo.ts (entry)
 import netClose from "nish:net" -> builtin netClose

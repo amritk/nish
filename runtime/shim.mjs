@@ -745,45 +745,14 @@ export function readSignal() {
  * either, for `signalFd`'s reason: Node's sockets are asynchronous only, and a
  * socket becomes readable, writable or connected only to the event loop, which
  * a program that owns its loop and spins or blocks in it never returns to. So
- * each throws, naming itself, rather than answer -11 forever.
+ * each throws, naming itself, rather than answer -11 forever; `nish.mjs`
+ * installs one per name.
  * docs/wp33-round-trip.md is the note that asks for one stated answer.
  */
-function noNetReading(name) {
+export function noNetReading(name) {
   throw new Error(
     `\`${name}\` has no synchronous reading under Node: a socket is ready only to the event loop, which a program that owns its loop never returns to (docs/wp33-round-trip.md)`
   );
-}
-
-export function netAddress() {
-  return noNetReading("netAddress");
-}
-
-export function netLocalPort() {
-  return noNetReading("netLocalPort");
-}
-
-export function tcpListen() {
-  return noNetReading("tcpListen");
-}
-
-export function tcpAccept() {
-  return noNetReading("tcpAccept");
-}
-
-export function netRead() {
-  return noNetReading("netRead");
-}
-
-export function netWrite() {
-  return noNetReading("netWrite");
-}
-
-export function netShutdown() {
-  return noNetReading("netShutdown");
-}
-
-export function netClose() {
-  return noNetReading("netClose");
 }
 
 /** `process.argv`: index 0 is the program (the script here, the executable natively), then the arguments. */

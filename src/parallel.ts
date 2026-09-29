@@ -49,8 +49,10 @@ import { isScalarArgument } from "./escape"
 import {
   isArrayWriteMethod,
   isAssignmentOperator,
+  builtinArgumentLetters,
   builtinNameOf,
-  builtinWrittenArguments,
+  dottedName,
+  isWrittenArgument,
   isTemplateExpression,
   unwrapParens,
 } from "./emit-util"
@@ -1178,14 +1180,21 @@ const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses
   return (t.kind === N_INDEX || t.kind === N_MEMBER) && uses.isPrivate(namedLocal(program, t.children[0]))
 }
 
-/** Whether a builtin call writes the elements of an array that is not a private local (`builtinWrittenArguments`). */
-const writesSharedArgument = (program: CheckedProgram, call: Node, uses: VariableUses): boolean => {
-  for (const written of builtinWrittenArguments(program, call)) {
-    if (!uses.isPrivate(namedLocal(program, written))) {
-      return true
+/**
+ * The builtin a call is, when it writes the elements of an array that is not
+ * a private local (`builtinArgumentLetters`), or "": `crypto.getRandomValues`
+ * (WP34 N3) and the `nish:net` calls that fill a `u8[]` (WP34 N5).
+ */
+const sharedWriteBuiltin = (program: CheckedProgram, call: Node, uses: VariableUses): string => {
+  const letters = builtinArgumentLetters(program, call)
+  const args = call.children[1].children
+  for (let i = 0; i < args.length; i++) {
+    if (isWrittenArgument(letters, i) && !uses.isPrivate(namedLocal(program, args[i]))) {
+      const callee = call.children[0]
+      return callee.kind === N_IDENT ? builtinNameOf(program, call) : dottedName(callee)
     }
   }
-  return false
+  return ""
 }
 
 /**
@@ -1201,6 +1210,12 @@ const regionCallMessage = (
   uses: VariableUses
 ): string => {
   const callee = node.children[0]
+  // WP34 N3 and N5: a builtin that fills an array writes its elements as
+  // `fill` does, so it is refused where `fill` is.
+  const writer = sharedWriteBuiltin(program, node, uses)
+  if (writer.length > 0) {
+    return regionWriteMessage(state, `\`${writer}\``)
+  }
   if (callee.kind === N_MEMBER) {
     const receiver = unwrapParens(callee.children[0])
     if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
@@ -1208,10 +1223,6 @@ const regionCallMessage = (
     }
     if (state.isDestination(namedLocal(program, receiver))) {
       return regionReadMessage(state, receiver.text)
-    }
-    // WP34 N3: `crypto.getRandomValues(a)` writes `a`'s elements as `fill` does.
-    if (writesSharedArgument(program, node, uses)) {
-      return regionWriteMessage(state, "`crypto.getRandomValues`")
     }
     // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
     // store to `a[i]` does, so they are refused where `push` and `pop` are.
@@ -1221,10 +1232,6 @@ const regionCallMessage = (
         return regionWriteMessage(state, `\`${callee.text}\``)
       }
     }
-  } else if (callee.kind === N_IDENT && writesSharedArgument(program, node, uses)) {
-    // WP34 N5: `netRead(fd, a, off, len)`, `tcpAccept(fd, a)` and
-    // `netAddress(a, host, port)` write `a`'s elements as `fill` does.
-    return regionWriteMessage(state, `\`${builtinNameOf(program, node)}\``)
   }
   const sig = program.nodeCallees[node.id]
   if (sig === null) {

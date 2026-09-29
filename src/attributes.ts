@@ -41,7 +41,6 @@ import {
   checksRangesInPrologue,
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
-  isNetRangeCall,
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
@@ -65,8 +64,8 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isPushCall,
-  builtinNameOf,
-  builtinWrittenArguments,
+  builtinArgumentLetters,
+  isWrittenArgument,
   isStringMethodCall,
   isTemplateExpression,
   rangedStoreOf,
@@ -845,10 +844,8 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     // WP34 N3 and N5: `crypto.getRandomValues(p)` writes every element of
     // `p`, and `netRead(fd, p, off, len)` the range it reads into, and each
     // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
-    for (const written of builtinWrittenArguments(program, owner)) {
-      if (written === node) {
-        return use(USE_WRITE)
-      }
+    if (isWrittenArgument(builtinArgumentLetters(program, owner), index)) {
+      return use(USE_WRITE)
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
     // nothing — the elements are numbers, and the copy is a `memmove` whose
@@ -1653,10 +1650,14 @@ class FactCollector {
     }
   }
 
-  /** Every array a builtin call writes the elements of (`builtinWrittenArguments`), each a write of its own. */
+  /** Every array a builtin call writes the elements of (`builtinArgumentLetters`), each a write of its own. */
   noteWrittenArguments(call: Node): void {
-    for (const written of builtinWrittenArguments(this.unit.program, call)) {
-      this.noteArrayWrite(call, written)
+    const letters = builtinArgumentLetters(this.unit.program, call)
+    const args = call.children[1].children
+    for (let i = 0; i < args.length; i++) {
+      if (isWrittenArgument(letters, i)) {
+        this.noteArrayWrite(call, args[i])
+      }
     }
   }
 
@@ -1673,24 +1674,20 @@ class FactCollector {
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
+    const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
     if (imported.length > 0) {
       this.addCallees(
         imported.indexOf(".") < 0
-          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
+          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
       )
     } else {
-      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node))
+      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node, unchecked))
     }
     // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
-    // are handed, and `netRead` and `netWrite` range-check theirs through the
-    // slice panic unless `--unchecked-indexing` dropped the check, which is a
-    // `noreturn` callee like `set`'s.
+    // are handed.
     this.noteWrittenArguments(node)
-    if (isNetRangeCall(builtinNameOf(this.unit.program, node)) && !this.opts.uncheckedIndexing) {
-      this.facts.callees.add("nish_panic_slice")
-    }
   }
 }
 

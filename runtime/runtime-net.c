@@ -176,7 +176,9 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
   int one = 1;
   int zero = 0;
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
-  if (!v4) setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
+  /* Both families at once on an IPv6 socket; on an IPv4 one this fails with
+     `ENOPROTOOPT` and changes nothing, which is cheaper than asking. */
+  setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
   nish_sockaddr s;
   socklen_t n = nish_net_sockaddr(&s, a, port, v4);
   if (bind(fd, &s.sa, n) != 0 || listen(fd, backlog) != 0) {

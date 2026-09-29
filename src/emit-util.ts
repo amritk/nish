@@ -11,7 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { netSignature } from "./nish-modules"
+import { NET_WRITTEN, netSignature } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
   N_BINARY,
@@ -135,47 +135,34 @@ export const arrayMethodName = (program: CheckedProgram, table: TypeTable, call:
 export const isArrayWriteMethod = (name: string): boolean =>
   name === "push" || name === "pop" || name === "set" || name === "fill"
 
-/** The letter of `netSignature` for a `u8[]` the call writes. */
-const CHAR_W: i32 = 119
-
 /**
- * The array arguments a builtin call writes the elements of, in argument
- * order, or none: the argument-side twin of `isArrayWriteMethod`. That is
- * `crypto.getRandomValues(bytes)` (WP34 N3) and every `nish:net` argument
- * `netSignature` spells `w` (WP34 N5): `netAddress`'s `out`, `tcpAccept`'s
- * `peer` and `netRead`'s `buf`. A user function that shares a builtin's name
- * wins it, as it wins every identifier builtin, and writes nothing here. The
- * parameter classification, the fact collector and a scope's region rule ask
- * this, each for the reason it asks `isArrayWriteMethod`.
+ * The parameters of the builtin a call reaches, in `netSignature`'s letters,
+ * or "" for a call that writes no argument's elements: the argument-side twin
+ * of `isArrayWriteMethod`. `crypto.getRandomValues(bytes)` (WP34 N3) is `w`;
+ * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
+ * `netAddress`'s `out`, `tcpAccept`'s `peer` and `netRead`'s `buf`. A user
+ * function that shares a builtin's name wins it, as it wins every identifier
+ * builtin, and writes nothing here. The parameter classification, the fact
+ * collector and a scope's region rule ask this, each for the reason it asks
+ * `isArrayWriteMethod`; a string rather than a list, because they ask it of
+ * every call and most answers are "".
  */
-export const builtinWrittenArguments = (program: CheckedProgram, call: Node): Node[] => {
-  const out: Node[] = []
+export const builtinArgumentLetters = (program: CheckedProgram, call: Node): string => {
   if (call.kind !== N_CALL) {
-    return out
+    return ""
   }
   const callee = call.children[0]
-  const args = call.children[1].children
   if (callee.kind === N_IDENT) {
-    if (program.nodeCallees[call.id] !== null) {
-      return out
-    }
-    const params = netSignature(builtinNameOf(program, call))
-    for (let i = 0; i < params.length && i < args.length; i++) {
-      if (params.charCodeAt(i) === CHAR_W) {
-        out.push(args[i])
-      }
-    }
-    return out
+    return program.nodeCallees[call.id] !== null ? "" : netSignature(builtinNameOf(program, call))
   }
-  if (
-    args.length > 0 &&
-    dottedName(callee) === "crypto.getRandomValues" &&
-    !receiverIsValue(program, callee.children[0])
-  ) {
-    out.push(args[0])
-  }
-  return out
+  const fills =
+    dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
+  return fills ? "w" : ""
 }
+
+/** Whether argument `index` of a builtin call is an array whose elements it writes (`builtinArgumentLetters`). */
+export const isWrittenArgument = (letters: string, index: i32): boolean =>
+  index >= 0 && index < letters.length && letters.charCodeAt(index) === NET_WRITTEN
 
 /**
  * The builtin a plain-identifier call reaches: the one a `nish:` import bound,

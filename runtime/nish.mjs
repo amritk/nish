@@ -98,16 +98,20 @@ provide("statMtimeSync", shim.statMtimeSync);
 provide("signalFd", shim.signalFd);
 provide("readSignal", shim.readSignal);
 
-// `nish:net` (WP34 N5). Each throws: a socket is ready only to Node's event
-// loop, which a program that owns its loop never returns to.
-provide("netAddress", shim.netAddress);
-provide("netLocalPort", shim.netLocalPort);
-provide("tcpListen", shim.tcpListen);
-provide("tcpAccept", shim.tcpAccept);
-provide("netRead", shim.netRead);
-provide("netWrite", shim.netWrite);
-provide("netShutdown", shim.netShutdown);
-provide("netClose", shim.netClose);
+// `nish:net` (WP34 N5). Each throws, naming itself: a socket is ready only to
+// Node's event loop, which a program that owns its loop never returns to.
+for (const name of [
+  "netAddress",
+  "netLocalPort",
+  "tcpListen",
+  "tcpAccept",
+  "netRead",
+  "netWrite",
+  "netShutdown",
+  "netClose",
+]) {
+  provide(name, () => shim.noNetReading(name));
+}
 
 // `crypto.getRandomValues(bytes)` (WP34 N3). Node has the global, but it
 // takes only a typed array and a `u8[]` is a plain `Array` here, so the one
