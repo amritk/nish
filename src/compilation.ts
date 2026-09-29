@@ -472,10 +472,8 @@ export class Compilation {
         // in its own module, so a broken one is that module's diagnostic, and
         // the walk has to reach that module to keep it.
         let k = before
-        while (k < this.sink.count()) {
-          if (this.sink.items[k].source === unit.source) {
-            unit.signaturesFailed = true
-          }
+        while (k < this.sink.count() && !unit.signaturesFailed) {
+          unit.signaturesFailed = this.sink.items[k].source === unit.source
           k = k + 1
         }
       }

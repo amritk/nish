@@ -1119,7 +1119,9 @@ program twice, with one golden between them.
   exporter itself imported, and the importer never has to import `Socket`
   (`alias_export_imported_class`). An array, a `T | null` and a `Result`
   alias are the types they name (`alias_export_array`,
-  `alias_export_nullable`, `alias_export_result`), a chain of aliases across
+  `alias_export_nullable`, `alias_export_result`), so is an alias of a
+  generic class's instantiation, which the exporter instantiates even when an
+  importer asks first (`alias_export_generic`), a chain of aliases across
   modules resolves by need (`alias_export_chain`: `Table` is `Line[]`, `Line`
   is an imported `Row`, `Row` is `Cell[]`, `Cell` is `i32`), and unlike a
   class an alias may be renamed on import — `import { Conn as Handle }` —
