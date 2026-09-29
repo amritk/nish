@@ -1112,14 +1112,13 @@ program twice, with one golden between them.
   `export type Byte = u8` is
   `` Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it) ``
   (`tests/cases/reject_type_alias_export`). This is a limitation rather than a
-  design decision: a module's signatures are resolved before its imports are
-  bound (pass 1 runs during load, pass 1b after it), so an imported name used
-  in type position is resolved provisionally as a class, and an alias has no
-  layout to stand in for. Making it work means resolving every module's
-  aliases before any module's signatures, which is a change to the load order
-  of both drivers and is not part of this rule. Declare the alias in each
-  module that needs it; a class or interface is what crosses a module
-  boundary.
+  design decision, and no longer the load order's: every module declares its
+  aliases before any module collects a signature, which is what lets an
+  exported [enum](#enums) be imported. What an alias still lacks is its
+  right-hand side resolved in the scope of the module that wrote it, when the
+  module using it may not see the classes that side names. Declare the alias
+  in each module that needs it; a class, an interface or an enum is what
+  crosses a module boundary.
 - **Aliases are top-level only.** `type X = i32` inside a function body is
   `Unsupported statement in Phase 1: TypeAliasDeclaration` *(CLI only)*.
 
@@ -1199,13 +1198,43 @@ and their `.ll` goldens are byte-identical files.
   one declaration namespace with functions, classes, interfaces, type aliases
   and module constants: a clash is `` `Kind` is already declared in this module ``
   whichever came first (`reject_enum_duplicate`).
-- **An enum is module-local and cannot be exported.** `export enum Kind` is
-  `` Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it) ``
-  (`tests/cases/reject_enum_export`), for exactly the reason a `type` alias
-  cannot be: a module's signatures are resolved before its imports are bound,
-  so an imported name in type position resolves provisionally as a class, and
-  an enum has no layout to stand in for. A class or interface is what crosses a
-  module boundary.
+- **An exported enum is imported, and in the importer it is the exporter's
+  enum.** `export enum Kind { ... }` in `kinds.ts` and
+  `import { Kind } from "./kinds"` elsewhere bind one type, not a copy: the
+  importer may use `Kind` as a field, parameter or return type, a local, a
+  `Map` key and a `switch` discriminant, `Kind.If` folds to the integer
+  `kinds.ts` gave it, and a `Kind` crosses a call between the two modules as
+  itself (`tests/link/enum_export_uses`). One enum reached along two import
+  paths is one type (`enum_export_diamond`), two modules may import each
+  other's enums (`enum_export_cycle`), and unlike a class an enum may be
+  renamed on import — `import { Kind as Level }` — because it has no symbol
+  for its name to be part of (`enum_export_rename`). Nothing is emitted in
+  either module, so the importer's IR is byte-identical to the same program
+  with the enum declared in it (`enum_export_ir` and `enum_export_ir_local`,
+  whose `.ll` goldens are the same files).
+  - **Every enum declaration is a type of its own.** A `Kind` a module
+    declares and the `Kind` it could have imported are two types, so a member
+    of one is not an argument where the other is declared:
+    `` Argument 1 of `weight`: expected Kind, got Kind `` (`tests/link/enum_import_distinct`).
+    An imported enum converts to and from `i32` no more than a local one does
+    (`enum_import_i32`, `enum_import_from_i32`).
+  - **The import errors are the ones every import has.** An enum declared
+    without `export` is
+    `` `Kind` is declared in `./kinds` but not exported (add `export`) ``
+    (`tests/link/enum_import_not_exported`); a declaration of the imported
+    name is `` `Kind` is already declared in this module ``
+    (`enum_import_clash`, `enum_import_clash_function`); a second import of
+    it is `` `Kind` is already imported from `./kinds` ``
+    (`enum_import_duplicate`, `enum_import_duplicate_function`); and an
+    enum is not a function, imported or not: `Kind(2)` is
+    `` Unknown function `Kind` `` (`enum_import_as_call`). A module does not
+    re-export an enum it imported.
+  - **Why it is bound before the signatures.** An enum is a type with no
+    layout, so a signature that names an imported one has to find it
+    declared, where an imported class can be resolved provisionally and bound
+    later. Every module of the program therefore declares its names and binds
+    its imported enums before any module collects a signature (`load` in
+    `src/compilation.ts`).
 - **`const enum` and `declare enum` are refused.** `const enum` asks for the
   inlining every member already gets —
   `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
@@ -1222,9 +1251,9 @@ and their `.ll` goldens are byte-identical files.
 
 ### `export` and `import`
 
-- `export` is accepted on `function`, `class`, `interface`, and `const`
+- `export` is accepted on `function`, `class`, `interface`, `enum` and `const`
   declarations (`tests/cases/export_fn`, `tests/link/class_export`,
-  `tests/link/const_export`). `export default`, `export { ... }`,
+  `tests/link/enum_export_uses`, `tests/link/const_export`). `export default`, `export { ... }`,
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
@@ -4889,7 +4918,8 @@ messages are exact for the cases cited; other rows quote the checker
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
-| `export` on an enum | `Enums cannot be exported: an enum names a type inside one module ...` | `reject_enum_export` |
+| importing an enum its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported` |
+| a declaration named like an imported enum, or a second import of its name | `` `Kind` is already declared in this module `` / `` `Kind` is already imported from `./kinds` `` | `tests/link/enum_import_clash`, `enum_import_clash_function`, `enum_import_duplicate`, `enum_import_duplicate_function` |
 | `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
 | `declare enum` | `` `declare enum` is not supported `` | *(CLI only)* |
 | enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |

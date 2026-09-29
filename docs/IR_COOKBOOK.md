@@ -6846,6 +6846,13 @@ attributes #2 = { nounwind }
 ```
 <!-- cookbook:end decl-enum -->
 
+**An imported enum lowers exactly as this one does.** `import { Kind } from
+"./kinds"` binds the exporter's enum, so a member folds to the exporter's
+integer, a `Kind` parameter is an `i32` parameter, and neither module gains a
+symbol for it: `tests/link/enum_export_ir` and `enum_export_ir_local` are one
+program with the enum imported and with it declared in `main.ts`, and both
+modules' `.ll` goldens are byte-identical files.
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that
