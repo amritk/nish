@@ -142,6 +142,13 @@ parameter type, a `switch` discriminant and a `Map` key. An exported alias is
 used the same way for a class, an array and a `T | null`. The rules that stay
 keep their negative tests: no string enum, no `const enum`, no default export.
 
+**State.** The enum half is done: an exported enum is imported and used as all
+four (`tests/link/enum_export_uses`), and LANGUAGE.md §Enums has the rule. The
+load order it needed — every module's enums and aliases declared, and its
+imported enums bound, before any signature — covers aliases too, so what is
+left of N1 is binding an exported alias and resolving its right-hand side in
+the module that wrote it.
+
 ### N2. Byte plumbing (S–M, builtins lane)
 
 A packet is parsed and forwarded through `u8[]`, and the language has no bulk

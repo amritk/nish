@@ -22,14 +22,23 @@ replace *globals* — never operators, never the object model.
 ## Using it
 
 ```bash
-node --experimental-strip-types --import ./runtime/nish.mjs prog.ts
+node --experimental-strip-types --import ./runtime/nish.mjs \
+  -e 'const m = await import("./prog.ts"); process.exit(m.main())'
 ```
+
+The `-e` is needed because an Nish program exports `main` rather than
+running anything at top level: `node … prog.ts` would load the module, never
+call `main`, print nothing and exit 0. The one-liner imports the module and calls
+`main` itself, which is what the native binary's entry point does, and exits
+with what `main` returns (0 for a `main` that returns `void`). It is the form
+`tests/differential/unmodified.js` runs. The import path is resolved from the
+current directory, so keep the `./`.
 
 The program must be an ES module to Node, which an Nish program always
 is — the language has `import`/`export` and no CommonJS at all. This package is
 `"type": "module"`, so an in-tree `.ts` is read that way and
-`node --experimental-strip-types examples/nbody.ts` works from the repository
-root. Under a package that says `"type": "commonjs"`, Node reads a `.ts` as
+`examples/nbody.ts` imports cleanly from the repository root. Under a package
+that says `"type": "commonjs"`, Node reads a `.ts` as
 CommonJS and `export function main` is a syntax error before type stripping
 ever runs; put the program under a directory whose `package.json` says
 `{ "type": "module" }`, or give it an `.mts` extension.

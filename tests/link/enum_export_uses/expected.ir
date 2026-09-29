@@ -1,0 +1,5 @@
+declare noundef i32 @weight(i32 noundef)
+%struct.Map$en$Kind$i32 = type
+switch i32 %k, label %sw.default [
+i32 1, label %sw.case
+i32 2, label %sw.case.1
