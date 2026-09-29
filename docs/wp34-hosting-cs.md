@@ -194,7 +194,7 @@ Each piece is required by something the relay does today:
 four before deciding where they go. If they do not fit, the precedent is the
 split that created `runtime-os.c`, not a higher ceiling.
 
-**State.** Done in the N3 pull request. They measured 506 bytes of `.text*`
+**State.** Done in the N3 pull request. They measured 503 bytes of `.text*`
 against the 143 `runtime-os.c` had left of its (by then 1,536-byte) ceiling, so
 they are a fourth translation unit, `runtime/runtime-host.c`, with a ceiling of
 its own of 512; `runtime-os.c`'s is unchanged. `Date.now()` answers whole

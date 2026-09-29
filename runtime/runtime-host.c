@@ -34,18 +34,19 @@ typedef int nish_host_unused;
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#if defined(__linux__)
 #include <sys/random.h>
+#if defined(__linux__)
 #include <sys/signalfd.h>
 #else
 #include <fcntl.h>
-#include <sys/random.h>
 #endif
 
 #include "nish.h"
+
+/* The spelling runtime.c and runtime-os.c use for their cold paths. */
+#define NISH_COLD __attribute__((noreturn, cold, noinline))
 
 /* `Date.now()`: `CLOCK_REALTIME` in whole milliseconds since the epoch, as
    JavaScript answers it — the milliseconds are counted in integers and then
@@ -57,7 +58,7 @@ double nish_date_now(void) {
   return (double)((int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
-static __attribute__((noreturn, cold, noinline)) void nish_entropy_fail(uint64_t asked) {
+static NISH_COLD void nish_entropy_fail(uint64_t asked) {
   if (asked > 65536) {
     dprintf(2, "crypto.getRandomValues: %llu bytes asked for, and one call fills at most 65536\n",
             (unsigned long long)asked);
@@ -142,7 +143,7 @@ int32_t nish_signal_fd(void) {
 }
 
 int32_t nish_read_signal(int32_t fd) {
-  if (fd < 0 || fd != nish_signal_read_end) return -1;
+  if (fd != nish_signal_read_end) return -1;
   struct signalfd_siginfo si;
   ssize_t n;
   do n = read(fd, &si, sizeof si);
@@ -162,8 +163,7 @@ static int nish_signal_write_end = -1;
 static void nish_on_signal(int sig) {
   int saved = errno;
   unsigned char b = (unsigned char)sig;
-  ssize_t ignored = write(nish_signal_write_end, &b, 1);
-  (void)ignored;
+  (void)!write(nish_signal_write_end, &b, 1);
   errno = saved;
 }
 
@@ -185,7 +185,7 @@ int32_t nish_signal_fd(void) {
 }
 
 int32_t nish_read_signal(int32_t fd) {
-  if (fd < 0 || fd != nish_signal_read_end) return -1;
+  if (fd != nish_signal_read_end) return -1;
   unsigned char b;
   ssize_t n;
   do n = read(fd, &b, 1);

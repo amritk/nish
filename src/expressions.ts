@@ -27,7 +27,7 @@ import {
   checkBuiltinFunctionNamed,
   checkImportedDottedBuiltin,
   checkNamespaceProperty,
-  cryptoValueRefusal,
+  cryptoRefusal,
   dateRefusal,
   isBuiltinFunction,
 } from "./builtins"
@@ -463,7 +463,7 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   // WP34 N3: `Date` and `crypto` are namespaces, reached only through their
   // one member each; as a value either is named by its rule.
   if (expr.text === "Date" || expr.text === "crypto") {
-    return ctx.errorType(expr, expr.text === "Date" ? dateRefusal("Date") : cryptoValueRefusal())
+    return ctx.errorType(expr, expr.text === "Date" ? dateRefusal("Date") : cryptoRefusal("crypto"))
   }
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``)
 }

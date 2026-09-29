@@ -49,7 +49,7 @@ import { isScalarArgument } from "./escape"
 import {
   isArrayWriteMethod,
   isAssignmentOperator,
-  isRandomFillCall,
+  builtinWrittenArgument,
   isTemplateExpression,
   unwrapParens,
 } from "./emit-util"
@@ -1199,11 +1199,9 @@ const regionCallMessage = (
       return regionReadMessage(state, receiver.text)
     }
     // WP34 N3: `crypto.getRandomValues(a)` writes `a`'s elements as `fill` does.
-    if (isRandomFillCall(program, node) && node.children[1].children.length > 0) {
-      const target = node.children[1].children[0]
-      if (!uses.isPrivate(namedLocal(program, target))) {
-        return regionWriteMessage(state, "`crypto.getRandomValues`")
-      }
+    const written = builtinWrittenArgument(program, node)
+    if (written !== null && !uses.isPrivate(namedLocal(program, written))) {
+      return regionWriteMessage(state, "`crypto.getRandomValues`")
     }
     // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
     // store to `a[i]` does, so they are refused where `push` and `pop` are.

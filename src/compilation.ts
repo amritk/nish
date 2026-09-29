@@ -126,7 +126,7 @@ import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { buildModeOf } from "./visibility"
+import { buildModeOf, isWasmBuild } from "./visibility"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -632,7 +632,7 @@ export class Compilation {
       this.opts.strictExports,
       packageName
     )
-    checker.ctx.wasm = this.opts.profile === "wasi" || this.opts.target.startsWith("wasm")
+    checker.ctx.wasm = isWasmBuild(this.opts)
     const unit = new ModuleUnit(path, name, source, file, parser.nodeCount, isEntry, checker, packageName)
     // WP29 P1 (wp20 §8c.3): a program that imports `nish/threads` is compiled
     // with `--threads`, because every worker a region starts bumps an arena of

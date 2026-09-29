@@ -64,7 +64,7 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isPushCall,
-  isRandomFillCall,
+  builtinWrittenArgument,
   isStringMethodCall,
   isTemplateExpression,
   rangedStoreOf,
@@ -842,7 +842,7 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     }
     // WP34 N3: `crypto.getRandomValues(p)` writes every element of `p` and
     // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
-    if (isRandomFillCall(program, owner)) {
+    if (builtinWrittenArgument(program, owner) !== null) {
       return use(USE_WRITE)
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
@@ -1312,8 +1312,9 @@ class FactCollector {
       this.addCallees(builtinCallees(program, table, node))
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
-      if (isRandomFillCall(program, node) && node.children[1].children.length > 0) {
-        this.noteArrayWrite(node, node.children[1].children[0])
+      const written = builtinWrittenArgument(program, node)
+      if (written !== null) {
+        this.noteArrayWrite(node, written)
       }
       return
     }

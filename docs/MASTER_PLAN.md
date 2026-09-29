@@ -103,7 +103,7 @@ Design rules that every WP must respect:
   on linux-x64, every `.text*` section summed at `-Oz`: `runtime.c` 3,515 of
   3,584 (3,640 of 3,840 with `-DNISH_THREADS=1`), `runtime-os.c` 1,462 of 1,536,
   `runtime-parallel.c` 286 of 320 (901 of 1,024 threaded) and `runtime-host.c`
-  506 of 512. N3's four builtins measured 506 bytes against the 143
+  503 of 512. N3's four builtins measured 503 bytes against the 143
   `runtime-os.c` had left, which is why they are a file of their own; the 69
   bytes they did cost `runtime-os.c` start every spawned child with no signal
   blocked, since `signalFd()` blocks two on Linux and `exec` keeps the mask.

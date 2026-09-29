@@ -66,11 +66,8 @@ export const dateRefusal = (what: string): string =>
   `\`${what}\` is refused: Nish has no \`Date\` object; the one \`Date\` member is \`Date.now()\`, the wall clock in milliseconds`
 
 /** The same for `crypto`, whose one member is the entropy source. */
-const cryptoRefusal = (what: string): string =>
+export const cryptoRefusal = (what: string): string =>
   `\`${what}\` is refused: the one \`crypto\` member is \`crypto.getRandomValues(bytes)\``
-
-/** `crypto` itself as a value. */
-export const cryptoValueRefusal = (): string => cryptoRefusal("crypto")
 
 /**
  * WP34 N3. The host builtins call `runtime-host.c`, which is empty on a wasm

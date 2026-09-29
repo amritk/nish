@@ -135,23 +135,20 @@ export const isArrayWriteMethod = (name: string): boolean =>
   name === "push" || name === "pop" || name === "set" || name === "fill"
 
 /**
- * `crypto.getRandomValues(bytes)` (WP34 N3): the one builtin call that writes
- * the elements of an array it is handed as an argument rather than as a
- * receiver. The parameter classification, the fact collector and a scope's
- * region rule ask this, each for the reason it asks `isArrayWriteMethod`.
+ * The array argument a builtin call writes the elements of, or null: the
+ * argument-side twin of `isArrayWriteMethod`. Today that is only
+ * `crypto.getRandomValues(bytes)` (WP34 N3). The parameter classification, the
+ * fact collector and a scope's region rule ask this, each for the reason it
+ * asks `isArrayWriteMethod`.
  */
-export const isRandomFillCall = (program: CheckedProgram, call: Node): boolean => {
-  if (call.kind !== N_CALL || call.children[0].kind !== N_MEMBER) {
-    return false
+export const builtinWrittenArgument = (program: CheckedProgram, call: Node): Node | null => {
+  if (call.kind !== N_CALL || call.children[1].children.length === 0) {
+    return null
   }
-  const access = call.children[0]
-  const receiver = access.children[0]
-  return (
-    access.text === "getRandomValues" &&
-    receiver.kind === N_IDENT &&
-    receiver.text === "crypto" &&
-    !receiverIsValue(program, receiver)
-  )
+  const callee = call.children[0]
+  const fills =
+    dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
+  return fills ? call.children[1].children[0] : null
 }
 
 /**

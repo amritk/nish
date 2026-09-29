@@ -662,14 +662,18 @@ if (!only || "os_host".includes(only)) {
   fs.rmSync(osDir, { recursive: true, force: true })
   fs.mkdirSync(osDir, { recursive: true })
   const prelude = path.join(root, "runtime", "nish.mjs")
+  // Compiled here and linked against the runtime objects this run already
+  // built (`linkNative`), rather than with `--link`, which would build the
+  // runtime from source again for every case.
   const osBuild = (name) => {
     const exe = path.join(osDir, name)
-    const r = spawnSync(
-      NISH,
-      [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", `${osDir}${path.sep}`, "--link", exe],
-      { cwd: root, encoding: "utf8" }
-    )
-    return check(`${name}: links`, r.status === 0, r.stderr) ? exe : null
+    const ll = path.join(osDir, `${name}.ll`)
+    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", ll], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const cc = r.status === 0 ? linkNative(exe, ll, { libm: true }) : r
+    return check(`${name}: links`, cc.status === 0, String(cc.stderr)) ? exe : null
   }
   // Under `node -e` the extra arguments start at `process.argv[1]`, and the
   // prelude's `process.argv` drops index 0, so the case's name stands where the
@@ -773,7 +777,7 @@ if (!only || "os_host".includes(only)) {
     const want = fs.statSync(file).mtimeMs
     check(
       "os_mtime: the fixture's mtime has a sub-millisecond fraction to read back",
-      !Number.isInteger(want * 1000) || want % 1 !== 0,
+      !Number.isInteger(want),
       `mtimeMs ${want}`
     )
     for (const [side, r] of [
@@ -5360,14 +5364,14 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
  * (WP34 N3): `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and
  * `readSignal`.
  *
- * Measured **506 bytes** on 2026-09-29 with clang 18 on linux-x64 (`.text` 449 plus
+ * Measured **503 bytes** on 2026-09-29 with clang 18 on linux-x64 (`.text` 446 plus
  * `.text.unlikely.` 57, which is the entropy panic): `nish_date_now` 53,
  * `nish_random_fill` 86 and its panic 57, `nish_stat_mtime` 83, `nish_signal_fd` 132 and
- * `nish_read_signal` 95. They are a fourth translation unit rather than more of
+ * `nish_read_signal` 92. They are a fourth translation unit rather than more of
  * `runtime-os.c` because that file had 143 bytes of `RUNTIME_OS_TEXT_BUDGET` left and
- * these are 506, and the rule is a new file with its own measured ceiling, never a
+ * these are 503, and the rule is a new file with its own measured ceiling, never a
  * raised one. The budget is the next 256-byte boundary above the measurement, which
- * leaves 6: the next host builtin is a measurement and a decision, not free room.
+ * leaves 9: the next host builtin is a measurement and a decision, not free room.
  *
  * What N3 cost `runtime-os.c` itself is the child's signal mask: `posix_spawnp` now
  * starts every child with no signal blocked, as libuv does for Node, because

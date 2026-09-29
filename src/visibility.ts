@@ -70,8 +70,13 @@ export class BuildMode {
   }
 }
 
-/** A wasm triple: the module is instantiated by a host, which calls its exports. */
-const wasmTarget = (target: string): boolean => target.startsWith("wasm")
+/**
+ * A wasm build: a wasm triple, whose module a host instantiates and calls, or
+ * the `wasi` profile. The checker asks it too, to refuse the WP34 N3 host
+ * builtins, which have no runtime there.
+ */
+export const isWasmBuild = (opts: Options): boolean =>
+  opts.profile === "wasi" || opts.target.startsWith("wasm")
 
 /** Whether any module of the program declares a C function. */
 const declaresForeign = (programs: CheckedProgram[]): boolean => {
@@ -93,7 +98,7 @@ export const buildModeOf = (opts: Options, programs: CheckedProgram[]): BuildMod
     opts.emitNapi.length > 0 ||
     opts.emitNapiAsync.length > 0
   const foreign = declaresForeign(programs)
-  const wasm = opts.profile === "wasi" || wasmTarget(opts.target)
+  const wasm = isWasmBuild(opts)
   const closed = opts.link.length > 0 && !wasm && !sidecar && !foreign
   return new BuildMode(closed, !opts.strictExports, sidecar || foreign || wasm)
 }
