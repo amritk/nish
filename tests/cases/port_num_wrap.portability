@@ -1,0 +1,6 @@
+{"file":"tests/cases/port_num_wrap.ts","line":14,"column":11,"endLine":14,"endColumn":21,"severity":"portability","code":"NL8007","message":"this `+` on u8 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap.ts","line":15,"column":3,"endLine":15,"endColumn":10,"severity":"portability","code":"NL8007","message":"this `++` on u8 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap.ts","line":17,"column":10,"endLine":17,"endColumn":18,"severity":"portability","code":"NL8007","message":"this `-` on u16 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap.ts","line":19,"column":24,"endLine":19,"endColumn":33,"severity":"portability","code":"NL8007","message":"this `*` on u32 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap.ts","line":21,"column":3,"endLine":21,"endColumn":18,"severity":"portability","code":"NL8007","message":"this `+=` on u32 wraps here, and TypeScript keeps counting past the range"}
+{"file":"tests/cases/port_num_wrap.ts","line":23,"column":3,"endLine":23,"endColumn":9,"severity":"portability","code":"NL8007","message":"this `--` on u8 wraps here, and TypeScript keeps counting past the range"}

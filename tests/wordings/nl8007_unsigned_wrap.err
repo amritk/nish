@@ -1,0 +1,1 @@
+this `+` on u8 wraps here, and TypeScript keeps counting past the range

@@ -1,0 +1,1 @@
+this `>>>` on i32 reads back signed here, and unsigned in TypeScript
