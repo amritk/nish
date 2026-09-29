@@ -72,7 +72,11 @@ const printTypeScriptTree = (source, sf) => {
   const emit = (depth, kind, start, end, extra) => {
     lines.push(`${"  ".repeat(depth)}${kind} ${start} ${end}${extra === undefined ? "" : ` ${extra}`}`)
   }
-  const span = (node) => [at(node.getStart(sf)), at(node.end)]
+  // A decorated node starts after its decorators in stage1's tree, where each
+  // decorator is a DECORATOR around the rest (`decorated`), so its start is
+  // recorded here and read in place of the `typescript` node's own.
+  const startAfterDecorators = new Map()
+  const span = (node) => [at(startAfterDecorators.get(node) ?? node.getStart(sf)), at(node.end)]
   const unsupported = (node) => {
     const e = new Error(ts.SyntaxKind[node.kind])
     e.unsupported = ts.SyntaxKind[node.kind]
@@ -154,6 +158,35 @@ const printTypeScriptTree = (source, sf) => {
     emit(depth, "IDENT", s, e, node.text)
   }
 
+  /**
+   * `async` and the `*` of a generator, which stage1 parses into flags for
+   * Phase 0 to refuse (NL1015, NL1044), in `kindWithFlags`'s order.
+   */
+  const functionFlags = (node) =>
+    `${node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword) ? "+async" : ""}${
+      node.asteriskToken === undefined ? "" : "+generator"
+    }`
+
+  /**
+   * The decorators in front of `node` (NL1006): stage1 reads each as a
+   * DECORATOR whose children are its expression and what it decorates, the
+   * next decorator or the node itself, which starts after the last of them.
+   * Answers the depth the node itself is printed at.
+   */
+  const decorated = (node, depth) => {
+    const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : []
+    if (decorators.length === 0) {
+      return depth
+    }
+    const end = at(node.end)
+    decorators.forEach((d, i) => {
+      emit(depth + i, "DECORATOR", i === 0 ? at(node.getStart(sf)) : at(d.getStart(sf)), end)
+      expression(d.expression, depth + i + 1)
+    })
+    startAfterDecorators.set(node, ts.skipTrivia(source, decorators[decorators.length - 1].end))
+    return depth + decorators.length
+  }
+
   // WP29: a function type and an arrow need printers declared further down;
   // the indirection is `statementOf`'s, for the same reason.
   const parameterOf = () => parameter
@@ -198,6 +231,13 @@ const printTypeScriptTree = (source, sf) => {
       // modifier on nothing else (TS1354), so any other operator here — `keyof`,
       // `unique` — is a type stage1 does not have a node for either.
       case ts.SyntaxKind.TypeOperator:
+        // `keyof T` is read too, for the checker to refuse (NL2038); `unique`
+        // is a type stage1 has no node for.
+        if (node.operator === ts.SyntaxKind.KeyOfKeyword) {
+          emit(depth, "TYPE_OPERATOR", s, e, "keyof")
+          type(node.type, depth + 1)
+          return
+        }
         if (node.operator !== ts.SyntaxKind.ReadonlyKeyword) {
           unsupported(node)
         }
@@ -438,10 +478,13 @@ const printTypeScriptTree = (source, sf) => {
       // `N_FUNCTION` — an absent name first, the type parameters last — and a
       // parameter's type and the return type may both be left out.
       case ts.SyntaxKind.ArrowFunction:
-        if (node.typeParameters !== undefined || node.modifiers !== undefined) {
+        if (
+          node.typeParameters !== undefined ||
+          node.modifiers?.some((m) => m.kind !== ts.SyntaxKind.AsyncKeyword)
+        ) {
           unsupported(node)
         }
-        emit(depth, "ARROW", s, e)
+        emit(depth, `ARROW${functionFlags(node)}`, s, e)
         empty(depth + 1)
         list(depth + 1, node.parameters, arrowParameterOf())
         optional(depth + 1, node.type, type)
@@ -471,29 +514,34 @@ const printTypeScriptTree = (source, sf) => {
   /**
    * WP18: the `<T, U>` of a generic function, as the fifth child of stage1's
    * `N_FUNCTION` — a `LIST` of plain identifiers, empty when there are none.
-   * A constrained or defaulted parameter has no node there because neither is
-   * accepted, so either one is an unsupported construct for this oracle.
+   * A constrained parameter is an unsupported construct for this oracle. A
+   * default is read and dropped, and the identifier flagged, for the checker
+   * to refuse (NL2292).
    */
   const typeParameters = (params, depth) => {
     for (const p of params ?? []) {
-      if (p.constraint !== undefined || p.default !== undefined) {
+      if (p.constraint !== undefined) {
         unsupported(p)
       }
     }
     list(
       depth,
       (params ?? []).map((p) => p.name),
-      identifier
+      (name, d) => {
+        const [ns, ne] = span(name)
+        emit(d, `IDENT${name.parent.default === undefined ? "" : "+default"}`, ns, ne, name.text)
+      }
     )
   }
 
-  const parameter = (node, depth) => {
+  const parameter = (node, parameterDepth) => {
     if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) {
       unsupported(node)
     }
     if (node.questionToken !== undefined || node.initializer !== undefined) {
       unsupported(node)
     }
+    const depth = decorated(node, parameterDepth)
     const [s, e] = span(node)
     emit(depth, "PARAM", s, e)
     identifier(node.name, depth + 1)
@@ -648,7 +696,8 @@ const printTypeScriptTree = (source, sf) => {
     }
   }
 
-  const declaration = (node, depth) => {
+  const declaration = (node, declarationDepth) => {
+    const depth = decorated(node, declarationDepth)
     const [s, e] = span(node)
     switch (node.kind) {
       case ts.SyntaxKind.ImportDeclaration: {
@@ -668,13 +717,10 @@ const printTypeScriptTree = (source, sf) => {
         return
       }
       case ts.SyntaxKind.FunctionDeclaration: {
-        if (node.asteriskToken !== undefined) {
-          unsupported(node)
-        }
         if (node.name === undefined || node.body === undefined || node.type === undefined) {
           unsupported(node)
         }
-        emit(depth, `FUNCTION${exported(node)}`, s, e)
+        emit(depth, `FUNCTION${exported(node)}${functionFlags(node)}`, s, e)
         identifier(node.name, depth + 1)
         list(depth + 1, node.parameters, parameter)
         type(node.type, depth + 1)
@@ -745,13 +791,56 @@ const printTypeScriptTree = (source, sf) => {
       }
       // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a
       // type in its right-hand child, which is exactly TypeScript's shape.
+      // Type parameters on one are a third child, only when written, for
+      // Phase 0 to refuse (NL1054).
       case ts.SyntaxKind.TypeAliasDeclaration: {
-        if (node.typeParameters !== undefined) {
-          unsupported(node)
-        }
         emit(depth, `TYPE_ALIAS${exported(node)}`, s, e)
         identifier(node.name, depth + 1)
         type(node.type, depth + 1)
+        if (node.typeParameters !== undefined) {
+          typeParameters(node.typeParameters, depth + 1)
+        }
+        return
+      }
+      // `namespace A.B { }`, `module "m" { }` and `declare global { }` (NL1027,
+      // NL1019): one NAMESPACE whose text is the keyword, the name — a dotted
+      // one is the member access it spells — and the body as a BLOCK stage1
+      // passes over unread, or EMPTY for `declare module "m";`.
+      case ts.SyntaxKind.ModuleDeclaration: {
+        let keyword = "module"
+        if ((node.flags & ts.NodeFlags.GlobalAugmentation) !== 0) {
+          keyword = "global"
+        } else if ((node.flags & ts.NodeFlags.Namespace) !== 0) {
+          keyword = "namespace"
+        }
+        emit(depth, `NAMESPACE${exported(node)}`, s, e, keyword)
+        let innermost = node
+        const names = [node.name]
+        while (innermost.body !== undefined && ts.isModuleDeclaration(innermost.body)) {
+          innermost = innermost.body
+          names.push(innermost.name)
+        }
+        if (ts.isStringLiteral(node.name)) {
+          const [ns, ne] = span(node.name)
+          emit(depth + 1, "STRING", ns, ne, `#${Buffer.byteLength(node.name.text, "utf8")}`)
+        } else {
+          const nameStart = at(names[0].getStart(sf))
+          const member = (i, d) => {
+            if (i === 0) {
+              identifier(names[0], d)
+              return
+            }
+            emit(d, "MEMBER", nameStart, at(names[i].end), names[i].text)
+            member(i - 1, d + 1)
+          }
+          member(names.length - 1, depth + 1)
+        }
+        if (innermost.body === undefined) {
+          empty(depth + 1)
+        } else {
+          const [bs, be] = span(innermost.body)
+          emit(depth + 1, "BLOCK", bs, be)
+        }
         return
       }
       // `enum X { A = 1, B }` (WP23). stage1 reads the members as a LIST of
@@ -811,7 +900,7 @@ const printTypeScriptTree = (source, sf) => {
           if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) {
             unsupported(node)
           }
-          emit(depth, `FUNCTION${exported(node)}`, s, e)
+          emit(depth, `FUNCTION${exported(node)}${functionFlags(arrow)}`, s, e)
           identifier(single[0].name, depth + 1)
           list(depth + 1, arrow.parameters, parameter)
           type(arrow.type, depth + 1)
@@ -855,6 +944,11 @@ const printTypeScriptTree = (source, sf) => {
     let readonly = false
     let isStatic = false
     for (const modifier of node.modifiers ?? []) {
+      // `async`, the `*` and a decorator are read for Phase 0 to refuse, and
+      // printed by `functionFlags` and `decorated`.
+      if (modifier.kind === ts.SyntaxKind.AsyncKeyword || modifier.kind === ts.SyntaxKind.Decorator) {
+        continue
+      }
       if (modifier.kind === ts.SyntaxKind.ReadonlyKeyword) {
         readonly = true
       } else if (modifier.kind === ts.SyntaxKind.StaticKeyword) {
@@ -867,7 +961,7 @@ const printTypeScriptTree = (source, sf) => {
         unsupported(modifier)
       }
     }
-    return `${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`
+    return `${functionFlags(node)}${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`
   }
 
   /** `?` and `!` after a member's name, in `kindWithFlags`'s order. */
@@ -876,7 +970,8 @@ const printTypeScriptTree = (source, sf) => {
       node.exclamationToken === undefined ? "" : "+definite"
     }`
 
-  const member = (node, depth) => {
+  const member = (node, memberDepth) => {
+    const depth = decorated(node, memberDepth)
     const [s, e] = span(node)
     if (ts.isPropertyDeclaration(node)) {
       if (!ts.isIdentifier(node.name) || node.type === undefined) {

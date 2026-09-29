@@ -42,6 +42,14 @@
 # expression rules it reached have no case here, because their programs are
 # `reject_*` cases in `tests/self/parser-refusals.txt`.
 #
+# And again, from 33 to 31, when the third stage read the declarations
+# (`nl2038_keyof_type`, `nl2292_default_type_argument`): `keyof T` is a type
+# operator node and a default type argument a flag on its parameter, both
+# refused by the checker's pass 1 sweep. The NL1xxx declaration rules it
+# reached — `async`, generators, decorators, `namespace`, `declare global`,
+# generic aliases — have no case here, because their programs are the
+# `reject_*` cases that came off `tests/self/parser-refusals.txt`.
+#
 # One warning from that change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
@@ -50,7 +58,6 @@
 # had. `tests/cases/reject_cls_ctor_static` is what pins it now, and a
 # `reject_*` case is the thing to write when a wording comes off this list.
 nl2018_anonymous_class
-nl2038_keyof_type
 nl2083_declare_class
 nl2090_method_without_body
 nl2091_constructor_without_body
@@ -81,4 +88,3 @@ nl2257_interface_construct_signature
 nl2258_object_literal_method
 nl2274_two_names_one_declaration
 nl2286_declare_enum
-nl2292_default_type_argument

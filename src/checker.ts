@@ -223,7 +223,14 @@ export class Checker {
       // declaration is collected, so a declaration that has one reports that
       // and nothing else — an unannotated constant holding `[1, , 2]` is the
       // hole, not the missing annotation (`tests/cases/reject_expr_sweep_together`).
-      if (stmt.kind === N_CLASS || stmt.kind === N_MODULE_CONST || stmt.kind === N_FUNCTION) {
+      // An interface is swept for its types, which a generic one resolves only
+      // per instantiation (`tests/cases/reject_type_keyof_template`).
+      if (
+        stmt.kind === N_CLASS ||
+        stmt.kind === N_INTERFACE ||
+        stmt.kind === N_MODULE_CONST ||
+        stmt.kind === N_FUNCTION
+      ) {
         refuseUnsupportedForms(this.ctx, stmt)
       }
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {

@@ -26,27 +26,33 @@
 // `with`, a label, `for...in`, `for await`, `for (x of a)`, a top-level `let`
 // and a top-level statement each become a node, and so do `==`, `?.`,
 // `typeof`, `in`, `**`, a regex, `as` and the rest of the expressions the
-// language forbids; the phase that owns the rule refuses it by name, because a
+// language forbids, and `async`, `function*`, a decorator, `namespace`,
+// `declare global`, a generic alias, `keyof` and a default type argument;
+// the phase that owns the rule refuses it by name, because a
 // message about the construct the programmer wrote beats one about a token
 // they did not. The shape each takes is written down once, beside the flags in
 // `src/nodes.ts`. `var`, `try`, `with`, `await`, `in`, `typeof` and the other
 // operator words are identifiers to the lexer, so they are matched by text
 // where they open a construct, as `of` and `using` are, and only where the
-// word could not be a name (`operandAhead`, `operatorPrecedence`).
+// word could not be a name (`operandAhead`, `operatorPrecedence`,
+// `asyncArrowAhead`, `namespaceAhead`, `keyofAhead`).
 
 import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
   FLAG_ANGLE,
+  FLAG_ASYNC,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_DEFAULT,
   FLAG_FOR_IN,
   FLAG_USING,
   FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_FOREIGN,
+  FLAG_GENERATOR,
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_PREFIX,
@@ -67,6 +73,7 @@ import {
   N_CONDITIONAL,
   N_CONSTRUCTOR,
   N_CONTINUE,
+  N_DECORATOR,
   N_DEFAULT,
   N_DO,
   N_EMPTY,
@@ -88,6 +95,7 @@ import {
   N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
+  N_NAMESPACE,
   N_NEW,
   N_NULL,
   N_NUMBER,
@@ -116,6 +124,7 @@ import {
   N_TYPE_FUNCTION,
   N_TYPE_LITERAL,
   N_TYPE_NULL,
+  N_TYPE_OPERATOR,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
   N_TYPE_REF,
@@ -131,6 +140,7 @@ import {
   TOK_AMP_ASSIGN,
   TOK_AND_AND,
   TOK_ARROW,
+  TOK_AT,
   TOK_ASSIGN,
   TOK_BANG,
   TOK_BREAK,
@@ -513,13 +523,7 @@ export class Parser {
    * which TypeScript counts as one too.
    */
   newlineBefore(): boolean {
-    for (let i: i32 = this.previousEnd; i < this.start; i++) {
-      const c = this.lexer.at(i)
-      if (c === CH_LF || c === CH_CR) {
-        return true
-      }
-    }
-    return false
+    return this.lineBreakBetween(this.previousEnd, this.start)
   }
 
   /**
@@ -567,6 +571,14 @@ export class Parser {
       exported = true
       this.advance()
     }
+    // `@dec class C { }`, for Phase 0 to refuse (NL1006). `@` is a token of
+    // its own that nothing else in the language spells, so it is always this.
+    if (this.at(TOK_AT)) {
+      const decorator = this.parseDecoratorHead(start)
+      decorator.children.push(this.exportable(this.parseDeclaration(), exported))
+      decorator.end = this.previousEnd
+      return decorator
+    }
     if (this.at(TOK_IMPORT)) {
       if (exported) {
         return this.fail("`export` cannot introduce an import")
@@ -575,6 +587,19 @@ export class Parser {
     }
     if (this.at(TOK_FUNCTION)) {
       return this.exportable(this.parseFunction(start), exported)
+    }
+    // `async function`, a modifier only with no line break before `function`,
+    // which is TypeScript's rule; Phase 0 refuses it (NL1015).
+    if (
+      this.at(TOK_IDENT) &&
+      this.value === "async" &&
+      this.peek() === TOK_FUNCTION &&
+      this.aheadOnSameLine()
+    ) {
+      this.advance() // `async`
+      const declaration = this.parseFunction(start)
+      declaration.flags = declaration.flags | FLAG_ASYNC
+      return this.exportable(declaration, exported)
     }
     if (this.at(TOK_CLASS)) {
       return this.exportable(this.parseClass(start), exported)
@@ -609,6 +634,21 @@ export class Parser {
       this.advance() // `declare`
       const foreign = this.parseForeignFunction(start)
       return this.exportable(foreign, exported)
+    }
+    if (this.namespaceAhead()) {
+      return this.exportable(this.parseNamespace(start, 0), exported)
+    }
+    if (
+      this.at(TOK_IDENT) &&
+      this.value === "declare" &&
+      this.aheadOnSameLine() &&
+      this.peek() === TOK_IDENT
+    ) {
+      const scan = this.scanAfterAhead()
+      if (this.declaredNamespaceAhead(scan)) {
+        this.advance() // `declare`
+        return this.exportable(this.parseNamespace(start, FLAG_FOREIGN), exported)
+      }
     }
     if (this.at(TOK_IDENT) && this.value === "type") {
       return this.exportable(this.parseTypeAlias(start), exported)
@@ -654,6 +694,135 @@ export class Parser {
     }
   }
 
+  /**
+   * A scratch lexer standing on the token after the one `peek` holds, for the
+   * two words of lookahead `declare global` and `namespace N` need.
+   */
+  scanAfterAhead(): Lexer {
+    const scan = new Lexer(this.file.text)
+    scan.pos = this.aheadEnd
+    scan.next()
+    return scan
+  }
+
+  /** Whether a line break sits between two offsets of the source. */
+  lineBreakBetween(from: i32, to: i32): boolean {
+    for (let i: i32 = from; i < to; i++) {
+      const c = this.lexer.at(i)
+      if (c === CH_LF || c === CH_CR) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Whether `namespace` or `module` opens a block (NL1027) rather than naming
+   * a variable. TypeScript's rule, and the only place the words could not be
+   * a name: a name or a string follows on the same line (`namespace N`,
+   * `module "m"`), which two operands in a row never compiled as. Everywhere
+   * else — `namespace * module`, `module(x)`, the word alone on its line —
+   * each is the name it always was (`tests/parser/names-declarations.ts`,
+   * `names-declaration-calls.ts`).
+   */
+  namespaceAhead(): boolean {
+    if (!this.at(TOK_IDENT) || (this.value !== "namespace" && this.value !== "module")) {
+      return false
+    }
+    const next = this.peek()
+    return (next === TOK_IDENT || next === TOK_STRING) && this.aheadOnSameLine()
+  }
+
+  /**
+   * After `declare` and a word on its line, held by `peek`: whether the two
+   * open `declare global { }` (NL1019), or a declared `namespace` or `module`
+   * (NL1027), by the rule `namespaceAhead` states. `scan` stands on the token
+   * after the word.
+   */
+  declaredNamespaceAhead(scan: Lexer): boolean {
+    const word = this.aheadValue
+    if (word === "global") {
+      return scan.kind === TOK_LBRACE
+    }
+    if (word !== "namespace" && word !== "module") {
+      return false
+    }
+    return (
+      (scan.kind === TOK_IDENT || scan.kind === TOK_STRING) &&
+      !this.lineBreakBetween(this.aheadEnd, scan.start)
+    )
+  }
+
+  /**
+   * `namespace A.B { ... }`, `module "m" { ... }` and `declare global { ... }`
+   * as one N_NAMESPACE whose text is the keyword, for Phase 0 to refuse. The
+   * body is a BLOCK passed over unread (`src/nodes.ts`); a body-less
+   * `declare module "m";` has an EMPTY one, and anything else without a body
+   * is the syntax error it is in TypeScript.
+   */
+  parseNamespace(start: i32, flags: i32): Node {
+    const node = this.node(N_NAMESPACE, start, this.end)
+    node.text = this.value
+    node.flags = flags
+    if (node.text === "global") {
+      node.children.push(this.parseIdentifier())
+    } else {
+      this.advance() // `namespace` or `module`
+      if (this.at(TOK_STRING)) {
+        const name = this.node(N_STRING, this.start, this.end)
+        name.text = this.value
+        this.advance()
+        node.children.push(name)
+      } else {
+        const nameStart = this.start
+        let name = this.parseIdentifier()
+        while (this.eat(TOK_DOT)) {
+          name = this.parseMemberName(name, nameStart)
+        }
+        node.children.push(name)
+      }
+    }
+    // Only a module named by a string may go without a body, as in TypeScript.
+    if (!this.at(TOK_LBRACE) && node.children[0].kind === N_STRING) {
+      node.children.push(this.empty())
+      this.expectSemicolon()
+      node.end = this.previousEnd
+      return node
+    }
+    // The body is passed over rather than read: Phase 0 refuses the block
+    // whatever it holds, and a declared one holds ambient declarations —
+    // functions without bodies, `export =` — that this grammar does not have.
+    const body = this.node(N_BLOCK, this.start, this.end)
+    if (!this.at(TOK_LBRACE)) {
+      this.expect(TOK_LBRACE)
+    } else {
+      const close = this.closingBrace(this.start)
+      while ((close < 0 || this.start < close) && !this.at(TOK_END)) {
+        this.advance()
+      }
+      if (close < 0) {
+        this.expect(TOK_RBRACE)
+      }
+    }
+    body.end = this.previousEnd
+    node.children.push(body)
+    node.end = this.previousEnd
+    return node
+  }
+
+  /**
+   * `@expr`, the head of a decorator (NL1006): an N_DECORATOR holding the
+   * expression, to which the caller adds what it decorates. The expression is
+   * a name, a member access or a call, as TypeScript reads one.
+   */
+  parseDecoratorHead(start: i32): Node {
+    const node = this.node(N_DECORATOR, start, this.end)
+    this.advance() // `@`
+    const expressionStart = this.start
+    node.children.push(this.parseCallOrMember(this.parsePrimary(), expressionStart))
+    return node
+  }
+
   /** `var` followed by a name: the one place the word opens a declaration. */
   varAhead(): boolean {
     return this.at(TOK_IDENT) && this.value === "var" && this.peek() === TOK_IDENT && this.aheadOnSameLine()
@@ -670,13 +839,7 @@ export class Parser {
    */
   aheadOnSameLine(): boolean {
     this.peek()
-    for (let i: i32 = this.end; i < this.aheadStart; i++) {
-      const c = this.lexer.at(i)
-      if (c === CH_LF || c === CH_CR) {
-        return false
-      }
-    }
-    return true
+    return !this.lineBreakBetween(this.end, this.aheadStart)
   }
 
   /**
@@ -993,6 +1156,11 @@ export class Parser {
   parseFunction(start: i32): Node {
     this.advance() // `function`
     const node = this.node(N_FUNCTION, start, this.end)
+    // `function*`, for Phase 0 to refuse (NL1044): `*` cannot follow
+    // `function` in anything else.
+    if (this.eat(TOK_STAR)) {
+      node.flags = FLAG_GENERATOR
+    }
     node.children.push(this.parseIdentifier())
     // The type parameters are read here, where they are written, and pushed
     // last, where `nodes.ts` puts them: the first four children of an
@@ -1050,9 +1218,10 @@ export class Parser {
    * list when there is none. Each parameter is its `IDENT`, so every reader
    * that wants the names keeps reading `.text` at the position it always did;
    * a constraint (`<T extends Shape>`, WP18 G6) is that identifier's one child.
-   * The checker, not the parser, decides what a constraint may name. A default
-   * (`<T = string>`) is still refused, because a type argument is inferred
-   * from the arguments and a default would have no position to fill.
+   * The checker, not the parser, decides what a constraint may name, and it
+   * refuses a default (`<T = string>`, FLAG_DEFAULT), because a type argument
+   * is inferred from the arguments and a default would have no position to
+   * fill.
    *
    * `<` here is unambiguous — a declaration cannot start with a comparison —
    * which is exactly why type arguments are written in an annotation and after
@@ -1072,14 +1241,10 @@ export class Parser {
         this.advance()
         param.children.push(this.parseType())
       }
-      if (this.at(TOK_ASSIGN)) {
-        this.report(
-          "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments",
-          this.start,
-          this.end
-        )
-        this.advance()
+      // A default is read and flagged, and the checker refuses it (NL2292).
+      if (this.eat(TOK_ASSIGN)) {
         this.parseType()
+        param.flags = param.flags | FLAG_DEFAULT
       }
       if (!this.eat(TOK_COMMA)) {
         break
@@ -1116,6 +1281,17 @@ export class Parser {
       return false
     }
     scan.next()
+    // `const f = async (x: i32): i32 => x`, whose `async` Phase 0 refuses
+    // (NL1015). It is the modifier only with no line break before the
+    // parameters, as in TypeScript; otherwise it is a name, and a call of it
+    // is still a call.
+    if (scan.kind === TOK_IDENT && scan.value === "async") {
+      const wordEnd = scan.end
+      scan.next()
+      if ((scan.kind !== TOK_LPAREN && scan.kind !== TOK_LT) || this.lineBreakBetween(wordEnd, scan.start)) {
+        return false
+      }
+    }
     // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
     // between the `=` and the parameters. It is skipped by matching `>` against
     // `<`. A constraint (G6) can nest one type argument list in another, and
@@ -1174,6 +1350,11 @@ export class Parser {
     const node = this.node(N_FUNCTION, start, this.end)
     node.children.push(this.parseIdentifier())
     this.expect(TOK_ASSIGN)
+    // `startsArrowDeclaration` has already told the modifier from a name.
+    if (this.at(TOK_IDENT) && this.value === "async") {
+      this.advance()
+      node.flags = FLAG_ASYNC
+    }
     const typeParams = this.parseTypeParameters()
     node.children.push(this.parseParameters())
     node.children.push(this.parseReturnType())
@@ -1191,22 +1372,33 @@ export class Parser {
       return list
     }
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
-      const start = this.start
-      const param = this.node(N_PARAM, start, this.end)
-      param.children.push(this.parseIdentifier())
-      if (this.at(TOK_QUESTION)) {
-        this.report("optional parameters are not supported", this.start, this.end)
-        this.advance()
-      }
-      param.children.push(this.parseTypeAnnotation())
-      param.end = this.previousEnd
-      list.children.push(param)
+      list.children.push(this.parseParameter())
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
     this.expect(TOK_RPAREN)
     return this.closeList(list)
+  }
+
+  /** `x: T`, or a decorator in front of one (NL1006). */
+  parseParameter(): Node {
+    const start = this.start
+    if (this.at(TOK_AT)) {
+      const decorator = this.parseDecoratorHead(start)
+      decorator.children.push(this.parseParameter())
+      decorator.end = this.previousEnd
+      return decorator
+    }
+    const param = this.node(N_PARAM, start, this.end)
+    param.children.push(this.parseIdentifier())
+    if (this.at(TOK_QUESTION)) {
+      this.report("optional parameters are not supported", this.start, this.end)
+      this.advance()
+    }
+    param.children.push(this.parseTypeAnnotation())
+    param.end = this.previousEnd
+    return param
   }
 
   /** `: T` after a signature; a missing one is an error the checker also wants named. */
@@ -1336,12 +1528,29 @@ export class Parser {
           flags = flags | FLAG_STATIC_FIRST
         }
         flags = flags | FLAG_STATIC
+      } else if (word === "async") {
+        // Phase 0's (NL1015), and a modifier only where TypeScript reads one:
+        // on the line of what follows it, and in front of a name, a `[` or the
+        // `*` of a generator.
+        if (!this.asyncModifierAhead()) {
+          return flags
+        }
+        flags = flags | FLAG_ASYNC
       } else if (word !== "public" && word !== "private" && word !== "protected") {
         return flags
       }
       this.advance()
     }
     return flags
+  }
+
+  /** Whether the `async` in hand is followed, on its line, by what a modifier can be. */
+  asyncModifierAhead(): boolean {
+    const next = this.peek()
+    return (
+      (next === TOK_IDENT || next === TOK_LBRACKET || next === TOK_STAR || next === TOK_STRING) &&
+      this.aheadOnSameLine()
+    )
   }
 
   /**
@@ -1467,7 +1676,18 @@ export class Parser {
    */
   parseMember(): Node {
     const start = this.start
-    const modifiers = this.parseMemberModifiers()
+    if (this.at(TOK_AT)) {
+      const decorator = this.parseDecoratorHead(start)
+      decorator.children.push(this.parseMember())
+      decorator.end = this.previousEnd
+      return decorator
+    }
+    let modifiers = this.parseMemberModifiers()
+    // `*m()`, a generator method, for Phase 0 to refuse (NL1044): a member
+    // never opened with `*` before, so it cannot be anything else.
+    if (this.eat(TOK_STAR)) {
+      modifiers = modifiers | FLAG_GENERATOR
+    }
     if (
       this.at(TOK_IDENT) &&
       this.value === "constructor" &&
@@ -1517,7 +1737,12 @@ export class Parser {
     // `m<U>(...)` is a generic method (WP18 G8): a field is always followed by
     // `:`, `?`, `!`, `=` or `;`, so a `<` after a member's name can only open a
     // type parameter list.
-    if (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()) {
+    if (
+      (modifiers & FLAG_GENERATOR) !== 0 ||
+      this.peek() === TOK_LPAREN ||
+      this.peek() === TOK_LT ||
+      this.markedMethodAhead()
+    ) {
       const method = this.node(N_METHOD, start, this.end)
       method.children.push(this.parseIdentifier())
       const typeParams = this.parseTypeParameters()
@@ -1597,17 +1822,21 @@ export class Parser {
 
   /**
    * `type X = T;` — a second name for a type that already exists, never a type
-   * of its own (docs/LANGUAGE.md, Type aliases). A type parameter list is not
-   * accepted: `type Box<T>` stops at the `=` this expects, which is where the
-   * language has always turned generics down.
+   * of its own (docs/LANGUAGE.md, Type aliases). A type parameter list is read
+   * and kept as a third child, only when there is one, for Phase 0 to refuse
+   * (NL1054): an alias has nothing for a type argument to specialise.
    */
   parseTypeAlias(start: i32): Node {
     this.advance() // `type`
     const node = this.node(N_TYPE_ALIAS, start, this.end)
     node.children.push(this.parseIdentifier())
+    const typeParams = this.parseTypeParameters()
     this.expect(TOK_ASSIGN)
     node.children.push(this.parseType())
     this.expectSemicolon()
+    if (typeParams.children.length > 0) {
+      node.children.push(typeParams)
+    }
     node.end = this.previousEnd
     return node
   }
@@ -1734,6 +1963,16 @@ export class Parser {
       node.end = this.previousEnd
       return node
     }
+    // `keyof T`, for the checker to refuse (NL2038). It binds as `readonly`
+    // does, and is the operator only where the name could not be (`keyofAhead`).
+    if (this.keyofAhead()) {
+      const operator = this.node(N_TYPE_OPERATOR, start, this.end)
+      operator.text = this.value
+      this.advance()
+      operator.children.push(this.parsePostfixType())
+      operator.end = this.previousEnd
+      return operator
+    }
     let type = this.parsePrimaryType()
     while (this.at(TOK_LBRACKET) && this.peek() === TOK_RBRACKET) {
       this.advance()
@@ -1743,6 +1982,28 @@ export class Parser {
       type = array
     }
     return type
+  }
+
+  /**
+   * Whether the `keyof` in hand is the type operator rather than a type named
+   * `keyof`, which a program may declare: it is when a type follows it on its
+   * line — a name that is not an operator word, `(`, `null` or a number —
+   * because a type name never had one of those after it there. `keyof[]`,
+   * `keyof | null`, `keyof {` (a body after a return type) and the word at
+   * the end of its line stay the name (`tests/parser/names-declarations.ts`).
+   */
+  keyofAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "keyof") {
+      return false
+    }
+    const next = this.peek()
+    if (!this.aheadOnSameLine()) {
+      return false
+    }
+    if (next === TOK_IDENT) {
+      return !isOperatorWord(this.aheadValue)
+    }
+    return next === TOK_LPAREN || next === TOK_NULL || next === TOK_NUMBER
   }
 
   parsePrimaryType(): Node {
@@ -2651,6 +2912,13 @@ export class Parser {
         if (this.peek() === TOK_ARROW) {
           return this.parseArrowExpression(start)
         }
+        // `async (x) => x` and `async x => x`, for Phase 0 to refuse (NL1015).
+        if (this.asyncArrowAhead()) {
+          this.advance() // `async`
+          const arrow = this.parseArrowExpression(start)
+          arrow.flags = FLAG_ASYNC
+          return arrow
+        }
         const node = this.node(N_IDENT, start, this.end)
         node.text = this.value
         this.advance()
@@ -2747,8 +3015,39 @@ export class Parser {
     if (next !== TOK_IDENT && next !== TOK_RPAREN) {
       return false
     }
+    return this.arrowParametersAt(this.start)
+  }
+
+  /**
+   * Whether the `async` in hand is the modifier of an arrow rather than a
+   * name: it is when an arrow's parameters follow it on its line — a name and
+   * `=>`, or a parenthesised list `startsArrowExpression` would take — as
+   * TypeScript reads it. `async(x)`, `async (x)` with no `=>` after it,
+   * `async => x`, `async.f` and the word at the end of its line are the name
+   * (`tests/parser/names-declaration-calls.ts`).
+   */
+  asyncArrowAhead(): boolean {
+    if (this.value !== "async") {
+      return false
+    }
+    const next = this.peek()
+    if ((next !== TOK_IDENT && next !== TOK_LPAREN) || !this.aheadOnSameLine()) {
+      return false
+    }
+    const scan = this.scanAfterAhead()
+    if (next === TOK_IDENT) {
+      return scan.kind === TOK_ARROW
+    }
+    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_RPAREN) {
+      return false
+    }
+    return this.arrowParametersAt(this.aheadStart)
+  }
+
+  /** The scan of `startsArrowExpression`, from the `(` at `open`. */
+  arrowParametersAt(open: i32): boolean {
     const scan = new Lexer(this.file.text)
-    scan.pos = this.start
+    scan.pos = open
     scan.next() // `(`
     let depth = 1
     while (depth > 0) {

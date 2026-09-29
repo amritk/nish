@@ -25,13 +25,16 @@
 
 import {
   FLAG_ANGLE,
+  FLAG_ASYNC,
   FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_DEFAULT,
   FLAG_FOR_IN,
   FLAG_USING,
   FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
+  FLAG_GENERATOR,
   FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_READONLY,
@@ -97,6 +100,15 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_SATISFIES) !== 0) {
     name = `${name}+satisfies`
+  }
+  if ((node.flags & FLAG_ASYNC) !== 0) {
+    name = `${name}+async`
+  }
+  if ((node.flags & FLAG_GENERATOR) !== 0) {
+    name = `${name}+generator`
+  }
+  if ((node.flags & FLAG_DEFAULT) !== 0) {
+    name = `${name}+default`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

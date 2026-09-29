@@ -1,1 +1,1 @@
-a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+`declare global` is forbidden in Nish (no global object to augment)

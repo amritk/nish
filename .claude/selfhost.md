@@ -262,26 +262,38 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `N_VAR` with `FLAG_VAR`, `for...in` and `for await` an `N_FOR_OF` with
     `FLAG_FOR_IN` / `FLAG_AWAIT`, a top-level `let` an `N_MODULE_CONST`
     without `FLAG_CONST`, `x?: T` and `static` a field or method with a flag,
-    `a?.b` an `N_MEMBER` (or `N_INDEX`, `N_CALL`) with `FLAG_OPTIONAL`. An
-    operator is the operator node whose text it is: `==`, `in`, `**` and the
-    comma an `N_BINARY`, `typeof`, `void`, `delete`, `await` and `yield` an
-    `N_UNARY`;
+    `a?.b` an `N_MEMBER` (or `N_INDEX`, `N_CALL`) with `FLAG_OPTIONAL`,
+    `async` and `function*` a function, method or arrow with `FLAG_ASYNC` /
+    `FLAG_GENERATOR`, and a default type argument the type parameter with
+    `FLAG_DEFAULT`. An operator is the operator node whose text it is: `==`,
+    `in`, `**` and the comma an `N_BINARY`, `typeof`, `void`, `delete`,
+    `await` and `yield` an `N_UNARY`;
   - it **resembles nothing** → a kind of its own with its child layout written
     beside it: `N_TRY`, `N_WITH`, `N_LABELED`, `N_REGEX`, `N_AS` (with
-    `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `N_SPREAD`;
+    `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `N_SPREAD`,
+    `N_DECORATOR` (around what it decorates), `N_NAMESPACE` (`namespace`,
+    `module` and `declare global`, its body passed over unread) and
+    `N_TYPE_OPERATOR` (`keyof T`);
   - it **differs in what one child is** → the same node with that child, when
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
     `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access.
+    `new a.B()` an `N_NEW` whose callee is the member access, and type
+    parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
+    when written.
 
   The refusal runs before anything else reads the node, so no later rule has
   to know the shape exists. An NL2xxx rule that needs no type is a sweep over
   the module in pass 1, never a rule in the body check: a template's body is
   checked only when something instantiates it, so a rule stated there lets an
-  uninstantiated one compile (`tests/cases/reject_for_await_template`). The
+  uninstantiated one compile (`tests/cases/reject_for_await_template`,
+  `reject_type_keyof_template`). The
   sweep (`refuseUnsupportedForms`) runs on each declaration before it is
-  collected, so a declaration that holds a refused form reports that alone.
+  collected, so a declaration that holds a refused form reports that alone,
+  and it reads a declaration's type parameters first, where the source has
+  them, though the tree keeps them last. A type parameter's constraint is not
+  swept: it is resolved where it is declared, instantiated or not, and reports
+  there.
   `src/ast-text.ts` prints every flag so that `--emit-ast` and
   `tests/parser-oracle.js` compare it. A word the lexer treats as an
   identifier (`var`, `try`, `with`, `in`, `await`, `typeof`, `as`, …) is
@@ -290,7 +302,11 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   not be a name. **Every program the last release compiles must still
   compile, to the same bytes**, and a variable called `typeof` is one: a
   prefix word is an operator only before an operand on its line
-  (`Parser.operandAhead`), an infix one only after an operand, and
+  (`Parser.operandAhead`), an infix one only after an operand, a declaration
+  word only where TypeScript reads it as one — `async` before `function`, an
+  arrow's parameters or a member's name on its line, `namespace` and `module`
+  before a name or a string on theirs, `keyof` before a type on its line
+  (`asyncArrowAhead`, `namespaceAhead`, `keyofAhead`) — and
   `tests/parser/names*.ts` pin the name readings. Check a new word against the
   seed in every position a name can stand, line breaks included, before it
   goes in. A regex is the one token the lexer cannot decide alone: the parser

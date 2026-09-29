@@ -25,7 +25,7 @@ import {
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context"
-import { resolveType } from "./annotations"
+import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { recordGuardFusion } from "./fusion"
@@ -35,9 +35,11 @@ import { rejectDiscardedResult } from "./result"
 import {
   FLAG_AWAIT,
   FLAG_CONST,
+  N_ARROW,
   N_BLOCK,
   N_BREAK,
   N_CALL,
+  N_CLASS,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
@@ -45,8 +47,11 @@ import {
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_IF,
+  N_INTERFACE,
+  N_METHOD,
   N_RETURN,
   N_SWITCH,
   N_THROW,
@@ -434,8 +439,9 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 
 /**
  * WP33 R1: the forms the parser reads for the checker to refuse, over the
- * whole module in source order — the two `for...of` heads here, and the
- * expressions `refuseExpressionForm` names. It is a sweep in pass 1 rather
+ * whole module in source order — the two `for...of` heads here, the
+ * expressions `refuseExpressionForm` names and the types `refuseTypeForm`
+ * does. It is a sweep in pass 1 rather
  * than a rule in `checkForOf` or `checkExpression` because none needs a type,
  * and a body pass 2 checks is not every body: a template nothing instantiates
  * is never checked, and a loop in one would compile. There is no event loop
@@ -443,6 +449,7 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
  */
 export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
   refuseExpressionForm(ctx, node)
+  refuseTypeForm(ctx, node)
   if (node.kind === N_FOR_OF) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
       ctx.error(node, "`for await` is not supported")
@@ -453,9 +460,34 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
       )
     }
   }
-  for (const child of node.children) {
-    refuseUnsupportedForms(ctx, child)
+  // An IDENT's one child is a type parameter's constraint, which is resolved
+  // where it is declared whether or not anything instantiates it, and says
+  // there what it names that it may not.
+  if (node.kind === N_IDENT) {
+    return
   }
+  // A declaration's type parameters are written after its name and kept last,
+  // so they are swept first, in the order the source has them.
+  const slot = typeParameterSlot(node)
+  if (slot >= 0) {
+    refuseUnsupportedForms(ctx, node.children[slot])
+  }
+  for (let i: i32 = 0; i < node.children.length; i++) {
+    if (i !== slot) {
+      refuseUnsupportedForms(ctx, node.children[i])
+    }
+  }
+}
+
+/** The child that holds a declaration's type parameter LIST (`src/nodes.ts`), or -1. */
+const typeParameterSlot = (node: Node): i32 => {
+  if (node.kind === N_FUNCTION || node.kind === N_ARROW || node.kind === N_CLASS) {
+    return 4
+  }
+  if (node.kind === N_METHOD && node.children.length > 4) {
+    return 4
+  }
+  return node.kind === N_INTERFACE ? 2 : -1
 }
 
 /**

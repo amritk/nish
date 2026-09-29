@@ -127,12 +127,14 @@ rejects. This table is the highest-value part of the page.
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | `for (const k in o)` | `` `for...in` is forbidden `` | `for (const x of xs)` over an array, or `for (const k of m.keys())` over a `Map` |
 | a callback stored or returned: `const cb = (n: i32) => n`, a field `cb: (n: i32) => i32` | `An arrow may only be written as the argument for a function-typed parameter` / `` … is a function type, which may only annotate a parameter of a top-level function `` | there are **no function values**; a callback the call names is a [function parameter](#function-parameters) |
-| `type Pair<T>` (a generic alias) | `` expected `=`, found `<` `` (a syntax error) | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
+| `type Pair<T>` (a generic alias) | `Generic type parameters are forbidden on a type alias` | a generic **function**, **class**, **interface** and **method** all work — see below; an alias renames a type that already exists, so it has nothing to specialise |
 | `constructor<T>(x: T)` | a syntax error: `a constructor cannot have type parameters` | put the parameter on the class (`class Box<T>`), or on a method |
 | `h.get<i32>(7)` (type argument at a method call) | `Type arguments are not written at a call site in Nish` | `h.get(7)` — a generic method infers like a generic function |
 | `<T>(p: T) => p.x` (a member of a type parameter) | `` Cannot read `x` of `T`: an unconstrained type parameter has no members `` | `<T extends Point>(p: T) => p.x`, where `Point` is a class or interface that declares `x` |
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
+| `namespace N { }`, `declare global { }`, `@decorator` | forbidden | one module per file; a plain function in place of a decorator |
+| `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, getters/setters | not supported | module `const`s and plain methods |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
