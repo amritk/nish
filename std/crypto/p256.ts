@@ -64,7 +64,7 @@
  * read) to the check of `tests/ct-asm.js`, which refuses any branch, call or
  * secret-indexed access in them on x86-64 and aarch64. fiat's field multiply
  * passes on x86-64 but is not named there: on aarch64 the model misreads a
- * pointer spilled in an `stp` pair, as that fixture's header explains. The
+ * pointer spilled in an `stp` pair (#334), as that fixture's header says. The
  * doubling and the addition are straight lines of calls to the field
  * functions, and the check refuses any call, so they, the table read's loop
  * and the multiply are constant time by construction rather than by that proof.

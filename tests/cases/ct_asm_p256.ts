@@ -18,7 +18,7 @@
 //   argument's data pointer with an `stp` pair and reloads it from the pair's
 //   second slot, which the model looks up by a text it never stored, so it
 //   falls back to "the stack held a secret" and refuses the loads through that
-//   pointer. That is the model's corner, not a secret-indexed load.
+//   pointer. That is the model's corner, not a secret-indexed load (#334).
 // - the doubling and the addition of the window step are straight lines of
 //   calls to these functions; clang does not inline a multiply this size and
 //   the check refuses any call.
