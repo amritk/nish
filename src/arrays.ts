@@ -9,6 +9,7 @@ import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unprove
 import { storesInlineElements, unwrapParens } from "./emit-util"
 import {
   N_ARRAY,
+  N_ARROW,
   N_BINARY,
   N_BLOCK,
   N_CALL,
@@ -832,6 +833,11 @@ const collectAliased = (
   parent: Node,
   out: StringSet
 ): void => {
+  // An arrow argument's body is a function of its own, walked with its own
+  // tables; what it aliases is its business, not the enclosing body's.
+  if (node.kind === N_ARROW) {
+    return
+  }
   if (node.kind === N_IDENT || node.kind === N_MEMBER) {
     const elem = inlineArrayElement(program, table, node)
     if (elem !== "" && !keepsItsName(parent, node)) {
