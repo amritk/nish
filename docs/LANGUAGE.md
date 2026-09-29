@@ -3458,7 +3458,7 @@ choice (WP34 N6).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_f64`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
+| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_i32_literal`, `reject_ct_select_f64`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
 | `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
 
 - **`T` is `u32` or `u64`, one type for every operand.** A mask is a bit
@@ -3470,8 +3470,10 @@ choice (WP34 N6).
   without the compare a boolean would need. Operands of two types are
   `` `ctSelect` needs every operand of one type, got u32 and u64 `` (NL2400),
   since a `u32` mask over `u64` words would leave half of each unselected. The
-  mask is checked against the operand it came from before any other is, so
-  a boolean mask is told the first message, not the second.
+  type is judged at the operand it was read from before any other operand is
+  measured against it, so a boolean mask is told the first message rather than
+  the second, and `ctSelect(m, 0x80000000, 0)` on an `i32` mask is NL2399
+  rather than "does not fit in i32" (`reject_ct_select_i32_literal`).
 - **A bare numeric literal takes its type from the first operand that is not
   one**, wherever it stands: `ctEq(0, x)` and `ctSelect(m, a, 0)` are both
   words of `x`'s and `m`'s type. A fraction is then refused as a fraction
@@ -3506,9 +3508,10 @@ choice (WP34 N6).
   `tests/run.js` compiles every `tests/cases/ct_asm_*` fixture with
   `clang -O2 -S` for x86-64 and aarch64 and reads each function a fixture names
   by its symbol (`tests/ct-asm.js`). It refuses any conditional branch
-  (`j<cc>`, `b.<cond>`, `cbz`, `tbz` and the rest), any call, and any load or
-  store whose address a secret reaches, following secrets through registers,
-  flags and stack slots. The fixtures are both builtins at both widths, a mask
+  (`j<cc>`, `b.<cond>`, `cbz`, `tbz` and the rest), any call or jump out of
+  the function, and any load or store whose address a secret reaches,
+  following secrets through registers, flags and stack slots and erring
+  towards refusal wherever its model of the machine is not exact. The fixtures are both builtins at both widths, a mask
   straight into a select, a 32-byte MAC compare over `u8[]` and a table read
   that loads every entry (`ct_asm_primitives`, `ct_asm_mac`); and
   `ct_asm_refused` holds an early-exit compare and a secret-indexed table

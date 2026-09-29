@@ -173,30 +173,33 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     lead = lead + 1
   }
   const type = checkExpression(ctx, args.children[lead], scope, -1)
-  // Every operand is checked before anything is reported, so an error inside
-  // one is not hidden behind this rule. The type is then judged once, at the
-  // operand it was read from, before a mismatch with it is: a boolean mask
-  // is told the types the builtin takes, not that it differs from `a`.
+  // The type is judged first, at the operand it was read from: a boolean mask
+  // is told the types the builtin takes rather than that it differs from `a`,
+  // and a literal is never measured against a type that was not admissible
+  // (`ctSelect(m, 0x80000000, 0)` on an `i32` mask is NL2399, not "does not
+  // fit in i32"). Every other operand is still checked, so an error inside
+  // one is reported too.
+  const admitted = type === T_U32 || type === T_U64
+  if (type !== T_ERROR && !admitted) {
+    ctx.error(
+      args.children[lead],
+      `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
+    )
+  }
   let other = -1
-  let failed = type === T_ERROR
+  let failed = !admitted
   for (let i = 0; i < arity; i++) {
-    if (i !== lead) {
-      const got = checkExpression(ctx, args.children[i], scope, type)
+    if (i !== lead && (admitted || args.children[i].kind !== N_NUMBER)) {
+      const got = checkExpression(ctx, args.children[i], scope, admitted ? type : -1)
       if (got === T_ERROR) {
         failed = true
-      } else if (got !== type && other < 0) {
+      } else if (admitted && got !== type && other < 0) {
         other = got
       }
     }
   }
   if (failed) {
     return T_ERROR
-  }
-  if (type !== T_U32 && type !== T_U64) {
-    return ctx.errorType(
-      args.children[lead],
-      `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
-    )
   }
   if (other >= 0) {
     const want = ctx.table.typeName(type)

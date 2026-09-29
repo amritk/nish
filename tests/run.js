@@ -2567,10 +2567,13 @@ if (!only || "ct_prelude".includes(only)) {
 // address a secret reaches. `ct_asm_refused` holds one function written to fail each
 // way, and must fail exactly that way, so a check that read nothing cannot pass.
 if (!only || "ct_asm constant time assembly".includes(only)) {
-  if (!has("clang")) {
+  if (!HAS_CLANG) {
     skip("ct_asm: no clang to compile the constant-time fixtures to assembly")
   } else {
     const workDir = path.join(buildDir, "ct-asm")
+    // Emptied first, so a fixture that fails to compile cannot leave the checks below
+    // reading the `.ll` an earlier run wrote.
+    fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
     const fixtures = fs
       .readdirSync(casesDir)
@@ -2611,7 +2614,9 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
           continue
         }
         const asm = fs.readFileSync(s, "utf8")
-        for (const spec of specs) {
+        // A spec that could not be read exactly fails below, in the fixture check,
+        // rather than being run here with a secret it lost.
+        for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
           const body = functionBody(asm, spec.name, target)
           const found = body === null ? [] : ctViolations(body, spec, target)
           const kinds = [...new Set(found.map((v) => v.kind))]
@@ -2636,7 +2641,9 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // through the asm, the first half fails; if the lowering stops needing it, the
     // second does, and the rule's reason for the barrier is out of date.
     const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
-    if (has("opt") && fs.existsSync(primitivesLl)) {
+    if (!HAS_OPT) {
+      skip("ct_asm: no opt, so nothing shows that the barrier is what keeps pickU32 from becoming a select")
+    } else if (fs.existsSync(primitivesLl)) {
       const pickOf = (module) => {
         const o = spawnSync("opt", ["-O2", "-S", "-"], { input: module, encoding: "utf8" })
         const fn = String(o.stdout).match(/define[^\n]*@pickU32\([\s\S]*?\n\}/)
@@ -2674,18 +2681,57 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       }
     }
 
+    // The model's own corners, on hand-written assembly: each of these hides a secret
+    // from a model that is one rule short — flags a `not` leaves alone, a bit-set that
+    // writes its operand, a byte write that keeps the upper bits, a spill reloaded after
+    // the stack pointer moved, a tail call — and each must still be refused.
+    const [x86, arm] = CT_TARGETS
+    const corners = [
+      [x86, "a,b", "load", ["cmpl %esi, %edi", "notl %ecx", "sbbl %eax, %eax", "movl (%rdx,%rax,4), %eax"]],
+      [x86, "b", "load", ["btsl %esi, %eax", "movl (%rdi,%rax,4), %ecx"]],
+      [x86, "b", "load", ["movl %esi, %ecx", "movb $0, %cl", "movl (%rdi,%rcx,4), %eax"]],
+      [x86, "b", "load", ["pushq %rsi", "subq $8, %rsp", "movq 8(%rsp), %rax", "movl (%rdi,%rax,4), %eax"]],
+      [x86, "a", "call", ["jmp helper"]],
+      [arm, "a,b", "load", ["cmp w0, w1", "mls w8, w9, w10, w11", "csetm x2, eq", "ldr w3, [x4, x2]"]],
+      [
+        arm,
+        "a",
+        "load",
+        ["str w0, [sp, #8]", "stp x29, x30, [sp, #-16]!", "ldr w5, [sp, #24]", "ldr w6, [x4, x5]"],
+      ],
+      [arm, "a", "call", ["b helper"]],
+    ]
+    const missed = corners.filter(([target, secret, kind, body]) => {
+      const source = `// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`
+      const [spec] = ctSpecs(source)
+      return !ctViolations(body, spec, target).some((v) => v.kind === kind)
+    })
+    check(
+      `ct_asm: tests/ct-asm.js refuses ${corners.length} hand-written leaks at the corners of its model`,
+      missed.length === 0,
+      missed
+        .map(([target, , kind, body]) => `${target.name}, expected ${kind}:\n  ${body.join("\n  ")}`)
+        .join("\n")
+    )
+
     // The fixtures themselves: every `ct-check` names a function its source declares,
     // and the set still holds a positive case for each builtin and width and one
     // refusal of each kind, so deleting a fixture cannot quietly narrow the check.
     const missing = all.filter((spec) => !spec.found).map((spec) => `${spec.fixture}: ${spec.name}`)
+    const unreadable = all.flatMap((spec) => spec.problems.map((p) => `${spec.fixture}: ${spec.name}: ${p}`))
     const names = new Set(all.map((spec) => spec.name))
     const wanted = ["selectU32", "selectU64", "eqU32", "eqU64", "macEqual"].filter((n) => !names.has(n))
     const expects = new Set(all.map((spec) => spec.expect))
     check(
       `ct_asm: the fixtures name ${all.length} functions, covering both builtins, both widths, the MAC compare, and a refusal of each kind`,
-      missing.length === 0 && wanted.length === 0 && expects.has("branch") && expects.has("load"),
+      missing.length === 0 &&
+        unreadable.length === 0 &&
+        wanted.length === 0 &&
+        expects.has("branch") &&
+        expects.has("load"),
       [
         missing.length > 0 ? `no such function: ${missing.join(", ")}` : "",
+        ...unreadable,
         wanted.length > 0 ? `no ct-check for ${wanted.join(", ")}` : "",
         expects.has("branch") ? "" : "no fixture expects a branch",
         expects.has("load") ? "" : "no fixture expects a secret-indexed load",

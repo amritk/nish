@@ -13,7 +13,9 @@
  *     `jrcxz` on x86-64; `b.<cond>`, `cbz`, `cbnz`, `tbz` and `tbnz` on
  *     aarch64 — whether or not it depends on a secret, because a function
  *     that is straight-line cannot leak through its branches at all;
- *   - **any call**, because the callee is code this check does not read;
+ *   - **any call**, because the callee is code this check does not read —
+ *     and so any jump out of the function too: a `jmp` or `b` to a symbol is a
+ *     tail call, and `br` or an indirect `jmp` goes who knows where;
  *   - **any load or store whose address depends on a secret**.
  *
  * The last is a taint analysis over registers, and it is only as good as what
@@ -23,12 +25,20 @@
  * condition flags included, so `sete` or `csetm` after a secret compare is
  * secret. "Loaded out of an array" means loaded through a pointer that itself
  * came out of memory: an array is a header whose `data` field is loaded first,
- * so the header read is public and the element read behind it is not. A value
- * stored to the stack and loaded back keeps its taint, by the slot's text.
- * The pass runs once, in order, which is exact for straight-line code; code
- * with a conditional branch has already failed. What it does not model is
- * other memory: a secret written through a pointer and read back through
- * another is lost, which the fixtures, small and register-allocated, do not do.
+ * so the header read is public and the element read behind it is not.
+ *
+ * Where the model cannot be exact it errs towards refusing. The flags only ever
+ * gain a secret, since telling apart the instructions that leave them alone is
+ * a table this would get wrong. A write to an 8- or 16-bit register, a lane
+ * insert or a bit-set keeps the taint already in the register. A value stored
+ * to the stack comes back with its taint, found by the slot's text; once the
+ * stack pointer moves that text names another slot, so every slot then reads
+ * as secret if anything secret was ever stored there. The pass runs once, in
+ * order, which is exact for straight-line code; code with a conditional branch
+ * has already failed. What it does not model is other memory: a secret written
+ * through a pointer and read back through another is lost, which the fixtures,
+ * small and register-allocated, do not do. `tests/run.js` holds each of these
+ * corners to a hand-written leak the check must refuse.
  *
  * A fixture says which functions to read and what is secret in comments:
  *
@@ -60,22 +70,54 @@ export const CT_TARGETS = [
   },
 ]
 
+/** Parameter types a fixture may give a function: each arrives in one general register. */
+const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
+
 /**
  * Every `// ct-check:` line of a fixture, with each secret parameter turned into
- * its position from the function's own signature.
+ * its position from the function's own signature. A spec that cannot be read
+ * exactly carries `problems`, which the suite fails on: a misspelt secret would
+ * otherwise leave a register untainted and the check reading as a pass.
  */
 export const ctSpecs = (source) => {
   const specs = []
-  for (const m of source.matchAll(/^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|load))?\s*$/gm)) {
+  for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
+    const m = line.match(/^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|load))?\s*$/)
+    if (m === null) {
+      specs.push({
+        name: line,
+        found: false,
+        problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|load]`"],
+      })
+      continue
+    }
     const [, name, secret, expect] = m
     const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)`))
-    const params = signature === null ? [] : signature[1].split(",").map((p) => p.split(":")[0].trim())
-    const names = secret.split(",")
+    const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
+    const names = params.map((p) => p.split(":")[0].trim())
+    const types = params.map((p) => (p.split(":")[1] ?? "").trim())
+    const problems = []
+    // Parameters are matched to argument registers by position, which holds
+    // only while every one takes a general register and there are no more of
+    // them than the smaller target has (six on x86-64).
+    types.forEach((type, i) => {
+      if (!REGISTER_PARAM.test(type)) {
+        problems.push(`parameter ${names[i]}: ${type} does not arrive in a general register`)
+      }
+    })
+    if (params.length > 6) {
+      problems.push(`${params.length} parameters: past six, x86-64 passes them on the stack`)
+    }
+    const secrets = secret.split(",").filter((n) => n !== "contents")
+    for (const unknown of secrets.filter((n) => !names.includes(n))) {
+      problems.push(`secret=${unknown} names no parameter`)
+    }
     specs.push({
       name,
       found: signature !== null,
-      contents: names.includes("contents"),
-      secretArgs: names.filter((n) => n !== "contents").map((n) => params.indexOf(n)),
+      problems,
+      contents: secret.split(",").includes("contents"),
+      secretArgs: secrets.map((n) => names.indexOf(n)),
       expect: expect ?? null,
     })
   }
@@ -192,7 +234,7 @@ const armOperand = (text) => {
   if (text.startsWith("[")) {
     const inside = text.slice(1, text.indexOf("]"))
     const address = [...inside.matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
-    return { memory: true, address, registers: address, text: `[${inside}]` }
+    return { memory: true, address, registers: address, text: `[${inside}]`, writeback: text.endsWith("!") }
   }
   const registers = [...text.matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
   return { memory: false, address: [], registers, text }
@@ -214,6 +256,7 @@ class Taint {
     this.secret = new Set()
     this.loaded = new Set()
     this.slots = new Map()
+    this.stackSecret = false
     this.stack = []
     this.contents = spec.contents
     for (const index of spec.secretArgs) {
@@ -248,13 +291,40 @@ class Taint {
   }
 
   /**
+   * The flags only ever gain a secret: an instruction that leaves them alone
+   * must not clear one, and telling those apart per mnemonic is a table this
+   * check would get wrong. A false alarm is a fixture to look at; a cleared
+   * taint would be a pass nobody earned.
+   */
+  taintFlags(secret) {
+    if (secret) {
+      this.secret.add("flags")
+    }
+  }
+
+  /** A store to the stack: remembered by the slot's text, and in `stackSecret` for good. */
+  store(operand, value) {
+    this.slots.set(operand.text, value)
+    this.stackSecret = this.stackSecret || value.secret
+  }
+
+  /**
+   * The stack pointer moved, so the same text now names another slot. What is
+   * loaded from the stack after this is secret if anything secret was ever
+   * stored there.
+   */
+  moveStack() {
+    this.slots.clear()
+  }
+
+  /**
    * What a load from `operand` yields: a stack slot gives back what was stored
    * there; an element read through a loaded pointer is secret under `contents`;
    * anything else is public, and is itself a loaded value.
    */
   loadFrom(operand) {
-    if (isStackSlot(operand) && this.slots.has(operand.text)) {
-      return this.slots.get(operand.text)
+    if (isStackSlot(operand)) {
+      return this.slots.get(operand.text) ?? { secret: this.stackSecret, loaded: true }
     }
     return { secret: this.contents && this.anyLoaded(operand.address), loaded: true }
   }
@@ -263,7 +333,11 @@ class Taint {
 const X86_BRANCH = /^(j(?!mp\b)[a-z]+|loop\w*|j[er]?cxz)$/
 const X86_OVERWRITE =
   /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf|bsf|bsr|tzcnt|lzcnt|popcnt)/
-const X86_COMPARE = /^(cmp|test|bt|v?u?comis|v?ptest)/
+const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
+/** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers. */
+const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
+/** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
+const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
 const X86_READS_FLAGS = /^(set|cmov|sbb|adc|rcl|rcr)/
 const X86_ZERO_IDIOM = /^(v?p?xor|sub|v?xorp[sd]|v?psub[bwdq])/
 const X86_WIDE = /^(i?mul|i?div)[bwlq]?$/
@@ -276,12 +350,12 @@ const stepX86 = (t, mnemonic, operands) => {
   if (mnemonic.startsWith("call")) {
     return "call"
   }
-  if (
-    mnemonic.startsWith("ret") ||
-    mnemonic === "jmp" ||
-    mnemonic.startsWith("nop") ||
-    mnemonic === "endbr64"
-  ) {
+  // A jump to a local label is control flow inside the function; one anywhere
+  // else is a tail call or an indirect jump, code this check does not read.
+  if (mnemonic === "jmp") {
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : "call"
+  }
+  if (mnemonic.startsWith("ret") || mnemonic.startsWith("nop") || mnemonic === "endbr64") {
     return null
   }
   // `lea` computes an address and touches no memory, so its operand is read as
@@ -298,12 +372,16 @@ const stepX86 = (t, mnemonic, operands) => {
     return null
   }
   if (mnemonic.startsWith("push")) {
-    t.stack.push({ secret: t.anySecret(ops[0].registers), loaded: t.anyLoaded(ops[0].registers) })
+    const secret = t.anySecret(ops[0].registers)
+    t.stack.push({ secret, loaded: t.anyLoaded(ops[0].registers) })
+    t.stackSecret = t.stackSecret || secret
+    t.moveStack()
     return null
   }
   if (mnemonic.startsWith("pop")) {
-    const top = t.stack.pop() ?? { secret: false, loaded: true }
+    const top = t.stack.pop() ?? { secret: t.stackSecret, loaded: true }
     t.set(ops[0].registers[0], top.secret, top.loaded)
+    t.moveStack()
     return null
   }
   const readsFlags = X86_READS_FLAGS.test(mnemonic)
@@ -322,14 +400,14 @@ const stepX86 = (t, mnemonic, operands) => {
     }
   }
   if (X86_COMPARE.test(mnemonic)) {
-    t.set("flags", secret || (dest !== null && t.anySecret(dest.registers)), false)
+    t.taintFlags(secret || (dest !== null && t.anySecret(dest.registers)))
     return null
   }
   if (X86_WIDE.test(mnemonic) && ops.length === 1) {
     const all = secret || t.anySecret(["a", "d"])
     t.set("a", all, false)
     t.set("d", all, false)
-    t.set("flags", all, false)
+    t.taintFlags(all)
     return null
   }
   if (dest === null) {
@@ -337,7 +415,9 @@ const stepX86 = (t, mnemonic, operands) => {
   }
   const zeroIdiom =
     ops.length === 2 && !dest.memory && ops[0].text === ops[1].text && X86_ZERO_IDIOM.test(mnemonic)
-  const overwrite = zeroIdiom || X86_OVERWRITE.test(mnemonic) || ops.length >= 3
+  const partial = !dest.memory && X86_PARTIAL.test(dest.text)
+  const merge = partial || X86_MERGE.test(mnemonic)
+  const overwrite = !merge && (zeroIdiom || X86_OVERWRITE.test(mnemonic) || ops.length >= 3)
   if (!overwrite) {
     // A two-operand instruction reads its destination too: `andl %esi, %eax`.
     const before = dest.memory ? t.loadFrom(dest) : { secret: t.anySecret(dest.registers), loaded: false }
@@ -350,14 +430,17 @@ const stepX86 = (t, mnemonic, operands) => {
   }
   if (dest.memory) {
     if (isStackSlot(dest)) {
-      t.slots.set(dest.text, { secret, loaded })
+      t.store(dest, { secret, loaded })
     }
   } else if (dest.registers.length > 0) {
     t.set(dest.registers[0], secret, loaded)
+    if (dest.registers[0] === "sp") {
+      t.moveStack()
+    }
   }
-  if (!X86_OVERWRITE.test(mnemonic)) {
-    t.set("flags", secret, false)
-  }
+  // Whether this one writes the flags is not asked: they only gain taint, so
+  // a `mov` that leaves them alone costs at most a false alarm.
+  t.taintFlags(secret)
   return null
 }
 
@@ -367,6 +450,7 @@ const ARM_STORE = /^(st[rpu]\w*|st[1-4]|stlr\w*|stnp)$/
 const ARM_LOAD = /^(ld[rpu]\w*|ld[1-4]\w*|ldar\w*|ldnp|ldx\w*)$/
 const ARM_COMPARE = /^(cmp|cmn|tst|f?ccmp|f?ccmn|fcmpe?)$/
 const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp|f?ccmn|fcsel)$/
+const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
 const ARM_READ_MODIFY_WRITE = /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx)$/
 
 /** One aarch64 instruction, likewise. The destination is the first operand. */
@@ -377,20 +461,36 @@ const stepArm = (t, mnemonic, operands) => {
   if (ARM_CALL.test(mnemonic)) {
     return "call"
   }
+  // `b` to a local label stays inside the function; to a symbol it is a tail
+  // call, and `br` jumps through a register to code this check does not read.
+  if (mnemonic === "b") {
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : "call"
+  }
+  if (mnemonic === "br") {
+    return "call"
+  }
   const ops = operands.map(armOperand)
   for (const op of ops) {
     if (op.memory && t.anySecret(op.address)) {
       return "load"
     }
   }
-  if (mnemonic === "ret" || mnemonic === "b" || mnemonic === "nop" || mnemonic === "br") {
+  if (mnemonic === "ret" || mnemonic === "nop") {
     return null
   }
   const memoryAt = ops.findIndex((op) => op.memory)
+  // Pre-index (`[sp, #-16]!`) and post-index (`[sp], #16`) both move the base.
+  const movesStack =
+    memoryAt >= 0 &&
+    ops[memoryAt].address[0] === "sp" &&
+    (ops[memoryAt].writeback || memoryAt < ops.length - 1)
   if (ARM_STORE.test(mnemonic) && memoryAt > 0) {
     const stored = ops.slice(0, memoryAt).flatMap((op) => op.registers)
     if (isStackSlot(ops[memoryAt])) {
-      t.slots.set(ops[memoryAt].text, { secret: t.anySecret(stored), loaded: t.anyLoaded(stored) })
+      t.store(ops[memoryAt], { secret: t.anySecret(stored), loaded: t.anyLoaded(stored) })
+    }
+    if (movesStack) {
+      t.moveStack()
     }
     return null
   }
@@ -401,13 +501,16 @@ const stepArm = (t, mnemonic, operands) => {
         t.set(r, value.secret, value.loaded)
       }
     }
+    if (movesStack) {
+      t.moveStack()
+    }
     return null
   }
   const readsFlags = ARM_READS_FLAGS.test(mnemonic)
   const flagSecret = readsFlags && t.secret.has("flags")
   if (ARM_COMPARE.test(mnemonic)) {
     const regs = ops.flatMap((op) => op.registers)
-    t.set("flags", flagSecret || t.anySecret(regs), false)
+    t.taintFlags(flagSecret || t.anySecret(regs))
     return null
   }
   if (ops.length === 0) {
@@ -423,9 +526,12 @@ const stepArm = (t, mnemonic, operands) => {
   const loaded = !zeroIdiom && t.anyLoaded(sourceRegs)
   if (dest.registers.length > 0) {
     t.set(dest.registers[0], secret, loaded)
+    if (dest.registers[0] === "sp") {
+      t.moveStack()
+    }
   }
-  if (/s$/.test(mnemonic) && !/^(ins|movs)$/.test(mnemonic)) {
-    t.set("flags", secret, false)
+  if (ARM_SETS_FLAGS.test(mnemonic)) {
+    t.taintFlags(secret)
   }
   return null
 }
