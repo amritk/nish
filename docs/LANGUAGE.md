@@ -435,7 +435,15 @@ and fit the width: `const b: u8 = -1` is
 `` Literal `256` does not fit in u8 ``
 (`tests/cases/reject_u_literal_too_wide`). The largest `u64` values are past
 2^53 and cannot be written at all; build them arithmetically
-(`toU64(0) - toU64(1)` is 2^64 - 1, `tests/cases/u_print`).
+(`toU64(0) - toU64(1)` is 2^64 - 1, `tests/cases/u_print`). The same holds for
+the `i64` minimum, -2^63: `-9223372036854775808` is refused like any literal
+past 2^53 (NL2055), although 2^63 happens to be an exact double and its
+negation fits. The 2^53 bound is what keeps every literal exact in both
+readings, and admitting this value would be a one-literal exception to it for
+no gain: in the TypeScript reading `i64` is `number`, so the value is a double
+there anyway (NL8009). Build it from the widest literal instead:
+`const lo: i64 = -9007199254740992; const min: i64 = lo << 10;` is -2^63
+(`tests/cases/neg_literal_i64_min`).
 
 ### Unsigned integers
 
@@ -3681,7 +3689,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). `null` when the path cannot be read *as a file* — missing, a **directory**, a parent that cannot be searched, a pipe with no length to ask for — which is the same set `readFileSync` prints `nish: cannot read <path>` for. It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
-| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked` |
+| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
@@ -3949,13 +3957,14 @@ whole.
   bare `fptosi`, whose answer for NaN or an infinity is poison. **NaN is `0`,
   a fraction truncates toward zero** (`2.7` is `2`, `-0.5` is `0`), and **an
   infinity or a value past the `i64` range saturates** to the `i64` bound on
-  its side. `fill` then clamps that bound to an end of the array, so
-  `a.fill(v, 0, Infinity)` fills all of it, as `Uint8Array.prototype.fill`
-  does (`bytes_offset_float`). `set` fails its range check with the saturated
-  offset in the message — `slice out of range: [9223372036854775807,
-  -9223372036854775808) of length 4` for `1e300` or `Infinity`, where the end
-  has wrapped — and exits 1 where JavaScript throws a `RangeError`
-  (`bytes_set_float_oob`, `bytes_set_float_panic`).
+  its side. `fill` then clamps that bound to an end of the array, so in f64
+  mode `a.fill(v, 0, 1 / 0)` fills all of it, as `Uint8Array.prototype.fill`
+  does (`bytes_offset_float`); `Infinity` itself is not a name in Nish. `set`
+  fails its range check with the saturated offset in the message —
+  `slice out of range: [9223372036854775807, -9223372036854775808) of length 4`
+  for `1e300` or an infinity, where the end has wrapped — and exits 1 where
+  JavaScript throws a `RangeError` (`bytes_set_float_oob`,
+  `bytes_set_float_panic`).
 - **An unsigned offset is never negative**, whatever its width. A `u64` of
   2^63 or more has the `i64` sign bit set, and `fill` still reads it as past
   the end: as a start it fills nothing, and as an end it fills to the length
