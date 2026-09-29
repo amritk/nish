@@ -243,9 +243,14 @@ export class Checker {
         refuseUnsupportedForms(this.ctx, stmt)
       }
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
+        const refused = this.ctx.errored
         const info = this.program.struct(stmt.children[0].text)
         if (info !== null && info.decl === stmt) {
           collectStructMembers(this.ctx, info)
+          // A struct the sweep refused is registered, so its name resolves,
+          // but it has no layout worth checking: `implements` and definite
+          // assignment would be a second diagnostic about the same declaration.
+          info.poisoned = info.poisoned || refused
         }
         // WP18 G6: a generic one's constraints, for the reason
         // `registerTemplate` resolves a function's. In this loop rather than
@@ -279,7 +284,7 @@ export class Checker {
     // and definite assignment needs the fields.
     for (const info of this.declared) {
       this.ctx.errored = false
-      if (info.kind === STRUCT_CLASS) {
+      if (info.kind === STRUCT_CLASS && !info.poisoned) {
         checkImplements(this.ctx, info)
         checkDefiniteAssignment(this.ctx, info)
       }
