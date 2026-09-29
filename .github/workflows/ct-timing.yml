@@ -127,6 +127,7 @@ jobs:
       - name: Open or update the ct-timing issue
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           failed=0
@@ -168,13 +169,12 @@ jobs:
             echo "Both rows ran and nothing was above the threshold."
             exit 0
           fi
-          repo="$GITHUB_REPOSITORY"
-          gh label create ct-timing --repo "$repo" --color d93f0b \
+          gh label create ct-timing --color d93f0b \
             --description "The weekly constant-time timing run found a difference or could not run" 2>/dev/null || true
-          number="$(gh issue list --repo "$repo" --label ct-timing --state open --json number --jq '.[0].number // empty')"
+          number="$(gh issue list --label ct-timing --state open --json number --jq '.[0].number // empty')"
           if [ -n "$number" ]; then
-            gh issue comment "$number" --repo "$repo" --body-file body.md
+            gh issue comment "$number" --body-file body.md
           else
-            gh issue create --repo "$repo" --label ct-timing \
+            gh issue create --label ct-timing \
               --title "ct-timing: the weekly timing run needs a look" --body-file body.md
           fi

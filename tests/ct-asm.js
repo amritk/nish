@@ -15,8 +15,8 @@
  *     that is straight-line cannot leak through its branches at all;
  *   - **any call to code this check does not read** — and so any jump out of
  *     the function too: a `jmp` or `b` to a symbol is a tail call, and `br` or
- *     an indirect `jmp` goes who knows where. The one call it follows is to
- *     another function the same fixture checks (below);
+ *     an indirect `jmp` goes who knows where. A call to a function whose body
+ *     is in the same listing is not refused but followed (below);
  *   - **any load or store whose address depends on a secret**.
  *
  * The last is a taint analysis over registers, and it is only as good as what
@@ -40,21 +40,15 @@
  * stack, but one written anywhere else is refused (`escape`), because the model
  * could no longer tell which writes land in the frame.
  *
- * **A call to a checked function.** A ladder step or a window step is a
- * sequence of field operations that LLVM does not inline, so it calls them.
- * Such a call is followed, not refused, when the callee is itself named by a
- * `// ct-check:` line of the same fixture (and so is held to this check on its
- * own), and when what the callee might do is something this model can account
- * for: it makes no call itself; it stores only through pointers it loaded (the
- * `data` of the arrays it was handed) or into its own frame; it is checked with
- * `secret=contents` whenever anything the caller passes may hold a secret; no
- * argument register the callee reads as public is secret here or was loaded
- * from memory; and no array header on the stack that it is handed holds a
- * secret. The callee is read to find how far before and past each `data`
- * pointer it stores, and after the call every stack byte in that range around
- * the start of any array this function laid out on its stack is secret, as is
- * every byte the model has no record of, every element read through a loaded
- * pointer from then on, and every register the call may overwrite.
+ * **A call is followed into the callee.** A ladder step or a window step is
+ * a sequence of field operations that LLVM does not inline, so it calls them.
+ * When the callee's body is in the same listing, the call is not refused: the
+ * callee is read on the caller's own state, from a return address pushed where
+ * the call pushes it, so its arguments carry exactly the taint they have, what
+ * it stores into the caller's frame lands in the bytes it lands in, and a
+ * violation inside it is reported at the call. A callee elsewhere, the
+ * runtime's for one, is code this check does not read, and a chain of calls
+ * deeper than `CALL_DEPTH` is refused rather than followed.
  *
  * Where the model cannot be exact it errs towards refusing. The flags only ever
  * gain a secret, since telling apart the instructions that leave them alone is
@@ -63,10 +57,9 @@
  * width or place this cannot tell only ever adds taint to the bytes it may
  * have written, and a read it cannot place is secret if any stack byte might
  * be. The pass runs once, in order, which is exact for straight-line code; code
- * with a conditional branch has already failed. What it does not model is
- * other memory: a secret written through a pointer and read back through
- * another is lost, which the fixtures, small and register-allocated, do not
- * do. `tests/run.js` holds each of these corners to a hand-written leak the
+ * with a conditional branch has already failed. Memory other than the stack
+ * is not followed byte by byte: a secret stored there makes every element read
+ * from then on secret, since it could come back through another pointer. `tests/run.js` holds each of these corners to a hand-written leak the
  * check must refuse; the stack and call rules' own corners are at the foot of
  * this file and are checked when it loads; and `ct_asm_x25519` holds the call
  * rule to one leak in real compiler output.
@@ -91,20 +84,18 @@ const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
  * Every `// ct-check:` line of a fixture, with each secret parameter turned into
  * its position from the function's own signature. A spec that cannot be read
  * exactly carries `problems`, which the suite fails on: a misspelt secret would
- * otherwise leave a register untainted and the check reading as a pass. Every
- * spec also carries `callable`, the fixture's readable specs by name, which is
- * what a call from one checked function to another is judged against.
+ * otherwise leave a register untainted and the check reading as a pass. Each
+ * spec also carries the parameter and return types, which is what
+ * `tests/ct-timing.js` calls the function with.
  */
 export const ctSpecs = (source) => {
   const specs = []
-  const callable = new Map()
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
     const m = line.match(/^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|load))?\s*$/)
     if (m === null) {
       specs.push({
         name: line,
         problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|load]`"],
-        callable,
       })
       continue
     }
@@ -129,21 +120,15 @@ export const ctSpecs = (source) => {
     for (const unknown of secrets.filter((n) => !names.includes(n))) {
       problems.push(`secret=${unknown} names no parameter`)
     }
-    const spec = {
+    specs.push({
       name,
       problems,
       contents: secret.split(",").includes("contents"),
       secretArgs: secrets.map((n) => names.indexOf(n)),
-      params: params.length,
       types,
       returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
       expect: expect ?? null,
-      callable,
-    }
-    specs.push(spec)
-    if (problems.length === 0) {
-      callable.set(name, spec)
-    }
+    })
   }
   return specs
 }
@@ -281,6 +266,8 @@ const x86Operand = (text) => {
 }
 
 const ARM_REGISTER = /\b(?:[xw]\d+|[vqdshb]\d+(?:\.\w+)?|sp|wsp|xzr|wzr)\b/g
+/** `ARM_REGISTER` without the `g`, whose `test` would otherwise keep a position between calls. */
+const ARM_ONE_REGISTER = new RegExp(ARM_REGISTER.source)
 
 const armOperand = (text) => {
   if (text.startsWith("[")) {
@@ -290,11 +277,8 @@ const armOperand = (text) => {
       .map((p) => p.trim())
     const address = [...parts.join(",").matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
     const second = parts[1]
-    const indexed = second !== undefined && new RegExp(ARM_REGISTER.source).test(second)
-    let disp = 0
-    if (second !== undefined && !indexed) {
-      disp = immediate(second)
-    }
+    const indexed = second !== undefined && ARM_ONE_REGISTER.test(second)
+    const disp = second === undefined || indexed ? 0 : immediate(second)
     return {
       memory: true,
       address,
@@ -371,18 +355,13 @@ const armWidth = (mnemonic, op) => {
   return width === undefined ? [16, false] : [width, true]
 }
 
-/** Nish's array header, `{ i64 length, i64 capacity, i8* data }`: what an array argument points at. */
-const ARRAY_HEADER_BYTES = 24
-
-/** The effects of a callee this model must account for, per listing and name. */
-const SUMMARIES = new WeakMap()
+/** How deep a chain of followed calls may go before the model stops and refuses. */
+const CALL_DEPTH = 8
 
 /**
  * Taint state: per register, whether it is secret, whether it came out of
  * memory (a loaded pointer, whose element reads are secret under `contents`),
- * whether it is exactly a word loaded from memory (`fresh`, which a callee's
- * store extent is measured from), and which stack offset it holds, if it
- * holds a stack address. `flags` is the condition register, as a register of
+ * and which stack offset it holds, if it holds a stack address. `flags` is the condition register, as a register of
  * its own. `sp` is the stack pointer's offset from its value on entry, or
  * `null` once an instruction moves it by something this cannot follow.
  */
@@ -391,17 +370,14 @@ class Taint {
     this.target = target
     this.secret = new Set()
     this.loaded = new Set()
-    this.fresh = new Set()
     this.stackAt = new Map()
     this.sp = 0
     this.bytes = new Map()
     this.unknownSecret = false
-    this.escaped = new Set()
-    this.escapedSomewhere = false
     this.contents = spec.contents
-    this.callable = spec.callable ?? new Map()
     this.listing = null
-    this.summary = null
+    this.depth = 0
+    this.found = []
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
     for (const index of spec.secretArgs) {
@@ -436,12 +412,11 @@ class Taint {
       secret: this.anySecret(op.registers),
       loaded: this.anyLoaded(op.registers),
       stack: single === null ? undefined : this.stackOf(single),
-      fresh: single !== null && this.fresh.has(single),
     }
   }
 
   set(register, secret, loaded) {
-    this.setValue(register, { secret, loaded, stack: undefined, fresh: false })
+    this.setValue(register, { secret, loaded, stack: undefined })
   }
 
   setValue(register, value) {
@@ -462,11 +437,6 @@ class Taint {
     } else {
       this.loaded.delete(register)
     }
-    if (value.fresh) {
-      this.fresh.add(register)
-    } else {
-      this.fresh.delete(register)
-    }
     if (value.stack === undefined) {
       this.stackAt.delete(register)
     } else {
@@ -486,8 +456,9 @@ class Taint {
     }
   }
 
+  /** The stack pointer moves by `delta`, or by an amount this cannot follow when `delta` is `null`. */
   moveSp(delta) {
-    this.sp = this.sp === null ? null : this.sp + delta
+    this.sp = this.sp === null || delta === null ? null : this.sp + delta
   }
 
   /** Where a memory operand points: `{ stack, at }`, `at` the stack offset or `null` when it cannot be placed. */
@@ -509,7 +480,7 @@ class Taint {
         secret = secret || b.secret
         stack = stack || b.stack !== undefined
       }
-      return { secret, loaded: true, stack: stack ? null : undefined, fresh: false }
+      return { secret, loaded: true, stack: stack ? null : undefined }
     }
     const first = this.bytes.get(at)
     let whole = first !== undefined && first.from === at && first.width === width
@@ -530,9 +501,9 @@ class Taint {
       stack = stack || b.stack !== undefined
     }
     if (whole) {
-      return { secret: first.secret, loaded: first.loaded, stack: first.stack, fresh: first.fresh }
+      return { secret: first.secret, loaded: first.loaded, stack: first.stack }
     }
-    return { secret, loaded, stack: stack ? null : undefined, fresh: false }
+    return { secret, loaded, stack: stack ? null : undefined }
   }
 
   /**
@@ -540,13 +511,6 @@ class Taint {
    * or one this cannot place, only adds taint to what it may have written.
    */
   writeStack(at, width, value, exact) {
-    if (value.stack !== undefined) {
-      if (typeof value.stack === "number") {
-        this.escaped.add(value.stack)
-      } else {
-        this.escapedSomewhere = true
-      }
-    }
     if (at === null) {
       if (value.secret) {
         this.unknownSecret = true
@@ -554,7 +518,7 @@ class Taint {
           b.secret = true
         }
       }
-      return null
+      return
     }
     for (let i = 0; i < width; i++) {
       const old = this.bytes.get(at + i)
@@ -571,7 +535,6 @@ class Taint {
         old.from = null
       }
     }
-    return null
   }
 
   /** A load: from the stack, what was stored there; through a loaded pointer, secret under `contents`. */
@@ -580,122 +543,57 @@ class Taint {
     if (place.stack) {
       return this.readStack(place.at, width)
     }
-    return {
-      secret: this.contents && this.anyLoaded(op.address),
-      loaded: true,
-      stack: undefined,
-      fresh: true,
-    }
+    return { secret: this.contents && this.anyLoaded(op.address), loaded: true, stack: undefined }
   }
 
-  /** A store through `op`; a stack address written anywhere but the stack is refused. */
+  /**
+   * A store through `op`. A stack address written anywhere but the stack is
+   * refused, since the frame could then be written through memory this does
+   * not follow; a secret written anywhere but the stack makes every element
+   * read from then on secret, since it could be read back through another
+   * pointer.
+   */
   storeTo(op, width, exact, value) {
     const place = this.addressOf(op)
     if (place.stack) {
-      // A callee's own frame is below where the stack pointer was on entry;
-      // at or above it is the return address and the caller's frame.
-      if (this.summary !== null && (place.at === null || place.at >= 0)) {
-        this.summary.otherStores = true
-      }
-      return this.writeStack(place.at, width, value, exact)
+      this.writeStack(place.at, width, value, exact)
+      return null
     }
     if (value.stack !== undefined) {
       return "escape"
     }
-    if (this.summary !== null) {
-      // How far past a `data` pointer the callee writes, when it writes
-      // through one it loaded and has not moved; anything else is unbounded.
-      if (
-        op.base !== null &&
-        this.fresh.has(op.base) &&
-        this.loaded.has(op.base) &&
-        op.index === null &&
-        op.disp !== null
-      ) {
-        this.summary.low = Math.min(this.summary.low, op.disp)
-        this.summary.extent = Math.max(this.summary.extent, op.disp + width)
-      } else if (this.anyLoaded(op.address)) {
-        this.summary.extent = Number.POSITIVE_INFINITY
-      } else {
-        this.summary.otherStores = true
-      }
+    if (value.secret) {
+      this.contents = true
     }
     return null
   }
 
-  /** Every byte from `from` for `length` bytes becomes secret; with no bound, every byte from `from` on. */
-  poison(from, length) {
-    if (length === Number.POSITIVE_INFINITY) {
-      for (const [at, b] of this.bytes) {
-        if (at >= from) {
-          b.secret = true
-          b.loaded = true
-          b.from = null
-        }
-      }
-      return
-    }
-    for (let i = 0; i < length; i++) {
-      this.bytes.set(from + i, { secret: true, loaded: true, stack: undefined, from: null, width: 1 })
-    }
-  }
-
   /**
-   * A call or tail call to `operand`. Answers `"call"` unless the callee is a
-   * function this fixture checks and its effects are ones this model can
-   * account for (the header of this file lists them), and then applies them.
+   * A call (`tail` false) or tail call to `operands`. A function whose body is
+   * in the same listing is followed: its body is walked on this same state, so
+   * its arguments carry exactly the taint they have here, what it stores to
+   * this frame lands in the bytes it lands in, and a violation inside it is
+   * reported at the call. Anything else is code this check does not read.
    */
-  call(operands) {
-    if (this.summary !== null) {
-      this.summary.calls = true
-    }
+  call(operands, tail) {
     const symbol = operands.length === 1 ? operands[0].replace(/@PLT$/, "") : ""
-    const callee = this.callable.get(symbol)
-    if (callee === undefined || callee.expect !== null || this.listing === null) {
+    const body =
+      this.listing === null || symbol.length === 0 ? null : functionBody(this.listing, symbol, this.target)
+    if (body === null || this.depth >= CALL_DEPTH) {
       return "call"
     }
-    const effects = calleeEffects(this.listing, callee, this.target)
-    if (effects === null || effects.calls || effects.otherStores) {
-      return "call"
+    const returnAddress = tail ? 0 : this.target.returnAddress
+    this.moveSp(-returnAddress)
+    this.depth++
+    const outer = this.found
+    this.found = []
+    walk(this, body)
+    for (const v of this.found) {
+      outer.push({ kind: v.kind, line: `${symbol}: ${v.line}` })
     }
-    const anySecretOnStack = this.unknownSecret || [...this.bytes.values()].some((b) => b.secret)
-    if (!callee.contents && (this.contents || anySecretOnStack)) {
-      return "call"
-    }
-    for (let i = 0; i < callee.params; i++) {
-      const r = this.target.args[i]
-      if ((this.secret.has(r) && !callee.secretArgs.includes(i)) || this.loaded.has(r)) {
-        return "call"
-      }
-      const at = this.stackOf(r)
-      if (at === null || (at !== undefined && this.readStack(at, ARRAY_HEADER_BYTES).secret)) {
-        return "call"
-      }
-    }
-    if (this.escapedSomewhere) {
-      this.poison(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY)
-    }
-    for (const from of this.escaped) {
-      this.poison(from + effects.low, effects.extent - effects.low)
-    }
-    // What the callee stored through an array's `data` is secret wherever the
-    // array lives, heap or stack, so element reads from here on are secret
-    // whatever this function's own spec said.
-    if (effects.extent > 0 || effects.low < 0) {
-      this.contents = true
-    }
-    // What the callee left below the stack pointer, and anything this has no
-    // record of, may be a secret now.
-    for (const [at, b] of this.bytes) {
-      if (this.sp === null || at < this.sp) {
-        b.secret = true
-      }
-    }
-    this.unknownSecret = true
-    for (const r of this.target.callerSaved) {
-      this.setValue(r, { secret: true, loaded: false, stack: undefined, fresh: false })
-    }
-    this.secret.add("flags")
+    this.found = outer
+    this.depth--
+    this.moveSp(returnAddress)
     return null
   }
 }
@@ -711,8 +609,14 @@ const X86_COPY = /^(mov[bwlq]?|movabsq)$/
 const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
 /** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers. */
 const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
-/** Three operands, and the last is read as well as written. */
-const X86_THREE_READS_DEST = /^(shld|shrd)[wlq]?$/
+/**
+ * Three operands, and the last is only written. Any other three-operand
+ * instruction is read as reading its destination too (`shld`, a fused
+ * multiply-add), because a wrong guess that way costs a false alarm and the
+ * other way a missed leak.
+ */
+const X86_THREE_OVERWRITE =
+  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m))/
 /** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
 const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
 const X86_READS_FLAGS = /^(set|cmov|sbb|adc|adox|rcl|rcr)/
@@ -725,13 +629,13 @@ const stepX86 = (t, mnemonic, operands) => {
     return "branch"
   }
   if (mnemonic.startsWith("call")) {
-    return t.call(operands)
+    return t.call(operands, false)
   }
   // A jump to a local label is control flow inside the function; one anywhere
-  // else is a tail call or an indirect jump, code this check does not read
-  // unless it is a function the fixture checks.
+  // else is a tail call, followed like a call, or an indirect jump, code this
+  // check does not read.
   if (X86_JUMP.test(mnemonic)) {
-    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands)
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands, true)
   }
   if (mnemonic.startsWith("ret") || mnemonic.startsWith("nop") || mnemonic === "endbr64") {
     return null
@@ -762,7 +666,8 @@ const stepX86 = (t, mnemonic, operands) => {
   if (/^push[wlq]?$/.test(mnemonic)) {
     const value = ops[0].memory ? t.loadFrom(ops[0], 8) : t.valueOf(ops[0])
     t.moveSp(-8)
-    return t.writeStack(t.sp, 8, { ...value, fresh: false }, true)
+    t.writeStack(t.sp, 8, value, true)
+    return null
   }
   if (/^pop[wlq]?$/.test(mnemonic)) {
     const top = t.readStack(t.sp, 8)
@@ -792,13 +697,18 @@ const stepX86 = (t, mnemonic, operands) => {
     const value = op.memory && !lea ? t.loadFrom(op, width) : t.valueOf(op)
     secret = secret || value.secret
     loaded = loaded || value.loaded
-    stack = stack || value.stack !== undefined || (lea && op.address.some((r) => t.isStack(r)))
+    stack = stack || value.stack !== undefined
     copied = value
+  }
+  // What the last operand held: read by a compare, and by an instruction that
+  // modifies rather than overwrites it.
+  let old = null
+  if (dest !== null && !lea) {
+    old = dest.memory ? t.loadFrom(dest, width) : t.valueOf(dest)
   }
   if (X86_COMPARE.test(mnemonic)) {
     // A compare reads both operands; `sources` stopped short of the last.
-    const last = dest.memory ? t.loadFrom(dest, width) : t.valueOf(dest)
-    t.taintFlags(secret || last.secret)
+    t.taintFlags(secret || old.secret)
     return null
   }
   if (X86_WIDE.test(mnemonic) && ops.length === 1) {
@@ -817,8 +727,7 @@ const stepX86 = (t, mnemonic, operands) => {
   const merge = partial || X86_MERGE.test(mnemonic)
   const overwrite =
     !merge &&
-    (zeroIdiom || X86_OVERWRITE.test(mnemonic) || (ops.length >= 3 && !X86_THREE_READS_DEST.test(mnemonic)))
-  const old = dest.memory ? t.loadFrom(dest, width) : t.valueOf(dest)
+    (zeroIdiom || X86_OVERWRITE.test(mnemonic) || (ops.length >= 3 && X86_THREE_OVERWRITE.test(mnemonic)))
   if (!overwrite) {
     // A two-operand instruction reads its destination too: `andl %esi, %eax`.
     secret = secret || old.secret
@@ -828,18 +737,18 @@ const stepX86 = (t, mnemonic, operands) => {
   // Where the result points, if at the stack: a copy keeps the source's
   // offset, `lea` and an immediate `add` or `sub` move it, and anything else
   // computed from a stack address is one this cannot place.
-  let result = { secret, loaded, stack: stack ? null : undefined, fresh: false }
+  let result = { secret, loaded, stack: stack ? null : undefined }
   if (zeroIdiom) {
-    result = { secret: false, loaded: false, stack: undefined, fresh: false }
+    result = { secret: false, loaded: false, stack: undefined }
   } else if (lea) {
     const place = t.addressOf(ops[0])
     result.stack = place.stack ? place.at : undefined
   } else if (X86_COPY.test(mnemonic) && ops.length === 2 && !partial && copied !== null) {
-    result = { ...copied, fresh: copied.fresh && ops[0].memory }
+    result = copied
   } else if (/^(add|sub)q$/.test(mnemonic) && sources[0].imm !== null && typeof old.stack === "number") {
     result.stack = old.stack + (mnemonic.startsWith("add") ? sources[0].imm : -sources[0].imm)
   }
-  if (partial && old.stack !== undefined) {
+  if (partial && old !== null && old.stack !== undefined) {
     result.stack = null
   }
   // Whether this one writes the flags is not asked: they only gain taint, so
@@ -879,7 +788,7 @@ const stepArm = (t, mnemonic, operands) => {
     return "branch"
   }
   if (mnemonic === "bl") {
-    return t.call(operands)
+    return t.call(operands, false)
   }
   if (ARM_CALL.test(mnemonic)) {
     return "call"
@@ -887,7 +796,7 @@ const stepArm = (t, mnemonic, operands) => {
   // `b` to a local label stays inside the function; to a symbol it is a tail
   // call, and `br` jumps through a register to code this check does not read.
   if (mnemonic === "b") {
-    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands)
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands, true)
   }
   if (mnemonic === "br") {
     return "call"
@@ -902,19 +811,18 @@ const stepArm = (t, mnemonic, operands) => {
     return null
   }
   const memoryAt = ops.findIndex((op) => op.memory)
-  if ((ARM_STORE.test(mnemonic) || ARM_LOAD.test(mnemonic)) && memoryAt > 0) {
+  const store = ARM_STORE.test(mnemonic)
+  if ((store || ARM_LOAD.test(mnemonic)) && memoryAt > 0) {
     const mem = ops[memoryAt]
-    const post = memoryAt < ops.length - 1 ? ops[memoryAt + 1].imm : null
     // Pre-index (`[sp, #-16]!`) moves the base before the access, post-index
     // (`[sp], #16`) after it; either way the base register changes, by an
     // amount this cannot place when it is not an immediate.
     const moveBase = (delta) => {
       if (mem.base === "sp") {
-        t.sp = t.sp === null || delta === null ? null : t.sp + delta
+        t.moveSp(delta)
         return
       }
       const base = t.stackOf(mem.base)
-      t.fresh.delete(mem.base)
       if (base !== undefined) {
         t.stackAt.set(mem.base, typeof base === "number" && delta !== null ? base + delta : null)
       }
@@ -929,8 +837,8 @@ const stepArm = (t, mnemonic, operands) => {
     for (const op of ops.slice(0, memoryAt)) {
       const [width, exact] = armWidth(mnemonic, op)
       const piece = { ...access, disp: access.disp === null ? null : access.disp + offset }
-      if (ARM_STORE.test(mnemonic)) {
-        violation = violation ?? t.storeTo(piece, width, exact, { ...t.valueOf(op), fresh: false })
+      if (store) {
+        violation = violation ?? t.storeTo(piece, width, exact, t.valueOf(op))
       } else {
         const value = t.loadFrom(piece, width)
         for (const r of op.registers) {
@@ -940,7 +848,7 @@ const stepArm = (t, mnemonic, operands) => {
       offset += width
     }
     if (memoryAt < ops.length - 1) {
-      moveBase(post)
+      moveBase(ops[memoryAt + 1].imm)
     }
     return violation
   }
@@ -979,8 +887,7 @@ const stepArm = (t, mnemonic, operands) => {
     stack = undefined
   }
   if (dest.registers.length > 0) {
-    const fresh = mnemonic === "mov" && ops[1]?.registers.length === 1 && t.fresh.has(ops[1].registers[0])
-    t.setValue(dest.registers[0], { secret, loaded, stack, fresh })
+    t.setValue(dest.registers[0], { secret, loaded, stack })
   }
   if (ARM_SETS_FLAGS.test(mnemonic)) {
     t.taintFlags(secret)
@@ -988,24 +895,16 @@ const stepArm = (t, mnemonic, operands) => {
   return null
 }
 
-/** The two targets, with the registers the first integer arguments arrive in and the ones a call may overwrite. */
+/**
+ * The two targets, with the registers the first integer arguments arrive in
+ * and how far a call moves the stack pointer to hold its return address.
+ */
 export const CT_TARGETS = [
   {
     name: "x86-64",
     triple: "x86_64-unknown-linux-gnu",
     args: ["di", "si", "d", "c", "r8", "r9"],
-    callerSaved: [
-      "a",
-      "c",
-      "d",
-      "si",
-      "di",
-      "r8",
-      "r9",
-      "r10",
-      "r11",
-      ...[...Array(16).keys()].map((i) => `v${i}`),
-    ],
+    returnAddress: 8,
     comment: /#.*$/,
     step: stepX86,
   },
@@ -1013,54 +912,25 @@ export const CT_TARGETS = [
     name: "aarch64",
     triple: "aarch64-unknown-linux-gnu",
     args: ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"],
-    // v8 to v15 keep only their low halves across a call, so every vector register is overwritten.
-    callerSaved: [...[...Array(19).keys()].map((i) => `r${i}`), ...[...Array(32).keys()].map((i) => `v${i}`)],
+    // The return address goes to the link register, not the stack.
+    returnAddress: 0,
     // `#` starts an immediate here, not a comment.
     comment: /\/\/.*$/,
     step: stepArm,
   },
 ]
 
-/** Runs `body` under `spec`, answering every violation and leaving `t` as the body leaves it. */
+/** Runs `body` on `t`, adding every violation to `t.found`. */
 const walk = (t, body) => {
-  const found = []
   for (const line of body) {
     const space = line.search(/\s/)
     const mnemonic = space < 0 ? line : line.slice(0, space)
     const operands = space < 0 ? [] : splitOperands(line.slice(space + 1))
     const kind = t.target.step(t, mnemonic, operands)
     if (kind !== null) {
-      found.push({ kind, line })
+      t.found.push({ kind, line })
     }
   }
-  return found
-}
-
-/**
- * What a checked callee may do that its caller has to account for: whether it
- * calls anything, whether it stores anywhere but through a pointer it loaded
- * and its own frame, and how many bytes past such a pointer it stores. `null`
- * when the listing does not hold it.
- */
-const calleeEffects = (listing, spec, target) => {
-  let byName = SUMMARIES.get(listing)
-  if (byName === undefined) {
-    byName = new Map()
-    SUMMARIES.set(listing, byName)
-  }
-  const key = `${target.name}:${spec.name}`
-  if (!byName.has(key)) {
-    const body = functionBody(listing, spec.name, target)
-    let effects = null
-    if (body !== null) {
-      const t = new Taint(spec, target)
-      t.summary = { calls: false, otherStores: false, low: 0, extent: 0 }
-      walk(t, body)
-      effects = t.summary
-    }
-    byName.set(key, effects)
-  }
-  return byName.get(key)
 }
 
 /**
@@ -1071,7 +941,8 @@ const calleeEffects = (listing, spec, target) => {
 export const ctViolations = (body, spec, target) => {
   const t = new Taint(spec, target)
   t.listing = LISTINGS.get(body) ?? null
-  return walk(t, body)
+  walk(t, body)
+  return t.found
 }
 
 /**
@@ -1146,18 +1017,33 @@ under:
 	pushq	%rbx
 	movq	%rsi, %rbx
 	subq	$48, %rsp
-	movq	$0, 16(%rsp)
-	leaq	24(%rsp), %rax
-	movq	%rax, 8(%rsp)
+	movq	$0, 24(%rsp)
+	movq	16(%rdi), %rcx
+	movq	(%rcx), %rcx
+	movq	%rcx, 32(%rsp)
+	leaq	32(%rsp), %rax
+	movq	%rax, 16(%rsp)
 	movq	%rsp, %rdi
 	callq	below@PLT
-	movq	16(%rsp), %rax
+	movq	24(%rsp), %rax
 	movq	16(%rbx), %rcx
 	movq	(%rcx,%rax,8), %rax
 	addq	$48, %rsp
 	popq	%rbx
 	retq
 .Lfunc_end6:
+above:
+	movq	8(%rsp), %rax
+	movq	(%rdi,%rax,8), %rax
+	retq
+.Lfunc_end7:
+spill:
+	subq	$8, %rsp
+	movq	%rsi, (%rsp)
+	callq	above@PLT
+	addq	$8, %rsp
+	retq
+.Lfunc_end8:
 `
 
 const CALL_SOURCE = `// ct-check: get secret=contents
@@ -1167,6 +1053,8 @@ const CALL_SOURCE = `// ct-check: get secret=contents
 // ct-check: leak secret=i,contents
 // ct-check: heap secret=bit
 // ct-check: under secret=contents
+// ct-check: above secret=contents
+// ct-check: spill secret=s
 export const get = (a: i64[], i: i32): i64 => a[i]
 export const put = (a: i64[], v: i64): void => {}
 export const below = (a: i64[]): void => {}
@@ -1174,18 +1062,23 @@ export const calm = (a: i64[], i: i32): i64 => get(a, i)
 export const leak = (a: i64[], i: i32): i64 => get(a, i)
 export const heap = (a: i64[], bit: i64, table: i64[]): i64 => 0
 export const under = (a: i64[], table: i64[]): i64 => 0
+export const above = (a: i64[]): i64 => 0
+export const spill = (a: i64[], s: i64): i64 => 0
 `
 
 const CALL_CORNERS = [
   // A call with a public index into a checked callee is followed.
   ["calm", null],
-  // A secret into a parameter the callee reads as public is refused.
-  ["leak", "call"],
+  // A secret index handed to the callee is refused where the callee uses it.
+  ["leak", "load"],
   // What the callee stored through an array's `data` is secret, even to a
   // caller that did not ask for `contents`.
   ["heap", "load"],
-  // Below `data` counts as well as past it.
+  // What it stored into this frame is secret where it landed, below `data` too.
   ["under", "load"],
+  // The callee's stack starts below the return address the call pushed, so
+  // its first stack slot above that is the caller's own.
+  ["spill", "load"],
 ]
 
 const cornerMisses = () => {

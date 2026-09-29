@@ -99,8 +99,8 @@ if (!Number.isInteger(samples) || samples < 1000) {
 }
 if (nish === null) {
   // build/nish is what CI builds and `npm run build` leaves; build/nish-test is what `npm test` leaves.
-  nish = ["nish", "nish-test"].map((n) => path.join(root, "build", n)).find((p) => fs.existsSync(p)) ?? null
-  if (nish === null) {
+  nish = ["nish", "nish-test"].map((n) => path.join(root, "build", n)).find((p) => fs.existsSync(p))
+  if (nish === undefined) {
     fail("no compiler in build/: run `npm run build` (or `npm test`), or name one with --nish")
   }
 }
@@ -232,17 +232,9 @@ for (const file of fixtures) {
     fail(`${name} exited ${run.status}:\n${run.stderr}`)
   }
   for (const line of run.stdout.trim().split("\n")) {
-    const [fn, batch, count, max, test, used, raw] = line.split("\t")
-    rows.push({ fixture: name, fn, batch, count, max: Number(max), test: Number(test), used, raw })
+    const [fn, batch, max, test, used, raw] = line.split("\t")
+    rows.push({ fixture: name, fn, batch, max: Number(max), test, used, raw })
   }
-}
-
-/** Which of dudect.c's tests an index names. */
-const testName = (index) => {
-  if (index === 0) {
-    return "uncropped"
-  }
-  return index === 101 ? "second order" : `cropped, ${index}`
 }
 
 console.log(
@@ -254,7 +246,7 @@ console.log("| --- | --- | ---: | ---: | --- | ---: | ---: | --- |")
 for (const r of rows) {
   const verdict = r.max > THRESHOLD ? "**differs**" : "ok"
   console.log(
-    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${testName(r.test)} | ${r.used} | ${r.raw} | ${verdict} |`
+    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${verdict} |`
   )
 }
 const over = rows.filter((r) => r.max > THRESHOLD)

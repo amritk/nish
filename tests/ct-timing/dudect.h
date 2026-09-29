@@ -34,10 +34,10 @@ typedef struct ct_function {
 extern const ct_function ct_functions[];
 extern const int ct_function_count;
 
-/* xorshift64*, seeded once from the command line so a run can be repeated. */
-uint64_t ct_random(void);
-
-/* `bytes` bytes at `p`: zero for class 0, random for class 1. */
+/*
+ * `bytes` bytes at `p`: zero for class 0, random for class 1, from an
+ * xorshift64* seeded on the command line so a run can be repeated.
+ */
 void ct_fill(void *p, size_t bytes, int secret_class);
 
 #endif

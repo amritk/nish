@@ -23,8 +23,8 @@
  * input, with `batch` the smallest power of two whose median measurement is
  * 64 ticks or more.
  *
- * Usage: <program> <samples> <seed>. One line per function on stdout:
- * name, batch, samples, max |t|, the test it came from, the smaller class
+ * Usage: <program> <samples> <seed>. One line per function on stdout, tab
+ * separated: name, batch, max |t|, the test it came from, the smaller class
  * count of that test, and the uncropped t.
  */
 #include "dudect.h"
@@ -41,7 +41,7 @@
 
 static uint64_t ct_state = 0x9e3779b97f4a7c15u;
 
-uint64_t ct_random(void) {
+static uint64_t ct_random(void) {
   ct_state ^= ct_state >> 12;
   ct_state ^= ct_state << 25;
   ct_state ^= ct_state >> 27;
@@ -163,8 +163,7 @@ static void ct_run(const ct_function *f, long samples) {
   }
   free(batch_of);
 
-  ct_ttest tests[CT_TESTS];
-  memset(tests, 0, sizeof tests);
+  ct_ttest tests[CT_TESTS] = {0};
   for (long i = 0; i < samples; i++) {
     int c = (int)(ct_random() & 1);
     double x = (double)ct_measure(f, c, batch);
@@ -201,7 +200,15 @@ static void ct_run(const ct_function *f, long samples) {
       used = n;
     }
   }
-  printf("%s\t%d\t%ld\t%.3f\t%d\t%.0f\t%.3f\n", f->name, batch, samples, max, which, used, ct_t(&tests[0]));
+  char test[32];
+  if (which == 0) {
+    snprintf(test, sizeof test, "uncropped");
+  } else if (which == CT_TESTS - 1) {
+    snprintf(test, sizeof test, "second order");
+  } else {
+    snprintf(test, sizeof test, "cropped, %d", which);
+  }
+  printf("%s\t%d\t%.3f\t%s\t%.0f\t%.3f\n", f->name, batch, max, test, used, ct_t(&tests[0]));
   fflush(stdout);
 }
 
@@ -212,7 +219,9 @@ int main(int argc, char **argv) {
   }
   long samples = atol(argv[1]);
   uint64_t seed = strtoull(argv[2], NULL, 10);
-  ct_state = seed == 0 ? ct_state : seed;
+  if (seed != 0) {
+    ct_state = seed;
+  }
   for (int i = 0; i < ct_function_count; i++) {
     ct_run(&ct_functions[i], samples);
   }
