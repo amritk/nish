@@ -69,6 +69,14 @@ static void expect_i64(int64_t got, int64_t want, const char *what) {
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 void nish_array_grow(nish_array *, uint64_t);
 nish_array *nish_alloc_array(uint64_t, uint64_t);
+/* WP34 N5: runtime-net.c */
+int32_t nish_net_local_port(int32_t fd);
+int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
+int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
+int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
+int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
+int32_t nish_net_shutdown(int32_t fd, int32_t how);
+int32_t nish_net_close(int32_t fd);
 /* WP7: process.argv and string parsing */
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t, char **);
@@ -404,6 +412,69 @@ static void test_host_signal_threads(void) {
 }
 #endif
 
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+/* WP34 N5, runtime-net.c: what the Node-driven echo in tests/run.js cannot
+   see from outside the process. A listener and an accepted connection are
+   both non-blocking and close-on-exec; the peer's address arrives in the
+   18-byte form with the port the client was given; a read with nothing
+   waiting is -11; and a write to a peer that has gone is -32 rather than a
+   SIGPIPE that would end this test. */
+static void test_net(void) {
+  char space[18];
+  nish_array peer = {18, 18, space};
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  int32_t fd = nish_tcp_listen(loopback, 0, 4);
+  assert(fd >= 0);
+  assert((fcntl(fd, F_GETFD) & FD_CLOEXEC) != 0 && (fcntl(fd, F_GETFL) & O_NONBLOCK) != 0);
+  expect_i64(nish_tcp_accept(fd, &peer), -11, "an accept with no connection waiting");
+
+  int client = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in to = {0};
+  to.sin_family = AF_INET;
+  to.sin_port = htons((uint16_t)nish_net_local_port(fd));
+  to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  assert(client >= 0 && connect(client, (struct sockaddr *)&to, sizeof to) == 0);
+  struct sockaddr_in from;
+  socklen_t n = sizeof from;
+  assert(getsockname(client, (struct sockaddr *)&from, &n) == 0);
+
+  int32_t conn = nish_tcp_accept(fd, &peer);
+  assert(conn >= 0);
+  assert((fcntl(conn, F_GETFD) & FD_CLOEXEC) != 0 && (fcntl(conn, F_GETFL) & O_NONBLOCK) != 0);
+  static const unsigned char mapped[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 127, 0, 0, 1};
+  assert(memcmp(space, mapped, 16) == 0);
+  expect_i64(((unsigned char)space[16] << 8) | (unsigned char)space[17], ntohs(from.sin_port), "the peer's port");
+
+  char bytes[4] = {'p', 'i', 'n', 'g'};
+  nish_array buf = {4, 4, bytes};
+  expect_i64(nish_net_read(conn, &buf, 0, 4), -11, "a read with nothing waiting");
+  assert(write(client, "abc", 3) == 3);
+  expect_i64(nish_net_read(conn, &buf, 1, 3), 3, "the three bytes the client sent");
+  assert(memcmp(bytes, "pabc", 4) == 0);
+  expect_i64(nish_net_write(conn, &buf, 0, 4), 4, "four bytes back");
+  expect_i64(nish_net_shutdown(conn, 1), 0, "the write side shut");
+  char back[8];
+  expect_i64(read(client, back, sizeof back), 4, "the client reads what was written");
+  expect_i64(read(client, back, sizeof back), 0, "and then the end of the stream");
+
+  /* The client goes: the first write may still be accepted into the kernel's
+     buffer, and a later one fails with EPIPE once the reset has arrived. */
+  close(client);
+  int32_t gone = 0;
+  for (int i = 0; i < 1000 && gone >= 0; i++) {
+    gone = nish_net_write(conn, &buf, 0, 4);
+    if (gone == -11) gone = 0;
+  }
+  assert(gone == -32 || gone == -104);
+  expect_i64(nish_net_close(conn), 0, "the connection closed");
+  expect_i64(nish_net_close(conn), -9, "a descriptor closed twice");
+  expect_i64(nish_net_close(fd), 0, "the listener closed");
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -674,6 +745,8 @@ int main(void) {
   /* The partition's contract holds in both configurations, so it is asserted in
      both; only the threaded build can check that it actually divided. */
   test_parallel_common();
+  nish_free_arena();
+  test_net();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();

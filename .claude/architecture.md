@@ -55,7 +55,7 @@ Compilation                                                            src/compi
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
 - **The runtime has a budget per translation unit.** Every `.text*` section of
-  `clang -Oz -c <file>`, summed, for each of the runtime's four translation
+  `clang -Oz -c <file>`, summed, for each of the runtime's five translation
   units:
 
   | Unit | What it holds | Today | Ceiling |
@@ -64,6 +64,7 @@ Compilation                                                            src/compi
   | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,393 | 1,536 |
   | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (901 threaded) | 320 (1,024) |
   | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 571 | 768 |
+  | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses and non-blocking TCP | 853 | 1,024 |
 
   They are apart so that a new builtin in one area cannot move another's
   number; the source bytes of any of them are history rather than a limit.
@@ -122,7 +123,7 @@ src/                the compiler, in Nish, built by the last release (see selfho
 std/                 the standard library, in Nish
 runtime/             runtime.c (core), runtime-os.c (the syscall wrappers),
                      runtime-parallel.c (threads), runtime-host.c (clock, entropy,
-                     file times, signals), nish.h,
+                     file times, signals), runtime-net.c (sockets), nish.h,
                      nish.d.ts (the builtins, for npm run check), runtime-wasm.c,
                      shim.mjs (the Node twin)
 bin/                 the npm command, which hands over to the prebuilt native compiler

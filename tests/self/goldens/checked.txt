@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 798 programs, 53036 dump lines.
+# 804 programs, 53201 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37099,6 +37099,160 @@ function main(): i32 -> @nish_main [exported entry]
   local 6:9 b: u16 (const)
   local 7:9 c: u32 (const)
   local 8:9 d: u64 (const)
+program tests/cases/net_tcp_bounds.ts
+module tests/cases/net_tcp_bounds.ts (entry)
+function readAt(off: i32, len: i32): i32 -> @readAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_net_read
+  calls: nish_net_read nish_panic_slice
+  stackSites=1 stackLocals=1
+  local 7:9 buf: u8[] (const)
+function writeAt(off: i32, len: i32): i32 -> @writeAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_net_write
+  calls: nish_net_write nish_panic_slice
+  stackSites=1 stackLocals=1
+  local 12:9 buf: u8[] (const)
+function pastEnd(): i32 -> @pastEnd [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via readAt
+  calls: readAt
+  stackSites=0 stackLocals=0
+  callee 16:35 readAt -> @readAt
+function negativeOffset(): i32 -> @negativeOffset [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via writeAt
+  calls: writeAt
+  stackSites=0 stackLocals=0
+  callee 18:42 writeAt -> @writeAt
+function negativeLength(): i32 -> @negativeLength [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via readAt
+  calls: readAt
+  stackSites=0 stackLocals=0
+  callee 20:42 readAt -> @readAt
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via readAt
+  calls: readAt writeAt
+  stackSites=0 stackLocals=0
+  callee 22:32 readAt -> @readAt
+  callee 22:47 writeAt -> @writeAt
+program tests/cases/net_tcp_calls.ts
+module tests/cases/net_tcp_calls.ts (entry)
+function bytes(a: u8[]): string -> @bytes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_from_u64
+  pointer a: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 9:9 parts: string[] (const)
+  local 10:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: bytes nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_net_read nish_net_shutdown nish_net_write nish_panic_slice nish_print nish_str_from_i32 nish_tcp_accept nish_tcp_listen
+  stackSites=2 stackLocals=2
+  local 17:9 out: u8[] (const)
+  local 18:9 short: u8[] (const)
+  callee 20:15 bytes -> @bytes
+  callee 22:15 bytes -> @bytes
+  local 29:9 fd: i32 (const)
+  local 30:9 port: i32 (const)
+  local 41:9 both: i32 (const)
+program tests/cases/net_tcp_echo.ts
+module tests/cases/net_tcp_echo.ts (entry)
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import netRead from "nish:net" -> builtin netRead
+import netWrite from "nish:net" -> builtin netWrite
+import tcpAccept from "nish:net" -> builtin tcpAccept
+import tcpListen from "nish:net" -> builtin tcpListen
+const WOULD_BLOCK: i32 = -11
+struct Served (class) size=8 align=4
+  field bytes: i32 index=0 offset=0
+  field notes: i32 index=1 offset=4
+  constructor -> @Served.constructor
+function Served.constructor(this: Served, bytes: i32, notes: i32): void -> @Served.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: bytes notes
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function sendAll(fd: i32, buf: u8[], n: i32): boolean -> @sendAll
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_net_write
+  calls: nish_net_write nish_panic_slice
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 24:7 sent: i32 (let)
+  local 26:11 w: i32 (const)
+function serve(conn: i32, buf: u8[]): Served -> @serve
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: 42:15
+  escaping: conn
+  calls: Served.constructor nish_alloc_struct nish_arena_release nish_net_read nish_panic_slice nish_str_concat nish_str_from_i32 sendAll
+  pointer buf: size=0 writesThrough=true captured=false passedTo=sendAll#1
+  stackSites=0 stackLocals=0
+  local 38:7 bytes: i32 (let)
+  local 39:7 notes: i32 (let)
+  local 40:7 failed: boolean (let)
+  local 42:11 n: i32 (const)
+  callee 49:19 sendAll -> @sendAll
+  local 54:11 note: string (const)
+  callee 58:10 new Served -> @Served.constructor
+function acceptOne(fd: i32, peer: u8[]): i32 -> @acceptOne
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 63:14
+  calls: nish_tcp_accept
+  pointer peer: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 63:7 conn: i32 (let)
+function oneConnection(fd: i32, peer: u8[], buf: u8[]): i64 -> @oneConnection
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via acceptOne
+  escaping: fd
+  calls: acceptOne nish_arena_mark nish_arena_release nish_arena_used nish_net_close nish_panic_index nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 serve
+  pointer peer: size=0 writesThrough=true captured=false passedTo=acceptOne#1
+  pointer buf: size=0 writesThrough=true captured=false passedTo=serve#1
+  stackSites=0 stackLocals=0
+  local 72:9 conn: i32 (const)
+  callee 72:16 acceptOne -> @acceptOne
+  local 78:9 before: i64 (const)
+  local 79:9 served: Served (const)
+  callee 79:18 serve -> @serve
+  local 80:9 grown: i64 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen
+  calls: nish_arena_mark nish_arena_release nish_net_close nish_net_local_port nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_tcp_listen oneConnection
+  stackSites=2 stackLocals=2
+  local 87:9 fd: i32 (const)
+  local 93:9 peer: u8[] (const)
+  local 94:9 buf: u8[] (const)
+  local 95:9 one: i64 (const)
+  callee 95:15 oneConnection -> @oneConnection
+  local 96:9 many: i64 (const)
+  callee 96:16 oneConnection -> @oneConnection
+program tests/cases/net_tcp_import.ts
+module tests/cases/net_tcp_import.ts (entry)
+import addressOf from "nish:net" -> builtin netAddress
+import netClose from "nish:net" -> builtin netClose
+import tcpListen from "nish:net" -> builtin tcpListen
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_panic_index nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_tcp_listen
+  stackSites=1 stackLocals=1
+  local 7:9 out: u8[] (const)
+  local 10:9 fd: i32 (const)
+program tests/cases/net_tcp_unchecked.ts
+module tests/cases/net_tcp_unchecked.ts (entry)
+function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 5:13
+  calls: nish_net_read nish_net_write nish_panic_slice
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 5:9 n: i32 (const)
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4
@@ -43102,6 +43256,23 @@ function magnitude(x: i32): i32 -> @magnitude
 function tau(): f64 -> @tau
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin-net.ts
+module docs/cookbook/builtin-net.ts (entry)
+import netRead from "nish:net" -> builtin netRead
+import netWrite from "nish:net" -> builtin netWrite
+import tcpListen from "nish:net" -> builtin tcpListen
+function listen(port: i32): i32 -> @listen [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen
+  calls: nish_tcp_listen
+  stackSites=0 stackLocals=0
+function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:13
+  calls: nish_net_read nish_net_write nish_panic_slice
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 11:9 n: i32 (const)
 program docs/cookbook/builtin-nish-modules.ts
 module docs/cookbook/builtin-nish-modules.ts (entry)
 import readFileSync from "nish:fs" -> builtin readFileSync
