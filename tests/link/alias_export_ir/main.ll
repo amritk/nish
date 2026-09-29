@@ -173,17 +173,16 @@ cond.true:
   br label %cond.end
 
 cond.false:
-  %25 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.end:
-  %26 = phi i32 [ %24, %cond.true ], [ %25, %cond.false ]
-  %27 = call i8* @nish_str_from_i32(i32 %26)
-  call void @nish_print(i8* %27)
-  %28 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %p.addr, align 8
-  %29 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %28, i32 0, i32 0
-  %30 = load i1, i1* %29, align 1
-  br i1 %30, label %cond.true.1, label %cond.false.1
+  %25 = phi i32 [ %24, %cond.true ], [ -1, %cond.false ]
+  %26 = call i8* @nish_str_from_i32(i32 %25)
+  call void @nish_print(i8* %26)
+  %27 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %p.addr, align 8
+  %28 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %27, i32 0, i32 0
+  %29 = load i1, i1* %28, align 1
+  br i1 %29, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
   br label %cond.end.1
@@ -192,9 +191,9 @@ cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %31 = phi i32 [ 0, %cond.true.1 ], [ 1, %cond.false.1 ]
+  %30 = phi i32 [ 0, %cond.true.1 ], [ 1, %cond.false.1 ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %31
+  ret i32 %30
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {

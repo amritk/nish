@@ -61,41 +61,37 @@ div.fail.1:
 div.ok.1:
   %13 = srem i32 %7, 5
   store i32 %13, i32* %acc.addr, align 4
-  %14 = sub nsw i32 0, 7
-  %15 = call i32 @div(i32 %14, i32 2)
-  %16 = call i8* @nish_str_from_i32(i32 %15)
-  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %18 = sub nsw i32 0, 2
-  %19 = call i32 @div(i32 7, i32 %18)
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  %21 = call i8* @nish_str_concat(i8* %17, i8* %20)
-  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %23 = sub nsw i32 0, 7
-  %24 = icmp eq i32 3, 0
-  %25 = icmp eq i32 %23, -2147483648
-  %26 = icmp eq i32 3, -1
-  %27 = and i1 %25, %26
-  %28 = or i1 %24, %27
-  br i1 %28, label %div.fail.2, label %div.ok.2
+  %14 = call i32 @div(i32 -7, i32 2)
+  %15 = call i8* @nish_str_from_i32(i32 %14)
+  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %17 = call i32 @div(i32 7, i32 -2)
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  %19 = call i8* @nish_str_concat(i8* %16, i8* %18)
+  %20 = call i8* @nish_str_concat(i8* %19, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %21 = icmp eq i32 3, 0
+  %22 = icmp eq i32 -7, -2147483648
+  %23 = icmp eq i32 3, -1
+  %24 = and i1 %22, %23
+  %25 = or i1 %21, %24
+  br i1 %25, label %div.fail.2, label %div.ok.2
 
 div.fail.2:
-  call void @nish_panic_div(i1 zeroext %24)
+  call void @nish_panic_div(i1 zeroext %21)
   unreachable
 
 div.ok.2:
-  %29 = srem i32 %23, 3
-  %30 = call i8* @nish_str_from_i32(i32 %29)
-  %31 = call i8* @nish_str_concat(i8* %22, i8* %30)
-  %32 = call i8* @nish_str_concat(i8* %31, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %33 = load i32, i32* %acc.addr, align 4
-  %34 = call i8* @nish_str_from_i32(i32 %33)
-  %35 = call i8* @nish_str_concat(i8* %32, i8* %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %37 = sub nsw i32 0, -2147483648
-  %38 = call i32 @div(i32 %37, i32 1)
-  %39 = call i8* @nish_str_from_i32(i32 %38)
-  %40 = call i8* @nish_str_concat(i8* %36, i8* %39)
-  call void @nish_print(i8* %40)
+  %26 = srem i32 -7, 3
+  %27 = call i8* @nish_str_from_i32(i32 %26)
+  %28 = call i8* @nish_str_concat(i8* %20, i8* %27)
+  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %30 = load i32, i32* %acc.addr, align 4
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  %32 = call i8* @nish_str_concat(i8* %29, i8* %31)
+  %33 = call i8* @nish_str_concat(i8* %32, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %34 = call i32 @div(i32 -2147483648, i32 1)
+  %35 = call i8* @nish_str_from_i32(i32 %34)
+  %36 = call i8* @nish_str_concat(i8* %33, i8* %35)
+  call void @nish_print(i8* %36)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

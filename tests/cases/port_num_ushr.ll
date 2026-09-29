@@ -10,22 +10,20 @@ entry:
   %same.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = sub nsw i32 0, 8
-  store i32 %0, i32* %x.addr, align 4
-  %1 = load i32, i32* %x.addr, align 4
-  %2 = lshr i32 %1, 0
-  store i32 %2, i32* %same.addr, align 4
-  %3 = sub nsw i32 0, 1
+  store i32 -8, i32* %x.addr, align 4
+  %0 = load i32, i32* %x.addr, align 4
+  %1 = lshr i32 %0, 0
+  store i32 %1, i32* %same.addr, align 4
+  store i32 -1, i32* %y.addr, align 4
+  %2 = load i32, i32* %y.addr, align 4
+  %3 = lshr i32 %2, 4
   store i32 %3, i32* %y.addr, align 4
-  %4 = load i32, i32* %y.addr, align 4
-  %5 = lshr i32 %4, 4
-  store i32 %5, i32* %y.addr, align 4
-  %6 = load i32, i32* %same.addr, align 4
+  %4 = load i32, i32* %same.addr, align 4
+  %5 = call i8* @nish_str_from_i32(i32 %4)
+  call void @nish_print(i8* %5)
+  %6 = load i32, i32* %y.addr, align 4
   %7 = call i8* @nish_str_from_i32(i32 %6)
   call void @nish_print(i8* %7)
-  %8 = load i32, i32* %y.addr, align 4
-  %9 = call i8* @nish_str_from_i32(i32 %8)
-  call void @nish_print(i8* %9)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -15,17 +15,16 @@ entry:
   %0 = load i32, i32* %bits.addr, align 4
   %1 = lshr i32 %0, 1
   store i32 %1, i32* %half.addr, align 4
-  %2 = sub nsw i32 0, 8
-  store i32 %2, i32* %x.addr, align 4
-  %3 = load i32, i32* %x.addr, align 4
-  %4 = ashr i32 %3, 1
-  store i32 %4, i32* %signed.addr, align 4
-  %5 = load i32, i32* %half.addr, align 4
-  %6 = call i8* @nish_str_from_i32(i32 %5)
-  call void @nish_print(i8* %6)
-  %7 = load i32, i32* %signed.addr, align 4
-  %8 = call i8* @nish_str_from_i32(i32 %7)
-  call void @nish_print(i8* %8)
+  store i32 -8, i32* %x.addr, align 4
+  %2 = load i32, i32* %x.addr, align 4
+  %3 = ashr i32 %2, 1
+  store i32 %3, i32* %signed.addr, align 4
+  %4 = load i32, i32* %half.addr, align 4
+  %5 = call i8* @nish_str_from_i32(i32 %4)
+  call void @nish_print(i8* %5)
+  %6 = load i32, i32* %signed.addr, align 4
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  call void @nish_print(i8* %7)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

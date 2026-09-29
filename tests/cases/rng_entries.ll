@@ -301,26 +301,24 @@ rng.ok.5:
   %85 = call i8* @nish_str_from_i32(i32 %84)
   %86 = call i8* @nish_str_concat(i8* %81, i8* %85)
   %87 = call i8* @nish_str_concat(i8* %86, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %88 = sub nsw i32 0, 3
-  %89 = call i32 @clamp(i1 true, i32 %88)
-  %90 = call i8* @nish_str_from_i32(i32 %89)
-  %91 = call i8* @nish_str_concat(i8* %87, i8* %90)
-  %92 = call i8* @nish_str_concat(i8* %91, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %93 = load i32, i32* %count.addr, align 4
-  %94 = call i8* @nish_str_from_i32(i32 %93)
-  %95 = call i8* @nish_str_concat(i8* %92, i8* %94)
-  call void @nish_print(i8* %95)
-  %96 = load i32, i32* %n.addr, align 4
-  %97 = mul nsw i32 %96, 666666666
-  %98 = add nsw i32 %97, 2
-  %99 = call i32 @span(i32 %98)
-  %100 = call i8* @nish_str_from_i32(i32 %99)
-  %101 = call i8* @nish_str_concat(i8* %100, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %102 = sub nsw i32 0, 2000000000
-  %103 = call i32 @span(i32 %102)
-  %104 = call i8* @nish_str_from_i32(i32 %103)
-  %105 = call i8* @nish_str_concat(i8* %101, i8* %104)
-  call void @nish_print(i8* %105)
+  %88 = call i32 @clamp(i1 true, i32 -3)
+  %89 = call i8* @nish_str_from_i32(i32 %88)
+  %90 = call i8* @nish_str_concat(i8* %87, i8* %89)
+  %91 = call i8* @nish_str_concat(i8* %90, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %92 = load i32, i32* %count.addr, align 4
+  %93 = call i8* @nish_str_from_i32(i32 %92)
+  %94 = call i8* @nish_str_concat(i8* %91, i8* %93)
+  call void @nish_print(i8* %94)
+  %95 = load i32, i32* %n.addr, align 4
+  %96 = mul nsw i32 %95, 666666666
+  %97 = add nsw i32 %96, 2
+  %98 = call i32 @span(i32 %97)
+  %99 = call i8* @nish_str_from_i32(i32 %98)
+  %100 = call i8* @nish_str_concat(i8* %99, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %101 = call i32 @span(i32 -2000000000)
+  %102 = call i8* @nish_str_from_i32(i32 %101)
+  %103 = call i8* @nish_str_concat(i8* %100, i8* %102)
+  call void @nish_print(i8* %103)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

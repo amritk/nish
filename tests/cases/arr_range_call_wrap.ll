@@ -50,8 +50,7 @@ if.end.1:
   br label %if.end
 
 if.end:
-  %19 = sub i32 0, 1
-  ret i32 %19
+  ret i32 -1
 }
 
 define noundef i32 @nish_main() #0 {
@@ -80,11 +79,10 @@ entry:
   %10 = call i8* @nish_str_from_i32(i32 %9)
   call void @nish_print(i8* %10)
   %11 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %12 = sub i32 0, 2147483647
-  %13 = sub i32 %12, 1
-  %14 = call i32 @pick(%struct.nish_array* %11, i32 %13)
-  %15 = call i8* @nish_str_from_i32(i32 %14)
-  call void @nish_print(i8* %15)
+  %12 = sub i32 -2147483647, 1
+  %13 = call i32 @pick(%struct.nish_array* %11, i32 %12)
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  call void @nish_print(i8* %14)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
