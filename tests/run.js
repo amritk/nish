@@ -2633,8 +2633,8 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // second does, and the rule's reason for the barrier is out of date.
     const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
     if (has("opt") && fs.existsSync(primitivesLl)) {
-      const pickOf = (ir) => {
-        const o = spawnSync("opt", ["-O2", "-S", "-"], { input: ir, encoding: "utf8" })
+      const pickOf = (module) => {
+        const o = spawnSync("opt", ["-O2", "-S", "-"], { input: module, encoding: "utf8" })
         const fn = String(o.stdout).match(/define[^\n]*@pickU32\([\s\S]*?\n\}/)
         return fn === null ? `opt failed: ${o.stderr}` : fn[0]
       }

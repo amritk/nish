@@ -1140,6 +1140,12 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 `Number(x)`, `parseInt(s)` (base 10, `i32`, no `NaN` — no digits give `0`),
 `parseFloat(s)`.
 
+**Constant time.** `ctSelect(mask, a, b)` is `(a & mask) | (b & ~mask)` and
+`ctEq(a, b)` is all-ones when equal and zero otherwise, both over `u32` or
+`u64` only, every operand one type. The mask sits behind an optimisation
+barrier, so neither ever becomes a branch; select and compare on a secret with
+these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
+
 **Arrays.** `a.length` (read-only), `a.push(v)`, `a.pop()` (panics when empty —
 there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` is
 `string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`

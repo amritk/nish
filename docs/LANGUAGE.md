@@ -3448,6 +3448,96 @@ are `NaN`, `Number("0x1A")` is `26` (as in JavaScript; hex floats such as
 is write (`strtod`/`strtoll` may set `errno`), so a function that parses is
 never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 
+### Constant time: `ctSelect` and `ctEq`
+
+Crypto code must not branch on a secret or index memory by one, and LLVM
+promises neither: a `select` it can see through may become a branch, and a mask
+it can prove is a boolean may become a `select`. These two builtins are how a
+program selects and compares on a secret without giving the optimiser that
+choice (WP34 N6).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `ctSelect(mask: T, a: T, b: T): T` | `(a & mask) \| (b & ~mask)`: `a` when `mask` is all-ones, `b` when it is zero | none | `ct_select_u32`, `ct_u64`; `reject_ct_select_i32`, `reject_ct_select_f64`, `reject_ct_select_bool_mask`, `reject_ct_select_mixed`, `reject_ct_select_arity`, `reject_ct_select_float_mask` |
+| `ctEq(a: T, b: T): T` | all-ones of `T` when `a === b`, zero otherwise | none | `ct_eq_u32`, `ct_u64`; `reject_ct_eq_i64`, `reject_ct_eq_u8`, `reject_ct_eq_ranged`, `reject_ct_eq_mixed`, `reject_ct_eq_arity`, `reject_ct_eq_literals`, `reject_ct_eq_value` |
+
+- **`T` is `u32` or `u64`, one type for every operand.** A mask is a bit
+  pattern, and the unsigned words are the only types whose all-ones is not also
+  a number with a sign: `i32`, `i64`, the narrow `u8` and `u16`, a ranged
+  integer (an `i32` underneath, and named so), `f32`, `f64` and `boolean` are
+  each `` `ctEq` takes u32 or u64 operands (convert with toU32 or toU64), got i64 ``
+  (NL2399). A boolean in particular is not a mask: `ctEq` makes the mask
+  without the compare a boolean would need. Operands of two types are
+  `` `ctSelect` needs every operand of one type, got u32 and u64 `` (NL2400),
+  since a `u32` mask over `u64` words would leave half of each unselected. The
+  mask is checked against the operand it came from before any other is, so
+  a boolean mask is told the first message, not the second.
+- **A bare numeric literal takes its type from the first operand that is not
+  one**, wherever it stands: `ctEq(0, x)` and `ctSelect(m, a, 0)` are both
+  words of `x`'s and `m`'s type. A fraction is then refused as a fraction
+  (`` Non-integer literal `0.5` where u32 is expected ``,
+  `reject_ct_select_float_mask`), and with nothing but literals there is no
+  width to take, so `ctEq(1, 2)` is an `i32` and refused (`reject_ct_eq_literals`).
+- **The mask convention is all-ones or zero, and it is not checked**, because
+  the check would be the branch. `ctEq` only ever answers one of the two. Any
+  other mask is a defined bitwise blend, bit by bit as the formula says —
+  `ctSelect(0xf0f0f0f0, a, b)` takes the high nibble of each byte from `a` —
+  and the Node reading below computes the same blend (`ct_select_u32`).
+- **They are globals, not a `nish:` module**, by the rule
+  [Builtin modules](#builtin-modules-nish) sets: what is backed by the C runtime
+  may be imported, and what lowers to instructions reads as language. These call
+  nothing (`reject_ct_nish_module`). Like every function, neither is a value
+  (`reject_ct_eq_value`).
+- **The lowering is the formula behind an optimisation barrier.** The barrier is
+  an empty inline `asm` that hands a value back in the same register —
+  `call i32 asm "", "=r,0"(i32 %mask) readnone nounwind` — which costs no
+  instruction and which no pass can see into, the idiom BoringSSL and Rust's
+  `subtle` crate use. `ctSelect` puts it on the mask before the blend; `ctEq`
+  computes `((d | -d) >>> (w - 1)) - 1` from `d = a ^ b` and puts it on the
+  answer, so a caller's `ctSelect(ctEq(a, b), x, y)` never shows LLVM a
+  boolean. `readnone nounwind` is what clang writes on the same statement and is
+  true of an empty string, so a function that only selects stays `readnone`.
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#ctselect-and-cteq) shows the IR. Without the
+  barrier `opt -O2` folds `ctSelect(ctEq(a, b), x, y)` into one `select` on
+  `a === b` — `tests/run.js` checks both halves of that sentence, so it learns
+  if LLVM ever sees through the `asm` or stops needing it.
+- **What the barrier promises: no branch and no secret-indexed load in these
+  primitives**, checked where the promise lives, in the machine code.
+  `tests/run.js` compiles every `tests/cases/ct_asm_*` fixture with
+  `clang -O2 -S` for x86-64 and aarch64 and reads each function a fixture names
+  by its symbol (`tests/ct-asm.js`). It refuses any conditional branch
+  (`j<cc>`, `b.<cond>`, `cbz`, `tbz` and the rest), any call, and any load or
+  store whose address a secret reaches, following secrets through registers,
+  flags and stack slots. The fixtures are both builtins at both widths, a mask
+  straight into a select, a 32-byte MAC compare over `u8[]` and a table read
+  that loads every entry (`ct_asm_primitives`, `ct_asm_mac`); and
+  `ct_asm_refused` holds an early-exit compare and a secret-indexed table
+  lookup that the check must refuse, one for each kind, so a check that read
+  nothing fails.
+- **What it does not promise: anything about the caller's own code.**
+  `if (ctEq(a, b) !== 0)` branches on a secret because the program wrote a
+  branch; `table[secret]` indexes by one; `===` on a secret is a compare LLVM
+  may branch on; a loop whose trip count is secret leaks it; and `/` and `%`
+  take time that depends on their operands on many processors. The fixtures
+  show the shapes that stay constant time, and a new one belongs beside them.
+  On `wasm32` the builtins compile with the same barrier, but the engine
+  compiles the module again, so the `.s` this check could read is not what
+  runs and nothing is promised there. The dudect-style timing run that would
+  measure a whole routine is a separate job, not part of `npm test`.
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2):
+`runtime/nish.mjs` supplies both as pure functions of their operands, so the
+answers agree and only the timing is not claimed. Over **`u32`** they are
+**class A**: a `u32` is a `number` there, the shim puts each answer back in
+range with `>>> 0` (JavaScript's `&` answers a signed 32-bit integer), and
+`ct_select_u32` and `ct_eq_u32` run unmodified under the prelude and print what
+the native build prints. Over **`u64`** the prelude takes BigInts and answers
+BigInts, and the `ct_prelude` check in `tests/run.js` holds its answers to
+`ct_u64`'s native output line for line. A `u64` program is still **class C**
+under Node, as all 64-bit arithmetic is ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)):
+a bare `u64` literal is a `number` there, and mixing one with a BigInt throws a
+`TypeError` rather than comparing the two and answering zero.
+
 ### `process`
 
 | Signature | Semantics | Effect | Test |
