@@ -4647,7 +4647,7 @@ by the caller.
   | NL8002 | checked `slice` (3.2) | a `slice(a, b)` whose bounds are not proven inside `[0, length]` | clamps the bounds and counts a negative one from the end, where this panics |
   | NL8003 | a record copied in (3.3) | a record pushed, listed or stored into an array while the original is written and one copy read afterwards | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | `ps[i] = q` while an element reference `r = ps[j]` is still read | puts a new object in the slot and leaves `r` holding the old one |
-  | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, `n` not the literal `0` (`tests/cases/port_array_zero_fill`; `[]`, `new Array<T>(0)` and the typed arrays are silent, `port_array_quiet`) | fills it with holes, which read back as `undefined` |
+  | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
   | NL8006 | integer `/` (3.1) | `/` on an integer type | divides exactly and keeps the fraction |
   | NL8007 | wrapping (3.1) | `+ - *`, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping` | keeps counting past the range |
   | NL8008 | `i32 >>>` (3.1) | `>>>` whose result is `i32` | reads the result back unsigned |

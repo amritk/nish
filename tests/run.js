@@ -516,6 +516,11 @@ for (const [at, name] of selectedCases.entries()) {
     check(`${name}: compiles`, false, stderr)
     continue
   }
+  // A `port_*` case exists for its warnings, and without the golden nothing
+  // would compile it with the flag: it would pass while asserting nothing.
+  if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
+    check(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
+  }
   if (fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per

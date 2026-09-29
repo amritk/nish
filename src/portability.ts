@@ -40,14 +40,14 @@ import { AnalysisUnit } from "./attributes"
 import { CLI } from "./branding"
 import { numericLiteralValue } from "./constants"
 import { StringSet } from "./map"
-import { N_ARROW, N_IDENT, N_NEW, N_NUMBER, Node } from "./nodes"
+import { FLAG_PREFIX, N_ARROW, N_IDENT, N_NEW, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
 import { Options } from "./options"
 import { ParentTable } from "./parents"
 import { numberFindings } from "./portability-numbers"
 import { recordFindings } from "./portability-records"
 import { stringFindings } from "./portability-strings"
 import { CheckedProgram, FunctionSig } from "./program"
-import { isNumeric, T_BOOL, TypeTable } from "./types"
+import { isFloat, isNumeric, T_BOOL, TypeTable } from "./types"
 
 /**
  * One portability warning before it is a diagnostic: the node it is reported
@@ -183,17 +183,40 @@ const walkPortability = (walk: PortabilityWalk, node: Node, out: PortabilityFind
 /**
  * NL8005: `new Array<T>(n)` of a number or a boolean is `n` zeros (or `false`s)
  * here, and `n` holes in TypeScript, which read back as `undefined` — so a sum
- * over it is `NaN` there and 0 here. `new Array<T>(0)`, however the zero is
- * spelled (`0x0`, `0b0_0`, `0.0`), has no element to
- * differ, and `[]` is not this node at all. The typed-array aliases are not
+ * over it is `NaN` there and 0 here. A length whose value is zero has no
+ * element to differ (`isZeroLength`), and `[]` is not this node at all. The typed-array aliases are not
  * reported: `new Float64Array(n)` is zero-filled in JavaScript too.
  */
+/**
+ * Whether a length is zero by its value, whatever its spelling: a literal of
+ * any radix or form (`0x0`, `0b0_0`, `0.0`), a sign in front of one (`-0`),
+ * parentheses, or a named constant, whose folded value the checker recorded in
+ * `nodeConstants` (the reading `constantLength` in `src/inline-arrays.ts`
+ * makes). Anything else is a length that may not be zero.
+ */
+const isZeroLength = (walk: PortabilityWalk, expr: Node): boolean => {
+  if (expr.kind === N_NUMBER) {
+    return numericLiteralValue(expr.text) === 0
+  }
+  if (expr.kind === N_PAREN) {
+    return isZeroLength(walk, expr.children[0])
+  }
+  if (expr.kind === N_UNARY && expr.flags === FLAG_PREFIX && (expr.text === "-" || expr.text === "+")) {
+    return isZeroLength(walk, expr.children[0])
+  }
+  const constant = walk.program.nodeConstants[expr.id]
+  if (constant === null) {
+    return false
+  }
+  return isFloat(constant.type) ? constant.floatValue === 0 : constant.intValue === toI64(0)
+}
+
 const zeroFillFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   if (node.kind !== N_NEW || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
     return
   }
   const args = node.children[2].children
-  if (args.length !== 1 || (args[0].kind === N_NUMBER && numericLiteralValue(args[0].text) === 0)) {
+  if (args.length !== 1 || isZeroLength(walk, args[0])) {
     return
   }
   const type = walk.program.nodeTypes[node.id]
