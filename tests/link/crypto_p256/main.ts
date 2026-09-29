@@ -217,9 +217,23 @@ export const main = (): i32 => {
   t.ok("0x04 then (0, 0) is refused", !p256VerifySha256(fromHex(`04${ZERO}${ZERO}`), sample, sampleSig));
   t.ok("a 64-byte key is refused", !p256VerifySha256(fromHex(`${UX}${UY}`), sample, sampleSig));
   t.ok("a 66-byte key is refused", !p256VerifySha256(fromHex(`${pubY}00`), sample, sampleSig));
-  // x = p is x = 0 once reduced, which is not refused by the curve equation
-  // alone for every y; it is refused because it is not canonical.
-  t.ok("a key with x = p is refused", !p256VerifySha256(fromHex(`04${P}${UY}`), sample, sampleSig));
+  // A coordinate of p or more is refused as not canonical, before the curve
+  // equation sees it. (5, y) is on the curve, and x = 5 + p is below 2^256,
+  // so the same point spelled with x + p would pass the equation; only the
+  // range check refuses it. The signature was built for this key from the
+  // verification equation itself (pick a and b, take R = aG + bQ, then
+  // r = R.x, s = r / b and z = a s), which needs no private key.
+  const smallX: string = "0000000000000000000000000000000000000000000000000000000000000005";
+  const smallY: string = "459243b9aa581806fe913bce99817ade11ca503c64d9a3c533415c083248fbcc";
+  const smallXPlusP: string = "ffffffff00000001000000000000000000000001000000000000000000000004";
+  const smallDigest: u8[] = fromHex("58270d12bd05dd5000c531afd354263d3a02d4adb93b6b1ce7ced34c032c65cb");
+  const smallSig: u8[] = fromHex(
+    "6f34b24828b4efbcbad39f16e008014367b4db9fca7b64cbd6972b0ef79e444f31d1583751fd3e107030204ab04db5793ed8e514c22c300b15e9ea8b1482ec35"
+  );
+  t.ok("the point (5, y) verifies its signature", p256Verify(fromHex(`04${smallX}${smallY}`), smallDigest, smallSig));
+  t.ok("the same point with x = 5 + p is refused", !p256Verify(fromHex(`04${smallXPlusP}${smallY}`), smallDigest, smallSig));
+  // P-256 has no point with y = 0, so y = p is refused by the equation too;
+  // this pins the refusal, not which check makes it.
   t.ok("a key with y = p is refused", !p256VerifySha256(fromHex(`04${UX}${P}`), sample, sampleSig));
 
   // --- Signatures: r and s in [1, n), 64 bytes --------------------------------

@@ -41,7 +41,8 @@ PASS  65 zero bytes are refused
 PASS  0x04 then (0, 0) is refused
 PASS  a 64-byte key is refused
 PASS  a 66-byte key is refused
-PASS  a key with x = p is refused
+PASS  the point (5, y) verifies its signature
+PASS  the same point with x = 5 + p is refused
 PASS  a key with y = p is refused
 PASS  r = 0 is refused
 PASS  s = 0 is refused
@@ -51,4 +52,4 @@ PASS  r = n + 1 is refused
 PASS  s = n + 1 is refused
 PASS  a 63-byte signature is refused
 PASS  a 65-byte signature is refused
-p256: 52 passed, 0 failed, 0 skipped
+p256: 53 passed, 0 failed, 0 skipped
