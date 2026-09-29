@@ -1,0 +1,7 @@
+PASS  §2.5.2 Poly1305
+PASS  §2.8.2 seal
+PASS  §2.8.2 open
+PASS  A.5 decryption
+PASS  RFC 9001 A.5 mask
+PASS  a flipped ciphertext bit answers null
+chacha20poly1305 (f64 mode): 6 passed, 0 failed, 0 skipped
