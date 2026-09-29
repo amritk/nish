@@ -75,8 +75,9 @@
  * functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
-import { HmacSha256 } from "nish/crypto/hmac"
+import { HmacSha256, hmacSha256 } from "nish/crypto/hmac"
 import { sha256 } from "nish/crypto/sha256"
+import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
 export const P256_SCALAR_SIZE: i32 = 32
@@ -3653,20 +3654,29 @@ const p256LimbsToBytes = (out: u8[], at: i32, a: u32[]): void => {
 }
 
 /**
- * 1 when the plain value `a` is below `m` and 0 otherwise: the borrow out of
- * `a - m`, carried through every limb, so the answer takes no comparison a
- * secret could steer.
+ * `d = a - m` modulo 2^256 for plain limbs, answering the borrow out of the
+ * top limb: 1 when `a` is below `m` and 0 otherwise. Every limb is subtracted
+ * whatever the values, so the answer takes no comparison a secret could steer.
  */
-const p256Below = (a: u32[], m: u32[]): u32 => {
-  if (toI32(a.length) < 8 || toI32(m.length) < 8) {
+const p256SubBorrow = (d: u32[], a: u32[], m: u32[]): u32 => {
+  if (toI32(d.length) < 8 || toI32(a.length) < 8 || toI32(m.length) < 8) {
     return 0
   }
   let borrow: u32 = 0
   for (let i: i32 = 0; i < 8; i++) {
-    borrow = toU32(p256FiatSubborrowxU32(borrow, a[i], m[i]) >> 32)
+    const w: u64 = p256FiatSubborrowxU32(borrow, a[i], m[i])
+    d[i] = toU32(w)
+    borrow = toU32(w >> 32)
   }
   return borrow
 }
+
+/**
+ * 1 when the plain value `a` is below `m` and 0 otherwise: the borrow out of
+ * `a - m`, carried through every limb, so the answer takes no comparison a
+ * secret could steer.
+ */
+const p256Below = (a: u32[], m: u32[]): u32 => p256SubBorrow(new Array<u32>(8), a, m)
 
 /**
  * `out = a mod m` for a plain `a` below 2m: `a - m` is computed whatever `a`
@@ -3674,17 +3684,8 @@ const p256Below = (a: u32[], m: u32[]): u32 => {
  * how an x-coordinate (below p < 2n) and a 256-bit digest are taken mod n.
  */
 const p256ReduceOnce = (out: u32[], a: u32[], m: u32[]): void => {
-  if (toI32(a.length) < 8 || toI32(m.length) < 8) {
-    return
-  }
   const d: u32[] = new Array<u32>(8)
-  let borrow: u32 = 0
-  for (let i: i32 = 0; i < 8; i++) {
-    const w: u64 = p256FiatSubborrowxU32(borrow, a[i], m[i])
-    d[i] = toU32(w)
-    borrow = toU32(w >> 32)
-  }
-  p256FiatSelectznz(out, borrow, d, a)
+  p256FiatSelectznz(out, p256SubBorrow(d, a, m), d, a)
 }
 
 /**
@@ -3700,11 +3701,13 @@ const p256Bit = (e: u32[], i: i32): boolean => {
 }
 
 /**
- * `out = a^e` in the field's Montgomery domain, by square-and-multiply from
- * the top bit of `e`. The branch is on `e`'s bits, so `e` must be public: it
- * is only ever p - 2, for an inversion.
+ * `out = 1 / a` in the field, as `a^(p - 2)` (Fermat); zero for a zero `a`.
+ * Square-and-multiply from the top bit: the branch is on the exponent's bits,
+ * which are a constant.
  */
-const p256FieldPow = (out: u32[], a: u32[], e: u32[]): void => {
+const p256FieldInvert = (out: u32[], a: u32[]): void => {
+  const e: u32[] = p256Prime()
+  e[0] = 0xfffffffd
   const acc: u32[] = p256Limbs()
   p256FiatSetOne(acc)
   for (let i: i32 = 255; i >= 0; i--) {
@@ -3714,13 +3717,6 @@ const p256FieldPow = (out: u32[], a: u32[], e: u32[]): void => {
     }
   }
   p256Copy(out, acc)
-}
-
-/** `out = 1 / a` in the field, as `a^(p - 2)` (Fermat); zero for a zero `a`. */
-const p256FieldInvert = (out: u32[], a: u32[]): void => {
-  const e: u32[] = p256Prime()
-  e[0] = 0xfffffffd
-  p256FieldPow(out, a, e)
 }
 
 /**
@@ -3772,9 +3768,7 @@ class P256PointScratch {
   t2: u32[]
   t3: u32[]
   t4: u32[]
-  x3: u32[]
-  y3: u32[]
-  z3: u32[]
+  sum: P256ProjectivePoint
   b: u32[]
 
   constructor() {
@@ -3783,11 +3777,16 @@ class P256PointScratch {
     this.t2 = p256Limbs()
     this.t3 = p256Limbs()
     this.t4 = p256Limbs()
-    this.x3 = p256Limbs()
-    this.y3 = p256Limbs()
-    this.z3 = p256Limbs()
+    this.sum = new P256ProjectivePoint()
     this.b = p256CurveB()
   }
+}
+
+/** `out = p`, coordinate by coordinate. */
+const p256PointCopy = (out: P256ProjectivePoint, p: P256ProjectivePoint): void => {
+  p256Copy(out.x, p.x)
+  p256Copy(out.y, p.y)
+  p256Copy(out.z, p.z)
 }
 
 /**
@@ -3806,9 +3805,9 @@ const p256PointAdd = (
   const t2: u32[] = s.t2
   const t3: u32[] = s.t3
   const t4: u32[] = s.t4
-  const x3: u32[] = s.x3
-  const y3: u32[] = s.y3
-  const z3: u32[] = s.z3
+  const x3: u32[] = s.sum.x
+  const y3: u32[] = s.sum.y
+  const z3: u32[] = s.sum.z
   p256FiatMul(t0, p.x, q.x) // 1
   p256FiatMul(t1, p.y, q.y)
   p256FiatMul(t2, p.z, q.z)
@@ -3852,9 +3851,7 @@ const p256PointAdd = (
   p256FiatMul(z3, t4, z3)
   p256FiatMul(t1, t3, t0)
   p256FiatAdd(z3, z3, t1)
-  p256Copy(out.x, x3)
-  p256Copy(out.y, y3)
-  p256Copy(out.z, z3)
+  p256PointCopy(out, s.sum)
 }
 
 /**
@@ -3866,9 +3863,9 @@ const p256PointDouble = (out: P256ProjectivePoint, p: P256ProjectivePoint, s: P2
   const t1: u32[] = s.t1
   const t2: u32[] = s.t2
   const t3: u32[] = s.t3
-  const x3: u32[] = s.x3
-  const y3: u32[] = s.y3
-  const z3: u32[] = s.z3
+  const x3: u32[] = s.sum.x
+  const y3: u32[] = s.sum.y
+  const z3: u32[] = s.sum.z
   p256FiatSquare(t0, p.x) // 1
   p256FiatSquare(t1, p.y)
   p256FiatSquare(t2, p.z)
@@ -3903,9 +3900,7 @@ const p256PointDouble = (out: P256ProjectivePoint, p: P256ProjectivePoint, s: P2
   p256FiatMul(z3, t0, t1)
   p256FiatAdd(z3, z3, z3)
   p256FiatAdd(z3, z3, z3)
-  p256Copy(out.x, x3)
-  p256Copy(out.y, y3)
-  p256Copy(out.z, z3)
+  p256PointCopy(out, s.sum)
 }
 
 /** The limbs one table entry takes: X, Y and Z, eight each. */
@@ -3921,18 +3916,27 @@ const p256TableStore = (table: u32[], at: i32, a: u32[]): void => {
   }
 }
 
+/** Table entry `i` (limbs `24i` to `24i + 23`, X then Y then Z) = `p`. */
+const p256TableStorePoint = (table: u32[], i: i32, p: P256ProjectivePoint): void => {
+  p256TableStore(table, i * P256_ENTRY, p.x)
+  p256TableStore(table, i * P256_ENTRY + 8, p.y)
+  p256TableStore(table, i * P256_ENTRY + 16, p.z)
+}
+
 /**
- * The window table: entry `i` (limbs `24i` to `24i + 23`, X then Y then Z) is
- * `i * p`, for `i` from 0 to 15. Built from `p`, which is public here (G or a
- * received key) and a secret only in that it is about to be multiplied.
+ * The window table: entry `i` is `i * p`, for `i` from 0 to 15. Built from
+ * `p`, which is public here (G or a received key) and a secret only in that
+ * it is about to be multiplied. Entry 0 is the identity and entry 1 is `p`;
+ * each later one adds `p` to the one before.
  */
 const p256TableBuild = (table: u32[], p: P256ProjectivePoint, s: P256PointScratch): void => {
   const acc = new P256ProjectivePoint()
-  for (let i: i32 = 0; i < 16; i++) {
-    p256TableStore(table, i * P256_ENTRY, acc.x)
-    p256TableStore(table, i * P256_ENTRY + 8, acc.y)
-    p256TableStore(table, i * P256_ENTRY + 16, acc.z)
+  p256TableStorePoint(table, 0, acc)
+  p256PointCopy(acc, p)
+  p256TableStorePoint(table, 1, acc)
+  for (let i: i32 = 2; i < 16; i++) {
     p256PointAdd(acc, acc, p, s)
+    p256TableStorePoint(table, i, acc)
   }
 }
 
@@ -3981,33 +3985,33 @@ const p256TableSelect = (out: P256ProjectivePoint, table: u32[], digit: u32): vo
  * complete addition, so a zero digit or a leading run of zeros costs what any
  * other digit does.
  */
-const p256ScalarMult = (out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoint): void => {
-  if (toI32(k.length) < 32) {
+const p256ScalarMult = (
+  out: P256ProjectivePoint,
+  k: u8[],
+  p: P256ProjectivePoint,
+  s: P256PointScratch
+): void => {
+  const kLength: i32 = toI32(k.length)
+  if (kLength < 32) {
     return
   }
-  const s = new P256PointScratch()
   const table: u32[] = new Array<u32>(384)
   p256TableBuild(table, p, s)
   const acc = new P256ProjectivePoint()
   const entry = new P256ProjectivePoint()
-  for (let i: i32 = 0; i < 32; i++) {
-    const byte: u32 = toU32(k[i])
+  for (let i: i32 = 0; i < 64; i++) {
+    // Digit i is the high nibble of byte i / 2 when i is even, the low when odd.
+    const at: i32 = i >> 1
+    const byte: u32 = at >= 0 && at < kLength ? toU32(k[at]) : 0
+    const digit: u32 = (byte >> ((1 - toU32(i & 1)) << 2)) & 15
     p256PointDouble(acc, acc, s)
     p256PointDouble(acc, acc, s)
     p256PointDouble(acc, acc, s)
     p256PointDouble(acc, acc, s)
-    p256TableSelect(entry, table, byte >> 4)
-    p256PointAdd(acc, acc, entry, s)
-    p256PointDouble(acc, acc, s)
-    p256PointDouble(acc, acc, s)
-    p256PointDouble(acc, acc, s)
-    p256PointDouble(acc, acc, s)
-    p256TableSelect(entry, table, byte & 15)
+    p256TableSelect(entry, table, digit)
     p256PointAdd(acc, acc, entry, s)
   }
-  p256Copy(out.x, acc.x)
-  p256Copy(out.y, acc.y)
-  p256Copy(out.z, acc.z)
+  p256PointCopy(out, acc)
 }
 
 /** The base point G (SEC 2 §2.4.2), in the Montgomery domain with Z = 1. */
@@ -4043,18 +4047,15 @@ const p256Generator = (): P256ProjectivePoint => {
 }
 
 /**
- * The affine x and y of `p` as plain limbs, `x = X / Z` and `y = Y / Z`, out
- * of the Montgomery domain. The identity has no affine form; its Z inverts to
- * zero and so do both answers, which callers rule out before they ask.
+ * The affine x of `p` as plain limbs, `X / Z` out of the Montgomery domain,
+ * which is all ECDSA reads of a point. The identity has no affine form; its Z
+ * inverts to zero and so does the answer, which callers rule out first.
  */
-const p256ToAffine = (x: u32[], y: u32[], p: P256ProjectivePoint): void => {
+const p256AffineX = (x: u32[], p: P256ProjectivePoint): void => {
   const zInverse: u32[] = p256Limbs()
-  const one: u32[] = p256PlainOne()
   p256FieldInvert(zInverse, p.z)
   p256FiatMul(x, p.x, zInverse)
-  p256FiatMul(y, p.y, zInverse)
-  p256FiatMul(x, x, one)
-  p256FiatMul(y, y, one)
+  p256FiatMul(x, x, p256PlainOne())
 }
 
 /**
@@ -4101,9 +4102,15 @@ const p256DecodePoint = (bytes: u8[]): P256ProjectivePoint | null => {
 
 /** `p` as its 65-byte uncompressed SEC 1 encoding; `p` is never the identity here. */
 const p256EncodePoint = (p: P256ProjectivePoint): u8[] => {
+  const zInverse: u32[] = p256Limbs()
+  const one: u32[] = p256PlainOne()
   const x: u32[] = p256Limbs()
   const y: u32[] = p256Limbs()
-  p256ToAffine(x, y, p)
+  p256FieldInvert(zInverse, p.z)
+  p256FiatMul(x, p.x, zInverse)
+  p256FiatMul(y, p.y, zInverse)
+  p256FiatMul(x, x, one)
+  p256FiatMul(y, y, one)
   const out: u8[] = new Array<u8>(65)
   out[0] = 4
   p256LimbsToBytes(out, 1, x)
@@ -4161,13 +4168,6 @@ const p256NonceKey = (k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] => {
   return mac.digest()
 }
 
-/** HMAC_K(V), the V update of RFC 6979 §3.2. */
-const p256NonceValue = (k: u8[], v: u8[]): u8[] => {
-  const mac = new HmacSha256(k)
-  mac.update(v, P256_FROM, toI32(v.length))
-  return mac.digest()
-}
-
 /**
  * The signature of the plain scalar `z` (a digest mod n) under the private key
  * `priv`, already checked to be in [1, n), with the nonce of RFC 6979 §3.2 for
@@ -4191,38 +4191,35 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
     v[i] = 1
   }
   k = p256NonceKey(k, v, 0, priv, h1) // step d
-  v = p256NonceValue(k, v) // step e
+  v = hmacSha256(k, v) // step e
   k = p256NonceKey(k, v, 1, priv, h1) // step f
-  v = p256NonceValue(k, v) // step g
+  v = hmacSha256(k, v) // step g
 
   const dM: u32[] = p256Limbs()
-  const zM: u32[] = p256Limbs()
   p256LimbsFromBytes(dM, priv, 0)
   p256FiatScalarMul(dM, dM, r2)
-  p256FiatScalarMul(zM, z, r2)
   const g: P256ProjectivePoint = p256Generator()
+  const scratch = new P256PointScratch()
   const point = new P256ProjectivePoint()
   const x: u32[] = p256Limbs()
-  const y: u32[] = p256Limbs()
   const r: u32[] = p256Limbs()
-  const rM: u32[] = p256Limbs()
   const kM: u32[] = p256Limbs()
   const s: u32[] = p256Limbs()
   while (true) {
-    v = p256NonceValue(k, v) // step h.2
+    v = hmacSha256(k, v) // step h.2
     if (p256ScalarInRange(v)) {
-      p256ScalarMult(point, v, g)
-      p256ToAffine(x, y, point)
+      p256ScalarMult(point, v, g, scratch)
+      p256AffineX(x, point)
       p256ReduceOnce(r, x, n)
-      // s = k^-1 (z + r d) mod n, in the Montgomery domain until the end.
-      p256FiatScalarMul(rM, r, r2)
+      // s = k^-1 (z + r d) mod n. A Montgomery multiply of a plain value by
+      // one in the Montgomery domain answers a plain value, so only d and
+      // k^-1 are converted: r d and then (z + r d) k^-1 come out plain.
       p256LimbsFromBytes(kM, v, 0)
       p256FiatScalarMul(kM, kM, r2)
       p256ScalarInvert(kM, kM)
-      p256FiatScalarMul(s, rM, dM)
-      p256FiatScalarAdd(s, s, zM)
+      p256FiatScalarMul(s, r, dM)
+      p256FiatScalarAdd(s, s, z)
       p256FiatScalarMul(s, s, kM)
-      p256FiatScalarMul(s, s, p256PlainOne())
       if (p256FiatNonzero(r) !== 0 && p256FiatNonzero(s) !== 0) {
         const sig: u8[] = new Array<u8>(64)
         p256LimbsToBytes(sig, 0, r)
@@ -4231,7 +4228,7 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
       }
     }
     k = p256NonceKey(k, v, 0, empty, empty) // step h.3
-    v = p256NonceValue(k, v)
+    v = hmacSha256(k, v)
   }
 }
 
@@ -4245,7 +4242,7 @@ export const p256PublicKey = (priv: u8[]): u8[] | null => {
     return null
   }
   const point = new P256ProjectivePoint()
-  p256ScalarMult(point, priv, p256Generator())
+  p256ScalarMult(point, priv, p256Generator(), new P256PointScratch())
   return p256EncodePoint(point)
 }
 
@@ -4294,50 +4291,40 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   }
   const n: u32[] = p256Order()
   const r2: u32[] = p256ScalarR2()
-  const one: u32[] = p256PlainOne()
   const r: u32[] = p256Limbs()
   const w: u32[] = p256Limbs()
   const z: u32[] = p256Limbs()
   p256LimbsFromBytes(r, rBytes, 0)
   p256LimbsFromBytes(w, sBytes, 0)
   p256DigestScalar(z, digest)
-  const rM: u32[] = p256Limbs()
-  p256FiatScalarMul(rM, r, r2)
+  // w = s^-1 in the Montgomery domain; u1 = z w and u2 = r w multiply a
+  // plain value by it, so they come out plain.
   p256FiatScalarMul(w, w, r2)
   p256ScalarInvert(w, w)
-  p256FiatScalarMul(z, z, r2)
   const u1: u32[] = p256Limbs()
   const u2: u32[] = p256Limbs()
   p256FiatScalarMul(u1, z, w)
-  p256FiatScalarMul(u2, rM, w)
-  p256FiatScalarMul(u1, u1, one)
-  p256FiatScalarMul(u2, u2, one)
+  p256FiatScalarMul(u2, r, w)
   const u1Bytes: u8[] = new Array<u8>(32)
   const u2Bytes: u8[] = new Array<u8>(32)
   p256LimbsToBytes(u1Bytes, 0, u1)
   p256LimbsToBytes(u2Bytes, 0, u2)
 
+  const scratch = new P256PointScratch()
   const sum = new P256ProjectivePoint()
   const other = new P256ProjectivePoint()
-  p256ScalarMult(sum, u1Bytes, p256Generator())
-  p256ScalarMult(other, u2Bytes, q)
-  p256PointAdd(sum, sum, other, new P256PointScratch())
+  p256ScalarMult(sum, u1Bytes, p256Generator(), scratch)
+  p256ScalarMult(other, u2Bytes, q, scratch)
+  p256PointAdd(sum, sum, other, scratch)
   if (p256FiatNonzero(sum.z) === 0) {
     return false
   }
   const x: u32[] = p256Limbs()
-  const y: u32[] = p256Limbs()
-  p256ToAffine(x, y, sum)
-  const v: u32[] = p256Limbs()
-  p256ReduceOnce(v, x, n)
-  if (toI32(v.length) < 8 || toI32(r.length) < 8) {
-    return false
-  }
-  let diff: u32 = 0
-  for (let i: i32 = 0; i < 8; i++) {
-    diff = diff | (v[i] ^ r[i])
-  }
-  return diff === 0
+  p256AffineX(x, sum)
+  p256ReduceOnce(x, x, n)
+  const vBytes: u8[] = new Array<u8>(32)
+  p256LimbsToBytes(vBytes, 0, x)
+  return timingSafeEqual(vBytes, rBytes)
 }
 
 /** `p256Sign` of the SHA-256 of `msg`: ECDSA with SHA-256 over the whole message. */

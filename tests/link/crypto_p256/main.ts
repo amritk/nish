@@ -208,7 +208,6 @@ export const main = (): i32 => {
   t.eqStr("p256SignSha256 with a 31-byte key is null", toHex(p256SignSha256(new Array<u8>(31), sample)), "null");
 
   // --- Public keys: 65 bytes, 0x04, on the curve, not the identity ----------
-  const pubY: string = toHex(pub);
   t.ok("a key with a flipped bit in y is off the curve", !p256VerifySha256(flip(pub, 64, 0), sample, sampleSig));
   t.ok("a key with a flipped bit in x is off the curve", !p256VerifySha256(flip(pub, 1, 7), sample, sampleSig));
   t.ok("a key with prefix 0x03 is refused", !p256VerifySha256(flip(pub, 0, 0), sample, sampleSig));
@@ -216,7 +215,7 @@ export const main = (): i32 => {
   t.ok("65 zero bytes are refused", !p256VerifySha256(new Array<u8>(65), sample, sampleSig));
   t.ok("0x04 then (0, 0) is refused", !p256VerifySha256(fromHex(`04${ZERO}${ZERO}`), sample, sampleSig));
   t.ok("a 64-byte key is refused", !p256VerifySha256(fromHex(`${UX}${UY}`), sample, sampleSig));
-  t.ok("a 66-byte key is refused", !p256VerifySha256(fromHex(`${pubY}00`), sample, sampleSig));
+  t.ok("a 66-byte key is refused", !p256VerifySha256(fromHex(`${toHex(pub)}00`), sample, sampleSig));
   // A coordinate of p or more is refused as not canonical, before the curve
   // equation sees it. (5, y) is on the curve, and x = 5 + p is below 2^256,
   // so the same point spelled with x + p would pass the equation; only the
