@@ -78,10 +78,10 @@ fs.mkdirSync(buildDir, { recursive: true })
 /**
  * The C runtime's translation units, as a direct `clang` line has to spell
  * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
- * system calls, `runtime-parallel.c` divides work across threads and
- * `runtime-host.c` holds the wall clock, entropy, file times and signals, split
- * apart so that each carries its own `.text*` budget (the `*_TEXT_BUDGET`
- * constants below).
+ * system calls, `runtime-parallel.c` divides work across threads,
+ * `runtime-host.c` holds the wall clock, entropy, file times and signals and
+ * `runtime-net.c` the sockets of `nish:net`, split apart so that each carries
+ * its own `.text*` budget (the `*_TEXT_BUDGET` constants below).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -94,6 +94,7 @@ const RUNTIME_C = [
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
   "runtime/runtime-host.c",
+  "runtime/runtime-net.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -4874,7 +4875,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c and runtime-net.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -5381,6 +5382,20 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
  * in tests/runtime-test.c).
  */
 const RUNTIME_HOST_TEXT_BUDGET = 768
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
+ * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
+ * `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`.
+ *
+ * Measured **856 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`.
+ * They are a fifth translation unit rather than more of `runtime-host.c` because the
+ * surface grows -- UDP and the readiness loop are the next two slices of N5, and each
+ * raises this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
+ * the rule is a new file with its own measured ceiling, never a raised one. The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here
+ * was set.
+ */
+const NET_TEXT_BUDGET = 1024
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -5414,6 +5429,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         ["-DNISH_THREADS=1"],
       ],
       ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
+      ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
     ]) {
       const name = path.basename(src)
       // The flags are in the check's name and in the object's, so the two rows for
@@ -10246,6 +10262,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // And the fourth (WP34 N3): without it every link would fail to find
       // `nish_date_now` and the other host calls the moment a program used one.
       "runtime/runtime-host.c",
+      // And the fifth (WP34 N5): without it every link of a program that
+      // imports `nish:net` would fail to find `nish_tcp_listen` and the rest.
+      "runtime/runtime-net.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
