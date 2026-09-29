@@ -64,6 +64,22 @@ snippet elsewhere in the repository that reproduces part of a port.
 [`bench/awfy/AUTHORS.md`](bench/awfy/AUTHORS.md) lists the people behind SOM.
 Those files are listed there rather than here, and the same check holds them.
 
+### `tests/link/crypto_wycheproof/LICENSE-wycheproof`
+
+[Project Wycheproof](https://github.com/C2SP/wycheproof)'s test vectors,
+Copyright 2016-2026 The Wycheproof Authors, under the Apache License,
+Version 2.0. Each file in [`tests/link/crypto_wycheproof/`](tests/link/crypto_wycheproof/)
+holds the cases one `std/crypto` module runs, rewritten from upstream's JSON
+as Nish source; it names the upstream file and commit it was taken from and
+says what was changed, as the licence's section 4 asks of a modified file.
+Upstream ships no `NOTICE` file. The directory has no `main.ts`, so the link
+harness does not run it as a program: each module's `tests/link/crypto_*`
+test imports the file it needs.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof/LICENSE-wycheproof.
+```
+
 ## Files
 
 | File | Derived from | Licence | Licence text |
@@ -78,6 +94,7 @@ Those files are listed there rather than here, and the same check holds them.
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.rs` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 
 ## Public-domain algorithms
 

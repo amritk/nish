@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 794 programs, 52622 dump lines.
+# 795 programs, 52921 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4906,6 +4906,306 @@ function test(): i32 -> @test [exported]
   local 4:9 f: f64 (const)
   local 5:9 big: i64 (const)
   local 12:9 zero: f64 (const)
+program tests/cases/ct_asm_aes.ts
+module tests/cases/ct_asm_aes.ts (entry)
+function aesLanes(pattern: u64): u64 -> @aesLanes
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 21:9 two: u64 (const)
+function aesSbox(q: u64[]): void -> @aesSbox
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 159:3
+  calls: nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 27:9 x0: u64 (const)
+  local 28:9 x1: u64 (const)
+  local 29:9 x2: u64 (const)
+  local 30:9 x3: u64 (const)
+  local 31:9 x4: u64 (const)
+  local 32:9 x5: u64 (const)
+  local 33:9 x6: u64 (const)
+  local 34:9 x7: u64 (const)
+  local 37:9 y14: u64 (const)
+  local 38:9 y13: u64 (const)
+  local 39:9 y9: u64 (const)
+  local 40:9 y8: u64 (const)
+  local 41:9 t0: u64 (const)
+  local 42:9 y1: u64 (const)
+  local 43:9 y4: u64 (const)
+  local 44:9 y12: u64 (const)
+  local 45:9 y2: u64 (const)
+  local 46:9 y5: u64 (const)
+  local 47:9 y3: u64 (const)
+  local 48:9 t1: u64 (const)
+  local 49:9 y15: u64 (const)
+  local 50:9 y20: u64 (const)
+  local 51:9 y6: u64 (const)
+  local 52:9 y10: u64 (const)
+  local 53:9 y11: u64 (const)
+  local 54:9 y7: u64 (const)
+  local 55:9 y17: u64 (const)
+  local 56:9 y19: u64 (const)
+  local 57:9 y16: u64 (const)
+  local 58:9 y21: u64 (const)
+  local 59:9 y18: u64 (const)
+  local 62:9 t2: u64 (const)
+  local 63:9 t3: u64 (const)
+  local 64:9 t4: u64 (const)
+  local 65:9 t5: u64 (const)
+  local 66:9 t6: u64 (const)
+  local 67:9 t7: u64 (const)
+  local 68:9 t8: u64 (const)
+  local 69:9 t9: u64 (const)
+  local 70:9 t10: u64 (const)
+  local 71:9 t11: u64 (const)
+  local 72:9 t12: u64 (const)
+  local 73:9 t13: u64 (const)
+  local 74:9 t14: u64 (const)
+  local 75:9 t15: u64 (const)
+  local 76:9 t16: u64 (const)
+  local 77:9 t17: u64 (const)
+  local 78:9 t18: u64 (const)
+  local 79:9 t19: u64 (const)
+  local 80:9 t20: u64 (const)
+  local 81:9 t21: u64 (const)
+  local 82:9 t22: u64 (const)
+  local 83:9 t23: u64 (const)
+  local 84:9 t24: u64 (const)
+  local 86:9 t25: u64 (const)
+  local 87:9 t26: u64 (const)
+  local 88:9 t27: u64 (const)
+  local 89:9 t28: u64 (const)
+  local 90:9 t29: u64 (const)
+  local 91:9 t30: u64 (const)
+  local 92:9 t31: u64 (const)
+  local 93:9 t32: u64 (const)
+  local 94:9 t33: u64 (const)
+  local 95:9 t34: u64 (const)
+  local 96:9 t35: u64 (const)
+  local 97:9 t36: u64 (const)
+  local 98:9 t37: u64 (const)
+  local 99:9 t38: u64 (const)
+  local 100:9 t39: u64 (const)
+  local 101:9 t40: u64 (const)
+  local 103:9 t41: u64 (const)
+  local 104:9 t42: u64 (const)
+  local 105:9 t43: u64 (const)
+  local 106:9 t44: u64 (const)
+  local 107:9 t45: u64 (const)
+  local 108:9 z0: u64 (const)
+  local 109:9 z1: u64 (const)
+  local 110:9 z2: u64 (const)
+  local 111:9 z3: u64 (const)
+  local 112:9 z4: u64 (const)
+  local 113:9 z5: u64 (const)
+  local 114:9 z6: u64 (const)
+  local 115:9 z7: u64 (const)
+  local 116:9 z8: u64 (const)
+  local 117:9 z9: u64 (const)
+  local 118:9 z10: u64 (const)
+  local 119:9 z11: u64 (const)
+  local 120:9 z12: u64 (const)
+  local 121:9 z13: u64 (const)
+  local 122:9 z14: u64 (const)
+  local 123:9 z15: u64 (const)
+  local 124:9 z16: u64 (const)
+  local 125:9 z17: u64 (const)
+  local 128:9 t46: u64 (const)
+  local 129:9 t47: u64 (const)
+  local 130:9 t48: u64 (const)
+  local 131:9 t49: u64 (const)
+  local 132:9 t50: u64 (const)
+  local 133:9 t51: u64 (const)
+  local 134:9 t52: u64 (const)
+  local 135:9 t53: u64 (const)
+  local 136:9 t54: u64 (const)
+  local 137:9 t55: u64 (const)
+  local 138:9 t56: u64 (const)
+  local 139:9 t57: u64 (const)
+  local 140:9 t58: u64 (const)
+  local 141:9 t59: u64 (const)
+  local 142:9 t60: u64 (const)
+  local 143:9 t61: u64 (const)
+  local 144:9 t62: u64 (const)
+  local 145:9 t63: u64 (const)
+  local 146:9 t64: u64 (const)
+  local 147:9 t65: u64 (const)
+  local 148:9 t66: u64 (const)
+  local 149:9 s0: u64 (const)
+  local 150:9 s6: u64 (const)
+  local 151:9 s7: u64 (const)
+  local 152:9 t67: u64 (const)
+  local 153:9 s3: u64 (const)
+  local 154:9 s4: u64 (const)
+  local 155:9 s5: u64 (const)
+  local 156:9 s1: u64 (const)
+  local 157:9 s2: u64 (const)
+function aesShiftPlane(x: u64): u64 -> @aesShiftPlane
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: aesLanes
+  stackSites=0 stackLocals=0
+  callee 171:8 aesLanes -> @aesLanes
+  callee 172:22 aesLanes -> @aesLanes
+  callee 173:22 aesLanes -> @aesLanes
+  callee 174:22 aesLanes -> @aesLanes
+  callee 175:22 aesLanes -> @aesLanes
+  callee 176:22 aesLanes -> @aesLanes
+  callee 177:22 aesLanes -> @aesLanes
+function aesShiftRows(q: u64[]): void -> @aesShiftRows
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 181:3
+  calls: aesShiftPlane nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 181:10 aesShiftPlane -> @aesShiftPlane
+  callee 182:10 aesShiftPlane -> @aesShiftPlane
+  callee 183:10 aesShiftPlane -> @aesShiftPlane
+  callee 184:10 aesShiftPlane -> @aesShiftPlane
+  callee 185:10 aesShiftPlane -> @aesShiftPlane
+  callee 186:10 aesShiftPlane -> @aesShiftPlane
+  callee 187:10 aesShiftPlane -> @aesShiftPlane
+  callee 188:10 aesShiftPlane -> @aesShiftPlane
+function aesNextRow(x: u64): u64 -> @aesNextRow
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: aesLanes
+  stackSites=0 stackLocals=0
+  callee 193:22 aesLanes -> @aesLanes
+  callee 193:69 aesLanes -> @aesLanes
+function aesRowAfterNext(x: u64): u64 -> @aesRowAfterNext
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: aesLanes
+  stackSites=0 stackLocals=0
+  callee 197:22 aesLanes -> @aesLanes
+  callee 197:68 aesLanes -> @aesLanes
+function aesMixColumns(q: u64[]): void -> @aesMixColumns
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 217:3
+  calls: aesNextRow aesRowAfterNext nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 201:9 n0: u64 (const)
+  callee 201:19 aesNextRow -> @aesNextRow
+  local 202:9 n1: u64 (const)
+  callee 202:19 aesNextRow -> @aesNextRow
+  local 203:9 n2: u64 (const)
+  callee 203:19 aesNextRow -> @aesNextRow
+  local 204:9 n3: u64 (const)
+  callee 204:19 aesNextRow -> @aesNextRow
+  local 205:9 n4: u64 (const)
+  callee 205:19 aesNextRow -> @aesNextRow
+  local 206:9 n5: u64 (const)
+  callee 206:19 aesNextRow -> @aesNextRow
+  local 207:9 n6: u64 (const)
+  callee 207:19 aesNextRow -> @aesNextRow
+  local 208:9 n7: u64 (const)
+  callee 208:19 aesNextRow -> @aesNextRow
+  local 209:9 t0: u64 (const)
+  local 210:9 t1: u64 (const)
+  local 211:9 t2: u64 (const)
+  local 212:9 t3: u64 (const)
+  local 213:9 t4: u64 (const)
+  local 214:9 t5: u64 (const)
+  local 215:9 t6: u64 (const)
+  local 216:9 t7: u64 (const)
+  callee 217:20 aesRowAfterNext -> @aesRowAfterNext
+  callee 218:25 aesRowAfterNext -> @aesRowAfterNext
+  callee 219:20 aesRowAfterNext -> @aesRowAfterNext
+  callee 220:25 aesRowAfterNext -> @aesRowAfterNext
+  callee 221:25 aesRowAfterNext -> @aesRowAfterNext
+  callee 222:20 aesRowAfterNext -> @aesRowAfterNext
+  callee 223:20 aesRowAfterNext -> @aesRowAfterNext
+  callee 224:20 aesRowAfterNext -> @aesRowAfterNext
+function aesAddRoundKey(q: u64[], rk: u64[], at: i32): void -> @aesAddRoundKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 229:3
+  escaping: at
+  calls: nish_panic_index
+  pointer q: size=0 writesThrough=true captured=false
+  pointer rk: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @aesBitslicedRound [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via aesSbox
+  escaping: at
+  calls: aesAddRoundKey aesMixColumns aesSbox aesShiftRows
+  pointer q: size=0 writesThrough=true captured=false passedTo=aesSbox#0 aesShiftRows#0 aesMixColumns#0 aesAddRoundKey#0
+  pointer rk: size=0 writesThrough=false captured=false passedTo=aesAddRoundKey#1
+  stackSites=0 stackLocals=0
+  callee 241:3 aesSbox -> @aesSbox
+  callee 242:3 aesShiftRows -> @aesShiftRows
+  callee 243:3 aesMixColumns -> @aesMixColumns
+  callee 244:3 aesAddRoundKey -> @aesAddRoundKey
+function ghashMul32(x: u64, y: u64): u64 -> @ghashMul32
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 249:9 m0: u64 (const)
+  local 250:9 m1: u64 (const)
+  local 251:9 m2: u64 (const)
+  local 252:9 m3: u64 (const)
+  local 253:9 x0: u64 (const)
+  local 254:9 x1: u64 (const)
+  local 255:9 x2: u64 (const)
+  local 256:9 x3: u64 (const)
+  local 257:9 y0: u64 (const)
+  local 258:9 y1: u64 (const)
+  local 259:9 y2: u64 (const)
+  local 260:9 y3: u64 (const)
+  local 261:9 z0: u64 (const)
+  local 262:9 z1: u64 (const)
+  local 263:9 z2: u64 (const)
+  local 264:9 z3: u64 (const)
+  local 265:9 w0: u64 (const)
+function ghashMultiply(y: u64[], hHi: u64, hLo: u64): void -> @ghashMultiply [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 313:3
+  calls: ghashMul32 nish_panic_index
+  pointer y: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 271:9 low32: u64 (const)
+  local 272:9 thirtyTwo: u64 (const)
+  local 273:9 a1: u64 (const)
+  local 274:9 a0: u64 (const)
+  local 275:9 a2: u64 (const)
+  local 276:9 b2: u64 (const)
+  local 279:9 l0: u64 (const)
+  callee 279:19 ghashMul32 -> @ghashMul32
+  local 280:9 l1: u64 (const)
+  callee 280:19 ghashMul32 -> @ghashMul32
+  local 281:9 l2: u64 (const)
+  callee 281:19 ghashMul32 -> @ghashMul32
+  local 282:9 lHi: u64 (const)
+  local 283:9 lLo: u64 (const)
+  local 286:9 h0: u64 (const)
+  callee 286:19 ghashMul32 -> @ghashMul32
+  local 287:9 h1: u64 (const)
+  callee 287:19 ghashMul32 -> @ghashMul32
+  local 288:9 h2: u64 (const)
+  callee 288:19 ghashMul32 -> @ghashMul32
+  local 289:9 hiHi: u64 (const)
+  local 290:9 hiLo: u64 (const)
+  local 293:9 m0: u64 (const)
+  callee 293:19 ghashMul32 -> @ghashMul32
+  local 294:9 m1: u64 (const)
+  callee 294:19 ghashMul32 -> @ghashMul32
+  local 295:9 m2: u64 (const)
+  callee 295:19 ghashMul32 -> @ghashMul32
+  local 296:9 mHi: u64 (const)
+  local 297:9 mLo: u64 (const)
+  local 300:9 r3: u64 (const)
+  local 301:9 r2: u64 (const)
+  local 302:9 r1: u64 (const)
+  local 303:9 r0: u64 (const)
+  local 304:9 one: u64 (const)
+  local 305:9 top: u64 (const)
+  local 306:9 p3: u64 (const)
+  local 307:9 p2: u64 (const)
+  local 308:9 p1: u64 (const)
+  local 309:9 p0: u64 (const)
+  local 312:9 d1: u64 (const)
+function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @aesGcmTagMask [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 program tests/cases/ct_asm_mac.ts
 module tests/cases/ct_asm_mac.ts (entry)
 function macEqual(a: u8[], b: u8[]): u32 -> @macEqual [exported]
