@@ -1636,10 +1636,12 @@ export class BoundsWalk {
   proved: Node[]
   /** The `substring` bounds an unrecorded walk proved, waiting as `proved` does. */
   clamps: Node[]
-  /** Whether `slice` bounds are judged too: set only by `proveSliceBounds`. */
-  slices: boolean
-  /** The `slice` bounds this walk proved inside `[0, length]`, for `proveSliceBounds` to record. */
-  sliceClamps: Node[]
+  /**
+   * The `slice` bounds this walk proved inside `[0, length]`, for
+   * `proveSliceBounds` to record; `null` in every other walk, which judges no
+   * `slice` at all.
+   */
+  sliceClamps: Node[] | null
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[]
   /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
@@ -1665,8 +1667,7 @@ export class BoundsWalk {
     this.record = true
     this.proved = []
     this.clamps = []
-    this.slices = false
-    this.sliceClamps = []
+    this.sliceClamps = null
     this.sites = []
     this.callees = []
     this.stopAfter = -1
@@ -1893,8 +1894,9 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
  * walk's `record` says.
  */
 const judgeSliceBound = (walk: BoundsWalk, state: State, holder: Local | null, bound: Node): void => {
-  if (provesClamp(walk.ctx, state, holder, bound)) {
-    walk.sliceClamps.push(bound)
+  const proved = walk.sliceClamps
+  if (proved !== null && provesClamp(walk.ctx, state, holder, bound)) {
+    proved.push(bound)
   }
 }
 
@@ -2080,7 +2082,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     // may reach back. The receiver's length is read before either, so the
     // holder is dropped the moment an argument rebinds it — a literal `0`
     // still folds after that, because no string has a negative length.
-    const slice = walk.slices && isSliceCall(ctx, e)
+    const slice = walk.sliceClamps !== null && isSliceCall(ctx, e)
     const clamped = slice || isSubstringCall(ctx, e)
     let holder: Local | null = null
     if (clamped) {
@@ -3861,15 +3863,16 @@ export const proveSliceBounds = (
     opts.strictExports
   )
   const walk = new BoundsWalk(ctx, opts.uncheckedIndexing)
+  const proved: Node[] = []
   walk.record = false
-  walk.slices = true
+  walk.sliceClamps = proved
   const state = new State(table)
   if (body.kind === N_BLOCK) {
     walkBoundsStatement(walk, state, body)
   } else {
     walkExpression(walk, state, body)
   }
-  for (const bound of walk.sliceClamps) {
+  for (const bound of proved) {
     program.nodeProvenClamp[bound.id] = true
   }
 }
