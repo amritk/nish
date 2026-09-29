@@ -44,6 +44,12 @@
 #define CT_PERCENTILES 100
 /* The uncropped test, one per percentile, and the second-order test. */
 #define CT_TESTS (CT_PERCENTILES + 2)
+/*
+ * Measurements a calibration round takes, its median the middle one. The
+ * first batch is never smaller, so the one buffer holds either: it was once
+ * 1001 against a floor of 1000, and every `--quick` run wrote a word past it.
+ */
+#define CT_CALIBRATION 1001
 
 static uint64_t ct_state = 0x9e3779b97f4a7c15u;
 
@@ -138,8 +144,8 @@ static void ct_sample(const ct_function *f, int batch, uint64_t *out, long count
 
 static void ct_run(const ct_function *f, long samples) {
   long first = samples / 10;
-  if (first < 1000) {
-    first = 1000;
+  if (first < CT_CALIBRATION) {
+    first = CT_CALIBRATION;
   }
   if (first > 100000) {
     first = 100000;
@@ -151,8 +157,8 @@ static void ct_run(const ct_function *f, long samples) {
   }
   int batch = 1;
   for (;;) {
-    ct_sample(f, batch, batch_of, 1001);
-    if (batch_of[500] >= 64 || batch >= 4096) {
+    ct_sample(f, batch, batch_of, CT_CALIBRATION);
+    if (batch_of[CT_CALIBRATION / 2] >= 64 || batch >= 4096) {
       break;
     }
     batch *= 2;
