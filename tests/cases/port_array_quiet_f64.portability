@@ -1,1 +1,0 @@
-{"file":"tests/cases/port_array_quiet_f64.ts","line":6,"column":3,"endLine":6,"endColumn":42,"severity":"portability","code":"NL8011","message":"`console.log` prints a negative zero as 0 here, and Node's console prints -0"}
