@@ -29,6 +29,12 @@
 # between the parser's sentence and stage0's, and they are why the parser could
 # not have said it.
 #
+# It shrank again, from 41 to 39, when WP33 R1 made the parser read every
+# statement the language forbids (`nl2133_for_await`,
+# `nl2135_for_of_without_declaration`): each is parsed into the node it
+# resembles and refused by the phase that owns its rule, the shape
+# `src/nodes.ts` writes down for every construct that comes off this list.
+#
 # One warning from that change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
@@ -46,8 +52,6 @@ nl2118_override_method
 nl2128_export_list
 nl2129_export_default_value
 nl2131_export_default_class
-nl2133_for_await
-nl2135_for_of_without_declaration
 nl2137_implements_expression
 nl2144_new_non_identifier
 nl2189_constructor_return_type

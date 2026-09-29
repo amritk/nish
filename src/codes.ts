@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 514
+export const RULE_COUNT: i32 = 515
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -224,6 +224,8 @@ const diagnosticRules = (): string[] => [
   "NL2159",
   "A module constant's initialiser must be a literal, another constant, or arithmetic over them",
   "NL2167",
+  " (it enumerates property names, and object layout is fixed at compile time); use `for...of`",
+  "NL1056",
   "` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ",
   "NL2042",
   "`, because that entry declares none of the conditions this compiler compiles source from (`",

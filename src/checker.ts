@@ -38,20 +38,26 @@ import {
   FLAG_CONST,
   FLAG_FOREIGN,
   FLAG_PREFIX,
+  FLAG_VAR,
   N_ARROW,
   N_BINARY,
   N_BLOCK,
+  N_BREAK,
   N_CLASS,
   N_CONSTRUCTOR,
+  N_CONTINUE,
   N_DO,
   N_EMPTY,
+  N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
+  N_IF,
   N_IMPORT,
   N_INDEX,
   N_INTERFACE,
+  N_LABELED,
   N_LIST,
   N_MEMBER,
   N_METHOD,
@@ -64,14 +70,18 @@ import {
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
+  N_SWITCH,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
+  N_THROW,
+  N_TRY,
   N_ENUM,
   N_TYPE_ALIAS,
   N_TYPE_REF,
   N_UNARY,
   N_VAR_DECL,
   N_WHILE,
+  N_WITH,
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
@@ -94,7 +104,7 @@ import {
 } from "./program"
 import { BoundsWalk, analyzeBounds } from "./bounds"
 import { checkResultLocalsHandled } from "./result"
-import { checkReturnValue, checkStatements } from "./statements"
+import { checkReturnValue, checkStatements, refuseForOfHeads } from "./statements"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
   checkImplements,
@@ -230,6 +240,14 @@ export class Checker {
         this.collectConstants(stmt)
       } else if (stmt.kind === N_FUNCTION) {
         this.collectFunction(stmt)
+      } else if (stmt.kind !== N_IMPORT && stmt.kind !== N_TYPE_ALIAS && stmt.kind !== N_ENUM) {
+        // A statement the parser read where a declaration was expected: a
+        // module has no top-level code for it to be part of (WP33 R1). The
+        // kind is named the way stage0 named it, by TypeScript's `SyntaxKind`.
+        this.ctx.error(
+          stmt,
+          `Only top-level function declarations are supported in Phase 1 (found ${syntaxKindName(stmt.kind)})`
+        )
       }
     }
     this.ctx.errored = false
@@ -258,6 +276,11 @@ export class Checker {
         this.ctx.errored = false
         aliasType(alias)
       }
+    }
+    // Per declaration, as the rest of pass 1 recovers: one refusal each.
+    for (const stmt of this.program.file.children) {
+      this.ctx.errored = false
+      refuseForOfHeads(this.ctx, stmt)
     }
     this.ctx.errored = false
     this.qualifySymbols()
@@ -672,6 +695,14 @@ export class Checker {
    * signatures.
    */
   collectConstants(stmt: Node): void {
+    // A `var` is Phase 0's (NL1036), which stops the module before this.
+    if ((stmt.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
+      this.ctx.error(
+        stmt,
+        "Top-level `let` is not supported; a module has no top-level code, so only `const` is available"
+      )
+      return
+    }
     const exported = isExported(stmt)
     for (const decl of stmt.children[0].children) {
       const name = decl.children[0].text
@@ -2535,4 +2566,44 @@ const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean,
   }
   program.newTypeArgumentIds.set(`${init.id}`, program.newTypeArguments.length)
   program.newTypeArguments.push(annotation.children[0])
+}
+
+/**
+ * The `SyntaxKind` TypeScript gives a statement found at the top level, which
+ * is the word NL2230's message has always ended with. Every statement the
+ * parser reads there has one (`Parser.startsTopLevelStatement`).
+ */
+const syntaxKindName = (kind: i32): string => {
+  switch (kind) {
+    case N_EXPR_STMT:
+      return "ExpressionStatement"
+    case N_IF:
+      return "IfStatement"
+    case N_WHILE:
+      return "WhileStatement"
+    case N_DO:
+      return "DoStatement"
+    case N_FOR:
+      return "ForStatement"
+    case N_FOR_OF:
+      return "ForOfStatement"
+    case N_SWITCH:
+      return "SwitchStatement"
+    case N_RETURN:
+      return "ReturnStatement"
+    case N_THROW:
+      return "ThrowStatement"
+    case N_BREAK:
+      return "BreakStatement"
+    case N_CONTINUE:
+      return "ContinueStatement"
+    case N_TRY:
+      return "TryStatement"
+    case N_WITH:
+      return "WithStatement"
+    case N_LABELED:
+      return "LabeledStatement"
+    default:
+      return "Statement"
+  }
 }
