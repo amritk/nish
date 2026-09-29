@@ -173,21 +173,20 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     lead = lead + 1
   }
   const type = checkExpression(ctx, args.children[lead], scope, -1)
+  // Every operand is checked before anything is reported, so an error inside
+  // one is not hidden behind this rule. The type is then judged once, at the
+  // operand it was read from, before a mismatch with it is: a boolean mask
+  // is told the types the builtin takes, not that it differs from `a`.
+  let other = -1
   let failed = type === T_ERROR
   for (let i = 0; i < arity; i++) {
-    if (i === lead) {
-      continue
-    }
-    const got = checkExpression(ctx, args.children[i], scope, type)
-    if (got === T_ERROR) {
-      failed = true
-    } else if (!failed && got !== type) {
-      const want = ctx.table.typeName(type)
-      ctx.error(
-        call,
-        `\`${name}\` needs every operand of one type, got ${want} and ${ctx.table.typeName(got)}`
-      )
-      failed = true
+    if (i !== lead) {
+      const got = checkExpression(ctx, args.children[i], scope, type)
+      if (got === T_ERROR) {
+        failed = true
+      } else if (got !== type && other < 0) {
+        other = got
+      }
     }
   }
   if (failed) {
@@ -197,6 +196,13 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     return ctx.errorType(
       args.children[lead],
       `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
+    )
+  }
+  if (other >= 0) {
+    const want = ctx.table.typeName(type)
+    return ctx.errorType(
+      call,
+      `\`${name}\` needs every operand of one type, got ${want} and ${ctx.table.typeName(other)}`
     )
   }
   return type

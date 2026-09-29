@@ -38,6 +38,7 @@ import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
+import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import {
   packageRootOf,
   selfCheckNotes,
@@ -2521,6 +2522,154 @@ if (!only || "bytes_prelude_bigint".includes(only)) {
     r.status === 0 && r.stdout === want,
     `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
   )
+}
+
+// ---- WP34 N6: constant time -------------------------------------------------------
+
+// The TypeScript reading of `ctSelect` and `ctEq` over `u64`, which no unmodified run
+// reaches: a `u64` is a BigInt under `runtime/nish.mjs`, where `ct_u64.ts` cannot run
+// as written, because its bare literals are numbers there. So this computes the same
+// table from BigInts and compares it with the native program's `.out`, line for
+// line — the two tables must be kept in step — and then holds the prelude to the two
+// things LANGUAGE.md says of it: a number mixed with a BigInt throws a `TypeError`,
+// and a `u32` that JavaScript's `&` has made negative still answers in range.
+if (!only || "ct_prelude".includes(only)) {
+  const probe = [
+    "const tryIt = (f) => { try { return String(f()); } catch (e) { return e.constructor.name; } };",
+    "const ones = (1n << 64n) - 1n, top = 1n << 63n;",
+    "const values = [0n, 1n, top, ones, top - 1n];",
+    "const lines = [];",
+    "for (const a of values) for (const b of values)",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: JavaScript source for the probe; the template is its own
+    "  lines.push(`${a} ${b}: ${ctEq(a, b)} ${ctSelect(ones, a, b)} ${ctSelect(0n, a, b)} ${ctSelect(ctEq(a, b), a, 7n)}`);",
+    "lines.push(String(ctSelect(top - 1n, ones, 0n)), String(ctEq(0n, ones - ones)));",
+    "lines.push(tryIt(() => ctEq(1n, 1)), tryIt(() => ctSelect(0, 1n, 2n)), tryIt(() => ctSelect(1n, 1, 2)));",
+    "lines.push(tryIt(() => ctEq(-1, 0xffffffff)), tryIt(() => ctSelect(-1, 7, 9)), tryIt(() => ctSelect(0xffffffff, -2147483648, 0)));",
+    "process.stdout.write(lines.join('\\n') + '\\n');",
+  ].join("\n")
+  const r = spawnSync("node", ["--import", path.join(root, "runtime", "nish.mjs"), "-e", probe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const want = `${fs.readFileSync(path.join(casesDir, "ct_u64.out"), "utf8")}TypeError\nTypeError\nTypeError\n4294967295\n7\n2147483648\n`
+  check(
+    "ct_prelude: under runtime/nish.mjs ctSelect and ctEq on BigInts print ct_u64.out, and a number mixed with a BigInt throws a TypeError",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
+// The promise `ctSelect` and `ctEq` make is about machine code, which no golden `.ll`
+// shows: `opt -O2` and `llc` must not turn the barriered mask back into a branch. Every
+// `tests/cases/ct_asm_*.ts` is compiled here, fresh, to `.s` for x86-64 and aarch64
+// with `clang -O2`, and each function its `// ct-check:` lines name is read by symbol
+// and held to tests/ct-asm.js: no conditional branch, no call, no load or store at an
+// address a secret reaches. `ct_asm_refused` holds one function written to fail each
+// way, and must fail exactly that way, so a check that read nothing cannot pass.
+if (!only || "ct_asm constant time assembly".includes(only)) {
+  if (!has("clang")) {
+    skip("ct_asm: no clang to compile the constant-time fixtures to assembly")
+  } else {
+    const workDir = path.join(buildDir, "ct-asm")
+    fs.mkdirSync(workDir, { recursive: true })
+    const fixtures = fs
+      .readdirSync(casesDir)
+      .filter((f) => /^ct_asm_\w+\.ts$/.test(f))
+      .sort()
+    const all = []
+    for (const file of fixtures) {
+      const name = file.slice(0, -".ts".length)
+      const source = fs.readFileSync(path.join(casesDir, file), "utf8")
+      const specs = ctSpecs(source)
+      all.push(...specs.map((spec) => ({ ...spec, fixture: name })))
+      const argsFile = path.join(casesDir, `${name}.args`)
+      const flags = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/) : []
+      const ll = path.join(workDir, `${name}.ll`)
+      const built = spawnSync(NISH, [path.join(casesDir, file), ...flags, "-o", ll], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      if (built.status !== 0) {
+        check(`ct_asm: ${name} compiles`, false, built.stderr)
+        continue
+      }
+      for (const target of CT_TARGETS) {
+        const s = path.join(workDir, `${name}.${target.name}.s`)
+        const cc = spawnSync(
+          "clang",
+          ["-O2", "-S", "-Wno-override-module", `--target=${target.triple}`, ll, "-o", s],
+          { encoding: "utf8" }
+        )
+        if (cc.status !== 0) {
+          skip(
+            `ct_asm: ${name} on ${target.name}: clang cannot target ${target.triple} (${cc.stderr.trim()})`
+          )
+          continue
+        }
+        const asm = fs.readFileSync(s, "utf8")
+        for (const spec of specs) {
+          const body = functionBody(asm, spec.name, target)
+          const found = body === null ? [] : ctViolations(body, spec, target)
+          const kinds = [...new Set(found.map((v) => v.kind))]
+          const promise =
+            spec.expect === null
+              ? "no branch, call or secret-indexed access"
+              : `refused for a ${spec.expect === "load" ? "secret-indexed load" : "conditional branch"}`
+          check(
+            `ct_asm: ${name} ${spec.name} on ${target.name}: ${promise}`,
+            body !== null && (spec.expect === null ? found.length === 0 : kinds.includes(spec.expect)),
+            body === null
+              ? `no symbol ${spec.name} in ${s}: a check that read nothing proves nothing`
+              : `${found.map((v) => `${v.kind}: ${v.line}`).join("\n") || "no violation found"}\n--- ${s}\n${body.join("\n")}`
+          )
+        }
+      }
+    }
+    // The barrier is load-bearing, and this is where that shows. After `opt -O2` the
+    // mask of `pickU32` is still an `and`/`or` blend of an opaque value; with each
+    // barrier replaced by its own operand the same IR becomes one `select` on
+    // `a === b`, which `llc` is free to lower as a branch. If LLVM ever learns to see
+    // through the asm, the first half fails; if the lowering stops needing it, the
+    // second does, and the rule's reason for the barrier is out of date.
+    const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
+    if (has("opt") && fs.existsSync(primitivesLl)) {
+      const pickOf = (ir) => {
+        const o = spawnSync("opt", ["-O2", "-S", "-"], { input: ir, encoding: "utf8" })
+        const fn = String(o.stdout).match(/define[^\n]*@pickU32\([\s\S]*?\n\}/)
+        return fn === null ? `opt failed: ${o.stderr}` : fn[0]
+      }
+      const ir = fs.readFileSync(primitivesLl, "utf8")
+      const barriered = pickOf(ir)
+      const stripped = pickOf(
+        ir.replace(/call (i32|i64) asm "", "=r,0"\((?:i32|i64) ([^)]*)\) readnone nounwind/g, "add $1 $2, 0")
+      )
+      check(
+        "ct_asm: opt -O2 keeps pickU32 a bitwise blend behind the barrier, and makes it a select without one",
+        /asm ""/.test(barriered) && !/\bselect\b/.test(barriered) && /\bselect i1\b/.test(stripped),
+        `--- with the barrier\n${barriered}\n--- without\n${stripped}`
+      )
+    }
+
+    // The fixtures themselves: every `ct-check` names a function its source declares,
+    // and the set still holds a positive case for each builtin and width and one
+    // refusal of each kind, so deleting a fixture cannot quietly narrow the check.
+    const missing = all.filter((spec) => !spec.found).map((spec) => `${spec.fixture}: ${spec.name}`)
+    const names = new Set(all.map((spec) => spec.name))
+    const wanted = ["selectU32", "selectU64", "eqU32", "eqU64", "macEqual"].filter((n) => !names.has(n))
+    const expects = new Set(all.map((spec) => spec.expect))
+    check(
+      `ct_asm: the fixtures name ${all.length} functions, covering both builtins, both widths, the MAC compare, and a refusal of each kind`,
+      missing.length === 0 && wanted.length === 0 && expects.has("branch") && expects.has("load"),
+      [
+        missing.length > 0 ? `no such function: ${missing.join(", ")}` : "",
+        wanted.length > 0 ? `no ct-check for ${wanted.join(", ")}` : "",
+        expects.has("branch") ? "" : "no fixture expects a branch",
+        expects.has("load") ? "" : "no fixture expects a secret-indexed load",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n")
+    )
+  }
 }
 
 // ---- WP18: generics ---------------------------------------------------------------
