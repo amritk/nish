@@ -1064,10 +1064,11 @@ const diagnosticRules = (): string[] => [
 
 /**
  * The WP33 portability rules (docs/wp33-round-trip.md section 5.2), matched by
- * substring against a `portability` message and against nothing else. Every
- * row of the class is registered here at once, live or not, so that the stages
- * that add the analyses never race each other for a number;
- * `tests/wordings/unreachable.txt` says which rows are not live yet.
+ * substring against a `portability` message and against nothing else. A
+ * retired row keeps its entry, as every retired rule does: NL8011's fragment
+ * matches nothing now that no pass prints it, and its number stays reserved so
+ * the band has no gap. `tests/wordings/unreachable.txt` names the retired rows
+ * and why each went.
  */
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",
