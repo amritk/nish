@@ -1,1 +1,1 @@
-a return type annotation is required
+Method `m` of class `Point` cannot be optional

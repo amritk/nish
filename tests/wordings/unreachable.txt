@@ -65,12 +65,10 @@ NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced
 NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
 NL2018  retired at R6: stage1's parser refuses reject_cls_anonymous, nl2018_anonymous_class before the rule is stated
 NL2033  retired at R6: stage1's parser refuses reject_side_effect_import before the rule is stated
-NL2048  retired at R6: stage1's parser refuses reject_multi_decl before the rule is stated
 NL2083  retired at R6: stage1's parser refuses reject_cls_declare, reject_generic_declare_class, nl2083_declare_class before the rule is stated
 NL2090  retired at R6: stage1's parser refuses reject_cls_method_no_body, nl2090_method_without_body before the rule is stated
 NL2091  retired at R6: stage1's parser refuses reject_cls_ctor_no_body, nl2091_constructor_without_body before the rule is stated
 NL2092  retired at R6: stage1's parser refuses reject_cls_field_string_name, nl2092_string_member_name before the rule is stated
-NL2096  retired at R6: stage1's parser refuses reject_arrow_return_type, reject_missing_return_type before the rule is stated
 NL2119  retired at R6: stage1's parser refuses reject_namespace_import before the rule is stated
 NL2128  retired at R6: stage1's parser refuses reject_export_list, nl2128_export_list before the rule is stated
 NL2129  retired at R6: stage1's parser refuses reject_export_assignment, nl2129_export_default_value before the rule is stated
@@ -79,28 +77,17 @@ NL2131  retired at R6: stage1's parser refuses reject_cls_export_default, reject
 NL2168  retired at R6: stage1's parser refuses reject_generic_abstract, reject_multi_decl before the rule is stated
 NL2189  retired at R6: stage1's parser refuses reject_cls_ctor_return_type, nl2189_constructor_return_type before the rule is stated
 NL2190  retired at R6: stage1's parser refuses reject_default_import before the rule is stated
-NL2191  retired at R6: stage1's parser refuses reject_const_destructured, nl2191_destructured_constant before the rule is stated
-NL2192  retired at R6: stage1's parser refuses reject_param_destructured, nl2192_destructured_parameter before the rule is stated
-NL2193  retired at R6: stage1's parser refuses reject_destructure_local, nl2193_destructuring_local before the rule is stated
-NL2203  retired at R6: stage1's parser refuses reject_fn_anonymous, nl2203_anonymous_default_function before the rule is stated
-NL2204  retired at R6: stage1's parser refuses nl2204_function_without_body before the rule is stated
-NL2209  retired at R6: stage1's parser refuses reject_multi_decl before the rule is stated
 NL2212  retired at R6: stage1's parser refuses reject_import_template_specifier, nl2212_template_specifier before the rule is stated
 NL2213  retired at R6: stage1's parser refuses reject_cls_index_signature, nl2213_class_index_signature before the rule is stated
 NL2214  retired at R6: stage1's parser refuses reject_iface_index_signature, nl2214_interface_index_signature before the rule is stated
 NL2215  retired at R6: stage1's parser refuses reject_generic_interface_extends, reject_iface_extends, nl2215_interface_extends before the rule is stated
 NL2223  retired at R6: stage1's parser refuses reject_cls_literal_key, nl2223_string_object_key before the rule is stated
 NL2226  retired at R6: stage1's parser refuses reject_export_import_equals, nl2226_export_import_equals before the rule is stated
-NL2233  retired at R6: stage1's parser refuses reject_param_default, nl2233_optional_parameter before the rule is stated
 NL2234  retired at R6: stage1's parser refuses reject_cls_param_property, nl2234_parameter_property before the rule is stated
-NL2235  retired at R6: stage1's parser refuses reject_param_rest, nl2235_rest_parameter before the rule is stated
 NL2243  retired at R6: stage1's parser refuses reject_import_type_only, nl2243_type_only_import before the rule is stated
 NL2255  retired at R6: stage1's parser refuses reject_cls_static_block, nl2255_class_static_block before the rule is stated
 NL2257  retired at R6: stage1's parser refuses reject_iface_member_unsupported, nl2257_interface_construct_signature before the rule is stated
 NL2258  retired at R6: stage1's parser refuses reject_cls_literal_member, nl2258_object_literal_method before the rule is stated
-NL2272  retired at R6: stage1's parser refuses reject_arrow_let before the rule is stated
-NL2273  retired at R6: stage1's parser refuses reject_arrow_annotated before the rule is stated
-NL2274  retired at R6: stage1's parser refuses reject_fn_two_names, nl2274_two_names_one_declaration before the rule is stated
 NL2286  retired at R6: stage1's parser refuses reject_enum_declare, nl2286_declare_enum before the rule is stated
 NL2260  retired at R6: stage1 answers reject_fn_nested, nl2260_empty_statement differently (stage1_divergence.txt)
 NL2302  retired at R6: stage1 answers nl2302_duplicate_type_parameter differently (stage1_divergence.txt)

@@ -1,1 +1,1 @@
-a type annotation is required
+a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`

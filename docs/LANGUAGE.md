@@ -933,8 +933,11 @@ spelling; the two compile to identical IR, instruction for instruction
 
 - **The arrow form** is a `const` — `let` is
   `` Function `f` must be declared `const`, not `let` ``
-  (`tests/cases/reject_arrow_let`) — binding one name, with the signature on
-  the arrow itself. Annotating the `const` is refused
+  (`tests/cases/reject_arrow_let`) — binding one name
+  (`const f = (): i32 => 1, g = 2` is `A function declaration binds one name`,
+  `reject_fn_two_names`), with the signature on the arrow itself. Annotating
+  the `const` is
+  `` Function `f` takes its signature from the arrow; drop the annotation on `f` ``
   (`reject_arrow_annotated`), because the annotation would be a function type,
   and a function type annotates a parameter of a top-level function and
   nothing else ([Function parameters](#function-parameters)). A function
@@ -954,8 +957,12 @@ spelling; the two compile to identical IR, instruction for instruction
   the call is a [function parameter](#function-parameters), resolved at compile
   time; a function held in a field, a local or an array does not exist.
 - Every parameter and the return type must be annotated
-  (`` Parameter `x` needs a type annotation ``; `explicit return type`,
-  `tests/cases/reject_missing_return_type`).
+  (`` Parameter `x` needs a type annotation ``;
+  `` Function `f` needs an explicit return type annotation ``,
+  `tests/cases/reject_missing_return_type`, `reject_arrow_return_type`). The
+  return type is asked of every function and method as the module is read, a
+  generic one nothing instantiates included
+  (`reject_method_return_template`, `reject_method_return_generic`).
 - Functions may call each other in any order; signatures are collected
   before bodies are checked (`tests/cases/locals`, `cf_fib`). **This holds for
   the arrow form too**, which is not what a reader who knows that a `const` is
@@ -985,11 +992,14 @@ spelling; the two compile to identical IR, instruction for instruction
   own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
-  (`Destructured parameters are not supported`,
-  `Rest parameters are not supported`,
-  `Optional/default parameters are not supported`), overloads
-  (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`),
-  `declare function`,
+  (`Destructured parameters are not supported`, `reject_param_destructured`;
+  `Rest parameters are not supported`, `reject_param_rest`;
+  `Optional/default parameters are not supported`, `reject_param_default`),
+  in a declaration, a method or an arrow argument alike, overloads
+  (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`; a
+  signature with no body, `function f(): void;`, is
+  `Functions must have a body`), an anonymous `export default function ()`
+  (`Functions must be named`, `reject_fn_anonymous`),
   function expressions, an arrow anywhere but as a function argument
   (`reject_fnarg_arrow_value`),
   and nested function declarations (`Unsupported statement in Phase 1:
@@ -1671,7 +1681,10 @@ class Point {
   message says which kind it is (`reject_cls_static_interface`) — `readonly` on
   a method or the constructor, which has no storage to be read-only
   (`reject_cls_method_readonly`, `reject_cls_ctor_readonly`),
-  getters/setters (`Getters and setters are not supported`), optional fields
+  getters/setters
+  (`` Getters and setters are not supported in class `Box` (use a method) ``,
+  `reject_cls_accessor`; `get` and `set` are still member names,
+  `tests/parser/names-bindings.ts`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
   `declare class`, type parameters on the constructor
   (`reject_generic_method_constructor`; a *method* may declare its own — see
@@ -2475,7 +2488,10 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
 - An interface is a struct type with the same layout rules as a class, with
-  fields only: methods are `Interface ... cannot declare methods`, `extends`
+  fields only: a method, or an accessor signature `get x(): i32`, is
+  `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
+  (`tests/cases/reject_iface_method`, `reject_iface_accessor`; a field may
+  still be called `get` or `set`), `extends`
   is `Interface inheritance (`extends`) is not supported`, and `new` on an
   interface is `` Cannot `new` interface `Pair` `` (`tests/cases/reject_cls_new_interface`).
 - An **object literal** allocates in the arena and stores every property in
@@ -2649,7 +2665,10 @@ loop body that is a single statement rather than a block is accepted
   *(CLI only)*) and takes its type from it; an annotation must match the
   initializer exactly (`Cannot initialize ... with ...`).
 - Declaring a `void`-typed variable is `Cannot declare a variable of type void`
-  *(CLI only)*. Destructuring is not supported. `var` is forbidden
+  *(CLI only)*. Destructuring is not supported: `const [a, b] = xs` is
+  `Destructuring is not supported` in a body and in a `for...of` head
+  (`reject_destructure_local`), and `Destructured constants are not supported`
+  at the top level (`reject_const_destructured`). `var` is forbidden
   (`tests/cases/reject_var_keyword`, `reject_var_in_for`).
 - `const` freezes the binding, not the contents: `xs[0] = 1` and
   `xs.push(1)` on a `const xs` are fine, `xs = []` is not
@@ -5254,7 +5273,14 @@ messages are exact for the cases cited; other rows quote the checker
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
 | assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |
-| missing return type | `` Function `f` needs an explicit return type annotation `` | `reject_missing_return_type` |
+| missing return type, a function's or a method's, in a template nothing instantiates too | `` Function `f` needs an explicit return type annotation `` / `` Method `m` of class `Box` needs an explicit return type annotation `` | `reject_missing_return_type`, `reject_arrow_return_type`, `reject_method_return_template`, `reject_method_return_generic` |
+| a function with no body (an overload signature) | `Functions must have a body` | `nl2204_function_without_body` |
+| `export default function ()` | `Functions must be named` | `reject_fn_anonymous` |
+| a destructuring pattern | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
+| a default, optional or rest parameter | `Optional/default parameters are not supported` / `Rest parameters are not supported` | `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest` |
+| an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
+| a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
+| more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |

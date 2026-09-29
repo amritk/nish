@@ -704,12 +704,10 @@ export class Checker {
    * signatures.
    */
   collectConstants(stmt: Node): void {
-    // A `var` is Phase 0's (NL1036), which stops the module before this.
+    // A `var` is Phase 0's (NL1036), which stops the module before this, and
+    // a top-level `let` the pass 1 sweep's (`refuseUnsupportedForms`), which
+    // has refused it already.
     if ((stmt.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
-      this.ctx.error(
-        stmt,
-        "Top-level `let` is not supported; a module has no top-level code, so only `const` is available"
-      )
       return
     }
     const exported = isExported(stmt)
