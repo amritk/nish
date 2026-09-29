@@ -1,0 +1,1 @@
+{"file":"tests/cases/port_rec_alias_store.ts","line":15,"column":3,"endLine":15,"endColumn":20,"severity":"portability","code":"NL8004","message":"`qs[0] = { x: 99 }` overwrites the element a reference still reads, and TypeScript replaces the object instead (`r`, line 16)"}

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 734 programs, 51281 dump lines.
+# 743 programs, 51434 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37424,6 +37424,168 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 5:7 n: i32 (let)
   local 9:9 square: i32 (const)
+program tests/cases/port_rec_alias_arrow_quiet.ts
+module tests/cases/port_rec_alias_arrow_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.16.nish_main$arrow0 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=4 stackLocals=4
+  local 12:9 as: Rec[] (const)
+  local 13:9 a: Rec (const)
+  local 15:9 bs: Rec[] (const)
+  callee 17:5 apply<(n) => ...> -> @apply$fn.16.nish_main$arrow0
+  local 18:13 xs: Rec[] (const)
+  local 19:13 ys: Rec[] (const)
+  local 24:9 b: Rec (const)
+function (n) => ...(n: i32): i32 -> @nish_main$arrow0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=1 stackLocals=2
+  local 18:13 xs: Rec[] (const)
+  local 19:13 ys: Rec[] (const)
+function apply<(n) => ...>(f: void): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 9:44 (n) => ... -> @nish_main$arrow0
+program tests/cases/port_rec_alias_copy.ts
+module tests/cases/port_rec_alias_copy.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=3
+  local 10:9 ps: Rec[] (const)
+  local 11:9 p: Rec (const)
+  local 13:9 qs: Rec[] (const)
+program tests/cases/port_rec_alias_store.ts
+module tests/cases/port_rec_alias_store.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=4 stackLocals=2
+  local 10:9 ps: Rec[] (const)
+  local 13:9 r: Rec (const)
+  local 14:9 qs: Rec[] (const)
+program tests/cases/port_rec_literal_twice.ts
+module tests/cases/port_rec_literal_twice.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 13:3
+  calls: nish_print nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 11:9 p: Point (const)
+  local 12:9 ps: Point[] (const)
+  local 16:9 o: Point (const)
+  local 17:7 qs: Point[] (let)
+program tests/cases/port_rec_pop_ref_quiet.ts
+module tests/cases/port_rec_pop_ref_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=5 stackLocals=2
+  local 12:9 ps: Rec[] (const)
+  local 15:9 q: Rec (const)
+  local 16:9 r: Rec (const)
+program tests/cases/port_rec_push_never_written_quiet.ts
+module tests/cases/port_rec_push_never_written_quiet.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Segment (interface) size=16 align=8
+  field from: Point index=0 offset=0
+  field length: i32 index=1 offset=8
+struct Box (class) size=4 align=4
+  field v: i32 index=0 offset=0
+  constructor -> @Box.constructor
+function Box.constructor(this: Box, v: i32): void -> @Box.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 49:3
+  calls: Box.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=10 stackLocals=9
+  local 26:9 ps: Point[] (const)
+  local 27:9 p: Point (const)
+  local 31:9 out: Point[] (const)
+  local 32:12 i: i32 (let)
+  local 33:11 c: Point (const)
+  local 39:9 kept: Point[] (const)
+  local 40:9 last: Point (const)
+  local 46:9 segs: Segment[] (const)
+  local 47:9 s: Segment (const)
+  local 52:9 boxes: Box[] (const)
+  local 53:9 b: Box (const)
+  callee 53:13 new Box -> @Box.constructor
+program tests/cases/port_rec_push_then_write.ts
+module tests/cases/port_rec_push_then_write.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 21:3
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=5 stackLocals=5
+  local 13:9 ps: Point[] (const)
+  local 14:9 p: Point (const)
+  local 19:9 q: Point (const)
+  local 24:9 moving: Point (const)
+  local 25:9 trail: Point[] (const)
+  local 26:12 i: i32 (let)
+program tests/cases/port_rec_slot_store_dead_ref_quiet.ts
+module tests/cases/port_rec_slot_store_dead_ref_quiet.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Size (interface) size=8 align=4
+  field w: i32 index=0 offset=0
+  field h: i32 index=1 offset=4
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 44:3
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=9 stackLocals=2
+  local 18:9 ps: Point[] (const)
+  local 22:9 r: Point (const)
+  local 27:11 inner: Point (const)
+  local 32:12 i: i32 (let)
+  local 33:11 each: Point (const)
+  local 38:9 sizes: Size[] (const)
+  local 39:9 at: Point (const)
+  local 43:9 held: Point (const)
+program tests/cases/port_rec_slot_store_live_ref.ts
+module tests/cases/port_rec_slot_store_live_ref.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=6 stackLocals=2
+  local 13:9 ps: Point[] (const)
+  local 17:9 r: Point (const)
+  local 18:9 q: Point (const)
+  local 22:14 e: Point (const)
+  local 27:9 first: Point (const)
+  local 28:12 i: i32 (let)
 program tests/cases/process_exit.ts
 module tests/cases/process_exit.ts (entry)
 function finish(code: i32): i32 -> @finish

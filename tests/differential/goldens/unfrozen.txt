@@ -203,6 +203,15 @@ cases/port_num_wide_quiet added after R6: no rewriter to freeze it with
 cases/port_num_wrap added after R6: no rewriter to freeze it with
 cases/port_num_wrap_quiet added after R6: no rewriter to freeze it with
 cases/port_num_wrap_wrapping added after R6: no rewriter to freeze it with
+cases/port_rec_alias_arrow_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_alias_copy added after R6: no rewriter to freeze it with
+cases/port_rec_alias_store added after R6: no rewriter to freeze it with
+cases/port_rec_literal_twice added after R6: no rewriter to freeze it with
+cases/port_rec_pop_ref_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_push_never_written_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_push_then_write added after R6: no rewriter to freeze it with
+cases/port_rec_slot_store_dead_ref_quiet added after R6: no rewriter to freeze it with
+cases/port_rec_slot_store_live_ref added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
