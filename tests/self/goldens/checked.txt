@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 742 programs, 51409 dump lines.
+# 743 programs, 51434 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37424,6 +37424,32 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 5:7 n: i32 (let)
   local 9:9 square: i32 (const)
+program tests/cases/port_rec_alias_arrow_quiet.ts
+module tests/cases/port_rec_alias_arrow_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.16.nish_main$arrow0 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=4 stackLocals=4
+  local 12:9 as: Rec[] (const)
+  local 13:9 a: Rec (const)
+  local 15:9 bs: Rec[] (const)
+  callee 17:5 apply<(n) => ...> -> @apply$fn.16.nish_main$arrow0
+  local 18:13 xs: Rec[] (const)
+  local 19:13 ys: Rec[] (const)
+  local 24:9 b: Rec (const)
+function (n) => ...(n: i32): i32 -> @nish_main$arrow0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=1 stackLocals=2
+  local 18:13 xs: Rec[] (const)
+  local 19:13 ys: Rec[] (const)
+function apply<(n) => ...>(f: void): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 9:44 (n) => ... -> @nish_main$arrow0
 program tests/cases/port_rec_alias_copy.ts
 module tests/cases/port_rec_alias_copy.ts (entry)
 struct Rec (interface) size=4 align=4
