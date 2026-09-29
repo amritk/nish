@@ -1,9 +1,10 @@
 // `nish/crypto/sha512` against its specification. Each vector is cited where it
-// is checked: the FIPS 180-4 examples ("abc", the 448- and 896-bit messages) and the
+// is checked: the FIPS 180-4 examples ("abc", the 896-bit message) and the
 // one-million-`a` message are the published digests of NIST's examples for
-// SHA-384 and SHA-512; the padding-boundary lengths have no published digest,
-// so those are checked against an independent implementation (Python's
-// `hashlib`), and the pattern that fills them is `(7 * i + 3) & 255`.
+// SHA-384 and SHA-512. The padding-boundary lengths and the 448-bit message of
+// NIST's SHA-256 examples have no published SHA-384 or SHA-512 digest, so those
+// are checked against an independent implementation (Python's `hashlib`), and
+// the pattern that fills the boundary lengths is `(7 * i + 3) & 255`.
 //
 // The suite is a function rather than `main` so that `crypto_sha512_f64` can run
 // the same checks with `--number-mode f64`.
@@ -138,9 +139,10 @@ export const runSuite = (): i32 => {
     "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
     "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
   );
-  // FIPS 180-4 / NIST's SHA-384 and SHA-512 examples: the 448-bit message of the
-  // SHA-256 "Two-Block Message Sample". It is 56 bytes, one block here, so it pins
-  // the published example rather than a padding boundary.
+  // The 448-bit message of NIST's SHA-256 examples ("Two-Block Message Sample"),
+  // which NIST publishes no SHA-384 or SHA-512 digest of: these are `hashlib`'s,
+  // and Node's `crypto` agrees. It is 56 bytes, one block here, so it pins the
+  // FIPS 180-4 example message rather than a padding boundary.
   checkBoth(
     t,
     "of the 448-bit message",

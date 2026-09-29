@@ -40,9 +40,13 @@ const root = path.resolve(import.meta.dirname, "..")
 const casesDir = path.join(root, "tests", "cases")
 const workDir = path.join(root, "build", "ct-timing")
 const DUDECT_C = path.join(root, "tests", "ct-timing", "dudect.c")
-const RUNTIME_C = ["runtime.c", "runtime-os.c", "runtime-parallel.c", "runtime-host.c"].map((f) =>
-  path.join(root, "runtime", f)
-)
+// Every unit of the native runtime, read from the directory rather than listed,
+// so a new one cannot be missed by a harness `npm test` never runs. The wasm
+// unit is the one runtime/ file that is not part of a native link.
+const RUNTIME_C = fs
+  .readdirSync(path.join(root, "runtime"))
+  .filter((f) => /^runtime(-[a-z]+)?\.c$/.test(f) && f !== "runtime-wasm.c")
+  .map((f) => path.join(root, "runtime", f))
 
 /** dudect's threshold: a |t| above it is read as a difference between the classes. */
 const THRESHOLD = 4.5

@@ -12,7 +12,8 @@
  * percentiles of a first batch (cropping, since the upper tail of a timing
  * distribution is mostly interrupts and is where a real difference drowns);
  * and on the squared distance from each class's mean (a second-order test,
- * for a difference in spread rather than in mean). The answer for a function
+ * for a difference in spread rather than in mean, once 10,000 measurements
+ * of a class are in). The answer for a function
  * is the largest |t| of the tests that saw enough measurements. dudect reads
  * |t| above 4.5 as a leak, and tests/ct-timing.js applies that threshold; this
  * file only measures.
@@ -173,7 +174,11 @@ static void ct_run(const ct_function *f, long samples) {
         ct_push(&tests[k + 1], x, c);
       }
     }
-    if (tests[0].n[c] > 1000) {
+    // dudect's rule for the second-order test: only once the uncropped mean
+    // has 10,000 measurements behind it. It is also kept below the top crop
+    // point here, because one preemption squared outweighs a thousand calls,
+    // and measured |t| of 30 to 47 on functions whose other tests read 1.
+    if (tests[0].n[c] > 10000 && x < crop[CT_PERCENTILES - 1]) {
       double centred = x - tests[0].mean[c];
       ct_push(&tests[CT_TESTS - 1], centred * centred, c);
     }

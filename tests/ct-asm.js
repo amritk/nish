@@ -50,10 +50,11 @@
  * `secret=contents` whenever anything the caller passes may hold a secret; no
  * argument register the callee reads as public is secret here or was loaded
  * from memory; and no array header on the stack that it is handed holds a
- * secret. The callee is read to find how far past each `data` pointer it
- * stores, and after the call every stack byte that far past the start of any
- * array this function laid out on its stack is secret, as is every byte the
- * model has no record of and every register the call may overwrite.
+ * secret. The callee is read to find how far before and past each `data`
+ * pointer it stores, and after the call every stack byte in that range around
+ * the start of any array this function laid out on its stack is secret, as is
+ * every byte the model has no record of, every element read through a loaded
+ * pointer from then on, and every register the call may overwrite.
  *
  * Where the model cannot be exact it errs towards refusing. The flags only ever
  * gain a secret, since telling apart the instructions that leave them alone is
@@ -66,7 +67,9 @@
  * other memory: a secret written through a pointer and read back through
  * another is lost, which the fixtures, small and register-allocated, do not
  * do. `tests/run.js` holds each of these corners to a hand-written leak the
- * check must refuse, and `ct_asm_x25519` holds the call rule to one.
+ * check must refuse; the stack and call rules' own corners are at the foot of
+ * this file and are checked when it loads; and `ct_asm_x25519` holds the call
+ * rule to one leak in real compiler output.
  *
  * A fixture says which functions to read and what is secret in comments:
  *
@@ -609,6 +612,7 @@ class Taint {
         op.index === null &&
         op.disp !== null
       ) {
+        this.summary.low = Math.min(this.summary.low, op.disp)
         this.summary.extent = Math.max(this.summary.extent, op.disp + width)
       } else if (this.anyLoaded(op.address)) {
         this.summary.extent = Number.POSITIVE_INFINITY
@@ -672,7 +676,13 @@ class Taint {
       this.poison(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY)
     }
     for (const from of this.escaped) {
-      this.poison(from, effects.extent)
+      this.poison(from + effects.low, effects.extent - effects.low)
+    }
+    // What the callee stored through an array's `data` is secret wherever the
+    // array lives, heap or stack, so element reads from here on are secret
+    // whatever this function's own spec said.
+    if (effects.extent > 0 || effects.low < 0) {
+      this.contents = true
     }
     // What the callee left below the stack pointer, and anything this has no
     // record of, may be a secret now.
@@ -728,7 +738,7 @@ const stepX86 = (t, mnemonic, operands) => {
   }
   // A string instruction repeats over memory by a count in a register, which
   // this does not follow.
-  if (/^rep|^(stos|movs|cmps|scas|lods)[bwlq]?$/.test(mnemonic)) {
+  if (/^rep|^(stos|movs|cmps|scas|lods)[bwlq]?$|^(push|pop)f[wlq]?$/.test(mnemonic)) {
     return "unmodelled"
   }
   // `lea` computes an address and touches no memory, so its operand is read as
@@ -740,16 +750,21 @@ const stepX86 = (t, mnemonic, operands) => {
       return "load"
     }
   }
-  if (/^(cltq|cwtl|cqto|cltd|cdqe|cqo)$/.test(mnemonic)) {
+  // Sign extensions with no operands: within %rax, or %rax's sign into %rdx.
+  if (/^(cltq|cwtl|cdqe|cbtw)$/.test(mnemonic)) {
+    t.set("a", t.anySecret(["a"]), false)
+    return null
+  }
+  if (/^(cqto|cltd|cwtd|cqo)$/.test(mnemonic)) {
     t.set("d", t.anySecret(["a"]), false)
     return null
   }
-  if (mnemonic.startsWith("push")) {
+  if (/^push[wlq]?$/.test(mnemonic)) {
     const value = ops[0].memory ? t.loadFrom(ops[0], 8) : t.valueOf(ops[0])
     t.moveSp(-8)
     return t.writeStack(t.sp, 8, { ...value, fresh: false }, true)
   }
-  if (mnemonic.startsWith("pop")) {
+  if (/^pop[wlq]?$/.test(mnemonic)) {
     const top = t.readStack(t.sp, 8)
     t.moveSp(8)
     t.setValue(ops[0].registers[0], top)
@@ -1039,7 +1054,7 @@ const calleeEffects = (listing, spec, target) => {
     let effects = null
     if (body !== null) {
       const t = new Taint(spec, target)
-      t.summary = { calls: false, otherStores: false, extent: 0 }
+      t.summary = { calls: false, otherStores: false, low: 0, extent: 0 }
       walk(t, body)
       effects = t.summary
     }
@@ -1057,4 +1072,150 @@ export const ctViolations = (body, spec, target) => {
   const t = new Taint(spec, target)
   t.listing = LISTINGS.get(body) ?? null
   return walk(t, body)
+}
+
+/**
+ * The corners of the stack and call rules, each a hand-written leak the model
+ * must refuse, or a shape it must pass (`null`). `tests/run.js` holds the
+ * model's older corners the same way; these sit beside the rules they pin and
+ * run when this module loads, so `npm test`, which imports it, cannot run with
+ * a model that misreads one.
+ */
+const STACK_CORNERS = [
+  // A stack address written to the heap: the model can no longer see the frame.
+  ["x86-64", "b", "escape", ["leaq 8(%rsp), %rax", "movq %rax, (%rdi)"]],
+  ["x86-64", "a", "unmodelled", ["rep stosq %rax, %es:(%rdi)"]],
+  // %rbp holding an array's `data` is not a stack slot.
+  ["x86-64", "contents", "load", ["movq 16(%rdi), %rbp", "movq 8(%rbp), %rax", "movl (%rsi,%rax,4), %eax"]],
+  // `shld` reads its destination.
+  ["x86-64", "a", "load", ["movl %edi, %eax", "shldl $3, %esi, %eax", "movl (%rdx,%rax,4), %eax"]],
+  // A slot written through %rsp and read back through a register that points at it.
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movq %rdi, 16(%rsp)", "leaq 8(%rsp), %rax", "movq 8(%rax), %rcx", "movl (%rsi,%rcx,4), %eax"],
+  ],
+  // `popcnt` is not a `pop`, and `cltq` leaves %rdx alone.
+  ["x86-64", "b", "load", ["movl $0, %eax", "popcntl %esi, %eax", "movl (%rdi,%rax,4), %eax"]],
+  ["x86-64", "b", "load", ["movq %rsi, %rdx", "cltq", "movl (%rdi,%rdx,4), %eax"]],
+  // A pre-indexed store and a post-indexed load meet at the same slot.
+  ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
+]
+
+/** A listing to follow calls through: the callees first, as LLVM lays them out. */
+const CALL_LISTING = `get:
+	movq	16(%rdi), %rax
+	movq	(%rax,%rsi,8), %rax
+	retq
+.Lfunc_end0:
+put:
+	movq	16(%rdi), %rax
+	movq	%rsi, (%rax)
+	retq
+.Lfunc_end1:
+below:
+	movq	16(%rdi), %rax
+	movq	(%rax), %rcx
+	movq	%rcx, -8(%rax)
+	retq
+.Lfunc_end2:
+calm:
+	callq	get@PLT
+	retq
+.Lfunc_end3:
+leak:
+	callq	get@PLT
+	retq
+.Lfunc_end4:
+heap:
+	pushq	%rbx
+	pushq	%r12
+	movq	%rdi, %rbx
+	movq	%rdx, %r12
+	callq	put@PLT
+	movq	16(%rbx), %rax
+	movq	(%rax), %rax
+	movq	16(%r12), %rcx
+	movq	(%rcx,%rax,8), %rax
+	popq	%r12
+	popq	%rbx
+	retq
+.Lfunc_end5:
+under:
+	pushq	%rbx
+	movq	%rsi, %rbx
+	subq	$48, %rsp
+	movq	$0, 16(%rsp)
+	leaq	24(%rsp), %rax
+	movq	%rax, 8(%rsp)
+	movq	%rsp, %rdi
+	callq	below@PLT
+	movq	16(%rsp), %rax
+	movq	16(%rbx), %rcx
+	movq	(%rcx,%rax,8), %rax
+	addq	$48, %rsp
+	popq	%rbx
+	retq
+.Lfunc_end6:
+`
+
+const CALL_SOURCE = `// ct-check: get secret=contents
+// ct-check: put secret=v,contents
+// ct-check: below secret=contents
+// ct-check: calm secret=contents
+// ct-check: leak secret=i,contents
+// ct-check: heap secret=bit
+// ct-check: under secret=contents
+export const get = (a: i64[], i: i32): i64 => a[i]
+export const put = (a: i64[], v: i64): void => {}
+export const below = (a: i64[]): void => {}
+export const calm = (a: i64[], i: i32): i64 => get(a, i)
+export const leak = (a: i64[], i: i32): i64 => get(a, i)
+export const heap = (a: i64[], bit: i64, table: i64[]): i64 => 0
+export const under = (a: i64[], table: i64[]): i64 => 0
+`
+
+const CALL_CORNERS = [
+  // A call with a public index into a checked callee is followed.
+  ["calm", null],
+  // A secret into a parameter the callee reads as public is refused.
+  ["leak", "call"],
+  // What the callee stored through an array's `data` is secret, even to a
+  // caller that did not ask for `contents`.
+  ["heap", "load"],
+  // Below `data` counts as well as past it.
+  ["under", "load"],
+]
+
+const cornerMisses = () => {
+  const missed = []
+  for (const [name, secret, kind, body] of STACK_CORNERS) {
+    const target = CT_TARGETS.find((t) => t.name === name)
+    const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
+    const found = ctViolations(body, spec, target)
+    if (!found.some((v) => v.kind === kind)) {
+      missed.push(`${name}, expected ${kind}: ${body.join("; ")}`)
+    }
+  }
+  const lines = CALL_LISTING.split("\n")
+  const specs = ctSpecs(CALL_SOURCE)
+  for (const [fn, kind] of CALL_CORNERS) {
+    const found = ctViolations(
+      functionBody(lines, fn, CT_TARGETS[0]),
+      specs.find((sp) => sp.name === fn),
+      CT_TARGETS[0]
+    )
+    if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
+      missed.push(
+        `${fn}, expected ${kind ?? "no violation"}: ${found.map((v) => `${v.kind}: ${v.line}`).join("; ")}`
+      )
+    }
+  }
+  return missed
+}
+
+const missedCorners = cornerMisses()
+if (missedCorners.length > 0) {
+  throw new Error(`tests/ct-asm.js misreads the corners of its own model:\n${missedCorners.join("\n")}`)
 }

@@ -10,7 +10,8 @@
 # It is not a check on pull requests and must not become one. Timing on a
 # shared runner is noisy, so a finding goes to one open issue labelled
 # `ct-timing` (a comment on it when it is already open) for a person to read,
-# not to a red pull request somebody else then has to explain. There is no
+# not to a red pull request somebody else then has to explain. A run that
+# could not measure at all is filed there too, and says so. There is no
 # `pull_request` trigger, and nothing here is a required check.
 name: Constant-time timing
 
@@ -130,8 +131,9 @@ jobs:
         run: |
           failed=0
           {
-            echo "The weekly constant-time timing run found something: $RUN_URL"
+            echo "The weekly constant-time timing run needs a look: $RUN_URL"
             echo
+            echo "Each row below says whether it found a difference or could not run at all."
             echo "A |t| above 4.5 means the fixed and the random secret took measurably different"
             echo "time. On a shared runner that can be noise, so re-run the workflow before reading"
             echo "it as a leak; one that repeats, on the same function, is a finding."
@@ -147,7 +149,11 @@ jobs:
               fi
               code="$(cat "$dir/code")"
               [ "$code" = 0 ] || failed=1
-              echo "Exit code $code."
+              case "$code" in
+                0) echo "Ran; nothing above the threshold." ;;
+                1) echo "**A function was above the threshold.**" ;;
+                *) echo "The harness could not run (exit $code): a build or link failure, not a timing result." ;;
+              esac
               echo
               cat "$dir/table.md"
               if [ -s "$dir/stderr.txt" ]; then
@@ -164,11 +170,11 @@ jobs:
           fi
           repo="$GITHUB_REPOSITORY"
           gh label create ct-timing --repo "$repo" --color d93f0b \
-            --description "The weekly constant-time timing run found a difference" 2>/dev/null || true
+            --description "The weekly constant-time timing run found a difference or could not run" 2>/dev/null || true
           number="$(gh issue list --repo "$repo" --label ct-timing --state open --json number --jq '.[0].number // empty')"
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$repo" --body-file body.md
           else
             gh issue create --repo "$repo" --label ct-timing \
-              --title "ct-timing: the weekly timing run found a difference" --body-file body.md
+              --title "ct-timing: the weekly timing run needs a look" --body-file body.md
           fi
