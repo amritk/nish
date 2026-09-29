@@ -700,12 +700,13 @@ export class Compilation {
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
-      unit.importedIdentities.push(this.identityOf(target))
+      const targetIdentity = this.identityOf(target)
+      unit.importedIdentities.push(targetIdentity)
       unit.importedNames.push(found.name)
       if (!this.discover(target, found.name, found.packageName)) {
         ok = false
       } else {
-        unit.resolved.set(imp.specifier, this.byPath.get(this.identityOf(target), -1))
+        unit.resolved.set(imp.specifier, this.byPath.get(targetIdentity, -1))
       }
     }
     return ok
@@ -979,9 +980,9 @@ export class Compilation {
       unit.checker.bindImports(targets)
     }
     // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
-    // Pass 1 could only write the request down — it runs as each module is
-    // parsed, long before any import is bound — and it is made here, once every
-    // module can answer one and can resolve its own imports while doing so.
+    // Pass 1 could only write the request down — it runs before any import but
+    // an enum is bound — and it is made here, once every module can answer one
+    // and can resolve its own imports while doing so.
     for (const unit of this.modules) {
       unit.checker.makeDeferredInstantiations()
     }

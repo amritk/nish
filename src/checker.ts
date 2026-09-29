@@ -868,12 +868,12 @@ export class Checker {
   bindTypeImports(targets: (CheckedProgram | null)[]): void {
     const rest: ImportBinding[] = []
     let i = 0
-    while (i < this.program.imports.length && i < targets.length) {
+    while (i < this.program.imports.length) {
       const imp = this.program.imports[i]
-      const declared = declaredEnum(targets[i], imp.importedName)
+      const declared = declaredEnum(i < targets.length ? targets[i] : null, imp.importedName)
       if (declared !== null) {
         this.ctx.errored = false
-        this.bindEnumImport(imp, declared)
+        this.bindEnumImport(imp, declared, rest)
       } else {
         rest.push(imp)
       }
@@ -888,8 +888,9 @@ export class Checker {
    * id under the importer's local name, so `Kind.If` folds to the exporter's
    * integer here and a `Kind` value crosses the boundary as itself. Unlike a
    * class it may be renamed, because it has no symbol for a name to be part of.
+   * `earlier` holds the imports written above this one that pass 1b will bind.
    */
-  bindEnumImport(imp: ImportBinding, info: EnumInfo): void {
+  bindEnumImport(imp: ImportBinding, info: EnumInfo, earlier: ImportBinding[]): void {
     // Reported, and bound all the same, as an unexported class is: the name
     // still means the enum, and nothing downstream reports it a second time.
     if (!info.exported) {
@@ -897,6 +898,15 @@ export class Checker {
         imp.node,
         `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
       )
+    }
+    // An import of the name written above this one is the first binding,
+    // whatever it names, so this one is the duplicate — not the other way
+    // round because the enum happens to be bound first.
+    for (const other of earlier) {
+      if (other.localName === imp.localName) {
+        this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${other.specifier}\``)
+        return
+      }
     }
     if (this.nameTaken(imp.localName)) {
       const other = this.importedEnum(imp.localName)
@@ -975,17 +985,18 @@ export class Checker {
 
   bindImport(index: i32, target: CheckedProgram): void {
     const imp = this.program.imports[index]
+    // An enum written above this import was bound before pass 1
+    // (`bindTypeImports`), and a second import of the name it took is the
+    // duplicate-import mistake whatever it names, a builtin included.
+    const enumImport = this.importedEnum(imp.localName)
+    if (enumImport !== null) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${enumImport.specifier}\``)
+      return
+    }
     // A `nish:` import names a builtin, so it never looks at `target`: there is
     // no module behind it.
     if (isNishSpecifier(imp.specifier)) {
       this.bindBuiltinImport(index)
-      return
-    }
-    // An enum was bound before pass 1 (`bindTypeImports`), and a second import
-    // under the name it took is the duplicate-import mistake whatever it names.
-    const enumImport = this.importedEnum(imp.localName)
-    if (enumImport !== null) {
-      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${enumImport.specifier}\``)
       return
     }
     const constant = target.constant(imp.importedName)
