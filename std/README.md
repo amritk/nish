@@ -16,6 +16,46 @@ whatever program imports it, and subject to the same rules as `examples/` or
 | [`map.ts`](./map.ts) | `reserve(m, n)` and `getOrInsert(m, k, v)` for the global `Map`. Their bodies are the meaning, and what runs under Node: `reserve` does nothing, and `getOrInsert` is a `get`, and a `set` of `v` when the key was missing. Natively the compiler lowers every call in place — `reserve` to the table's `reserveSlots`, which grows the buckets once so that `n` entries fit without a rebuild, and `getOrInsert` to one `probe` and a `valueAt` or an `insertAt` through its answer — so, like `collections.ts`, it writes no `.ll` of its own ([`docs/wp32-map.md`](../docs/wp32-map.md) §9.2, [`docs/LANGUAGE.md`](../docs/LANGUAGE.md#map-and-set)) |
 | [`threads.ts`](./threads.ts) | `parallelMapInto(src, dst, f)` and `parallelReduce(src, f, identity)`: a function over every element of an array, on as many threads as the length is worth. Its bodies are the sequential meaning, which is what runs under Node; the compiler recognises the two templates by module and name, lowers the one loop in each onto `nish_parallel_range`, holds the function to the rules that make that safe, and compiles an importing program with `--threads` ([`docs/LANGUAGE.md`](../docs/LANGUAGE.md#data-parallelism-nishthreads)). `tests/link/par_*` are its programs |
 
+## `nish/crypto` — the primitives under TLS 1.3
+
+The first lanes of [WP34](../docs/wp34-hosting-cs.md) §5: K1's hashes, MACs and
+key derivation, and K4's key exchange, in pure Nish (decision S1), each module
+imported by its own specifier. Every one is written from its specification
+rather than ported, and reproduces that specification's published vectors in
+its `tests/link/crypto_*` programs. The performance gate compiles every module
+with no diagnostics under both `--number-mode i32` and `f64`, and the hashes,
+HMAC, HKDF and X25519 also run their vectors in `f64` (`crypto_*_f64`).
+
+| Module | What it is | Reproduces |
+| --- | --- | --- |
+| [`crypto/sha256.ts`](./crypto/sha256.ts) | `sha256(data)`, and `Sha256`, a streaming hasher: `update(buf, off, len)` over a window of a `u8[]`, `copy()` for the hash of a prefix while the original keeps going, and `digest()`, a fresh 32-byte array. `SHA256_SIZE` and `SHA256_BLOCK` | FIPS 180-4 §6.2 |
+| [`crypto/sha512.ts`](./crypto/sha512.ts) | SHA-512 and SHA-384 on one compression function: `sha512` and `sha384`, and the streaming `Sha512` and `Sha384` with `Sha256`'s three methods; digests of 64 and 48 bytes. `SHA512_SIZE`, `SHA384_SIZE` and `SHA512_BLOCK` | FIPS 180-4 §6.4, §6.5 |
+| [`crypto/hmac.ts`](./crypto/hmac.ts) | `hmacSha256` and `hmacSha384`, the streaming `HmacSha256` and `HmacSha384` (keyed in the constructor, then `update` and `digest`), and `hmacSha256Verify` / `hmacSha384Verify`, which compare a received tag with `timingSafeEqual` | RFC 2104, RFC 4231 §4 |
+| [`crypto/hkdf.ts`](./crypto/hkdf.ts) | `hkdfExtractSha256` / `hkdfExtractSha384` (an empty salt is HashLen zeros) and `hkdfExpandSha256` / `hkdfExpandSha384`, which answer `null` for a length below zero or above 255 × HashLen. TLS 1.3's HKDF-Expand-Label is not here; it belongs with TLS | RFC 5869 §2, Appendix A |
+| [`crypto/ct.ts`](./crypto/ct.ts) | `timingSafeEqual(a, b)`, which reads every byte whatever it holds, and `timingSafeEqualAt(a, aOff, b, bOff, len)` over two windows, which answers `false` for a window outside its array. Two lengths that differ answer `false` at once, because a length is public | — |
+| [`crypto/base64url.ts`](./crypto/base64url.ts) | `base64urlEncode(data)` and `base64urlDecode(text)`, unpadded. Decoding is strict, so every byte string has one spelling: a `=`, a character outside the alphabet, a length of 1 mod 4 or nonzero unused low bits answer `null` | RFC 4648 §5, §10 |
+| [`crypto/x25519.ts`](./crypto/x25519.ts) | `x25519(scalar, u)` and `x25519Base(scalar)`, on ten 25.5-bit limbs in `i64`. Either answers `null` unless its arguments are `X25519_SIZE` (32) bytes; the scalar is clamped on a copy | RFC 7748 §5.2, §6.1 |
+
+Three rules hold across the modules:
+
+- **A digest ends the computation.** After `digest()` on a hasher or an HMAC, a
+  further `update` or `digest` panics rather than answering a hash over the
+  padding, and so does a window outside its buffer. `Sha256.copy()` on a
+  digested hasher panics too; `Sha512.copy()` and `Sha384.copy()` answer a copy
+  that is itself spent, so any `update` or `digest` on it panics. Either way,
+  copy *before* `digest` when the computation has to go on.
+- **An all-zero X25519 result is returned, not refused.** It is what a
+  low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol; TLS
+  1.3 (WP34 T1) makes it. A key exchange outside TLS has to make it itself.
+- **Constant time by construction, not yet by proof.** No module branches on,
+  or indexes by, a secret: comparisons OR the differences into one word and
+  test it once, the ladder swaps with a mask and always runs 255 steps, and
+  base64url maps characters by arithmetic on range masks rather than a table.
+  Every branch is on a length, a loop counter or a bit position. What checks
+  that the machine code kept that shape is WP34 N6 — the `ctSelect` / `ctEq`
+  builtins behind an optimisation barrier, and a disassembly check — and it is
+  not built yet, so this is the discipline and not a verified property.
+
 ## How a program imports it
 
 By its package specifier:
