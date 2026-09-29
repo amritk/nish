@@ -5086,21 +5086,101 @@ by the caller.
 
   | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
-  | NL8001 | UTF-8 offsets (3.2) | a `.length`, `charCodeAt`, `indexOf` or `lastIndexOf` whose value meets an outside fact: printed, stored, returned from `main`, or compared with a literal offset into text that is not provably ASCII | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
-  | NL8002 | checked `slice` (3.2) | a `slice(a, b)` whose bounds are not proven inside `[0, length]` | clamps the bounds and counts a negative one from the end, where this panics |
-  | NL8003 | a record copied in (3.3) | a record pushed, listed or stored into an array while the original is written and one copy read afterwards | stores the same object, so a write through one is seen through the other |
-  | NL8004 | a store over a live element (3.3) | `ps[i] = q` while an element reference `r = ps[j]` is still read | puts a new object in the slot and leaves `r` holding the old one |
+  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored, compared or combined with a number literal, or taken from a width (`width - s.length`); the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
+  | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that the bounds proof which folds a `substring` clamp does not place inside `[0, length]`; one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
+  | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
+  | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
-  | NL8006 | integer `/` (3.1) | `/` on an integer type | divides exactly and keeps the fraction |
-  | NL8007 | wrapping (3.1) | `+ - *`, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping` | keeps counting past the range |
-  | NL8008 | `i32 >>>` (3.1) | `>>>` whose result is `i32` | reads the result back unsigned |
+  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type | divides exactly and keeps the fraction |
+  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
+  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
-  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` | applies JavaScript's rules: a NaN operand makes `min` and `max` NaN, and `round` rounds a half towards +∞ and keeps `-0` |
-  | NL8011 | `console.log` of `-0` (3.5) | `console.log` of an `f64` | Node's console prints a negative zero as `-0` |
+  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32` | answers NaN from `min` or `max` when either operand is NaN, where this drops the NaN and answers the other; and answers `-0` from `round` for a negative number that rounds to zero (`Math.round(-0.4)`), where this answers `0`. Both round a half towards +∞ (`2.5` to `3`, `-2.5` to `-2`), so that is not a difference |
+  | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
 
-  NL8005 is live; the other rows are registered and land in the stages
-  `tests/wordings/unreachable.txt` names, which is the record of which rows
-  report today.
+  **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)` or
+  `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
+  `string` — an array's `.length` is not one — whose receiver is not
+  *provably ASCII*: a literal of bytes below 128, a module constant that folds
+  to one, a template, `+` or `?:` built only of ASCII parts and number or
+  boolean holes, or a local declared in the same body whose initialiser and
+  every `=` to it are one of those (`s = s + "x"` keeps `s` proven). A
+  parameter proves nothing. From a source the value is followed outward
+  through parentheses, `toI32` / `toI64` / `toF64`, either arm of a `?:` and
+  arithmetic (`+ - * / %` and the bitwise operators) with an operand that is
+  not a literal, and into a local and every read of it. It is reported where
+  it meets an outside fact:
+
+  - it is **printed**: an argument of `console.log` or `console.error`, or a
+    template literal's hole;
+  - it is **the exit code**: the value `main` returns, or its concise body;
+  - it is **stored**: into a field or an element, as an object literal's
+    property or an array literal's element, or pushed on to an array;
+  - it is **compared or combined with a number** — a literal, a signed one or
+    a module constant — whose value is, for an offset, anything but `0` and
+    `-1` (every string answers those two in both units: `s.length === 0`,
+    `s.indexOf(t) < 0`), and for a code unit, 128 or more (a code below 128
+    names the same character in both units);
+  - it is **taken from a width**: the right operand of a `-` whose left
+    operand does not itself hold an offset, as in `width - s.length`, the
+    room left in a column that was not counted in bytes.
+
+  One `+ k` on the offset an `indexOf` or `lastIndexOf` of a provably ASCII
+  needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
+  fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
+  the stepped offset is followed on like any other, so printing it is
+  reported. Everything else is quiet: an offset handed to a string method or
+  to any function, compared with another offset or with a local, or used as a
+  loop bound, stays inside the program's own counting, so
+  `const width = name.length;` alone is not reported
+  (`tests/cases/port_str_length_printed`, `port_str_nonascii_charcode`,
+  `port_str_needle_step_printed`; quiet: `port_str_ascii_literal_quiet`,
+  `port_str_offset_roundtrip_quiet`).
+
+  **NL8003 and NL8004, exactly.** A *record array* holds its records inline:
+  its element type is an `interface` no class `implements`, and not
+  `T | null`. The two rows tell arrays apart by name — a local, or a member
+  chain such as `this.ps` — except for an element type the body *aliases*:
+  when a record array is declared or assigned from anything but a literal or
+  a `new`, or used other than as an index or member receiver, a `for … of`
+  iterable, a call argument or such an assignment's target (`const qs = ps`,
+  `this.f = ps`, `return ps`), every array of that element type is taken to
+  be the same array. An arrow argument's body is its own.
+
+  - NL8003's *copy site* is a local `p`, as written, passed to `ps.push`, put
+    in an array literal that initialises or is assigned to a binding, or
+    stored by `ps[i] = p`. It is reported at `p` when a field write
+    (`x.f = e`, `x.f op= e`, `x.f++`, `x.f--`) through `p`, or through
+    `ps[k]` for any `k`, runs after the copy, and the other side is read after
+    that write: any use of `ps` after a write through `p`; any use of `p` after
+    a write through `ps[k]`, and any use of `ps` too when `p` was copied in at
+    two sites (`[p, p]`). "Runs after" is later in the source, or inside a
+    loop that encloses the earlier node and does not declare `p`. A write
+    through a nested record (`p.inner.x`) is not one: that field is a pointer
+    in both readings.
+  - NL8004 tracks the element references `reject_arr_element_across_push`
+    tracks, less `pop()`'s, whose slot no in-bounds store reaches; each is
+    live until its block ends, and inside a loop the loop's stores reach a
+    reference that was live on entry. It is reported at the store, naming the
+    reference and the line it is next read on.
+
+  Neither row sees an array that reaches a second name through a call, two
+  parameters or fields that already hold one array on entry, a write done in a
+  callee (`bump(p)`), a write through an element reference or a `for … of`
+  variable (for NL8003), or a copy whose source is not a local
+  (`ps.push(this.p)`). They warn where nothing diverges at a self-copy
+  (`r = ps[0]; ps[0] = r`), at a `let p` rebound between the copy and the
+  write, across `if`/`else` arms (which are ordered by source position), at a
+  read of `ps` that is only `ps.length`, and at any two arrays of an aliased
+  element type (`tests/cases/port_rec_push_then_write`,
+  `port_rec_literal_twice`, `port_rec_slot_store_live_ref`,
+  `port_rec_alias_copy`, `port_rec_alias_store`; quiet:
+  `port_rec_push_never_written_quiet`, `port_rec_slot_store_dead_ref_quiet`,
+  `port_rec_pop_ref_quiet`, `port_rec_alias_arrow_quiet`).
+
+  Every row but the retired NL8011 is live, each with a warning case and a
+  quiet counterpart among `tests/cases/port_*` and a wording pin in
+  `tests/wordings/`.
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
