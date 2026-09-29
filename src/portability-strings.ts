@@ -21,6 +21,7 @@
 // whether each bound is inside, the same proof that folds the clamp of a
 // `substring`, and warns about every bound it could not place.
 
+import { proveSliceBounds } from "./bounds"
 import { numericLiteralValue } from "./constants"
 import { isIdentifierBuiltinCall } from "./emit-builtins"
 import { dottedName, isPushCall, unwrapParens } from "./emit-util"
@@ -103,10 +104,12 @@ const CODE_UNIT: i32 = 2
  *   string gives in both units (`s.length === 0`, `s.indexOf(t) < 0`,
  *   `=== -1`), or — for a code unit — 128 or more, the codes an ASCII byte
  *   never has (a literal below 128 names the same character in both units, and
- *   a byte of a longer UTF-8 sequence is never below it) — except `+ k` on the
- *   offset an `indexOf` or `lastIndexOf` of a provably ASCII needle answers,
- *   for `0 < k <= needle.length`, which steps inside the match and so lands
- *   on the same character in both readings (`needleSpan`);
+ *   a byte of a longer UTF-8 sequence is never below it) — except one `+ k`
+ *   on the offset an `indexOf` or `lastIndexOf` of a provably ASCII needle
+ *   answers, for `0 < k <= needle.length`: that steps inside the match, so it
+ *   is not itself a fact from outside, and the stepped offset is followed on
+ *   like any other — quiet into `slice`, reported where it is printed
+ *   (`needleSpan`, `isNeedleStep`);
  * - as the right operand of a `-` whose left operand does not itself hold an
  *   offset: `width - s.length` is the room left in a column, and the column
  *   was not counted in bytes (it pads or aligns output — the language has no
@@ -120,14 +123,18 @@ const CODE_UNIT: i32 = 2
  *
  * **NL8002**, exactly. `s.slice(a)` or `s.slice(a, b)` on a `string`, where a
  * bound is a negative literal (TypeScript counts it from the end) or is not in
- * `nodeProvenClamp`: `src/bounds.ts` records there each `slice` bound it
- * proves inside `[0, s.length]`, by the proof that folds a `substring` clamp,
- * and records it only. One warning per call, naming the first such bound. An
+ * `nodeProvenClamp`: `proveSliceBounds` in `src/bounds.ts`, called here at
+ * the root of every body, records there each `slice` bound the proof that
+ * folds a `substring` clamp places inside `[0, s.length]` — the pass-2 walk,
+ * without the entry facts `src/ranges.ts` adds. One warning per call, naming the first such bound. An
  * array has no `slice` in the language, so the row reads strings only. The
  * proof does not relate the two bounds, so `s.slice(b, a)` with both inside is
  * quiet, though it panics here where TypeScript answers `""`.
  */
 export const stringFindings = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
+  if (node === walk.body) {
+    proveSliceBounds(walk.program, walk.table, walk.opts, walk.body)
+  }
   sliceFinding(walk, node, out)
   const kind = sourceKind(walk, node)
   if (kind === NOT_A_SOURCE || isProvablyAscii(walk, sourceReceiver(node), [])) {
@@ -202,7 +209,8 @@ const sourceKind = (walk: PortabilityWalk, node: Node): i32 => {
  * ASCII, and 0 for any other source. Stepping that far past a match stays
  * inside the needle, whose bytes are its code units one for one, so
  * `line.slice(line.indexOf(":") + 1)` cuts at the same character in either
- * reading and is not reported.
+ * reading and is not reported, while `console.log(line.indexOf(":") + 1)`
+ * still is: the step is no fact, but the printed offset is.
  */
 const needleSpan = (walk: PortabilityWalk, source: Node): f64 => {
   if (source.kind !== N_CALL || source.children[1].children.length !== 1) {
@@ -354,6 +362,7 @@ const asciiValue = (walk: PortabilityWalk, expr: Node): string | null => {
 const followValue = (trail: Trail, value: Node, holder: Local | null): void => {
   const walk = trail.walk
   let at = value
+  let stepped = false
   while (true) {
     if (at === walk.body) {
       // A concise arrow body is its function's answer.
@@ -380,6 +389,13 @@ const followValue = (trail: Trail, value: Node, holder: Local | null): void => {
       }
       at = call
     } else if (parent.kind === N_BINARY) {
+      if (!stepped && isNeedleStep(trail, parent)) {
+        // One step inside the match is still an offset, and it is followed
+        // on to wherever it goes; it is only the literal that is no fact.
+        stepped = true
+        at = parent
+        continue
+      }
       if (!followThroughBinary(trail, parent, at, value, holder)) {
         return
       }
@@ -415,6 +431,19 @@ const isConversion = (walk: PortabilityWalk, call: Node): boolean => {
 }
 
 /**
+ * `at + k`, with `k` a literal in `(0, span]`: a step past a match of a
+ * provably ASCII needle that stays inside the needle (`needleSpan`).
+ */
+const isNeedleStep = (trail: Trail, binary: Node): boolean => {
+  const other = binary.children[1]
+  if (binary.text !== "+" || !isNumberLiteral(trail.walk, other)) {
+    return false
+  }
+  const k = numberValue(trail.walk, other)
+  return k > 0 && k <= trail.span
+}
+
+/**
  * A value that is one operand of a binary operator. Answers whether the value
  * goes on outward as the operator's result: it does through arithmetic with
  * anything but a literal, and stops at a comparison, an assignment and a
@@ -442,7 +471,7 @@ const followThroughBinary = (
   }
   if (isNumberLiteral(walk, other)) {
     const literal = numberValue(walk, other)
-    if (meetsLiteral(trail.kind, literal) && !(op === "+" && literal > 0 && literal <= trail.span)) {
+    if (meetsLiteral(trail.kind, literal)) {
       const verb = isComparison(op) ? "compared with" : "combined with"
       trail.report(
         value,

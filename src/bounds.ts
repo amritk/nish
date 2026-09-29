@@ -16,12 +16,12 @@
 // once the two are swapped into order — and that clamp is the semantics rather
 // than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
 // analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
-// clamp is dead code. `program.nodeProvenClamp` holds exactly that verdict,
-// a bound of a string range call proven inside `[0, s.length]`, for the
-// bounds of `substring` and of `slice` alike (`isStringRangeCall`), and
-// `src/emit-strings.ts` writes a `substring` bound through where it holds.
-// `slice` checks rather than clamps, so nothing emitted reads its verdicts;
-// the WP33 portability pass does (`src/portability-strings.ts`, NL8002).
+// clamp is dead code: `program.nodeProvenClamp` says which bounds those are
+// and `src/emit-strings.ts` writes them through. The bounds of a `s.slice`
+// get the same verdict in the same table, but only from `proveSliceBounds`,
+// which the WP33 portability pass calls under `--warn-portability`: `slice`
+// checks rather than clamps, so nothing emitted reads them, and a compile
+// without the flag never judges one.
 //
 // A third question is a range entry (WP31 §8, docs/wp31-ranged-integers.md).
 // A value entering an `integer<Lo, Hi>` is compared once where it enters, and
@@ -134,6 +134,7 @@
 // `const xs = h.xs` hoist, and that is advice about a local.
 
 import { CheckContext } from "./context"
+import { DiagnosticSink } from "./diagnostics"
 import {
   N_ARRAY,
   N_ARROW,
@@ -167,6 +168,7 @@ import {
 } from "./nodes"
 import { StringMap } from "./map"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
+import { Options } from "./options"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { DeclaredRange, T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
 
@@ -1634,6 +1636,10 @@ export class BoundsWalk {
   proved: Node[]
   /** The `substring` bounds an unrecorded walk proved, waiting as `proved` does. */
   clamps: Node[]
+  /** Whether `slice` bounds are judged too: set only by `proveSliceBounds`. */
+  slices: boolean
+  /** The `slice` bounds this walk proved inside `[0, length]`, for `proveSliceBounds` to record. */
+  sliceClamps: Node[]
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[]
   /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
@@ -1659,6 +1665,8 @@ export class BoundsWalk {
     this.record = true
     this.proved = []
     this.clamps = []
+    this.slices = false
+    this.sliceClamps = []
     this.sites = []
     this.callees = []
     this.stopAfter = -1
@@ -1798,20 +1806,15 @@ const judge = (
  * is the arity the checker accepts; a third is already an error and is never
  * judged here.
  */
-const isSubstringCall = (ctx: CheckContext, call: Node): boolean =>
-  isStringRangeCall(ctx, call) && unwrapBoundsParens(call.children[0]).text === "substring"
+const isSubstringCall = (ctx: CheckContext, call: Node): boolean => isStringRangeCall(ctx, call, "substring")
 
-/** `substring` or `slice`: the string methods that take a range of offsets. */
-const isStringRangeMethod = (name: string): boolean => name === "substring" || name === "slice"
+/** `s.slice(a)` / `s.slice(a, b)` on a string receiver: checked rather than clamped (`proveSliceBounds`). */
+const isSliceCall = (ctx: CheckContext, call: Node): boolean => isStringRangeCall(ctx, call, "slice")
 
-/**
- * `s.substring(...)` or `s.slice(...)` on a string receiver, with the one or
- * two bounds the checker accepts: the calls whose bounds are judged into
- * `nodeProvenClamp` (see the header for who reads which).
- */
-const isStringRangeCall = (ctx: CheckContext, call: Node): boolean => {
+/** A call of the string method `name` with the one or two bounds the checker accepts. */
+const isStringRangeCall = (ctx: CheckContext, call: Node, name: string): boolean => {
   const callee = unwrapBoundsParens(call.children[0])
-  if (callee.kind !== N_MEMBER || !isStringRangeMethod(callee.text)) {
+  if (callee.kind !== N_MEMBER || callee.text !== name) {
     return false
   }
   const count = call.children[1].children.length
@@ -1880,6 +1883,18 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
     walk.ctx.program.nodeProvenClamp[bound.id] = true
   } else {
     walk.clamps.push(bound)
+  }
+}
+
+/**
+ * `judgeClampBound` for a `slice` bound: the same proof in the same state,
+ * since `emitSlice` also reads the receiver's length first and each bound in
+ * order. The verdict goes to `sliceClamps` and nowhere else, whatever the
+ * walk's `record` says.
+ */
+const judgeSliceBound = (walk: BoundsWalk, state: State, holder: Local | null, bound: Node): void => {
+  if (provesClamp(walk.ctx, state, holder, bound)) {
+    walk.sliceClamps.push(bound)
   }
 }
 
@@ -2065,11 +2080,10 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     // may reach back. The receiver's length is read before either, so the
     // holder is dropped the moment an argument rebinds it — a literal `0`
     // still folds after that, because no string has a negative length.
-    // `emitSlice` reads the length and the bounds in the same order, so a
-    // `slice` is judged the same way.
-    const rangeCall = isStringRangeCall(ctx, e)
+    const slice = walk.slices && isSliceCall(ctx, e)
+    const clamped = slice || isSubstringCall(ctx, e)
     let holder: Local | null = null
-    if (rangeCall) {
+    if (clamped) {
       holder = lengthHolder(ctx, callee.children[0])
     }
     const target = ctx.program.nodeCallees[e.id]
@@ -2077,11 +2091,15 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     for (const arg of e.children[1].children) {
       walkArgument(walk, state, arg, target, at)
       at = at + 1
-      if (rangeCall) {
+      if (clamped) {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null
         }
-        judgeClampBound(walk, state, holder, arg)
+        if (slice) {
+          judgeSliceBound(walk, state, holder, arg)
+        } else {
+          judgeClampBound(walk, state, holder, arg)
+        }
       }
     }
     if (isCharCodeAt(ctx, e)) {
@@ -3051,9 +3069,9 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
 
 /**
  * Whether `node` holds anything `judge`, `judgeClampBound` or `judgeRange` is
- * ever called on: an element access, a call spelled `.charCodeAt(...)`,
- * `.substring(...)` or `.slice(...)` whatever its receiver, or a value
- * entering a range. Read off the syntax and the entries the checker recorded, so it answers `true`
+ * ever called on: an element access, a call spelled `.charCodeAt(...)` or
+ * `.substring(...)` whatever its receiver, or a value entering a range. Read
+ * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
  */
 const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
@@ -3062,7 +3080,7 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   }
   if (node.kind === N_CALL) {
     const callee = unwrapBoundsParens(node.children[0])
-    if (callee.kind === N_MEMBER && (callee.text === "charCodeAt" || isStringRangeMethod(callee.text))) {
+    if (callee.kind === N_MEMBER && (callee.text === "charCodeAt" || callee.text === "substring")) {
       return true
     }
   }
@@ -3810,6 +3828,48 @@ export const commitProofs = (program: CheckedProgram, walk: BoundsWalk): void =>
     program.nodeProvenIndex[node.id] = true
   }
   for (const bound of walk.clamps) {
+    program.nodeProvenClamp[bound.id] = true
+  }
+}
+
+/**
+ * WP33 NL8002: record in `nodeProvenClamp` each `slice` bound of `body` that
+ * the `substring` proof places inside `[0, s.length]`, and nothing else. The
+ * portability pass calls it once per body it walks, before it reads a `slice`
+ * verdict, so a compile without `--warn-portability` never does this work.
+ *
+ * It is the pass-2 walk — the facts the body proves by itself, with no entry
+ * facts from its callers, which `src/ranges.ts` adds to `substring` verdicts —
+ * run unrecorded, so every other verdict it reaches is thrown away and the
+ * side tables the emitter reads are exactly what they were. The context is a
+ * fresh one over the checked program: the walk reads only its program, table
+ * and flags, and it reports nothing into the sink it is given.
+ */
+export const proveSliceBounds = (
+  program: CheckedProgram,
+  table: TypeTable,
+  opts: Options,
+  body: Node
+): void => {
+  const ctx = new CheckContext(
+    table,
+    program,
+    new DiagnosticSink(),
+    opts.numberMode,
+    !opts.nsw,
+    opts.uncheckedIndexing,
+    opts.strictExports
+  )
+  const walk = new BoundsWalk(ctx, opts.uncheckedIndexing)
+  walk.record = false
+  walk.slices = true
+  const state = new State(table)
+  if (body.kind === N_BLOCK) {
+    walkBoundsStatement(walk, state, body)
+  } else {
+    walkExpression(walk, state, body)
+  }
+  for (const bound of walk.sliceClamps) {
     program.nodeProvenClamp[bound.id] = true
   }
 }

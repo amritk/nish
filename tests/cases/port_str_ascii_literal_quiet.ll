@@ -6,10 +6,9 @@
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"c\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"t\00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c" starts with p\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"x\00" }, align 8
 
 declare void @nish_free_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
@@ -22,7 +21,7 @@ entry:
   %sizes.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [2 x i32], align 8
-  %arena.mark = call i64 @nish_arena_mark()
+  %built.addr = alloca i8*, align 8
   store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %word.addr, align 8
   %0 = load i8*, i8** %word.addr, align 8
   %1 = bitcast i8* %0 to i64*
@@ -98,7 +97,16 @@ if.then:
   br label %if.end
 
 if.end:
-  call void @nish_arena_release(i64 %arena.mark)
+  store i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*), i8** %built.addr, align 8
+  %45 = load i8*, i8** %built.addr, align 8
+  %46 = call i8* @nish_str_concat(i8* %45, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
+  store i8* %46, i8** %built.addr, align 8
+  %47 = load i8*, i8** %built.addr, align 8
+  %48 = bitcast i8* %47 to i64*
+  %49 = load i64, i64* %48, align 8
+  %50 = trunc i64 %49 to i32
+  %51 = call i8* @nish_str_from_i32(i32 %50)
+  call void @nish_print(i8* %51)
   ret i32 0
 }
 
