@@ -5119,8 +5119,8 @@ by the caller.
     operand does not itself hold an offset, as in `width - s.length`, the
     room left in a column that was not counted in bytes.
 
-  One `+ k` on the offset an `indexOf` of a provably ASCII needle answers,
-  with `0 < k <= needle.length`, steps inside the match and is not itself a
+  One `+ k` on the offset an `indexOf` or `lastIndexOf` of a provably ASCII
+  needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
   fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
   the stepped offset is followed on like any other, so printing it is
   reported. Everything else is quiet: an offset handed to a string method or
