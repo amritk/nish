@@ -823,17 +823,29 @@ export class ConstInfo {
 export class AliasInfo {
   name: string
   decl: Node
-  /** The module that declares it; an alias never leaves the one that wrote it. */
+  /**
+   * The module that declares it. An importer holds this same record under its
+   * own local name, so `origin` is what tells a declaration from an import.
+   */
   origin: SourceFile
+  /**
+   * The declaring module's context: the right-hand side is resolved there,
+   * whichever module asks first, so `export type Conn = Socket | null` means
+   * the `Socket` its own module sees and its errors are reported against it.
+   */
+  home: CheckContext
   /** The resolved type id, or -1 while it is still a name. */
   type: i32
-  /** In progress, which is how a cycle is caught. */
+  exported: boolean
+  /** In progress, which is how a cycle is caught, across modules too. */
   resolving: boolean
 
-  constructor(name: string, decl: Node, origin: SourceFile) {
+  constructor(name: string, decl: Node, origin: SourceFile, home: CheckContext) {
     this.name = name
     this.decl = decl
     this.origin = origin
+    this.home = home
+    this.exported = false
     this.type = -1
     this.resolving = false
   }
@@ -1095,7 +1107,7 @@ export class CheckedProgram {
   builtinImports: StringMap
   builtinImportList: BuiltinExport[]
 
-  /** Name -> index into `aliasList`, for the `type` aliases this module declares. */
+  /** Name -> index into `aliasList`, for the `type` aliases this module declares or imports. */
   aliases: StringMap
   aliasList: AliasInfo[]
 
@@ -1154,13 +1166,13 @@ export class CheckedProgram {
   enums: StringMap
   enumList: EnumInfo[]
   /**
-   * The imports that name an enum. They are bound before pass 1 rather than in
-   * pass 1b — an enum is a type with no layout, so a signature naming one has
-   * to find it, where a class can be resolved provisionally — and they leave
-   * `imports` when they are, because an enum declares no symbol for the
-   * emitter to declare and binds nothing pass 1b binds.
+   * The imports that name an enum or a type alias. They are bound before pass
+   * 1 rather than in pass 1b — neither has a layout, so a signature naming one
+   * has to find it, where a class can be resolved provisionally — and they
+   * leave `imports` when they are, because neither declares a symbol for the
+   * emitter to declare nor binds anything pass 1b binds.
    */
-  enumImports: ImportBinding[]
+  typeImports: ImportBinding[]
 
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null
@@ -1326,7 +1338,7 @@ export class CheckedProgram {
     this.savedFusion = this.fusion
     this.enums = new StringMap()
     this.enumList = []
-    this.enumImports = []
+    this.typeImports = []
     this.entryMain = null
     this.parallelCalls = []
     this.spawnCalls = []
@@ -1443,8 +1455,19 @@ export class CheckedProgram {
     return at < 0 ? null : this.aliasList[at]
   }
 
+  /** The alias this module itself declares as `name`, or `null`, as `ownEnum` answers for an enum. */
+  ownAlias(name: string): AliasInfo | null {
+    const info = this.alias(name)
+    return info !== null && info.origin === this.source ? info : null
+  }
+
   addAlias(info: AliasInfo): void {
-    this.aliases.set(info.name, this.aliasList.length)
+    this.addAliasAs(info.name, info)
+  }
+
+  /** An alias under `localName`: its own name when declared here, the import's when bound (`import { Conn as C }`). */
+  addAliasAs(localName: string, info: AliasInfo): void {
+    this.aliases.set(localName, this.aliasList.length)
     this.aliasList.push(info)
   }
 
