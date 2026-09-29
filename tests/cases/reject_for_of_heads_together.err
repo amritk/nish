@@ -1,0 +1,2 @@
+`for await` is not supported
+`for...of` needs a `const` or `let` declaration

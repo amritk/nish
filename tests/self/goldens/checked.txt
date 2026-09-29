@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 715 programs, 51008 dump lines.
+# 716 programs, 51021 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -7265,6 +7265,20 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i64
   stackSites=0 stackLocals=0
   local 1:38 big: i64 (let)
+program tests/cases/ident_with_try_var.ts
+module tests/cases/ident_with_try_var.ts (entry)
+function with(x: i32): i32 -> @with
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: with
+  stackSites=0 stackLocals=0
+  local 12:7 try: i32 (let)
+  callee 12:18 with -> @with
+  local 13:7 var: i32 (let)
+  local 14:7 n: i32 (let)
+  callee 15:3 with -> @with
 program tests/cases/int_min_literal.ts
 module tests/cases/int_min_literal.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

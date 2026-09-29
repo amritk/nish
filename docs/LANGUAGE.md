@@ -2755,6 +2755,11 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 (it enumerates property names, and object layout is fixed at compile time); use
 `for...of` ``, NL1056, `reject_for_in`), nested `function`, `enum`, `type`,
 `namespace` (`reject_namespace`), `declare global` (`reject_declare_global`).
+`with`, `try` and `var` are not reserved: a function or a variable may be
+called one, and a statement opens only where the word could not be that
+name — `with (…)` followed on the same line by a statement, `try` followed on
+the same line by a block, `var` followed on the same line by a name
+(`tests/cases/ident_with_try_var`).
 `enum` and `type` are top-level declarations ([Enums](#enums),
 [Type aliases](#type-aliases)); it is only inside a function body that they are
 a rejected statement.

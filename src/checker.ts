@@ -257,7 +257,11 @@ export class Checker {
       this.ctx.errored = false
       aliasType(alias, this.ctx)
     }
-    refuseForOfHeads(this.ctx, this.program.file)
+    // Per declaration, as the rest of pass 1 recovers: one refusal each.
+    for (const stmt of this.program.file.children) {
+      this.ctx.errored = false
+      refuseForOfHeads(this.ctx, stmt)
+    }
     this.ctx.errored = false
     this.qualifySymbols()
   }

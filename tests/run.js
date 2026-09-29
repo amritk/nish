@@ -7665,6 +7665,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_multi_error", ["2:10-2:18 NL2231", "6:19-6:20 NL2185", "11:10-11:16 NL2231"]],
       ["reject_ffi_pointer_array", ["21:18-21:22 NL2323"]],
       ["reject_ffi_pointer_type_argument_fn", ["22:13-22:18 NL2323"]],
+      // WP33 R1: Phase 0 ends a module at its first refusal, and the pass 1
+      // `for...of` sweep recovers per declaration; a `.err` cannot count.
+      ["reject_stmt_forms_together", ["8:3-9:4 NL1056"]],
+      ["reject_for_of_heads_together", ["4:3-6:4 NL2133", "12:8-12:9 NL2135"]],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)

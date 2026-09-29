@@ -593,7 +593,88 @@ export class Parser {
 
   /** `var` followed by a name: the one place the word opens a declaration. */
   varAhead(): boolean {
-    return this.at(TOK_IDENT) && this.value === "var" && this.peek() === TOK_IDENT
+    return this.at(TOK_IDENT) && this.value === "var" && this.peek() === TOK_IDENT && this.aheadOnSameLine()
+  }
+
+  /**
+   * Whether the token after the current one starts on the same line. `var`,
+   * `try` and `with` are identifiers to the lexer, and a program may use them
+   * as names: `var` then `x` on the next line is two expression statements
+   * under TypeScript's semicolon insertion, and compiled as that before these
+   * words opened a construct, so a construct is read only where the words
+   * stand on one line (WP33 R1).
+   */
+  aheadOnSameLine(): boolean {
+    this.peek()
+    for (let i: i32 = this.end; i < this.aheadStart; i++) {
+      const c = this.lexer.at(i)
+      if (c === CH_LF || c === CH_CR) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /**
+   * Whether `with` opens a `with` statement rather than calling a function
+   * named `with`, which a program may declare and call (`with(5);`). The two
+   * share `with (…)`, so a scratch lexer, as in `startsArrowDeclaration`, runs
+   * to the parenthesis that closes it and looks at what follows: a statement
+   * on the same line — a block, a name or a statement keyword — makes it the
+   * statement, and anything else the call it has always been. Everything read
+   * as the statement here was a syntax error as a call.
+   */
+  withStatementAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "with" || this.peek() !== TOK_LPAREN) {
+      return false
+    }
+    const scan = new Lexer(this.file.text)
+    scan.pos = this.aheadEnd
+    let depth = 1
+    while (depth > 0) {
+      scan.next()
+      if (scan.kind === TOK_END) {
+        return false
+      }
+      if (scan.kind === TOK_LPAREN) {
+        depth = depth + 1
+      } else if (scan.kind === TOK_RPAREN) {
+        depth = depth - 1
+      }
+    }
+    const close = scan.end
+    scan.next()
+    for (let i: i32 = close; i < scan.start; i++) {
+      const c = this.lexer.at(i)
+      if (c === CH_LF || c === CH_CR) {
+        return false
+      }
+    }
+    switch (scan.kind) {
+      case TOK_LBRACE:
+      case TOK_IF:
+      case TOK_WHILE:
+      case TOK_DO:
+      case TOK_FOR:
+      case TOK_SWITCH:
+      case TOK_RETURN:
+      case TOK_THROW:
+      case TOK_BREAK:
+      case TOK_CONTINUE:
+      case TOK_LET:
+      case TOK_CONST:
+        return true
+      case TOK_IDENT:
+        // A word that continues an expression after a call.
+        return (
+          scan.value !== "as" &&
+          scan.value !== "satisfies" &&
+          scan.value !== "in" &&
+          scan.value !== "instanceof"
+        )
+      default:
+        return false
+    }
   }
 
   /** Mark a declaration `export`ed, which is a modifier rather than a child. */
@@ -1579,10 +1660,12 @@ export class Parser {
         if (this.usingAhead() || this.varAhead()) {
           return this.parseVariableStatement(start)
         }
-        if (this.value === "try" && this.peek() === TOK_LBRACE) {
+        // `try` then a block on the next line is a name and a block, as it
+        // was before `try` opened a statement (`aheadOnSameLine`).
+        if (this.value === "try" && this.peek() === TOK_LBRACE && this.aheadOnSameLine()) {
           return this.parseTry(start)
         }
-        if (this.value === "with" && this.peek() === TOK_LPAREN) {
+        if (this.withStatementAhead()) {
           return this.parseWith(start)
         }
         if (this.peek() === TOK_COLON) {
@@ -1622,16 +1705,7 @@ export class Parser {
    * else, so `using(x)` and `using = 1` stay the expressions they are.
    */
   usingAhead(): boolean {
-    if (!this.at(TOK_IDENT) || this.value !== "using" || this.peek() !== TOK_IDENT) {
-      return false
-    }
-    for (let i: i32 = this.end; i < this.aheadStart; i++) {
-      const c = this.lexer.at(i)
-      if (c === CH_LF || c === CH_CR) {
-        return false
-      }
-    }
-    return true
+    return this.at(TOK_IDENT) && this.value === "using" && this.peek() === TOK_IDENT && this.aheadOnSameLine()
   }
 
   parseVariableStatement(start: i32): Node {
