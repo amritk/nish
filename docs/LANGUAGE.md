@@ -3626,8 +3626,14 @@ choice (WP34 N6).
   show the shapes that stay constant time, and a new one belongs beside them.
   On `wasm32` the builtins compile with the same barrier, but the engine
   compiles the module again, so the `.s` this check could read is not what
-  runs and nothing is promised there. The dudect-style timing run that would
-  measure a whole routine is a separate job, not part of `npm test`.
+  runs and nothing is promised there. Weekly, and never from `npm test`,
+  `.github/workflows/ct-timing.yml` runs `tests/ct-timing.js` on an x86-64 and
+  an aarch64 runner — a dudect-style Welch's t-test of every function the
+  fixtures name, a fixed secret against a random one, filed as an issue when
+  |t| passes 4.5 — which measures whether their running time on that hardware
+  moves with the secret, and cannot promise more: a difference below a shared
+  runner's noise, a secret index into a table that fits in the L1 cache, or
+  another processor goes unseen.
 
 The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2):
 `runtime/nish.mjs` supplies both as pure functions of their operands, so the
