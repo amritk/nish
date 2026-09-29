@@ -161,6 +161,18 @@ declare function toF64(x: number | boolean): f64;
 declare function f64ToBits(x: f64): i64;
 declare function bitsToF64(bits: i64): f64;
 
+// ---- Constant time (WP34 N6) ------------------------------------------------
+
+/**
+ * `(a & mask) | (b & ~mask)` with the mask hidden from the optimiser, so it is
+ * never turned into a branch: `a` for an all-ones mask, `b` for zero. Every
+ * operand is one type, `u32` or `u64`. Both are `number` here, so one generic
+ * declaration stands for the two.
+ */
+declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
+/** All-ones of the operands' type when `a === b`, zero otherwise, without a branch. */
+declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
+
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
 /** `s` to stdout with no trailing newline and no conversion. */

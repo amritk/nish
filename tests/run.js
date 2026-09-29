@@ -3784,11 +3784,11 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     }
   }
   // Every builtin is read as having a branch in the callee table, or is one of the
-  // two that lower to a single bitcast and call nothing. A builtin with neither
-  // would read as "calls nothing, so allocates nothing" -- the silent miss this
-  // guard exists to prevent -- so a branch this scan cannot see is a failure
-  // naming the builtin, not a pass.
-  const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64"])
+  // four that call nothing: two lower to a single bitcast and the constant-time pair (WP34 N6) to
+  // bitwise instructions and an empty asm. A builtin with neither would read as "calls nothing, so
+  // allocates nothing" -- the silent miss this guard exists to prevent -- so a branch
+  // this scan cannot see is a failure naming the builtin, not a pass.
+  const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64", "ctSelect", "ctEq"])
   const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b))
   check(
     "src/builtins.ts and src/emit-builtins.ts still read as a builtin list and a callee table " +

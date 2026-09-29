@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 514
+export const RULE_COUNT: i32 = 516
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -370,6 +370,8 @@ const diagnosticRules = (): string[] => [
   "NL3002",
   "` is generic: it must be written with its type arguments, e.g. ",
   "NL2317",
+  "` takes u32 or u64 operands (convert with toU32 or toU64), got ",
+  "NL2399",
   "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
   "NL2143",
   " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -622,6 +624,8 @@ const diagnosticRules = (): string[] => [
   "NL1002",
   "` needs a newer compiler: its `engines.",
   "NL3018",
+  "` needs every operand of one type, got ",
+  "NL2400",
   "`declare function` is not supported yet",
   "NL2125",
   "`Function` constructor is forbidden in ",

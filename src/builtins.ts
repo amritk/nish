@@ -15,7 +15,7 @@
 
 import { CheckContext } from "./context"
 import { checkExpression } from "./expressions"
-import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
+import { N_CALL, N_IDENT, N_MEMBER, N_NUMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
   isNumeric,
@@ -85,6 +85,8 @@ export const isBuiltinFunction = (name: string): boolean => {
   return (
     name === "f64ToBits" ||
     name === "bitsToF64" ||
+    name === "ctSelect" ||
+    name === "ctEq" ||
     name === "parseInt" ||
     name === "parseFloat" ||
     name === "Number" ||
@@ -149,6 +151,55 @@ const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: str
       `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`
     )
   }
+}
+
+/**
+ * `ctSelect(mask, a, b)` and `ctEq(a, b)` (WP34 N6): every operand one type,
+ * and that type `u32` or `u64`, which is also the answer.
+ *
+ * Only the two unsigned words, because a mask is a bit pattern: all-ones in a
+ * signed type reads as -1, and a mask narrower than a word is not what the
+ * limb arithmetic the crypto lanes write deals in. A bare numeric literal takes
+ * its type from the first operand that is not one, so `ctEq(x, 0)` and
+ * `ctSelect(m, a, 0)` read naturally whichever side the literal is on.
+ */
+const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
+  const arity = name === "ctSelect" ? 3 : 2
+  if (!checkBuiltinArity(ctx, call, name, args, arity)) {
+    return T_ERROR
+  }
+  let lead = 0
+  while (lead < arity - 1 && args.children[lead].kind === N_NUMBER) {
+    lead = lead + 1
+  }
+  const type = checkExpression(ctx, args.children[lead], scope, -1)
+  let failed = type === T_ERROR
+  for (let i = 0; i < arity; i++) {
+    if (i === lead) {
+      continue
+    }
+    const got = checkExpression(ctx, args.children[i], scope, type)
+    if (got === T_ERROR) {
+      failed = true
+    } else if (!failed && got !== type) {
+      const want = ctx.table.typeName(type)
+      ctx.error(
+        call,
+        `\`${name}\` needs every operand of one type, got ${want} and ${ctx.table.typeName(got)}`
+      )
+      failed = true
+    }
+  }
+  if (failed) {
+    return T_ERROR
+  }
+  if (type !== T_U32 && type !== T_U64) {
+    return ctx.errorType(
+      args.children[lead],
+      `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
+    )
+  }
+  return type
 }
 
 // ---- Namespace properties -----------------------------------------------------------
@@ -439,6 +490,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[0], scope, name, from)
     }
     return name === "f64ToBits" ? T_I64 : T_F64
+  }
+  if (name === "ctSelect" || name === "ctEq") {
+    return checkConstantTime(ctx, call, scope, name, args)
   }
   if (name === "parseInt" || name === "parseFloat") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
