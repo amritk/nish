@@ -183,8 +183,27 @@ export const N_NAMESPACE: i32 = 71
 // resolver has no case for it, which is the rule.
 export const N_TYPE_OPERATOR: i32 = 72
 
+// ---- Refused bindings (WP33 R1) ------------------------------------------------------
+//
+// The function and binding forms. Most are a node that exists: a default,
+// optional or rest parameter is an N_PARAM with FLAG_DEFAULT, FLAG_OPTIONAL
+// or FLAG_REST, a getter or setter an N_METHOD with FLAG_ACCESSOR, a method
+// in an interface an N_METHOD among its fields, and `export default function
+// ()` an N_FUNCTION with FLAG_DEFAULT whose name is EMPTY. A missing return
+// type is an EMPTY return type and a missing body an EMPTY body, as a
+// `declare function`'s is. A top-level `let` bound to an arrow is the module
+// constant whose initialiser is the N_ARROW, and the names after the first in
+// `const f = (): i32 => 1, g = 2` a sixth child of the N_FUNCTION, a LIST of
+// VAR_DECL there only when written.
+
+// `{ a, b }` or `[a, b]` where a name is bound — a VAR_DECL's or a PARAM's
+// first child (NL2191, NL2192, NL2193): no children; the pattern between the
+// brackets is passed over unread, as a namespace body is, because every
+// declaration that holds one is refused whatever it binds.
+export const N_BINDING_PATTERN: i32 = 73
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 73
+export const N_COUNT: i32 = 74
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -244,17 +263,23 @@ export const FLAG_USING: i32 = 256
 //     and methods, `?.` is a member, element or call (FLAG_OPTIONAL), `async`
 //     and `function*` a function, method or arrow (FLAG_ASYNC,
 //     FLAG_GENERATOR), and a default type argument its type parameter
-//     (FLAG_DEFAULT). An operator is the N_BINARY or N_UNARY whose text it is.
+//     (FLAG_DEFAULT); a default, optional or rest parameter is its PARAM
+//     (FLAG_DEFAULT, FLAG_OPTIONAL, FLAG_REST) and a getter or setter a
+//     method (FLAG_ACCESSOR). An operator is the N_BINARY or N_UNARY whose
+//     text it is.
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
 //     N_LABELED, N_REGEX, N_AS, N_SPREAD, N_DECORATOR, N_NAMESPACE,
-//     N_TYPE_OPERATOR.
+//     N_TYPE_OPERATOR, N_BINDING_PATTERN.
 //   - A variant that differs only in what one child is keeps the node and
 //     puts the other thing in that child, when the child's own kind is the
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
 //     than a VAR, a top-level statement is the statement itself, sitting
-//     in the SOURCE_FILE where a declaration would, and type parameters on an
-//     alias are an N_TYPE_ALIAS's third child, there only when written.
+//     in the SOURCE_FILE where a declaration would, type parameters on an
+//     alias are an N_TYPE_ALIAS's third child, there only when written, a
+//     missing name, return type or body is an EMPTY child, a method in an
+//     interface an N_METHOD among its fields, and a `let` bound to an arrow
+//     a module constant whose initialiser is the N_ARROW.
 //
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
@@ -284,7 +309,12 @@ export const FLAG_GENERATOR: i32 = 32768
 // `flags` on a type parameter's IDENT: bit 16 is a default, `<T = i32>`
 // (NL2292). The default type is read and dropped, as a `catch` binding's
 // annotation is: the declaration is refused whatever it names.
-export const FLAG_DEFAULT: i32 = 65536
+export const FLAG_DEFAULT: i32 = 65536 // and on N_PARAM, `x = 1` (NL2233); on N_FUNCTION, `export default` (NL2203)
+// `flags` on N_PARAM: bit 17 is `...xs` (NL2235). `x?: T` is FLAG_OPTIONAL and
+// a default FLAG_DEFAULT, whose value is read and dropped.
+export const FLAG_REST: i32 = 131072
+// `flags` on N_METHOD: bit 18 is `get` or `set` in front of its name (NL2209).
+export const FLAG_ACCESSOR: i32 = 262144
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -469,6 +499,8 @@ export const nodeName = (kind: i32): string => {
       return "NAMESPACE"
     case N_TYPE_OPERATOR:
       return "TYPE_OPERATOR"
+    case N_BINDING_PATTERN:
+      return "BINDING_PATTERN"
     default:
       return "?"
   }

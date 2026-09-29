@@ -264,8 +264,10 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     without `FLAG_CONST`, `x?: T` and `static` a field or method with a flag,
     `a?.b` an `N_MEMBER` (or `N_INDEX`, `N_CALL`) with `FLAG_OPTIONAL`,
     `async` and `function*` a function, method or arrow with `FLAG_ASYNC` /
-    `FLAG_GENERATOR`, and a default type argument the type parameter with
-    `FLAG_DEFAULT`. An operator is the operator node whose text it is: `==`,
+    `FLAG_GENERATOR`, a default type argument the type parameter with
+    `FLAG_DEFAULT`, a default, optional or rest parameter the parameter with
+    `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST`, and `get x()` / `set x(v)`
+    a method with `FLAG_ACCESSOR`. An operator is the operator node whose text it is: `==`,
     `in`, `**` and the comma an `N_BINARY`, `typeof`, `void`, `delete`,
     `await` and `yield` an `N_UNARY`;
   - it **resembles nothing** → a kind of its own with its child layout written
@@ -273,14 +275,20 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `FLAG_ANGLE` / `FLAG_SATISFIES` for `<T>x` and `satisfies`), `N_SPREAD`,
     `N_DECORATOR` (around what it decorates), `N_NAMESPACE` (`namespace`,
     `module` and `declare global`, its body passed over unread) and
-    `N_TYPE_OPERATOR` (`keyof T`);
+    `N_TYPE_OPERATOR` (`keyof T`) and `N_BINDING_PATTERN` (a destructuring
+    pattern where a name is bound, passed over unread);
   - it **differs in what one child is** → the same node with that child, when
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
     `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access, and type
+    `new a.B()` an `N_NEW` whose callee is the member access, type
     parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
-    when written.
+    when written, a missing name, return type or body an EMPTY child of the
+    `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an
+    interface's fields, a top-level `let` bound to an arrow the module
+    constant whose initialiser is the `N_ARROW`, and the names after the
+    first in `const f = (): i32 => 1, g = 2` a sixth child of the
+    `N_FUNCTION`.
 
   The refusal runs before anything else reads the node, so no later rule has
   to know the shape exists. An NL2xxx rule that needs no type is a sweep over
@@ -293,7 +301,14 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   and it reads a declaration's type parameters first, constraints included,
   where the source has them, though the tree keeps them last; resolving a
   constraint stays quiet about a `keyof` the sweep refused
-  (`tests/cases/reject_type_keyof_constraint`).
+  (`tests/cases/reject_type_keyof_constraint`). A rule about a node's shape
+  is asked where its form is written — a missing return type after the
+  parameters, a default after the parameter's type, a declarator's pattern
+  before its initialiser — so that the first form in the source is the one
+  reported (`tests/cases/reject_fn_sweep_together`), and a method's missing
+  return type is the sweep's rather than the collector's, because a generic
+  class's members are collected only once instantiated
+  (`reject_method_return_template`).
   `src/ast-text.ts` prints every flag so that `--emit-ast` and
   `tests/parser-oracle.js` compare it. A word the lexer treats as an
   identifier (`var`, `try`, `with`, `in`, `await`, `typeof`, `as`, …) is

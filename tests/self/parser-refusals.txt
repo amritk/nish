@@ -72,8 +72,6 @@
 #      `.err`, §A3's declaration and this entry all updated together, not to a
 #      line edited until the run goes green.
 
-reject_arrow_let	a module holds no top-level `let`; use `const`
-reject_arrow_return_type	a return type annotation is required
 reject_asi_for_header	expected `;`, found `IDENT`
 reject_asi_same_line	expected `;`, found `const`
 reject_asi_template	expected `;`, found `TEMPLATE`
@@ -90,22 +88,17 @@ reject_cls_index_signature	a class member is a field, a method or a constructor,
 reject_cls_literal_key	an object literal key must be a plain identifier
 reject_cls_literal_member	expected `}`, found `(`
 reject_cls_method_no_body	expected `{`, found `;`
-reject_cls_method_optional_untyped	a return type annotation is required
 reject_cls_param_property	a type annotation is required
 reject_cls_static_block	a class member is a field, a method or a constructor, found `{`
 reject_cls_static_field_untyped	a type annotation is required
 reject_computed_property	an object literal key must be a plain identifier
-reject_const_destructured	expected a name, found `{`
 reject_default_import	expected `{`, found `IDENT`
-reject_destructure_local	expected a name, found `[`
 reject_enum_declare	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_export_assignment	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `=`
 reject_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_export_import_equals	`export` cannot introduce an import
 reject_export_list	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `{`
-reject_fn_anonymous	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_fn_nested	expected an expression, found `function`
-reject_fn_two_names	expected `;`, found `,`
 reject_generic_abstract	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_generic_declare_class	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
@@ -118,17 +111,13 @@ reject_import_template_specifier	a module specifier must be a string literal
 reject_import_type_only	expected `{`, found `IDENT`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
-reject_missing_return_type	a return type annotation is required
-reject_multi_decl	a type annotation is required
+reject_multi_decl	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_namespace_import	expected `{`, found `*`
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_object_spread	an object literal key must be a plain identifier
-reject_param_default	expected `)`, found `=`
-reject_param_destructured	expected a name, found `{`
-reject_param_rest	expected a name, found `...`
 reject_separator_after_dot	Numeric separators are not allowed here
 reject_separator_after_prefix	Numeric separators are not allowed here
 reject_separator_before_bigint_suffix	Numeric separators are not allowed here

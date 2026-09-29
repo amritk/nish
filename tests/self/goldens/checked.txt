@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 783 programs, 52344 dump lines.
+# 784 programs, 52433 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51086,6 +51086,96 @@ function pair<(p, q) => ...>(f: void, n: string | null[]): i32 -> @pair$fn.13.sh
   pointer n: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 11:10 (p, q) => ... -> @shapes$arrow4
+program tests/parser/names-bindings.ts
+module tests/parser/names-bindings.ts (entry)
+const LOW: i32 = 1
+const HIGH: i32 = 2
+struct Accessors (class) size=12 align=4
+  field get: i32 index=0 offset=0 initialized
+  field set: i32 index=1 offset=4 initialized
+  field value: i32 index=2 offset=8 initialized
+  method get2 -> @Accessors.get2
+struct GetSet (class) size=0 align=1
+  method get -> @GetSet.get
+  method set -> @GetSet.set
+  method set2 -> @GetSet.set2
+struct LineBreaks (class) size=0 align=1
+  method get -> @LineBreaks.get
+struct Pair (interface) size=8 align=4
+  field get: i32 index=0 offset=0
+  field set: i32 index=1 offset=4
+function Accessors.get2(this: Accessors): i32 -> @Accessors.get2 [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=12 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function GetSet.get(this: GetSet): i32 -> @GetSet.get [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function GetSet.set(this: GetSet, v: i32): void -> @GetSet.set [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  escaping: v
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 30:11 get: i32 (const)
+  local 31:11 set: i32 (const)
+function GetSet.set2(this: GetSet): i32 -> @GetSet.set2 [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function LineBreaks.get(this: LineBreaks): i32 -> @LineBreaks.get [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function body(n: i32): i32 -> @body
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function twice(n: i32): i32 -> @twice
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via GetSet.set
+  calls: GetSet.set apply$fn.16.nish_main$arrow0 apply$fn.16.nish_main$arrow1 body nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 twice
+  stackSites=7 stackLocals=3
+  local 64:7 x: i32 (let)
+  local 66:9 y: i32 (const)
+  local 67:12 i: i32 (let)
+  local 67:19 j: i32 (let)
+  local 70:9 a: i32 (const)
+  local 70:16 b: i32 (const)
+  local 71:9 p: Pair (const)
+  local 72:9 g: GetSet (const)
+  callee 73:3 GetSet.set -> @GetSet.set
+  local 74:9 flag: boolean (const)
+  local 75:9 pick: i32 (const)
+  local 76:9 arr: i32[] (const)
+  local 77:9 q: Pair (const)
+  local 78:9 r: Pair (const)
+  callee 79:60 apply<(v) => ...> -> @apply$fn.16.nish_main$arrow0
+  callee 79:86 apply<(v) => ...> -> @apply$fn.16.nish_main$arrow1
+  callee 79:122 body -> @body
+  callee 79:133 twice -> @twice
+function (v) => ...(v: i32): i32 -> @nish_main$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function (v) => ...(v: i32): i32 -> @nish_main$arrow1
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function apply<(v) => ...>(f: void, v: i32): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: v
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 54:52 (v) => ... -> @nish_main$arrow0
+function apply<(v) => ...>(f: void, v: i32): i32 -> @apply$fn.16.nish_main$arrow1 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: v
+  calls: nish_main$arrow1
+  stackSites=0 stackLocals=0
+  callee 54:52 (v) => ... -> @nish_main$arrow1
 program tests/parser/names-catch-array.ts
 module tests/parser/names-catch-array.ts (entry)
 function catch(xs: i32[]): i32 -> @catch

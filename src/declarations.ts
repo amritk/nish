@@ -112,7 +112,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
   collectParams(ctx, sig, decl.children[1], -1, foreign)
   const returnAnnotation = decl.children[2]
   if (returnAnnotation.kind === N_EMPTY) {
-    ctx.error(decl.children[0], `Function \`${name}\` needs an explicit return type annotation`)
+    // The pass 1 sweep has refused it (NL2096, `refuseUnsupportedForms`).
     sig.returnType = T_ERROR
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx)

@@ -167,6 +167,14 @@ const printTypeScriptTree = (source, sf) => {
       node.asteriskToken === undefined ? "" : "+generator"
     }`
 
+  /** Whether an arrow's parameters open with `(` or `<`, after any `async`. */
+  const parenthesisedArrow = (arrow) => {
+    const modifiers = arrow.modifiers ?? []
+    const opens =
+      modifiers.length === 0 ? arrow.getStart(sf) : ts.skipTrivia(source, modifiers[modifiers.length - 1].end)
+    return source[opens] === "(" || source[opens] === "<"
+  }
+
   /**
    * The decorators in front of `node` (NL1006): stage1 reads each as a
    * DECORATOR whose children are its expression and what it decorates, the
@@ -501,12 +509,9 @@ const printTypeScriptTree = (source, sf) => {
   }
 
   const variableDeclaration = (node, depth) => {
-    if (!ts.isIdentifier(node.name)) {
-      unsupported(node)
-    }
     const [s, e] = span(node)
     emit(depth, "VAR_DECL", s, e)
-    identifier(node.name, depth + 1)
+    bindingName(node.name, depth + 1)
     optional(depth + 1, node.type, type)
     optional(depth + 1, node.initializer, expression)
   }
@@ -534,34 +539,36 @@ const printTypeScriptTree = (source, sf) => {
     )
   }
 
-  const parameter = (node, parameterDepth) => {
-    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) {
-      unsupported(node)
-    }
-    if (node.questionToken !== undefined || node.initializer !== undefined) {
-      unsupported(node)
-    }
+  /**
+   * A parameter. A default, `...` and `?` are flags stage1 reads for the
+   * checker to refuse (NL2233, NL2235), in `kindWithFlags`'s order, and the
+   * default's value is dropped; a destructuring pattern is the name's
+   * BINDING_PATTERN (NL2192). None of those needs its annotation, and an
+   * arrow argument's parameter may leave its type out (WP29).
+   */
+  const parameter = (node, parameterDepth, typed = true) => {
     const depth = decorated(node, parameterDepth)
     const [s, e] = span(node)
-    emit(depth, "PARAM", s, e)
-    identifier(node.name, depth + 1)
-    if (node.type === undefined) {
+    const flags = `${node.initializer === undefined ? "" : "+default"}${
+      node.dotDotDotToken === undefined ? "" : "+rest"
+    }${node.questionToken === undefined ? "" : "+optional"}`
+    emit(depth, `PARAM${flags}`, s, e)
+    bindingName(node.name, depth + 1)
+    if (node.type === undefined && typed && flags === "" && ts.isIdentifier(node.name)) {
       unsupported(node)
     }
-    type(node.type, depth + 1)
+    optional(depth + 1, node.type, type)
   }
-  // An arrow argument's parameter may leave its type out (WP29).
-  const arrowParameter = (node, depth) => {
-    if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) {
-      unsupported(node)
-    }
-    if (node.questionToken !== undefined || node.initializer !== undefined) {
-      unsupported(node)
+  const arrowParameter = (node, depth) => parameter(node, depth, false)
+
+  /** A bound name, or the destructuring pattern stage1 passes over unread (NL2191–NL2193). */
+  const bindingName = (node, depth) => {
+    if (ts.isIdentifier(node)) {
+      identifier(node, depth)
+      return
     }
     const [s, e] = span(node)
-    emit(depth, "PARAM", s, e)
-    identifier(node.name, depth + 1)
-    optional(depth + 1, node.type, type)
+    emit(depth, "BINDING_PATTERN", s, e)
   }
 
   const block = (node, depth) => {
@@ -717,14 +724,22 @@ const printTypeScriptTree = (source, sf) => {
         return
       }
       case ts.SyntaxKind.FunctionDeclaration: {
-        if (node.name === undefined || node.body === undefined || node.type === undefined) {
+        // A missing name (`export default function ()`, NL2203), return type
+        // (NL2096) or body (NL2204) is an EMPTY child, for the checker to
+        // refuse; a `declare function`'s shape is not compared here.
+        const modifiers = node.modifiers ?? []
+        const isDefault = modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
+        if (modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
           unsupported(node)
         }
-        emit(depth, `FUNCTION${exported(node)}${functionFlags(node)}`, s, e)
-        identifier(node.name, depth + 1)
+        if (isDefault && node.name !== undefined) {
+          unsupported(node)
+        }
+        emit(depth, `FUNCTION${exported(node)}${functionFlags(node)}${isDefault ? "+default" : ""}`, s, e)
+        optional(depth + 1, node.name, identifier)
         list(depth + 1, node.parameters, parameter)
-        type(node.type, depth + 1)
-        block(node.body, depth + 1)
+        optional(depth + 1, node.type, type)
+        optional(depth + 1, node.body, block)
         // WP18: the type parameters are the fifth child, after the body, because
         // `src/nodes.ts` appends rather than renumbers.
         typeParameters(node.typeParameters, depth + 1)
@@ -773,6 +788,20 @@ const printTypeScriptTree = (source, sf) => {
         emit(depth, `INTERFACE${exported(node)}`, s, e)
         identifier(node.name, depth + 1)
         list(depth + 1, node.members, (m, d) => {
+          // A method signature is a METHOD among the fields, with an EMPTY
+          // body, for the checker to refuse (NL2048).
+          if (ts.isMethodSignature(m) && ts.isIdentifier(m.name)) {
+            const [ms, me] = span(m)
+            emit(d, `METHOD${memberFlags(m)}${memberMarker(m)}`, ms, me)
+            identifier(m.name, d + 1)
+            list(d + 1, m.parameters, arrowParameter)
+            optional(d + 1, m.type, type)
+            empty(d + 1)
+            if (m.typeParameters !== undefined) {
+              typeParameters(m.typeParameters, d + 1)
+            }
+            return
+          }
           if (!ts.isPropertySignature(m) || !ts.isIdentifier(m.name) || m.type === undefined) {
             unsupported(m)
           }
@@ -886,24 +915,26 @@ const printTypeScriptTree = (source, sf) => {
         // normalises the same way. It is the one place the oracle reshapes a
         // `typescript` tree rather than transcribing it, and it does so
         // because the language says the two spellings declare one thing.
-        const single = node.declarationList.declarations
+        //
+        // It is the first declarator that decides: an unannotated name bound to
+        // an arrow whose parameters are parenthesised, as `startsArrowDeclaration`
+        // reads it. Its return type may be missing (NL2096), and the names after
+        // it are a sixth child, a LIST of VAR_DECL (NL2274).
+        const declarations = node.declarationList.declarations
+        const first = declarations[0]
         const arrow =
-          single.length === 1 &&
-          single[0].initializer !== undefined &&
-          ts.isArrowFunction(single[0].initializer)
-            ? single[0].initializer
+          first.initializer !== undefined &&
+          ts.isArrowFunction(first.initializer) &&
+          first.type === undefined &&
+          ts.isIdentifier(first.name) &&
+          parenthesisedArrow(first.initializer)
+            ? first.initializer
             : undefined
         if (arrow !== undefined) {
-          if (arrow.type === undefined) {
-            unsupported(node)
-          }
-          if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) {
-            unsupported(node)
-          }
           emit(depth, `FUNCTION${exported(node)}${functionFlags(arrow)}`, s, e)
-          identifier(single[0].name, depth + 1)
+          identifier(first.name, depth + 1)
           list(depth + 1, arrow.parameters, parameter)
-          type(arrow.type, depth + 1)
+          optional(depth + 1, arrow.type, type)
           // The body child is the block, or the expression a concise body
           // returns -- exactly what stage1 puts there.
           if (ts.isBlock(arrow.body)) {
@@ -912,6 +943,9 @@ const printTypeScriptTree = (source, sf) => {
             expression(arrow.body, depth + 1)
           }
           typeParameters(arrow.typeParameters, depth + 1)
+          if (declarations.length > 1) {
+            list(depth + 1, declarations.slice(1), variableDeclaration)
+          }
           return
         }
         emit(depth, `MODULE_CONST${exported(node)}+const`, s, e)
@@ -962,7 +996,8 @@ const printTypeScriptTree = (source, sf) => {
         unsupported(modifier)
       }
     }
-    return `${functionFlags(node)}${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`
+    const accessor = ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ? "+accessor" : ""
+    return `${functionFlags(node)}${accessor}${isStatic ? "+static" : ""}${readonly ? "+readonly" : ""}`
   }
 
   /** `?` and `!` after a member's name, in `kindWithFlags`'s order. */
@@ -987,9 +1022,15 @@ const printTypeScriptTree = (source, sf) => {
       optional(depth + 1, node.initializer, expression)
       return
     }
-    if (ts.isMethodDeclaration(node)) {
+    // A getter or setter is a METHOD with `+accessor` (NL2209), and a method
+    // may leave its return type out (NL2096): the checker refuses both.
+    if (
+      ts.isMethodDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)
+    ) {
       const dispose = isDisposeName(node.name)
-      if ((!ts.isIdentifier(node.name) && !dispose) || node.body === undefined || node.type === undefined) {
+      if ((!ts.isIdentifier(node.name) && !dispose) || node.body === undefined) {
         unsupported(node)
       }
       if (node.typeParameters !== undefined) {
@@ -1002,8 +1043,9 @@ const printTypeScriptTree = (source, sf) => {
       } else {
         identifier(node.name, depth + 1)
       }
-      list(depth + 1, node.parameters, parameter)
-      type(node.type, depth + 1)
+      // An accessor's parameter may leave its type out: the accessor is refused whole.
+      list(depth + 1, node.parameters, ts.isMethodDeclaration(node) ? parameter : arrowParameter)
+      optional(depth + 1, node.type, type)
       block(node.body, depth + 1)
       return
     }
