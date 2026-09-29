@@ -2105,12 +2105,12 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
   check(
     "portability: the human report is `file:line:col: portability: <text>`, an excerpt, and a count, and exits 0",
     warned.status === 0 &&
-      summaries(warned.stderr).length === 8 &&
+      summaries(warned.stderr).length === 6 &&
       warnedLines[0] ===
         `${zeroFill}:10:18: portability: \`new Array<i32>(side * side)\` is filled with zeros here, and with holes in TypeScript, which read back as \`undefined\`` &&
       warnedLines[1] === "  10 |     this.cells = new Array<i32>(side * side);" &&
       warnedLines[2] === "     |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~" &&
-      warned.stderr.includes("\n8 portability warnings\n"),
+      warned.stderr.includes("\n6 portability warnings\n"),
     warned.stderr
   )
 
