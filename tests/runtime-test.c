@@ -46,6 +46,9 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
+/* runtime-host.c (WP34 N3). */
+int32_t nish_signal_fd(void);
+int32_t nish_read_signal(int32_t fd);
 
 static void expect_str(const nish_str *s, const char *want, const char *what) {
   if (s->len != strlen(want) || memcmp(s->data, want, s->len) != 0 || s->data[s->len] != 0) {
@@ -357,6 +360,50 @@ static void test_threads(void) {
 }
 #endif
 
+#ifdef NISH_THREADS
+#include <fcntl.h>
+#include <signal.h>
+
+/* A thread that was running, with nothing blocked, before `nish_signal_fd()`
+   was called: it waits in `read` on a pipe of its own until the test lets it
+   go. */
+static int host_gate[2];
+static void *host_waiting_thread(void *unused) {
+  (void)unused;
+  char b;
+  while (read(host_gate[0], &b, 1) < 0) {
+  }
+  return NULL;
+}
+
+/* WP34 N3, review R1-1: a signal that lands on a thread which was already
+   running when the descriptor was made is still read back, and does not end
+   the process. `pthread_kill` aims each signal at that thread, so the test
+   does not depend on which thread the kernel would have picked. A `signalfd`
+   with the signals blocked only in the calling thread fails here: the waiting
+   thread takes SIGINT at its default action and the whole test exits 130. */
+static void test_host_signal_threads(void) {
+  assert(pipe(host_gate) == 0);
+  pthread_t t;
+  assert(pthread_create(&t, NULL, host_waiting_thread, NULL) == 0);
+  int32_t fd = nish_signal_fd();
+  assert(fd >= 0);
+  assert(nish_signal_fd() == fd);
+  /* R1-2: the pipe is close-on-exec, so a child spawned meanwhile does not
+     inherit it; on Linux it is from the moment `pipe2` makes it. */
+  assert((fcntl(fd, F_GETFD) & FD_CLOEXEC) != 0);
+  assert(pthread_kill(t, SIGINT) == 0);
+  expect_i64(nish_read_signal(fd), 2, "SIGINT on a thread started before signalFd");
+  assert(pthread_kill(t, SIGTERM) == 0);
+  expect_i64(nish_read_signal(fd), 15, "SIGTERM on a thread started before signalFd");
+  assert(kill(getpid(), SIGINT) == 0);
+  expect_i64(nish_read_signal(fd), 2, "SIGINT to the process");
+  expect_i64(nish_read_signal(fd + 1), -1, "a descriptor that is not the signal descriptor");
+  assert(write(host_gate[1], "x", 1) == 1);
+  assert(pthread_join(t, NULL) == 0);
+}
+#endif
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -631,6 +678,7 @@ int main(void) {
 #ifdef NISH_THREADS
   test_threads();
   test_parallel_threads();
+  test_host_signal_threads();
   puts("runtime_test: ok (threads)");
 #else
   puts("runtime_test: ok");

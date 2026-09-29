@@ -190,6 +190,8 @@ collected in §7.
 | `console.log` prints `String(x)` | Node's console inspects: `-0` prints as `-0` | C | the runtime's `log` | — |
 | the prelude needs Node | Bun cannot load it (`registerHooks` is not in Bun's `node:module`); a browser cannot load `shim.mjs` (`node:fs`, `node:child_process`, `process`) | — | — | Split the runtime by host (§4.3). |
 | scoped tasks, `using s = scope()` | the tasks run one after another at each `spawn` under Node, and together at the block's end natively; the checker refuses every program where the two could print differently ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)) | A | the source as written | Node 22 needs `--js-explicit-resource-management` for `using`, and Node 24 has it natively. `--emit ts` output targets the host's `using` support, or lowers the block to a `try`/`finally` for a host without it. |
+| `crypto.getRandomValues(bytes)` on a `u8[]` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | Node's global takes only a typed array, and a `u8[]` is a plain `Array` under Node: a `TypeError` without the prelude. `runtime/nish.mjs` replaces the method on Node's `crypto` with one that draws into a `Uint8Array` and copies across, and panics past 65,536 bytes with the native words where Node throws a `QuotaExceededError`; `os_random` and `os_random_limit` agree under it, and the `os_` block of `tests/run.js` checks the draws and the panic both ways | C (A under the prelude) | the source as written, with the prelude's `getRandomValues` imported (§4.3) | Keep. The bytes cannot agree, being random; what the reading keeps is every other fact: the length filled, the empty array, the limit and its exit status. |
+| `signalFd()` and `readSignal(fd)` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | **no faithful shim exists.** Node delivers SIGTERM and SIGINT only to its event loop (`process.on("SIGTERM")`), a worker thread is never told of one, and a synchronous `readSignal` keeps the loop from running, so no function the prelude could install learns that a signal arrived. The prelude's two throw, naming this row, and the `os_` block checks that they do | C | `signalFd()` becomes a helper that installs one `process.on` listener per signal and queues the numbers; `readSignal(fd)` becomes `await nextSignal()` on that queue | Keep, and note what is new about it: it is the first translation that is not local to its statement, because the function holding the `await` becomes `async` and so does each caller up to `main`. N5's loop, which waits on this descriptor beside its sockets, has the same shape and will decide whether §7 records it as C or opens it as D. |
 | `declare function` (FFI) and `CPtr` | no JS counterpart (`ffi_scalar` in known-failures) | not a TS program | the module stays native and is imported through `--emit-napi` or wasm (§4.4) | This is the only row with no TS reading, and it is not D: the interop layer already gives it a *JS* reading, one module at a time. |
 
 ### 3.6 Identical, for the record
@@ -199,7 +201,9 @@ order, `get` answers `V | undefined`); `T | null` and narrowing; classes
 (reference semantics, static dispatch, which cannot differ now that there is no
 inheritance); compile-time function parameters and non-capturing arrows;
 `for...of` over an array; `fill` on an array of numbers, clamped ends and
-all; `ctSelect` and `ctEq` over `u32`; template literals; f64 arithmetic; `std/threads.ts`'s
+all; `ctSelect` and `ctEq` over `u32`; `Date.now()`, the same floored
+`CLOCK_REALTIME` in both readings; `statMtimeSync` under the prelude, which is
+Node's own `mtimeMs` (WP34 N3); template literals; f64 arithmetic; `std/threads.ts`'s
 parallel calls, whose std bodies are their sequential meaning; ASI.
 
 ---

@@ -135,6 +135,23 @@ export const isArrayWriteMethod = (name: string): boolean =>
   name === "push" || name === "pop" || name === "set" || name === "fill"
 
 /**
+ * The array argument a builtin call writes the elements of, or null: the
+ * argument-side twin of `isArrayWriteMethod`. Today that is only
+ * `crypto.getRandomValues(bytes)` (WP34 N3). The parameter classification, the
+ * fact collector and a scope's region rule ask this, each for the reason it
+ * asks `isArrayWriteMethod`.
+ */
+export const builtinWrittenArgument = (program: CheckedProgram, call: Node): Node | null => {
+  if (call.kind !== N_CALL || call.children[1].children.length === 0) {
+    return null
+  }
+  const callee = call.children[0]
+  const fills =
+    dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
+  return fills ? call.children[1].children[0] : null
+}
+
+/**
  * The builtin a plain-identifier call reaches: the one a `nish:` import bound,
  * which the checker recorded, or else the identifier's own text.
  */

@@ -146,7 +146,7 @@ rejects. This table is the highest-value part of the page.
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
-| `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
+| `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
@@ -1184,8 +1184,16 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
-`monotonicNanos()` (`i64`; elapsed time only, **there is no wall clock and no
-`Date`**).
+`monotonicNanos()` (`i64`; elapsed time only).
+
+**The host.** `Date.now()` (an `f64` of whole milliseconds, the wall clock —
+**the only `Date` there is**: `new Date()`, `Date.parse` and the rest are
+refused), `crypto.getRandomValues(bytes)` (a statement over a `u8[]` only, at
+most 65,536 bytes a call, from the kernel's CSPRNG; more panics),
+`statMtimeSync(path)` (an `f64` of milliseconds, **NaN** — not `null` — when the
+path cannot be stat'd, so test `m !== m`), and `signalFd()` / `readSignal(fd)`:
+call `signalFd()` once at the top of `main`, then `readSignal(fd)` blocks until
+SIGTERM or SIGINT and answers 15 or 2. None of them exists on a wasm target.
 
 **Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
 — see below.
@@ -1402,8 +1410,9 @@ export const main = (): i32 => {
 **Optional parameters** — there are none. Write two functions with different
 names, or take the value and document the sentinel.
 
-**A wall clock, regex, JSON, threads of your own** — not in the language. Say
-so rather than emitting code that cannot compile.
+**A calendar, regex, JSON, threads of your own** — not in the language (the
+wall clock is `Date.now()`, and that is all of `Date`). Say so rather than
+emitting code that cannot compile.
 
 ## Before you say it compiles
 

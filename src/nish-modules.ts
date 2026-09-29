@@ -70,10 +70,10 @@ export const nishModuleNames = (): string =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
   return "write, writeError, panic"
 }
@@ -90,7 +90,8 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "mkdirSync" ||
       name === "isDirectorySync" ||
       name === "readdirSync" ||
-      name === "realpathSync"
+      name === "realpathSync" ||
+      name === "statMtimeSync"
     ) {
       return new BuiltinExport("", name, false)
     }
@@ -100,7 +101,14 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     if (name === "exit") {
       return new BuiltinExport("process", "exit", false)
     }
-    if (name === "getenv" || name === "spawnSync" || name === "spawnSyncTo" || name === "monotonicNanos") {
+    if (
+      name === "getenv" ||
+      name === "spawnSync" ||
+      name === "spawnSyncTo" ||
+      name === "monotonicNanos" ||
+      name === "signalFd" ||
+      name === "readSignal"
+    ) {
       return new BuiltinExport("", name, false)
     }
     if (name === "argv" || name === "platform" || name === "arch") {

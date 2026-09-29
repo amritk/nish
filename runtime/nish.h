@@ -312,6 +312,31 @@ const nish_str *nish_arch(void);
  * region into one and measure zero. */
 int64_t nish_monotonic_nanos(void);
 
+/* ---- The host (WP34 N3), runtime/runtime-host.c --------------------------
+ * `Date.now()`: the wall clock, `CLOCK_REALTIME`, in whole milliseconds since
+ * the epoch, as JavaScript answers it. Unlike `nish_monotonic_nanos` it can go
+ * backwards when the clock is corrected; it is for a time a person or a
+ * certificate means, not for measuring an interval. */
+double nish_date_now(void);
+/* `crypto.getRandomValues(bytes)`: fills `bytes->len` bytes from the kernel's
+ * CSPRNG (`getrandom` on Linux, `getentropy` elsewhere). More than 65,536
+ * bytes, the Web API's limit for one call, and a failing entropy source both
+ * print a message and exit 1; nothing weaker is ever substituted. */
+void nish_random_fill(nish_array *bytes);
+/* `statMtimeSync(path)`: the modification time in milliseconds with its
+ * sub-millisecond fraction, computed as Node's `mtimeMs` is, or NaN when
+ * `stat` fails. Follows a symbolic link. */
+double nish_stat_mtime(const nish_str *path);
+/* `signalFd()`: a descriptor that becomes readable when SIGTERM or SIGINT
+ * arrives: the read end of a pipe that a `sigaction` handler writes each
+ * signal's number to, whichever thread the signal lands on. Nothing is
+ * blocked. Made once; every call answers the same descriptor, and -1 when it
+ * could not be made. `readSignal(fd)`: block until one arrives and
+ * answer its number (15 or 2), or -1 for any `fd` that is not that descriptor
+ * or a read that fails. */
+int32_t nish_signal_fd(void);
+int32_t nish_read_signal(int32_t fd);
+
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
  * (the whole string, trimmed; blank is 0; `0x` hex accepted, as in JS),

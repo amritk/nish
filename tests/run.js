@@ -27,7 +27,7 @@
  *     size and wasm build profiles, Node wasm host, and the browser harness in
  *     web/ compiling with the compiler's own wasi build.
  */
-import { execFileSync, spawnSync } from "node:child_process"
+import { execFileSync, spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -76,10 +76,12 @@ const buildDir = path.join(root, "build", "test")
 fs.mkdirSync(buildDir, { recursive: true })
 
 /**
- * The C runtime's two translation units, as a direct `clang` line has to spell
- * them: `runtime.c` is the core every program touches and `runtime-os.c` is the
- * half that wraps the system calls, split apart so that each carries its own
- * `.text*` budget (RUNTIME_TEXT_BUDGET and RUNTIME_OS_TEXT_BUDGET below).
+ * The C runtime's translation units, as a direct `clang` line has to spell
+ * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
+ * system calls, `runtime-parallel.c` divides work across threads and
+ * `runtime-host.c` holds the wall clock, entropy, file times and signals, split
+ * apart so that each carries its own `.text*` budget (the `*_TEXT_BUDGET`
+ * constants below).
  *
  * Named here rather than written out at each link so that a third unit is one
  * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
@@ -87,7 +89,12 @@ fs.mkdirSync(buildDir, { recursive: true })
  * line this suite gets wrong should fail as a link error rather than be quietly
  * repaired on the way past.
  */
-const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime-os.c", "runtime/runtime-parallel.c"]
+const RUNTIME_C = [
+  "runtime/runtime.c",
+  "runtime/runtime-os.c",
+  "runtime/runtime-parallel.c",
+  "runtime/runtime-host.c",
+]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
 const DRIVER_C = path.join(root, "tests", "driver.c")
@@ -640,6 +647,209 @@ for (const [at, name] of selectedCases.entries()) {
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     )
   }
+}
+
+// ---- The host builtins, against the clock, the kernel and Node (WP34 N3) ----------
+//
+// What a golden cannot say about `Date.now`, `crypto.getRandomValues`,
+// `statMtimeSync` and the signal descriptor, because the answers are the world's
+// rather than the program's. Each `tests/cases/os_*` program is built here with
+// `--link` into a directory of its own, so no check depends on what section A left
+// behind, and each claim is asked of the native binary and, where the TypeScript
+// reading is class A, of the same source under `runtime/nish.mjs`.
+if (!only || "os_host".includes(only)) {
+  const osDir = path.join(buildDir, "os")
+  fs.rmSync(osDir, { recursive: true, force: true })
+  fs.mkdirSync(osDir, { recursive: true })
+  const prelude = path.join(root, "runtime", "nish.mjs")
+  // Compiled here and linked against the runtime objects this run already
+  // built (`linkNative`), rather than with `--link`, which would build the
+  // runtime from source again for every case.
+  const osBuild = (name) => {
+    const exe = path.join(osDir, name)
+    const ll = path.join(osDir, `${name}.ll`)
+    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", ll], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const cc = r.status === 0 ? linkNative(exe, ll, { libm: true }) : r
+    return check(`${name}: links`, cc.status === 0, String(cc.stderr)) ? exe : null
+  }
+  // Under `node -e` the extra arguments start at `process.argv[1]`, and the
+  // prelude's `process.argv` drops index 0, so the case's name stands where the
+  // program path stands natively and the arguments after it line up.
+  const osNode = (name, args) =>
+    spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--no-warnings",
+        "--import",
+        prelude,
+        "-e",
+        `const m = await import(${JSON.stringify(path.join(casesDir, `${name}.ts`))}); process.exit(m.main());`,
+        name,
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+  const osNative = (exe, args) => spawnSync(exe, args, { cwd: root, encoding: "utf8" })
+  const linesOf = (r) => r.stdout.split("\n").filter((l) => l.length > 0)
+  const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
+
+  // Date.now: a whole number of milliseconds held between two readings of Node's
+  // own clock, taken either side of the run. Both are CLOCK_REALTIME floored to
+  // the millisecond, so the bracket is exact rather than a tolerance: seconds,
+  // microseconds or the monotonic clock would each fall outside it.
+  const nowExe = osBuild("os_now")
+  for (const [side, run] of [
+    ["natively", (args) => osNative(nowExe, args)],
+    ["under the prelude", (args) => osNode("os_now", args)],
+  ]) {
+    if (nowExe === null) {
+      break
+    }
+    const before = Date.now()
+    const r = run(["print"])
+    const after = Date.now()
+    const lines = linesOf(r)
+    const t = Number(lines[2])
+    check(
+      `os_now: Date.now() ${side} is a whole millisecond between two readings of Node's clock`,
+      r.status === 0 &&
+        lines[0] === "true" &&
+        lines[1] === "true" &&
+        Number.isInteger(t) &&
+        before <= t &&
+        t <= after,
+      `${before} <= ${lines[2]} <= ${after}?\n${shown(r)}`
+    )
+  }
+
+  // getRandomValues: two draws in a run differ, two runs differ, and each draw
+  // is 32 bytes of hex. The Node run fills through the prelude's wrapper, which
+  // is what a plain array needs there.
+  const randomExe = osBuild("os_random")
+  if (randomExe !== null) {
+    const draws = [
+      osNative(randomExe, ["print"]),
+      osNative(randomExe, ["print"]),
+      osNode("os_random", ["print"]),
+    ]
+    const hexes = draws.map((r) => linesOf(r).slice(4))
+    const all = hexes.flat()
+    check(
+      "os_random: every draw is 32 bytes, and no two draws agree across two native runs and one under the prelude",
+      draws.every((r) => r.status === 0 && linesOf(r).slice(0, 4).join(" ") === "true 0 65536 4") &&
+        hexes.every((h) => h.length === 2) &&
+        all.every((h) => /^[0-9a-f]{64}$/.test(h)) &&
+        new Set(all).size === all.length,
+      draws.map(shown).join("\n")
+    )
+  }
+
+  // The limit: 65,536 bytes fill, 65,537 panic, with the same words and status
+  // under the prelude.
+  const limitExe = osBuild("os_random_limit")
+  if (limitExe !== null) {
+    const words = "crypto.getRandomValues: 65537 bytes asked for, and one call fills at most 65536"
+    for (const [side, r] of [
+      ["natively", osNative(limitExe, [])],
+      ["under the prelude", osNode("os_random_limit", [])],
+    ]) {
+      check(
+        `os_random_limit: 65,537 bytes panic ${side}, after 65,536 filled`,
+        r.status === 1 && r.stdout === "65536 filled\n" && r.stderr.includes(words),
+        shown(r)
+      )
+    }
+  }
+
+  // statMtimeSync: a file whose mtime is set to a fraction of a millisecond, read
+  // natively and under the prelude, and both held to `fs.statSync().mtimeMs`
+  // printed as JavaScript prints it. The fraction is the point: a runtime that
+  // truncated to milliseconds, or computed in another order, prints other digits.
+  const mtimeExe = osBuild("os_mtime")
+  if (mtimeExe !== null) {
+    const file = path.join(osDir, "mtime.txt")
+    fs.writeFileSync(file, "x")
+    fs.utimesSync(file, 1700000000, 1700000000.1234567)
+    const want = fs.statSync(file).mtimeMs
+    check(
+      "os_mtime: the fixture's mtime has a sub-millisecond fraction to read back",
+      !Number.isInteger(want),
+      `mtimeMs ${want}`
+    )
+    for (const [side, r] of [
+      ["natively", osNative(mtimeExe, [file])],
+      ["under the prelude", osNode("os_mtime", [file])],
+    ]) {
+      check(
+        `os_mtime: statMtimeSync ${side} prints Node's mtimeMs, ${want}`,
+        r.status === 0 && linesOf(r).join(" ") === `true true ${want}`,
+        shown(r)
+      )
+    }
+  }
+
+  // The signal descriptor. The program prints `ready` once its descriptor is
+  // made, and only then is the first signal sent, so nothing races the
+  // `signalFd()` call; the second goes once the first has been read back. A lost
+  // signal is a timeout and a SIGKILL, never a hang.
+  const signalRun = (exe, first, second) =>
+    new Promise((resolve) => {
+      const child = spawn(exe, [], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      let out = ""
+      let err = ""
+      let sent = 0
+      let timedOut = false
+      const timer = setTimeout(() => {
+        timedOut = true
+        child.kill("SIGKILL")
+      }, 10000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+        const after = out.split("ready\n")
+        if (sent === 0 && after.length > 1) {
+          sent = 1
+          child.kill(first)
+        } else if (sent === 1 && after[1].includes("\n")) {
+          sent = 2
+          child.kill(second)
+        }
+      })
+      child.stderr.on("data", (chunk) => {
+        err += chunk
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        resolve({ code, signal, out, err, timedOut })
+      })
+    })
+  for (const [name, first, second, want] of [
+    ["os_signal", "SIGTERM", "SIGINT", "-1\ntrue\n-1\n143\nready\n15\n2\n"],
+    ["os_signal_import", "SIGINT", "SIGTERM", "ready\n2\n15\n"],
+  ]) {
+    const exe = osBuild(name)
+    if (exe === null) {
+      continue
+    }
+    const r = await signalRun(exe, first, second)
+    check(
+      `${name}: ${first} then ${second} are read back as their numbers, and the program exits 0`,
+      !r.timedOut && r.code === 0 && r.out === want,
+      `${r.timedOut ? "timed out after 10 s: a signal was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(want)}\nstderr: ${r.err}`
+    )
+  }
+  // No synchronous reading exists under Node (docs/wp33-round-trip.md), and the
+  // prelude says so rather than answering something else.
+  const loud = osNode("os_signal", [])
+  check(
+    "os_signal: under the prelude signalFd fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("signalFd has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- A `nish:` import is the same builtin, not another one -----------------------
@@ -4664,7 +4874,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c and runtime-parallel.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -5149,6 +5359,28 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 320
  * and a program that never opens a scope still pays none of it.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 1024
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
+ * -- the wall clock, entropy, a file's modification time and the signal descriptor
+ * (WP34 N3): `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and
+ * `readSignal`.
+ *
+ * Measured **571 bytes** on 2026-09-29 with clang 18 on linux-x64 (`.text` 514 plus
+ * `.text.unlikely.` 57, which is the entropy panic): `nish_date_now` 53,
+ * `nish_random_fill` 86 and its panic 57, `nish_stat_mtime` 83, `nish_signal_fd` 150,
+ * its handler 53 and `nish_read_signal` 89. They are a fourth translation unit rather
+ * than more of `runtime-os.c` because that file had 143 bytes of `RUNTIME_OS_TEXT_BUDGET`
+ * left and these are 571, and the rule is a new file with its own measured ceiling,
+ * never a raised one; `runtime-os.c` is untouched. The budget is the next 256-byte
+ * boundary above the measurement, as every ceiling here was set.
+ *
+ * The signal half is a handler writing to a pipe rather than a `signalfd` on Linux,
+ * which measured 503 in all: a `signalfd` hears only a signal blocked in every thread,
+ * and a thread already running when `signalFd()` is called keeps its own mask, so the
+ * cheaper form ended the process when the signal landed there (`test_host_signal_threads`
+ * in tests/runtime-test.c).
+ */
+const RUNTIME_HOST_TEXT_BUDGET = 768
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -5181,6 +5413,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
         "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
         ["-DNISH_THREADS=1"],
       ],
+      ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],
     ]) {
       const name = path.basename(src)
       // The flags are in the check's name and in the object's, so the two rows for
@@ -9961,6 +10194,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // install a compiler whose every link fails to find `nish_parallel_range`,
       // because build.sh pairs all three from one named input.
       "runtime/runtime-parallel.c",
+      // And the fourth (WP34 N3): without it every link would fail to find
+      // `nish_date_now` and the other host calls the moment a program used one.
+      "runtime/runtime-host.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

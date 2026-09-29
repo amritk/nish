@@ -470,6 +470,37 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP34 N3, runtime/runtime-host.c. The wall clock is `nish_monotonic_nanos`'s
+    // case exactly: not memory, so not `readnone`, or two reads around a
+    // piece of work would fold into one; and `willreturn`, one `clock_gettime`.
+    this.add(plain("nish_date_now", "declare double @nish_date_now()", EFFECT_WRITE))
+    // Writes every byte of the array it is handed and keeps nothing of it, so
+    // `nocapture` without `readonly`. Not `willreturn`: `getrandom` blocks
+    // until the kernel's pool is first seeded, and a failure panics.
+    this.add(
+      new RuntimeFunction(
+        "nish_random_fill",
+        "declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // One `stat`, `nish_is_dir`'s shape and for its reasons: the file system is
+    // not memory LLVM tracks, so two reads either side of a `writeFileSync`
+    // must not fold, and a failed `stat` stores `errno`.
+    this.add(plain("nish_stat_mtime", `declare double @nish_stat_mtime(${STR_NOCAP})`, EFFECT_WRITE))
+    // Changes the process's signal mask and dispositions once, and answers
+    // the same descriptor after: a write, and `willreturn`.
+    this.add(plain("nish_signal_fd", "declare noundef i32 @nish_signal_fd()", EFFECT_WRITE))
+    // Blocks until a signal arrives, which may be never: no `willreturn`.
+    this.add(
+      new RuntimeFunction(
+        "nish_read_signal",
+        "declare noundef i32 @nish_read_signal(i32 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

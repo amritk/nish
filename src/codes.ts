@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 517
+export const RULE_COUNT: i32 = 521
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -170,6 +170,8 @@ const diagnosticRules = (): string[] => [
   "NL2285",
   "; a class or interface name must be unique across the program, and an instantiation is named after its template",
   "NL3013",
+  "` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds",
+  "NL2401",
   "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
   "NL2300",
   "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -318,6 +320,8 @@ const diagnosticRules = (): string[] => [
   "NL2027",
   ": initializers must be literals (assign other values in the constructor)",
   "NL2030",
+  "` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`",
+  "NL2403",
   "`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`",
   "NL2142",
   "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
@@ -344,6 +348,8 @@ const diagnosticRules = (): string[] => [
   "NL2242",
   " (the interface's fields must be the class's first fields, in order)",
   "NL2277",
+  "` reaches the operating system, and a wasm32 build has none to reach",
+  "NL2404",
   "Interface inheritance (`extends`) is not supported; list every field",
   "NL2215",
   " (use `if` / `else`; only an integer switch lowers to a jump table)",
@@ -940,6 +946,8 @@ const diagnosticRules = (): string[] => [
   "NL2050",
   "` clashes with field `",
   "NL2051",
+  "` fills a `u8[]`, got ",
+  "NL2402",
   "` is not available on ",
   "NL2081",
   "` needs an initialiser",

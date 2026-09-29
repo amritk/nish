@@ -3,11 +3,12 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
 #
-# The C runtime is three translation units and is named as one: an input
+# The C runtime is four translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
-# and <dir>/runtime-parallel.c, the half that divides a range of work across
-# threads. Each of those files says why they are compiled and measured apart.
+# <dir>/runtime-parallel.c, the half that divides a range of work across
+# threads, and <dir>/runtime-host.c, the wall clock, entropy, file times and
+# signals. Each of those files says why they are compiled and measured apart.
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
@@ -83,9 +84,9 @@ done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
 [ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is three translation units, and a caller names one: whoever passes
-# <dir>/runtime.c gets <dir>/runtime-os.c and <dir>/runtime-parallel.c compiled
-# beside it. They were one file until the operating-system half was split out
+# The runtime is four translation units, and a caller names one: whoever passes
+# <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c and
+# <dir>/runtime-host.c compiled beside it. They were one file until the operating-system half was split out
 # for its own size budget, and the parallel half followed for the same reason
 # (each file's header comment says why), and a link line is where those splits
 # would otherwise leak: `nish --link` builds its command line in
@@ -97,7 +98,7 @@ done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
-      for half in runtime-os.c runtime-parallel.c; do
+      for half in runtime-os.c runtime-parallel.c runtime-host.c; do
         side="${i%runtime.c}$half"
         have=0
         for j in "${inputs[@]}"; do

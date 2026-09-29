@@ -1,0 +1,1 @@
+`crypto.randomUUID` is refused: the one `crypto` member is `crypto.getRandomValues(bytes)`

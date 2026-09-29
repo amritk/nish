@@ -110,7 +110,7 @@ export const checkIndex = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
  * because the caller is almost always holding a mutable array that widened on
  * the way in — the parameter's annotation is what has to change, not the call.
  */
-const readonlyWriteMessage = (ctx: CheckContext, receiver: i32, what: string): string => {
+export const readonlyWriteMessage = (ctx: CheckContext, receiver: i32, what: string): string => {
   const mutable = ctx.table.typeName(ctx.table.arrayOf(ctx.table.refOf(receiver)))
   return `Cannot ${what} ${ctx.table.typeName(receiver)} (declare it ${mutable} to write through it)`
 }

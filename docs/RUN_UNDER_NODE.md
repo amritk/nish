@@ -64,6 +64,16 @@ the same commit.
   `slice out of range` panic; `fill` needs nothing, since `Array.prototype.fill`
   already means what the language's does
   ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill))
+- `statMtimeSync` — `fs.statSync(path, { throwIfNoEntry: false })?.mtimeMs`,
+  or NaN, which is the native arithmetic exactly, so the digits agree
+- `crypto.getRandomValues` — Node's own takes only a typed array, so the
+  prelude replaces it on Node's `crypto` with one that fills a plain array too
+  (through a `Uint8Array`) and panics past 65,536 bytes with the native words;
+  `Date.now` needs nothing, since Node's is the same floored wall clock
+  ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals))
+- `signalFd`, `readSignal` — installed only to **throw**: Node tells its event
+  loop about a signal, and a blocking read never lets the loop run, so there is
+  no synchronous answer to give ([wp33-round-trip.md](wp33-round-trip.md) §3.5)
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the
