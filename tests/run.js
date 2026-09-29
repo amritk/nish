@@ -8351,6 +8351,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // The declaration forms, the same two ways.
       ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
+      ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)

@@ -460,12 +460,6 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
       )
     }
   }
-  // An IDENT's one child is a type parameter's constraint, which is resolved
-  // where it is declared whether or not anything instantiates it, and says
-  // there what it names that it may not.
-  if (node.kind === N_IDENT) {
-    return
-  }
   // A declaration's type parameters are written after its name and kept last,
   // so they are swept first, in the order the source has them.
   const slot = typeParameterSlot(node)

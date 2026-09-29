@@ -575,7 +575,14 @@ export class Parser {
     // its own that nothing else in the language spells, so it is always this.
     if (this.at(TOK_AT)) {
       const decorator = this.parseDecoratorHead(start)
-      decorator.children.push(this.exportable(this.parseDeclaration(), exported))
+      const decorated = this.parseDeclaration()
+      // `export @a @b class C`: the flag is the class's, under every decorator.
+      let declaration = decorated
+      while (declaration.kind === N_DECORATOR && declaration.children.length > 1) {
+        declaration = declaration.children[1]
+      }
+      this.exportable(declaration, exported)
+      decorator.children.push(decorated)
       decorator.end = this.previousEnd
       return decorator
     }
@@ -1987,7 +1994,8 @@ export class Parser {
   /**
    * Whether the `keyof` in hand is the type operator rather than a type named
    * `keyof`, which a program may declare: it is when a type follows it on its
-   * line — a name that is not an operator word, `(`, `null` or a number —
+   * line — a name that is not an operator word, `(`, `null`, or a number
+   * with or without a `-`, as `parsePrimaryType` reads one —
    * because a type name never had one of those after it there. `keyof[]`,
    * `keyof | null`, `keyof {` (a body after a return type) and the word at
    * the end of its line stay the name (`tests/parser/names-declarations.ts`).
@@ -2002,6 +2010,9 @@ export class Parser {
     }
     if (next === TOK_IDENT) {
       return !isOperatorWord(this.aheadValue)
+    }
+    if (next === TOK_MINUS) {
+      return this.scanAfterAhead().kind === TOK_NUMBER
     }
     return next === TOK_LPAREN || next === TOK_NULL || next === TOK_NUMBER
   }

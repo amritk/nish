@@ -930,9 +930,10 @@ const printTypeScriptTree = (source, sf) => {
    * `protected` are ignored, exactly as Nish does (docs/LANGUAGE.md, Classes):
    * both are flags the checker refuses on rather than syntax the parser turns
    * down, so `src/ast-text.ts` prints them and this has to print the same
-   * words in the same order. Anything else — `abstract`, `async`, `declare` —
-   * is a construct the language does not have, so the file is skipped and
-   * counted.
+   * words in the same order. `async` and the `*` of a generator are printed
+   * first, by `functionFlags`, and a decorator is `decorated`'s, all three for
+   * Phase 0 to refuse (WP33 R1). Anything else — `abstract`, `declare` — is a
+   * construct the language does not have, so the file is skipped and counted.
    *
    * `static` used to be skipped here, and that was the whole coverage of every
    * `static` member: the parse a stage0 oracle never compared

@@ -17,7 +17,7 @@ export class Service {
   }
 }
 
-export @sealed class Plain {}
+export @sealed @final class Plain {}
 
 namespace Geometry.Shapes.Round {
   export const sides = 0

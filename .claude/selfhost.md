@@ -290,10 +290,10 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   `reject_type_keyof_template`). The
   sweep (`refuseUnsupportedForms`) runs on each declaration before it is
   collected, so a declaration that holds a refused form reports that alone,
-  and it reads a declaration's type parameters first, where the source has
-  them, though the tree keeps them last. A type parameter's constraint is not
-  swept: it is resolved where it is declared, instantiated or not, and reports
-  there.
+  and it reads a declaration's type parameters first, constraints included,
+  where the source has them, though the tree keeps them last; resolving a
+  constraint stays quiet about a `keyof` the sweep refused
+  (`tests/cases/reject_type_keyof_constraint`).
   `src/ast-text.ts` prints every flag so that `--emit-ast` and
   `tests/parser-oracle.js` compare it. A word the lexer treats as an
   identifier (`var`, `try`, `with`, `in`, `await`, `typeof`, `as`, …) is
