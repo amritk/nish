@@ -15,13 +15,18 @@
 // `reject_arr_element_across_push` — which already knows which references are
 // live where, rather than tracking them a second time.
 
-import { inlineArrayElement, referenceRoot, SlotOverwrite, slotOverwrites } from "./arrays"
-import { isAssignmentOperator, unwrapParens } from "./emit-util"
+import { referenceRoot, SlotOverwrite, slotOverwrites, slotStoreArray } from "./arrays"
+import {
+  isAssignmentOperator,
+  isPushCall,
+  methodReceiver,
+  storesInlineElements,
+  unwrapParens,
+} from "./emit-util"
 import {
   N_ARRAY,
   N_ARROW,
   N_BINARY,
-  N_CALL,
   N_DO,
   N_FOR,
   N_FOR_OF,
@@ -77,20 +82,20 @@ export const recordFindings = (walk: PortabilityWalk, node: Node, out: Portabili
 class Side {
   local: Local | null
   root: string
-  text: string
+  /** The node whose text a message names this side by, spelled only when there is a finding. */
+  spelled: Node
 
-  constructor(local: Local | null, root: string, text: string) {
+  constructor(local: Local | null, root: string, spelled: Node) {
     this.local = local
     this.root = root
-    this.text = text
+    this.spelled = spelled
   }
 
   /** Whether `node` names this side. */
   names(walk: PortabilityWalk, node: Node): boolean {
     const local = this.local
     if (local !== null) {
-      const bound = walk.program.nodeLocals[node.id]
-      return node.kind === N_IDENT && bound !== null && bound === local
+      return namesLocal(walk, node, local)
     }
     return node.kind === N_MEMBER && referenceRoot(node) === this.root
   }
@@ -103,6 +108,12 @@ class Side {
     }
     return theirs === null && this.root === other.root
   }
+}
+
+/** Whether `node` is a use of the binding `local`. */
+const namesLocal = (walk: PortabilityWalk, node: Node, local: Local): boolean => {
+  const bound = walk.program.nodeLocals[node.id]
+  return node.kind === N_IDENT && bound !== null && bound === local
 }
 
 /** `p` copied into `into`: the argument of a `push`, an element of a literal, the value of `ps[i] = p`. */
@@ -123,13 +134,13 @@ const sideOf = (walk: PortabilityWalk, expr: Node): Side | null => {
   const inner = unwrapParens(expr)
   if (inner.kind === N_IDENT) {
     const local = walk.program.nodeLocals[inner.id]
-    return local === null ? null : new Side(local, "", inner.text)
+    return local === null ? null : new Side(local, "", inner)
   }
   if (inner.kind !== N_MEMBER) {
     return null
   }
   const root = referenceRoot(inner)
-  return root === "" ? null : new Side(null, root, walk.textOf(inner))
+  return root === "" ? null : new Side(null, root, inner)
 }
 
 /**
@@ -149,7 +160,7 @@ const literalSide = (walk: PortabilityWalk, literal: Node): Side | null => {
   }
   if (parent.kind === N_VAR_DECL && parent.children[2] === child) {
     const local = walk.program.nodeLocals[parent.id]
-    return local === null ? null : new Side(local, "", parent.children[0].text)
+    return local === null ? null : new Side(local, "", parent.children[0])
   }
   if (parent.kind === N_BINARY && parent.text === "=" && parent.children[1] === child) {
     return sideOf(walk, parent.children[0])
@@ -169,35 +180,31 @@ const addCopy = (walk: PortabilityWalk, value: Node, into: Side | null, out: Cop
   }
 }
 
-/** Whether `array` is an array whose slots hold records by value. */
-const holdsRecords = (walk: PortabilityWalk, array: Node): boolean =>
-  inlineArrayElement(walk.program, walk.table, array) !== ""
-
 /** Every copy of a binding into an array of records, in source order. */
 const collectCopies = (walk: PortabilityWalk, node: Node, out: CopySite[]): void => {
   if (node.kind === N_ARROW) {
     return
   }
-  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER && node.children[0].text === "push") {
-    const receiver = node.children[0].children[0]
-    if (holdsRecords(walk, receiver)) {
-      const into = sideOf(walk, receiver)
-      for (const arg of node.children[1].children) {
-        addCopy(walk, arg, into, out)
-      }
+  const receiver = methodReceiver(node)
+  if (
+    receiver !== null &&
+    isPushCall(walk.program, walk.table, node) &&
+    storesInlineElements(walk.program, walk.table, receiver)
+  ) {
+    const into = sideOf(walk, receiver)
+    for (const arg of node.children[1].children) {
+      addCopy(walk, arg, into, out)
     }
   }
-  if (node.kind === N_ARRAY && holdsRecords(walk, node)) {
+  if (node.kind === N_ARRAY && storesInlineElements(walk.program, walk.table, node)) {
     const into = literalSide(walk, node)
     for (const element of node.children) {
       addCopy(walk, element, into, out)
     }
   }
-  if (node.kind === N_BINARY && node.text === "=") {
-    const target = unwrapParens(node.children[0])
-    if (target.kind === N_INDEX && holdsRecords(walk, target.children[0])) {
-      addCopy(walk, node.children[1], sideOf(walk, target.children[0]), out)
-    }
+  const stored = slotStoreArray(walk.program, walk.table, node)
+  if (stored !== null) {
+    addCopy(walk, node.children[1], sideOf(walk, stored), out)
   }
   for (const child of node.children) {
     collectCopies(walk, child, out)
@@ -248,41 +255,46 @@ const isLoop = (node: Node): boolean =>
   node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
 
 /**
- * Whether `later` can run after `earlier`: it follows it in the source, or
- * both are inside a loop that runs them again with the same record. A loop
- * that declares the record makes a fresh one each pass, so a write there on
- * one pass does not reach the copy an earlier pass made.
+ * The outermost loop around `node` that runs it again with the same record —
+ * one that does not declare the record, since a loop that does makes a fresh
+ * one each pass — or `null`. Every loop between it and `node` repeats with the
+ * same record too, so this one loop answers for all of them.
  */
-const runsAfter = (walk: PortabilityWalk, earlier: Node, later: Node, decl: Node | null): boolean => {
-  if (later.start >= earlier.end) {
-    return true
-  }
-  let at = walk.parents.parentOf(earlier)
+const repeatingLoop = (walk: PortabilityWalk, node: Node, decl: Node | null): Node | null => {
+  let found: Node | null = null
+  let at = walk.parents.parentOf(node)
   while (at !== null && at !== walk.body) {
-    if (isLoop(at) && isInside(later, at) && (decl === null || !isInside(decl, at))) {
-      return true
+    if (isLoop(at) && (decl === null || !isInside(decl, at))) {
+      found = at
     }
     at = walk.parents.parentOf(at)
   }
-  return false
+  return found
 }
 
-/** Whether anything under `node` names `side` after `write` has run. */
+/**
+ * Whether `later` can run after `earlier`: it follows it in the source, or it
+ * is inside `loop`, `earlier`'s `repeatingLoop`, which runs both again.
+ */
+const runsAfter = (earlier: Node, later: Node, loop: Node | null): boolean =>
+  later.start >= earlier.end || (loop !== null && isInside(later, loop))
+
+/** Whether anything under `node` names `side` after `write`, whose `repeatingLoop` is `loop`, has run. */
 const readAfter = (
   walk: PortabilityWalk,
   node: Node,
   side: Side,
   write: Node,
-  decl: Node | null
+  loop: Node | null
 ): boolean => {
   if (node.kind === N_ARROW) {
     return false
   }
-  if (side.names(walk, node) && runsAfter(walk, write, node, decl)) {
+  if (side.names(walk, node) && runsAfter(write, node, loop)) {
     return true
   }
   for (const child of node.children) {
-    if (readAfter(walk, child, side, write, decl)) {
+    if (readAfter(walk, child, side, write, loop)) {
       return true
     }
   }
@@ -302,11 +314,12 @@ const SEEN_BY_OTHER_COPY: i32 = 3
  */
 const copyFinding = (walk: PortabilityWalk, copy: CopySite, write: Node, seenBy: i32): PortabilityFinding => {
   const name = copy.source.text
-  let other = `the other copy in \`${copy.into.text}\``
+  const into = walk.textOf(copy.into.spelled)
+  let other = `the other copy in \`${into}\``
   if (seenBy === SEEN_BY_SOURCE) {
     other = `\`${name}\``
   } else if (seenBy === SEEN_BY_ARRAY) {
-    other = `\`${copy.into.text}\``
+    other = `\`${into}\``
   }
   return new PortabilityFinding(
     copy.source,
@@ -333,27 +346,30 @@ const copyFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void =>
   collectFieldWrites(walk.body, writes)
   for (const copy of copies) {
     const decl = bindingDeclaration(walk, walk.body, copy.local)
-    const source = new Side(copy.local, "", copy.source.text)
+    const copyLoop = repeatingLoop(walk, copy.source, decl)
+    const source = new Side(copy.local, "", copy.source)
     let twice = false
     for (const other of copies) {
       if (other !== copy && other.local === copy.local && other.into.same(copy.into)) {
         twice = true
+        break
       }
     }
     for (const write of writes) {
-      if (!runsAfter(walk, copy.source, write, decl)) {
+      if (!runsAfter(copy.source, write, copyLoop)) {
         continue
       }
       const record = writtenRecord(write)
+      const writeLoop = repeatingLoop(walk, write, decl)
       let seenBy = SEEN_BY_NONE
-      if (source.names(walk, record)) {
-        if (readAfter(walk, walk.body, copy.into, write, decl)) {
+      if (namesLocal(walk, record, copy.local)) {
+        if (readAfter(walk, walk.body, copy.into, write, writeLoop)) {
           seenBy = SEEN_BY_ARRAY
         }
       } else if (record.kind === N_INDEX && copy.into.names(walk, unwrapParens(record.children[0]))) {
-        if (readAfter(walk, walk.body, source, write, decl)) {
+        if (readAfter(walk, walk.body, source, write, writeLoop)) {
           seenBy = SEEN_BY_SOURCE
-        } else if (twice && readAfter(walk, walk.body, copy.into, write, decl)) {
+        } else if (twice && readAfter(walk, walk.body, copy.into, write, writeLoop)) {
           seenBy = SEEN_BY_OTHER_COPY
         }
       }

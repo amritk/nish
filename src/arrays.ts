@@ -6,7 +6,7 @@ import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotati
 import { checkBuiltinArity, isArgvExpression } from "./builtins"
 import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
-import { unwrapParens } from "./emit-util"
+import { storesInlineElements, unwrapParens } from "./emit-util"
 import {
   N_BINARY,
   N_BLOCK,
@@ -421,7 +421,7 @@ export const referenceRoot = (expr: Node): string => {
  * compared by when one of them cannot be named: element types are exact here,
  * so a `FunctionSig[]` and an `ImportBinding[]` are never the same array.
  */
-export const inlineArrayElement = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
+const inlineArrayElement = (program: CheckedProgram, table: TypeTable, expr: Node): string => {
   const type = program.nodeTypes[expr.id]
   if (type < 0 || !table.isArray(type)) {
     return ""
@@ -500,12 +500,12 @@ const collectMutations = (program: CheckedProgram, table: TypeTable, call: Node,
  * stores its elements inline — or `null`. A field store `ps[i].x = 1` is not
  * one: it writes into the element a reference points at, in both readings.
  */
-const slotStoreArray = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
+export const slotStoreArray = (program: CheckedProgram, table: TypeTable, node: Node): Node | null => {
   if (node.kind !== N_BINARY || node.text !== "=") {
     return null
   }
   const target = unwrapParens(node.children[0])
-  if (target.kind !== N_INDEX || inlineArrayElement(program, table, target.children[0]) === "") {
+  if (target.kind !== N_INDEX || !storesInlineElements(program, table, target.children[0])) {
     return null
   }
   return target.children[0]
@@ -527,16 +527,21 @@ class RefWalk {
   live: ElementRef[]
   /** One report per body: `ctx.error` suppresses the rest anyway, and stage0 stops here too. */
   reported: boolean
-  /** What an observing walk has found; `null` in the checker's. */
+  /** What an observing walk has found; `null` in the checker's, which skips that work. */
   overwrites: SlotOverwrite[] | null
 
-  constructor(program: CheckedProgram, table: TypeTable, ctx: CheckContext | null) {
+  constructor(
+    program: CheckedProgram,
+    table: TypeTable,
+    ctx: CheckContext | null,
+    overwrites: SlotOverwrite[] | null
+  ) {
     this.program = program
     this.table = table
     this.ctx = ctx
     this.live = []
     this.reported = false
-    this.overwrites = null
+    this.overwrites = overwrites
   }
 
   report(node: Node, message: string): void {
@@ -567,41 +572,42 @@ class RefWalk {
   }
 
   /**
-   * Mark every live reference a whole-slot store into `array` may have
-   * overwritten. Which slot is not asked: `ps[i] = q` and `r = ps[j]` are
-   * taken to meet whatever `i` and `j` are, the conservative answer.
+   * When `node` is a whole-slot store and this walk observes, mark every live
+   * reference it may have overwritten. Which slot is not asked: `ps[i] = q` and
+   * `r = ps[j]` are taken to meet whatever `i` and `j` are, the conservative
+   * answer.
    */
-  overwrite(store: Node, array: Node): void {
+  overwrite(node: Node): void {
+    if (this.overwrites === null) {
+      return
+    }
+    const array = slotStoreArray(this.program, this.table, node)
+    if (array === null) {
+      return
+    }
     const root = referenceRoot(array)
     const elem = inlineArrayElement(this.program, this.table, array)
     let i = 0
     while (i < this.live.length) {
       const ref = this.live[i]
       if (ref.overwrittenBy === null && ref.reachedBy(root, elem)) {
-        this.live[i].overwrittenBy = store
+        this.live[i].overwrittenBy = node
       }
       i = i + 1
     }
   }
 
-  /** Every mutation anywhere inside `node`, for the pre-scan of a loop. */
+  /**
+   * The pre-scan of a loop: every mutation anywhere inside `node` into `out`,
+   * and every whole-slot store marked as it is found.
+   */
   mutationsWithin(node: Node, out: Mutation[]): void {
     if (node.kind === N_CALL) {
       collectMutations(this.program, this.table, node, out)
     }
+    this.overwrite(node)
     for (const child of node.children) {
       this.mutationsWithin(child, out)
-    }
-  }
-
-  /** Every whole-slot store anywhere inside `node`, for the same pre-scan. */
-  overwriteWithin(node: Node): void {
-    const array = slotStoreArray(this.program, this.table, node)
-    if (array !== null) {
-      this.overwrite(node, array)
-    }
-    for (const child of node.children) {
-      this.overwriteWithin(child)
     }
   }
 
@@ -631,12 +637,7 @@ class RefWalk {
     this.visitChildren(node)
     // The store happens after both sides are evaluated, so a reference read
     // on its right-hand side is read before it is overwritten.
-    if (this.overwrites !== null) {
-      const array = slotStoreArray(this.program, this.table, node)
-      if (array !== null) {
-        this.overwrite(node, array)
-      }
-    }
+    this.overwrite(node)
   }
 
   visitChildren(node: Node): void {
@@ -647,19 +648,23 @@ class RefWalk {
 
   visitIdentifier(node: Node): void {
     const local = this.program.nodeLocals[node.id]
-    if (local === null) {
+    const overwrites = this.overwrites
+    if (local === null || (this.reported && overwrites === null)) {
       return
     }
     let i = 0
     while (i < this.live.length) {
       const ref = this.live[i]
+      if (ref.local !== local) {
+        i = i + 1
+        continue
+      }
       const store = ref.overwrittenBy
-      const overwrites = this.overwrites
-      if (ref.local === local && store !== null && overwrites !== null) {
+      if (store !== null && overwrites !== null) {
         overwrites.push(new SlotOverwrite(store, local, node))
         this.live[i].overwrittenBy = null
       }
-      if (ref.local === local && ref.invalidatedBy !== "" && !this.reported) {
+      if (ref.invalidatedBy !== "" && !this.reported) {
         this.report(
           node,
           `\`${ref.local.name}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
@@ -677,9 +682,6 @@ class RefWalk {
     this.mutationsWithin(node, found)
     for (const m of found) {
       this.invalidate(m)
-    }
-    if (this.overwrites !== null) {
-      this.overwriteWithin(node)
     }
     const depth = this.live.length
     // `for (const p of ps)` binds an element reference too. It is re-derived
@@ -747,7 +749,7 @@ class RefWalk {
  * warnings, so every type and binding the walk reads is already recorded.
  */
 export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
-  const walk = new RefWalk(ctx.program, ctx.table, ctx)
+  const walk = new RefWalk(ctx.program, ctx.table, ctx, null)
   walk.visit(body)
 }
 
@@ -758,9 +760,8 @@ export const checkElementReferences = (ctx: CheckContext, body: Node): void => {
  * carries the body's own side tables, as the portability pass installs them.
  */
 export const slotOverwrites = (program: CheckedProgram, table: TypeTable, body: Node): SlotOverwrite[] => {
-  const walk = new RefWalk(program, table, null)
   const found: SlotOverwrite[] = []
-  walk.overwrites = found
+  const walk = new RefWalk(program, table, null, found)
   walk.visit(body)
   return found
 }
