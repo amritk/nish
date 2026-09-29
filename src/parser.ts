@@ -659,18 +659,20 @@ export class Parser {
     if (scan.kind === TOK_LBRACE) {
       return true
     }
-    // `catch (e) {` and `catch (e: unknown) {`, and not a call `catch(1)`.
+    // `catch (e) {`, `catch (e: unknown) {` and a destructured `catch ({ message }) {`
+    // or `catch ([a]) {`, and not a call `catch(1)`: a binding is a name or a
+    // pattern, and a call's argument that is neither is not a handler.
     if (handler !== "catch" || scan.kind !== TOK_LPAREN) {
       return false
     }
     scan.next()
-    if (scan.kind !== TOK_IDENT) {
+    if (scan.kind !== TOK_IDENT && scan.kind !== TOK_LBRACE && scan.kind !== TOK_LBRACKET) {
       return false
     }
     let depth = 1
     while (depth > 0) {
       scan.next()
-      if (scan.kind === TOK_END || scan.kind === TOK_LBRACE || scan.kind === TOK_SEMICOLON) {
+      if (scan.kind === TOK_END || scan.kind === TOK_SEMICOLON) {
         return false
       }
       if (scan.kind === TOK_LPAREN) {
@@ -1824,8 +1826,10 @@ export class Parser {
 
   /**
    * `try { } catch (e) { } finally { }`, for Phase 0 to refuse (NL1033). A
-   * catch binding's annotation, `catch (e: unknown)`, is read and dropped: the
-   * statement is refused whatever it says.
+   * catch binding's annotation, `catch (e: unknown)`, and a destructuring
+   * binding, `catch ({ message })` or `catch ([a])`, are read and dropped (the
+   * binding child is EMPTY for a pattern): the statement is refused whatever
+   * it binds.
    */
   parseTry(start: i32): Node {
     this.advance() // `try`
@@ -1837,7 +1841,11 @@ export class Parser {
     if (this.at(TOK_IDENT) && this.value === "catch") {
       this.advance()
       if (this.eat(TOK_LPAREN)) {
-        binding = this.parseIdentifier()
+        if (this.at(TOK_LBRACE) || this.at(TOK_LBRACKET)) {
+          this.skipBindingPattern()
+        } else {
+          binding = this.parseIdentifier()
+        }
         if (this.at(TOK_COLON)) {
           this.parseTypeAnnotation()
         }
@@ -1861,6 +1869,25 @@ export class Parser {
     node.children.push(finalizer)
     node.end = this.previousEnd
     return node
+  }
+
+  /**
+   * Step over a destructuring pattern, from its `{` or `[` to the bracket that
+   * closes it. Only a refused `catch` reads one, so nothing is built from it.
+   */
+  skipBindingPattern(): void {
+    let depth = 0
+    while (!this.at(TOK_END)) {
+      if (this.at(TOK_LBRACE) || this.at(TOK_LBRACKET)) {
+        depth = depth + 1
+      } else if (this.at(TOK_RBRACE) || this.at(TOK_RBRACKET)) {
+        depth = depth - 1
+      }
+      this.advance()
+      if (depth === 0) {
+        return
+      }
+    }
   }
 
   /** `with (o) body`, for Phase 0 to refuse (NL1038). */
