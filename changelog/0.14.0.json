@@ -1,0 +1,657 @@
+{
+  "version": "0.14.0",
+  "date": "2026-09-29",
+  "tag": "v0.14.0",
+  "range": {
+    "from": "v0.13.0",
+    "to": "63f7bbf0"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-13-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.13.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5249e6b"
+      ],
+      "pr": 284,
+      "author": "github-actions[bot]",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "pin-the-t-null-twins-of-the-keeps",
+      "type": "test",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pin the T | null twins of the keeps-proof refusals",
+      "body": "The fix for #234 (a narrowing proof leaking into the type of a ternary or an array literal) was pinned only in its `Result` form. The `T | null` form was refused too, but no test held it. Two cases now do.\n\n- In `const z = r.v > 0 ? r : q`, where `r` is narrowed to non-null and `q` to `null`, `z` stays `Box | null`, so `z.v` is refused (NL2187).\n- `[r]` with `r` narrowed is a `Box[]`, so `arr.push(mk(false))` is refused (NL2186).\n\nEach `.err` pins the line and column, so the test fails if the refusal moves or disappears. There is no compiler change.",
+      "metrics": [],
+      "refs": [
+        "#275"
+      ],
+      "tests": [
+        "tests/cases/reject_null_ternary_keeps_proof",
+        "tests/cases/reject_null_array_keeps_proof"
+      ],
+      "commits": [
+        "0c28544"
+      ],
+      "pr": 286,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "export-an-enum-and-import-it-into-another",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "export an enum and import it into another module",
+      "body": "`export enum Kind { ... }` is now importable: `import { Kind } from \"./kinds\"`\nbinds the exporter's enum itself, not a copy. In the importer it works as a\nfield type, a parameter or return type, a local, a `Map` key and a `switch`\ndiscriminant. `Kind.If` folds to the integer the exporter gave it, and a\n`Kind` value crosses a call between the two modules as itself. Unlike a\nclass, an enum may be renamed on import (`import { Kind as Level }`),\nbecause it has no symbol for its name to be part of. Nothing is emitted in\neither module, so the importer's IR is byte-identical to the same program\nwith the enum declared locally.\n\n**Every enum declaration is now a type of its own.** Enum types used to be\nkeyed by name, so two modules that each declared a `Kind` shared one type,\nand a value of one was accepted where the other was declared. The first\n`Kind` keeps its symbol, so no existing program's IR moves.\n\n**The load order changed to make this possible.** Every module in the import\ngraph is parsed and declares its names first. Each module then binds the\nenums it imports, and only after that does any module collect its\nsignatures. Before, pass 1 ran as each module was parsed, so an imported\nname in a signature was resolved provisionally as a class. An enum has no\nlayout that could stand in for one. The report is unchanged: modules the old\norder would not have loaded still go unreported, and files are listed in the\norder they were before.\n\nImporting an enum that is not exported, declaring the imported name again,\nimporting it twice, and calling it all give the same errors as for any other\nimport. An import written above an enum import is the first binding, a\nbuiltin included. String enums, `const enum`, `declare enum`, default\nexports and `export { ... }` keep their refusals, and exported type aliases\nstay refused for now. NL2288 is retired.\n\nWith `-g`, an enum that reached a module only as a type (say\n`const k = pick()`) no longer stops the debug info with an internal error.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify 78.4 s before, 78.0 s after (two runs each); no existing .ll golden moves"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#enums"
+      ],
+      "tests": [
+        "tests/link/enum_export_*",
+        "tests/link/enum_import_*"
+      ],
+      "commits": [
+        "ce1eab4"
+      ],
+      "pr": 296,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "make-the-run-under-node-command-call-main",
+      "type": "docs",
+      "breaking": false,
+      "title": "make the RUN_UNDER_NODE command call main",
+      "body": "The command `docs/RUN_UNDER_NODE.md` gave for running a Nish program under Node, `node --experimental-strip-types --import ./runtime/nish.mjs prog.ts`, loaded the module but never called `main`, so it printed nothing and exited 0. The page now shows the form the test harness already uses: an `-e` script that imports the program and exits with what `main` returns.\n\n```bash\nnode --experimental-strip-types --import ./runtime/nish.mjs \\\n  -e 'const m = await import(\"./prog.ts\"); process.exit(m.main())'\n```\n\nRun verbatim, it prints `6.5` for #224's program and matches the native binary on `examples/nbody.ts` in f64 mode. The prelude is unchanged: it still supplies globals and rewrites nothing.",
+      "metrics": [],
+      "refs": [
+        "#275"
+      ],
+      "tests": [],
+      "commits": [
+        "fa84998"
+      ],
+      "pr": 285,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "hold-modules-in-std-subdirectories-to-the-same",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "hold modules in std/ subdirectories to the same gates as top-level ones",
+      "body": "Four checks in `tests/run.js` read `std/` only one level deep: the performance gate, the tsc library check, the npm-pack check and the platform-package check. A module in a subdirectory, such as `std/crypto/sha256.ts` (`nish/crypto/sha256`), would have shipped without any of them checking it or saying it was left out. They now share one recursive walker, `stdModuleFiles()`, so a `std/crypto` module is held to the zero-warning gate in both number modes, and to the packaging checks, the day it lands. A fixture-tree check proves the walker reaches every depth and skips a directory named like a module.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/run.js (performance gate: the std/ walker finds a module at every depth)"
+      ],
+      "commits": [
+        "8f7a92b"
+      ],
+      "pr": 287,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "x25519-in-nish-crypto-x25519-289",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "X25519 in nish/crypto/x25519",
+      "body": "`nish/crypto/x25519` is RFC 7748 X25519 in pure Nish: `x25519(scalar, u)` and `x25519Base(scalar)`, each answering `null` unless both inputs are 32 bytes. It is WP34 lane K4, the key exchange TLS 1.3 needs.\n\nA field element is ten signed limbs in `i64`, alternately 26 and 25 bits, so every product fits without wide multiplication; the comment beside the multiply shows why each sum stays under 2^62.6. The ladder runs all 255 steps with a masked conditional swap and no branch on a scalar bit; decoding masks the top bit of `u`, the scalar is clamped on a copy, and the output is fully reduced. An all-zero shared secret is returned rather than refused, because RFC 7748 §6.1 leaves that check to the protocol (TLS 1.3 makes it).\n\nWritten from RFC 7748 and Bernstein's Curve25519 paper; nothing ported. Constant-time behaviour is by construction and is not yet verified by a disassembly check (WP34 N6).",
+      "metrics": [
+        "the RFC 7748 §5.2 1,000,000-iteration vector matches in 3m02s (about 0.18 ms per call, speed profile)"
+      ],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/crypto_x25519",
+        "tests/link/crypto_x25519_f64"
+      ],
+      "commits": [
+        "d9dc4fc"
+      ],
+      "pr": 289,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "sha-384-and-sha-512-in-nish-crypto",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "SHA-384 and SHA-512 in nish/crypto/sha512",
+      "body": "`nish/crypto/sha512` is SHA-512 and SHA-384 in pure Nish, written from FIPS 180-4: one-shot `sha512()` and `sha384()`, and streaming `Sha512` and `Sha384` hashers with `update(data, off, len)`, `copy()` and `digest()`, because TLS 1.3 reads intermediate transcript hashes. It is part of WP34 lane K1.\n\nBoth hashes share one engine on eight `u64` words with a 128-bit length; SHA-384 starts from its own initial value and is cut to 48 bytes. The round constants come from a `switch` that LLVM lowers to one read-only table, so constructing or copying a hasher computes nothing for them, and the constants past 2^53 are written as two 32-bit halves. A second `digest`, an `update` after `digest`, and an out-of-range window each panic rather than answer a wrong digest.",
+      "metrics": [
+        "1 MiB at about 272 MiB/s (SHA-512) and 274 MiB/s (SHA-384), speed profile; OpenSSL on the same machine about 580"
+      ],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/crypto_sha512",
+        "tests/link/crypto_sha512_f64",
+        "tests/link/crypto_sha512_spent",
+        "tests/link/crypto_sha512_digest_twice",
+        "tests/link/crypto_sha512_window"
+      ],
+      "commits": [
+        "7652b36"
+      ],
+      "pr": 291,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "a-constant-time-compare-and-base64url-in-nish",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "a constant-time compare and base64url in nish/crypto",
+      "body": "Two pure-Nish modules for WP34 lane K1, written from RFC 4648.\n\n`nish/crypto/ct` adds `timingSafeEqual(a, b)` and `timingSafeEqualAt(a, aOff, b, bOff, len)`. Every byte pair is XORed into one accumulator that is tested once, after the loop, so the time taken does not depend on where two tags differ. Lengths and windows are public, so an unequal length or an out-of-range window answers `false` up front; the bounds test is written so that a huge offset cannot wrap round and pass. HMAC verification uses it.\n\n`nish/crypto/base64url` adds `base64urlEncode` and `base64urlDecode`: RFC 4648 §5 without padding, as JWS uses it. The decoder is strict, so a byte string has exactly one spelling: it answers `null` for `=` padding, any character outside the URL alphabet, a length of 1 mod 4, and non-zero trailing bits. Neither direction branches or looks up a table on the data.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/crypto_ct",
+        "tests/link/crypto_base64url"
+      ],
+      "commits": [
+        "d0a7323"
+      ],
+      "pr": 294,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "sha-256-in-nish-crypto-sha256-288",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "SHA-256 in nish/crypto/sha256",
+      "body": "`nish/crypto/sha256` is SHA-256 in pure Nish, written from FIPS 180-4: a one-shot `sha256(data)` and a streaming `Sha256` hasher with `update(data, off, len)`, `copy()` and `digest()`, because TLS 1.3 reads intermediate transcript hashes. It is part of WP34 lane K1.\n\nThe round constants come from a function over a `switch`, which LLVM lowers to one read-only table, since a module constant cannot be an array; the hot loop allocates nothing. The message length is an `i64`, and every misuse that would otherwise answer a wrong digest panics instead: a second `digest`, an `update` or a `copy` after `digest`, and an out-of-range window.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/crypto_sha256",
+        "tests/link/crypto_sha256_f64",
+        "tests/link/crypto_sha256_update_after_digest",
+        "tests/link/crypto_sha256_digest_twice",
+        "tests/link/crypto_sha256_copy_after_digest",
+        "tests/link/crypto_sha256_window"
+      ],
+      "commits": [
+        "c1b7e74"
+      ],
+      "pr": 288,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "the-portability-diagnostic-class-nl8xxx-behind-warn-portability",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "the portability diagnostic class, NL8xxx, behind --warn-portability",
+      "body": "A new warning class marks the places where a Nish program and its TypeScript\nreading, run under Node with `runtime/nish.mjs`, both run to the end but\nquietly give different answers. On the way into Nish these are the lines\nwhere a passing TypeScript test proves nothing. On the way out they are\nwhere `--emit ts` will need a helper (docs/wp33-round-trip.md §5.2).\n\n`--warn-portability` turns it on; it is off by default, and without it the\ncompiler does no extra work. The warnings print only for a program that\ncompiles, after the performance warnings and on the same streams:\n`file:line:col: portability: <text>` with an excerpt on stderr, or one\nobject per warning with `\"severity\":\"portability\"` on stdout under `--json`.\nThey never change the exit code and never reach the IR: every case compiles\nto the same bytes with and without the flag. `nish run` accepts the flag,\nand `--no-warn-performance` does not silence it.\n\nThe codes are a new band, NL8001–NL8011, one per row of the TypeScript\nledger in wp33 §3: UTF-8 offsets, the checked `slice`, record copies into\narrays, stores over a live element, zero-filled arrays, integer division,\nwrapping arithmetic, `>>>` on i32, 64-bit integers, libm NaN and signed-zero\nrules, and `console.log` of `-0`. All eleven are registered and documented.\nNL8005 is live now: `new Array<T>(n)` of a number or a boolean is zero-filled\nnatively and full of holes in TypeScript, so it is flagged unless `n`'s\nvalue is zero, however it is spelled (`0x0`, `-0`, `0.0`, or a `const` that\nfolds to 0). The other ten rows land in their own changes. The standard\nlibrary is not walked.\n\n`gen-diagnostic-codes --check` knows band 8, and a `port_*` golden case must\ncarry a `.portability` file naming its warnings (an empty one for a quiet\ncase).",
+      "metrics": [
+        "scripts/bootstrap.sh --verify 77.7 s before, 79.2 s after (warm, within noise); no existing .ll golden moves"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#diagnostics-and-debugging-flags",
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/port_array_*",
+        "tests/wordings/nl8005_zero_fill"
+      ],
+      "commits": [
+        "fa8808e"
+      ],
+      "pr": 293,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "hmac-and-hkdf-over-sha-256-and-sha",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "HMAC and HKDF over SHA-256 and SHA-384 in nish/crypto",
+      "body": "`nish/crypto/hmac` and `nish/crypto/hkdf` complete WP34 lane K1: HMAC (RFC 2104) and HKDF extract and expand (RFC 5869) over SHA-256 and SHA-384, in pure Nish. TLS 1.3's key schedule is built on them.\n\n`HmacSha256` and `HmacSha384` stream (`update(buf, off, len)`, `digest()`); `hmacSha256` and `hmacSha384` are one-shot; a key longer than the hash's block is hashed first. `hmacSha256Verify` and `hmacSha384Verify` compare tags through `timingSafeEqual`, answering `false` for a tag of the wrong length. `hkdfExtract*` treats an empty salt as HashLen zero bytes; `hkdfExpand*` answers `null` for a negative length or one past 255 × HashLen, and an empty array for zero. HKDF-Expand-Label is TLS's (lane T1).",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/crypto_hmac",
+        "tests/link/crypto_hmac_f64",
+        "tests/link/crypto_hkdf",
+        "tests/link/crypto_hkdf_f64",
+        "tests/link/crypto_hmac_sha{256",
+        "384}_{digest_twice",
+        "update_after_digest",
+        "window}"
+      ],
+      "commits": [
+        "231b0f3"
+      ],
+      "pr": 298,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "document-nish-crypto-and-list-it-where-the",
+      "type": "docs",
+      "scope": "std",
+      "breaking": false,
+      "title": "document nish/crypto and list it where the library is listed",
+      "body": "The standard library now says it has `nish/crypto`. The list an unknown `nish/…` import prints names the seven crypto modules, `std/README.md` gains a `nish/crypto` section with one row per module and the specification each reproduces, `docs/LANGUAGE.md` gives the `nish/crypto/<primitive>` rule, `llms.txt` names the library correctly, and WP34 records lanes K1 and K4 as landed with what each still owes: Wycheproof vectors, and WP34 N6's disassembly check of the constant-time claim.\n\nThe check that holds `src/std-modules.ts`'s list to the `std/` tree now walks subdirectories, so a nested module left out of the list fails the suite. `stdModuleNames()` stays a string literal, since `src/` is built by the last release.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md",
+        "std/README.md"
+      ],
+      "tests": [
+        "tests/run.js (src/std-modules.ts lists the modules std/ actually has)"
+      ],
+      "commits": [
+        "ac298cc"
+      ],
+      "pr": 299,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "a-refused-const-reports-once-not-at-every",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a refused const reports once, not at every later use",
+      "body": "Before, a `const` or `let` with no annotation was left undeclared when its initializer was refused. Every later use of the name then added an `Unknown identifier` (or `Unknown function`) on top of the one real mistake. Now the name is declared with the error type, and reading it reports nothing more, so the refusal is the only diagnostic.\n\nA program that refuses `new Array<integer<1, 9>>(4)` and then uses the result fifteen ways used to print 15 errors and now prints 1. A new check in `tests/run.js` asserts an exact count of one diagnostic for the refusals that used to cascade, because a `.err` substring cannot see errors after the line it names. A declaration that really is duplicated in the same scope is still reported.",
+      "metrics": [],
+      "refs": [
+        "#275"
+      ],
+      "tests": [
+        "tests/cases/reject_const_refused_initializer",
+        "tests/wordings/nl2247_unknown_function"
+      ],
+      "commits": [
+        "bf2610f"
+      ],
+      "pr": 290,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "portability-warnings-for-integer-and-libm-divergences-301",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "portability warnings for integer and libm divergences",
+      "body": "Under `--warn-portability`, the six numbers rows of the portability class\nnow fire (docs/wp33-round-trip.md §3.1 and §3.5). They mark the places\nwhere a program compiled here and its TypeScript reading both run to the\nend but print different answers:\n\n- **NL8006**: `/` and `/=` on an integer truncate, where TypeScript divides\n  exactly.\n- **NL8007**: `+ - *`, the compound forms, `++` and `--` on `u8`/`u16`/`u32`\n  (and on `i32` under `--wrapping`) wrap, where TypeScript keeps counting.\n- **NL8008**: `>>>` whose result is `i32` reads back signed.\n- **NL8009**: each `i64`/`u64` local, parameter, annotated return, field or\n  module `const` is a 64-bit integer here and a double in TypeScript.\n  It is reported once per declaration.\n- **NL8010**: `Math.min`, `Math.max` and `Math.round` of a float follow the\n  native NaN and signed-zero rules.\n- **NL8011**: `console.log` and `console.error` of a float print a negative\n  zero as `0`.\n\nEach row reads the type the checker recorded at the node, just as the\nemitter does before it picks an instruction. So a site is reported exactly\nwhere its IR is the instruction that diverges. `%`, `i32` arithmetic\nwithout `--wrapping` (`nsw`), ranged places and templates stay quiet.\nWarnings never reach the IR: every case is checked byte-for-byte with and\nwithout the flag. Known omissions: unary `-` on an unsigned type, `i64`\narray elements and inferred returns, and module-level declarations in a\nmodule with no function body.",
+      "metrics": [
+        "bootstrap --verify 1m32.1s before, 1m24.5s after (noise)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#diagnostics",
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/port_num_*",
+        "tests/wordings/nl8006_* … nl8011_*"
+      ],
+      "commits": [
+        "1130c99"
+      ],
+      "pr": 301,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "fold-a-negated-integer-literal-into-its-constant",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "fold a negated integer literal into its constant",
+      "body": "Negation always compiled to an instruction, `sub nsw <ty> 0, <value>`. For `-2147483648` in `i32` that is `sub nsw i32 0, -2147483648`, which is poison under LLVM's rules, and programs got the right answer only because `opt` folded it first. Unary minus on an integer literal, parentheses included, now emits the negated constant itself, wrapped to the type's width, with no instruction. Every minimum spells itself, and an unsigned `-(1)` is all ones, the same bits the old `sub` produced. Negating any other operand is unchanged.\n\nThe IR of every program that negates a literal is one instruction smaller. The regenerated goldens were checked mechanically: the only differences are the removed `sub`, the constant at its uses and SSA renumbering. New cases pin `-0x80000000` in `i32`, the `i64` minimum (reached from -2^53, the widest `i64` literal the language accepts) and the width wrap for `u8` through `u64`. Each prints the same output as the 0.13.0 release.",
+      "metrics": [],
+      "refs": [
+        "#275",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/neg_literal_int_min_hex",
+        "tests/cases/neg_literal_i64_min",
+        "tests/cases/neg_literal_unsigned",
+        "tests/cases/int_min_literal"
+      ],
+      "commits": [
+        "b3cbc36"
+      ],
+      "pr": 297,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "export-a-type-alias-and-import-it-into",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "export a type alias and import it into another module",
+      "body": "`export type` now works across modules. An importer names the alias and\nsees exactly the type it stands for: a class declared in the exporter,\none the exporter itself imported, an array, a `T | null`, a `Result`,\nor another alias, including a chain of aliases across several modules.\n\nThe right-hand side is resolved in the exporter's scope, so an alias of\na class the exporter imported works even when the importer never imports\nthat class. Nothing is emitted for an alias: the importer's IR is\nbyte-identical to the same program with the alias written out, and\n`sameType` never sees an alias.\n\nThe errors mirror an imported enum's:\n- importing an alias that is not exported (with an `add export` hint);\n- using an imported alias as a value;\n- clashing with a local declaration;\n- importing it twice.\n\nA cycle across modules reports the existing \"Type alias `X` is defined in\nterms of itself\" wording. NL2276, the old refusal, is retired.\n\nGeneric aliases, local aliases, `export { … }`, `export *`, `import type`\nand default exports stay refused, and aliases do not cross to C or JS\nsidecars.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#type-aliases",
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/link/alias_export_*",
+        "tests/link/alias_import_*"
+      ],
+      "commits": [
+        "f411fd2"
+      ],
+      "pr": 300,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "portability-warnings-for-record-copies-into-arrays-and",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "portability warnings for record copies into arrays and stores over a live element",
+      "body": "An array of records holds the records themselves: a push copies the\nrecord, and `ps[i]` is a pointer into the block. The TypeScript reading\nstores and hands out the same object instead. Under `--warn-portability`,\ntwo rows now mark where that layout becomes observable.\n\n- **NL8003**: a record copied into an array (by `push`, an array literal\n  or `ps[i] = p`), after which one copy is written and the other read.\n- **NL8004**: a whole-slot store `ps[i] = v` over a slot that a live\n  element reference (`const r = ps[i]`, or a `for … of` variable) still\n  reads.\n\nBoth rows see an array under a second name that the body itself creates\n(`const qs = ps`, `this.f = ps`, `return ps`) by matching its element\ntype. An arrow argument's body is treated as its own function.\nReferences taken with `pop()` are skipped, because no in-bounds store\nreaches the slot a pop dropped.\n\nNL8004 reuses the element-reference walk behind the checker's\n`reject_arr_element_across_push`, run in an observe-only mode. Checker\nmode is unchanged. NL8003 indexes each body once, so a body of 1,200\ncopy sites adds 0.011 s under the flag. Aliasing through a call, a write\ninside a callee, and a copy whose source is not a local are not seen.",
+      "metrics": [
+        "1200-site body under the flag, 0.381 s before the rewrite, 0.011 s after"
+      ],
+      "refs": [
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/port_rec_*",
+        "tests/wordings/nl8003_record_copy",
+        "tests/wordings/nl8004_slot_store"
+      ],
+      "commits": [
+        "5fbfa3d"
+      ],
+      "pr": 302,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "portability-warnings-where-utf-8-string-offsets-meet",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "portability warnings where UTF-8 string offsets meet an outside fact",
+      "body": "The two strings rows of the portability class now fire under\n`--warn-portability`.\n\n- **NL8001**: a string length, an `indexOf`/`lastIndexOf` offset or a\n  `charCodeAt` code unit counts UTF-8 bytes here and UTF-16 units in\n  TypeScript. It warns where such a value meets a fact from outside:\n  when it is printed, returned from `main`, stored, compared or combined\n  with a number literal other than 0 and -1 (128 or more for a code\n  unit), or subtracted from a width.\n- **NL8002**: the checked `slice` panics outside its receiver's bounds,\n  where TypeScript clamps. It warns on a negative literal bound, and on\n  any bound not proven within `[0, s.length]` by the same proof that\n  folds a `substring` clamp.\n\nA receiver that is provably ASCII stays quiet: a literal, a folded\nconstant, an ASCII template, `+`/`?:` of ASCII strings, or a local only\never assigned those. One `+ k` step inside an ASCII needle's match is\nnot reported by itself, and the stepped offset is still followed to its\nuse. Offsets handed back to string methods, compared with each other, or\nused as loop bounds are quiet.\n\nEverything runs only under the flag. The always-on bounds walk is\nunchanged. Slice bounds are proved by a separate walk that only the\nportability pass builds, so a compile without the flag emits\nbyte-identical IR.",
+      "metrics": [
+        "bootstrap --verify 1m44.2s/1m27.7s before, 1m36.7s/1m31.0s after (overlapping, noise)"
+      ],
+      "refs": [
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/port_str_*",
+        "tests/wordings/nl8001_utf8_offset",
+        "tests/wordings/nl8002_slice_unproven"
+      ],
+      "commits": [
+        "6e1269f"
+      ],
+      "pr": 304,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "byte-plumbing-u8-set-and-fill-readfilebytessync-wp34",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "byte plumbing — u8[] set and fill, readFileBytesSync (WP34 N2)",
+      "body": "A packet can now be copied, cleared and loaded from a binary file without a loop per byte. There are three new builtins, each with its rule in `docs/LANGUAGE.md` under \"Bulk writes: `set` and `fill`\" and in the File I/O table.\n\n- **`dst.set(src, offset = 0)`** has `TypedArray.prototype.set`'s meaning. It checks the range written the way `s.slice` checks what it reads, and fails through the same panic. The copy is an `llvm.memmove`. It becomes an `llvm.memcpy` only where the checker proves the two buffers distinct and records that proof in a new side table, `nodeDisjointCopy`. The proof is an array literal or `new` at the call, or two different `const` locals each bound to a fresh allocation.\n- **`a.fill(value, start = 0, end = a.length)`** uses JavaScript's relative, clamped ends and never panics. On a `u8[]` it is one `llvm.memset`; on wider elements it is a store loop that `opt -O2` turns into `memset` for zero.\n- **Offsets.** A float offset is converted as `ToIntegerOrInfinity` converts it, through `llvm.fptosi.sat`: NaN is 0, a fraction truncates, and an infinity saturates. An unsigned offset is never negative, so a `u64` of 2^63 or more is past the end. Under the Node prelude a 64-bit offset is a `bigint`, and `set` and `fill` throw a `TypeError` for it.\n- Both methods are statements. They take arrays of numbers only, and are refused on `readonly` arrays and inside a scope's region.\n- **`readFileBytesSync(path): u8[] | null`**, from `nish:fs` and as a global, returns the bytes on disk with no UTF-8 assumed, or `null`. It reuses `nish_read_file_or_null`'s read and costs 46 bytes of runtime-os `.text` (1,393 of a 1,536 ceiling, which is unchanged).\n- `set` is WP33 class A under `runtime/nish.mjs`, which adds a non-enumerable `Array.prototype.set`, and class C without it. `fill` is class A.\n- An adjacent fix: escape analysis now reads the builtin the checker recorded rather than the identifier's text. Before, a renamed import (`import { readFileBytesSync as bytesOf }`) had its bytes released before the caller read them.\n\nNew diagnostics: NL2395–NL2398.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#bulk-writes-set-and-fill"
+      ],
+      "tests": [
+        "tests/cases/bytes_set_disjoint",
+        "tests/cases/bytes_set_overlap",
+        "tests/cases/bytes_fill",
+        "tests/cases/bytes_read",
+        "tests/cases/bytes_offset_float",
+        "tests/cases/bytes_offset_u64"
+      ],
+      "commits": [
+        "86ed523"
+      ],
+      "pr": 295,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "refuse-forbidden-statements-by-their-rule-not-nl0001",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "breakingNote": "a program that uses `try` as a variable and `catch` as a function name, and writes `try` alone on a line, a block, then `catch(<a binding>)` (a name or a destructuring pattern, such as `catch(n)` or `catch([n])`) followed by a block on the next line, is now read as a try/catch statement and refused with NL1033. Those are exactly the tokens of a brace-on-next-line TypeScript try/catch. 0.13.0 compiled it as a call; TypeScript rejects `let try` and `function catch` outright.",
+      "title": "refuse forbidden statements by their rule, not NL0001",
+      "body": "Nine statement forms that Nish forbids used to stop at a syntax error such as `NL0001 expected ;, found IDENT`, so `--json` never named the rule or how to rewrite the code. The parser now reads each form, and the phase that owns its rule refuses it once, with that rule's code and message:\n\n| Written | Now |\n| --- | --- |\n| `var x = 1` (statement, `for` head, top level) | NL1036 `var` is forbidden; use `let` or `const` |\n| `try` / `catch` / `finally`, with any catch binding | NL1033 |\n| `with (o) …` | NL1038 |\n| a labelled statement, and a `break`/`continue` naming its label | NL1046 |\n| `for (… in …)` | NL1056 (new): `for...in` is forbidden; use `for...of` |\n| `for await (…)` | NL2133 |\n| `for (x of xs)` over an existing variable | NL2135 |\n| top-level `let` | NL2084 |\n| a statement at module top level | NL2230 |\n\n`with`, `try`, `var`, `catch` and `finally` are not reserved words to the lexer, and programs that use them as names keep compiling. A statement opens only where the word cannot be that name:\n- `with (…)` or `var` followed on the same line by what a statement needs;\n- `try` followed by a block and a `catch`/`finally` handler, whatever line breaks and comments sit between, so brace-on-the-next-line (Allman) style is refused like any other `try`;\n- a call such as `finally();`, `catch(1);`, `catch([1, 2]);` or `catch({ first: 1 });` stays a call.\n\nThe parse-then-refuse shape that the rest of WP33 R1 follows is documented in `.claude/selfhost.md`. The parser registers shrank (`tests/self/parser-refusals.txt` from 109 to 100, `tests/wordings/parser_refusals.txt` from 41 to 39), and eight codes left the R6 section of `unreachable.txt`. No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify 1m32.6s on main vs 1m28.7s on the branch; 8000 nested try-named blocks parse in 376 ms against 375 ms on 0.13.0"
+      ],
+      "refs": [
+        "docs/wp33-round-trip.md",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/reject_for_in",
+        "tests/cases/reject_try_allman_catch",
+        "tests/cases/reject_try_catch_destructured",
+        "tests/parser/names.ts"
+      ],
+      "commits": [
+        "982b4cf"
+      ],
+      "pr": 292,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-28"
+    },
+    {
+      "id": "constant-time-ctselect-and-cteq-behind-an-optimisation",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "constant-time ctSelect and ctEq behind an optimisation barrier (WP34 N6)",
+      "body": "Crypto code can now select and compare on a secret without LLVM turning either into a branch. There are two new builtins over `u32` and `u64`, with their rule in `docs/LANGUAGE.md` under \"Constant time: `ctSelect` and `ctEq`\".\n\n- **`ctSelect(mask, a, b)`** is `(a & mask) | (b & ~mask)`: `a` for an all-ones mask, `b` for zero. The mask is not checked, because the check would be the branch.\n- **`ctEq(a, b)`** gives all-ones of the operands' type when they are equal, and zero otherwise.\n- **Types.** Every operand is one type, `u32` or `u64`. Signed and narrow integers, ranged integers, the floats and `boolean` are refused (NL2399), and so are mixed widths (NL2400). A bare literal takes its type from the first operand that is not a literal, by the rule operators already use.\n- **They are globals, not a `nish:` module.** They lower to instructions and call nothing.\n- **The lowering** is the formula behind an optimisation barrier: an empty inline `asm \"\", \"=r,0\"` that hands the mask back in the same register. This is the BoringSSL `value_barrier_w` idiom. It costs no instruction and keeps `readnone`. Without it, `opt -O2` folds `ctSelect(ctEq(a, b), x, y)` into a `select i1` that `llc` may lower as a branch.\n- **`tests/ct-asm.js`** is a new check run by `npm test`. It compiles each `tests/cases/ct_asm_*` fixture with `clang -O2 -S` for x86-64 and aarch64. It refuses any conditional branch, any call or jump out of the function, and any load or store whose address a secret reaches, following secrets through registers, flags and stack slots. `ct_asm_refused` must be refused, so a check that reads nothing fails. Hand-written snippets pin the corners of the model, including size-suffixed `jmp`.\n- **What it does not promise:** anything about the caller's own code. `if (ctEq(a, b) !== 0)`, `table[secret]`, `===` on a secret, secret trip counts and division are all called out in the rule. On `wasm32` the barrier is emitted but the engine recompiles the module, so nothing is promised there.\n- **Under Node**, `runtime/nish.mjs` supplies both builtins. Over `u32` they are WP33 class A. Over `u64` they take and return BigInts, and are checked against the native output.\n\nNew diagnostics: NL2399, NL2400. The weekly dudect-style timing run is left for a follow-up.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#constant-time-ctselect-and-cteq"
+      ],
+      "tests": [
+        "tests/cases/ct_select_u32",
+        "tests/cases/ct_eq_u32",
+        "tests/cases/ct_u64",
+        "tests/cases/ct_asm_primitives",
+        "tests/cases/ct_asm_mac",
+        "tests/cases/ct_asm_refused"
+      ],
+      "commits": [
+        "7f2b5b2"
+      ],
+      "pr": 310,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-forbidden-expressions-by-their-rule-not-nl0001",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse forbidden expressions by their rule, not NL0001",
+      "body": "Nineteen expression forms that Nish forbids used to stop at a syntax error such as `NL0001 expected ;, found ==`, so `--json` never named the rule or how to rewrite the code. The parser now reads each form, and the phase that owns its rule refuses it once, with that rule's code and message: Phase 0 (`src/validator.ts`) for the NL1xxx rules, the checker's pass 1 sweep for the NL2xxx ones.\n\n| Written | Now |\n| --- | --- |\n| `==` `!=` | NL1047 Loose equality is forbidden; use === / !== |\n| `a?.b`, `a?.[i]`, `f?.()` | NL1049 |\n| `typeof x`, `delete o.x`, `void e` | NL1034, NL1020, NL1037 |\n| `\"k\" in o`, `x instanceof C` | NL1025, NL1026 |\n| `a, b` | NL1040 |\n| `a ** b`, `x **= e` | NL2254, NL2253 |\n| `await e`, `yield e` | NL1004, NL1039 |\n| `/re/g` | NL1050 |\n| `x as any`, `x as unknown` (and `<any>x`, `<unknown>x`) | NL1051, NL1052 |\n| `x satisfies T`, and `as` / `<T>x` to any other type | NL2256 |\n| `import(\"./m\")` | NL1002 |\n| `[1, , 2]`, `[...a]` | NL2210, NL2237 |\n| `new a.B()`, `new cs[0]()`, `new (f())()` | NL2144 |\n\n`typeof`, `delete`, `void`, `instanceof`, `in`, `yield`, `await`, `satisfies`, `as` and `of` are not reserved words to the lexer, and programs that use them as names keep compiling to the same bytes:\n- a prefix word (`typeof`, `void`, `delete`, `await`, `yield`) is an operator only when an operand follows on the same line, so `typeof(x)` and `void (0)` stay calls;\n- `in` and `instanceof` are an operator after an operand on their line;\n- `as` and `satisfies` are an operator only on the line of the operand before them, which is TypeScript's rule.\n\nInside a `for` head's initialiser `in` still opens a `for...in`, but it is the operator again wherever the ECMAScript grammar reads `[+In]`: a parenthesis, an array or object literal, an argument list, an element access, a template substitution, a block, and the branch between a conditional's `?` and `:`.\n\nTwenty codes left the R6 section of `tests/wordings/unreachable.txt`. The parser registers shrank (`tests/self/parser-refusals.txt` from 100 to 77, `tests/wordings/parser_refusals.txt` from 39 to 33). No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point. A generated sweep of each word beside each neighbouring token and separator (2700 variable and 3430 function programs that 0.13.0 compiles) produces IR byte-identical to main's.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify user time 1m49.8s on main vs 1m49.9s on the branch"
+      ],
+      "refs": [
+        "docs/wp33-round-trip.md",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/reject_expr_forms_together",
+        "tests/cases/reject_expr_sweep_together",
+        "tests/cases/reject_in_for_head_conditional",
+        "tests/parser/names-operators.ts",
+        "tests/parser/names-operator-calls.ts"
+      ],
+      "commits": [
+        "56d6871"
+      ],
+      "pr": 311,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-forbidden-declarations-by-their-rule-not-nl0001",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse forbidden declarations by their rule, not NL0001",
+      "body": "Eight declaration forms that Nish forbids used to stop at a syntax error such as ``NL0001 a module holds only `function`, `class`, … found `IDENT` ``, so `--json` never named the rule or how to rewrite the code. The parser now reads each form, and the phase that owns its rule refuses it once, with that rule's code and message: Phase 0 (`src/validator.ts`) for the NL1xxx rules, the checker's pass 1 sweep for the NL2xxx ones.\n\n| Written | Now |\n| --- | --- |\n| `async function f()`, `async m()`, `async (x) => x` | NL1015 `` `async` functions are forbidden in Nish (no event loop or promises) `` |\n| `function* g()`, `*m()` | NL1044 `Generators are forbidden in Nish (no coroutine runtime)` |\n| `@dec` on a class, a member or a parameter | NL1006 `Decorators are forbidden in Nish (no runtime metadata or class rewriting)` |\n| `namespace N { }`, `module M { }`, `declare module \"m\" { }` | NL1027 |\n| `declare global { }` | NL1019 |\n| `type Box<T> = T[]` | NL1054 |\n| `keyof T`, in any type position, a constraint included | NL2038 |\n| a default type argument `<T = i32>` | NL2292 |\n\n`async`, `namespace`, `module`, `declare`, `global` and `keyof` are not reserved words to the lexer, and programs that use them as names keep compiling to the same bytes:\n- `async` is a modifier only with no line break after it and `function`, an arrow's parameters or a member name after it, so `async(x)`, `async * 2` and `async` before `(` on the next line stay a call, a product and a name;\n- `namespace` and `module` open a block only before a name or a string on the same line, and `declare` only before `global {` or a declared namespace;\n- `keyof` is the operator only before a type on its line, so a class named `keyof` is still a type before `[]`, `|`, `=`, `,`, `)`, `>` and a line break.\n\nWithin one declaration the first forbidden form in source order is reported, alone; a `keyof` in a type parameter's constraint comes before one in the parameters. A namespace body is passed over unread, so the whole block is one NL1027 whatever it holds.\n\nEight codes left the R6 section of `tests/wordings/unreachable.txt`, and the parser registers shrank (`tests/self/parser-refusals.txt` from 77 to 70, `tests/wordings/parser_refusals.txt` from 33 to 31). No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point. A generated sweep of each word beside 38 following and 24 preceding tokens with four separators (77,028 programs, 4,025 of which 0.13.0 compiles) gives IR byte-identical to main's.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify user time 1m33.2s on main vs 1m31.0s on the branch"
+      ],
+      "refs": [
+        "docs/wp33-round-trip.md",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/cases/reject_decl_forms_together",
+        "tests/cases/reject_decl_sweep_together",
+        "tests/cases/reject_type_keyof_constraint",
+        "tests/cases/reject_type_keyof_negative",
+        "tests/parser/names-declarations.ts",
+        "tests/parser/names-declaration-calls.ts"
+      ],
+      "commits": [
+        "a5d3193"
+      ],
+      "pr": 313,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-forbidden-function-and-binding-forms-by-their",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse forbidden function and binding forms by their rule, not NL0001",
+      "body": "Thirteen function and binding forms that Nish forbids used to stop at a syntax error such as `NL0001 expected a name, found {` or `a return type annotation is required`, so `--json` never named the rule or how to rewrite the code. The parser now reads each form, and the checker's pass 1 sweep refuses it once, with that rule's code and message.\n\n| Written | Now |\n| --- | --- |\n| a function or method with no return type | NL2096 |\n| `const { a } = o`, `const [a, b] = xs` at the top level | NL2191 `Destructured constants are not supported` |\n| `({ x }: Point) =>` | NL2192 `Destructured parameters are not supported` |\n| `const [a, b] = xs` in a body or a `for...of` head | NL2193 `Destructuring is not supported` |\n| `export default function () { }` | NL2203 `Functions must be named` |\n| `function f(): void;` (an overload signature) | NL2204 `Functions must have a body` |\n| `(n = 1)`, `(n?: i32)` | NL2233 `Optional/default parameters are not supported` |\n| `(...ns: i32[])` | NL2235 `Rest parameters are not supported` |\n| `let f = (n: i32): i32 => n` at the top level | NL2272 |\n| `const f: (n: i32) => i32 = (n: i32): i32 => n` | NL2273 |\n| `const f = (): i32 => 1, g = 2` | NL2274 `A function declaration binds one name` |\n| a method or an accessor signature in an `interface` | NL2048 |\n| `get x()` / `set x(v)` in a class | NL2209 |\n\nWithin one declaration the first forbidden form in source order is reported, alone, and a top-level `let` is refused before anything inside it. A method's missing return type is refused in generic classes and methods that nothing instantiates too.\n\n`get` and `set` are not reserved words to the lexer, and programs that use them as names keep compiling to the same bytes: they read as an accessor only before another member name, so `get: i32` fields, `get()` methods, locals, and a `get` alone on its line all keep their meaning. Array and object literals, a parenthesised assignment, spread arguments, `const a = 1, b = 2` and commas in a `for` head read as before; a destructuring pattern, a default or rest parameter, or a body-less signature is recognised only where a name or a parameter must stand.\n\nEleven entries left `tests/self/parser-refusals.txt` (70 to 59) and eight left `tests/wordings/parser_refusals.txt` (31 to 23); thirteen codes left the R6 section of `unreachable.txt`. No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point. A generated sweep of 58 risky shapes with five separators at every token gap (3,000 programs, 1,461 of which 0.13.0 compiles) gives IR byte-identical to main's.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify user time 1m25.9s on main vs 1m27.9s on the branch"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/reject_fn_sweep_together",
+        "tests/cases/reject_iface_accessor",
+        "tests/cases/reject_cls_accessor",
+        "tests/cases/reject_method_return_template",
+        "tests/parser/names-bindings.ts"
+      ],
+      "commits": [
+        "3a243e6"
+      ],
+      "pr": 314,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "date-now-crypto-getrandomvalues-statmtimesync-and-a-signal",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "Date.now, crypto.getRandomValues, statMtimeSync and a signal descriptor (WP34 N3)",
+      "body": "* feat(runtime): Date.now, crypto.getRandomValues, statMtimeSync and a signal descriptor (WP34 N3)\n\nWork in progress: the runtime translation unit, the checker and the\nemitter. Tests and documents follow.\n\n* test(runtime): goldens, the os_ driver, rejections and documents for the host builtins\n\n* style: format the os_ block\n\n* test(self): regenerate the checked goldens for builtin-host-facts\n\n* refactor(runtime): simplify the host builtins' helpers and link the os_ cases against the prebuilt runtime\n\n* test(self): regenerate the checked goldens of src/\n\n* docs(runtime): name the N3 pull request in the WP34 note\n\n* fix(runtime): a signal descriptor every thread feeds, and the review's four smaller findings\n\nsignalFd() is now a sigaction handler writing to a pipe on every platform.\nA Linux signalfd hears only a signal blocked in every thread, and a mask\nreaches only the calling thread, so a scope() task already running when the\ndescriptor was made could take SIGINT at its default action and end the\nprocess. The handler runs in whichever thread the kernel picks, nothing is\nblocked, and runtime-os.c's child-mask reset is no longer needed and is\nreverted. On Linux the pipe comes from pipe2(O_CLOEXEC).\n\nAlso: docs/AI.md no longer says there is no wall clock, the cookbook names\nboth calls without willreturn, and a local named Date called as a function\nis the ordinary unknown function again.\n\nMeasured: runtime-host.c 571 bytes of .text*, ceiling 768; runtime-os.c 1,393, unchanged\nTests: tests/runtime-test.c test_host_signal_threads, tests/cases/reject_os_date_shadowed\n\n* test(runtime): the signal pipe is close-on-exec\n\n* docs(runtime): drop the old signalfd contract from signalFd's declaration",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "163eb76"
+      ],
+      "pr": 312,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-forbidden-class-interface-and-enum-forms-by",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse forbidden class, interface and enum forms by their rule, not NL0001",
+      "body": "Sixteen class, interface and enum forms that Nish forbids used to stop at a syntax error, so `--json` never named the rule. The parser now reads each form into the node it resembles, and the checker refuses it once, with that rule's existing code and message: an anonymous class or class expression (NL2018), `declare class` / `declare interface` (NL2083), a method or constructor without a body (NL2090, NL2091), a member named by a string or a number (NL2092), `abstract` on a class or member (NL2168), a constructor return type (NL2189), index signatures in a class or interface (NL2213, NL2214), `interface … extends` (NL2215), an object-literal string or number key (NL2223), a parameter property (NL2234), `static { }` (NL2255), an interface's construct or call signature (NL2257), a method or accessor in an object literal (NL2258), and `declare enum` (NL2286).\n\nEach form reaches its rule in every container TypeScript allows it, and within one declaration the first form in source order is reported, alone. A named class expression is `Unsupported expression in Phase 1: ClassExpression`. A class or interface the sweep refused is kept out of the layout and template checks, so it costs one diagnostic.\n\nThe words stay names wherever TypeScript reads a name: a generated sweep of 3,760 programs, 3,575 of which 0.13.0 compiles, gives IR byte-identical to main's. Nineteen entries left `tests/self/parser-refusals.txt` (59 to 40), fifteen left `tests/wordings/parser_refusals.txt` (23 to 8), and sixteen codes left the R6 section of `unreachable.txt`. No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify user time 2m08.7s on main vs 2m04.9s on the branch"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/AI.md"
+      ],
+      "tests": [
+        "tests/cases/reject_cls_sweep_together",
+        "tests/parser/names-classes.ts"
+      ],
+      "commits": [
+        "ff3a7c2"
+      ],
+      "pr": 315,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "agent-guidelines-for-runtime-units-self-golden-conflicts",
+      "type": "docs",
+      "breaking": false,
+      "title": "agent guidelines for runtime units, self-golden conflicts and reviews",
+      "body": "Four conventions the WP34 N2/N6/N3 run (#295, #310, #312) had to learn the hard way are now written down where agents read them.\n\n- **The runtime is four translation units, each with its own `.text*` budget.** `.claude/architecture.md` now lists `runtime.c`, `runtime-os.c`, `runtime-parallel.c` and `runtime-host.c` with today's measured sizes and ceilings. `runtime-os.c`'s ceiling is now given as 1,536, where the old text said 1,280. An addition that does not fit goes in a new unit with its own ceiling. A new unit is named in five places in one commit: `scripts/build.sh`, `RUNTIME_C` and the `npm pack` check, `tests/nish/run.ts`, `src/run-cache.ts`, and a new `*_TEXT_BUDGET`. A plan that may split the runtime gives its stage `scripts/build.sh`. N3 needed it and had not been given it.\n- **Long-lived pull requests conflict on the self-goldens.** `tests/self/goldens/checked-self.txt` dumps `src/`, so every `src/` commit on main conflicts with every open `src/` PR. `AGENTS.md` now gives the merge-and-regenerate routine for that conflict.\n- **Review a large pull request from a checkout.** The GitHub API truncates large diffs and file lists. One review of #295 saw 33 of 126 files.\n- **A runtime race or leak needs a reproduction in Nish.** A C-harness-only finding is not confirmed, because the checker already refuses shared-writing runtime calls inside `scope()` tasks. Two #312 findings were fixed before that was noticed.\n\n`testing.md` and `orientation.md` stop describing the runtime as two files.",
+      "metrics": [],
+      "refs": [
+        "AGENTS.md#reviewing-a-pull-request",
+        ".claude/architecture.md"
+      ],
+      "tests": [],
+      "commits": [
+        "63f7bbf"
+      ],
+      "pr": 318,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    }
+  ]
+}
