@@ -1,0 +1,54 @@
+PASS  encode RFC 4648 §10: empty
+PASS  decode RFC 4648 §10: empty
+PASS  encode RFC 4648 §10: f
+PASS  decode RFC 4648 §10: f
+PASS  encode RFC 4648 §10: fo
+PASS  decode RFC 4648 §10: fo
+PASS  encode RFC 4648 §10: foo
+PASS  decode RFC 4648 §10: foo
+PASS  encode RFC 4648 §10: foob
+PASS  decode RFC 4648 §10: foob
+PASS  encode RFC 4648 §10: fooba
+PASS  decode RFC 4648 §10: fooba
+PASS  encode RFC 4648 §10: foobar
+PASS  decode RFC 4648 §10: foobar
+PASS  encode RFC 4648 §5: fb ff uses - and _
+PASS  decode RFC 4648 §5: fb ff uses - and _
+PASS  encode RFC 4648 §5: ff fe uses _
+PASS  decode RFC 4648 §5: ff fe uses _
+PASS  RFC 4648 §5 Table 2: the alphabet decodes to sextets 0..63
+PASS  RFC 4648 §5 Table 2: and encodes back to the alphabet
+PASS  every byte value: exactly the 64 alphabet characters are accepted
+PASS  every byte value: each accepted one decodes to its Table 2 value
+PASS  round trip: 0 bytes
+PASS  round trip: 1 bytes
+PASS  round trip: 2 bytes
+PASS  round trip: 3 bytes
+PASS  round trip: 4 bytes
+PASS  round trip: 5 bytes
+PASS  round trip: 6 bytes
+PASS  round trip: 7 bytes
+PASS  round trip: 8 bytes
+PASS  round trip: 9 bytes
+PASS  round trip: 10 bytes
+PASS  refuse = padding after one byte
+PASS  refuse = padding after two bytes
+PASS  refuse = padding after a full group
+PASS  refuse = alone
+PASS  refuse + from the standard alphabet
+PASS  refuse / from the standard alphabet
+PASS  refuse a space
+PASS  refuse a trailing newline
+PASS  refuse a bad character in the first position
+PASS  refuse a bad character in a short final group
+PASS  refuse a multi-byte UTF-8 character
+PASS  refuse length 1
+PASS  refuse length 5
+PASS  refuse length 9
+PASS  refuse trailing bits after one byte (Zh, not Zg)
+PASS  refuse trailing bits after one byte (AB, not AA)
+PASS  refuse trailing bits after two bytes (Zm9, not Zm8)
+PASS  refuse trailing bits after two bytes (AAB, not AAA)
+PASS  AA is the one spelling of a zero byte
+PASS  AAA is the one spelling of two zero bytes
+base64url: 53 passed, 0 failed, 0 skipped
