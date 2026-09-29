@@ -5580,7 +5580,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
  * `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`.
  *
- * Measured **856 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`.
+ * Measured **869 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`.
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop are the next two slices of N5, and each
  * raises this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and

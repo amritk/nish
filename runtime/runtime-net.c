@@ -82,8 +82,11 @@ static int32_t nish_net_err(int e) {
 static int32_t nish_net_fail(void) { return nish_net_err(errno); }
 
 /* A numeric host into the 16 address bytes: an IPv4 dotted quad as its mapped
-   form, or an IPv6 literal. No name resolution. 1 when it parsed. */
-static int nish_net_parse(const char *host, unsigned char a[16]) {
+   form, or an IPv6 literal. No name resolution. 1 when it parsed. A string
+   with a NUL inside is not a literal, however the part before it reads. */
+static int nish_net_parse(const nish_str *s, unsigned char a[16]) {
+  const char *host = s->data;
+  if (strlen(host) != s->len) return 0;
   if (inet_pton(AF_INET, host, a + 12) == 1) {
     memcpy(a, nish_mapped_prefix, 12);
     return 1;
@@ -138,7 +141,7 @@ static int nish_net_socket(int family, int type) {
    an `out` shorter than 18 bytes. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port) {
   unsigned char a[16];
-  if (out->len < NISH_ADDR_BYTES || (uint32_t)port > 65535 || !nish_net_parse(host->data, a)) return -22;
+  if (out->len < NISH_ADDR_BYTES || (uint32_t)port > 65535 || !nish_net_parse(host, a)) return -22;
   memcpy(out->data, a, 16);
   out->data[16] = (char)(port >> 8);
   out->data[17] = (char)port;
@@ -159,7 +162,7 @@ int32_t nish_net_local_port(int32_t fd) {
    TIME_WAIT. */
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
   unsigned char a[16];
-  if ((uint32_t)port > 65535 || !nish_net_parse(host->data, a)) return -22;
+  if ((uint32_t)port > 65535 || !nish_net_parse(host, a)) return -22;
   int v4 = memcmp(a, nish_mapped_prefix, 12) == 0;
   int fd = nish_net_socket(v4 ? AF_INET : AF_INET6, SOCK_STREAM);
   /* `::` on a kernel without IPv6: the same wildcard in the family there is.

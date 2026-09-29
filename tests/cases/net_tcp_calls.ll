@@ -5,10 +5,11 @@
 @.str.1 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"127.0.0.1\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [12 x i8] } { i64 11, [12 x i8] c"2001:db8::1\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"localhost\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"nowhere\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
-@.str.6 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"::\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"127.0.0.1\00.9\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"nowhere\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"::\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
@@ -246,55 +247,55 @@ entry:
   %19 = call i32 @nish_net_address(%struct.nish_array* %18, i8* bitcast ({ i64, [10 x i8] }* @.str.3 to i8*), i32 1)
   %20 = call i8* @nish_str_from_i32(i32 %19)
   call void @nish_print(i8* %20)
-  %21 = load %struct.nish_array*, %struct.nish_array** %short.addr, align 8
-  %22 = call i32 @nish_net_address(%struct.nish_array* %21, i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 1)
+  %21 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %22 = call i32 @nish_net_address(%struct.nish_array* %21, i8* bitcast ({ i64, [13 x i8] }* @.str.4 to i8*), i32 1)
   %23 = call i8* @nish_str_from_i32(i32 %22)
   call void @nish_print(i8* %23)
-  %24 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %25 = call i32 @nish_net_address(%struct.nish_array* %24, i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 65536)
+  %24 = load %struct.nish_array*, %struct.nish_array** %short.addr, align 8
+  %25 = call i32 @nish_net_address(%struct.nish_array* %24, i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 1)
   %26 = call i8* @nish_str_from_i32(i32 %25)
   call void @nish_print(i8* %26)
-  %27 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [8 x i8] }* @.str.4 to i8*), i32 0, i32 1)
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  call void @nish_print(i8* %28)
-  %29 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 0, i32 4)
-  store i32 %29, i32* %fd.addr, align 4
-  %30 = load i32, i32* %fd.addr, align 4
-  %31 = call i32 @nish_net_local_port(i32 %30)
-  store i32 %31, i32* %port.addr, align 4
-  %32 = load i32, i32* %fd.addr, align 4
-  %33 = icmp sge i32 %32, 0
-  br i1 %33, label %land.rhs, label %land.end
+  %27 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %28 = call i32 @nish_net_address(%struct.nish_array* %27, i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 65536)
+  %29 = call i8* @nish_str_from_i32(i32 %28)
+  call void @nish_print(i8* %29)
+  %30 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [8 x i8] }* @.str.5 to i8*), i32 0, i32 1)
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  call void @nish_print(i8* %31)
+  %32 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 0, i32 4)
+  store i32 %32, i32* %fd.addr, align 4
+  %33 = load i32, i32* %fd.addr, align 4
+  %34 = call i32 @nish_net_local_port(i32 %33)
+  store i32 %34, i32* %port.addr, align 4
+  %35 = load i32, i32* %fd.addr, align 4
+  %36 = icmp sge i32 %35, 0
+  br i1 %36, label %land.rhs, label %land.end
 
 land.rhs:
-  %34 = load i32, i32* %port.addr, align 4
-  %35 = icmp sgt i32 %34, 0
+  %37 = load i32, i32* %port.addr, align 4
+  %38 = icmp sgt i32 %37, 0
   br label %land.end
 
 land.end:
-  %36 = phi i1 [ false, %entry ], [ %35, %land.rhs ]
-  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
-  call void @nish_print(i8* %37)
-  %38 = load i32, i32* %port.addr, align 4
-  %39 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 %38, i32 4)
-  %40 = call i8* @nish_str_from_i32(i32 %39)
+  %39 = phi i1 [ false, %entry ], [ %38, %land.rhs ]
+  %40 = select i1 %39, i8* bitcast ({ i64, [5 x i8] }* @.str.6 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.7 to i8*)
   call void @nish_print(i8* %40)
-  %41 = load i32, i32* %fd.addr, align 4
-  %42 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %43 = call i32 @nish_tcp_accept(i32 %41, %struct.nish_array* %42)
-  %44 = call i8* @nish_str_from_i32(i32 %43)
-  call void @nish_print(i8* %44)
-  %45 = load i32, i32* %fd.addr, align 4
-  %46 = load %struct.nish_array*, %struct.nish_array** %short.addr, align 8
-  %47 = call i32 @nish_tcp_accept(i32 %45, %struct.nish_array* %46)
-  %48 = call i8* @nish_str_from_i32(i32 %47)
-  call void @nish_print(i8* %48)
-  %49 = load i32, i32* %fd.addr, align 4
-  %50 = call i32 @nish_net_shutdown(i32 %49, i32 3)
+  %41 = load i32, i32* %port.addr, align 4
+  %42 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i32 %41, i32 4)
+  %43 = call i8* @nish_str_from_i32(i32 %42)
+  call void @nish_print(i8* %43)
+  %44 = load i32, i32* %fd.addr, align 4
+  %45 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %46 = call i32 @nish_tcp_accept(i32 %44, %struct.nish_array* %45)
+  %47 = call i8* @nish_str_from_i32(i32 %46)
+  call void @nish_print(i8* %47)
+  %48 = load i32, i32* %fd.addr, align 4
+  %49 = load %struct.nish_array*, %struct.nish_array** %short.addr, align 8
+  %50 = call i32 @nish_tcp_accept(i32 %48, %struct.nish_array* %49)
   %51 = call i8* @nish_str_from_i32(i32 %50)
   call void @nish_print(i8* %51)
   %52 = load i32, i32* %fd.addr, align 4
-  %53 = call i32 @nish_net_close(i32 %52)
+  %53 = call i32 @nish_net_shutdown(i32 %52, i32 3)
   %54 = call i8* @nish_str_from_i32(i32 %53)
   call void @nish_print(i8* %54)
   %55 = load i32, i32* %fd.addr, align 4
@@ -302,61 +303,65 @@ land.end:
   %57 = call i8* @nish_str_from_i32(i32 %56)
   call void @nish_print(i8* %57)
   %58 = load i32, i32* %fd.addr, align 4
-  %59 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %60 = add i64 0, 18
-  %61 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
-  %62 = load i64, i64* %61, align 8
-  %63 = icmp ule i64 0, %60
-  %64 = icmp ule i64 %60, %62
-  %65 = and i1 %63, %64
-  br i1 %65, label %net.ok, label %net.fail
+  %59 = call i32 @nish_net_close(i32 %58)
+  %60 = call i8* @nish_str_from_i32(i32 %59)
+  call void @nish_print(i8* %60)
+  %61 = load i32, i32* %fd.addr, align 4
+  %62 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %63 = add i64 0, 18
+  %64 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %62, i64 0, i32 0
+  %65 = load i64, i64* %64, align 8
+  %66 = icmp ule i64 0, %63
+  %67 = icmp ule i64 %63, %65
+  %68 = and i1 %66, %67
+  br i1 %68, label %net.ok, label %net.fail
 
 net.fail:
-  call void @nish_panic_slice(i64 0, i64 %60, i64 %62)
+  call void @nish_panic_slice(i64 0, i64 %63, i64 %65)
   unreachable
 
 net.ok:
-  %66 = call i32 @nish_net_read(i32 %58, %struct.nish_array* %59, i64 0, i64 18)
-  %67 = call i8* @nish_str_from_i32(i32 %66)
-  call void @nish_print(i8* %67)
-  %68 = load i32, i32* %fd.addr, align 4
-  %69 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %70 = add i64 0, 18
-  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %69, i64 0, i32 0
-  %72 = load i64, i64* %71, align 8
-  %73 = icmp ule i64 0, %70
-  %74 = icmp ule i64 %70, %72
-  %75 = and i1 %73, %74
-  br i1 %75, label %net.ok.1, label %net.fail.1
+  %69 = call i32 @nish_net_read(i32 %61, %struct.nish_array* %62, i64 0, i64 18)
+  %70 = call i8* @nish_str_from_i32(i32 %69)
+  call void @nish_print(i8* %70)
+  %71 = load i32, i32* %fd.addr, align 4
+  %72 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %73 = add i64 0, 18
+  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %72, i64 0, i32 0
+  %75 = load i64, i64* %74, align 8
+  %76 = icmp ule i64 0, %73
+  %77 = icmp ule i64 %73, %75
+  %78 = and i1 %76, %77
+  br i1 %78, label %net.ok.1, label %net.fail.1
 
 net.fail.1:
-  call void @nish_panic_slice(i64 0, i64 %70, i64 %72)
+  call void @nish_panic_slice(i64 0, i64 %73, i64 %75)
   unreachable
 
 net.ok.1:
-  %76 = call i32 @nish_net_write(i32 %68, %struct.nish_array* %69, i64 0, i64 18)
-  %77 = call i8* @nish_str_from_i32(i32 %76)
-  call void @nish_print(i8* %77)
-  %78 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [3 x i8] }* @.str.7 to i8*), i32 0, i32 4)
-  store i32 %78, i32* %both.addr, align 4
-  %79 = load i32, i32* %both.addr, align 4
-  %80 = icmp sge i32 %79, 0
-  br i1 %80, label %land.rhs.1, label %land.end.1
+  %79 = call i32 @nish_net_write(i32 %71, %struct.nish_array* %72, i64 0, i64 18)
+  %80 = call i8* @nish_str_from_i32(i32 %79)
+  call void @nish_print(i8* %80)
+  %81 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [3 x i8] }* @.str.8 to i8*), i32 0, i32 4)
+  store i32 %81, i32* %both.addr, align 4
+  %82 = load i32, i32* %both.addr, align 4
+  %83 = icmp sge i32 %82, 0
+  br i1 %83, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %81 = load i32, i32* %both.addr, align 4
-  %82 = call i32 @nish_net_local_port(i32 %81)
-  %83 = icmp sgt i32 %82, 0
+  %84 = load i32, i32* %both.addr, align 4
+  %85 = call i32 @nish_net_local_port(i32 %84)
+  %86 = icmp sgt i32 %85, 0
   br label %land.end.1
 
 land.end.1:
-  %84 = phi i1 [ false, %net.ok.1 ], [ %83, %land.rhs.1 ]
-  %85 = select i1 %84, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
-  call void @nish_print(i8* %85)
-  %86 = load i32, i32* %both.addr, align 4
-  %87 = call i32 @nish_net_close(i32 %86)
+  %87 = phi i1 [ false, %net.ok.1 ], [ %86, %land.rhs.1 ]
+  %88 = select i1 %87, i8* bitcast ({ i64, [5 x i8] }* @.str.6 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.7 to i8*)
+  call void @nish_print(i8* %88)
+  %89 = load i32, i32* %both.addr, align 4
+  %90 = call i32 @nish_net_close(i32 %89)
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %87
+  ret i32 %90
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

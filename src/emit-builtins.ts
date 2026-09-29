@@ -1007,15 +1007,17 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     emitSliceCheck(emitter, values[2], end, size, true, "net")
   }
   const parts: string[] = []
-  for (let i = 0; i < params.length; i++) {
+  // Bounded by both lengths, which the checker made equal, so neither index is checked.
+  for (let i = 0; i < values.length && i < params.length; i++) {
     const param = params.charCodeAt(i)
+    const value = values[i]
     if (param === CHAR_S) {
-      parts.push(`i8* ${values[i]}`)
+      parts.push(`i8* ${value}`)
     } else if (param === CHAR_I) {
-      parts.push(`${range && i >= 2 ? "i64" : "i32"} ${values[i]}`)
+      parts.push(`${range && i >= 2 ? "i64" : "i32"} ${value}`)
     } else {
       emitter.declareType(ARRAY_TYPE)
-      parts.push(`${ARRAY_STRUCT}* ${values[i]}`)
+      parts.push(`${ARRAY_STRUCT}* ${value}`)
     }
   }
   return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)

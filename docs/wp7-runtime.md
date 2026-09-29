@@ -658,15 +658,15 @@ no link line anywhere that has to learn about it.
 
 `runtime/runtime-net.c` holds the sockets of `nish:net` (WP34 N5), with a
 ceiling of its own, `NET_TEXT_BUDGET`. The first slice is addresses and
-non-blocking TCP, and it measured **856 bytes**, all `.text`, with clang 18.1.3
+non-blocking TCP, and it measured **869 bytes**, all `.text`, with clang 18.1.3
 on linux-x64 at `-Oz`:
 
 | function | bytes |
 | --- | ---: |
-| `nish_tcp_listen` (the address parse and the `sockaddr` inlined, the `::` fallback, `SO_REUSEADDR`, `IPV6_V6ONLY`, `bind`, `listen`) | 380 |
+| `nish_tcp_listen` (the `sockaddr` inlined, the `::` fallback, `SO_REUSEADDR`, `IPV6_V6ONLY`, `bind`, `listen`) | 376 |
 | `nish_tcp_accept` (and writing the peer's 18-byte form) | 113 |
-| `nish_net_address` | 90 |
-| `nish_net_parse` (two `inet_pton`s) | 78 |
+| `nish_net_address` | 86 |
+| `nish_net_parse` (two `inet_pton`s, and a `strlen` that refuses a NUL inside the host) | 99 |
 | `nish_net_local_port` | 53 |
 | `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
 | `nish_net_fail`, `nish_net_socket` | 14, 12 |
