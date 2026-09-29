@@ -228,7 +228,8 @@ export class TypeTable {
   readonlys: boolean[]
   /**
    * The source spelling of an instantiated struct (`Box<i32>` for `Box$i32`,
-   * WP18 §6.7), or empty. Read only by `typeName`; symbols keep the name.
+   * WP18 §6.7) or of a second enum of one name (`Kind` for `Kind.2`), or
+   * empty. Read only by `typeName`; symbols keep the name.
    */
   displays: string[]
   /** The interning index: a key built by `derivedKey` -> the id it names. */
@@ -345,9 +346,32 @@ export class TypeTable {
     this.displays[type] = display
   }
 
-  /** The type a numeric `enum` declaration names (WP23); identity is the declared name. */
+  /** The enum type interned under the symbol `name` (WP23). A declaration asks `declaredEnumOf`. */
   enumOf(name: string): i32 {
     return this.intern(K_ENUM, -1, name)
+  }
+
+  /**
+   * The type one `enum` declaration names: a new id for every declaration.
+   *
+   * An enum crosses a module boundary, so one program can hold `a.ts`'s `Kind`
+   * and `b.ts`'s own `Kind` at once, and they are two types (docs/LANGUAGE.md,
+   * Enums) — keyed on the name alone they were one, and a value of either was
+   * accepted where the other was declared. The first `Kind` keeps its name as
+   * its symbol, so a program with one enum per name interns and mangles exactly
+   * as it did; a later one is `Kind.2`, which no declared name can spell, and
+   * `typeName` still says `Kind`.
+   */
+  declaredEnumOf(name: string): i32 {
+    let symbol = name
+    let n = 2
+    while (this.index.has(this.derivedKey(K_ENUM, -1, symbol))) {
+      symbol = `${name}.${n}`
+      n = n + 1
+    }
+    const id = this.enumOf(symbol)
+    this.setDisplayName(id, name)
+    return id
   }
 
   isEnum(type: i32): boolean {
@@ -708,7 +732,7 @@ export class TypeTable {
       case K_STRUCT:
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_ENUM:
-        return this.names[type]
+        return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_RANGED:
         return `integer<${this.refs[type]}, ${this.errs[type]}>`
       case K_NULLABLE:

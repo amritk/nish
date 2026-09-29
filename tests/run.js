@@ -359,6 +359,21 @@ const diagnosticsOf = (stdout) =>
 /** One `--json` diagnostic as a report line: `file:line:col CODE message`. */
 const diagnosticLine = (d) => `${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`
 
+/**
+ * Every module of the library under `dir` (`std/` by default), at any depth, as
+ * `std/<path>` with `/` separators, sorted. Recursive because a module may live in
+ * a subdirectory (`std/crypto/sha256.ts` is `nish/crypto/sha256`), and a check that
+ * read only the top level would pass over it without saying so.
+ */
+const stdModuleFiles = (dir = path.join(root, "std")) =>
+  fs
+    .readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) =>
+      ["std", ...path.relative(dir, path.join(entry.parentPath, entry.name)).split(path.sep)].join("/")
+    )
+    .sort()
+
 /** A dotted version as numbers, for ordering releases. */
 const semver = (v) => v.split(".").map(Number)
 
@@ -1615,11 +1630,26 @@ if (!only || "performance".includes(only)) {
     ["examples/multi/main.ts f64", "NL2140"],
     ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32
   ])
+  // The walker the gate reads `std/` through reaches a module in a subdirectory,
+  // proven on a tree of its own so the claim does not wait for one to exist.
+  {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "nish-std-walk-"))
+    fs.mkdirSync(path.join(fixture, "crypto", "hash"), { recursive: true })
+    for (const file of ["top.ts", "crypto/inner.ts", "crypto/hash/deep.ts", "crypto/notes.md", "README.md"]) {
+      fs.writeFileSync(path.join(fixture, file), "")
+    }
+    fs.mkdirSync(path.join(fixture, "looks.ts"))
+    const found = stdModuleFiles(fixture)
+    const want = ["std/crypto/hash/deep.ts", "std/crypto/inner.ts", "std/top.ts"]
+    fs.rmSync(fixture, { recursive: true, force: true })
+    check(
+      "performance gate: the std/ walker finds a module at every depth, and nothing that is not one",
+      JSON.stringify(found) === JSON.stringify(want),
+      `found ${JSON.stringify(found)}, wanted ${JSON.stringify(want)}`
+    )
+  }
   const gateSources = [
-    ...fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => `std/${f}`),
+    ...stdModuleFiles(),
     // The corpus's own discovery, which already reads a directory with a
     // `main.ts` as one program (`examples/multi/`).
     ...corpusPrograms()
@@ -9055,10 +9085,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   // `std/testing.ts` is how most people will meet it. They are one project
   // because they import each other.
   const libraryModules = [
-    ...fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => path.join(root, "std", f)),
+    ...stdModuleFiles().map((f) => path.join(root, f)),
     ...fs
       .readdirSync(path.join(root, "tests", "nish"))
       .filter((f) => f.endsWith(".ts"))
@@ -9342,11 +9369,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // and a `files` entry narrowed later would take it back out just as quietly.
     // Asking the tree rather than a written list is the assertion that cannot go
     // stale (wp26 §7 question 6).
-    const stdModules = fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => `std/${f}`)
-      .sort()
+    const stdModules = stdModuleFiles()
     const unshipped = stdModules.filter((f) => !files.includes(f))
     check(
       `npm pack ships every std/ module in the tree (${stdModules.length}: ${stdModules.join(", ")})`,
@@ -9741,10 +9764,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           "runtime/runtime-os.c",
           "runtime/nish.h",
           "scripts/build.sh",
-          ...fs
-            .readdirSync(path.join(root, "std"))
-            .filter((f) => f.endsWith(".ts"))
-            .map((f) => `std/${f}`),
+          ...stdModuleFiles(),
         ]
         const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f))
         check(
