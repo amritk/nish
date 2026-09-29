@@ -29,15 +29,14 @@ entry:
   store i32 %1, i32* %same.addr, align 4
   %2 = call i32 @identity$i32(i32 8)
   store i32 %2, i32* %plain.addr, align 4
-  %3 = sub nsw i32 0, 100
-  call void @Box$rng.m128.p127.constructor(%struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj, i32 %3)
+  call void @Box$rng.m128.p127.constructor(%struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj, i32 -100)
   store %struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj, %struct.Box$rng.m128.p127** %low.addr, align 8
   store i32 20, i32* %n.addr, align 4
-  %4 = load i32, i32* %n.addr, align 4
-  %5 = mul nsw i32 %4, 5
-  %6 = sub i32 %5, -128
-  %7 = icmp ult i32 %6, 256
-  br i1 %7, label %rng.ok, label %rng.fail
+  %3 = load i32, i32* %n.addr, align 4
+  %4 = mul nsw i32 %3, 5
+  %5 = sub i32 %4, -128
+  %6 = icmp ult i32 %5, 256
+  br i1 %6, label %rng.ok, label %rng.fail
 
 rng.fail:
   call void @nish_write(i8* bitcast ({ i64, [48 x i8] }* @.str.0 to i8*), i32 2, i1 true)
@@ -45,27 +44,27 @@ rng.fail:
   unreachable
 
 rng.ok:
-  call void @Box$rng.m128.p127.constructor(%struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj.1, i32 %5)
+  call void @Box$rng.m128.p127.constructor(%struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj.1, i32 %4)
   store %struct.Box$rng.m128.p127* %Box$rng.m128.p127.obj.1, %struct.Box$rng.m128.p127** %high.addr, align 8
-  %8 = load i32, i32* %same.addr, align 4
-  %9 = call i8* @nish_str_from_i32(i32 %8)
-  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %11 = load i32, i32* %plain.addr, align 4
-  %12 = call i8* @nish_str_from_i32(i32 %11)
-  %13 = call i8* @nish_str_concat(i8* %10, i8* %12)
-  %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %15 = load %struct.Box$rng.m128.p127*, %struct.Box$rng.m128.p127** %low.addr, align 8
-  %16 = getelementptr inbounds %struct.Box$rng.m128.p127, %struct.Box$rng.m128.p127* %15, i32 0, i32 0
-  %17 = load i32, i32* %16, align 4, !tbaa !4
-  %18 = call i8* @nish_str_from_i32(i32 %17)
-  %19 = call i8* @nish_str_concat(i8* %14, i8* %18)
-  %20 = call i8* @nish_str_concat(i8* %19, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
-  %21 = load %struct.Box$rng.m128.p127*, %struct.Box$rng.m128.p127** %high.addr, align 8
-  %22 = getelementptr inbounds %struct.Box$rng.m128.p127, %struct.Box$rng.m128.p127* %21, i32 0, i32 0
-  %23 = load i32, i32* %22, align 4, !tbaa !4
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  %25 = call i8* @nish_str_concat(i8* %20, i8* %24)
-  call void @nish_print(i8* %25)
+  %7 = load i32, i32* %same.addr, align 4
+  %8 = call i8* @nish_str_from_i32(i32 %7)
+  %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %10 = load i32, i32* %plain.addr, align 4
+  %11 = call i8* @nish_str_from_i32(i32 %10)
+  %12 = call i8* @nish_str_concat(i8* %9, i8* %11)
+  %13 = call i8* @nish_str_concat(i8* %12, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %14 = load %struct.Box$rng.m128.p127*, %struct.Box$rng.m128.p127** %low.addr, align 8
+  %15 = getelementptr inbounds %struct.Box$rng.m128.p127, %struct.Box$rng.m128.p127* %14, i32 0, i32 0
+  %16 = load i32, i32* %15, align 4, !tbaa !4
+  %17 = call i8* @nish_str_from_i32(i32 %16)
+  %18 = call i8* @nish_str_concat(i8* %13, i8* %17)
+  %19 = call i8* @nish_str_concat(i8* %18, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %20 = load %struct.Box$rng.m128.p127*, %struct.Box$rng.m128.p127** %high.addr, align 8
+  %21 = getelementptr inbounds %struct.Box$rng.m128.p127, %struct.Box$rng.m128.p127* %20, i32 0, i32 0
+  %22 = load i32, i32* %21, align 4, !tbaa !4
+  %23 = call i8* @nish_str_from_i32(i32 %22)
+  %24 = call i8* @nish_str_concat(i8* %19, i8* %23)
+  call void @nish_print(i8* %24)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

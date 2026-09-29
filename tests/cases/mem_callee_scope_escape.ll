@@ -118,79 +118,78 @@ for.body:
   %11 = load %struct.nish_array*, %struct.nish_array** %junk.addr, align 8
   %12 = call i8* @nish_alloc_struct(i64 4)
   %13 = bitcast i8* %12 to %struct.Cell*
-  %14 = sub nsw i32 0, 1
-  call void @Cell.constructor(%struct.Cell* %13, i32 %14)
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !13, !noalias !14, !tbaa !18
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
-  %18 = load i64, i64* %17, align 8, !alias.scope !13, !noalias !14, !tbaa !19
-  %19 = icmp eq i64 %16, %18
-  br i1 %19, label %push.grow, label %push.store
+  call void @Cell.constructor(%struct.Cell* %13, i32 -1)
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
+  %17 = load i64, i64* %16, align 8, !alias.scope !13, !noalias !14, !tbaa !19
+  %18 = icmp eq i64 %15, %17
+  br i1 %18, label %push.grow, label %push.store
 
 push.grow:
   call void @nish_array_grow(%struct.nish_array* %11, i64 8)
   br label %push.store
 
 push.store:
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
-  %21 = load i8*, i8** %20, align 8, !alias.scope !13, !noalias !14, !tbaa !20
-  %22 = bitcast i8* %21 to %struct.Cell**
-  %23 = getelementptr inbounds %struct.Cell*, %struct.Cell** %22, i64 %16
-  store %struct.Cell* %13, %struct.Cell** %23, align 8, !alias.scope !14, !noalias !13, !tbaa !22
-  %24 = add i64 %16, 1
-  store i64 %24, i64* %15, align 8, !alias.scope !13, !noalias !14, !tbaa !18
-  %25 = trunc i64 %24 to i32
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %20 = load i8*, i8** %19, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %21 = bitcast i8* %20 to %struct.Cell**
+  %22 = getelementptr inbounds %struct.Cell*, %struct.Cell** %21, i64 %15
+  store %struct.Cell* %13, %struct.Cell** %22, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  %23 = add i64 %15, 1
+  store i64 %23, i64* %14, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %24 = trunc i64 %23 to i32
   br label %for.inc
 
 for.inc:
-  %26 = load i32, i32* %i.addr, align 4
-  %27 = add nsw i32 %26, 1
-  store i32 %27, i32* %i.addr, align 4
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = add nsw i32 %25, 1
+  store i32 %26, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %28 = load %struct.Cache*, %struct.Cache** %cache.addr, align 8
-  %29 = getelementptr inbounds %struct.Cache, %struct.Cache* %28, i32 0, i32 0
-  %30 = load %struct.Cell*, %struct.Cell** %29, align 8, !tbaa !7
-  store %struct.Cell* %30, %struct.Cell** %last.addr, align 8
-  %31 = load %struct.Box*, %struct.Box** %box.addr, align 8
-  %32 = getelementptr inbounds %struct.Box, %struct.Box* %31, i32 0, i32 0
-  %33 = load %struct.Cell*, %struct.Cell** %32, align 8, !tbaa !9
-  store %struct.Cell* %33, %struct.Cell** %cell.addr, align 8
-  %34 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
-  %35 = icmp ne %struct.Cell* %34, null
-  br i1 %35, label %land.rhs, label %land.end
+  %27 = load %struct.Cache*, %struct.Cache** %cache.addr, align 8
+  %28 = getelementptr inbounds %struct.Cache, %struct.Cache* %27, i32 0, i32 0
+  %29 = load %struct.Cell*, %struct.Cell** %28, align 8, !tbaa !7
+  store %struct.Cell* %29, %struct.Cell** %last.addr, align 8
+  %30 = load %struct.Box*, %struct.Box** %box.addr, align 8
+  %31 = getelementptr inbounds %struct.Box, %struct.Box* %30, i32 0, i32 0
+  %32 = load %struct.Cell*, %struct.Cell** %31, align 8, !tbaa !9
+  store %struct.Cell* %32, %struct.Cell** %cell.addr, align 8
+  %33 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
+  %34 = icmp ne %struct.Cell* %33, null
+  br i1 %34, label %land.rhs, label %land.end
 
 land.rhs:
-  %36 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
-  %37 = icmp ne %struct.Cell* %36, null
+  %35 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
+  %36 = icmp ne %struct.Cell* %35, null
   br label %land.end
 
 land.end:
-  %38 = phi i1 [ false, %for.end ], [ %37, %land.rhs ]
-  br i1 %38, label %if.then, label %if.end
+  %37 = phi i1 [ false, %for.end ], [ %36, %land.rhs ]
+  br i1 %37, label %if.then, label %if.end
 
 if.then:
-  %39 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
-  %40 = getelementptr inbounds %struct.Cell, %struct.Cell* %39, i32 0, i32 0
-  %41 = load i32, i32* %40, align 4, !tbaa !4
-  %42 = call i8* @nish_str_from_i32(i32 %41)
-  call void @nish_print(i8* %42)
-  %43 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
-  %44 = getelementptr inbounds %struct.Cell, %struct.Cell* %43, i32 0, i32 0
-  %45 = load i32, i32* %44, align 4, !tbaa !4
-  %46 = call i8* @nish_str_from_i32(i32 %45)
-  call void @nish_print(i8* %46)
+  %38 = load %struct.Cell*, %struct.Cell** %last.addr, align 8
+  %39 = getelementptr inbounds %struct.Cell, %struct.Cell* %38, i32 0, i32 0
+  %40 = load i32, i32* %39, align 4, !tbaa !4
+  %41 = call i8* @nish_str_from_i32(i32 %40)
+  call void @nish_print(i8* %41)
+  %42 = load %struct.Cell*, %struct.Cell** %cell.addr, align 8
+  %43 = getelementptr inbounds %struct.Cell, %struct.Cell* %42, i32 0, i32 0
+  %44 = load i32, i32* %43, align 4, !tbaa !4
+  %45 = call i8* @nish_str_from_i32(i32 %44)
+  call void @nish_print(i8* %45)
   br label %if.end
 
 if.end:
-  %47 = load %struct.nish_array*, %struct.nish_array** %junk.addr, align 8
-  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 0
-  %49 = load i64, i64* %48, align 8, !alias.scope !13, !noalias !14, !tbaa !18
-  %50 = trunc i64 %49 to i32
-  %51 = sub nsw i32 %50, 64
+  %46 = load %struct.nish_array*, %struct.nish_array** %junk.addr, align 8
+  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %46, i64 0, i32 0
+  %48 = load i64, i64* %47, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %49 = trunc i64 %48 to i32
+  %50 = sub nsw i32 %49, 64
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %51
+  ret i32 %50
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {

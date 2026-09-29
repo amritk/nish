@@ -27,6 +27,7 @@ import { emitElementAssignment } from "./emit-arrays"
 import { emitFieldAssignment } from "./emit-classes"
 import { emitCoalesce, emitUndefinedTest, isUndefinedTest } from "./emit-map"
 import { emitConcat, emitStrictEquality } from "./emit-strings"
+import { unwrapParens } from "./emit-util"
 import { N_INDEX, N_MEMBER, N_NUMBER, N_PAREN, N_UNARY, Node } from "./nodes"
 import { ConstInfo } from "./program"
 import { f32Hex, f64Hex } from "./strings"
@@ -382,6 +383,20 @@ const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
 
 // ---- Unary expressions -------------------------------------------------------------
 
+/**
+ * `-<literal>` at an integer type, as the constant it is rather than a
+ * `sub nsw <ty> 0, <literal>`: for `-2147483648` in `i32`, whose literal
+ * already truncates to `INT_MIN`, that instruction is poison under LangRef.
+ * The negation is done in `u64`, where it wraps, and sign-extended back from
+ * the type's width, so every minimum spells itself and an unsigned `-(1)` is
+ * all ones.
+ */
+const negatedLiteral = (text: string, type: i32): string => {
+  const negated = toI64(toU64(0) - toU64(parseIntegerLiteral(text)))
+  const spare = toI64(64 - intBits(type))
+  return `${(negated << spare) >> spare}`
+}
+
 export const emitUnary = (emitter: Emitter, expr: Node): string => {
   const op = expr.text
   if (op === "++" || op === "--") {
@@ -390,6 +405,10 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
   const operand = expr.children[0]
   if (op === "-") {
     const type = emitter.typeOf(operand)
+    const literal = unwrapParens(operand)
+    if (isInteger(type) && literal.kind === N_NUMBER) {
+      return negatedLiteral(literal.text, type)
+    }
     const value = emitter.emitExpression(operand)
     const ty = emitter.llvm(type)
     if (isInteger(type)) {
