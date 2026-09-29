@@ -3,7 +3,7 @@
 **Decided (§7, 2026-09-28); R1's portability half is built: the class, its
 flag and its eleven codes (#293), the number, record and string rows (#301,
 #302, #304), and NL8011's retirement with NL8008 narrowed to the counts that
-can diverge (#309). Every row is live except NL8011.** This is the plan of
+can diverge (#329). Every row is live except NL8011.** This is the plan of
 record for one requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -473,7 +473,7 @@ and the stages in §9 build it.
 (`portabilityRules` in `src/codes.ts`), and the rows are documented in
 [LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags), the string and
 record rows with their exact predicates. Every row is live
-(#293, #301, #302, #304) except NL8011, which is retired: the `-0` it flagged
+(#293, #301, #302, #304, #329) except NL8011, which #329 retired: the `-0` it flagged
 prints `0` in both readings, because `runtime/nish.mjs` prints `String(x)`
 (§3.5). Its code stays reserved, and `tests/wordings/unreachable.txt` records
 it as retired. The parser half
