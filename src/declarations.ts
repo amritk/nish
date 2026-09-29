@@ -8,6 +8,7 @@
 // `collectImports`, in the order stage0 asked, and the rest of this file is
 // the semantic half: names, types, arity and the rules about `main`.
 
+import { refuseTopLevelForm } from "./checker"
 import { CheckContext } from "./context"
 import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
@@ -241,13 +242,17 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
 /**
  * One binding per name in an `import`. Every form but `import { a, b as c }
  * from "..."` is refused first, once, in the order stage0 asked and the source
- * writes them — a specifier that is not a string literal (NL2212), the
+ * writes them — `export import` (NL2226), a specifier that is not a string literal (NL2212), the
  * specifier rule, a side-effect import (NL2033), `import type` (NL2243), a
  * default import (NL2190), a namespace import (NL2119), and then per name a
  * type-only one (NL2243) or `default as x`, which is the default import by
  * another spelling — so a refused import binds nothing and loads nothing.
  */
 export const collectImports = (ctx: CheckContext, decl: Node): void => {
+  if (isExported(decl)) {
+    refuseTopLevelForm(ctx, decl)
+    return
+  }
   if ((decl.flags & FLAG_COMPUTED) !== 0) {
     ctx.error(decl, "Import specifier must be a string literal")
     return

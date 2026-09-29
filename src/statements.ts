@@ -24,6 +24,7 @@ import {
   WANT_MAYBE,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
+import { syntaxKindName } from "./checker"
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
@@ -486,12 +487,8 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
  * instantiates too.
  */
 const sweepNested = (ctx: CheckContext, node: Node): void => {
-  if (node.kind === N_FUNCTION) {
-    ctx.error(node, "Unsupported statement in Phase 1: FunctionDeclaration")
-  } else if (node.kind === N_IMPORT) {
-    ctx.error(node, "Unsupported statement in Phase 1: ImportDeclaration")
-  } else if (node.kind === N_IMPORT_EQUALS) {
-    ctx.error(node, "Unsupported statement in Phase 1: ImportEqualsDeclaration")
+  if (node.kind === N_FUNCTION || node.kind === N_IMPORT || node.kind === N_IMPORT_EQUALS) {
+    ctx.error(node, `Unsupported statement in Phase 1: ${syntaxKindName(node.kind)}`)
   } else if (node.kind !== N_CLASS) {
     sweepForms(ctx, node, null)
   } else if (node.children[0].kind === N_EMPTY) {

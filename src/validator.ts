@@ -395,7 +395,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       return
     case N_EXPORT_DECLARATION:
       // `export { a }` is refused by pass 1 whatever it names (NL2128), and
-      // the names in it are names, as they are in an import.
+      // nothing in it is a value for a rule here to judge.
       return
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it

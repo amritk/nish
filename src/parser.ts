@@ -333,6 +333,8 @@ const isAssignment = (kind: i32): boolean =>
 /**
  * The words TypeScript reserves that the lexer reads as identifiers (the rest
  * of its reserved words are keywords there): never a name an import binds.
+ * A different set from `isOperatorWord` and `isPrefixWord`, which are about
+ * where a word is an operator rather than whether it may be bound.
  */
 const isReservedWord = (word: string): boolean =>
   word === "catch" ||
@@ -887,12 +889,7 @@ export class Parser {
         this.advance()
         node.children.push(name)
       } else {
-        const nameStart = this.start
-        let name = this.parseIdentifier()
-        while (this.eat(TOK_DOT)) {
-          name = this.parseMemberName(name, nameStart)
-        }
-        node.children.push(name)
+        node.children.push(this.parseQualifiedName())
       }
     }
     // Only a module named by a string may go without a body, as in TypeScript.
@@ -906,17 +903,7 @@ export class Parser {
     // whatever it holds, and a declared one holds ambient declarations —
     // functions without bodies, `export =` — that this grammar does not have.
     const body = this.node(N_BLOCK, this.start, this.end)
-    if (!this.at(TOK_LBRACE)) {
-      this.expect(TOK_LBRACE)
-    } else {
-      const close = this.closingBrace(this.start)
-      while ((close < 0 || this.start < close) && !this.at(TOK_END)) {
-        this.advance()
-      }
-      if (close < 0) {
-        this.expect(TOK_RBRACE)
-      }
-    }
+    this.skipBraces()
     body.end = this.previousEnd
     node.children.push(body)
     node.end = this.previousEnd
@@ -1265,19 +1252,6 @@ export class Parser {
       this.advance() // `default`
       return this.flagged(this.parseFunction(start, anonymous), flags)
     }
-    if (next === TOK_IDENT && this.aheadValue === "async") {
-      const scan = this.scanAfterAhead()
-      if (scan.kind === TOK_FUNCTION && !this.lineBreakBetween(this.aheadEnd, scan.start)) {
-        scan.next()
-        if (scan.kind === TOK_STAR) {
-          scan.next()
-        }
-        const anonymous = scan.kind === TOK_LPAREN || scan.kind === TOK_LT
-        this.advance() // `default`
-        this.advance() // `async`
-        return this.flagged(this.parseFunction(start, anonymous), flags | FLAG_ASYNC)
-      }
-    }
     if (next === TOK_CLASS || this.defaultAbstractClassAhead()) {
       this.advance() // `default`
       let classFlags = flags
@@ -1295,7 +1269,18 @@ export class Parser {
       this.advance() // `default`
       return this.parseDecorated(start, flags)
     }
-    return this.parseExportAssignment(start)
+    this.advance() // `default`
+    if (
+      this.at(TOK_IDENT) &&
+      this.value === "async" &&
+      this.peek() === TOK_FUNCTION &&
+      this.aheadOnSameLine()
+    ) {
+      const anonymous = this.anonymousFunctionAhead()
+      this.advance() // `async`
+      return this.flagged(this.parseFunction(start, anonymous), flags | FLAG_ASYNC)
+    }
+    return this.finishExportAssignment(start, "default")
   }
 
   /** After `export`, on `default`: whether `abstract class` follows, the two on one line. */
@@ -1307,11 +1292,16 @@ export class Parser {
     return scan.kind === TOK_CLASS && !this.lineBreakBetween(this.aheadEnd, scan.start)
   }
 
-  /** `export default <value>;` or `export = <value>;` (NL2129), on `default` or `=`. */
+  /** `export = <value>;` (NL2129), on `=`. */
   parseExportAssignment(start: i32): Node {
-    const node = this.node(N_EXPORT_ASSIGNMENT, start, this.end)
-    node.text = this.at(TOK_ASSIGN) ? "=" : "default"
-    this.advance()
+    this.advance() // `=`
+    return this.finishExportAssignment(start, "=")
+  }
+
+  /** The value after `export default` or `export =` (NL2129), whose word, `default` or `=`, is consumed. */
+  finishExportAssignment(start: i32, word: string): Node {
+    const node = this.node(N_EXPORT_ASSIGNMENT, start, this.previousEnd)
+    node.text = word
     node.children.push(this.parseExpression())
     this.expectSemicolon()
     node.end = this.previousEnd
@@ -1538,16 +1528,21 @@ export class Parser {
       }
       this.expect(TOK_RPAREN)
     } else {
-      const nameStart = this.start
-      let reference = this.parseIdentifier()
-      while (this.eat(TOK_DOT)) {
-        reference = this.parseMemberName(reference, nameStart)
-      }
-      node.children.push(reference)
+      node.children.push(this.parseQualifiedName())
     }
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
+  }
+
+  /** `A.B.C`, a namespace's name or what `import x =` names: an IDENT, or a MEMBER for each dot. */
+  parseQualifiedName(): Node {
+    const start = this.start
+    let name = this.parseIdentifier()
+    while (this.eat(TOK_DOT)) {
+      name = this.parseMemberName(name, start)
+    }
+    return name
   }
 
   /** `from`, or the syntax error that it is missing. */
@@ -1574,8 +1569,7 @@ export class Parser {
     // A reserved word that cannot open an expression, `import with from`,
     // is the syntax error TypeScript reports there too; `typeof`, `void` and
     // `delete` open one.
-    const operator = this.value === "typeof" || this.value === "void" || this.value === "delete"
-    if (this.at(TOK_IDENT) && isReservedWord(this.value) && !operator) {
+    if (this.at(TOK_IDENT) && isReservedWord(this.value) && !isPrefixWord(this.value)) {
       this.report(`expected a module specifier, found \`${this.value}\``, this.start, this.end)
       return
     }
@@ -1613,6 +1607,15 @@ export class Parser {
    */
   skipAttributes(): void {
     this.advance() // `with` or `assert`
+    this.skipBraces()
+  }
+
+  /**
+   * `{ ... }` passed over unread, from its `{` past the `}` that closes it —
+   * a namespace body, import attributes — or the syntax error that the `{`
+   * or its `}` is missing.
+   */
+  skipBraces(): void {
     if (!this.at(TOK_LBRACE)) {
       this.expect(TOK_LBRACE)
       return
@@ -1657,7 +1660,7 @@ export class Parser {
    */
   parseSpecifier(isImport: boolean): Node {
     const specStart = this.start
-    let reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+    let reserved = this.keywordHere()
     let name = this.parseModuleExportName()
     // Made here, after the first name, so a specifier that compiles numbers
     // its nodes as it always did.
@@ -1673,7 +1676,7 @@ export class Parser {
             // `{ type as as x }`: a type-only `as`, renamed.
             spec.flags = FLAG_TYPE_ONLY
             property = firstAs
-            reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+            reserved = this.keywordHere()
             name = this.parseModuleExportName()
           } else {
             // `{ type as as }`: `type`, renamed `as`.
@@ -1682,7 +1685,7 @@ export class Parser {
           alias = false
         } else if (this.moduleExportNameAhead()) {
           // `{ type as x }`: `type`, renamed.
-          reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+          reserved = this.keywordHere()
           name = this.parseModuleExportName()
           alias = false
         } else {
@@ -1694,14 +1697,14 @@ export class Parser {
       } else if (this.moduleExportNameAhead()) {
         // `{ type x }`: a type-only `x`.
         spec.flags = FLAG_TYPE_ONLY
-        reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+        reserved = this.keywordHere()
         name = this.parseModuleExportName()
         property = name
       }
     }
     if (alias && this.at(TOK_IDENT) && this.value === "as") {
       this.advance()
-      reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+      reserved = this.keywordHere()
       name = this.parseModuleExportName()
     }
     if (isImport && (reserved || name.kind !== N_IDENT)) {
@@ -1711,6 +1714,11 @@ export class Parser {
     spec.children.push(property)
     spec.end = name.end
     return spec
+  }
+
+  /** Whether the name about to be read is a keyword rather than an identifier or a string. */
+  keywordHere(): boolean {
+    return this.kind !== TOK_IDENT && this.kind !== TOK_STRING
   }
 
   /** Whether a module export name stands here: a name, a keyword or a string. */
@@ -1732,7 +1740,7 @@ export class Parser {
     }
     if (this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER) {
       const name = this.node(N_IDENT, this.start, this.end)
-      name.text = this.file.text.substring(this.start, this.end)
+      name.text = tokenName(this.kind)
       this.advance()
       return name
     }

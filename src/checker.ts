@@ -167,11 +167,7 @@ export class Checker {
         // One diagnostic per import, as stage0 recovered per statement: a
         // refused import binds nothing, so the next one is still read.
         this.ctx.errored = false
-        if (isExported(stmt)) {
-          refuseTopLevelForm(this.ctx, stmt)
-        } else {
-          collectImports(this.ctx, stmt)
-        }
+        collectImports(this.ctx, stmt)
       } else if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
         // WP18 G5: a class or interface with type parameters is a template, not
         // a struct. It declares no layout, so it is registered beside the
@@ -2611,7 +2607,7 @@ const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean,
  * module has no top-level code for (NL2230). The kind is named the way
  * stage0 named it, by TypeScript's `SyntaxKind`.
  */
-const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
+export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
   if (stmt.kind === N_EXPORT_DECLARATION) {
     ctx.error(
       stmt,
@@ -2636,9 +2632,10 @@ const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
  * The `SyntaxKind` TypeScript gives a statement found at the top level, which
  * is the word NL2230's message has always ended with. Every statement the
  * parser reads there has one (`Parser.startsTopLevelStatement`), and so does
- * every import form NL2226 and NL2230 name.
+ * every import form NL2226 and NL2230 name and every declaration NL2260
+ * finds where a statement stands.
  */
-const syntaxKindName = (kind: i32): string => {
+export const syntaxKindName = (kind: i32): string => {
   switch (kind) {
     case N_EXPR_STMT:
       return "ExpressionStatement"
@@ -2668,6 +2665,8 @@ const syntaxKindName = (kind: i32): string => {
       return "WithStatement"
     case N_LABELED:
       return "LabeledStatement"
+    case N_FUNCTION:
+      return "FunctionDeclaration"
     case N_IMPORT:
       return "ImportDeclaration"
     case N_IMPORT_EQUALS:
