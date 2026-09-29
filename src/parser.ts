@@ -17,25 +17,28 @@
 // TypeScript is genuinely ambiguous to one token (`(` after an identifier is a
 // call, and `<` after a type name is a type argument list).
 //
-// **What it accepts is wider than the language.** The parser reads `?.`,
-// `==`, `**` and the rest, and turns them down by name, because a message
-// about the operator the programmer wrote beats one about a token they did
-// not. `??` it builds as an operator (WP32), and the checker refuses it
-// wherever its left operand is not a `Map.get` result. Anything it cannot
-// make a node of is an `N_ERROR` with the reason.
+// **What it accepts is wider than the language.** `??` it builds as an
+// operator (WP32), and the checker refuses it wherever its left operand is not
+// a `Map.get` result. Anything it cannot make a node of is an `N_ERROR` with
+// the reason.
 //
-// **A forbidden statement is parsed, not refused** (WP33 R1): `var`, `try`,
+// **A forbidden construct is parsed, not refused** (WP33 R1): `var`, `try`,
 // `with`, a label, `for...in`, `for await`, `for (x of a)`, a top-level `let`
-// and a top-level statement each become a node, and the phase that owns the
-// rule refuses it by name. The shape each takes is written down once, beside
-// the flags in `src/nodes.ts`. `var`, `try`, `with`, `await` and `in` are
-// identifiers to the lexer, so they are matched by text where they open a
-// construct, as `of` and `using` are.
+// and a top-level statement each become a node, and so do `==`, `?.`,
+// `typeof`, `in`, `**`, a regex, `as` and the rest of the expressions the
+// language forbids; the phase that owns the rule refuses it by name, because a
+// message about the construct the programmer wrote beats one about a token
+// they did not. The shape each takes is written down once, beside the flags in
+// `src/nodes.ts`. `var`, `try`, `with`, `await`, `in`, `typeof` and the other
+// operator words are identifiers to the lexer, so they are matched by text
+// where they open a construct, as `of` and `using` are, and only where the
+// word could not be a name (`operandAhead`, `operatorPrecedence`).
 
 import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
 import { StringMap } from "./map"
 import {
+  FLAG_ANGLE,
   FLAG_AWAIT,
   FLAG_CONST,
   FLAG_FOR_IN,
@@ -48,9 +51,11 @@ import {
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
+  FLAG_SATISFIES,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
   N_ARRAY,
+  N_AS,
   N_ARROW,
   N_BIGINT,
   N_BINARY,
@@ -90,8 +95,10 @@ import {
   N_PARAM,
   N_PAREN,
   N_PROPERTY,
+  N_REGEX,
   N_RETURN,
   N_SOURCE_FILE,
+  N_SPREAD,
   N_SUPER,
   N_STRING,
   N_SWITCH,
@@ -142,6 +149,7 @@ import {
   TOK_ELSE,
   TOK_END,
   TOK_EQ,
+  TOK_EQ_LOOSE,
   TOK_ERROR,
   TOK_EXPORT,
   TOK_EXTENDS,
@@ -165,6 +173,7 @@ import {
   TOK_MINUS_ASSIGN,
   TOK_MINUS_MINUS,
   TOK_NE,
+  TOK_NE_LOOSE,
   TOK_NEW,
   TOK_NULL,
   TOK_NUMBER,
@@ -178,6 +187,7 @@ import {
   TOK_PLUS_ASSIGN,
   TOK_PLUS_PLUS,
   TOK_QUESTION,
+  TOK_QUESTION_DOT,
   TOK_QUESTION_QUESTION,
   TOK_RBRACE,
   TOK_RBRACKET,
@@ -192,6 +202,8 @@ import {
   TOK_SLASH_ASSIGN,
   TOK_STAR,
   TOK_STAR_ASSIGN,
+  TOK_STAR_STAR,
+  TOK_STAR_STAR_ASSIGN,
   TOK_STRING,
   TOK_SUPER,
   TOK_SWITCH,
@@ -217,7 +229,10 @@ const CH_CR: i32 = 13
  * Binding power of a binary operator, or 0 when the token is not one. The
  * levels are JavaScript's, so that a program means here what it means there:
  * `||` binds loosest, then `&&`, then the bitwise trio, equality, relational,
- * shifts, additive, multiplicative.
+ * shifts, additive, multiplicative, and `**`, the one right-associative level.
+ * `==`, `!=` and `**` are read so that the phase that owns each rule refuses
+ * it (WP33 R1); `in`, `instanceof`, `as` and `satisfies` are words, and
+ * `Parser.operatorPrecedence` gives them the relational level.
  */
 const binaryPrecedence = (kind: i32): i32 => {
   if (kind === TOK_OR_OR) {
@@ -235,7 +250,7 @@ const binaryPrecedence = (kind: i32): i32 => {
   if (kind === TOK_AMP) {
     return 5
   }
-  if (kind === TOK_EQ || kind === TOK_NE) {
+  if (kind === TOK_EQ || kind === TOK_NE || kind === TOK_EQ_LOOSE || kind === TOK_NE_LOOSE) {
     return 6
   }
   if (kind === TOK_LT || kind === TOK_LE || kind === TOK_GT || kind === TOK_GE) {
@@ -250,10 +265,31 @@ const binaryPrecedence = (kind: i32): i32 => {
   if (kind === TOK_STAR || kind === TOK_SLASH || kind === TOK_PERCENT) {
     return 10
   }
+  if (kind === TOK_STAR_STAR) {
+    return 11
+  }
   return 0
 }
 
-/** Whether the token assigns: `=` and the compound forms the language has. */
+/** The relational level, where `<` and the operator words bind. */
+const RELATIONAL: i32 = 7
+
+/**
+ * Whether a word after an operand can only be an operator, which is what keeps
+ * it from being the operand of a prefix word before it: `typeof in o` is the
+ * name `typeof` and the `in` operator, as `for (typeof of xs)` names it too.
+ */
+const isOperatorWord = (word: string): boolean =>
+  word === "in" || word === "of" || word === "instanceof" || word === "as" || word === "satisfies"
+
+/** The words TypeScript reads as a prefix operator: each is forbidden (WP33 R1). */
+const isPrefixWord = (word: string): boolean =>
+  word === "typeof" || word === "void" || word === "delete" || word === "await" || word === "yield"
+
+/**
+ * Whether the token assigns: `=`, the compound forms the language has, and
+ * `**=`, which the checker refuses (NL2253).
+ */
 const isAssignment = (kind: i32): boolean =>
   kind === TOK_ASSIGN ||
   kind === TOK_PLUS_ASSIGN ||
@@ -266,7 +302,8 @@ const isAssignment = (kind: i32): boolean =>
   kind === TOK_CARET_ASSIGN ||
   kind === TOK_SHL_ASSIGN ||
   kind === TOK_SHR_ASSIGN ||
-  kind === TOK_USHR_ASSIGN
+  kind === TOK_USHR_ASSIGN ||
+  kind === TOK_STAR_STAR_ASSIGN
 
 export class Parser {
   /**
@@ -299,6 +336,20 @@ export class Parser {
   aheadValue: string
   hasAhead: boolean
 
+  /**
+   * Set while a `for` head's initialiser is read, where `in` opens a
+   * `for...in` rather than being the operator, as TypeScript's `disallowIn`
+   * context does. Every bracket the ECMAScript grammar reads `[+In]` inside
+   * clears it again (`allowIn`): a parenthesis, an array literal, an argument
+   * list, an element access, an object literal, a template substitution, a
+   * block and the branch between a conditional's `?` and `:`. A concise arrow
+   * body and the branch after `:` inherit it, as the grammar's `[?In]` does.
+   * TypeScript's parser keeps `in` disallowed inside an array literal, where
+   * Node follows the grammar; this parser follows the grammar too
+   * (`tests/cases/reject_in_for_head_array`).
+   */
+  noIn: boolean
+
   /** How many nodes this parser has made; also the next id it will hand out. */
   nodeCount: i32
 
@@ -325,6 +376,7 @@ export class Parser {
     this.nodeCount = 0
     this.labels = []
     this.closingBraces = new StringMap()
+    this.noIn = false
     this.kind = TOK_END
     this.start = 0
     this.end = 0
@@ -1840,6 +1892,7 @@ export class Parser {
       block.end = this.previousEnd
       return block
     }
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const before = this.start
       block.children.push(this.parseStatement())
@@ -1847,6 +1900,7 @@ export class Parser {
         this.advance()
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACE)
     block.end = this.previousEnd
     return block
@@ -2024,7 +2078,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_IF, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     node.children.push(this.parseStatement())
     node.children.push(this.eat(TOK_ELSE) ? this.parseStatement() : this.empty())
@@ -2036,7 +2090,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_WHILE, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     node.children.push(this.parseStatement())
     node.end = this.previousEnd
@@ -2049,7 +2103,7 @@ export class Parser {
     node.children.push(this.parseStatement())
     this.expect(TOK_WHILE)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     this.eat(TOK_SEMICOLON)
     node.end = this.previousEnd
@@ -2070,6 +2124,8 @@ export class Parser {
       this.advance()
     }
     this.expect(TOK_LPAREN)
+    const outerNoIn = this.noIn
+    this.noIn = true
     if (((this.at(TOK_CONST) || this.at(TOK_LET)) && this.peek() === TOK_IDENT) || this.varAhead()) {
       const declStart = this.start
       const declaration = this.node(N_VAR, declStart, this.end)
@@ -2081,12 +2137,14 @@ export class Parser {
       this.advance()
       declaration.children.push(this.parseVariableDeclarations())
       declaration.end = this.previousEnd
+      this.noIn = outerNoIn
       if (this.atForOfKeyword()) {
         return this.parseForOfRest(start, declaration, flags)
       }
       return this.parseForRest(start, declaration, flags)
     }
-    const initializer = this.at(TOK_SEMICOLON) ? this.empty() : this.parseExpression()
+    const initializer = this.at(TOK_SEMICOLON) ? this.empty() : this.parseSequence()
+    this.noIn = outerNoIn
     if (initializer.kind !== N_EMPTY && this.atForOfKeyword()) {
       return this.parseForOfRest(start, initializer, flags)
     }
@@ -2123,9 +2181,9 @@ export class Parser {
     const node = this.node(N_FOR, start, this.end)
     node.children.push(initializer)
     this.expect(TOK_SEMICOLON)
-    node.children.push(this.at(TOK_SEMICOLON) ? this.empty() : this.parseExpression())
+    node.children.push(this.at(TOK_SEMICOLON) ? this.empty() : this.parseSequence())
     this.expect(TOK_SEMICOLON)
-    node.children.push(this.at(TOK_RPAREN) ? this.empty() : this.parseExpression())
+    node.children.push(this.at(TOK_RPAREN) ? this.empty() : this.parseSequence())
     this.expect(TOK_RPAREN)
     node.children.push(this.parseStatement())
     node.end = this.previousEnd
@@ -2136,7 +2194,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_SWITCH, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     const clauses = this.list()
     if (this.expect(TOK_LBRACE)) {
@@ -2185,7 +2243,7 @@ export class Parser {
     // `return` then a line break returns nothing, as it does in TypeScript; the
     // value on the next line is then unreachable code, which the checker refuses.
     const bare = this.at(TOK_SEMICOLON) || this.at(TOK_RBRACE) || this.at(TOK_END) || this.newlineBefore()
-    node.children.push(bare ? this.empty() : this.parseExpression())
+    node.children.push(bare ? this.empty() : this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
@@ -2194,7 +2252,7 @@ export class Parser {
   parseThrow(start: i32): Node {
     this.advance()
     const node = this.node(N_THROW, start, this.end)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
@@ -2219,13 +2277,45 @@ export class Parser {
 
   parseExpressionStatement(start: i32): Node {
     const node = this.node(N_EXPR_STMT, start, this.end)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
   }
 
   // ---- Expressions -------------------------------------------------------------------
+
+  /**
+   * `a, b`: the comma operator, read where TypeScript reads a whole
+   * expression that a `,` cannot otherwise follow — an expression statement,
+   * a condition, a `for` clause, a `return`, a `throw`, a `switch` and a
+   * parenthesis — for Phase 0 to refuse (NL1040). An argument list and an
+   * array literal keep their commas.
+   */
+  parseSequence(): Node {
+    const start = this.start
+    let left = this.parseExpression()
+    while (this.at(TOK_COMMA)) {
+      this.advance()
+      const right = this.parseExpression()
+      const node = this.node(N_BINARY, start, right.end)
+      node.text = ","
+      node.children.push(left)
+      node.children.push(right)
+      left = node
+    }
+    return left
+  }
+
+  /**
+   * Clear `noIn` for a bracket that reads `in` as the operator again, and
+   * answer what it was, for the caller to put back when the bracket closes.
+   */
+  allowIn(): boolean {
+    const outer = this.noIn
+    this.noIn = false
+    return outer
+  }
 
   /** Assignment, the loosest expression. Right-associative, as in JavaScript. */
   parseExpression(): Node {
@@ -2253,7 +2343,11 @@ export class Parser {
     this.advance()
     const node = this.node(N_CONDITIONAL, start, this.end)
     node.children.push(condition)
+    // The branch between `?` and `:` reads `in` again, as the grammar's
+    // `[+In]` does; the one after `:` keeps the context's (`noIn`).
+    const outerNoIn = this.allowIn()
     node.children.push(this.parseExpression())
+    this.noIn = outerNoIn
     this.expect(TOK_COLON)
     node.children.push(this.parseExpression())
     node.end = this.previousEnd
@@ -2305,18 +2399,34 @@ export class Parser {
     )
   }
 
-  /** Precedence climbing; every operator here is left-associative. */
+  /**
+   * Precedence climbing. Every operator here is left-associative but `**`,
+   * whose right operand is read at its own level, as TypeScript reads it. `as`
+   * and `satisfies` take a type rather than an operand, and are an `N_AS`.
+   */
   parseBinary(minimum: i32): Node {
     const start = this.start
     let left = this.parseUnary()
     while (true) {
-      const precedence = binaryPrecedence(this.kind)
+      const precedence = this.operatorPrecedence()
       if (precedence === 0 || precedence < minimum) {
         return left
       }
-      const operator = tokenName(this.kind)
+      const word = this.at(TOK_IDENT)
+      const operator = word ? this.value : tokenName(this.kind)
       this.advance()
-      const right = this.parseBinary(precedence + 1)
+      if (operator === "as" || operator === "satisfies") {
+        const assertion = this.node(N_AS, start, this.end)
+        if (operator === "satisfies") {
+          assertion.flags = FLAG_SATISFIES
+        }
+        assertion.children.push(left)
+        assertion.children.push(this.parseType())
+        assertion.end = this.previousEnd
+        left = assertion
+        continue
+      }
+      const right = this.parseBinary(operator === "**" ? precedence : precedence + 1)
       const node = this.node(N_BINARY, start, right.end)
       node.text = operator
       node.children.push(left)
@@ -2325,8 +2435,96 @@ export class Parser {
     }
   }
 
+  /**
+   * The binding power of the token in hand as a binary operator, or 0. `in`,
+   * `instanceof`, `as` and `satisfies` are identifiers to the lexer, and a
+   * program may use them as names, so each is an operator only where a name
+   * could not stand (WP33 R1): on the line of the operand before it, where
+   * TypeScript's `as` and `satisfies` must be and where a name could only be
+   * a syntax error, or — for `in` and `instanceof` — at the start of a line
+   * when an operand follows on that line, which a statement opening with the
+   * name could not have either. A `for` head's `in` is the loop's
+   * (`noIn`).
+   */
+  operatorPrecedence(): i32 {
+    if (!this.at(TOK_IDENT)) {
+      return binaryPrecedence(this.kind)
+    }
+    const word = this.value
+    if (word === "as" || word === "satisfies") {
+      return this.newlineBefore() ? 0 : RELATIONAL
+    }
+    if ((word === "in" && !this.noIn) || word === "instanceof") {
+      return !this.newlineBefore() || this.operandAhead() ? RELATIONAL : 0
+    }
+    return 0
+  }
+
+  /**
+   * Whether the token after the one in hand begins an operand, on the same
+   * line: a name that is not an operator word, a literal, `this`, `super`,
+   * `new`, `!` or `~`. A word before such a token cannot be a name — two
+   * operands in a row on one line are a syntax error — so it can only be the
+   * operator TypeScript reads it as. The tokens a name *can* be followed by
+   * are not here: `(` makes it a call, `[` an element, `+` and `-` a binary
+   * operator, `++` and `--` a postfix one, `/` a division and `<` a
+   * comparison, and every one of those compiled before these words were read
+   * (`tests/parser/names-operators.ts`).
+   */
+  operandAhead(): boolean {
+    const next = this.peek()
+    if (!this.aheadOnSameLine()) {
+      return false
+    }
+    switch (next) {
+      case TOK_IDENT:
+        return !isOperatorWord(this.aheadValue)
+      case TOK_NUMBER:
+      case TOK_BIGINT:
+      case TOK_STRING:
+      case TOK_TEMPLATE:
+      case TOK_TEMPLATE_HEAD:
+      case TOK_TRUE:
+      case TOK_FALSE:
+      case TOK_NULL:
+      case TOK_THIS:
+      case TOK_SUPER:
+      case TOK_NEW:
+      case TOK_BANG:
+      case TOK_TILDE:
+        return true
+      default:
+        return false
+    }
+  }
+
   parseUnary(): Node {
     const start = this.start
+    // `typeof x`, `void 0`, `delete o.x`, `await p` and `yield v`, for Phase 0
+    // to refuse. Each word is a name to the lexer, and is the operator only
+    // where an operand follows it on its line (`operandAhead`).
+    if (this.at(TOK_IDENT) && isPrefixWord(this.value) && this.operandAhead()) {
+      const operator = this.value
+      this.advance()
+      const node = this.node(N_UNARY, start, this.end)
+      node.text = operator
+      node.flags = FLAG_PREFIX
+      node.children.push(this.parseUnary())
+      node.end = this.previousEnd
+      return node
+    }
+    // `<T>x`, the older spelling of `x as T`, which binds as a prefix operator.
+    if (this.at(TOK_LT)) {
+      this.advance()
+      const assertion = this.node(N_AS, start, this.end)
+      assertion.flags = FLAG_ANGLE
+      const type = this.parseType()
+      this.expectTypeArgumentEnd()
+      assertion.children.push(this.parseUnary())
+      assertion.children.push(type)
+      assertion.end = this.previousEnd
+      return assertion
+    }
     if (this.at(TOK_BANG) || this.at(TOK_MINUS) || this.at(TOK_PLUS) || this.at(TOK_TILDE)) {
       const operator = tokenName(this.kind)
       this.advance()
@@ -2366,30 +2564,33 @@ export class Parser {
     return operand
   }
 
-  /** `.f`, `[i]` and `(args)`, applied left to right for as long as they come. */
+  /**
+   * `.f`, `[i]` and `(args)`, applied left to right for as long as they come,
+   * and each of them after `?.`, which is the same node with FLAG_OPTIONAL
+   * for Phase 0 to refuse (NL1049).
+   */
   parseCallOrMember(target: Node, start: i32): Node {
     let node = target
     while (true) {
-      if (this.at(TOK_DOT)) {
+      let flags = 0
+      if (this.at(TOK_QUESTION_DOT)) {
+        flags = FLAG_OPTIONAL
         this.advance()
-        const member = this.node(N_MEMBER, start, this.end)
-        if (this.at(TOK_IDENT) || this.kind >= 0) {
-          member.text = this.at(TOK_IDENT) ? this.value : tokenName(this.kind)
-          this.advance()
+        if (!this.at(TOK_LBRACKET) && !this.at(TOK_LPAREN)) {
+          node = this.parseMemberName(node, start)
+          node.flags = flags
+          continue
         }
-        member.children.push(node)
-        member.end = this.previousEnd
-        node = member
-      } else if (this.at(TOK_LBRACKET)) {
+      }
+      if (this.at(TOK_DOT) && flags === 0) {
         this.advance()
-        const index = this.node(N_INDEX, start, this.end)
-        index.children.push(node)
-        index.children.push(this.parseExpression())
-        this.expect(TOK_RBRACKET)
-        index.end = this.previousEnd
-        node = index
+        node = this.parseMemberName(node, start)
+      } else if (this.at(TOK_LBRACKET)) {
+        node = this.parseElement(node, start)
+        node.flags = flags
       } else if (this.at(TOK_LPAREN)) {
         const call = this.node(N_CALL, start, this.end)
+        call.flags = flags
         call.children.push(node)
         call.children.push(this.parseArguments())
         call.end = this.previousEnd
@@ -2400,17 +2601,44 @@ export class Parser {
     }
   }
 
+  /** The name after a `.` or a `?.`, and the `N_MEMBER` it makes of `receiver`. */
+  parseMemberName(receiver: Node, start: i32): Node {
+    const member = this.node(N_MEMBER, start, this.end)
+    if (this.at(TOK_IDENT) || this.kind >= 0) {
+      member.text = this.at(TOK_IDENT) ? this.value : tokenName(this.kind)
+      this.advance()
+    }
+    member.children.push(receiver)
+    member.end = this.previousEnd
+    return member
+  }
+
+  /** `[i]` after `receiver`, as an `N_INDEX`. */
+  parseElement(receiver: Node, start: i32): Node {
+    this.advance()
+    const index = this.node(N_INDEX, start, this.end)
+    index.children.push(receiver)
+    const outerNoIn = this.allowIn()
+    index.children.push(this.parseExpression())
+    this.noIn = outerNoIn
+    this.expect(TOK_RBRACKET)
+    index.end = this.previousEnd
+    return index
+  }
+
   parseArguments(): Node {
     const list = this.list()
     if (!this.expect(TOK_LPAREN)) {
       return list
     }
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RPAREN) && !this.at(TOK_END)) {
       list.children.push(this.parseExpression())
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RPAREN)
     return this.closeList(list)
   }
@@ -2474,13 +2702,29 @@ export class Parser {
         }
         this.advance()
         const node = this.node(N_PAREN, start, this.end)
-        node.children.push(this.parseExpression())
+        const outerNoIn = this.allowIn()
+        node.children.push(this.parseSequence())
+        this.noIn = outerNoIn
         this.expect(TOK_RPAREN)
         node.end = this.previousEnd
         return node
       }
       case TOK_NEW:
         return this.parseNew(start)
+      case TOK_SLASH:
+      case TOK_SLASH_ASSIGN:
+        return this.parseRegex(start)
+      case TOK_IMPORT: {
+        // `import("./m")`: the keyword as the callee of the call that follows,
+        // for Phase 0 to refuse (NL1002). Nothing else can name it.
+        if (this.peek() !== TOK_LPAREN) {
+          return this.fail(`expected an expression, found \`${tokenName(this.kind)}\``)
+        }
+        const node = this.node(N_IDENT, start, this.end)
+        node.text = "import"
+        this.advance()
+        return node
+      }
       default:
         return this.fail(`expected an expression, found \`${tokenName(this.kind)}\``)
     }
@@ -2614,6 +2858,7 @@ export class Parser {
       node.end = this.previousEnd
       return node
     }
+    const outerNoIn = this.allowIn()
     while (true) {
       node.children.push(this.parseExpression())
       if (this.at(TOK_TEMPLATE_MIDDLE) || this.at(TOK_TEMPLATE_TAIL)) {
@@ -2630,19 +2875,61 @@ export class Parser {
         break
       }
     }
+    this.noIn = outerNoIn
     node.end = this.previousEnd
     return node
   }
 
+  /**
+   * A regular expression literal, where an operand is due and the lexer saw a
+   * `/` or a `/=` (`Lexer.scanRegex`), for Phase 0 to refuse (NL1050).
+   */
+  parseRegex(start: i32): Node {
+    const end = this.lexer.scanRegex(start)
+    // The lexer has moved past the literal, or to the end of its line when it
+    // has no closing `/`, so a token held for lookahead is not the next one.
+    this.hasAhead = false
+    this.end = this.lexer.pos
+    if (end < 0) {
+      this.report("unterminated regular expression literal", start, this.end)
+      const unterminated = this.node(N_ERROR, start, this.end)
+      unterminated.text = "unterminated regular expression literal"
+      this.advance()
+      return unterminated
+    }
+    const node = this.node(N_REGEX, start, end)
+    node.text = this.file.text.substring(start, end)
+    this.advance()
+    return node
+  }
+
+  /**
+   * `[a, b]`. A hole, `[a, , b]`, is an EMPTY element, and `...a` an
+   * N_SPREAD, for the checker to refuse (NL2210, NL2237).
+   */
   parseArrayLiteral(start: i32): Node {
     this.advance()
     const node = this.node(N_ARRAY, start, this.end)
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACKET) && !this.at(TOK_END)) {
-      node.children.push(this.parseExpression())
+      if (this.eat(TOK_COMMA)) {
+        node.children.push(this.empty())
+        continue
+      }
+      if (this.at(TOK_DOT_DOT_DOT)) {
+        const spread = this.node(N_SPREAD, this.start, this.end)
+        this.advance()
+        spread.children.push(this.parseExpression())
+        spread.end = this.previousEnd
+        node.children.push(spread)
+      } else {
+        node.children.push(this.parseExpression())
+      }
       if (!this.eat(TOK_COMMA)) {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACKET)
     node.end = this.previousEnd
     return node
@@ -2651,6 +2938,7 @@ export class Parser {
   parseObjectLiteral(start: i32): Node {
     this.advance()
     const node = this.node(N_OBJECT, start, this.end)
+    const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
       const property = this.node(N_PROPERTY, propertyStart, this.end)
@@ -2675,15 +2963,30 @@ export class Parser {
         break
       }
     }
+    this.noIn = outerNoIn
     this.expect(TOK_RBRACE)
     node.end = this.previousEnd
     return node
   }
 
+  /**
+   * `new C<T>(args)`. The class is a name, and anything else a program writes
+   * there — `new a.B()`, `new classes[0]()` — is read as the member or element
+   * access it is, for the checker to refuse (NL2144).
+   */
   parseNew(start: i32): Node {
     this.advance()
     const node = this.node(N_NEW, start, this.end)
-    node.children.push(this.parseIdentifier())
+    const calleeStart = this.start
+    let callee = this.at(TOK_IDENT) ? this.parseIdentifier() : this.parsePrimary()
+    while (this.at(TOK_DOT) || this.at(TOK_LBRACKET)) {
+      if (this.eat(TOK_DOT)) {
+        callee = this.parseMemberName(callee, calleeStart)
+      } else {
+        callee = this.parseElement(callee, calleeStart)
+      }
+    }
+    node.children.push(callee)
     const typeArguments = this.list()
     if (this.at(TOK_LT)) {
       this.advance()

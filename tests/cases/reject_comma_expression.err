@@ -1,1 +1,1 @@
-expected `)`, found `,`
+Comma expressions are forbidden in Nish (write separate statements)

@@ -137,8 +137,29 @@ export const N_WITH: i32 = 65
 // `outer: body` (NL1046): text: the label; children: the statement it labels.
 export const N_LABELED: i32 = 66
 
+// ---- Refused expressions (WP33 R1) ---------------------------------------------------
+//
+// The expressions that resemble nothing above. Every other forbidden
+// expression is a node that exists: `==`, `!=`, `in`, `instanceof`, `**`,
+// `**=` and the comma operator are an N_BINARY whose text is the operator,
+// `typeof`, `void`, `delete`, `await` and `yield` an N_UNARY whose text is
+// the word, `?.` an N_MEMBER, N_INDEX or N_CALL with FLAG_OPTIONAL, a dynamic
+// `import(...)` an N_CALL whose callee is the IDENT `import` (a keyword, so
+// no program can declare it), a hole in an array literal an EMPTY element,
+// and `new` of something other than a name an N_NEW whose callee is that
+// expression.
+
+// `/x/g` (NL1050): text: the literal as written, flags and all.
+export const N_REGEX: i32 = 67
+// `x as T`, `<T>x` (FLAG_ANGLE) and `x satisfies T` (FLAG_SATISFIES): Phase 0
+// refuses the assertion to `any` or `unknown` (NL1051, NL1052), and pass 1
+// every other one (NL2256). children: the expression, the type.
+export const N_AS: i32 = 68
+// `...a` in an array literal (NL2237): children: the expression spread.
+export const N_SPREAD: i32 = 69
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 67
+export const N_COUNT: i32 = 70
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -168,7 +189,7 @@ export const FLAG_FOREIGN: i32 = 8
 // it is in, and stage0's sentence names all three. Refusing them in the parser
 // is what put these cases in `tests/wordings/parser_refusals.txt`
 // (docs/wp19-stage0-retirement.md R3).
-export const FLAG_OPTIONAL: i32 = 16
+export const FLAG_OPTIONAL: i32 = 16 // and `?.` on N_MEMBER, N_INDEX and N_CALL (NL1049)
 export const FLAG_DEFINITE: i32 = 32
 export const FLAG_STATIC: i32 = 64
 // Bit 7 is the one piece of *order* the checker needs: set when `static` was
@@ -194,11 +215,12 @@ export const FLAG_USING: i32 = 256
 //     tree a later phase walks stays one it knows, and the refusal is a test
 //     of one bit. `var` is a `let` (FLAG_VAR), `for...in` and `for await` are
 //     a `for...of` (FLAG_FOR_IN, FLAG_AWAIT), a top-level `let` is a module
-//     constant without FLAG_CONST, and the member headers above are fields
-//     and methods.
+//     constant without FLAG_CONST, the member headers above are fields
+//     and methods, and `?.` is a member, element or call (FLAG_OPTIONAL). An
+//     operator is the N_BINARY or N_UNARY whose text it is.
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
-//     N_LABELED.
+//     N_LABELED, N_REGEX, N_AS, N_SPREAD.
 //   - A variant that differs only in what one child is keeps the node and
 //     puts the other thing in that child, when the child's own kind is the
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
@@ -208,7 +230,7 @@ export const FLAG_USING: i32 = 256
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
 // shape exists. A checker rule that needs no type is a sweep over the whole
-// module in pass 1 (`refuseForOfHeads`), not a rule in the body check: pass 2
+// module in pass 1 (`refuseUnsupportedForms`), not a rule in the body check: pass 2
 // checks a template's body once per instantiation, so a template nothing
 // instantiates is never checked, and a refusal stated there would let it
 // compile (`tests/cases/reject_for_await_template`). `src/ast-text.ts` prints each flag, so `--emit-ast` and
@@ -221,6 +243,10 @@ export const FLAG_VAR: i32 = 512
 // than `of` (NL1056).
 export const FLAG_AWAIT: i32 = 1024
 export const FLAG_FOR_IN: i32 = 2048
+// `flags` on N_AS: bit 12 is the `<T>x` spelling and bit 13 `satisfies`
+// rather than `as`, each the TypeScript construct NL2256 names.
+export const FLAG_ANGLE: i32 = 4096
+export const FLAG_SATISFIES: i32 = 8192
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -393,6 +419,12 @@ export const nodeName = (kind: i32): string => {
       return "WITH"
     case N_LABELED:
       return "LABELED"
+    case N_REGEX:
+      return "REGEX"
+    case N_AS:
+      return "AS"
+    case N_SPREAD:
+      return "SPREAD"
     default:
       return "?"
   }

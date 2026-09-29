@@ -294,10 +294,10 @@ the compiler says since:
 | Written | First diagnostic | Count | The rule LANGUAGE.md documents |
 | --- | --- | --- | --- |
 | `var x = 1` | `NL1036`, the rule (R1, stage 1) | 1 | `` `var` is forbidden; use `let` or `const` `` |
-| `a == 1` | `NL0001` syntax error: expected `)`, found `==` | 8 | `NL1047` Loose equality is forbidden; use === / !== |
-| `o?.x` | `NL0001` syntax error: expected `;`, found `?.` | 3 | Optional chaining `?.` is forbidden … (narrow with `!== null` instead) |
+| `a == 1` | `NL1047`, the rule (R1, stage 2) | 1 | `NL1047` Loose equality is forbidden; use === / !== |
+| `o?.x` | `NL1049`, the rule (R1, stage 2) | 1 | Optional chaining `?.` is forbidden … (narrow with `!== null` instead) |
 | `try { } catch (e) { }` | `NL1033`, the rule (R1, stage 1) | 1 | `` `try`/`catch`/`finally` is forbidden … use `Result<T, E>` `` |
-| `typeof 1` | `NL0001` syntax error: expected `;`, found `NUMBER` | 1 | `` `typeof` is forbidden in Nish (no runtime type tags) `` |
+| `typeof 1` | `NL1034`, the rule (R1, stage 2) | 1 | `` `typeof` is forbidden in Nish (no runtime type tags) `` |
 | `async (): void => {}` | `NL0001` syntax error: expected `;`, found `:` | 3 | `` `async` functions are forbidden in Nish … `` |
 | `for (const k in a)` | `NL1056`, the rule (R1, stage 1) | 1 | `` `for...in` is forbidden … use `for...of` ``, a code of its own since R1 ([Rejected statements](LANGUAGE.md#rejected-statements)) |
 | `throw 1` | `NL1001`, the rule | 1 | reached |

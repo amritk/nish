@@ -35,6 +35,13 @@
 # resembles and refused by the phase that owns its rule, the shape
 # `src/nodes.ts` writes down for every construct that comes off this list.
 #
+# And again, from 39 to 33, when the second stage did the same for the
+# expressions (`nl2144_new_non_identifier`, `nl2210_array_hole`,
+# `nl2237_array_spread`, `nl2253_field_compound_operator`,
+# `nl2254_unsupported_binary`, `nl2256_satisfies_expression`); the NL1xxx
+# expression rules it reached have no case here, because their programs are
+# `reject_*` cases in `tests/self/parser-refusals.txt`.
+#
 # One warning from that change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
@@ -53,14 +60,12 @@ nl2128_export_list
 nl2129_export_default_value
 nl2131_export_default_class
 nl2137_implements_expression
-nl2144_new_non_identifier
 nl2189_constructor_return_type
 nl2191_destructured_constant
 nl2192_destructured_parameter
 nl2193_destructuring_local
 nl2203_anonymous_default_function
 nl2204_function_without_body
-nl2210_array_hole
 nl2212_template_specifier
 nl2213_class_index_signature
 nl2214_interface_index_signature
@@ -70,12 +75,8 @@ nl2226_export_import_equals
 nl2233_optional_parameter
 nl2234_parameter_property
 nl2235_rest_parameter
-nl2237_array_spread
 nl2243_type_only_import
-nl2253_field_compound_operator
-nl2254_unsupported_binary
 nl2255_class_static_block
-nl2256_satisfies_expression
 nl2257_interface_construct_signature
 nl2258_object_literal_method
 nl2274_two_names_one_declaration

@@ -1,1 +1,1 @@
-expected `;`, found `NUMBER`
+`await` is forbidden in Nish (no event loop or promises)

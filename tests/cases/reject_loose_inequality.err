@@ -1,1 +1,1 @@
-expected `;`, found `!=`
+Loose equality is forbidden; use === / !==

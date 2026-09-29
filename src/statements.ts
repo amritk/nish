@@ -18,6 +18,7 @@ import {
   checkExpression,
   clearNarrowingsAssignedIn,
   narrow,
+  refuseExpressionForm,
   resolveMaybeAnnotation,
   unproven,
   WANT_MAYBE,
@@ -377,7 +378,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // `for await` and a head that is not a declaration never get here: pass 1
-  // refuses them (`refuseForOfHeads`), so the head is a VAR.
+  // refuses them (`refuseUnsupportedForms`), so the head is a VAR.
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   // The head, before the iterable, in stage0's order (stage0's `src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
@@ -432,14 +433,16 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 }
 
 /**
- * WP33 R1: the two `for...of` heads the parser reads for the checker to
- * refuse, over the whole module. It is a sweep in pass 1 rather than a rule in
- * `checkForOf` because neither needs a type, and a body pass 2 checks is not
- * every body: a template nothing instantiates is never checked, and a loop in
- * one would compile. There is no event loop to wait on, so `for await` is
- * refused at the modifier, whatever it walks.
+ * WP33 R1: the forms the parser reads for the checker to refuse, over the
+ * whole module in source order — the two `for...of` heads here, and the
+ * expressions `refuseExpressionForm` names. It is a sweep in pass 1 rather
+ * than a rule in `checkForOf` or `checkExpression` because none needs a type,
+ * and a body pass 2 checks is not every body: a template nothing instantiates
+ * is never checked, and a loop in one would compile. There is no event loop
+ * to wait on, so `for await` is refused at the modifier, whatever it walks.
  */
-export const refuseForOfHeads = (ctx: CheckContext, node: Node): void => {
+export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
+  refuseExpressionForm(ctx, node)
   if (node.kind === N_FOR_OF) {
     if ((node.flags & FLAG_AWAIT) !== 0) {
       ctx.error(node, "`for await` is not supported")
@@ -451,7 +454,7 @@ export const refuseForOfHeads = (ctx: CheckContext, node: Node): void => {
     }
   }
   for (const child of node.children) {
-    refuseForOfHeads(ctx, child)
+    refuseUnsupportedForms(ctx, child)
   }
 }
 

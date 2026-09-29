@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+`delete` is forbidden in Nish (object layout is fixed)

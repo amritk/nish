@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+Unsupported expression in Phase 1: SatisfiesExpression
