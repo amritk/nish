@@ -5,9 +5,11 @@
 //
 //   1. **Load.** Parse the entry file and, transitively, everything it
 //      imports. Each file is parsed exactly once, keyed by its resolved path,
-//      so an import cycle simply terminates. Signatures are collected as soon
-//      as a module is parsed (pass 1), which is what makes cycles legal: no
-//      body is checked until every module's exports are known.
+//      so an import cycle simply terminates. Every module declares its names
+//      as it is parsed (pass 1a); once the whole graph is read, each binds the
+//      enums it imports and then collects its signatures (pass 1). That is
+//      what makes cycles legal: no body is checked until every module's
+//      exports are known, and no signature until every module's enums are.
 //   2. **Check.** Bind each import to the exporter's signature (pass 1b),
 //      close the reachable-struct set once every module is bound, reject the
 //      symbol clashes that would fail at link time, then check bodies (pass 2).
@@ -49,7 +51,7 @@ import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
-import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
 import { emitProgram } from "./emit"
 import { StringMap, StringSet } from "./map"
 import { isNishSpecifier } from "./nish-modules"
@@ -66,7 +68,14 @@ import {
 } from "./packages"
 import { ParentTable } from "./parents"
 import { Parser } from "./parser"
-import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry, StructTemplateInfo } from "./program"
+import {
+  CheckedProgram,
+  EnumInfo,
+  FunctionSig,
+  STRUCT_CLASS,
+  StructRegistry,
+  StructTemplateInfo,
+} from "./program"
 import {
   basename,
   basenameWithout,
@@ -201,6 +210,10 @@ export class ModuleUnit {
   nodeCount: i32
   /** The entry module; the only one allowed to declare `export function main`. */
   isEntry: boolean
+  /** Phase 0 refused it: nothing after that ran on it, and nothing it imports was loaded. */
+  refused: boolean
+  /** Pass 1a or pass 1 reported something here, so what it imports goes unreported (`settleLoad`). */
+  signaturesFailed: boolean
   /**
    * The package this module belongs to (WP21 S1, `src/packages.ts`); `""` for
    * the root package, which is where every module of a single-package program
@@ -214,6 +227,12 @@ export class ModuleUnit {
   parents: ParentTable
   /** Specifier text -> index into `Compilation.modules`, for this importer. */
   resolved: StringMap
+  /**
+   * The identity and the name of every module this one asked `discover` for,
+   * in import order, whether or not it parsed: the edges `settleLoad` walks.
+   */
+  importedIdentities: string[]
+  importedNames: string[]
 
   constructor(
     path: string,
@@ -235,6 +254,10 @@ export class ModuleUnit {
     this.checker = checker
     this.parents = new ParentTable(file, nodeCount)
     this.resolved = new StringMap()
+    this.refused = false
+    this.signaturesFailed = false
+    this.importedIdentities = []
+    this.importedNames = []
   }
 }
 
@@ -399,13 +422,148 @@ export class Compilation {
 
   /**
    * Load `path` and everything it imports. Answers false when a file could not
-   * be read or a module failed to parse. A module's own errors are in the
-   * sink; a *root* that could not be opened is in `unreadableRoot`, because it
-   * has no span and no importer to report it against.
+   * be read or a module failed to parse or Phase 0. A module's own errors are
+   * in the sink; a *root* that could not be opened is in `unreadableRoot`,
+   * because it has no span and no importer to report it against.
    *
    * Call it once per root: the second and later ones are modules nothing
    * imports, and a path already loaded answers true without reparsing.
+   *
+   * Three steps, each over every module the root brings in before the next
+   * starts. `discover` parses the import graph, sweeps each module with Phase 0
+   * and declares its names (pass 1a); `bindTypeImports` binds the enums each
+   * one imports; then pass 1 collects the signatures. Pass 1 used to run as
+   * each module was parsed, before anything it imports had been read, so a
+   * name it imported was resolved provisionally as a class — which an enum,
+   * having no layout, cannot stand in for. A module an earlier root loaded is
+   * already through all three, so a later root's modules may bind to it.
    */
+  load(path: string, name: string, packageOverride: string): boolean {
+    const first = this.modules.length
+    const firstDiagnostic = this.sink.count()
+    const filesBefore = this.sink.fileOrder.size()
+    const discovered = this.discover(path, name, packageOverride)
+    if (this.modules.length === first) {
+      return discovered // already loaded, unreadable, or it did not parse
+    }
+    let i = first
+    while (i < this.modules.length) {
+      const unit = this.modules[i]
+      if (!unit.refused) {
+        // Beside `imports`, as `check` builds them for pass 1b, with `null`
+        // for a builtin and for a specifier that did not reach a loaded module.
+        const targets: (CheckedProgram | null)[] = []
+        for (const imp of unit.checker.program.imports) {
+          const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1)
+          targets.push(index < 0 ? null : this.modules[index].checker.program)
+        }
+        unit.checker.bindTypeImports(targets)
+      }
+      i = i + 1
+    }
+    i = first
+    while (i < this.modules.length) {
+      const unit = this.modules[i]
+      if (!unit.refused) {
+        const before = this.sink.count()
+        unit.checker.collectSignatures() // pass 1
+        if (this.sink.count() > before) {
+          unit.signaturesFailed = true
+        }
+      }
+      i = i + 1
+    }
+    // A load that reported nothing has nothing to drop or reorder, and every
+    // parse or Phase 0 failure reports, so `discovered` is already the answer.
+    if (this.sink.count() === firstDiagnostic) {
+      return discovered
+    }
+    return this.settleLoad(first, firstDiagnostic, filesBefore)
+  }
+
+  /**
+   * Make the report the one a load that ran pass 1 module by module made.
+   *
+   * That load did not read what a module imports once the module's own
+   * signatures had failed: a duplicate function in the entry hid an imported
+   * module's refusals (`tests/link/main_in_import`). `discover` has to read
+   * them before any signature exists, so the modules that load would never
+   * have reached are found again by walking the import edges from the root in
+   * the order it did, and their diagnostics are dropped. The walk also gives
+   * the order that load mentioned files in, which is the report's order
+   * (`DiagnosticSink.compare`), so the files first mentioned during this call
+   * are ranked by it rather than by when each was mentioned here. Answers
+   * whether a module it would have loaded failed to parse or Phase 0.
+   */
+  settleLoad(first: i32, firstDiagnostic: i32, filesBefore: i32): boolean {
+    const seen: boolean[] = []
+    let i = 0
+    while (i < this.modules.length) {
+      seen.push(i < first)
+      i = i + 1
+    }
+    const reached: string[] = []
+    const loaded = this.reach(first, seen, reached)
+    const reachedNames = new StringSet()
+    for (const reachedName of reached) {
+      reachedNames.add(reachedName)
+    }
+    const kept: Diagnostic[] = []
+    i = 0
+    while (i < this.sink.items.length) {
+      const item = this.sink.items[i]
+      if (i < firstDiagnostic || reachedNames.has(item.source.path)) {
+        kept.push(item)
+      }
+      i = i + 1
+    }
+    this.sink.items = kept
+    const order = new StringMap()
+    i = 0
+    while (i < filesBefore) {
+      order.set(this.sink.fileOrder.keyAt(i), i)
+      i = i + 1
+    }
+    for (const reachedName of reached) {
+      if (this.sink.fileOrder.has(reachedName) && !order.has(reachedName)) {
+        order.set(reachedName, order.size())
+      }
+    }
+    this.sink.fileOrder = order
+    return loaded
+  }
+
+  /**
+   * One module of `settleLoad`'s walk, and then what it imports, depth first:
+   * `false` when a module the walk reaches did not parse or was refused by
+   * Phase 0. A module whose signatures failed is reached, and the walk stops
+   * there, as the load it reproduces did (`dumpOnly` excepted, which read on).
+   */
+  reach(index: i32, seen: boolean[], reached: string[]): boolean {
+    const unit = this.modules[index]
+    seen[index] = true
+    reached.push(unit.name)
+    if (unit.refused) {
+      return false
+    }
+    if (unit.signaturesFailed && !this.dumpOnly) {
+      return true
+    }
+    let loaded = true
+    let k = 0
+    while (k < unit.importedIdentities.length) {
+      const target = this.byPath.get(unit.importedIdentities[k], -1)
+      if (target < 0) {
+        reached.push(unit.importedNames[k]) // it did not parse, and its errors are the report
+        loaded = false
+      } else if (target < seen.length && !seen[target] && !this.reach(target, seen, reached)) {
+        loaded = false
+      }
+      k = k + 1
+    }
+    return loaded
+  }
+
   /**
    * Read, parse and register one module. `name` is what the module is called
    * in its IR header, its diagnostics and its output path — the path itself
@@ -419,7 +577,7 @@ export class Compilation {
    * one program would compile installed and collide in a checkout, which is
    * the clash `packages.ts` exists to prevent.
    */
-  load(path: string, name: string, packageOverride: string): boolean {
+  discover(path: string, name: string, packageOverride: string): boolean {
     const identity = this.identityOf(path)
     const at = this.byPath.get(identity, -1)
     if (at >= 0) {
@@ -480,7 +638,7 @@ export class Compilation {
     this.byPath.set(identity, this.modules.length)
     this.modules.push(unit)
 
-    // Phase 0 before pass 1, so what is forbidden by design is refused before
+    // Phase 0 before pass 1a, so what is forbidden by design is refused before
     // the checker can report it as merely unsupported. The count around it is
     // what `--emit-ast` reads: stage0 answers that flag from the parsed and
     // *validated* modules and never checks anything, so a Phase 0 refusal
@@ -496,20 +654,24 @@ export class Compilation {
       // driver reports the one diagnostic (stage0's `src/validator.ts`, `fail`). Going
       // on meant the checker refused `any` a second time, from the annotation
       // resolver, for one `any` in the source (WP19 §A3).
+      unit.refused = true
       return false
     }
-    const beforeSignatures = this.sink.count()
-    checker.collectSignatures() // pass 1, which also validates the import syntax
-    // Pass 1 refused something in this module. Its specifiers are still
+    const beforeNames = this.sink.count()
+    checker.declareNames() // pass 1a, which also validates the import syntax
+    // Pass 1a refused something in this module. Its specifiers are still
     // *resolved* — a missing module is reported either way — but the modules
     // that do exist are not loaded, so nothing they would have said is
     // reported: stage0 stops at what this module got wrong, and a duplicate
     // function in the entry hides an imported module's own refusals
     // (`tests/link/main_in_import` in f64 mode, `tests/link/missing_module`
-    // for the half that still reports). `--emit-ast` is exempt: it prints the
-    // tree of every module it managed to read, and stage0 reaches that dump
-    // before it looks at anything pass 1 recorded.
-    const signaturesFailed = this.sink.count() > beforeSignatures && !this.dumpOnly
+    // for the half that still reports). A refusal in pass 1 proper is found
+    // only once everything is loaded, and `settleLoad` drops what this would
+    // have hidden. `--emit-ast` is exempt: it prints the tree of every module
+    // it managed to read, and stage0 reaches that dump before it looks at
+    // anything pass 1 recorded.
+    unit.signaturesFailed = this.sink.count() > beforeNames
+    const signaturesFailed = unit.signaturesFailed && !this.dumpOnly
     const dir = dirname(path)
     let ok = true
     for (const imp of checker.program.imports) {
@@ -544,10 +706,13 @@ export class Compilation {
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
-      if (!this.load(target, found.name, found.packageName)) {
+      const targetIdentity = this.identityOf(target)
+      unit.importedIdentities.push(targetIdentity)
+      unit.importedNames.push(found.name)
+      if (!this.discover(target, found.name, found.packageName)) {
         ok = false
       } else {
-        unit.resolved.set(imp.specifier, this.byPath.get(this.identityOf(target), -1))
+        unit.resolved.set(imp.specifier, this.byPath.get(targetIdentity, -1))
       }
     }
     return ok
@@ -821,9 +986,9 @@ export class Compilation {
       unit.checker.bindImports(targets)
     }
     // WP18 G7: `Box<i32>` in a signature annotation, where `Box` is imported.
-    // Pass 1 could only write the request down — it runs as each module is
-    // parsed, long before any import is bound — and it is made here, once every
-    // module can answer one and can resolve its own imports while doing so.
+    // Pass 1 could only write the request down — it runs before any import but
+    // an enum is bound — and it is made here, once every module can answer one
+    // and can resolve its own imports while doing so.
     for (const unit of this.modules) {
       unit.checker.makeDeferredInstantiations()
     }
@@ -897,6 +1062,7 @@ export class Compilation {
     proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     this.reportArenaLoops()
     this.checkParallel()
+    this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -904,6 +1070,24 @@ export class Compilation {
       this.reportPortability()
     }
     return true
+  }
+
+  /** Every module's enum table, keyed for the emitter now that no name is resolved (`CheckedProgram.keyEnumsBySymbol`). */
+  keyEnumsBySymbol(): void {
+    const every: EnumInfo[] = []
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.enumList) {
+        if (info.origin === unit.source) {
+          every.push(info)
+        }
+      }
+    }
+    if (every.length === 0) {
+      return
+    }
+    for (const unit of this.modules) {
+      unit.checker.program.keyEnumsBySymbol(every)
+    }
   }
 
   /**
@@ -1541,7 +1725,7 @@ const declarationNameOf = (program: CheckedProgram, name: string): Node | null =
   if (alias !== null) {
     return alias.decl.children[0]
   }
-  const declared = program.enumNamed(name)
+  const declared = program.ownEnum(name)
   return declared === null ? null : declared.decl.children[0]
 }
 

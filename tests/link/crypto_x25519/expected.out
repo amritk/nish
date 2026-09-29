@@ -1,0 +1,30 @@
+PASS  X25519_SIZE is 32 bytes
+PASS  §5.2 first vector
+PASS  §5.2 second vector
+PASS  §5.2 iterated, after 1 iteration
+PASS  §5.2 iterated, after 1,000 iterations
+PASS  §6.1 Alice's public key
+PASS  §6.1 Bob's public key
+PASS  §6.1 Alice's shared secret
+PASS  §6.1 Bob's shared secret
+PASS  the scalar is clamped on a copy, not in place
+PASS  x25519: a 31-byte scalar answers null
+PASS  x25519: a 31-byte u answers null
+PASS  x25519: a 33-byte scalar answers null
+PASS  x25519: a 33-byte u answers null
+PASS  x25519: an empty scalar answers null
+PASS  x25519Base: a 31-byte scalar answers null
+PASS  x25519Base: a 33-byte scalar answers null
+PASS  x25519Base is x25519 with u = 9
+PASS  a u with its top bit set gives the same answer as with it clear
+PASS  u = 0 answers all zeros, not null
+PASS  u = p decodes as 0, so it answers all zeros
+PASS  u = p + 1 decodes as 1
+PASS  u = p + 9 decodes as 9
+PASS  the answer for u = p + 1 is below p
+PASS  the answer for u = p + 9 is below p
+PASS  an all-ones u (top bit masked, then reduced) answers below p
+PASS  isCanonical itself refuses p
+PASS  isCanonical itself accepts p - 1
+PASS  u = p with its top bit set still decodes as 0
+x25519: 29 passed, 0 failed, 0 skipped
