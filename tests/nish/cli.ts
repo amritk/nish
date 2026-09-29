@@ -88,6 +88,7 @@ const advertisedFlags = (): string[] => [
   "--emit-napi-async",
   "--target",
   "--profile",
+  "--warn-portability",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -272,6 +273,8 @@ const writeFixtures = (): void => {
   // WP15 §8: a `new Array<T>(n)` whose length is not a literal cannot be an
   // alloca, so this loop bumps one out of the arena every pass and nothing keeps
   // it past the iteration — which the compiler says, on a program that compiles.
+  // The same array is zero-filled here and a row of holes in TypeScript, so
+  // under `--warn-portability` it is a WP33 portability warning as well.
   writeFileSync(
     `${WORK}/${FIXTURE_WARN}`,
     [
@@ -459,6 +462,32 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is not `error`", cliField(objects[0], "severity"), "performance");
   t.eqBool("and whose code is a code", isDiagnosticCode(cliField(objects[0], "code")), true);
+};
+
+/**
+ * The WP33 portability warning, which is off unless asked for: under
+ * `--warn-portability --json` it is one more object, after the performance
+ * warning, with a `severity` of its own — and the program still compiles.
+ */
+const checkPortabilityObjects = (t: Suite, cli: Cli): void => {
+  const quiet = cli.plain("port_off", [`${WORK}/${FIXTURE_WARN}`, "--json", "-o", `${WORK}/port-off.ll`]);
+  t.eqI32("without --warn-portability there is no portability object", toI32(cliObjectLines(quiet.stdout).length), 1);
+  const run = cli.plain("port_json", [
+    `${WORK}/${FIXTURE_WARN}`,
+    "--warn-portability",
+    "--json",
+    "-o",
+    `${WORK}/port.ll`,
+  ]);
+  if (!t.eqI32("a portability warning does not refuse the program", run.status, 0)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32("and is an object on stdout after the performance one", toI32(objects.length), 2)) {
+    return;
+  }
+  t.eqStr("whose severity is `portability`", cliField(objects[1], "severity"), "portability");
+  t.eqStr("and whose code is the zero-fill row's", cliField(objects[1], "code"), "NL8005");
 };
 
 /**
@@ -865,6 +894,7 @@ export const main = (): number => {
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
   checkWarningObjects(t, cli);
+  checkPortabilityObjects(t, cli);
   checkDumps(t, cli);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);

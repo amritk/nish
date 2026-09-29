@@ -51,11 +51,13 @@ exclusive:
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
   the same rule next release. The prose may improve; the code may not.
-- **`severity`** is `"error"` or `"performance"`. A performance warning never
-  changes the exit code — it is advice, not a rejection.
+- **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
+  of either kind never changes the exit code — it is advice, not a rejection.
+  Portability warnings, the sites where the program's TypeScript reading
+  answers differently, print only under `--warn-portability`.
 - **Bands**: `NL1xxx` the Phase 0 forbidden-syntax sweep, `NL2xxx` the checker,
-  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL9xxx`
-  performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
+  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL8xxx`
+  portability, `NL9xxx` performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
   `NL0000` a diagnostic with no rule yet.
 - **Exit codes**: `0` ok, `1` the program was rejected, `2` usage, `3` the C
   toolchain is unusable, `70` an internal compiler error — that last one is a
@@ -137,7 +139,7 @@ rejects. This table is the highest-value part of the page.
 | `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
-| `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
+| `export type T = …` | `Type aliases cannot be exported` | declare the alias in each module that needs it (an `export enum` is fine) |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
@@ -996,15 +998,19 @@ export const main = (): i32 => {
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
   no bitwise, so **bit flags stay `i32` module constants**.
-- **Neither can be exported.** Both are module-local; declare them in every
-  module that needs them. A class or interface is what crosses a module
-  boundary.
+- **An enum can be exported; an alias cannot, yet.** `export enum Kind` is
+  imported like a function, `import { Kind } from "./kinds"` (renamed with
+  `as` if you like), and in the importer it *is* the exporter's `Kind`: the
+  members fold to the exporter's integers and a `Kind` value crosses a call
+  as itself. A `Kind` a second module declares for itself is a different
+  type, however alike the two are. A `type` alias is still module-local:
+  declare it in every module that needs it.
 - Both are top-level only.
 
 ### Modules
 
-- `export` goes on `const` (function or constant), `class`, and `interface`
-  declarations. No `export default`, no `export { … }`, no `export *`.
+- `export` goes on `const` (function or constant), `class`, `interface` and
+  `enum` declarations. No `export default`, no `export { … }`, no `export *`.
 - The only import form is a **named import**:
   `import { square, cube as pow3 } from "./math"`. `.ts` is optional. Default
   imports, namespace imports, side-effect imports and type-only imports are all
@@ -1025,8 +1031,8 @@ export const main = (): i32 => {
   `"engines": {"nish": ">=X.Y.Z"}` is above this compiler `` needs a newer
   compiler ``, and a `package.json` that is not JSON names its line and
   column — each with its own `--json` code (`NL3017`–`NL3021`).
-- Functions may be renamed on import; classes and interfaces may not — the type
-  name is part of the ABI.
+- Functions and enums may be renamed on import; classes and interfaces may
+  not — the type name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.
 - **A function name is unique across the whole program**, exported or not.
 - An `export`ed function is an external C-ABI symbol; every other function gets
