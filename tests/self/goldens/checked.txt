@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 723 programs, 51177 dump lines.
+# 726 programs, 51209 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37209,6 +37209,30 @@ function startingWith<i32>(n: i32, first: i32): i32[] -> @startingWith$i32 [inst
   calls: nish_panic_index
   stackSites=0 stackLocals=0
   local 15:9 out: i32[] (const)
+program tests/cases/port_rec_alias_copy.ts
+module tests/cases/port_rec_alias_copy.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=3
+  local 10:9 ps: Rec[] (const)
+  local 11:9 p: Rec (const)
+  local 13:9 qs: Rec[] (const)
+program tests/cases/port_rec_alias_store.ts
+module tests/cases/port_rec_alias_store.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=4 stackLocals=2
+  local 10:9 ps: Rec[] (const)
+  local 13:9 r: Rec (const)
+  local 14:9 qs: Rec[] (const)
 program tests/cases/port_rec_literal_twice.ts
 module tests/cases/port_rec_literal_twice.ts (entry)
 struct Point (interface) size=8 align=4
@@ -37223,6 +37247,17 @@ function main(): i32 -> @nish_main [exported entry]
   local 12:9 ps: Point[] (const)
   local 16:9 o: Point (const)
   local 17:7 qs: Point[] (let)
+program tests/cases/port_rec_pop_ref_quiet.ts
+module tests/cases/port_rec_pop_ref_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=4 stackLocals=1
+  local 10:9 ps: Rec[] (const)
+  local 13:9 r: Rec (const)
 program tests/cases/port_rec_push_never_written_quiet.ts
 module tests/cases/port_rec_push_never_written_quiet.ts (entry)
 struct Point (interface) size=8 align=4
