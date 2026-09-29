@@ -19,10 +19,18 @@
 
 import { isBuiltinFunction } from "./builtins"
 import { Emitter } from "./emit"
-import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit-strings"
+import {
+  emitConsoleError,
+  emitConsoleLog,
+  emitFromCharCode,
+  emitSliceCheck,
+  stringifyCallee,
+} from "./emit-strings"
+import { emitIndex } from "./emit-arrays"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
+import { isNetExport, netSignature } from "./nish-modules"
 import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
@@ -775,6 +783,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const fd = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
   }
+  if (isNetExport(name)) {
+    return emitNetCall(emitter, expr, name)
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
   }
@@ -907,6 +918,10 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_read_signal")
     return out
   }
+  if (isNetExport(name)) {
+    out.push(netSymbol(name))
+    return out
+  }
   if (name === "write" || name === "writeError") {
     out.push("nish_write")
     return out
@@ -922,6 +937,88 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   return out
+}
+
+// ---- WP34 N5: `nish:net` -------------------------------------------------------------------
+
+/** The runtime-net.c symbol a `nish:net` function lowers to. */
+const netSymbol = (name: string): string => {
+  if (name === "netAddress") {
+    return "nish_net_address"
+  }
+  if (name === "netLocalPort") {
+    return "nish_net_local_port"
+  }
+  if (name === "tcpListen") {
+    return "nish_tcp_listen"
+  }
+  if (name === "tcpAccept") {
+    return "nish_tcp_accept"
+  }
+  if (name === "netRead") {
+    return "nish_net_read"
+  }
+  if (name === "netWrite") {
+    return "nish_net_write"
+  }
+  if (name === "netShutdown") {
+    return "nish_net_shutdown"
+  }
+  return "nish_net_close"
+}
+
+/** Whether a `nish:net` function takes a byte range `(buf, off, len)`, which the call range-checks. */
+export const isNetRangeCall = (name: string): boolean => name === "netRead" || name === "netWrite"
+
+/** The letters of `netSignature` the emitter tells apart; `w` and `r` are both a header. */
+const CHAR_I: i32 = 105
+const CHAR_S: i32 = 115
+
+/**
+ * One call into runtime-net.c, its arguments emitted left to right as every
+ * call's are and passed as `netSignature` spells them: an `i32` as itself, a
+ * string as its `i8*` and a `u8[]` as its header, whose `len` and `data` the
+ * runtime reads. The answer is the runtime's `i32` in either number mode.
+ *
+ * `netRead` and `netWrite` take the range `[off, off + len)` of their buffer,
+ * checked here the way `dst.set(src, at)` checks the range it writes, through
+ * the same panic and with the same words: `0 <= off <= off + len <=
+ * buf.length`. Both offsets are `i32`, so their sum cannot wrap an `i64`, and
+ * the unsigned compares refuse a negative one. The buffer's length is read
+ * after every argument is evaluated, as JavaScript reads it, and
+ * `--unchecked-indexing` drops the check with the rest.
+ */
+const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
+  const fn = emitter.fn
+  const params = netSignature(name)
+  const args = expr.children[1].children
+  const range = isNetRangeCall(name)
+  const values: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    // `off` and `len` go to the runtime as `i64`s, widened as an index is.
+    values.push(range && i >= 2 ? emitIndex(emitter, args[i]) : emitter.emitExpression(args[i]))
+  }
+  if (range && !emitter.opts.uncheckedIndexing) {
+    const end = fn.emitValue(`add i64 ${values[2]}, ${values[3]}`)
+    const field = fn.emitValue(
+      `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[1]}, i64 0, i32 0`
+    )
+    const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
+    emitSliceCheck(emitter, values[2], end, size, true, "net")
+  }
+  const parts: string[] = []
+  for (let i = 0; i < params.length; i++) {
+    const param = params.charCodeAt(i)
+    if (param === CHAR_S) {
+      parts.push(`i8* ${values[i]}`)
+    } else if (param === CHAR_I) {
+      parts.push(`${range && i >= 2 ? "i64" : "i32"} ${values[i]}`)
+    } else {
+      emitter.declareType(ARRAY_TYPE)
+      parts.push(`${ARRAY_STRUCT}* ${values[i]}`)
+    }
+  }
+  return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)
 }
 
 // ---- Namespace properties -----------------------------------------------------------------

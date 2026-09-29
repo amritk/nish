@@ -188,6 +188,9 @@ cases/mem_loop_scope_threads added after R6: no rewriter to freeze it with
 cases/neg_literal_i64_min added after R6: no rewriter to freeze it with
 cases/neg_literal_int_min_hex added after R6: no rewriter to freeze it with
 cases/neg_literal_unsigned added after R6: no rewriter to freeze it with
+cases/net_tcp_calls added after R6: no rewriter to freeze it with
+cases/net_tcp_echo added after R6: no rewriter to freeze it with
+cases/net_tcp_import added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with

@@ -41,6 +41,7 @@ import {
   checksRangesInPrologue,
   identifierBuiltinCallees,
   identifierBuiltinCalleesNamed,
+  isNetRangeCall,
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
@@ -64,7 +65,8 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isPushCall,
-  builtinWrittenArgument,
+  builtinNameOf,
+  builtinWrittenArguments,
   isStringMethodCall,
   isTemplateExpression,
   rangedStoreOf,
@@ -840,10 +842,13 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE)
     }
-    // WP34 N3: `crypto.getRandomValues(p)` writes every element of `p` and
+    // WP34 N3 and N5: `crypto.getRandomValues(p)` writes every element of
+    // `p`, and `netRead(fd, p, off, len)` the range it reads into, and each
     // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
-    if (builtinWrittenArgument(program, owner) !== null) {
-      return use(USE_WRITE)
+    for (const written of builtinWrittenArguments(program, owner)) {
+      if (written === node) {
+        return use(USE_WRITE)
+      }
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
     // nothing — the elements are numbers, and the copy is a `memmove` whose
@@ -1312,10 +1317,7 @@ class FactCollector {
       this.addCallees(builtinCallees(program, table, node))
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
-      const written = builtinWrittenArgument(program, node)
-      if (written !== null) {
-        this.noteArrayWrite(node, written)
-      }
+      this.noteWrittenArguments(node)
       return
     }
     if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {
@@ -1651,6 +1653,13 @@ class FactCollector {
     }
   }
 
+  /** Every array a builtin call writes the elements of (`builtinWrittenArguments`), each a write of its own. */
+  noteWrittenArguments(call: Node): void {
+    for (const written of builtinWrittenArguments(this.unit.program, call)) {
+      this.noteArrayWrite(call, written)
+    }
+  }
+
   /** WP7: `toI32`, `parseInt`, `readFileSync` and the rest, called by plain identifier. */
   collectIdentifierBuiltinFacts(node: Node): void {
     if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT) {
@@ -1671,9 +1680,17 @@ class FactCollector {
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
       )
-      return
+    } else {
+      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node))
     }
-    this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node))
+    // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
+    // are handed, and `netRead` and `netWrite` range-check theirs through the
+    // slice panic unless `--unchecked-indexing` dropped the check, which is a
+    // `noreturn` callee like `set`'s.
+    this.noteWrittenArguments(node)
+    if (isNetRangeCall(builtinNameOf(this.unit.program, node)) && !this.opts.uncheckedIndexing) {
+      this.facts.callees.add("nish_panic_slice")
+    }
   }
 }
 

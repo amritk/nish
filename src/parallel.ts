@@ -49,7 +49,8 @@ import { isScalarArgument } from "./escape"
 import {
   isArrayWriteMethod,
   isAssignmentOperator,
-  builtinWrittenArgument,
+  builtinNameOf,
+  builtinWrittenArguments,
   isTemplateExpression,
   unwrapParens,
 } from "./emit-util"
@@ -1177,10 +1178,20 @@ const isPrivateSlot = (program: CheckedProgram, target: Node, uses: VariableUses
   return (t.kind === N_INDEX || t.kind === N_MEMBER) && uses.isPrivate(namedLocal(program, t.children[0]))
 }
 
+/** Whether a builtin call writes the elements of an array that is not a private local (`builtinWrittenArguments`). */
+const writesSharedArgument = (program: CheckedProgram, call: Node, uses: VariableUses): boolean => {
+  for (const written of builtinWrittenArguments(program, call)) {
+    if (!uses.isPrivate(namedLocal(program, written))) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * The refusal for a call in the region, or "": `Arena`, `push`, `pop`, `set` or `fill` on
- * anything but a private local, a task of another scope, or a function that
- * writes through a pointer it is handed.
+ * anything but a private local, a builtin that fills such an array, a task of
+ * another scope, or a function that writes through a pointer it is handed.
  */
 const regionCallMessage = (
   program: CheckedProgram,
@@ -1199,8 +1210,7 @@ const regionCallMessage = (
       return regionReadMessage(state, receiver.text)
     }
     // WP34 N3: `crypto.getRandomValues(a)` writes `a`'s elements as `fill` does.
-    const written = builtinWrittenArgument(program, node)
-    if (written !== null && !uses.isPrivate(namedLocal(program, written))) {
+    if (writesSharedArgument(program, node, uses)) {
       return regionWriteMessage(state, "`crypto.getRandomValues`")
     }
     // WP34 N2: `set` and `fill` write the receiver's elements as surely as a
@@ -1211,6 +1221,10 @@ const regionCallMessage = (
         return regionWriteMessage(state, `\`${callee.text}\``)
       }
     }
+  } else if (callee.kind === N_IDENT && writesSharedArgument(program, node, uses)) {
+    // WP34 N5: `netRead(fd, a, off, len)`, `tcpAccept(fd, a)` and
+    // `netAddress(a, host, port)` write `a`'s elements as `fill` does.
+    return regionWriteMessage(state, `\`${builtinNameOf(program, node)}\``)
   }
   const sig = program.nodeCallees[node.id]
   if (sig === null) {

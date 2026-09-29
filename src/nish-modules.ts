@@ -61,11 +61,12 @@ export const isNishSpecifier = (specifier: string): boolean => specifier.startsW
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
-  specifier === `${BUILTIN_SCHEME}io`
+  specifier === `${BUILTIN_SCHEME}io` ||
+  specifier === `${BUILTIN_SCHEME}net`
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net`
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
@@ -75,8 +76,50 @@ export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
+  if (specifier === `${BUILTIN_SCHEME}net`) {
+    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose"
+  }
   return "write, writeError, panic"
 }
+
+/**
+ * WP34 N5: the parameters of a `nish:net` function, one letter each, or "" for
+ * a name `nish:net` does not export. `i` is an `i32`, `s` a `string`, `w` a
+ * `u8[]` the call writes and `r` a `u8[]` it only reads; every one answers an
+ * `i32`. The checker, the emitter and the written-argument rule all read this
+ * one string, so the three cannot disagree about which argument is which.
+ *
+ * Each name is a global too, as every `nish:` export is, and each carries a
+ * `net` or `tcp` prefix so that none of them collides with a global that
+ * already exists (`write`).
+ */
+export const netSignature = (name: string): string => {
+  if (name === "netAddress") {
+    return "wsi"
+  }
+  if (name === "netLocalPort" || name === "netClose") {
+    return "i"
+  }
+  if (name === "tcpListen") {
+    return "sii"
+  }
+  if (name === "tcpAccept") {
+    return "iw"
+  }
+  if (name === "netRead") {
+    return "iwii"
+  }
+  if (name === "netWrite") {
+    return "irii"
+  }
+  if (name === "netShutdown") {
+    return "ii"
+  }
+  return ""
+}
+
+/** Whether `nish:net` exports `name`. */
+export const isNetExport = (name: string): boolean => netSignature(name).length > 0
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
@@ -121,6 +164,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       return new BuiltinExport("", name, false)
     }
     return null
+  }
+  if (specifier === `${BUILTIN_SCHEME}net`) {
+    return isNetExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }

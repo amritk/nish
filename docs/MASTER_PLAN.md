@@ -55,6 +55,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
 │    runtime/runtime-os.c            files, spawn, env (C, 1.5 KB) │
 │    runtime/runtime-host.c          clock, rng, signals (C, 0.5 KB)│
+│    runtime/runtime-net.c           sockets (C, 0.8 KB)           │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -105,7 +106,9 @@ Design rules that every WP must respect:
   `runtime-parallel.c` 286 of 320 (901 of 1,024 threaded) and `runtime-host.c`
   571 of 768. N3's four builtins measured 571 bytes against the 143
   `runtime-os.c` had left, which is why they are a file of their own, and
-  `runtime-os.c` itself is unchanged by them.
+  `runtime-os.c` itself is unchanged by them. A fifth, `runtime-net.c`, holds
+  the sockets of `nish:net` (WP34 N5): 856 of 1,024 for addresses and
+  non-blocking TCP, measured the same day the same way.
 
 ## 3. Consolidated language specification (Nish)
 

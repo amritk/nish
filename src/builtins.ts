@@ -16,6 +16,7 @@
 import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
+import { isNetExport, netSignature } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
@@ -141,7 +142,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "realpathSync" ||
     name === "statMtimeSync" ||
     name === "signalFd" ||
-    name === "readSignal"
+    name === "readSignal" ||
+    isNetExport(name)
   )
 }
 
@@ -773,7 +775,62 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  if (isNetExport(name)) {
+    return checkNet(ctx, call, scope, name)
+  }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``)
+}
+
+/** The letters of `netSignature` that are not `i`. */
+const CHAR_R: i32 = 114
+const CHAR_S: i32 = 115
+const CHAR_W: i32 = 119
+
+/**
+ * WP34 N5, `nish:net`: each argument against its letter in `netSignature`, and
+ * an `i32` answer in either number mode, as `signalFd`'s is. A descriptor, an
+ * offset and a length are `i32` because they are one: an `f64` is refused
+ * rather than converted. `runtime-net.c` is empty on wasm, so every call is
+ * refused there as the host builtins are.
+ */
+const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i32 => {
+  const params = netSignature(name)
+  const args = call.children[1]
+  if (checkBuiltinArity(ctx, call, name, args, params.length) && !refuseOnWasm(ctx, call, name)) {
+    for (let i = 0; i < params.length; i++) {
+      const param = params.charCodeAt(i)
+      const arg = args.children[i]
+      if (param === CHAR_W || param === CHAR_R) {
+        checkNetBuffer(ctx, arg, scope, name, param === CHAR_W)
+      } else {
+        checkArgumentType(ctx, arg, scope, name, param === CHAR_S ? T_STRING : T_I32)
+      }
+    }
+  }
+  return T_I32
+}
+
+/**
+ * A `u8[]` a `nish:net` call reads or writes. Only a `u8[]`, as
+ * `crypto.getRandomValues` takes only one: bytes are what a socket carries,
+ * and a wider element would make the byte order on the wire a fact about the
+ * machine. A `readonly u8[]` is refused where the call writes it, with the
+ * words every write through a readonly array gets, and accepted where it
+ * only reads.
+ */
+const checkNetBuffer = (ctx: CheckContext, arg: Node, scope: Scope, name: string, written: boolean): void => {
+  const bytes = ctx.table.arrayOf(T_U8)
+  const got = checkExpression(ctx, arg, scope, bytes)
+  if (got === T_ERROR || got === bytes) {
+    return
+  }
+  const readonlyBytes = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === T_U8
+  if (readonlyBytes && written) {
+    ctx.error(arg, readonlyWriteMessage(ctx, got, `\`${name}\` through`))
+  } else if (!readonlyBytes) {
+    const verb = written ? "fills" : "sends from"
+    ctx.error(arg, `\`${name}\` ${verb} a \`u8[]\`, got ${ctx.table.typeName(got)}`)
+  }
 }
 
 /**

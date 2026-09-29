@@ -654,6 +654,38 @@ the `runtime.c` a caller names, as it already pairs `runtime-os.c`, so there is
 no link line anywhere that has to learn about it.
 
 
+### 2026-09-29: a fifth file, for sockets
+
+`runtime/runtime-net.c` holds the sockets of `nish:net` (WP34 N5), with a
+ceiling of its own, `NET_TEXT_BUDGET`. The first slice is addresses and
+non-blocking TCP, and it measured **856 bytes**, all `.text`, with clang 18.1.3
+on linux-x64 at `-Oz`:
+
+| function | bytes |
+| --- | ---: |
+| `nish_tcp_listen` (the address parse and the `sockaddr` inlined, the `::` fallback, `SO_REUSEADDR`, `IPV6_V6ONLY`, `bind`, `listen`) | 380 |
+| `nish_tcp_accept` (and writing the peer's 18-byte form) | 113 |
+| `nish_net_address` | 90 |
+| `nish_net_parse` (two `inet_pton`s) | 78 |
+| `nish_net_local_port` | 53 |
+| `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
+| `nish_net_fail`, `nish_net_socket` | 14, 12 |
+
+The ceiling is **1,024**, the next 256-byte boundary above the measurement, as
+every ceiling here was set. It is a file of its own rather than more of
+`runtime-host.c` (571 of 768) because it would not have fitted, and because its
+surface is the one that grows: UDP with GSO, GRO and ECN, and then the readiness
+loop over `epoll` and `kqueue`, are the next two slices of N5, and each raises
+this ceiling alone with a fresh measurement here. The four ceilings before it do
+not move.
+
+What it costs a program that calls none of it is, again, nothing: the `net_`
+block of `tests/run.js` links a program that calls no `nish:net` function with
+`-ffunction-sections -Wl,--gc-sections` and finds no `nish_net_` or `nish_tcp_`
+symbol in it, against nine without `--gc-sections`, and links `net_tcp_echo`
+the same way as the control that shows the count would see them.
+
+
 ### What FFI does and does not do to the budget
 
 WP27 lets a program declare and call a C function of its own, and

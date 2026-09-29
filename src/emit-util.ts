@@ -11,6 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
+import { netSignature } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
   N_BINARY,
@@ -134,21 +135,46 @@ export const arrayMethodName = (program: CheckedProgram, table: TypeTable, call:
 export const isArrayWriteMethod = (name: string): boolean =>
   name === "push" || name === "pop" || name === "set" || name === "fill"
 
+/** The letter of `netSignature` for a `u8[]` the call writes. */
+const CHAR_W: i32 = 119
+
 /**
- * The array argument a builtin call writes the elements of, or null: the
- * argument-side twin of `isArrayWriteMethod`. Today that is only
- * `crypto.getRandomValues(bytes)` (WP34 N3). The parameter classification, the
- * fact collector and a scope's region rule ask this, each for the reason it
- * asks `isArrayWriteMethod`.
+ * The array arguments a builtin call writes the elements of, in argument
+ * order, or none: the argument-side twin of `isArrayWriteMethod`. That is
+ * `crypto.getRandomValues(bytes)` (WP34 N3) and every `nish:net` argument
+ * `netSignature` spells `w` (WP34 N5): `netAddress`'s `out`, `tcpAccept`'s
+ * `peer` and `netRead`'s `buf`. A user function that shares a builtin's name
+ * wins it, as it wins every identifier builtin, and writes nothing here. The
+ * parameter classification, the fact collector and a scope's region rule ask
+ * this, each for the reason it asks `isArrayWriteMethod`.
  */
-export const builtinWrittenArgument = (program: CheckedProgram, call: Node): Node | null => {
-  if (call.kind !== N_CALL || call.children[1].children.length === 0) {
-    return null
+export const builtinWrittenArguments = (program: CheckedProgram, call: Node): Node[] => {
+  const out: Node[] = []
+  if (call.kind !== N_CALL) {
+    return out
   }
   const callee = call.children[0]
-  const fills =
-    dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
-  return fills ? call.children[1].children[0] : null
+  const args = call.children[1].children
+  if (callee.kind === N_IDENT) {
+    if (program.nodeCallees[call.id] !== null) {
+      return out
+    }
+    const params = netSignature(builtinNameOf(program, call))
+    for (let i = 0; i < params.length && i < args.length; i++) {
+      if (params.charCodeAt(i) === CHAR_W) {
+        out.push(args[i])
+      }
+    }
+    return out
+  }
+  if (
+    args.length > 0 &&
+    dottedName(callee) === "crypto.getRandomValues" &&
+    !receiverIsValue(program, callee.children[0])
+  ) {
+    out.push(args[0])
+  }
+  return out
 }
 
 /**
