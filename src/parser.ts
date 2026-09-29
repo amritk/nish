@@ -747,21 +747,18 @@ export class Parser {
    * a name, which is `{`, `<`, `extends` or `implements`.
    */
   anonymousDefaultClassAhead(): boolean {
-    const scan = new Lexer(this.file.text)
-    scan.pos = this.start
-    scan.next() // `default`
-    scan.next()
-    if (scan.kind === TOK_IDENT && scan.value === "abstract") {
-      const end = scan.end
-      scan.next()
-      if (scan.kind !== TOK_CLASS || this.lineBreakBetween(end, scan.start)) {
-        return false
-      }
-    }
-    if (scan.kind !== TOK_CLASS) {
+    const next = this.peek()
+    const isAbstract = next === TOK_IDENT && this.aheadValue === "abstract"
+    if (next !== TOK_CLASS && !isAbstract) {
       return false
     }
-    scan.next()
+    const scan = this.scanAfterAhead()
+    if (isAbstract) {
+      if (scan.kind !== TOK_CLASS || this.lineBreakBetween(this.aheadEnd, scan.start)) {
+        return false
+      }
+      scan.next()
+    }
     return scan.kind !== TOK_IDENT
   }
 
@@ -781,6 +778,9 @@ export class Parser {
     }
     if (next === TOK_IDENT && this.aheadValue === "enum") {
       return true
+    }
+    if (next !== TOK_CONST && !(next === TOK_IDENT && this.aheadValue === "abstract")) {
+      return false
     }
     const scan = this.scanAfterAhead()
     const sameLine = !this.lineBreakBetween(this.aheadEnd, scan.start)
@@ -2115,15 +2115,14 @@ export class Parser {
    * rather than a computed name: a name and then `:` inside it.
    */
   indexSignatureAhead(): boolean {
-    const scan = new Lexer(this.file.text)
-    scan.pos = this.start
-    scan.next() // `[`
-    scan.next()
-    if (scan.kind !== TOK_IDENT) {
-      return false
+    return this.peek() === TOK_IDENT && this.scanAfterAhead().kind === TOK_COLON
+  }
+
+  /** The `;` or `,` that may end an interface member or an index signature. */
+  eatMemberSeparator(): void {
+    if (!this.eat(TOK_SEMICOLON)) {
+      this.eat(TOK_COMMA)
     }
-    scan.next()
-    return scan.kind === TOK_COLON
   }
 
   /**
@@ -2141,9 +2140,7 @@ export class Parser {
     node.children.push(key)
     this.expect(TOK_RBRACKET)
     node.children.push(this.parseTypeAnnotation())
-    if (!this.eat(TOK_SEMICOLON)) {
-      this.eat(TOK_COMMA)
-    }
+    this.eatMemberSeparator()
     node.end = this.previousEnd
     return node
   }
@@ -2204,7 +2201,10 @@ export class Parser {
     // is a keyword, so before `(` or `<` it is always this.
     const construct = this.at(TOK_NEW) && (this.peek() === TOK_LPAREN || this.peek() === TOK_LT)
     if (construct || this.at(TOK_LPAREN) || this.at(TOK_LT)) {
-      return this.parseCallSignature(start, construct)
+      if (construct) {
+        this.advance() // `new`
+      }
+      return this.parseMethodSignature(start, construct ? FLAG_CONSTRUCT : 0, false)
     }
     if (this.at(TOK_LBRACKET) && this.indexSignatureAhead()) {
       return this.parseIndexSignature(start, 0)
@@ -2236,7 +2236,7 @@ export class Parser {
       (this.atMemberName() &&
         (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
     ) {
-      return this.parseMethodSignature(start, modifiers)
+      return this.parseMethodSignature(start, modifiers, true)
     }
     const field = this.node(N_FIELD, start, this.end)
     field.children.push(this.parseMemberNameNode())
@@ -2250,48 +2250,22 @@ export class Parser {
     }
     field.children.push(this.parseTypeAnnotation())
     field.children.push(this.empty())
-    if (!this.eat(TOK_SEMICOLON)) {
-      this.eat(TOK_COMMA)
-    }
+    this.eatMemberSeparator()
     field.end = this.previousEnd
     return field
   }
 
   /**
-   * An interface's call signature `(x: i32): T`, or its construct signature
-   * `new (x: i32): T` (FLAG_CONSTRUCT): a method signature with an EMPTY name,
-   * for the checker to refuse (NL2257).
-   */
-  parseCallSignature(start: i32, construct: boolean): Node {
-    const method = this.node(N_METHOD, start, this.end)
-    if (construct) {
-      this.advance() // `new`
-      method.flags = FLAG_CONSTRUCT
-    }
-    method.children.push(this.empty())
-    const typeParams = this.parseTypeParameters()
-    method.children.push(this.parseParameters(false))
-    method.children.push(this.parseReturnType())
-    method.children.push(this.empty())
-    if (typeParams.children.length > 0) {
-      method.children.push(typeParams)
-    }
-    if (!this.eat(TOK_SEMICOLON)) {
-      this.eat(TOK_COMMA)
-    }
-    method.end = this.previousEnd
-    return method
-  }
-
-  /**
    * An interface's `m<T>(x: T): R;`, shaped as a class's method is, with an
    * EMPTY body: the checker refuses it before anything reads it (NL2048), so
-   * a parameter needs no annotation to get there.
+   * a parameter needs no annotation to get there. A call signature
+   * `(x: i32): T` is the same with an EMPTY name (`named` false), and a
+   * construct signature `new (): T` that with FLAG_CONSTRUCT (NL2257).
    */
-  parseMethodSignature(start: i32, modifiers: i32): Node {
+  parseMethodSignature(start: i32, modifiers: i32, named: boolean): Node {
     const method = this.node(N_METHOD, start, this.end)
-    method.children.push(this.parseMemberNameNode())
-    method.flags = modifiers | this.parseMemberMarker()
+    method.children.push(named ? this.parseMemberNameNode() : this.empty())
+    method.flags = named ? modifiers | this.parseMemberMarker() : modifiers
     const typeParams = this.parseTypeParameters()
     method.children.push(this.parseParameters(false))
     method.children.push(this.parseReturnType())
@@ -2299,9 +2273,7 @@ export class Parser {
     if (typeParams.children.length > 0) {
       method.children.push(typeParams)
     }
-    if (!this.eat(TOK_SEMICOLON)) {
-      this.eat(TOK_COMMA)
-    }
+    this.eatMemberSeparator()
     method.end = this.previousEnd
     return method
   }
