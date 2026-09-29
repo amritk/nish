@@ -1372,7 +1372,10 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
  * or a value past the `i64` range is poison: NaN is 0, a fraction truncates
  * toward zero, and an infinity or 1e300 saturates to the `i64` bound on its
  * side, which the clamp of `fill` and the range check of `set` then answer as
- * JavaScript does. Every integer width is `emitIndex`'s widening, exact.
+ * JavaScript does. An integer is `emitIndex`'s widening: exact below 64 bits,
+ * and at 64 bits the bits as they are, so a `u64` of 2^63 or more arrives as an
+ * `i64` whose sign bit is set. `set`'s range check compares unsigned and
+ * refuses it; `fill` has to know the type was unsigned (`relativeIndex`).
  */
 const emitOffset = (emitter: Emitter, expr: Node): string => {
   const type = emitter.typeOf(expr)
@@ -1385,16 +1388,26 @@ const emitOffset = (emitter: Emitter, expr: Node): string => {
   return emitter.fn.emitValue(`call i64 ${intrinsic}(${ty} ${value})`)
 }
 
+/** `expr` is an integer literal, which `emitIndex` folds to its value. */
+const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
+  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
+
 /**
  * JavaScript's relative index, which `fill` takes for each end: a negative
  * `k` counts back from `len`, and either way the answer is clamped into
  * `[0, len]`, so no offset is ever out of range and `fill` never panics. An
  * integer literal, the usual spelling of an end, is never negative (a minus
- * sign is a unary operator), so it needs only the upper half of the clamp.
+ * sign is a unary operator), so it needs only the upper half of the clamp. An
+ * unsigned end is never negative either, but a `u64` of 2^63 or more has its
+ * sign bit set, so its upper half is `llvm.umin`: the signed test would count
+ * it back from the end, and fill the whole array where it should fill nothing.
  */
-const relativeIndex = (emitter: Emitter, k: string, len: string, literal: boolean): string => {
+const relativeIndex = (emitter: Emitter, end: Node, k: string, len: string): string => {
   const fn = emitter.fn
-  if (literal) {
+  if (isUnsigned(emitter.typeOf(end))) {
+    return fn.emitValue(`call i64 ${emitter.useRuntime("llvm.umin.i64")}(i64 ${k}, i64 ${len})`)
+  }
+  if (isIntegerLiteral(emitter, end)) {
     return fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${k}, i64 ${len})`)
   }
   const negative = fn.emitValue(`icmp slt i64 ${k}, 0`)
@@ -1403,10 +1416,6 @@ const relativeIndex = (emitter: Emitter, k: string, len: string, literal: boolea
   const high = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${k}, i64 ${len})`)
   return fn.emitValue(`select i1 ${negative}, i64 ${low}, i64 ${high}`)
 }
-
-/** `expr` is an integer literal, which `emitIndex` folds to its value. */
-const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
-  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
 
 /**
  * `a.fill(value, start, end)`: `value` into every slot of `[start, end)`, each
@@ -1423,8 +1432,8 @@ const emitFill = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   const start = args.length > 1 ? emitOffset(emitter, args[1]) : ""
   const stop = args.length > 2 ? emitOffset(emitter, args[2]) : ""
   const len = loadLength(emitter, arr)
-  const from = start.length > 0 ? relativeIndex(emitter, start, len, isIntegerLiteral(emitter, args[1])) : "0"
-  const to = stop.length > 0 ? relativeIndex(emitter, stop, len, isIntegerLiteral(emitter, args[2])) : len
+  const from = start.length > 0 ? relativeIndex(emitter, args[1], start, len) : "0"
+  const to = stop.length > 0 ? relativeIndex(emitter, args[2], stop, len) : len
   if (slotType(emitter, elem) === "i8") {
     const span = fn.emitValue(`sub i64 ${to}, ${from}`)
     const count = fn.emitValue(`call i64 ${emitter.useRuntime("llvm.smax.i64")}(i64 ${span}, i64 0)`)

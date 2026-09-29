@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 732 programs, 51273 dump lines.
+# 734 programs, 51320 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3388,6 +3388,32 @@ function main(): i32 -> @nish_main [exported entry]
   callee 33:15 show -> @show
   callee 36:15 show -> @show
   local 37:9 wide: i32[] (const)
+program tests/cases/bytes_offset_u64.ts
+module tests/cases/bytes_offset_u64.ts (entry)
+function show(xs: u8[]): string -> @show
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_from_u64
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 8:9 parts: string[] (const)
+  local 9:14 x: u8 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_slice nish_print show
+  stackSites=2 stackLocals=2
+  local 16:9 top: u64 (const)
+  local 17:9 all: u64 (const)
+  local 18:9 lo: i64 (const)
+  local 19:9 hi: i64 (const)
+  local 20:9 a: u8[] (const)
+  callee 22:15 show -> @show
+  callee 24:15 show -> @show
+  callee 27:15 show -> @show
+  callee 31:15 show -> @show
+  local 32:9 b: u8[] (const)
+  local 33:9 three: u64 (const)
+  callee 35:15 show -> @show
 program tests/cases/bytes_read.ts --number-mode f64
 module tests/cases/bytes_read.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -3542,6 +3568,29 @@ function main(): i32 -> @nish_main [exported entry]
   callee 27:15 show -> @show
   local 28:7 c: u8[] (let)
   callee 31:15 show -> @show
+program tests/cases/bytes_set_u64_oob.ts
+module tests/cases/bytes_set_u64_oob.ts (entry)
+function into(at: u64): i32 -> @into
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_slice
+  stackSites=2 stackLocals=2
+  local 6:9 dst: u8[] (const)
+  local 7:9 src: u8[] (const)
+function topBit(): i32 -> @topBit [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 12:34 into -> @into
+function allOnes(): i32 -> @allOnes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 14:35 into -> @into
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: into
+  stackSites=0 stackLocals=0
+  callee 16:32 into -> @into
 program tests/cases/cf_break_continue.ts
 module tests/cases/cf_break_continue.ts (entry)
 function firstMultipleOver(n: i32, limit: i32): i32 -> @firstMultipleOver

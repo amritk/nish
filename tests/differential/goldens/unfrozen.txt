@@ -67,6 +67,7 @@ cases/asi_statements added after R6: no rewriter to freeze it with
 cases/attr_panic_charcodeat added after R6: no rewriter to freeze it with
 cases/bytes_fill added after R6: no rewriter to freeze it with
 cases/bytes_offset_float added after R6: no rewriter to freeze it with
+cases/bytes_offset_u64 added after R6: no rewriter to freeze it with
 cases/bytes_read added after R6: no rewriter to freeze it with
 cases/bytes_set_disjoint added after R6: no rewriter to freeze it with
 cases/bytes_set_end added after R6: no rewriter to freeze it with
