@@ -238,8 +238,8 @@ declare function monotonicNanos(): i64;
  */
 declare function statMtimeSync(path: string): f64;
 /**
- * A descriptor that becomes readable when SIGTERM or SIGINT arrives, made once
- * (every call answers the same one), or -1. Call it before starting a thread.
+ * A descriptor that becomes readable when SIGTERM or SIGINT arrives, whichever
+ * thread the signal lands on, made once (every call answers the same one), or -1.
  */
 declare function signalFd(): i32;
 /**
