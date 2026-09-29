@@ -24,8 +24,11 @@
 // without changing the oracle in the same commit.
 
 import {
+  FLAG_AWAIT,
   FLAG_CONST,
+  FLAG_FOR_IN,
   FLAG_USING,
+  FLAG_VAR,
   FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_OPTIONAL,
@@ -76,6 +79,16 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_USING) !== 0) {
     name = `${name}+using`
+  }
+  // The refused forms of WP33 R1 (`src/nodes.ts`), printed for the same reason.
+  if ((node.flags & FLAG_VAR) !== 0) {
+    name = `${name}+var`
+  }
+  if ((node.flags & FLAG_AWAIT) !== 0) {
+    name = `${name}+await`
+  }
+  if ((node.flags & FLAG_FOR_IN) !== 0) {
+    name = `${name}+in`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

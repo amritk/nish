@@ -113,7 +113,25 @@ const printTypeScriptTree = (source, sf) => {
     if (flags === ts.NodeFlags.Using) {
       return "VAR+const+using"
     }
-    return isConst(declarationList) ? "VAR+const" : "VAR"
+    return `VAR${letFlags(declarationList)}`
+  }
+
+  /**
+   * What a `const`, `let` or `var` list prints after its kind. `var` is a flag
+   * stage1 parses for Phase 0 to refuse (WP33 R1, `src/nodes.ts`), and it is
+   * printed so that it is compared.
+   */
+  const letFlags = (declarationList) => {
+    if (isConst(declarationList)) {
+      return "+const"
+    }
+    return (declarationList.flags & ts.NodeFlags.BlockScoped) === 0 ? "+var" : ""
+  }
+
+  /** The declaration a `for` or `for...of` head holds: its VAR, then its list. */
+  const declarationHead = (declarationList, depth) => {
+    emit(depth, `VAR${letFlags(declarationList)}`, at(declarationList.getStart(sf)), at(declarationList.end))
+    list(depth + 1, declarationList.declarations, variableDeclaration)
   }
 
   /**
@@ -496,9 +514,7 @@ const printTypeScriptTree = (source, sf) => {
         if (node.initializer === undefined) {
           empty(depth + 1)
         } else if (ts.isVariableDeclarationList(node.initializer)) {
-          const [ds, de] = [at(node.initializer.getStart(sf)), at(node.initializer.end)]
-          emit(depth + 1, isConst(node.initializer) ? "VAR+const" : "VAR", ds, de)
-          list(depth + 2, node.initializer.declarations, variableDeclaration)
+          declarationHead(node.initializer, depth + 1)
         } else {
           expression(node.initializer, depth + 1)
         }
@@ -507,37 +523,51 @@ const printTypeScriptTree = (source, sf) => {
         statement(node.statement, depth + 1)
         return
       }
-      case ts.SyntaxKind.ForOfStatement: {
-        if (node.awaitModifier !== undefined) {
-          unsupported(node)
-        }
-        emit(depth, "FOR_OF", s, e)
+      // `for...in`, `for await` and a head that assigns rather than declares
+      // are the same FOR_OF with a flag or an expression for a head, for the
+      // phase that owns each rule to refuse (WP33 R1, `src/nodes.ts`).
+      case ts.SyntaxKind.ForOfStatement:
+      case ts.SyntaxKind.ForInStatement: {
+        const forIn = node.kind === ts.SyntaxKind.ForInStatement ? "+in" : ""
+        const isAwait = node.awaitModifier !== undefined ? "+await" : ""
+        emit(depth, `FOR_OF${isAwait}${forIn}`, s, e)
         const initializer = node.initializer
-        if (!ts.isVariableDeclarationList(initializer)) {
-          unsupported(node)
+        if (ts.isVariableDeclarationList(initializer)) {
+          declarationHead(initializer, depth + 1)
+        } else {
+          expression(initializer, depth + 1)
         }
-        emit(
-          depth + 1,
-          isConst(initializer) ? "VAR+const" : "VAR",
-          at(initializer.getStart(sf)),
-          at(initializer.end)
-        )
-        list(depth + 2, initializer.declarations, variableDeclaration)
         expression(node.expression, depth + 1)
         statement(node.statement, depth + 1)
         return
       }
       case ts.SyntaxKind.BreakStatement:
-        if (node.label !== undefined) {
-          unsupported(node)
-        }
-        emit(depth, "BREAK", s, e)
+        emit(depth, "BREAK", s, e, node.label?.text)
         return
       case ts.SyntaxKind.ContinueStatement:
-        if (node.label !== undefined) {
+        emit(depth, "CONTINUE", s, e, node.label?.text)
+        return
+      case ts.SyntaxKind.TryStatement: {
+        emit(depth, "TRY", s, e)
+        block(node.tryBlock, depth + 1)
+        const clause = node.catchClause
+        const binding = clause?.variableDeclaration?.name
+        if (binding !== undefined && !ts.isIdentifier(binding)) {
           unsupported(node)
         }
-        emit(depth, "CONTINUE", s, e)
+        optional(depth + 1, binding, identifier)
+        optional(depth + 1, clause?.block, block)
+        optional(depth + 1, node.finallyBlock, block)
+        return
+      }
+      case ts.SyntaxKind.WithStatement:
+        emit(depth, "WITH", s, e)
+        expression(node.expression, depth + 1)
+        statement(node.statement, depth + 1)
+        return
+      case ts.SyntaxKind.LabeledStatement:
+        emit(depth, "LABELED", s, e, node.label.text)
+        statement(node.statement, depth + 1)
         return
       case ts.SyntaxKind.ReturnStatement:
         emit(depth, "RETURN", s, e)
@@ -706,8 +736,12 @@ const printTypeScriptTree = (source, sf) => {
         return
       }
       case ts.SyntaxKind.VariableStatement: {
+        // A top-level `let` or `var` is a module constant without `const`,
+        // which the checker and Phase 0 refuse (WP33 R1).
         if (!isConst(node.declarationList)) {
-          unsupported(node)
+          emit(depth, `MODULE_CONST${exported(node)}${letFlags(node.declarationList)}`, s, e)
+          list(depth + 1, node.declarationList.declarations, variableDeclaration)
+          return
         }
         // A module-level `const` bound to an arrow declares a *function*
         // (docs/wp22-arrow-functions.md), and stage1's parser builds the same
@@ -748,7 +782,9 @@ const printTypeScriptTree = (source, sf) => {
         return
       }
       default:
-        unsupported(node)
+        // A statement where a declaration belongs is read as the statement,
+        // for the checker to refuse (NL2230); the rest is still unsupported.
+        statement(node, depth)
     }
   }
 

@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+`var` is forbidden; use `let` or `const`

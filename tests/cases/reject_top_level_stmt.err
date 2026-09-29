@@ -1,1 +1,1 @@
-a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
+Only top-level function declarations are supported in Phase 1 (found ExpressionStatement)

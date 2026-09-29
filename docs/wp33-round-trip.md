@@ -288,17 +288,18 @@ The agent's first input is the diagnostic, and today the diagnostic for most of
 ordinary TypeScript is the wrong one. The parser stops at syntax the language
 forbids before Phase 0 can name the rule (wp19's declared divergence 602). So
 the rule's message, its code and its rewrite hint never reach the agent.
-`nish` 0.12.0, `--json`, one construct each:
+`nish` 0.12.0, `--json`, one construct each; a row R1 has closed gives what
+the compiler says since:
 
 | Written | First diagnostic | Count | The rule LANGUAGE.md documents |
 | --- | --- | --- | --- |
-| `var x = 1` | `NL0001` syntax error: expected `;`, found `IDENT` | 1 | `` `var` is forbidden; use `let` or `const` `` |
+| `var x = 1` | `NL1036`, the rule (R1, stage 1) | 1 | `` `var` is forbidden; use `let` or `const` `` |
 | `a == 1` | `NL0001` syntax error: expected `)`, found `==` | 8 | `NL1047` Loose equality is forbidden; use === / !== |
 | `o?.x` | `NL0001` syntax error: expected `;`, found `?.` | 3 | Optional chaining `?.` is forbidden … (narrow with `!== null` instead) |
-| `try { } catch (e) { }` | `NL0001` syntax error: expected `;`, found `{` | 2 | `` `try`/`catch`/`finally` is forbidden … use `Result<T, E>` `` |
+| `try { } catch (e) { }` | `NL1033`, the rule (R1, stage 1) | 1 | `` `try`/`catch`/`finally` is forbidden … use `Result<T, E>` `` |
 | `typeof 1` | `NL0001` syntax error: expected `;`, found `NUMBER` | 1 | `` `typeof` is forbidden in Nish (no runtime type tags) `` |
 | `async (): void => {}` | `NL0001` syntax error: expected `;`, found `:` | 3 | `` `async` functions are forbidden in Nish … `` |
-| `for (const k in a)` | `NL0001` syntax error: expected `;`, found `IDENT` | 2 | listed under [Rejected statements](LANGUAGE.md#rejected-statements), with no message of its own |
+| `for (const k in a)` | `NL1056`, the rule (R1, stage 1) | 1 | `` `for...in` is forbidden … use `for...of` ``, a code of its own since R1 ([Rejected statements](LANGUAGE.md#rejected-statements)) |
 | `throw 1` | `NL1001`, the rule | 1 | reached |
 
 **The parser must read all of TypeScript's syntax**, and refuse each construct

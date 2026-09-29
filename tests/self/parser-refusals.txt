@@ -72,7 +72,6 @@
 #      `.err`, §A3's declaration and this entry all updated together, not to a
 #      line edited until the run goes green.
 
-reject_arr_forof_expression	expected `;`, found `IDENT`
 reject_arr_hole	expected an expression, found `,`
 reject_arr_spread	expected an expression, found `...`
 reject_arrow_let	a module holds no top-level `let`; use `const`
@@ -106,7 +105,6 @@ reject_cls_static_field_untyped	a type annotation is required
 reject_comma_expression	expected `)`, found `,`
 reject_computed_property	an object literal key must be a plain identifier
 reject_const_destructured	expected a name, found `{`
-reject_const_top_level_let	a module holds no top-level `let`; use `const`
 reject_declare_global	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
 reject_decorator	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `@`
 reject_default_import	expected `{`, found `IDENT`
@@ -134,12 +132,10 @@ reject_import_template_specifier	a module specifier must be a string literal
 reject_import_type_only	expected `{`, found `IDENT`
 reject_in_operator	expected `;`, found `IDENT`
 reject_instanceof	expected `;`, found `IDENT`
-reject_labeled_statement	expected `;`, found `:`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
 reject_loose_equality	expected `;`, found `==`
 reject_loose_inequality	expected `;`, found `!=`
-reject_map_iter_for_in	expected `;`, found `IDENT`
 reject_map_iter_spread	expected an expression, found `...`
 reject_missing_return_type	a return type annotation is required
 reject_multi_decl	a type annotation is required
@@ -171,13 +167,8 @@ reject_shebang_not_first	'#!' can only be used at the start of a file
 reject_side_effect_import	expected `{`, found `STRING`
 reject_surrogate_escape_too_large	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive
 reject_surrogate_escape_wraps	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive
-reject_top_level_stmt	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `IDENT`
-reject_try_catch	expected `;`, found `{`
 reject_type_alias_generic	expected `=`, found `<`
 reject_type_keyof	expected `)`, found `IDENT`
 reject_typeof_operator	expected `;`, found `IDENT`
-reject_var_in_for	expected `;`, found `IDENT`
-reject_var_keyword	expected `;`, found `IDENT`
 reject_void_expression	expected `;`, found `NUMBER`
-reject_with_statement	expected `;`, found `{`
 reject_yield	expected `;`, found `NUMBER`

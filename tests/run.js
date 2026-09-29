@@ -7753,6 +7753,41 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     )
   }
 
+  // WP33 R1 parses `with (…)`, `try { }` and `var x` for Phase 0 to refuse,
+  // and each word is still a name wherever it cannot open the statement:
+  // `tests/parser/names.ts` compiled before R1 and has to go on compiling,
+  // with `with(n)` a call rather than a refused `with` statement, and
+  // `finally()` and `catch(1)` after a `try`-named block calls rather than
+  // handlers.
+  const namesLl = path.join(buildDir, "parser_names.ll")
+  const namesRun = spawnSync(NISH, ["tests/parser/names.ts", "-o", namesLl], { cwd: root, encoding: "utf8" })
+  const namesIr = namesRun.status === 0 ? fs.readFileSync(namesLl, "utf8") : ""
+  check(
+    "src/parser.ts reads `with`, `try` and `var` as names where they cannot open a statement",
+    namesRun.status === 0 &&
+      namesIr.includes("call i32 @with(i32 %1)") &&
+      namesIr.includes("call i32 @finally()") &&
+      namesIr.includes("call i32 @catch(i32 1)") &&
+      namesIr.includes("%try.addr = alloca i32"),
+    `exit ${namesRun.status}\n${namesRun.stdout}${namesRun.stderr}`
+  )
+  // A literal argument is not a catch binding, so `catch([1, 2])` and
+  // `catch({ first: 1, second: 2 })` after a `try`-named block stay calls;
+  // each needs a `catch` of its own type, hence a file each.
+  for (const literal of ["names-catch-array", "names-catch-object"]) {
+    const literalLl = path.join(buildDir, `parser_${literal}.ll`)
+    const literalRun = spawnSync(NISH, [`tests/parser/${literal}.ts`, "-o", literalLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const literalIr = literalRun.status === 0 ? fs.readFileSync(literalLl, "utf8") : ""
+    check(
+      `src/parser.ts reads \`catch(<literal>)\` after a \`try\`-named block as a call (tests/parser/${literal}.ts)`,
+      literalRun.status === 0 && literalIr.includes("call i32 @catch("),
+      `exit ${literalRun.status}\n${literalRun.stdout}${literalRun.stderr}`
+    )
+  }
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
@@ -8196,6 +8231,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_multi_error", ["2:10-2:18 NL2231", "6:19-6:20 NL2185", "11:10-11:16 NL2231"]],
       ["reject_ffi_pointer_array", ["21:18-21:22 NL2323"]],
       ["reject_ffi_pointer_type_argument_fn", ["22:13-22:18 NL2323"]],
+      // WP33 R1: Phase 0 ends a module at its first refusal, and the pass 1
+      // `for...of` sweep recovers per declaration; a `.err` cannot count.
+      ["reject_stmt_forms_together", ["8:3-9:4 NL1056"]],
+      ["reject_for_of_heads_together", ["4:3-6:4 NL2133", "12:8-12:9 NL2135"]],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)

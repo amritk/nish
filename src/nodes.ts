@@ -47,9 +47,13 @@ export const N_IF: i32 = 18 // children: condition, then, else
 export const N_WHILE: i32 = 19 // children: condition, body
 export const N_DO: i32 = 20 // children: body, condition
 export const N_FOR: i32 = 21 // children: initializer, condition, incrementor, body
-export const N_FOR_OF: i32 = 22 // children: VAR, iterable, body
-export const N_BREAK: i32 = 23
-export const N_CONTINUE: i32 = 24
+// `for (const x of a)`. The head is the `VAR` it declares, or — only in the
+// refused `for (x of a)` — the expression it assigns, which the checker tells
+// apart by the child's kind (NL2135). `for...in` and `for await` are this node
+// with FLAG_FOR_IN and FLAG_AWAIT.
+export const N_FOR_OF: i32 = 22 // children: VAR or the refused expression, iterable, body
+export const N_BREAK: i32 = 23 // text: the label, only in a refused labelled statement
+export const N_CONTINUE: i32 = 24 // text: the label, only in a refused labelled statement
 export const N_RETURN: i32 = 25 // children: the expression
 export const N_THROW: i32 = 26 // children: the expression
 export const N_SWITCH: i32 = 27 // children: discriminant, LIST of CASE / DEFAULT
@@ -116,8 +120,25 @@ export const N_ARROW: i32 = 62
 // a bound of `integer<Lo, Hi>`, which the checker says everywhere else.
 export const N_TYPE_LITERAL: i32 = 63
 
+// ---- Refused statements (WP33 R1) ----------------------------------------------------
+//
+// Three statements the language forbids and nothing else resembles. They are
+// parsed so that Phase 0 can refuse each by its rule (`src/validator.ts`),
+// and no phase after Phase 0 ever sees one: a module Phase 0 refuses is not
+// checked. The convention every refused construct follows is at the foot of
+// this list, beside the flags.
+
+// `try { } catch (e) { } finally { }` (NL1033): children: the BLOCK, the catch
+// binding (IDENT, or EMPTY for `catch { }` and for no `catch`), the catch
+// BLOCK or EMPTY, the finally BLOCK or EMPTY.
+export const N_TRY: i32 = 64
+// `with (o) body` (NL1038): children: the object, the body.
+export const N_WITH: i32 = 65
+// `outer: body` (NL1046): text: the label; children: the statement it labels.
+export const N_LABELED: i32 = 66
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 64
+export const N_COUNT: i32 = 67
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -163,6 +184,43 @@ export const FLAG_STATIC_FIRST: i32 = 128
 // the same node as a `let` or a `const`, so nothing that walks declarations
 // needs a new kind to find it.
 export const FLAG_USING: i32 = 256
+
+// **Parse, then refuse (WP33 R1).** A construct the language forbids is
+// *parsed*, and refused by the phase that owns its rule — Phase 0 for an NL1xxx
+// code, the checker for an NL2xxx one — never by the parser, which could only
+// say what token it expected. Its shape in this tree is decided once:
+//
+//   - When it resembles a node that exists, it is that node with a flag: the
+//     tree a later phase walks stays one it knows, and the refusal is a test
+//     of one bit. `var` is a `let` (FLAG_VAR), `for...in` and `for await` are
+//     a `for...of` (FLAG_FOR_IN, FLAG_AWAIT), a top-level `let` is a module
+//     constant without FLAG_CONST, and the member headers above are fields
+//     and methods.
+//   - When it resembles nothing, it is a kind of its own, with its child
+//     layout written beside it like every other kind's: N_TRY, N_WITH,
+//     N_LABELED.
+//   - A variant that differs only in what one child is keeps the node and
+//     puts the other thing in that child, when the child's own kind is the
+//     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
+//     than a VAR, and a top-level statement is the statement itself, sitting
+//     in the SOURCE_FILE where a declaration would.
+//
+// Every one is refused with exactly one diagnostic, and the refusal comes
+// before anything else looks at the node, so no later rule has to know the
+// shape exists. A checker rule that needs no type is a sweep over the whole
+// module in pass 1 (`refuseForOfHeads`), not a rule in the body check: pass 2
+// checks a template's body once per instantiation, so a template nothing
+// instantiates is never checked, and a refusal stated there would let it
+// compile (`tests/cases/reject_for_await_template`). `src/ast-text.ts` prints each flag, so `--emit-ast` and
+// `tests/parser-oracle.js` compare them.
+
+// `flags` on N_VAR and N_MODULE_CONST: bit 9 is `var` rather than `let`
+// (NL1036).
+export const FLAG_VAR: i32 = 512
+// `flags` on N_FOR_OF: bit 10 is `for await` (NL2133) and bit 11 `in` rather
+// than `of` (NL1056).
+export const FLAG_AWAIT: i32 = 1024
+export const FLAG_FOR_IN: i32 = 2048
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -329,6 +387,12 @@ export const nodeName = (kind: i32): string => {
       return "ARROW"
     case N_TYPE_LITERAL:
       return "TYPE_LITERAL"
+    case N_TRY:
+      return "TRY"
+    case N_WITH:
+      return "WITH"
+    case N_LABELED:
+      return "LABELED"
     default:
       return "?"
   }

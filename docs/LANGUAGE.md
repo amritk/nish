@@ -897,12 +897,14 @@ declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 ([Type aliases](#type-aliases)), numeric `enum` declarations
 ([Enums](#enums)), `declare function` declarations
 ([Calling C](#calling-c)), `import` statements, and `export` modifiers on
-those declarations. Any other top-level statement, including `let`,
-is rejected with
-`Only top-level function declarations are supported in Phase 1 (found <Kind>)`
-(`tests/cases/reject_top_level_stmt`); top-level
-`let` and `var` name the reason instead (`` Top-level `let` is not supported ``,
-`reject_const_top_level_let`). Modules have no top-level code, so there is no
+those declarations. Any other top-level statement is rejected with
+`Only top-level function declarations are supported in Phase 1 (found <Kind>)`,
+where `<Kind>` is TypeScript's name for the statement, `ExpressionStatement`
+or `IfStatement` (`tests/cases/reject_top_level_stmt`); a top-level `let`
+names the reason instead (`` Top-level `let` is not supported; a module has no
+top-level code, so only `const` is available ``,
+`reject_const_top_level_let`), and `var` is refused wherever it is written
+([Forbidden constructs](#forbidden-constructs-phase-0-validator)). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
 must be a value the compiler can compute for itself.
 
@@ -2698,7 +2700,9 @@ The condition must be `boolean`: there is no truthiness
   (`` `for...of` needs a `const` or `let` declaration ``,
   `tests/cases/reject_arr_forof_expression`); `let x` makes
   it assignable, `const x` does not (`tests/cases/reject_arr_forof_const_assign`).
-  `for await` is not supported.
+  `for await` is not supported (`` `for await` is not supported ``,
+  `tests/wordings/nl2133_for_await`), and `for...in` is forbidden
+  ([Rejected statements](#rejected-statements)).
 - `a` is evaluated once; `a.length` is re-read every iteration, so a `push`
   inside the body extends the iteration, as JavaScript's array iterator does
   (`tests/cases/arr_for_of`). `break` and `continue` work
@@ -2760,8 +2764,10 @@ switch (node.kind) {
 
 ### `break` / `continue`
 
-Unlabelled only (`Labelled `break` is not supported`; labeled statements are
-forbidden outright, `tests/cases/reject_labeled_statement`). `break` needs an
+Unlabelled only: labeled statements are forbidden outright
+(`tests/cases/reject_labeled_statement`), and a `break` or `continue` that names
+one is part of that one refusal. A label nothing declares is a syntax error, as
+it is in TypeScript. `break` needs an
 enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
 `tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
 (`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
@@ -2814,8 +2820,33 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
 `debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
-`var` (`reject_var_keyword`), `for...in`, nested `function`, `enum`, `type`,
+`var` (`reject_var_keyword`), `for...in` (`` `for...in` is forbidden in Nish
+(it enumerates property names, and object layout is fixed at compile time); use
+`for...of` ``, NL1056, `reject_for_in`), nested `function`, `enum`, `type`,
 `namespace` (`reject_namespace`), `declare global` (`reject_declare_global`).
+`with`, `try` and `var` are not reserved: a function or a variable may be
+called one, and a statement opens only where the word could not be that
+name. `with (…)` is the statement when a statement follows it on the same
+line, and `var` when a name follows it on the same line. `try` is the
+statement when a block follows it on the same line, or when a block follows
+it and a handler follows that block (`catch {`, `catch (e) {` or `finally {`,
+not a call such as `finally();`), whatever line breaks and comments sit
+between (`reject_try_allman_catch`, `reject_try_allman_finally`,
+`reject_try_comment_newline`). A catch binding may be a name or a
+destructuring pattern, with or without an annotation, and is refused the same
+way (`reject_try_catch_destructured`). So a `try`-named block followed by
+`catch(<a binding>)` — a name or a pattern, `catch(n)` or `catch([n])` — and
+then a block is a `try` statement, even where 0.13.0 read a call to a function
+named `catch` (`reject_try_catch_call_newline`,
+`reject_try_catch_pattern_call_newline`): the one shape of program this rule
+stopped compiling. An argument that is no binding, such as `catch([1, 2])` or
+`catch({ first: 1 })`, is the call it was (`tests/parser/names-catch-array.ts`,
+`names-catch-object.ts`). A line break inside a block comment counts as
+one, as it does for semicolon insertion. So `try` alone on a line before a
+block that nothing handles is a name and a block, as it was before
+(`tests/parser/names.ts`). `tsc` reserves all three, so this is Nish
+accepting what TypeScript does not, as it did before these statements
+parsed.
 `enum` and `type` are top-level declarations ([Enums](#enums),
 [Type aliases](#type-aliases)); it is only inside a function body that they are
 a rejected statement.
@@ -4296,8 +4327,9 @@ export const main = (): i32 => {
     `` `for...of` over `Map<string, i32>` needs `entries()` ``, with the
     rewrite, `for (const k of m.keys())` (`reject_map_iter_entries`, NL2375).
     It reports once: the variable is an error that its body reads without a
-    second report (`reject_map_iter_recovery`). A spread and `for...in` do not
-    parse (`reject_map_iter_spread`, `reject_map_iter_for_in`), `keys()` takes
+    second report (`reject_map_iter_recovery`). A spread does not parse
+    (`reject_map_iter_spread`), `for...in` is Phase 0's NL1056 as it is over
+    anything (`reject_map_iter_for_in`), `keys()` takes
     no argument (`reject_map_iter_arity`), and the variable has the type it
     walks (`reject_map_iter_variable_type`).
 - **A module's own `Map` or `Set` wins in that module.** A module that
@@ -5022,6 +5054,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
 | `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
 | labeled statements | `` Labeled statements are forbidden in Nish (use structured loops) `` | `reject_labeled_statement` |
+| `for...in` | `` `for...in` is forbidden in Nish (it enumerates property names, and object layout is fixed at compile time); use `for...of` `` | `reject_for_in`, `reject_map_iter_for_in` |
 
 ### Expressions
 
@@ -5098,7 +5131,9 @@ messages are exact for the cases cited; other rows quote the checker
 | enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
 | enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
 | name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
-| top-level `let` / `var` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
+| top-level `let` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
+| `for await`, in any body, a template nothing instantiates included | `` `for await` is not supported `` | `nl2133_for_await`, `reject_for_await_template` |
+| `for (x of a)`, assigning rather than declaring | `` `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)` `` | `reject_arr_forof_expression`, `reject_arr_forof_expression_template`, `nl2135_for_of_without_declaration` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
 | assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |
