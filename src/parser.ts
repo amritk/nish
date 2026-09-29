@@ -2342,7 +2342,11 @@ export class Parser {
     this.advance()
     const node = this.node(N_CONDITIONAL, start, this.end)
     node.children.push(condition)
+    // The branch between `?` and `:` reads `in` again, as the grammar's
+    // `[+In]` does; the one after `:` keeps the context's (`noIn`).
+    const outerNoIn = this.allowIn()
     node.children.push(this.parseExpression())
+    this.noIn = outerNoIn
     this.expect(TOK_COLON)
     node.children.push(this.parseExpression())
     node.end = this.previousEnd

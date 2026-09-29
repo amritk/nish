@@ -1,0 +1,1 @@
+`in` operator is forbidden in Nish (no dynamic property lookup)
