@@ -217,6 +217,8 @@ cases/port_num_libm_quiet added after R6: no rewriter to freeze it with
 cases/port_num_negzero added after R6: no rewriter to freeze it with
 cases/port_num_negzero_quiet added after R6: no rewriter to freeze it with
 cases/port_num_ushr added after R6: no rewriter to freeze it with
+cases/port_num_ushr_const_quiet added after R6: no rewriter to freeze it with
+cases/port_num_ushr_count added after R6: no rewriter to freeze it with
 cases/port_num_ushr_quiet added after R6: no rewriter to freeze it with
 cases/port_num_wide added after R6: no rewriter to freeze it with
 cases/port_num_wide_quiet added after R6: no rewriter to freeze it with
