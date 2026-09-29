@@ -1389,6 +1389,10 @@ const relativeIndex = (emitter: Emitter, k: string, len: string, literal: boolea
   return fn.emitValue(`select i1 ${negative}, i64 ${low}, i64 ${high}`)
 }
 
+/** `expr` is an integer literal, which `emitIndex` folds to its value. */
+const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
+  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
+
 /**
  * `a.fill(value, start, end)`: `value` into every slot of `[start, end)`, each
  * end relative and clamped as JavaScript's are. A one-byte element is one
@@ -1397,10 +1401,6 @@ const relativeIndex = (emitter: Emitter, k: string, len: string, literal: boolea
  * `opt -O2`'s loop-idiom pass turns into a `memset` by itself when the value
  * is a repeated byte, zero above all, so no second lowering is written here.
  */
-/** `expr` is an integer literal, which `emitIndex` folds to its value. */
-const isIntegerLiteral = (emitter: Emitter, expr: Node): boolean =>
-  unwrapParens(expr).kind === N_NUMBER && !isFloat(emitter.typeOf(expr))
-
 const emitFill = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
   const fn = emitter.fn
   const args = expr.children[1].children

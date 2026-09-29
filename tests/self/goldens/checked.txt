@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 728 programs, 51197 dump lines.
+# 729 programs, 51212 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3377,9 +3377,9 @@ program tests/cases/bytes_read_import.ts
 module tests/cases/bytes_read_import.ts (entry)
 import bytesOf from "nish:fs" -> builtin readFileBytesSync
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_bytes
-  calls: nish_panic_index nish_read_file_bytes
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_read_file_bytes
   stackSites=0 stackLocals=0
   local 6:9 bytes: u8[] | null (const)
 program tests/cases/bytes_set_disjoint.ts --number-mode f64
@@ -35921,6 +35921,22 @@ function load(path: string): u8[] | null -> @load [exported]
   calls: nish_print nish_read_file_bytes nish_str_concat
   stackSites=0 stackLocals=0
   local 8:9 label: string (const)
+program tests/cases/mem_read_import_scope.ts
+module tests/cases/mem_read_import_scope.ts (entry)
+import bytesOf from "nish:fs" -> builtin readFileBytesSync
+import textOf from "nish:fs" -> builtin readFileSyncOrNull
+function load(path: string): u8[] | null -> @load [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_read_file_bytes nish_str_concat
+  stackSites=0 stackLocals=0
+  local 10:9 label: string (const)
+function text(path: string): string | null -> @text [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_read_file_or_null nish_str_concat
+  stackSites=0 stackLocals=0
+  local 16:9 label: string (const)
 program tests/cases/mem_read_or_null_scope.ts
 module tests/cases/mem_read_or_null_scope.ts (entry)
 function load(path: string): string | null -> @load [exported]

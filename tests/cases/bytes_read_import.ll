@@ -2,12 +2,15 @@
 
 @.str.0 = private unnamed_addr constant { i64, [27 x i8] } { i64 26, [27 x i8] c"tests/cases/bytes_read.bin\00" }, align 8
 
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
 define noundef i32 @test() #0 {
 entry:
   %bytes.addr = alloca %struct.nish_array*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call %struct.nish_array* @nish_read_file_bytes(i8* bitcast ({ i64, [27 x i8] }* @.str.0 to i8*))
   store %struct.nish_array* %0, %struct.nish_array** %bytes.addr, align 8
   %1 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
@@ -16,6 +19,7 @@ entry:
 
 if.then:
   %3 = sub nsw i32 0, 1
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %3
 
 if.end:
@@ -54,6 +58,7 @@ bounds.ok.1:
   %22 = load i8, i8* %21, align 1, !alias.scope !4, !noalias !3, !tbaa !13
   %23 = zext i8 %22 to i32
   %24 = add nsw i32 %13, %23
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %24
 }
 
