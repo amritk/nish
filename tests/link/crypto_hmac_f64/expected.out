@@ -1,0 +1,34 @@
+PASS  HMAC-SHA-256, RFC 4231 test case 1
+PASS  HMAC-SHA-384, RFC 4231 test case 1
+PASS  HMAC-SHA-256, RFC 4231 test case 2
+PASS  HMAC-SHA-384, RFC 4231 test case 2
+PASS  HMAC-SHA-256, RFC 4231 test case 3
+PASS  HMAC-SHA-384, RFC 4231 test case 3
+PASS  HMAC-SHA-256, RFC 4231 test case 4
+PASS  HMAC-SHA-384, RFC 4231 test case 4
+PASS  HMAC-SHA-256, RFC 4231 test case 5 (first 128 bits)
+PASS  HMAC-SHA-384, RFC 4231 test case 5 (first 128 bits)
+PASS  HMAC-SHA-256, RFC 4231 test case 6 (131-byte key, hashed first)
+PASS  HMAC-SHA-384, RFC 4231 test case 6 (131-byte key, hashed first)
+PASS  HMAC-SHA-256, RFC 4231 test case 7
+PASS  HMAC-SHA-384, RFC 4231 test case 7
+PASS  HMAC-SHA-256 with a 64-byte key, used as it is (checked against Python)
+PASS  HMAC-SHA-256 with a 65-byte key, hashed first (checked against Python)
+PASS  HMAC-SHA-384 with a 128-byte key, used as it is (checked against Python)
+PASS  HMAC-SHA-384 with a 129-byte key, hashed first (checked against Python)
+PASS  HMAC-SHA-256 of test case 7 fed one byte at a time
+PASS  HMAC-SHA-256 of test case 7 fed in 50-byte chunks
+PASS  HMAC-SHA-384 of test case 7 fed one byte at a time
+PASS  HMAC-SHA-384 of test case 7 fed in 50-byte chunks
+PASS  HmacSha256 with only an empty window is the HMAC of nothing
+PASS  HmacSha384 with only an empty window is the HMAC of nothing
+PASS  hmacSha256Verify accepts the right tag
+PASS  hmacSha256Verify refuses a one-bit flip
+PASS  hmacSha256Verify refuses a truncated tag
+PASS  hmacSha256Verify refuses the tag of other data
+PASS  hmacSha384Verify accepts the right tag
+PASS  hmacSha384Verify refuses a one-bit flip
+PASS  hmacSha384Verify refuses a truncated tag
+PASS  hmacSha384Verify refuses the tag of other data
+PASS  each tag is a fresh array
+hmac: 33 passed, 0 failed, 0 skipped

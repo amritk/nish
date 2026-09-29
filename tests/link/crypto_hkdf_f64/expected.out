@@ -1,0 +1,26 @@
+PASS  RFC 5869 A.1 PRK
+PASS  RFC 5869 A.1 OKM (42 bytes, ending mid-block)
+PASS  RFC 5869 A.2 PRK
+PASS  RFC 5869 A.2 OKM (82 bytes, three blocks)
+PASS  RFC 5869 A.3 PRK (empty salt)
+PASS  RFC 5869 A.3 OKM (empty info)
+PASS  an empty salt is HashLen zero bytes
+PASS  A.1's inputs, HKDF-SHA-384 PRK (checked against Python)
+PASS  A.1's inputs, HKDF-SHA-384 OKM (checked against Python)
+PASS  A.2's inputs, HKDF-SHA-384 PRK (checked against Python)
+PASS  A.2's inputs, HKDF-SHA-384 OKM (checked against Python)
+PASS  A.3's inputs, HKDF-SHA-384 PRK (checked against Python)
+PASS  A.3's inputs, HKDF-SHA-384 OKM (checked against Python)
+PASS  an empty SHA-384 salt is HashLen zero bytes
+PASS  HKDF-SHA-256 expands to exactly 255 * 32 bytes
+PASS  and its last block is T(255) (checked against Python)
+PASS  HKDF-SHA-256 refuses 255 * 32 + 1 bytes
+PASS  HKDF-SHA-384 expands to exactly 255 * 48 bytes
+PASS  and its last block is T(255) (checked against Python)
+PASS  HKDF-SHA-384 refuses 255 * 48 + 1 bytes
+PASS  HKDF-SHA-256 refuses a negative length
+PASS  HKDF-SHA-384 refuses a negative length
+PASS  HKDF-SHA-256 of zero bytes is an empty array
+PASS  HKDF-SHA-384 of zero bytes is an empty array
+PASS  the first 42 bytes of the longest SHA-256 output are A.1's OKM
+hkdf: 25 passed, 0 failed, 0 skipped

@@ -1,0 +1,5 @@
+PASS  §5.2 first vector
+PASS  §6.1 Alice's public key
+PASS  §6.1 the shared secret
+PASS  a 31-byte scalar answers null
+x25519 (f64 mode): 4 passed, 0 failed, 0 skipped

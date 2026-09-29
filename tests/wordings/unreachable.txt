@@ -197,3 +197,17 @@ NL4003  an error string in the generated N-API shim
 NL4004  a sentence in the `--emit-dts` loader's marshalling report
 NL4005  an error string in the generated N-API shim
 NL4006  an error string in the generated N-API shim
+
+# --- Not live yet: WP33 R1's portability rows land in three stages. ---------
+# Every NL8xxx code was registered at once, with the class, so that the stages
+# that write the analyses cannot race each other for a number. Each block below
+# is one stage's, and that stage deletes exactly its own block when its rows go
+# live; the blank comment lines keep the three deletions from touching.
+#
+# --- WP33 R1: lands with portability-strings
+NL8001  not live yet: a UTF-8 offset that meets an outside fact
+NL8002  not live yet: a `slice` whose bounds are not proven inside its receiver
+#
+# --- WP33 R1: lands with portability-records
+NL8003  not live yet: a record copied into an array while the original is still used
+NL8004  not live yet: a store over an element a live reference still reads

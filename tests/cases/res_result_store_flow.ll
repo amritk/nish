@@ -78,12 +78,11 @@ cond.true:
   br label %cond.end
 
 cond.false:
-  %4 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.end:
-  %5 = phi i32 [ %3, %cond.true ], [ %4, %cond.false ]
-  ret i32 %5
+  %4 = phi i32 [ %3, %cond.true ], [ -1, %cond.false ]
+  ret i32 %4
 }
 
 define noundef i32 @nish_main() #2 {
@@ -116,40 +115,39 @@ if.end:
   %10 = call i32 @take(%struct.nish_result.i32.str* %9)
   %11 = add nsw i32 %8, %10
   store i32 %11, i32* %total.addr, align 4
-  %12 = sub nsw i32 0, 3
-  %13 = call %struct.nish_result.i32.str* @parse(i32 %12)
-  store %struct.nish_result.i32.str* %13, %struct.nish_result.i32.str** %s.addr, align 8
+  %12 = call %struct.nish_result.i32.str* @parse(i32 -3)
+  store %struct.nish_result.i32.str* %12, %struct.nish_result.i32.str** %s.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %while.cond
 
 while.cond:
-  %14 = load i32, i32* %i.addr, align 4
-  %15 = icmp slt i32 %14, 3
-  br i1 %15, label %while.body, label %while.end
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = icmp slt i32 %13, 3
+  br i1 %14, label %while.body, label %while.end
 
 while.body:
-  %16 = load i32, i32* %total.addr, align 4
-  %17 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
-  %18 = call i32 @take(%struct.nish_result.i32.str* %17)
-  %19 = add nsw i32 %16, %18
-  store i32 %19, i32* %total.addr, align 4
-  %20 = load i32, i32* %i.addr, align 4
-  %21 = call %struct.nish_result.i32.str* @parse(i32 %20)
-  store %struct.nish_result.i32.str* %21, %struct.nish_result.i32.str** %s.addr, align 8
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = add nsw i32 %22, 1
-  store i32 %23, i32* %i.addr, align 4
+  %15 = load i32, i32* %total.addr, align 4
+  %16 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
+  %17 = call i32 @take(%struct.nish_result.i32.str* %16)
+  %18 = add nsw i32 %15, %17
+  store i32 %18, i32* %total.addr, align 4
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = call %struct.nish_result.i32.str* @parse(i32 %19)
+  store %struct.nish_result.i32.str* %20, %struct.nish_result.i32.str** %s.addr, align 8
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = add nsw i32 %21, 1
+  store i32 %22, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %24 = load i32, i32* %total.addr, align 4
-  %25 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
-  %26 = call i32 @take(%struct.nish_result.i32.str* %25)
-  %27 = add nsw i32 %24, %26
-  store i32 %27, i32* %total.addr, align 4
-  %28 = load i32, i32* %total.addr, align 4
-  %29 = call i8* @nish_str_from_i32(i32 %28)
-  call void @nish_print(i8* %29)
+  %23 = load i32, i32* %total.addr, align 4
+  %24 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
+  %25 = call i32 @take(%struct.nish_result.i32.str* %24)
+  %26 = add nsw i32 %23, %25
+  store i32 %26, i32* %total.addr, align 4
+  %27 = load i32, i32* %total.addr, align 4
+  %28 = call i8* @nish_str_from_i32(i32 %27)
+  call void @nish_print(i8* %28)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -12,6 +12,8 @@
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
+ *       <name>.portability  the `--warn-portability --json` portability objects, one
+ *                    per line (WP33: the case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
  *     `build/nish-test` once per run -- one process per case, `defaultJobs()` at
@@ -359,6 +361,21 @@ const diagnosticsOf = (stdout) =>
 /** One `--json` diagnostic as a report line: `file:line:col CODE message`. */
 const diagnosticLine = (d) => `${d.file}:${d.line}:${d.column} ${d.code} ${d.message}`
 
+/**
+ * Every module of the library under `dir` (`std/` by default), at any depth, as
+ * `std/<path>` with `/` separators, sorted. Recursive because a module may live in
+ * a subdirectory (`std/crypto/sha256.ts` is `nish/crypto/sha256`), and a check that
+ * read only the top level would pass over it without saying so.
+ */
+const stdModuleFiles = (dir = path.join(root, "std")) =>
+  fs
+    .readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) =>
+      ["std", ...path.relative(dir, path.join(entry.parentPath, entry.name)).split(path.sep)].join("/")
+    )
+    .sort()
+
 /** A dotted version as numbers, for ordering releases. */
 const semver = (v) => v.split(".").map(Number)
 
@@ -514,6 +531,41 @@ for (const [at, name] of selectedCases.entries()) {
     check(`${name}: compiles`, false, stderr)
     continue
   }
+  // A `port_*` case exists for its warnings, and without the golden nothing
+  // would compile it with the flag: it would pass while asserting nothing.
+  if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
+    check(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
+  }
+  if (fs.existsSync(side("portability"))) {
+    // WP33: the warnings are off by default, so the case compiles a second
+    // time with the flag, and its portability objects are the golden, one per
+    // line and in report order. Paths are taken back to the repository's, as
+    // for `.stdout`.
+    const warned = spawnSync(
+      NISH,
+      [src, "-o", path.join(buildDir, `${name}.portability.ll`), ...args, "--warn-portability", "--json"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const want = fs.readFileSync(side("portability"), "utf8").trim()
+    const got = warned.stdout
+      .split("\n")
+      .filter((l) => l.includes('"severity":"portability"'))
+      .join("\n")
+      .split(`${root}/`)
+      .join("")
+    check(
+      `${name}: --warn-portability --json matches .portability`,
+      warned.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+    )
+    // Warnings never reach the IR (wp33 §1 rule 6): both compiles wrote the same bytes.
+    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
+    check(
+      `${name}: --warn-portability changes no byte of the IR`,
+      fs.existsSync(warnedLl) && fs.readFileSync(warnedLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+      "the two .ll files differ"
+    )
+  }
   if (fs.existsSync(side("stdout"))) {
     // A dump flag (`--emit-ast`, `--emit-checked`): the compiler's stdout is the golden, no IR is written.
     // stage1 prints a module path the way it was handed one, and this suite
@@ -596,7 +648,9 @@ for (const [at, name] of selectedCases.entries()) {
 // two goldens generated together only prove they were generated together — so
 // the two outputs are compared directly, with the one line that is allowed to
 // differ (the source file each was compiled from) taken out.
-if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes(only)) {
+// Both cases have to be in the run: a filter such as `port_` selects
+// `io_nish_import_global` alone, and the comparison would read a stale file or none.
+if (selectedCases.includes("io_nish_import") && selectedCases.includes("io_nish_import_global")) {
   const ir = (name) => {
     const file = path.join(buildDir, `${name}.ll`)
     return fs.existsSync(file)
@@ -611,6 +665,41 @@ if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes
     imported === null
       ? "(one of the two cases did not compile)"
       : `--- global\n${global}\n--- imported\n${imported}`
+  )
+}
+
+// ---- A refused `const` is one diagnostic (#275) --------------------------------------
+// A `.err` is a substring match, so it cannot see a cascade after the line it
+// names. A `const` whose initializer is refused is declared as the error type,
+// and each case here uses one afterwards; the count is what says those uses
+// stayed silent rather than each reporting `Unknown identifier` or `Unknown function`.
+for (const name of [
+  "reject_const_refused_initializer",
+  "reject_rng_array_zero_fill",
+  "reject_arrow_as_value",
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  // A case renamed or deleted fails here rather than leaving the check empty.
+  const at = selectedCases.indexOf(name)
+  if (at < 0) {
+    check(
+      `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+      false,
+      "(no such case)"
+    )
+    continue
+  }
+  // The compile the case loop already ran: one summary line per error.
+  const r = caseResults[at]
+  const errors = String(r.stderr)
+    .split("\n")
+    .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
+    r.status === 1 && errors.length === 1,
+    String(r.stderr)
   )
 }
 
@@ -765,6 +854,22 @@ if (!only || "diagnostics".includes(only)) {
       (t) => t.replace("const performanceRules = (): string[] => [\n", (open) => open + codesStray),
     ],
     ["a gap in the NL9xxx codes", "performanceRules", (t) => t.replace('"NL9010",', '"NL9011",')],
+    [
+      "a stray fragment in portabilityRules",
+      "portabilityRules",
+      (t) => t.replace("const portabilityRules = (): string[] => [\n", (open) => open + codesStray),
+    ],
+    ["a gap in the NL8xxx codes", "portabilityRules", (t) => t.replace('"NL8006",', '"NL8012",')],
+    [
+      "a portability code outside portabilityRules",
+      "diagnosticRules",
+      (t) => t.replace('"NL2186",', '"NL8012",'),
+    ],
+    [
+      "a non-portability code inside portabilityRules",
+      "portabilityRules",
+      (t) => t.replace('"NL8006",', '"NL2395",'),
+    ],
   ]
   for (const [i, [what, table, mutate]] of codesMutations.entries()) {
     const copy = path.join(buildDir, `codes-mutation-${i}.ts`)
@@ -1615,11 +1720,26 @@ if (!only || "performance".includes(only)) {
     ["examples/multi/main.ts f64", "NL2140"],
     ["examples/nbody.ts i32", "NL2008"], // written for f64 (its `// smoke: args` line): `Math.sqrt` of an i32
   ])
+  // The walker the gate reads `std/` through reaches a module in a subdirectory,
+  // proven on a tree of its own so the claim does not wait for one to exist.
+  {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "nish-std-walk-"))
+    fs.mkdirSync(path.join(fixture, "crypto", "hash"), { recursive: true })
+    for (const file of ["top.ts", "crypto/inner.ts", "crypto/hash/deep.ts", "crypto/notes.md", "README.md"]) {
+      fs.writeFileSync(path.join(fixture, file), "")
+    }
+    fs.mkdirSync(path.join(fixture, "looks.ts"))
+    const found = stdModuleFiles(fixture)
+    const want = ["std/crypto/hash/deep.ts", "std/crypto/inner.ts", "std/top.ts"]
+    fs.rmSync(fixture, { recursive: true, force: true })
+    check(
+      "performance gate: the std/ walker finds a module at every depth, and nothing that is not one",
+      JSON.stringify(found) === JSON.stringify(want),
+      `found ${JSON.stringify(found)}, wanted ${JSON.stringify(want)}`
+    )
+  }
   const gateSources = [
-    ...fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => `std/${f}`),
+    ...stdModuleFiles(),
     // The corpus's own discovery, which already reads a directory with a
     // `main.ts` as one program (`examples/multi/`).
     ...corpusPrograms()
@@ -1734,6 +1854,129 @@ if (!only || "performance".includes(only)) {
     many.status === 0 &&
       summaries(many.stderr).length === 20 &&
       many.stderr.includes("\n...and 5 more performance warnings\n25 performance warnings"),
+    many.stderr
+  )
+}
+
+// ---- WP33: the `portability` diagnostic class --------------------------------------
+// Warnings about the program's TypeScript reading rather than about this build:
+// where the same source, run under Node, runs to the end and answers
+// differently. Off by default and turned on with `--warn-portability`; printed
+// `file:line:col: portability: <text>` with the usual excerpt, or with
+// `"severity":"portability"` under `--json`, after the performance warnings and
+// on the same streams. The rows themselves are pinned by the `port_*` cases'
+// `.portability` goldens; what is checked here is the class.
+if (!only || "portability".includes(only) || only.startsWith("port_")) {
+  const compile = (source, out, extra = []) =>
+    spawnSync(NISH, [source, "-o", path.join(buildDir, out), ...extra], { cwd: root, encoding: "utf8" })
+  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: portability: /.test(l))
+  const objects = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{"))
+  const zeroFill = path.join(casesDir, "port_array_zero_fill.ts")
+
+  // Off by default: without the flag the case says nothing, in either form.
+  // (That it costs the IR nothing is checked per `port_*` case, beside its golden.)
+  const plain = compile(zeroFill, "port_class_plain.ll")
+  const plainJson = compile(zeroFill, "port_class_plain_json.ll", ["--json"])
+  const warned = compile(zeroFill, "port_class_warned.ll", ["--warn-portability"])
+  check(
+    "portability: off by default -- port_array_zero_fill says nothing without --warn-portability, in either form",
+    plain.status === 0 &&
+      summaries(plain.stderr).length === 0 &&
+      plainJson.status === 0 &&
+      objects(plainJson.stdout).length === 0,
+    plain.stderr + plainJson.stdout
+  )
+
+  // The human form: the summary line, the excerpt under it, and the count, and
+  // a warned program still exits 0.
+  const warnedLines = warned.stderr.split("\n")
+  check(
+    "portability: the human report is `file:line:col: portability: <text>`, an excerpt, and a count, and exits 0",
+    warned.status === 0 &&
+      summaries(warned.stderr).length === 8 &&
+      warnedLines[0] ===
+        `${zeroFill}:10:18: portability: \`new Array<i32>(side * side)\` is filled with zeros here, and with holes in TypeScript, which read back as \`undefined\`` &&
+      warnedLines[1] === "  10 |     this.cells = new Array<i32>(side * side);" &&
+      warnedLines[2] === "     |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~" &&
+      warned.stderr.includes("\n8 portability warnings\n"),
+    warned.stderr
+  )
+
+  // A program with an error gets the error report and nothing else: advice
+  // about code that does not compile is noise.
+  const brokenSrc = path.join(buildDir, "port_class_error.ts")
+  fs.writeFileSync(
+    brokenSrc,
+    "export const main = (): number => {\n  const xs = new Array<f64>(3);\n  return xs.length + true;\n};\n"
+  )
+  const broken = compile(brokenSrc, "port_class_error.ll", ["--warn-portability"])
+  const brokenJson = compile(brokenSrc, "port_class_error_json.ll", ["--warn-portability", "--json"])
+  check(
+    "portability: a program with an error prints no portability warning, in either form",
+    broken.status === 1 &&
+      broken.stderr.includes(": error: ") &&
+      !broken.stderr.includes("portability") &&
+      brokenJson.status === 1 &&
+      objects(brokenJson.stdout).length > 0 &&
+      objects(brokenJson.stdout).every((l) => JSON.parse(l).severity === "error"),
+    broken.stderr + brokenJson.stdout
+  )
+
+  // The two warning classes are independent in both directions, and when both
+  // print, performance comes first. The program has one of each: a string
+  // rebuilt in a loop (NL9002) and a zero-filled array (NL8005).
+  const bothSrc = path.join(buildDir, "port_class_both.ts")
+  fs.writeFileSync(
+    bothSrc,
+    'export const main = (): number => {\n  let s = "";\n  for (let i = 0; i < 3; i = i + 1) {\n    s = s + "x";\n  }\n  const xs = new Array<f64>(3);\n  return s.length + xs.length;\n};\n'
+  )
+  const both = compile(bothSrc, "port_class_both.ll", ["--warn-portability"])
+  const bothJson = compile(bothSrc, "port_class_both_json.ll", ["--warn-portability", "--json"])
+  const quietPerf = compile(bothSrc, "port_class_quiet_perf.ll", [
+    "--warn-portability",
+    "--no-warn-performance",
+  ])
+  const perfOnly = compile(bothSrc, "port_class_perf_only.ll")
+  const severities = objects(bothJson.stdout).map((l) => `${JSON.parse(l).severity} ${JSON.parse(l).code}`)
+  check(
+    "portability: printed after the performance warnings, on stderr, and as objects on stdout under --json",
+    both.status === 0 &&
+      both.stderr.indexOf(": performance: ") >= 0 &&
+      both.stderr.indexOf(": performance: ") < both.stderr.indexOf(": portability: ") &&
+      bothJson.status === 0 &&
+      severities.join(",") === "performance NL9002,portability NL8005",
+    both.stderr + bothJson.stdout + bothJson.stderr
+  )
+  check(
+    "portability: --no-warn-performance does not silence it, and it does not bring performance back",
+    quietPerf.status === 0 &&
+      summaries(quietPerf.stderr).length === 1 &&
+      !quietPerf.stderr.includes(": performance: "),
+    quietPerf.stderr
+  )
+  check(
+    "portability: without the flag the performance warning alone prints",
+    perfOnly.status === 0 &&
+      perfOnly.stderr.includes(": performance: ") &&
+      !perfOnly.stderr.includes("portability"),
+    perfOnly.stderr
+  )
+
+  // The cap the performance report has, with the class's own words.
+  const manySrc = path.join(buildDir, "port_class_many.ts")
+  fs.writeFileSync(
+    manySrc,
+    Array.from(
+      { length: 25 },
+      (_, i) => `export const f${i} = (n: i32): i32 => new Array<i32>(n).length;`
+    ).join("\n") + "\n"
+  )
+  const many = compile(manySrc, "port_class_many.ll", ["--warn-portability"])
+  check(
+    "portability: 25 warnings print 20, then `...and 5 more portability warnings` and `25 portability warnings`",
+    many.status === 0 &&
+      summaries(many.stderr).length === 20 &&
+      many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
 }
@@ -7100,26 +7343,27 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
   // stage1 cannot read `std/` to list it: `src/` has to compile under the last
   // *released* compiler (the WP19 G2 gate), and `readdirSync` is newer than
-  // that release, so `src/std-modules.ts` carries the list as a literal while
-  // stage0 reads the directory. This is what stops the literal going stale — a
-  // disagreement is a diagnostic the two compilers word differently, which the
-  // reject oracle would only catch if a case happened to trigger it.
+  // that release, so `src/std-modules.ts` carries the list as a literal. This
+  // is what stops the literal going stale: a module added to `std/` at any
+  // depth and not to the list would be one the "not part of the standard
+  // library" diagnostic leaves out, and no golden triggers that by chance.
+  // Each module is listed by its specifier tail, `std/crypto/sha256.ts` as
+  // `crypto/sha256`.
   {
-    const stdDir = path.join(root, "std")
-    const actual = fs
-      .readdirSync(stdDir)
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => f.slice(0, -3))
+    const actual = stdModuleFiles()
+      .map((f) => f.slice("std/".length, -".ts".length))
       .sort()
       .join(", ")
     const stage1 = fs.readFileSync(path.join(root, "src", "std-modules.ts"), "utf8")
+    // The formatter may break the arrow before a long literal, so the literal
+    // is read from the declaration wherever it wrapped.
+    const listed = /stdModuleNames = \(\): string =>\s*"([^"]*)"/.exec(stage1)
     check(
       `src/std-modules.ts lists the modules std/ actually has (${actual})`,
-      stage1.includes(`=> "${actual}"`),
-      stage1
-        .split("\n")
-        .filter((l) => l.includes("stdModuleNames"))
-        .join(" | ")
+      listed !== null && listed[1] === actual,
+      listed === null
+        ? 'no `stdModuleNames = (): string => "..."` in src/std-modules.ts'
+        : `it lists: ${listed[1]}`
     )
 
     // And the third party to that contract, added 2026-09-20: the release
@@ -7139,12 +7383,18 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // whichever happened to come first in the file and say nothing about the others,
     // which is the shape of the defect rather than a check on it.
     const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l))
-    const listedModules = actual.split(", ")
+    //
+    // TODO(WP34): the gates name the top-level modules only, so this holds them
+    // to those. A module in a subdirectory (`std/crypto/sha256.ts`) is not named
+    // in release.yml yet; until it is, "npm pack ships every std/ module" below
+    // is what proves those reach the package, and this list takes them in once
+    // the gates do.
+    const listedModules = actual.split(", ").filter((m) => !m.includes("/"))
     const holes = gateLines.flatMap((line) =>
       listedModules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
     )
     check(
-      `release.yml's ${gateLines.length} presence gates each name every std module, so none can ship missing (${actual})`,
+      `release.yml's ${gateLines.length} presence gates each name every top-level std module, so none can ship missing (${listedModules.join(", ")})`,
       gateLines.length === 3 && holes.length === 0,
       gateLines.length !== 3
         ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateLines.length}`
@@ -8585,6 +8835,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-napi-async",
     "--target",
     "--profile",
+    "--warn-portability",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
@@ -9094,10 +9345,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   // `std/testing.ts` is how most people will meet it. They are one project
   // because they import each other.
   const libraryModules = [
-    ...fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => path.join(root, "std", f)),
+    ...stdModuleFiles().map((f) => path.join(root, f)),
     ...fs
       .readdirSync(path.join(root, "tests", "nish"))
       .filter((f) => f.endsWith(".ts"))
@@ -9381,11 +9629,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // and a `files` entry narrowed later would take it back out just as quietly.
     // Asking the tree rather than a written list is the assertion that cannot go
     // stale (wp26 §7 question 6).
-    const stdModules = fs
-      .readdirSync(path.join(root, "std"))
-      .filter((f) => f.endsWith(".ts"))
-      .map((f) => `std/${f}`)
-      .sort()
+    const stdModules = stdModuleFiles()
     const unshipped = stdModules.filter((f) => !files.includes(f))
     check(
       `npm pack ships every std/ module in the tree (${stdModules.length}: ${stdModules.join(", ")})`,
@@ -9780,10 +10024,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           "runtime/runtime-os.c",
           "runtime/nish.h",
           "scripts/build.sh",
-          ...fs
-            .readdirSync(path.join(root, "std"))
-            .filter((f) => f.endsWith(".ts"))
-            .map((f) => `std/${f}`),
+          ...stdModuleFiles(),
         ]
         const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f))
         check(

@@ -1322,7 +1322,9 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
-  collections, json, map, pair, testing, text, threads) ``
+  collections, crypto/base64url, crypto/ct, crypto/hkdf, crypto/hmac,
+  crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text,
+  threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1362,6 +1364,14 @@ and their `.ll` goldens are byte-identical files.
   (`gen_interface`): one struct per instantiation, `%struct.Pair$i32$bool`,
   returned by pointer. Use it to return two values, not to store them side by
   side; `docs/wp23-language-surface.md` §5 is the reasoning.
+- **`nish/crypto/<primitive>` is a module in a subdirectory of the library**,
+  one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
+  `ct` (constant-time compare), `base64url` and `x25519`
+  (`tests/link/crypto_base64url` is the case that resolves a nested
+  specifier). Each is ordinary Nish source under the rules above, and a byte
+  string is a `u8[]`. They are written branch-free on secret data, which WP34
+  N6 is to verify and has not yet; `std/README.md` lists what each exports,
+  the specification it reproduces, and the three rules they share.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the
@@ -4681,12 +4691,51 @@ by the caller.
     (`tests/cases/perf_padding_suffix_gap`). Padding inside that prefix is the
     interface's, and the class says nothing about it
     (`tests/cases/perf_padding_suffix_quiet`).
+- **Portability warnings are the second diagnostic that is not an error**
+  ([wp33-round-trip.md](wp33-round-trip.md) §5.2). A program here can also be
+  read as TypeScript and run under Node with `runtime/nish.mjs`, and at a few
+  kinds of site the two readings both run to the end and quietly answer
+  differently; `--warn-portability` reports those sites, in the shape a
+  performance warning has, with `portability` where `performance` would be:
+  `file:line:col: portability: <text>`, and `"severity":"portability"` under
+  `--json`. They are **off by default** — the pass that finds them does not run
+  without the flag — and **never change the exit code** or a byte of the IR.
+  They print only for a compilation that checked cleanly, after the performance
+  warnings and on the same streams, capped at 20 with
+  `...and N more portability warnings` and an `N portability warnings` line, in
+  the same order as the performance report. `--no-warn-performance` does not
+  silence them, and `--warn-portability` does not change the performance
+  report. The standard library is not walked: its sites are not the reader's
+  to change, and a program that uses `Map` never runs `std/collections.ts` as
+  TypeScript at all. A difference TypeScript reports loudly (`orReturn`, `Ok`
+  and `Err`, a host global, a `nish:` specifier, `export const main`, `enum`)
+  is not one of them, because the TypeScript tests already notice it. The
+  rows, one code each in band NL8xxx:
+
+  | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
+  | --- | --- | --- | --- |
+  | NL8001 | UTF-8 offsets (3.2) | a `.length`, `charCodeAt`, `indexOf` or `lastIndexOf` whose value meets an outside fact: printed, stored, returned from `main`, or compared with a literal offset into text that is not provably ASCII | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
+  | NL8002 | checked `slice` (3.2) | a `slice(a, b)` whose bounds are not proven inside `[0, length]` | clamps the bounds and counts a negative one from the end, where this panics |
+  | NL8003 | a record copied in (3.3) | a record pushed, listed or stored into an array while the original is written and one copy read afterwards | stores the same object, so a write through one is seen through the other |
+  | NL8004 | a store over a live element (3.3) | `ps[i] = q` while an element reference `r = ps[j]` is still read | puts a new object in the slot and leaves `r` holding the old one |
+  | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
+  | NL8006 | integer `/` (3.1) | `/` on an integer type | divides exactly and keeps the fraction |
+  | NL8007 | wrapping (3.1) | `+ - *`, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping` | keeps counting past the range |
+  | NL8008 | `i32 >>>` (3.1) | `>>>` whose result is `i32` | reads the result back unsigned |
+  | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
+  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` | applies JavaScript's rules: a NaN operand makes `min` and `max` NaN, and `round` rounds a half towards +∞ and keeps `-0` |
+  | NL8011 | `console.log` of `-0` (3.5) | `console.log` of an `f64` | Node's console prints a negative zero as `-0` |
+
+  NL8005 is live; the other rows are registered and land in the stages
+  `tests/wordings/unreachable.txt` names, which is the record of which rows
+  report today.
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
   `message`), nothing else on stdout and nothing on stderr, with the same exit
-  code. `severity` is `"error"` for every error and `"performance"` for a
-  WP15 §8 warning, which is the field a tool filters on; `code` is the stable
+  code. `severity` is `"error"` for every error, `"performance"` for a
+  WP15 §8 warning and `"portability"` for a WP33 one, which is the field a tool
+  filters on; `code` is the stable
   identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
   failure with no source position — an unusable C toolchain, an internal

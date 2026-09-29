@@ -675,9 +675,8 @@ for.inc:
   br label %for.cond
 
 for.end:
-  %25 = sub nsw i32 0, 1
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %25
+  ret i32 -1
 }
 
 define internal noundef nonnull align 8 i8* @growth(i32 noundef %which, i32 noundef %rounds) #1 {

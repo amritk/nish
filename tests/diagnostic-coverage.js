@@ -40,8 +40,11 @@
  * `tests/self/reject-oracle.js` owns and which survive stage0; the `perf_*`
  * cases, because a WP15 §8 warning is a diagnostic on a program that compiles
  * and so can never be a `reject_*` case (their wordings are pinned by the
- * performance block of `tests/run.js`); and `tests/wordings/`, which is this
- * file's own corpus and exists to reach what the other two do not.
+ * performance block of `tests/run.js`); the `port_*` cases, for the same
+ * reason about a WP33 portability warning, compiled with the
+ * `--warn-portability` the class is off without (`portabilityArgs`); and
+ * `tests/wordings/`, which is this file's own corpus and exists to reach what
+ * the other two do not.
  *
  * **stage1's parser gets there first, sometimes.** `.claude/selfhost.md`: lex
  * and parse what is written, refuse in the phase that owns the rule. For the
@@ -142,6 +145,15 @@ const readList = (file) => {
 /** The flags a case is compiled with, from the `.args` sidecar the rest of the suite uses. */
 const argsOf = (file) => extraArgs(file)
 
+/**
+ * The same, plus `--warn-portability`: the WP33 class is off by default, so a
+ * `port_*` case or an `nl8xxx_*` wording provokes nothing without it. It is
+ * added here rather than written into those cases' `.args`, because the
+ * corpus tools that compile `tests/cases/` with the last release would refuse
+ * a flag that release does not know.
+ */
+const portabilityArgs = (file) => [...argsOf(file), "--warn-portability"]
+
 /** `tests/wordings/nl2200_empty_import_list.ts`: the code it pins and the wording it expects. */
 const wordingCases = () => {
   const cases = []
@@ -153,11 +165,12 @@ const wordingCases = () => {
     const file = path.join(WORDINGS, name)
     const err = file.replace(/\.ts$/, ".err")
     const stem = path.basename(name, ".ts")
+    const code = named[1].toUpperCase()
     cases.push({
       stem,
       file,
-      args: argsOf(file),
-      code: named[1].toUpperCase(),
+      args: code.startsWith("NL8") ? portabilityArgs(file) : argsOf(file),
+      code,
       expected: fs.existsSync(err) ? fs.readFileSync(err, "utf8").trim() : null,
     })
   }
@@ -166,8 +179,8 @@ const wordingCases = () => {
 
 /**
  * Everything else that provokes a diagnostic and outlives stage0: the
- * single-module negatives, the `tests/link/` negatives, and the `perf_*`
- * positives. Nothing here is asserted on — `tests/run.js` and
+ * single-module negatives, the `tests/link/` negatives, and the `perf_*` and
+ * `port_*` positives. Nothing here is asserted on — `tests/run.js` and
  * `reject-oracle.js` already own these files — they are read for the
  * measurement, so that a wording those cases already reach does not get a
  * second case here for no reason.
@@ -179,11 +192,16 @@ const corpusPrograms = () => {
       continue
     }
     const negative = name.startsWith("reject_") && fs.existsSync(path.join(CASES, `${name.slice(0, -3)}.err`))
-    if (!negative && !name.startsWith("perf_")) {
+    const portability = name.startsWith("port_")
+    if (!negative && !name.startsWith("perf_") && !portability) {
       continue
     }
     const file = path.join(CASES, name)
-    programs.push({ stem: path.basename(name, ".ts"), file, args: argsOf(file) })
+    programs.push({
+      stem: path.basename(name, ".ts"),
+      file,
+      args: portability ? portabilityArgs(file) : argsOf(file),
+    })
   }
   for (const program of linkPrograms()) {
     if (program.expectedErr === null) {

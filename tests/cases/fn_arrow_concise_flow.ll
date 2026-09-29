@@ -211,36 +211,35 @@ res.ok:
   br label %res.end
 
 res.alt:
-  %22 = sub nsw i32 0, 1
   br label %res.end
 
 res.end:
-  %23 = phi i32 [ %21, %res.ok ], [ %22, %res.alt ]
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  call void @nish_print(i8* %24)
-  %25 = getelementptr inbounds %struct.Node, %struct.Node* %Node.obj, i32 0, i32 0
-  store i32 4, i32* %25, align 4
+  %22 = phi i32 [ %21, %res.ok ], [ -1, %res.alt ]
+  %23 = call i8* @nish_str_from_i32(i32 %22)
+  call void @nish_print(i8* %23)
+  %24 = getelementptr inbounds %struct.Node, %struct.Node* %Node.obj, i32 0, i32 0
+  store i32 4, i32* %24, align 4
   store %struct.Node* %Node.obj, %struct.Node** %n.addr, align 8
-  %26 = load %struct.Node*, %struct.Node** %n.addr, align 8
-  %27 = call i32 @field(%struct.Node* %26)
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
-  store i64 2, i64* %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
-  store i64 2, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !16
-  %32 = bitcast [2 x i32]* %arr.data to i8*
-  %33 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
-  store i8* %32, i8** %33, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %34 = bitcast i8* %32 to i32*
-  %35 = getelementptr inbounds i32, i32* %34, i64 0
-  store i32 7, i32* %35, align 4, !alias.scope !4, !noalias !3, !tbaa !15
-  %36 = getelementptr inbounds i32, i32* %34, i64 1
-  store i32 8, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !15
-  %37 = call i32 @element(%struct.nish_array* %arr.hdr)
-  %38 = call i8* @nish_str_from_i32(i32 %37)
-  %39 = call i8* @nish_str_concat(i8* %29, i8* %38)
-  call void @nish_print(i8* %39)
+  %25 = load %struct.Node*, %struct.Node** %n.addr, align 8
+  %26 = call i32 @field(%struct.Node* %25)
+  %27 = call i8* @nish_str_from_i32(i32 %26)
+  %28 = call i8* @nish_str_concat(i8* %27, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %29, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %30, align 8, !alias.scope !3, !noalias !4, !tbaa !16
+  %31 = bitcast [2 x i32]* %arr.data to i8*
+  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %31, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %33 = bitcast i8* %31 to i32*
+  %34 = getelementptr inbounds i32, i32* %33, i64 0
+  store i32 7, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !15
+  %35 = getelementptr inbounds i32, i32* %33, i64 1
+  store i32 8, i32* %35, align 4, !alias.scope !4, !noalias !3, !tbaa !15
+  %36 = call i32 @element(%struct.nish_array* %arr.hdr)
+  %37 = call i8* @nish_str_from_i32(i32 %36)
+  %38 = call i8* @nish_str_concat(i8* %28, i8* %37)
+  call void @nish_print(i8* %38)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -17,70 +17,69 @@ entry:
   %q.addr = alloca i64, align 8
   %f.addr = alloca double, align 8
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = sub nsw i32 0, 1
-  store i32 %0, i32* %neg.addr, align 4
-  %1 = load i32, i32* %neg.addr, align 4
-  store i32 %1, i32* %w.addr, align 4
+  store i32 -1, i32* %neg.addr, align 4
+  %0 = load i32, i32* %neg.addr, align 4
+  store i32 %0, i32* %w.addr, align 4
   store i8 200, i8* %b.addr, align 1
-  %2 = load i32, i32* %w.addr, align 4
-  %3 = zext i32 %2 to i64
-  store i64 %3, i64* %q.addr, align 8
-  %4 = load i32, i32* %w.addr, align 4
-  %5 = zext i32 %4 to i64
-  %6 = call i8* @nish_str_from_u64(i64 %5)
-  %7 = call i8* @nish_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %8 = load i32, i32* %w.addr, align 4
-  %9 = call i8* @nish_str_from_i32(i32 %8)
-  %10 = call i8* @nish_str_concat(i8* %7, i8* %9)
-  %11 = call i8* @nish_str_concat(i8* %10, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %12 = load i8, i8* %b.addr, align 1
-  %13 = zext i8 %12 to i16
-  %14 = zext i16 %13 to i64
-  %15 = call i8* @nish_str_from_u64(i64 %14)
-  %16 = call i8* @nish_str_concat(i8* %11, i8* %15)
-  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %18 = load i8, i8* %b.addr, align 1
-  %19 = zext i8 %18 to i32
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  %21 = call i8* @nish_str_concat(i8* %17, i8* %20)
-  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %23 = load i64, i64* %q.addr, align 8
-  %24 = call i8* @nish_str_from_u64(i64 %23)
-  %25 = call i8* @nish_str_concat(i8* %22, i8* %24)
-  call void @nish_print(i8* %25)
-  %26 = load i32, i32* %w.addr, align 4
-  %27 = trunc i32 %26 to i8
-  %28 = zext i8 %27 to i64
-  %29 = call i8* @nish_str_from_u64(i64 %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %31 = load i32, i32* %w.addr, align 4
-  %32 = trunc i32 %31 to i16
-  %33 = zext i16 %32 to i64
-  %34 = call i8* @nish_str_from_u64(i64 %33)
-  %35 = call i8* @nish_str_concat(i8* %30, i8* %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %37 = load i32, i32* %neg.addr, align 4
-  %38 = sext i32 %37 to i64
-  %39 = call i8* @nish_str_from_u64(i64 %38)
-  %40 = call i8* @nish_str_concat(i8* %36, i8* %39)
-  call void @nish_print(i8* %40)
-  %41 = load i32, i32* %w.addr, align 4
-  %42 = uitofp i32 %41 to double
-  store double %42, double* %f.addr, align 8
-  %43 = load double, double* %f.addr, align 8
-  %44 = call i8* @nish_str_from_f64(double %43)
-  %45 = call i8* @nish_str_concat(i8* %44, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %46 = load double, double* %f.addr, align 8
-  %47 = call i32 @llvm.fptoui.sat.i32.f64(double %46)
-  %48 = zext i32 %47 to i64
-  %49 = call i8* @nish_str_from_u64(i64 %48)
-  %50 = call i8* @nish_str_concat(i8* %45, i8* %49)
-  call void @nish_print(i8* %50)
-  %51 = load i32, i32* %w.addr, align 4
-  %52 = trunc i32 %51 to i8
-  %53 = zext i8 %52 to i32
+  %1 = load i32, i32* %w.addr, align 4
+  %2 = zext i32 %1 to i64
+  store i64 %2, i64* %q.addr, align 8
+  %3 = load i32, i32* %w.addr, align 4
+  %4 = zext i32 %3 to i64
+  %5 = call i8* @nish_str_from_u64(i64 %4)
+  %6 = call i8* @nish_str_concat(i8* %5, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %7 = load i32, i32* %w.addr, align 4
+  %8 = call i8* @nish_str_from_i32(i32 %7)
+  %9 = call i8* @nish_str_concat(i8* %6, i8* %8)
+  %10 = call i8* @nish_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %11 = load i8, i8* %b.addr, align 1
+  %12 = zext i8 %11 to i16
+  %13 = zext i16 %12 to i64
+  %14 = call i8* @nish_str_from_u64(i64 %13)
+  %15 = call i8* @nish_str_concat(i8* %10, i8* %14)
+  %16 = call i8* @nish_str_concat(i8* %15, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %17 = load i8, i8* %b.addr, align 1
+  %18 = zext i8 %17 to i32
+  %19 = call i8* @nish_str_from_i32(i32 %18)
+  %20 = call i8* @nish_str_concat(i8* %16, i8* %19)
+  %21 = call i8* @nish_str_concat(i8* %20, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %22 = load i64, i64* %q.addr, align 8
+  %23 = call i8* @nish_str_from_u64(i64 %22)
+  %24 = call i8* @nish_str_concat(i8* %21, i8* %23)
+  call void @nish_print(i8* %24)
+  %25 = load i32, i32* %w.addr, align 4
+  %26 = trunc i32 %25 to i8
+  %27 = zext i8 %26 to i64
+  %28 = call i8* @nish_str_from_u64(i64 %27)
+  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %30 = load i32, i32* %w.addr, align 4
+  %31 = trunc i32 %30 to i16
+  %32 = zext i16 %31 to i64
+  %33 = call i8* @nish_str_from_u64(i64 %32)
+  %34 = call i8* @nish_str_concat(i8* %29, i8* %33)
+  %35 = call i8* @nish_str_concat(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %36 = load i32, i32* %neg.addr, align 4
+  %37 = sext i32 %36 to i64
+  %38 = call i8* @nish_str_from_u64(i64 %37)
+  %39 = call i8* @nish_str_concat(i8* %35, i8* %38)
+  call void @nish_print(i8* %39)
+  %40 = load i32, i32* %w.addr, align 4
+  %41 = uitofp i32 %40 to double
+  store double %41, double* %f.addr, align 8
+  %42 = load double, double* %f.addr, align 8
+  %43 = call i8* @nish_str_from_f64(double %42)
+  %44 = call i8* @nish_str_concat(i8* %43, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %45 = load double, double* %f.addr, align 8
+  %46 = call i32 @llvm.fptoui.sat.i32.f64(double %45)
+  %47 = zext i32 %46 to i64
+  %48 = call i8* @nish_str_from_u64(i64 %47)
+  %49 = call i8* @nish_str_concat(i8* %44, i8* %48)
+  call void @nish_print(i8* %49)
+  %50 = load i32, i32* %w.addr, align 4
+  %51 = trunc i32 %50 to i8
+  %52 = zext i8 %51 to i32
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %53
+  ret i32 %52
 }
 
 attributes #0 = { nounwind willreturn }

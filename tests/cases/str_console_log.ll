@@ -13,14 +13,13 @@ entry:
   call void @nish_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   %0 = call i8* @nish_str_from_i32(i32 7)
   call void @nish_print(i8* %0)
-  %1 = sub nsw i32 0, 3
-  %2 = call i8* @nish_str_from_i32(i32 %1)
+  %1 = call i8* @nish_str_from_i32(i32 -3)
+  call void @nish_print(i8* %1)
+  %2 = select i1 false, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
   call void @nish_print(i8* %2)
-  %3 = select i1 false, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  call void @nish_print(i8* %3)
-  %4 = icmp eq i32 1, 1
-  %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  call void @nish_print(i8* %5)
+  %3 = icmp eq i32 1, 1
+  %4 = select i1 %3, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  call void @nish_print(i8* %4)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

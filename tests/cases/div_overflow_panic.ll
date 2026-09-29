@@ -10,27 +10,25 @@ entry:
   %m.addr = alloca i32, align 4
   %d.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = sub nsw i32 0, -2147483648
-  store i32 %0, i32* %m.addr, align 4
-  %1 = sub nsw i32 0, 1
-  store i32 %1, i32* %d.addr, align 4
-  %2 = load i32, i32* %m.addr, align 4
-  %3 = load i32, i32* %d.addr, align 4
-  %4 = icmp eq i32 %3, 0
-  %5 = icmp eq i32 %2, -2147483648
-  %6 = icmp eq i32 %3, -1
-  %7 = and i1 %5, %6
-  %8 = or i1 %4, %7
-  br i1 %8, label %div.fail, label %div.ok
+  store i32 -2147483648, i32* %m.addr, align 4
+  store i32 -1, i32* %d.addr, align 4
+  %0 = load i32, i32* %m.addr, align 4
+  %1 = load i32, i32* %d.addr, align 4
+  %2 = icmp eq i32 %1, 0
+  %3 = icmp eq i32 %0, -2147483648
+  %4 = icmp eq i32 %1, -1
+  %5 = and i1 %3, %4
+  %6 = or i1 %2, %5
+  br i1 %6, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %4)
+  call void @nish_panic_div(i1 zeroext %2)
   unreachable
 
 div.ok:
-  %9 = srem i32 %2, %3
-  %10 = call i8* @nish_str_from_i32(i32 %9)
-  call void @nish_print(i8* %10)
+  %7 = srem i32 %0, %1
+  %8 = call i8* @nish_str_from_i32(i32 %7)
+  call void @nish_print(i8* %8)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

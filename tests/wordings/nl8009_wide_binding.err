@@ -1,0 +1,1 @@
+`total` is a 64-bit integer here, and a double in TypeScript, which rounds past 2^53

@@ -13,8 +13,8 @@
  * So numbers are only ever *appended*, and a retired rule keeps its entry, and
  * its number reserved. The bands follow the pipeline: NL0001 a syntax error,
  * NL1xxx Phase 0, NL2xxx the checker, NL3xxx the driver, NL4xxx the interop
- * sidecars, NL9xxx a WP15 section 8 performance warning, and NL0000 a
- * diagnostic no rule matched yet.
+ * sidecars, NL8xxx a WP33 portability warning, NL9xxx a WP15 section 8
+ * performance warning, and NL0000 a diagnostic no rule matched yet.
  *
  * Codes are carried in `--json` only. The human summary line
  * `file:line:col: error: <text>` is unchanged and stays byte-for-byte what it
@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 500
+export const RULE_COUNT: i32 = 511
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1036,6 +1036,38 @@ const diagnosticRules = (): string[] => [
   "NL2186",
 ]
 
+/**
+ * The WP33 portability rules (docs/wp33-round-trip.md section 5.2), matched by
+ * substring against a `portability` message and against nothing else. Every
+ * row of the class is registered here at once, live or not, so that the stages
+ * that add the analyses never race each other for a number;
+ * `tests/wordings/unreachable.txt` says which rows are not live yet.
+ */
+const portabilityRules = (): string[] => [
+  "overwrites the element a reference still reads, and TypeScript replaces the object instead",
+  "NL8004",
+  "is copied into the array here, and TypeScript stores the same object",
+  "NL8003",
+  "follows the native NaN and signed-zero rules here, not JavaScript's",
+  "NL8010",
+  "panics here outside its receiver's bounds, where TypeScript clamps",
+  "NL8002",
+  "prints a negative zero as 0 here, and Node's console prints -0",
+  "NL8011",
+  "wraps here, and TypeScript keeps counting past the range",
+  "NL8007",
+  "counts UTF-8 bytes here, and UTF-16 units in TypeScript",
+  "NL8001",
+  "is filled with zeros here, and with holes in TypeScript",
+  "NL8005",
+  "is a 64-bit integer here, and a double in TypeScript",
+  "NL8009",
+  "reads back signed here, and unsigned in TypeScript",
+  "NL8008",
+  "truncates here, and TypeScript divides exactly",
+  "NL8006",
+]
+
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
 const performanceRules = (): string[] => [
   "` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both",
@@ -1066,9 +1098,21 @@ const performanceRules = (): string[] => [
   "NL9004",
 ]
 
+/** The code of the first fragment of one table that `text` contains, or `UNCODED`. */
+const firstMatch = (rules: string[], text: string): string => {
+  let i: i32 = 0
+  while (i < rules.length) {
+    if (text.indexOf(rules[i]) >= 0) {
+      return rules[i + 1]
+    }
+    i = i + 2
+  }
+  return UNCODED
+}
+
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
- * (`error`, `syntax error`, `performance`) and `text` the message without
+ * (`error`, `syntax error`, `performance`, `portability`) and `text` the message without
  * its location prefix.
  */
 export const codeFor = (kind: string, text: string): string => {
@@ -1076,23 +1120,10 @@ export const codeFor = (kind: string, text: string): string => {
     return SYNTAX
   }
   if (kind === "performance") {
-    const perf: string[] = performanceRules()
-    let i: i32 = 0
-    while (i < perf.length) {
-      if (text.indexOf(perf[i]) >= 0) {
-        return perf[i + 1]
-      }
-      i = i + 2
-    }
-    return UNCODED
+    return firstMatch(performanceRules(), text)
   }
-  const rules: string[] = diagnosticRules()
-  let j: i32 = 0
-  while (j < rules.length) {
-    if (text.indexOf(rules[j]) >= 0) {
-      return rules[j + 1]
-    }
-    j = j + 2
+  if (kind === "portability") {
+    return firstMatch(portabilityRules(), text)
   }
-  return UNCODED
+  return firstMatch(diagnosticRules(), text)
 }

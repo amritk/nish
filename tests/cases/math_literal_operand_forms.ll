@@ -39,34 +39,32 @@ entry:
   %19 = call i8* @nish_str_from_f64(double %18)
   %20 = call i8* @nish_str_concat(i8* %15, i8* %19)
   call void @nish_print(i8* %20)
-  %21 = sub nsw i64 0, 1
-  %22 = load i64, i64* %big.addr, align 8
-  %23 = mul nsw i64 %21, %22
-  %24 = call i8* @nish_str_from_i64(i64 %23)
-  %25 = call i8* @nish_str_concat(i8* %24, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %26 = sub nsw i64 0, 1
-  %27 = load i64, i64* %big.addr, align 8
-  %28 = add nsw i64 %26, %27
-  %29 = call i8* @nish_str_from_i64(i64 %28)
-  %30 = call i8* @nish_str_concat(i8* %25, i8* %29)
-  call void @nish_print(i8* %30)
-  %31 = fneg double 0x3FF0000000000000
-  %32 = load double, double* %z.addr, align 8
-  %33 = fcmp olt double %31, %32
-  %34 = select i1 %33, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %35 = call i8* @nish_str_concat(i8* %34, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %36 = fneg double 0x3FF0000000000000
-  %37 = load double, double* %z.addr, align 8
-  %38 = fcmp oeq double %36, %37
-  %39 = select i1 %38, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %40 = call i8* @nish_str_concat(i8* %35, i8* %39)
-  %41 = call i8* @nish_str_concat(i8* %40, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %42 = fneg double 0x4000000000000000
-  %43 = load double, double* %z.addr, align 8
-  %44 = fcmp oge double %42, %43
-  %45 = select i1 %44, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %46 = call i8* @nish_str_concat(i8* %41, i8* %45)
-  call void @nish_print(i8* %46)
+  %21 = load i64, i64* %big.addr, align 8
+  %22 = mul nsw i64 -1, %21
+  %23 = call i8* @nish_str_from_i64(i64 %22)
+  %24 = call i8* @nish_str_concat(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %25 = load i64, i64* %big.addr, align 8
+  %26 = add nsw i64 -1, %25
+  %27 = call i8* @nish_str_from_i64(i64 %26)
+  %28 = call i8* @nish_str_concat(i8* %24, i8* %27)
+  call void @nish_print(i8* %28)
+  %29 = fneg double 0x3FF0000000000000
+  %30 = load double, double* %z.addr, align 8
+  %31 = fcmp olt double %29, %30
+  %32 = select i1 %31, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %33 = call i8* @nish_str_concat(i8* %32, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %34 = fneg double 0x3FF0000000000000
+  %35 = load double, double* %z.addr, align 8
+  %36 = fcmp oeq double %34, %35
+  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %38 = call i8* @nish_str_concat(i8* %33, i8* %37)
+  %39 = call i8* @nish_str_concat(i8* %38, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %40 = fneg double 0x4000000000000000
+  %41 = load double, double* %z.addr, align 8
+  %42 = fcmp oge double %40, %41
+  %43 = select i1 %42, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %44 = call i8* @nish_str_concat(i8* %39, i8* %43)
+  call void @nish_print(i8* %44)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

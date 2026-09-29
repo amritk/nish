@@ -51,11 +51,13 @@ exclusive:
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
   the same rule next release. The prose may improve; the code may not.
-- **`severity`** is `"error"` or `"performance"`. A performance warning never
-  changes the exit code — it is advice, not a rejection.
+- **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
+  of either kind never changes the exit code — it is advice, not a rejection.
+  Portability warnings, the sites where the program's TypeScript reading
+  answers differently, print only under `--warn-portability`.
 - **Bands**: `NL1xxx` the Phase 0 forbidden-syntax sweep, `NL2xxx` the checker,
-  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL9xxx`
-  performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
+  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL8xxx`
+  portability, `NL9xxx` performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
   `NL0000` a diagnostic with no rule yet.
 - **Exit codes**: `0` ok, `1` the program was rejected, `2` usage, `3` the C
   toolchain is unusable, `70` an internal compiler error — that last one is a
