@@ -1,7 +1,9 @@
 # WP34: Hosting cs — the network stack first
 
-**Proposed. Lanes K1 and K4 of §5 have landed (§5a); nothing else here is
-built.** This note covers the compiler's half of a
+**Proposed, and partly built. Lanes K1 and K4 of §5 have landed (§5a), and
+so have N1, N2, N3 and N6 of §4 (each section's State line names its pull
+requests); N5 and everything else here are not built.** This note covers the
+compiler's half of a
 plan whose other half lives in the program being ported,
 [`amritk/cs` → `docs/nish-port.md`](https://github.com/amritk/cs/blob/main/docs/nish-port.md).
 
@@ -142,12 +144,12 @@ parameter type, a `switch` discriminant and a `Map` key. An exported alias is
 used the same way for a class, an array and a `T | null`. The rules that stay
 keep their negative tests: no string enum, no `const enum`, no default export.
 
-**State.** Done. An exported enum is imported and used as all four
-(`tests/link/enum_export_uses`), and LANGUAGE.md §Enums has the rule. An
-exported alias is imported and resolves to the class, array or `T | null` it
-names (`tests/link/alias_export_class`, `alias_export_array`,
-`alias_export_nullable`), its right-hand side resolved in the module that
-wrote it, so it may name a class that module imported
+**State.** Done in #296 (enums) and #300 (aliases). An exported enum is
+imported and used as all four (`tests/link/enum_export_uses`), and
+LANGUAGE.md §Enums has the rule. An exported alias is imported and resolves
+to the class, array or `T | null` it names (`tests/link/alias_export_class`,
+`alias_export_array`, `alias_export_nullable`), its right-hand side resolved
+in the module that wrote it, so it may name a class that module imported
 (`alias_export_imported_class`); LANGUAGE.md §Type aliases has the rule. Both
 are bound by the same pre-pass: every module's enums and aliases declared, and
 its imported ones bound, before any signature.
@@ -335,9 +337,11 @@ RFC 5869 Appendix A, RFC 4648 §10, and RFC 7748 §5.2 (the iterated vector to
 1,000) and §6.1. Neither lane waited for its **Needs** column. The modules
 export functions, classes and constants and no enum or alias, so N1 was not
 needed, and they are written branch-free on secrets by masking, so N6 is what
-will *verify* them rather than what they are written with. Until N6 lands that
-property is the modules' discipline, stated in each header, and not a checked
-fact. [`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
+will *verify* them rather than what they are written with. N6 has landed
+(#310), but its assembly check reads only its own fixtures so far
+(`tests/cases/ct_asm_*`): until it is pointed at these modules, being
+branch-free on secrets is their discipline, stated in each header, and not a
+checked fact. [`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
 lists what each module exports and the rules they share.
 
 **One test suite belongs to no single lane:** a Nish server and a Nish client
