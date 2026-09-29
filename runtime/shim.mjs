@@ -42,6 +42,7 @@
  * The rewrite rules that call these helpers are listed in docs/wp13-differential.md.
  */
 import child_process from "node:child_process";
+import { webcrypto } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 
@@ -678,6 +679,65 @@ export function spawnSyncTo(argv, out, err) {
  */
 export function monotonicNanos() {
   return process.hrtime.bigint();
+}
+
+// ---- The host (WP34 N3) ------------------------------------------------------
+
+/**
+ * `statMtimeSync(path)`: Node's `mtimeMs` for the path, or NaN when it cannot
+ * be stat'd, which is the native answer too. `mtimeMs` is the same arithmetic
+ * `runtime-host.c` does, so the two print the same digits, fraction and all.
+ */
+export function statMtimeSync(path) {
+  const st = fs.statSync(path, { throwIfNoEntry: false });
+  if (st === undefined) {
+    return Number.NaN;
+  }
+  return st.mtimeMs;
+}
+
+/**
+ * Node's own fill, taken before `runtime/nish.mjs` puts the one below in its
+ * place on the same object: `webcrypto` is the global `crypto`.
+ */
+const webRandom = webcrypto.getRandomValues.bind(webcrypto);
+
+/**
+ * `crypto.getRandomValues(bytes)` for the plain array a `u8[]` is here. Node's
+ * own takes only a typed array, so the bytes are drawn into one and copied
+ * across. More than 65,536 fails with the native panic and its words, where
+ * Node would throw a `QuotaExceededError`: the exit status is 1 either way. A
+ * typed array goes straight through.
+ */
+export function getRandomValues(bytes) {
+  if (!Array.isArray(bytes)) {
+    return webRandom(bytes);
+  }
+  if (bytes.length > 65536) {
+    panic(`crypto.getRandomValues: ${bytes.length} bytes asked for, and one call fills at most 65536`);
+  }
+  const drawn = webRandom(new Uint8Array(bytes.length));
+  for (let i = 0; i < drawn.length; i++) {
+    bytes[i] = drawn[i];
+  }
+  return bytes;
+}
+
+/**
+ * `signalFd()` and `readSignal(fd)` have no faithful reading under Node, and
+ * these say so rather than answer something else. Node delivers a signal to
+ * its event loop (`process.on("SIGTERM")`), and a blocking read keeps the loop
+ * from ever running, so no synchronous function here can learn that one
+ * arrived. docs/wp33-round-trip.md §3.5 has the row and the translation.
+ */
+export function signalFd() {
+  throw new Error(
+    "signalFd has no synchronous reading under Node: a signal reaches the event loop, which a blocking readSignal never returns to (docs/wp33-round-trip.md)"
+  );
+}
+
+export function readSignal() {
+  return signalFd();
 }
 
 /** `process.argv`: index 0 is the program (the script here, the executable natively), then the arguments. */

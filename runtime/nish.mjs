@@ -94,6 +94,19 @@ provide("realpathSync", shim.realpathSync);
 provide("spawnSync", shim.spawnSync);
 provide("spawnSyncTo", shim.spawnSyncTo);
 provide("getenv", shim.getenv);
+provide("statMtimeSync", shim.statMtimeSync);
+provide("signalFd", shim.signalFd);
+provide("readSignal", shim.readSignal);
+
+// `crypto.getRandomValues(bytes)` (WP34 N3). Node has the global, but it
+// takes only a typed array and a `u8[]` is a plain `Array` here, so the one
+// method is replaced on Node's own `crypto` object by one that fills a plain
+// array too (and hands a typed array to the original).
+Object.defineProperty(globalThis.crypto, "getRandomValues", {
+  value: shim.getRandomValues,
+  writable: true,
+  configurable: true,
+});
 
 // `dst.set(src, offset)` (WP34 N2). A `u8[]` is a plain `Array` here, which
 // has `fill` with the typed array's meaning already but no `set`, so the one

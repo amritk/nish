@@ -53,7 +53,8 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │             emit*.ts        AST -> LLVM IR text                  │
 │             runtime.ts      runtime ABI, inline allocator        │
 │    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
-│    runtime/runtime-os.c            files, spawn, env (C, 1.2 KB) │
+│    runtime/runtime-os.c            files, spawn, env (C, 1.5 KB) │
+│    runtime/runtime-host.c          clock, rng, signals (C, 0.5 KB)│
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -94,6 +95,18 @@ Design rules that every WP must respect:
   than by a reviewer (`node tests/run.js budget`); `docs/wp7-runtime.md`
   §"Runtime additions and budget" records each measurement, why the single
   4,864-byte ceiling became two, and what the split costs a program.
+  **Since then** the operating-system half's ceiling rose once, to 1,536 for
+  `nish_realpath`, and two more translation units arrived on the same rule,
+  each with a ceiling of its own rather than room borrowed from another:
+  `runtime-parallel.c` (WP20/wp29) and `runtime-host.c`, the wall clock,
+  entropy, file times and signals (WP34 N3). Measured 2026-09-29 with clang 18
+  on linux-x64, every `.text*` section summed at `-Oz`: `runtime.c` 3,515 of
+  3,584 (3,640 of 3,840 with `-DNISH_THREADS=1`), `runtime-os.c` 1,462 of 1,536,
+  `runtime-parallel.c` 286 of 320 (901 of 1,024 threaded) and `runtime-host.c`
+  506 of 512. N3's four builtins measured 506 bytes against the 143
+  `runtime-os.c` had left, which is why they are a file of their own; the 69
+  bytes they did cost `runtime-os.c` start every spawned child with no signal
+  blocked, since `signalFd()` blocks two on Linux and `exec` keeps the mask.
 
 ## 3. Consolidated language specification (Nish)
 

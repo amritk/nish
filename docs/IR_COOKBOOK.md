@@ -12819,6 +12819,72 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end builtin-ct -->
 
+### `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and `readSignal`
+
+The host (WP34 N3). Each is one call into `runtime/runtime-host.c`, declared
+with the effect of what it does to the world rather than to memory: none of
+them is `readnone`, so two clock reads or two `stat`s around a piece of work
+never fold into one. The array `crypto.getRandomValues` fills is written
+through, so the parameter it arrives in is `nocapture` without `readonly`, and
+`nish_read_signal` alone lacks `willreturn`, since it can wait forever
+([LANGUAGE.md](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals)).
+
+<!-- cookbook:begin builtin-host-facts -->
+```ts
+// WP34 N3: the four host facts. Each is one call into runtime-host.c; the array
+// `getRandomValues` fills is written, so `key` is `nocapture` but not
+// `readonly`, and `readSignal` is the one call that is not `willreturn`.
+export const stamp = (): f64 => Date.now()
+
+export const rekey = (key: u8[]): void => {
+  crypto.getRandomValues(key)
+}
+
+export const renewed = (path: string, since: f64): boolean => statMtimeSync(path) > since
+
+export const nextSignal = (): i32 => readSignal(signalFd())
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare double @nish_date_now() #0
+declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #1
+declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_signal_fd() #0
+declare noundef i32 @nish_read_signal(i32 noundef) #1
+
+define noundef double @stamp() #0 {
+entry:
+  %0 = call double @nish_date_now()
+  ret double %0
+}
+
+define void @rekey(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %key) #1 {
+entry:
+  call void @nish_random_fill(%struct.nish_array* %key)
+  ret void
+}
+
+define noundef zeroext i1 @renewed(i8* noundef nonnull noalias readonly align 8 nocapture %path, double noundef %since) #0 {
+entry:
+  %0 = call double @nish_stat_mtime(i8* %path)
+  %1 = fcmp ogt double %0, %since
+  ret i1 %1
+}
+
+define noundef i32 @nextSignal() #1 {
+entry:
+  %0 = call i32 @nish_signal_fd()
+  %1 = call i32 @nish_read_signal(i32 %0)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end builtin-host-facts -->
+
 ### `Math.random`
 
 `nish_random` mutates global state (effect `write`), so `coin` is not pure.
@@ -13832,6 +13898,11 @@ declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #2
+declare double @nish_date_now() #2
+declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #5
+declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i32 @nish_signal_fd() #2
+declare noundef i32 @nish_read_signal(i32 noundef) #5
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2

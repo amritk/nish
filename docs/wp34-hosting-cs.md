@@ -170,6 +170,12 @@ emitter has to handle, which is a much larger change than the plumbing needs.
 **Acceptance.** Each builtin is tested against Node on overlapping and
 non-overlapping ranges. `set` is WP33 class A: identical in both readings.
 
+**State.** Done in #295. `dst.set(src, offset)` is a `memmove`, and a `memcpy`
+where the checker proves the two buffers distinct; `fill` is a `memset` on a
+`u8[]`; `readFileBytesSync` is in `nish:fs` and the globals. LANGUAGE.md
+§"Bulk writes: `set` and `fill`" and the File I/O table have the rules. `set` is
+class A under `runtime/nish.mjs` and class C without it.
+
 ### N3. A wall clock, entropy, file times and signals (S, runtime-os lane)
 
 Each piece is required by something the relay does today:
@@ -187,6 +193,19 @@ Each piece is required by something the relay does today:
 `runtime-os.c` holds 1,190 of its 1,280 bytes (MASTER_PLAN §2). Measure these
 four before deciding where they go. If they do not fit, the precedent is the
 split that created `runtime-os.c`, not a higher ceiling.
+
+**State.** Done in the N3 pull request. They measured 506 bytes of `.text*`
+against the 143 `runtime-os.c` had left of its (by then 1,536-byte) ceiling, so
+they are a fourth translation unit, `runtime/runtime-host.c`, with a ceiling of
+its own of 512; `runtime-os.c`'s is unchanged. `Date.now()` answers whole
+milliseconds, and every other `Date` member is refused by one rule.
+`crypto.getRandomValues` fills a `u8[]` only, at most 65,536 bytes a call, and
+panics rather than return weak bytes. `statMtimeSync` answers NaN, not `null`,
+for a path it cannot stat, because an `f64` has no `null`. The signal
+descriptor is `signalFd()` and `readSignal(fd)` in `nish:process` and the
+globals: a `signalfd` on Linux, a self-pipe written from a `sigaction` handler
+elsewhere. LANGUAGE.md §"The host" has the rules; the signal pair is WP33 class
+C with no synchronous shim, and the ledger says why.
 
 ### N5. Sockets and the loop a program owns (L, runtime lane)
 
@@ -233,6 +252,11 @@ refuses a conditional branch or a secret-indexed load in their `.s` output:
 
 Wide multiplication is not needed. §5's K4 and K5 are written in limbs whose
 products fit in `i64` and `u64`.
+
+**State.** Done in #310, without the weekly timing run. `ctSelect` and `ctEq`
+are globals over `u32` and `u64`, lowered behind an empty inline `asm` barrier,
+and `tests/ct-asm.js` reads their `-O2` assembly for x86-64 and aarch64 on every
+`npm test`. LANGUAGE.md §"Constant time" has the rule.
 
 ### N9. Programs that do not exit — phase one needs the discipline, not the note
 

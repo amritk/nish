@@ -231,6 +231,34 @@ declare function getenv(name: string): string | null;
  * origin is arbitrary, so only the difference between two reads is meaningful.
  */
 declare function monotonicNanos(): i64;
+/**
+ * The modification time of `path` in milliseconds since the epoch, with the
+ * sub-millisecond fraction the file system keeps (Node's `mtimeMs`), or NaN
+ * when it cannot be stat'd. Follows a symbolic link; a directory has one too.
+ */
+declare function statMtimeSync(path: string): f64;
+/**
+ * A descriptor that becomes readable when SIGTERM or SIGINT arrives, made once
+ * (every call answers the same one), or -1. Call it before starting a thread.
+ */
+declare function signalFd(): i32;
+/**
+ * Block until SIGTERM or SIGINT arrives and answer its number, 15 or 2; -1 for
+ * any `fd` that is not `signalFd()`'s. No reading under Node, which throws.
+ */
+declare function readSignal(fd: i32): i32;
+
+// ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
+//
+// `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it,
+// so nothing is added: `tsc` accepting `new Date()` is `tsc` not being Nish's
+// checker. `crypto` is a Web API that `lib.es2022` leaves out, so it is
+// declared with its one member, typed as Nish types it.
+
+declare var crypto: {
+  /** Every byte of `bytes` from the system's CSPRNG; at most 65,536 bytes a call. */
+  getRandomValues(bytes: u8[]): void;
+};
 
 // ---- The builtin modules (`nish:`) ---------------------------------------------
 //
@@ -259,6 +287,8 @@ declare module "nish:fs" {
    */
   export function readdirSync(path: string): string[] | null;
   export function realpathSync(path: string): string | null;
+  /** Node's `mtimeMs` for the path, or NaN when it cannot be stat'd. */
+  export function statMtimeSync(path: string): f64;
 }
 
 declare module "nish:process" {
@@ -276,6 +306,10 @@ declare module "nish:process" {
    * difference between two reads is meaningful.
    */
   export function monotonicNanos(): i64;
+  /** A descriptor readable when SIGTERM or SIGINT arrives; the same one every call, or -1. */
+  export function signalFd(): i32;
+  /** Block until SIGTERM or SIGINT arrives: 15 or 2, or -1 for a descriptor that is not `signalFd()`'s. */
+  export function readSignal(fd: i32): i32;
   /** The command line; `argv[0]` is the program path, as in C. Read-only. */
   export const argv: readonly string[];
   /** The operating system the program runs on: `"linux"`, `"darwin"`, or `"unknown"`. */

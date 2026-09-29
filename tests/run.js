@@ -27,7 +27,7 @@
  *     size and wasm build profiles, Node wasm host, and the browser harness in
  *     web/ compiling with the compiler's own wasi build.
  */
-import { execFileSync, spawnSync } from "node:child_process"
+import { execFileSync, spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -647,6 +647,196 @@ for (const [at, name] of selectedCases.entries()) {
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     )
   }
+}
+
+// ---- The host builtins, against the clock, the kernel and Node (WP34 N3) ----------
+//
+// What a golden cannot say about `Date.now`, `crypto.getRandomValues`,
+// `statMtimeSync` and the signal descriptor, because the answers are the world's
+// rather than the program's. Each `tests/cases/os_*` program is built here with
+// `--link` into a directory of its own, so no check depends on what section A left
+// behind, and each claim is asked of the native binary and, where the TypeScript
+// reading is class A, of the same source under `runtime/nish.mjs`.
+if (!only || "os_host".includes(only)) {
+  const osDir = path.join(buildDir, "os")
+  fs.rmSync(osDir, { recursive: true, force: true })
+  fs.mkdirSync(osDir, { recursive: true })
+  const prelude = path.join(root, "runtime", "nish.mjs")
+  const osBuild = (name) => {
+    const exe = path.join(osDir, name)
+    const r = spawnSync(
+      NISH,
+      [path.join(casesDir, `${name}.ts`), ...caseArgs(name), "-o", `${osDir}${path.sep}`, "--link", exe],
+      { cwd: root, encoding: "utf8" }
+    )
+    return check(`${name}: links`, r.status === 0, r.stderr) ? exe : null
+  }
+  // Under `node -e` the extra arguments start at `process.argv[1]`, and the
+  // prelude's `process.argv` drops index 0, so the case's name stands where the
+  // program path stands natively and the arguments after it line up.
+  const osNode = (name, args) =>
+    spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--no-warnings",
+        "--import",
+        prelude,
+        "-e",
+        `const m = await import(${JSON.stringify(path.join(casesDir, `${name}.ts`))}); process.exit(m.main());`,
+        name,
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+  const osNative = (exe, args) => spawnSync(exe, args, { cwd: root, encoding: "utf8" })
+  const linesOf = (r) => r.stdout.split("\n").filter((l) => l.length > 0)
+  const shown = (r) => `exit ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
+
+  // Date.now: a whole number of milliseconds held between two readings of Node's
+  // own clock, taken either side of the run. Both are CLOCK_REALTIME floored to
+  // the millisecond, so the bracket is exact rather than a tolerance: seconds,
+  // microseconds or the monotonic clock would each fall outside it.
+  const nowExe = osBuild("os_now")
+  for (const [side, run] of [
+    ["natively", (args) => osNative(nowExe, args)],
+    ["under the prelude", (args) => osNode("os_now", args)],
+  ]) {
+    if (nowExe === null) {
+      break
+    }
+    const before = Date.now()
+    const r = run(["print"])
+    const after = Date.now()
+    const lines = linesOf(r)
+    const t = Number(lines[2])
+    check(
+      `os_now: Date.now() ${side} is a whole millisecond between two readings of Node's clock`,
+      r.status === 0 && lines[0] === "true" && lines[1] === "true" && Number.isInteger(t) && before <= t && t <= after,
+      `${before} <= ${lines[2]} <= ${after}?\n${shown(r)}`
+    )
+  }
+
+  // getRandomValues: two draws in a run differ, two runs differ, and each draw
+  // is 32 bytes of hex. The Node run fills through the prelude's wrapper, which
+  // is what a plain array needs there.
+  const randomExe = osBuild("os_random")
+  if (randomExe !== null) {
+    const draws = [osNative(randomExe, ["print"]), osNative(randomExe, ["print"]), osNode("os_random", ["print"])]
+    const hexes = draws.map((r) => linesOf(r).slice(4))
+    const all = hexes.flat()
+    check(
+      "os_random: every draw is 32 bytes, and no two draws agree across two native runs and one under the prelude",
+      draws.every((r) => r.status === 0 && linesOf(r).slice(0, 4).join(" ") === "true 0 65536 4") &&
+        hexes.every((h) => h.length === 2) &&
+        all.every((h) => /^[0-9a-f]{64}$/.test(h)) &&
+        new Set(all).size === all.length,
+      draws.map(shown).join("\n")
+    )
+  }
+
+  // The limit: 65,536 bytes fill, 65,537 panic, with the same words and status
+  // under the prelude.
+  const limitExe = osBuild("os_random_limit")
+  if (limitExe !== null) {
+    const words = "crypto.getRandomValues: 65537 bytes asked for, and one call fills at most 65536"
+    for (const [side, r] of [
+      ["natively", osNative(limitExe, [])],
+      ["under the prelude", osNode("os_random_limit", [])],
+    ]) {
+      check(
+        `os_random_limit: 65,537 bytes panic ${side}, after 65,536 filled`,
+        r.status === 1 && r.stdout === "65536 filled\n" && r.stderr.includes(words),
+        shown(r)
+      )
+    }
+  }
+
+  // statMtimeSync: a file whose mtime is set to a fraction of a millisecond, read
+  // natively and under the prelude, and both held to `fs.statSync().mtimeMs`
+  // printed as JavaScript prints it. The fraction is the point: a runtime that
+  // truncated to milliseconds, or computed in another order, prints other digits.
+  const mtimeExe = osBuild("os_mtime")
+  if (mtimeExe !== null) {
+    const file = path.join(osDir, "mtime.txt")
+    fs.writeFileSync(file, "x")
+    fs.utimesSync(file, 1700000000, 1700000000.1234567)
+    const want = fs.statSync(file).mtimeMs
+    check(
+      "os_mtime: the fixture's mtime has a sub-millisecond fraction to read back",
+      !Number.isInteger(want * 1000) || want % 1 !== 0,
+      `mtimeMs ${want}`
+    )
+    for (const [side, r] of [
+      ["natively", osNative(mtimeExe, [file])],
+      ["under the prelude", osNode("os_mtime", [file])],
+    ]) {
+      check(
+        `os_mtime: statMtimeSync ${side} prints Node's mtimeMs, ${want}`,
+        r.status === 0 && linesOf(r).join(" ") === `true true ${want}`,
+        shown(r)
+      )
+    }
+  }
+
+  // The signal descriptor. The program prints `ready` once its descriptor is
+  // made, and only then is the first signal sent, so nothing races the
+  // `signalFd()` call; the second goes once the first has been read back. A lost
+  // signal is a timeout and a SIGKILL, never a hang.
+  const signalRun = (exe, first, second) =>
+    new Promise((resolve) => {
+      const child = spawn(exe, [], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+      let out = ""
+      let err = ""
+      let sent = 0
+      let timedOut = false
+      const timer = setTimeout(() => {
+        timedOut = true
+        child.kill("SIGKILL")
+      }, 10000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+        const after = out.split("ready\n")
+        if (sent === 0 && after.length > 1) {
+          sent = 1
+          child.kill(first)
+        } else if (sent === 1 && after[1].includes("\n")) {
+          sent = 2
+          child.kill(second)
+        }
+      })
+      child.stderr.on("data", (chunk) => {
+        err += chunk
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        resolve({ code, signal, out, err, timedOut })
+      })
+    })
+  for (const [name, first, second, want] of [
+    ["os_signal", "SIGTERM", "SIGINT", "-1\ntrue\n-1\n143\nready\n15\n2\n"],
+    ["os_signal_import", "SIGINT", "SIGTERM", "ready\n2\n15\n"],
+  ]) {
+    const exe = osBuild(name)
+    if (exe === null) {
+      continue
+    }
+    const r = await signalRun(exe, first, second)
+    check(
+      `${name}: ${first} then ${second} are read back as their numbers, and the program exits 0`,
+      !r.timedOut && r.code === 0 && r.out === want,
+      `${r.timedOut ? "timed out after 10 s: a signal was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(want)}\nstderr: ${r.err}`
+    )
+  }
+  // No synchronous reading exists under Node (docs/wp33-round-trip.md), and the
+  // prelude says so rather than answering something else.
+  const loud = osNode("os_signal", [])
+  check(
+    "os_signal: under the prelude signalFd fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("signalFd has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- A `nish:` import is the same builtin, not another one -----------------------
