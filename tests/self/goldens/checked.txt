@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 795 programs, 56756 dump lines.
+# 798 programs, 56871 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4906,6 +4906,97 @@ function test(): i32 -> @test [exported]
   local 4:9 f: f64 (const)
   local 5:9 big: i64 (const)
   local 12:9 zero: f64 (const)
+program tests/cases/ct_asm_chacha20poly1305.ts
+module tests/cases/ct_asm_chacha20poly1305.ts (entry)
+function ctChacha20Word(buf: u8[], at: i32): u32 -> @ctChacha20Word
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_panic_index
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function ctPoly1305Le64(buf: u8[], at: i32): u64 -> @ctPoly1305Le64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_panic_index
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function ctPoly1305Clamp(key: u8[], r: u64[]): void -> @ctPoly1305Clamp [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 34:3
+  calls: ctPoly1305Le64 nish_panic_index
+  pointer key: size=0 writesThrough=false captured=false passedTo=ctPoly1305Le64#0 ctPoly1305Le64#0
+  pointer r: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 32:9 lo: u64 (const)
+  callee 32:19 ctPoly1305Le64 -> @ctPoly1305Le64
+  local 33:9 hi: u64 (const)
+  callee 33:19 ctPoly1305Le64 -> @ctPoly1305Le64
+function ctPoly1305Block(h: u64[], r: u64[], m: u8[], at: i32, high: u64): void -> @ctPoly1305Block [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 75:3
+  escaping: at
+  calls: ctPoly1305Le64 nish_panic_index
+  pointer h: size=0 writesThrough=true captured=false
+  pointer r: size=0 writesThrough=false captured=false
+  pointer m: size=0 writesThrough=false captured=false passedTo=ctPoly1305Le64#0 ctPoly1305Le64#0
+  stackSites=0 stackLocals=0
+  local 42:9 lo: u64 (const)
+  callee 42:19 ctPoly1305Le64 -> @ctPoly1305Le64
+  local 43:9 hi: u64 (const)
+  callee 43:19 ctPoly1305Le64 -> @ctPoly1305Le64
+  local 44:9 h0: u64 (const)
+  local 45:9 h1: u64 (const)
+  local 46:9 h2: u64 (const)
+  local 47:9 h3: u64 (const)
+  local 48:9 h4: u64 (const)
+  local 50:9 r0: u64 (const)
+  local 51:9 r1: u64 (const)
+  local 52:9 r2: u64 (const)
+  local 53:9 r3: u64 (const)
+  local 54:9 r4: u64 (const)
+  local 57:9 s1: u64 (const)
+  local 58:9 s2: u64 (const)
+  local 59:9 s3: u64 (const)
+  local 60:9 s4: u64 (const)
+  local 62:7 d0: u64 (let)
+  local 63:7 d1: u64 (let)
+  local 64:7 d2: u64 (let)
+  local 65:7 d3: u64 (let)
+  local 66:7 d4: u64 (let)
+function ctPoly1305Finish(h: u64[], key: u8[], tag: u8[]): void -> @ctPoly1305Finish [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 117:3
+  calls: ctChacha20Word nish_panic_index
+  pointer h: size=0 writesThrough=false captured=false
+  pointer key: size=0 writesThrough=false captured=false passedTo=ctChacha20Word#0 ctChacha20Word#0 ctChacha20Word#0 ctChacha20Word#0
+  pointer tag: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 83:7 h0: u64 (let)
+  local 84:7 h1: u64 (let)
+  local 85:7 h2: u64 (let)
+  local 86:7 h3: u64 (let)
+  local 87:7 h4: u64 (let)
+  local 88:12 pass: i32 (let)
+  local 101:9 g0: u64 (const)
+  local 102:9 g1: u64 (const)
+  local 103:9 g2: u64 (const)
+  local 104:9 g3: u64 (const)
+  local 105:9 g4: u64 (const)
+  local 108:9 keep: u64 (const)
+  local 115:9 word: u64 (const)
+  local 116:7 f: u64 (let)
+  callee 116:51 ctChacha20Word -> @ctChacha20Word
+  callee 121:50 ctChacha20Word -> @ctChacha20Word
+  callee 126:51 ctChacha20Word -> @ctChacha20Word
+  callee 131:50 ctChacha20Word -> @ctChacha20Word
+function ctChacha20Poly1305TagMatch(tag: u8[], sealed: u8[], at: i32): u32 -> @ctChacha20Poly1305TagMatch [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_panic_index
+  pointer tag: size=0 writesThrough=false captured=false
+  pointer sealed: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 139:9 diff: u32 (const)
 program tests/cases/ct_asm_mac.ts
 module tests/cases/ct_asm_mac.ts (entry)
 function macEqual(a: u8[], b: u8[]): u32 -> @macEqual [exported]
@@ -41954,7 +42045,7 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_write
   stackSites=0 stackLocals=0
-  local 4:9 zero: f64 (const)
+  local 5:9 zero: f64 (const)
 program tests/cases/port_num_negzero_quiet.ts
 module tests/cases/port_num_negzero_quiet.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -41974,6 +42065,33 @@ function main(): i32 -> @nish_main [exported entry]
   local 5:9 x: i32 (const)
   local 6:9 same: i32 (const)
   local 7:7 y: i32 (let)
+program tests/cases/port_num_ushr_const_quiet.ts
+module tests/cases/port_num_ushr_const_quiet.ts (entry)
+const K: i32 = 5
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 8:9 x: i32 (const)
+  local 9:9 a: i32 (const)
+  local 10:9 b: i32 (const)
+  local 11:9 c: i32 (const)
+  local 12:7 d: i32 (let)
+program tests/cases/port_num_ushr_count.ts
+module tests/cases/port_num_ushr_count.ts (entry)
+const NONE: i32 = 0
+function shift(x: i32, n: i32): i32 -> @shift
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 shift
+  stackSites=0 stackLocals=0
+  local 9:7 y: i32 (let)
+  local 11:9 z: i32 (const)
+  callee 12:15 shift -> @shift
 program tests/cases/port_num_ushr_quiet.ts
 module tests/cases/port_num_ushr_quiet.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
