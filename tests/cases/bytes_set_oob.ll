@@ -104,9 +104,8 @@ entry:
 
 define noundef i32 @negative() #0 {
 entry:
-  %0 = sub nsw i32 0, 1
-  %1 = tail call i32 @into(i32 %0)
-  ret i32 %1
+  %0 = tail call i32 @into(i32 -1)
+  ret i32 %0
 }
 
 define noundef i32 @test() #0 {

@@ -590,8 +590,7 @@ for.inc:
   br label %for.cond
 
 for.end:
-  %20 = sub nsw i32 0, 1
-  ret i32 %20
+  ret i32 -1
 }
 
 define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 {
@@ -822,40 +821,39 @@ entry:
   %bucket.addr = alloca i32, align 4
   %h.addr = alloca i32, align 4
   %used.addr = alloca i32, align 4
-  %0 = sub nsw i64 0, 1
-  %1 = sub nsw i64 %0, %absent
-  store i64 %1, i64* %packed.addr, align 8
-  %2 = load i64, i64* %packed.addr, align 8
-  %3 = ashr i64 %2, 32
-  %4 = trunc i64 %3 to i32
-  store i32 %4, i32* %bucket.addr, align 4
-  %5 = load i64, i64* %packed.addr, align 8
-  %6 = trunc i64 %5 to i32
-  store i32 %6, i32* %h.addr, align 4
-  %7 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
-  %8 = load %struct.nish_array*, %struct.nish_array** %7, align 8, !tbaa !24
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 0
-  %10 = load i64, i64* %9, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %11 = sitofp i64 %10 to double
-  %12 = call i32 @llvm.fptosi.sat.i32.f64(double %11)
-  %13 = icmp sge i32 %12, 16777215
-  br i1 %13, label %if.then, label %if.end
+  %0 = sub nsw i64 -1, %absent
+  store i64 %0, i64* %packed.addr, align 8
+  %1 = load i64, i64* %packed.addr, align 8
+  %2 = ashr i64 %1, 32
+  %3 = trunc i64 %2 to i32
+  store i32 %3, i32* %bucket.addr, align 4
+  %4 = load i64, i64* %packed.addr, align 8
+  %5 = trunc i64 %4 to i32
+  store i32 %5, i32* %h.addr, align 4
+  %6 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
+  %7 = load %struct.nish_array*, %struct.nish_array** %6, align 8, !tbaa !24
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0
+  %9 = load i64, i64* %8, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = sitofp i64 %9 to double
+  %11 = call i32 @llvm.fptosi.sat.i32.f64(double %10)
+  %12 = icmp sge i32 %11, 16777215
+  br i1 %12, label %if.then, label %if.end
 
 if.then:
-  %14 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
-  %15 = load i32, i32* %14, align 4, !tbaa !21
-  %16 = icmp sge i32 %15, 16777215
-  br i1 %16, label %lor.end, label %lor.rhs
+  %13 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
+  %14 = load i32, i32* %13, align 4, !tbaa !21
+  %15 = icmp sge i32 %14, 16777215
+  br i1 %15, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %17 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
-  %18 = load i32, i32* %17, align 4, !tbaa !22
-  %19 = icmp sgt i32 %18, 0
+  %16 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 6
+  %17 = load i32, i32* %16, align 4, !tbaa !22
+  %18 = icmp sgt i32 %17, 0
   br label %lor.end
 
 lor.end:
-  %20 = phi i1 [ true, %if.then ], [ %19, %lor.rhs ]
-  br i1 %20, label %if.then.1, label %if.end.1
+  %19 = phi i1 [ true, %if.then ], [ %18, %lor.rhs ]
+  br i1 %19, label %if.then.1, label %if.end.1
 
 if.then.1:
   call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.1 to i8*), i32 2, i1 true)
@@ -864,99 +862,98 @@ if.then.1:
 
 if.end.1:
   call void @nish.Set$f64.rebuild(%struct.Set$f64* %this)
-  %21 = sub nsw i32 0, 1
-  store i32 %21, i32* %bucket.addr, align 4
+  store i32 -1, i32* %bucket.addr, align 4
   br label %if.end
 
 if.end:
-  %22 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
-  %23 = load %struct.nish_array*, %struct.nish_array** %22, align 8, !tbaa !24
-  %24 = fadd double %key, 0.000000e+00
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
-  %26 = load i64, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 1
-  %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4, !tbaa !14
-  %29 = icmp eq i64 %26, %28
-  br i1 %29, label %push.grow, label %push.store
+  %20 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
+  %21 = load %struct.nish_array*, %struct.nish_array** %20, align 8, !tbaa !24
+  %22 = fadd double %key, 0.000000e+00
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 1
+  %26 = load i64, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %27 = icmp eq i64 %24, %26
+  br i1 %27, label %push.grow, label %push.store
 
 push.grow:
-  call void @nish_array_grow(%struct.nish_array* %23, i64 8)
+  call void @nish_array_grow(%struct.nish_array* %21, i64 8)
   br label %push.store
 
 push.store:
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
-  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %32 = bitcast i8* %31 to double*
-  %33 = getelementptr inbounds double, double* %32, i64 %26
-  store double %24, double* %33, align 8, !alias.scope !4, !noalias !3, !tbaa !27
-  %34 = add i64 %26, 1
-  store i64 %34, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %35 = sitofp i64 %34 to double
-  %36 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 5
-  %37 = load %struct.nish_array*, %struct.nish_array** %36, align 8, !tbaa !25
-  %38 = load i32, i32* %h.addr, align 4
-  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 0
-  %40 = load i64, i64* %39, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 1
-  %42 = load i64, i64* %41, align 8, !alias.scope !3, !noalias !4, !tbaa !14
-  %43 = icmp eq i64 %40, %42
-  br i1 %43, label %push.grow.1, label %push.store.1
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
+  %29 = load i8*, i8** %28, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %30 = bitcast i8* %29 to double*
+  %31 = getelementptr inbounds double, double* %30, i64 %24
+  store double %22, double* %31, align 8, !alias.scope !4, !noalias !3, !tbaa !27
+  %32 = add i64 %24, 1
+  store i64 %32, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %33 = sitofp i64 %32 to double
+  %34 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 5
+  %35 = load %struct.nish_array*, %struct.nish_array** %34, align 8, !tbaa !25
+  %36 = load i32, i32* %h.addr, align 4
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 0
+  %38 = load i64, i64* %37, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 1
+  %40 = load i64, i64* %39, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %41 = icmp eq i64 %38, %40
+  br i1 %41, label %push.grow.1, label %push.store.1
 
 push.grow.1:
-  call void @nish_array_grow(%struct.nish_array* %37, i64 4)
+  call void @nish_array_grow(%struct.nish_array* %35, i64 4)
   br label %push.store.1
 
 push.store.1:
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 2
-  %45 = load i8*, i8** %44, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %46 = bitcast i8* %45 to i32*
-  %47 = getelementptr inbounds i32, i32* %46, i64 %40
-  store i32 %38, i32* %47, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %48 = add i64 %40, 1
-  store i64 %48, i64* %39, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %49 = sitofp i64 %48 to double
-  %50 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
-  %51 = load i32, i32* %50, align 4, !tbaa !21
-  %52 = add nsw i32 %51, 1
-  %53 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
-  store i32 %52, i32* %53, align 4, !tbaa !21
-  %54 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
-  %55 = load double, double* %54, align 8, !tbaa !19
-  %56 = fadd double %55, 0x3FF0000000000000
-  %57 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
-  store double %56, double* %57, align 8, !tbaa !19
-  %58 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
-  %59 = load %struct.nish_array*, %struct.nish_array** %58, align 8, !tbaa !24
-  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
-  %61 = load i64, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %62 = sitofp i64 %61 to double
-  %63 = call i32 @llvm.fptosi.sat.i32.f64(double %62)
-  store i32 %63, i32* %used.addr, align 4
-  %64 = load i32, i32* %used.addr, align 4
-  %65 = mul nsw i32 %64, 4
-  %66 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
-  %67 = load %struct.nish_array*, %struct.nish_array** %66, align 8, !tbaa !23
-  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %67, i64 0, i32 0
-  %69 = load i64, i64* %68, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %70 = sitofp i64 %69 to double
-  %71 = call i32 @llvm.fptosi.sat.i32.f64(double %70)
-  %72 = mul nsw i32 %71, 3
-  %73 = icmp sgt i32 %65, %72
-  br i1 %73, label %if.then.2, label %if.else
+  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %35, i64 0, i32 2
+  %43 = load i8*, i8** %42, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %44 = bitcast i8* %43 to i32*
+  %45 = getelementptr inbounds i32, i32* %44, i64 %38
+  store i32 %36, i32* %45, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %46 = add i64 %38, 1
+  store i64 %46, i64* %37, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %47 = sitofp i64 %46 to double
+  %48 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
+  %49 = load i32, i32* %48, align 4, !tbaa !21
+  %50 = add nsw i32 %49, 1
+  %51 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 3
+  store i32 %50, i32* %51, align 4, !tbaa !21
+  %52 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
+  %53 = load double, double* %52, align 8, !tbaa !19
+  %54 = fadd double %53, 0x3FF0000000000000
+  %55 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 0
+  store double %54, double* %55, align 8, !tbaa !19
+  %56 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 4
+  %57 = load %struct.nish_array*, %struct.nish_array** %56, align 8, !tbaa !24
+  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 0
+  %59 = load i64, i64* %58, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %60 = sitofp i64 %59 to double
+  %61 = call i32 @llvm.fptosi.sat.i32.f64(double %60)
+  store i32 %61, i32* %used.addr, align 4
+  %62 = load i32, i32* %used.addr, align 4
+  %63 = mul nsw i32 %62, 4
+  %64 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
+  %65 = load %struct.nish_array*, %struct.nish_array** %64, align 8, !tbaa !23
+  %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %65, i64 0, i32 0
+  %67 = load i64, i64* %66, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %68 = sitofp i64 %67 to double
+  %69 = call i32 @llvm.fptosi.sat.i32.f64(double %68)
+  %70 = mul nsw i32 %69, 3
+  %71 = icmp sgt i32 %63, %70
+  br i1 %71, label %if.then.2, label %if.else
 
 if.then.2:
   call void @nish.Set$f64.rebuild(%struct.Set$f64* %this)
   br label %if.end.2
 
 if.else:
-  %74 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
-  %75 = load %struct.nish_array*, %struct.nish_array** %74, align 8, !tbaa !23
-  %76 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 2
-  %77 = load i32, i32* %76, align 4, !tbaa !20
-  %78 = load i32, i32* %bucket.addr, align 4
-  %79 = load i32, i32* %h.addr, align 4
-  %80 = load i32, i32* %used.addr, align 4
-  call void @nish.fileAppended(%struct.nish_array* %75, i32 %77, i32 %78, i32 %79, i32 %80)
+  %72 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 1
+  %73 = load %struct.nish_array*, %struct.nish_array** %72, align 8, !tbaa !23
+  %74 = getelementptr inbounds %struct.Set$f64, %struct.Set$f64* %this, i32 0, i32 2
+  %75 = load i32, i32* %74, align 4, !tbaa !20
+  %76 = load i32, i32* %bucket.addr, align 4
+  %77 = load i32, i32* %h.addr, align 4
+  %78 = load i32, i32* %used.addr, align 4
+  call void @nish.fileAppended(%struct.nish_array* %73, i32 %75, i32 %76, i32 %77, i32 %78)
   br label %if.end.2
 
 if.end.2:

@@ -18,48 +18,47 @@ entry:
   br i1 %2, label %if.then, label %if.end
 
 if.then:
-  %3 = sub nsw i32 0, 1
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %3
+  ret i32 -1
 
 if.end:
-  %4 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
-  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %7 = icmp ult i64 3, %6
-  br i1 %7, label %bounds.ok, label %bounds.fail
+  %3 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = icmp ult i64 3, %5
+  br i1 %6, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 3, i64 %6)
+  call void @nish_panic_index(i64 3, i64 %5)
   unreachable
 
 bounds.ok:
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %10 = bitcast i8* %9 to i8*
-  %11 = getelementptr inbounds i8, i8* %10, i64 3
-  %12 = load i8, i8* %11, align 1, !alias.scope !4, !noalias !3, !tbaa !13
-  %13 = zext i8 %12 to i32
-  %14 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %17 = icmp ult i64 4, %16
-  br i1 %17, label %bounds.ok.1, label %bounds.fail.1
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i8*
+  %10 = getelementptr inbounds i8, i8* %9, i64 3
+  %11 = load i8, i8* %10, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %12 = zext i8 %11 to i32
+  %13 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0
+  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %16 = icmp ult i64 4, %15
+  br i1 %16, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 4, i64 %16)
+  call void @nish_panic_index(i64 4, i64 %15)
   unreachable
 
 bounds.ok.1:
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
-  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %20 = bitcast i8* %19 to i8*
-  %21 = getelementptr inbounds i8, i8* %20, i64 4
-  %22 = load i8, i8* %21, align 1, !alias.scope !4, !noalias !3, !tbaa !13
-  %23 = zext i8 %22 to i32
-  %24 = add nsw i32 %13, %23
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
+  %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %19 = bitcast i8* %18 to i8*
+  %20 = getelementptr inbounds i8, i8* %19, i64 4
+  %21 = load i8, i8* %20, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %22 = zext i8 %21 to i32
+  %23 = add nsw i32 %12, %22
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %24
+  ret i32 %23
 }
 
 attributes #0 = { nounwind }

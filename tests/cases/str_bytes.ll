@@ -72,16 +72,15 @@ entry:
   %19 = mul nsw i32 %18, 100000
   %20 = add nsw i32 %11, %19
   %21 = load i8*, i8** %s.addr, align 8
-  %22 = sub nsw i32 0, 4
-  %23 = call i64 @nish_arena_mark()
-  %24 = call i8* @head(i8* %21, i32 %22)
-  %25 = call i8* @nish_arena_keep(i64 %23, i8* %24)
-  %26 = bitcast i8* %25 to i64*
-  %27 = load i64, i64* %26, align 8
-  %28 = trunc i64 %27 to i32
-  %29 = add nsw i32 %20, %28
+  %22 = call i64 @nish_arena_mark()
+  %23 = call i8* @head(i8* %21, i32 -4)
+  %24 = call i8* @nish_arena_keep(i64 %22, i8* %23)
+  %25 = bitcast i8* %24 to i64*
+  %26 = load i64, i64* %25, align 8
+  %27 = trunc i64 %26 to i32
+  %28 = add nsw i32 %20, %27
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %29
+  ret i32 %28
 }
 
 attributes #0 = { nounwind }

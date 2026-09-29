@@ -182,6 +182,9 @@ cases/mem_loop_scope_escape added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_forof added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_interior added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_threads added after R6: no rewriter to freeze it with
+cases/neg_literal_i64_min added after R6: no rewriter to freeze it with
+cases/neg_literal_int_min_hex added after R6: no rewriter to freeze it with
+cases/neg_literal_unsigned added after R6: no rewriter to freeze it with
 cases/perf_arena_control added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with

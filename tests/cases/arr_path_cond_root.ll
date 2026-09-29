@@ -94,8 +94,7 @@ bounds.ok:
   ret i32 %22
 
 if.end:
-  %23 = sub nsw i32 0, 1
-  ret i32 %23
+  ret i32 -1
 }
 
 define noundef i32 @nish_main() #1 {
