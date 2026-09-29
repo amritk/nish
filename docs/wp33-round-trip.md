@@ -338,7 +338,7 @@ diagnostic has, the summary line and the excerpt, with `portability` as the
 kind ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)):
 
 ```
-src/table.ts:41:18: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
+src/table.ts:41:17: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
   41 |   const width = name.length;
      |                 ^~~~~~~~~~~
 ```
