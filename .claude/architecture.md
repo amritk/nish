@@ -54,24 +54,38 @@ Compilation                                                            src/compi
   `src/runtime.ts` and `runtime/runtime.c` / `runtime/nish.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
-- **The runtime has two budgets.** Every `.text*` section of
-  `clang -Oz -c <file>`, summed, for each of the runtime's two translation
-  units: `runtime/runtime.c` — the core every program touches, which is a closed
-  set — stays under 3,584 bytes and is 3,515 today; `runtime/runtime-os.c` — the
-  syscall wrappers, which is the surface that grows as the language reaches
-  further into the operating system — stays under 1,280 and is 1,251. They are
-  apart so that a new builtin for files, directories, processes, the environment
-  or the clock cannot move the core's number; the source bytes of either are
-  history rather than a limit. `tests/run.js` measures both on every run
-  (`node tests/run.js budget`), so a PR that touches the runtime does not depend
-  on a reviewer remembering to report a size. Raising either ceiling takes a
-  fresh measurement written into `docs/wp7-runtime.md` §"Runtime additions and
-  budget", and the two are raised for different reasons: the core's should come
-  down over time, the other one's rises with the surface.
+- **The runtime has a budget per translation unit.** Every `.text*` section of
+  `clang -Oz -c <file>`, summed, for each of the runtime's four translation
+  units:
+
+  | Unit | What it holds | Today | Ceiling |
+  | --- | --- | --- | --- |
+  | `runtime/runtime.c` | the core every program touches, a closed set | 3,515 (3,640 with `-DNISH_THREADS=1`) | 3,584 (3,840) |
+  | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,393 | 1,536 |
+  | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (901 threaded) | 320 (1,024) |
+  | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 571 | 768 |
+
+  They are apart so that a new builtin in one area cannot move another's
+  number; the source bytes of any of them are history rather than a limit.
+  `tests/run.js` measures every one on every run (`node tests/run.js budget`),
+  so a PR that touches the runtime does not depend on a reviewer remembering to
+  report a size. Raising a ceiling takes a fresh measurement written into
+  `docs/wp7-runtime.md` §"Runtime additions and budget"; the core's should come
+  down over time, the others rise with their surface. **When an addition does
+  not fit, split it into a new unit with its own measured ceiling rather than
+  raising an existing one**, as `runtime-parallel.c` and `runtime-host.c` were.
 - **A link line names the runtime through `scripts/build.sh`.** It compiles
-  `runtime-os.c` beside any `runtime.c` it is handed, which is what keeps
-  `nish --link`, the published package and every recipe in the
-  documents correct with one file named. A direct `clang` line names both.
+  the other units beside any `runtime.c` it is handed, which is what keeps
+  `nish --link`, the published package and every recipe in the documents
+  correct with one file named. A direct `clang` line names them all.
+- **A new runtime unit is named in five places, in the same commit:** the list
+  in `scripts/build.sh` that pairs units with `runtime.c` (without it every
+  `--link` fails on an undefined symbol), `RUNTIME_C` and the `npm pack` check
+  in `tests/run.js`, the link line in `tests/nish/run.ts`, the `nish run` cache
+  key in `src/run-cache.ts`, and a `*_TEXT_BUDGET` of its own in
+  `tests/run.js`. `package.json`'s `files` already ships all of `runtime/`. A
+  plan whose stage may split the runtime must give that stage
+  `scripts/build.sh` (WP34 N3, #312, needed it and had not been given it).
 - **The name lives in one file.** `src/branding.ts` is the only source file
   that spells the project's name. Every string the
   compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and
@@ -106,7 +120,9 @@ src/                the compiler, in Nish, built by the last release (see selfho
   emit*.ts …         attributes, escape analysis, target table, ir builder, runtime ABI
   interop-*.ts       C header, wasm .d.ts and N-API shim generators
 std/                 the standard library, in Nish
-runtime/             runtime.c (core), runtime-os.c (the syscall wrappers), nish.h,
+runtime/             runtime.c (core), runtime-os.c (the syscall wrappers),
+                     runtime-parallel.c (threads), runtime-host.c (clock, entropy,
+                     file times, signals), nish.h,
                      nish.d.ts (the builtins, for npm run check), runtime-wasm.c,
                      shim.mjs (the Node twin)
 bin/                 the npm command, which hands over to the prebuilt native compiler
