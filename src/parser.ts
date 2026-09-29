@@ -336,6 +336,13 @@ export class Parser {
   aheadValue: string
   hasAhead: boolean
 
+  /**
+   * Set while a `for` head's initialiser is read, where `in` opens a
+   * `for...in` rather than being the operator, as TypeScript's `disallowIn`
+   * context does; a parenthesis clears it again.
+   */
+  noIn: boolean
+
   /** How many nodes this parser has made; also the next id it will hand out. */
   nodeCount: i32
 
@@ -354,13 +361,6 @@ export class Parser {
    * rather than scanned again, and nested blocks cost one scan between them.
    */
   closingBraces: StringMap
-
-  /**
-   * Set while a `for` head's initialiser is read, where `in` opens a
-   * `for...in` rather than being the operator, as TypeScript's `disallowIn`
-   * context does; a parenthesis clears it again.
-   */
-  noIn: boolean
 
   constructor(file: SourceFile) {
     this.file = file
@@ -2069,7 +2069,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_IF, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     node.children.push(this.parseStatement())
     node.children.push(this.eat(TOK_ELSE) ? this.parseStatement() : this.empty())
@@ -2081,7 +2081,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_WHILE, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     node.children.push(this.parseStatement())
     node.end = this.previousEnd
@@ -2094,7 +2094,7 @@ export class Parser {
     node.children.push(this.parseStatement())
     this.expect(TOK_WHILE)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     this.eat(TOK_SEMICOLON)
     node.end = this.previousEnd
@@ -2185,7 +2185,7 @@ export class Parser {
     this.advance()
     const node = this.node(N_SWITCH, start, this.end)
     this.expect(TOK_LPAREN)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expect(TOK_RPAREN)
     const clauses = this.list()
     if (this.expect(TOK_LBRACE)) {
@@ -2243,7 +2243,7 @@ export class Parser {
   parseThrow(start: i32): Node {
     this.advance()
     const node = this.node(N_THROW, start, this.end)
-    node.children.push(this.parseExpression())
+    node.children.push(this.parseSequence())
     this.expectSemicolon()
     node.end = this.previousEnd
     return node
@@ -2278,9 +2278,10 @@ export class Parser {
 
   /**
    * `a, b`: the comma operator, read where TypeScript reads a whole
-   * expression that a `,` cannot otherwise follow — a statement's, a `for`
-   * clause's, a `return`'s and a parenthesis's — for Phase 0 to refuse
-   * (NL1040). An argument list and an array literal keep their commas.
+   * expression that a `,` cannot otherwise follow — an expression statement,
+   * a condition, a `for` clause, a `return`, a `throw`, a `switch` and a
+   * parenthesis — for Phase 0 to refuse (NL1040). An argument list and an
+   * array literal keep their commas.
    */
   parseSequence(): Node {
     const start = this.start
