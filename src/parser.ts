@@ -34,6 +34,7 @@
 
 import { Diagnostic, SourceFile } from "./diagnostics"
 import { Lexer, withoutSeparators } from "./lexer"
+import { StringMap } from "./map"
 import {
   FLAG_AWAIT,
   FLAG_CONST,
@@ -308,12 +309,21 @@ export class Parser {
    */
   labels: string[]
 
+  /**
+   * The end of the `}` that closes each `{` a `tryStatementAhead` scan has
+   * passed, keyed by the brace's offset. A scan records every brace it walks
+   * through, so a `try` block nested in one already scanned is looked up
+   * rather than scanned again, and nested blocks cost one scan between them.
+   */
+  closingBraces: StringMap
+
   constructor(file: SourceFile) {
     this.file = file
     this.lexer = new Lexer(file.text)
     this.diagnostics = []
     this.nodeCount = 0
     this.labels = []
+    this.closingBraces = new StringMap()
     this.kind = TOK_END
     this.start = 0
     this.end = 0
@@ -619,12 +629,13 @@ export class Parser {
   /**
    * Whether `try` opens a `try` statement rather than naming a variable. It
    * does when a block follows it on the same line, and, whatever line breaks
-   * and comments sit between, when a block follows it and a `catch` or a
-   * `finally` follows that block: an Allman-style `try` is a statement. What
-   * stays a name is `try` alone on a line before a block that nothing
-   * handles, the one shape that compiled, as two statements, before `try`
-   * opened one (`tests/parser/names.ts`). A scratch lexer runs to the brace
-   * that closes the block and looks at the word after it.
+   * and comments sit between, when a block follows it and a *handler* follows
+   * that block: `catch {`, `catch (e) {` or `finally {`. An Allman-style `try`
+   * is therefore a statement. What stays a name is `try` alone on a line
+   * before a block nothing handles, and `catch` and `finally` stay names too
+   * where no handler's shape follows them (`finally();`, `catch(1);`), each
+   * the shape that compiled before `try` opened a statement
+   * (`tests/parser/names.ts`).
    */
   tryStatementAhead(): boolean {
     if (!this.at(TOK_IDENT) || this.value !== "try" || this.peek() !== TOK_LBRACE) {
@@ -633,22 +644,72 @@ export class Parser {
     if (this.aheadOnSameLine()) {
       return true
     }
+    const close = this.closingBrace(this.aheadStart)
+    if (close < 0) {
+      return false
+    }
     const scan = new Lexer(this.file.text)
-    scan.pos = this.aheadEnd
+    scan.pos = close
+    scan.next()
+    if (scan.kind !== TOK_IDENT || (scan.value !== "catch" && scan.value !== "finally")) {
+      return false
+    }
+    const handler = scan.value
+    scan.next()
+    if (scan.kind === TOK_LBRACE) {
+      return true
+    }
+    // `catch (e) {` and `catch (e: unknown) {`, and not a call `catch(1)`.
+    if (handler !== "catch" || scan.kind !== TOK_LPAREN) {
+      return false
+    }
+    scan.next()
+    if (scan.kind !== TOK_IDENT) {
+      return false
+    }
     let depth = 1
     while (depth > 0) {
       scan.next()
-      if (scan.kind === TOK_END) {
+      if (scan.kind === TOK_END || scan.kind === TOK_LBRACE || scan.kind === TOK_SEMICOLON) {
         return false
       }
-      if (scan.kind === TOK_LBRACE) {
+      if (scan.kind === TOK_LPAREN) {
         depth = depth + 1
-      } else if (scan.kind === TOK_RBRACE) {
+      } else if (scan.kind === TOK_RPAREN) {
         depth = depth - 1
       }
     }
     scan.next()
-    return scan.kind === TOK_IDENT && (scan.value === "catch" || scan.value === "finally")
+    return scan.kind === TOK_LBRACE
+  }
+
+  /**
+   * The end of the `}` that closes the `{` at `open`, or -1 when the file
+   * ends first. Every brace the scan passes is recorded in `closingBraces`.
+   */
+  closingBrace(open: i32): i32 {
+    const known = this.closingBraces.get(`${open}`, -1)
+    if (known >= 0) {
+      return known
+    }
+    const scan = new Lexer(this.file.text)
+    scan.pos = open
+    const opens: i32[] = []
+    while (true) {
+      scan.next()
+      if (scan.kind === TOK_END) {
+        return -1
+      }
+      if (scan.kind === TOK_LBRACE) {
+        opens.push(scan.start)
+      } else if (scan.kind === TOK_RBRACE) {
+        const matched = opens.pop()
+        this.closingBraces.set(`${matched}`, scan.end)
+        if (opens.length === 0) {
+          return scan.end
+        }
+      }
+    }
   }
 
   /**

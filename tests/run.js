@@ -7225,7 +7225,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // WP33 R1 parses `with (…)`, `try { }` and `var x` for Phase 0 to refuse,
   // and each word is still a name wherever it cannot open the statement:
   // `tests/parser/names.ts` compiled before R1 and has to go on compiling,
-  // with `with(n)` a call rather than a refused `with` statement.
+  // with `with(n)` a call rather than a refused `with` statement, and
+  // `finally()` and `catch(1)` after a `try`-named block calls rather than
+  // handlers.
   const namesLl = path.join(buildDir, "parser_names.ll")
   const namesRun = spawnSync(NISH, ["tests/parser/names.ts", "-o", namesLl], { cwd: root, encoding: "utf8" })
   const namesIr = namesRun.status === 0 ? fs.readFileSync(namesLl, "utf8") : ""
@@ -7233,6 +7235,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     "src/parser.ts reads `with`, `try` and `var` as names where they cannot open a statement",
     namesRun.status === 0 &&
       namesIr.includes("call i32 @with(i32 %1)") &&
+      namesIr.includes("call i32 @finally()") &&
+      namesIr.includes("call i32 @catch(i32 1)") &&
       namesIr.includes("%try.addr = alloca i32"),
     `exit ${namesRun.status}\n${namesRun.stdout}${namesRun.stderr}`
   )

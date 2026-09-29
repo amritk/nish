@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 716 programs, 51021 dump lines.
+# 716 programs, 51029 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -50012,15 +50012,23 @@ module tests/parser/names.ts (entry)
 function with(x: i32): i32 -> @with
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function finally(): i32 -> @finally
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function catch(x: i32): i32 -> @catch
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function test(): i32 -> @test [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: with
+  calls: catch finally with
   stackSites=0 stackLocals=0
-  local 18:7 try: i32 (let)
-  callee 18:18 with -> @with
-  local 19:7 var: i32 (let)
-  local 20:7 n: i32 (let)
-  callee 21:3 with -> @with
+  local 28:7 try: i32 (let)
+  callee 28:18 with -> @with
+  local 29:7 var: i32 (let)
+  local 30:7 n: i32 (let)
+  callee 31:3 with -> @with
+  callee 42:3 finally -> @finally
+  callee 47:3 catch -> @catch
 reject tests/parser/nullish.ts: error: Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead)
 reject tests/parser/precedence.ts: error: Operator `||` requires boolean operands, got i32 and i32
 program tests/parser/types.ts

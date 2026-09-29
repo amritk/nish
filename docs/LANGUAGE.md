@@ -2789,8 +2789,9 @@ called one, and a statement opens only where the word could not be that
 name. `with (…)` is the statement when a statement follows it on the same
 line, and `var` when a name follows it on the same line. `try` is the
 statement when a block follows it on the same line, or when a block follows
-it and a `catch` or `finally` follows that block, whatever line breaks and
-comments sit between (`reject_try_allman_catch`, `reject_try_allman_finally`,
+it and a handler follows that block (`catch {`, `catch (e) {` or `finally {`,
+not a call such as `finally();`), whatever line breaks and comments sit
+between (`reject_try_allman_catch`, `reject_try_allman_finally`,
 `reject_try_comment_newline`). A line break inside a block comment counts as
 one, as it does for semicolon insertion. So `try` alone on a line before a
 block that nothing handles is a name and a block, as it was before
