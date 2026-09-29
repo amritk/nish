@@ -214,6 +214,3 @@ NL4006  an error string in the generated N-API shim
 # live; the blank comment lines keep the three deletions from touching.
 #
 #
-# --- WP33 R1: lands with portability-records
-NL8003  not live yet: a record copied into an array while the original is still used
-NL8004  not live yet: a store over an element a live reference still reads
