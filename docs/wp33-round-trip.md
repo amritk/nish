@@ -488,7 +488,7 @@ and leading-zero literals, `#!` after the first line, a `\u{…}` escape out of
 range, `??` mixed with `&&` or `||` — and the entries left in
 `tests/self/parser-refusals.txt`. It was built in six stages: #292
 statements, #311 expressions, #313 declarations, #314 functions and bindings,
-#315 classes, interfaces and enums, and #NNN imports and exports.
+#315 classes, interfaces and enums, and #337 imports and exports.
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
 and it is also what gives R5 its differential.
