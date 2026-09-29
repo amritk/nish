@@ -1,0 +1,28 @@
+PASS  SHA256_SIZE is 32 bytes (FIPS 180-4 §1)
+PASS  SHA256_BLOCK is 64 bytes (FIPS 180-4 §1)
+PASS  empty message (CAVP ShortMsg Len = 0)
+PASS  "abc" (FIPS 180-4 example, one block)
+PASS  the 448-bit message (FIPS 180-4 example, two blocks)
+PASS  the 896-bit message (FIPS 180-4 additional example)
+PASS  one million "a" (FIPS 180-4 additional example)
+PASS  one million "a" in 997-byte chunks
+PASS  one byte (CAVP ShortMsg Len = 8)
+PASS  three bytes (CAVP ShortMsg Len = 24)
+PASS  55 bytes, the longest one-block padding (CAVP ShortMsg Len = 440)
+PASS  56 bytes, the shortest two-block padding (CAVP ShortMsg Len = 448)
+PASS  63 bytes, one byte short of a block (CAVP ShortMsg Len = 504)
+PASS  64 bytes, exactly one block (CAVP ShortMsg Len = 512)
+PASS  65 bytes, one byte into a second block (checked against OpenSSL)
+PASS  the 896-bit message gives one digest wherever it is cut in two
+PASS  300 bytes of (7i + 3) mod 251 (checked against OpenSSL)
+PASS  300 bytes give one digest wherever they are cut in two
+PASS  300 bytes fed one byte at a time
+PASS  the 448-bit message fed one byte at a time
+PASS  empty windows are no-ops, even at the end of the buffer
+PASS  a copy after every prefix digests the prefix and leaves the original alone
+PASS  a copy of a hasher that has seen "abc" digests "abc"
+PASS  a second copy, later, digests everything fed since
+PASS  and the original still digests the same
+PASS  each digest is a fresh array
+PASS  a digest is SHA256_SIZE bytes long
+sha256: 27 passed, 0 failed, 0 skipped

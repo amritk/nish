@@ -192,6 +192,9 @@ cases/perf_rng_counter added after R6: no rewriter to freeze it with
 cases/perf_rng_getbyte added after R6: no rewriter to freeze it with
 cases/perf_rng_loop added after R6: no rewriter to freeze it with
 cases/perf_rng_quiet added after R6: no rewriter to freeze it with
+cases/port_array_quiet added after R6: no rewriter to freeze it with
+cases/port_array_quiet_f64 added after R6: no rewriter to freeze it with
+cases/port_array_zero_fill added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with

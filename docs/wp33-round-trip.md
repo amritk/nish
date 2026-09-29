@@ -1,6 +1,8 @@
 # WP33: The round trip — TypeScript into Nish, and back out
 
-**Decided (§7, 2026-09-28); nothing here is built.** This is the plan of record for one
+**Decided (§7, 2026-09-28); R1's portability half is built: the class, its
+flag and all eleven codes, with NL8005 live and the other rows landing in their
+own stages.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -332,15 +334,19 @@ ignores unknown fields is unaffected, but the shape is part of the contract
 ### 5.2 The `portability` diagnostic class
 
 A warning at every class-C site in the program, with `--json` and a code in a
-new band, off by default and on under `--compat` and `--emit ts`:
+new band, off by default and on under `--compat` and `--emit ts`, and
+`--warn-portability` until they exist. It prints in the shape every
+diagnostic has, the summary line and the excerpt, with `portability` as the
+kind ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)):
 
 ```
-warning[NL8001]: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
-  --> src/table.ts:41:18
-   = it is flagged because it pads a printed column, where the unit shows
-   = the two agree when `name` is ASCII
-   = your TypeScript tests do not check this line's meaning
+src/table.ts:41:17: portability: `name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript
+  41 |   const width = name.length;
+     |                 ^~~~~~~~~~~
 ```
+
+Under `--json` it is one object with `"severity":"portability"` and its NL8xxx
+`code`.
 
 It is the map both directions need. On the way in, it lists exactly where "the
 tests still pass" stops being evidence, which is what an agent should look at
@@ -454,6 +460,15 @@ and the stages in §9 build it.
 | **R4** | `--emit ts` (§4), with the live differential (§4.5) | The exit door, and the oracle §5.3 step 6 leans on. |
 | **R5** | `fix` in `--json` and `nish fix` (§5.1); the AI.md section | The agent loop, once the compiler can say where the risks are. |
 | **R6** | wp28's compat mode, on wp28's own staging | The way in widens once there is a safe way back out. |
+
+**R1's portability half is built.** `--warn-portability` runs the pass
+(`src/portability.ts`), the band is NL8xxx with every row's code registered
+(`portabilityRules` in `src/codes.ts`), and the rows are documented in
+[LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags). NL8005, the
+zero-filled `new Array<T>(n)`, is live; the number, string and record rows are
+three stages written against the pass's row signature, and
+`tests/wordings/unreachable.txt` names the ones not live yet. The parser half
+(§5.0) is not started.
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
 and it is also what gives R5 its differential.
