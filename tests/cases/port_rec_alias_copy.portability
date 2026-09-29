@@ -1,0 +1,1 @@
+{"file":"tests/cases/port_rec_alias_copy.ts","line":12,"column":11,"endLine":12,"endColumn":12,"severity":"portability","code":"NL8003","message":"`p` is copied into the array here, and TypeScript stores the same object, so the later write `p.x = 9` (line 14) is not seen through `ps`"}
