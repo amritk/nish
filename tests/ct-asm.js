@@ -106,7 +106,7 @@ export const ctSpecs = (source) => {
       continue
     }
     const [, name, secret, expect] = m
-    const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)`))
+    const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)(?::\\s*([^=]+?))?\\s*=>`))
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
     const types = params.map((p) => (p.split(":")[1] ?? "").trim())
@@ -132,6 +132,8 @@ export const ctSpecs = (source) => {
       contents: secret.split(",").includes("contents"),
       secretArgs: secrets.map((n) => names.indexOf(n)),
       params: params.length,
+      types,
+      returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
       expect: expect ?? null,
       callable,
     }
