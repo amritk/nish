@@ -1,0 +1,1 @@
+`Date.UTC` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds

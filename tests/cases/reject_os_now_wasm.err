@@ -1,0 +1,1 @@
+`Date.now` reaches the operating system, and a wasm32 build has none to reach

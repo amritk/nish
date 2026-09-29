@@ -1,0 +1,2 @@
+reject_thread_region_random.ts:19:5
+`crypto.getRandomValues` writes memory a task of `s` may read, before the scope joins
