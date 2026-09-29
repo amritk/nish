@@ -25,10 +25,12 @@
  *
  *   - **Every number is well-formed and in its band.** `NL1xxx` Phase 0,
  *     `NL2xxx` the checker, `NL3xxx` the driver, `NL4xxx` the interop
- *     sidecars, `NL9xxx` a WP15 section 8 performance warning. Band 0 is not
- *     in the tables: `NL0000` (no rule matched), `NL0001` (a syntax error),
- *     `NL0002` (the toolchain) and `NL0003` (an internal error) are constants.
- *     A performance fragment is in `performanceRules` and nowhere else.
+ *     sidecars, `NL8xxx` a WP33 portability warning, `NL9xxx` a WP15 section
+ *     8 performance warning. Band 0 is not in the tables: `NL0000` (no rule
+ *     matched), `NL0001` (a syntax error), `NL0002` (the toolchain) and
+ *     `NL0003` (an internal error) are constants. A performance fragment is in
+ *     `performanceRules` and nowhere else, and a portability fragment is in
+ *     `portabilityRules` and nowhere else.
  *   - **Nothing is used twice.** A number handed out once is never handed to a
  *     different rule, and a retired rule keeps its entry -- it matches nothing,
  *     so carrying it costs a string -- precisely so that its number stays
@@ -48,7 +50,8 @@
  *     simply not a match. So each table's strings are counted on their own
  *     and have to come to twice its pairs ([#107](https://github.com/amritk/nish/issues/107)).
  *   - **The `NL9xxx` codes run from `NL9001` with no gap**, one per WP15
- *     section 8 rule, so a missing number is a rule that lost its code.
+ *     section 8 rule, so a missing number is a rule that lost its code; and
+ *     the `NL8xxx` codes run from `NL8001` the same way, one per WP33 row.
  *   - **`RULE_COUNT` is the number of entries.**
  *
  * A fragment is the longest literal run of its message's template -- the rule
@@ -68,10 +71,23 @@ const REGISTRY =
   process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? path.join(ROOT, "src", "codes.ts")
 
 /** The bands a table entry may use. Band 0 is constants, never a table row. */
-const BANDS = new Set(["1", "2", "3", "4", "9"])
+const BANDS = new Set(["1", "2", "3", "4", "8", "9"])
 
 /** Shorter than this, a fragment would match half the suite. */
 const MIN_FRAGMENT = 10
+
+/**
+ * The three tables, the band each warning table owns alone, and that warning
+ * class's name: a warning table holds only its band's codes and its band's
+ * codes live only there, because `codeFor` matches a warning's message against
+ * its own table and nothing else. `null` is the table of errors, which takes
+ * every other band.
+ */
+const TABLES = [
+  ["diagnosticRules", null, null],
+  ["portabilityRules", "8", "portability"],
+  ["performanceRules", "9", "performance"],
+]
 
 /**
  * The text of one table in `src/codes.ts`: from its `name = (): string[] => [`
@@ -104,10 +120,7 @@ const inOrder = (a, b) => b.fragment.length - a.fragment.length || a.fragment.lo
 const problems = (text) => {
   const found = []
   const tables = []
-  for (const [name, perf] of [
-    ["diagnosticRules", false],
-    ["performanceRules", true],
-  ]) {
+  for (const [name, owns, kind] of TABLES) {
     const body = tableText(text, name)
     if (body === null) {
       found.push(`src/codes.ts has no \`${name}\` table`)
@@ -122,7 +135,7 @@ const problems = (text) => {
             "without its other half shifts every later pairing `codeFor` makes"
         )
       }
-      tables.push({ name, perf, pairs })
+      tables.push({ name, owns, kind, pairs })
     } catch (err) {
       found.push(err.message)
     }
@@ -139,18 +152,22 @@ const problems = (text) => {
     found.push(err.message)
   }
   if (whole.length !== all.length) {
-    found.push(`src/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the two tables`)
+    found.push(`src/codes.ts holds ${whole.length} pairs, ${all.length} of them inside the three tables`)
   }
 
-  for (const { name, perf, pairs } of tables) {
+  const warningBands = TABLES.map(([, owns]) => owns).filter((band) => band !== null)
+  for (const { name, owns, pairs } of tables) {
     for (let i = 0; i < pairs.length; i++) {
       const { fragment, code } = pairs[i]
       const band = code[2]
       if (!BANDS.has(band)) {
-        found.push(`${code} is not in a table band (1, 2, 3, 4 or 9): ${JSON.stringify(fragment)}`)
+        found.push(`${code} is not in a table band (1, 2, 3, 4, 8 or 9): ${JSON.stringify(fragment)}`)
       }
-      if (perf !== (band === "9")) {
-        found.push(`${code} is in \`${name}\`, which holds ${perf ? "only" : "no"} NL9xxx codes`)
+      if (owns !== null && band !== owns) {
+        found.push(`${code} is in \`${name}\`, which holds only NL${owns}xxx codes`)
+      }
+      if (owns === null && warningBands.includes(band)) {
+        found.push(`${code} is in \`${name}\`, which holds no NL${band}xxx codes`)
       }
       if (fragment.trim().length < MIN_FRAGMENT) {
         found.push(`${code}'s fragment ${JSON.stringify(fragment)} is under ${MIN_FRAGMENT} characters`)
@@ -161,15 +178,20 @@ const problems = (text) => {
     }
   }
 
-  const perfCodes = tables
-    .filter((t) => t.perf)
-    .flatMap((t) => t.pairs.map((p) => Number(p.code.slice(3))))
-    .sort((a, b) => a - b)
-  const gap = perfCodes.findIndex((n, i) => n !== i + 1)
-  if (gap >= 0) {
-    found.push(
-      `\`performanceRules\` has no NL${9000 + gap + 1} in its place: its codes run from NL9001 with no gap`
-    )
+  // A warning band is gap-free from its first number, so a missing one is a
+  // rule that lost its code rather than a number nobody took yet.
+  for (const { name, owns, kind, pairs } of tables) {
+    if (owns === null) {
+      continue
+    }
+    const numbers = pairs.map((p) => Number(p.code.slice(3))).sort((a, b) => a - b)
+    const gap = numbers.findIndex((n, i) => n !== i + 1)
+    if (gap >= 0) {
+      const base = Number(owns) * 1000
+      found.push(
+        `\`${name}\` has no NL${base + gap + 1} in its place: its ${kind} codes run from NL${base + 1} with no gap`
+      )
+    }
   }
 
   const seen = (key) => {

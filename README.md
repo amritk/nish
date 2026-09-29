@@ -306,6 +306,8 @@ nish run [options] <file.ts> [args ...]
                              language spawns a thread yet)
   --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
                              print on stderr, and never change the exit code)
+  --warn-portability         report the `portability` diagnostics: where the program's TypeScript
+                             reading answers differently (off by default; never changes the exit code)
   -g                         emit DWARF debug info (!dbg locations, variables); kept by --link
   --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
   --emit-ast                 print the syntax tree of every module to stdout instead of IR
