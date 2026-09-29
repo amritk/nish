@@ -7859,6 +7859,43 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     `exit ${callsRun.status}, wrong call count for ${wrongCalls.join(", ")}\n${callsRun.stdout}${callsRun.stderr}`
   )
 
+  // The third stage's words open declarations: `async` a function, a method
+  // or an arrow, `namespace` and `module` a block, `declare` a `global` or a
+  // namespace, `keyof` a type operator. `tests/parser/names-declarations.ts`
+  // uses each as a variable, a parameter, a field and a method, and `keyof`
+  // as a class; `names-declaration-calls.ts` calls a function of each name,
+  // `async (n)` and `async` before a parenthesis on the next line among them.
+  const declarationWords = ["async", "namespace", "module", "declare", "global", "type"]
+  const declsLl = path.join(buildDir, "parser_names_declarations.ll")
+  const declsRun = spawnSync(NISH, ["tests/parser/names-declarations.ts", "-o", declsLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const declsIr = declsRun.status === 0 ? fs.readFileSync(declsLl, "utf8") : ""
+  const missingDeclLocals = declarationWords.filter((word) => !declsIr.includes(`%${word}.addr = alloca i32`))
+  check(
+    "src/parser.ts reads the declaration words as names where a declaration cannot start (tests/parser/names-declarations.ts)",
+    declsRun.status === 0 && missingDeclLocals.length === 0 && declsIr.includes("%struct.keyof = type"),
+    `exit ${declsRun.status}, no slot for ${missingDeclLocals.join(", ")}\n${declsRun.stdout}${declsRun.stderr}`
+  )
+  const declCallsLl = path.join(buildDir, "parser_names_declaration_calls.ll")
+  const declCallsRun = spawnSync(NISH, ["tests/parser/names-declaration-calls.ts", "-o", declCallsLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const declCallsIr = declCallsRun.status === 0 ? fs.readFileSync(declCallsLl, "utf8") : ""
+  // As above, the calls in `through`, in the instance of `apply` and in the
+  // template included.
+  const wantDeclCalls = { async: 9, namespace: 2, module: 4, declare: 2, global: 2, keyof: 1, type: 2 }
+  const wrongDeclCalls = Object.keys(wantDeclCalls).filter(
+    (word) => declCallsIr.split(`call i32 @${word}(`).length - 1 !== wantDeclCalls[word]
+  )
+  check(
+    "src/parser.ts reads a call of a function named like a declaration word as the call (tests/parser/names-declaration-calls.ts)",
+    declCallsRun.status === 0 && wrongDeclCalls.length === 0,
+    `exit ${declCallsRun.status}, wrong call count for ${wrongDeclCalls.join(", ")}\n${declCallsRun.stdout}${declCallsRun.stderr}`
+  )
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
@@ -8311,6 +8348,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // declaration's own collection.
       ["reject_expr_forms_together", ["6:50-6:56 NL1047"]],
       ["reject_expr_sweep_together", ["6:18-6:26 NL2210", "8:40-8:51 NL2254", "10:35-10:41 NL2237"]],
+      // The declaration forms, the same two ways.
+      ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
+      ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
+      ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)

@@ -1,1 +1,1 @@
-expected `=`, found `<`
+Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists

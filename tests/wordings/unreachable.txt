@@ -62,16 +62,9 @@ NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced
 # (`stage1_divergence.txt`), so nothing prints these wordings any more. The
 # numbers stay reserved like every retired one. The programs stay in the corpus
 # and in their registers, and pin what stage1 says instead.
-NL1006  retired at R6: stage1's parser refuses reject_decorator before the rule is stated
-NL1015  retired at R6: stage1's parser refuses reject_async_function before the rule is stated
-NL1019  retired at R6: stage1's parser refuses reject_declare_global before the rule is stated
-NL1027  retired at R6: stage1's parser refuses reject_namespace before the rule is stated
-NL1044  retired at R6: stage1's parser refuses reject_generator before the rule is stated
-NL1054  retired at R6: stage1's parser refuses reject_type_alias_generic before the rule is stated
 NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
 NL2018  retired at R6: stage1's parser refuses reject_cls_anonymous, nl2018_anonymous_class before the rule is stated
 NL2033  retired at R6: stage1's parser refuses reject_side_effect_import before the rule is stated
-NL2038  retired at R6: stage1's parser refuses reject_type_keyof, nl2038_keyof_type before the rule is stated
 NL2048  retired at R6: stage1's parser refuses reject_multi_decl before the rule is stated
 NL2083  retired at R6: stage1's parser refuses reject_cls_declare, reject_generic_declare_class, nl2083_declare_class before the rule is stated
 NL2090  retired at R6: stage1's parser refuses reject_cls_method_no_body, nl2090_method_without_body before the rule is stated
@@ -109,7 +102,6 @@ NL2272  retired at R6: stage1's parser refuses reject_arrow_let before the rule 
 NL2273  retired at R6: stage1's parser refuses reject_arrow_annotated before the rule is stated
 NL2274  retired at R6: stage1's parser refuses reject_fn_two_names, nl2274_two_names_one_declaration before the rule is stated
 NL2286  retired at R6: stage1's parser refuses reject_enum_declare, nl2286_declare_enum before the rule is stated
-NL2292  retired at R6: stage1's parser refuses nl2292_default_type_argument before the rule is stated
 NL2260  retired at R6: stage1 answers reject_fn_nested, nl2260_empty_statement differently (stage1_divergence.txt)
 NL2302  retired at R6: stage1 answers nl2302_duplicate_type_parameter differently (stage1_divergence.txt)
 

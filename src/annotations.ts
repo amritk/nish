@@ -20,11 +20,14 @@ import { AliasInfo } from "./program"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import {
+  FLAG_DEFAULT,
+  N_IDENT,
   N_LIST,
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
   N_TYPE_LITERAL,
   N_TYPE_NULL,
+  N_TYPE_OPERATOR,
   N_TYPE_PAREN,
   N_TYPE_READONLY,
   N_TYPE_REF,
@@ -208,7 +211,31 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
         `A literal type \`${node.text}\` is only allowed as a bound of \`integer<Lo, Hi>\``
       )
     default:
-      return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`)
+      // `keyof T` (N_TYPE_OPERATOR) among them, which `refuseTypeForm` says first.
+      return ctx.errorType(node, unsupportedType(ctx, node))
+  }
+}
+
+/** The sentence for a type annotation with no case above. */
+const unsupportedType = (ctx: CheckContext, node: Node): string =>
+  `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`
+
+/**
+ * WP33 R1: one node of the pass 1 sweep (`refuseUnsupportedForms`), refusing
+ * the type forms the parser reads for the checker: `keyof T` (NL2038), which
+ * `resolveType` has no case for, and a default type argument (NL2292). Here
+ * rather than where annotations are resolved because a template's are
+ * resolved only when something instantiates it, and one nothing does would
+ * compile.
+ */
+export const refuseTypeForm = (ctx: CheckContext, node: Node): void => {
+  if (node.kind === N_TYPE_OPERATOR) {
+    ctx.error(node, unsupportedType(ctx, node))
+  } else if (node.kind === N_IDENT && (node.flags & FLAG_DEFAULT) !== 0) {
+    ctx.error(
+      node,
+      "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments"
+    )
   }
 }
 

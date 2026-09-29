@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 781 programs, 52189 dump lines.
+# 783 programs, 52344 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51113,6 +51113,163 @@ function test(): i32 -> @test [exported]
   stackSites=1 stackLocals=0
   local 15:7 try: i32 (let)
   callee 20:3 catch -> @catch
+program tests/parser/names-declaration-calls.ts
+module tests/parser/names-declaration-calls.ts (entry)
+function async(x: i32): i32 -> @async
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function namespace(x: i32): i32 -> @namespace
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function module(x: i32): i32 -> @module
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function declare(x: i32): i32 -> @declare
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function global(x: i32): i32 -> @global
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function keyof(x: i32): i32 -> @keyof
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function type(x: i32): i32 -> @type
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function through(x: i32): i32 -> @through
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: async module
+  stackSites=0 stackLocals=0
+  callee 22:34 async -> @async
+  callee 22:40 module -> @module
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: apply$fn.5.async async declare global keyof module namespace nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 through type
+  stackSites=0 stackLocals=0
+  local 29:7 n: i32 (let)
+  callee 29:16 async -> @async
+  callee 29:27 namespace -> @namespace
+  callee 29:42 module -> @module
+  callee 29:54 declare -> @declare
+  callee 29:67 global -> @global
+  callee 30:11 keyof -> @keyof
+  callee 30:22 type -> @type
+  callee 31:3 async -> @async
+  callee 32:3 async -> @async
+  callee 33:3 namespace -> @namespace
+  callee 35:3 module -> @module
+  callee 36:3 declare -> @declare
+  callee 37:3 global -> @global
+  callee 38:7 async -> @async
+  callee 40:7 async -> @async
+  callee 40:14 async -> @async
+  callee 41:7 through -> @through
+  callee 41:20 apply<async> -> @apply$fn.5.async
+  local 42:9 s: string (const)
+  callee 42:16 async -> @async
+  callee 42:27 module -> @module
+  callee 42:39 type -> @type
+function apply<async>(f: void, x: i32): i32 -> @apply$fn.5.async [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: async
+  stackSites=0 stackLocals=0
+  callee 26:52 async -> @async
+program tests/parser/names-declarations.ts
+module tests/parser/names-declarations.ts (entry)
+struct Words (class) size=28 align=4
+  field async: i32 index=0 offset=0 initialized
+  field namespace: i32 index=1 offset=4 initialized
+  field module: i32 index=2 offset=8 initialized
+  field declare: i32 index=3 offset=12 initialized
+  field global: i32 index=4 offset=16 initialized
+  field keyof: i32 index=5 offset=20 initialized
+  field type: i32 index=6 offset=24 initialized
+struct Methods (class) size=0 align=1
+  method async -> @Methods.async
+  method namespace -> @Methods.namespace
+  method declare -> @Methods.declare
+  method global -> @Methods.global
+  method keyof -> @Methods.keyof
+  method type -> @Methods.type
+struct keyof (class) size=16 align=8
+  field v: i32 index=0 offset=0 initialized
+  field next: keyof | null index=1 offset=8 initialized
+function Methods.async(this: Methods): i32 -> @Methods.async [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Methods.namespace(this: Methods): i32 -> @Methods.namespace [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Methods.declare(this: Methods): i32 -> @Methods.declare [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Methods.global(this: Methods): i32 -> @Methods.global [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Methods.keyof(this: Methods): i32 -> @Methods.keyof [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Methods.type(this: Methods): i32 -> @Methods.type [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function pick(k: keyof, ks: keyof[]): i32 -> @pick
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer k: size=16 writesThrough=false captured=false
+  pointer ks: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function made(): keyof -> @made
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function scale(async: i32, module: i32): i32 -> @scale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function offset(namespace: i32, declare: i32, global: i32): i32 -> @offset
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: Methods.async Methods.declare Methods.global Methods.keyof Methods.module$i32 Methods.namespace Methods.type made nish_arena_mark nish_arena_release nish_panic_div nish_panic_index nish_str_concat nish_str_from_i32 offset pick scale
+  stackSites=5 stackLocals=4
+  local 73:7 async: i32 (let)
+  local 74:7 namespace: i32 (let)
+  local 75:7 module: i32 (let)
+  local 76:7 declare: i32 (let)
+  local 77:7 global: i32 (let)
+  local 78:7 type: i32 (let)
+  local 79:9 w: Words (const)
+  local 80:9 m: Methods (const)
+  local 81:9 all: i32[] (const)
+  local 82:7 n: i32 (let)
+  callee 95:11 Methods.async -> @Methods.async
+  callee 95:23 Methods.namespace -> @Methods.namespace
+  callee 95:39 Methods.module<i32> -> @Methods.module$i32
+  callee 95:53 Methods.declare -> @Methods.declare
+  callee 95:67 Methods.global -> @Methods.global
+  callee 95:80 Methods.keyof -> @Methods.keyof
+  callee 95:92 Methods.type -> @Methods.type
+  local 97:12 i: i32 (let)
+  local 100:14 module: i32 (const)
+  local 103:9 s: string (const)
+  callee 104:22 scale -> @scale
+  callee 104:45 offset -> @offset
+  local 105:9 k: keyof (const)
+  callee 105:20 made -> @made
+  local 106:9 ks: keyof[] (const)
+  local 107:7 maybe: keyof | null (let)
+  callee 109:11 pick -> @pick
+function Methods.module<i32>(this: Methods, x: i32): i32 -> @Methods.module$i32 [method instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 program tests/parser/names-operator-calls.ts
 module tests/parser/names-operator-calls.ts (entry)
 function typeof(x: i32): i32 -> @typeof
