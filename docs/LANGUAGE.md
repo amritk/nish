@@ -1350,7 +1350,9 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
-  collections, json, map, pair, testing, text, threads) ``
+  collections, crypto/base64url, crypto/ct, crypto/hkdf, crypto/hmac,
+  crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text,
+  threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1390,6 +1392,14 @@ and their `.ll` goldens are byte-identical files.
   (`gen_interface`): one struct per instantiation, `%struct.Pair$i32$bool`,
   returned by pointer. Use it to return two values, not to store them side by
   side; `docs/wp23-language-surface.md` §5 is the reasoning.
+- **`nish/crypto/<primitive>` is a module in a subdirectory of the library**,
+  one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
+  `ct` (constant-time compare), `base64url` and `x25519`
+  (`tests/link/crypto_base64url` is the case that resolves a nested
+  specifier). Each is ordinary Nish source under the rules above, and a byte
+  string is a `u8[]`. They are written branch-free on secret data, which WP34
+  N6 is to verify and has not yet; `std/README.md` lists what each exports,
+  the specification it reproduces, and the three rules they share.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the

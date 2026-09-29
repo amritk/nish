@@ -1,6 +1,7 @@
 # WP34: Hosting cs — the network stack first
 
-**Proposed. Nothing here is built.** This note covers the compiler's half of a
+**Proposed. Lanes K1 and K4 of §5 have landed (§5a); nothing else here is
+built.** This note covers the compiler's half of a
 plan whose other half lives in the program being ported,
 [`amritk/cs` → `docs/nish-port.md`](https://github.com/amritk/cs/blob/main/docs/nish-port.md).
 
@@ -295,6 +296,24 @@ the compiler, and K1–K6 in the stack. H1's parser, H2's HPACK, Q1 and R1's
 QPACK tables can start in the same wave, because each is a pure function with
 published answers. Only T2, the servers of H1 and H2, Q2 and its successors,
 and A1 need a socket.
+
+### 5a. Landed
+
+| Lane | Pull requests | Modules | What is left |
+| --- | --- | --- | --- |
+| **K1** | #287 (the `std/` walker nested modules needed), #288, #291, #294, #298 | `nish/crypto/sha256`, `nish/crypto/sha512` (SHA-512 and SHA-384), `nish/crypto/hmac`, `nish/crypto/hkdf`, `nish/crypto/ct`, `nish/crypto/base64url` | Wycheproof's HMAC and HKDF vectors, a third-party file with its own notice. N6's disassembly check over every K1 module, and its weekly timing run over the MAC comparison |
+| **K4** | #289 | `nish/crypto/x25519` | Wycheproof `x25519`, as for K1. N6's disassembly check over the field arithmetic and the ladder, and its weekly timing run |
+
+Each module reproduces its specification's published vectors in a
+`tests/link/crypto_*` program: FIPS 180-4 and the NIST examples, RFC 4231,
+RFC 5869 Appendix A, RFC 4648 §10, and RFC 7748 §5.2 (the iterated vector to
+1,000) and §6.1. Neither lane waited for its **Needs** column. The modules
+export functions, classes and constants and no enum or alias, so N1 was not
+needed, and they are written branch-free on secrets by masking, so N6 is what
+will *verify* them rather than what they are written with. Until N6 lands that
+property is the modules' discipline, stated in each header, and not a checked
+fact. [`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
+lists what each module exports and the rules they share.
 
 **One test suite belongs to no single lane:** a Nish server and a Nish client
 over loopback, for every carrier. It is what catches two lanes that each pass
