@@ -16,8 +16,10 @@ entry:
   %arr.hdr = alloca %struct.nish_array, align 8
   %Rec.obj = alloca %struct.Rec, align 8
   %Rec.obj.1 = alloca %struct.Rec, align 8
-  %r.addr = alloca %struct.Rec*, align 8
+  %q.addr = alloca %struct.Rec*, align 8
   %Rec.obj.2 = alloca %struct.Rec, align 8
+  %r.addr = alloca %struct.Rec*, align 8
+  %Rec.obj.3 = alloca %struct.Rec, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 0, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -76,58 +78,71 @@ push.store.1:
   %31 = add i64 %21, 1
   store i64 %31, i64* %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %32 = trunc i64 %31 to i32
-  %33 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 0
-  %35 = load i64, i64* %34, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %36 = icmp eq i64 %35, 0
-  br i1 %36, label %pop.empty, label %pop.ok
+  %33 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.2, i32 0, i32 0
+  store i32 2, i32* %33, align 4
+  store %struct.Rec* %Rec.obj.2, %struct.Rec** %q.addr, align 8
+  %34 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0
+  %36 = load i64, i64* %35, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %37 = icmp eq i64 %36, 0
+  br i1 %37, label %pop.empty, label %pop.ok
 
 pop.empty:
   call void @nish_panic_index(i64 0, i64 0)
   unreachable
 
 pop.ok:
-  %37 = sub i64 %35, 1
-  store i64 %37, i64* %34, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %33, i64 0, i32 2
-  %39 = load i8*, i8** %38, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %40 = bitcast i8* %39 to %struct.Rec*
-  %41 = getelementptr inbounds %struct.Rec, %struct.Rec* %40, i64 %37
-  store %struct.Rec* %41, %struct.Rec** %r.addr, align 8
-  %42 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %43 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.2, i32 0, i32 0
-  store i32 7, i32* %43, align 4
-  %44 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 0
-  %45 = load i64, i64* %44, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %46 = icmp ult i64 0, %45
-  br i1 %46, label %bounds.ok, label %bounds.fail
+  %38 = sub i64 %36, 1
+  store i64 %38, i64* %35, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %39 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %41 = bitcast i8* %40 to %struct.Rec*
+  %42 = getelementptr inbounds %struct.Rec, %struct.Rec* %41, i64 %38
+  store %struct.Rec* %42, %struct.Rec** %r.addr, align 8
+  %43 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %44 = getelementptr inbounds %struct.Rec, %struct.Rec* %Rec.obj.3, i32 0, i32 0
+  store i32 7, i32* %44, align 4
+  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %43, i64 0, i32 0
+  %46 = load i64, i64* %45, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %47 = icmp ult i64 0, %46
+  br i1 %47, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %45)
+  call void @nish_panic_index(i64 0, i64 %46)
   unreachable
 
 bounds.ok:
-  %47 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %42, i64 0, i32 2
-  %48 = load i8*, i8** %47, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %49 = bitcast i8* %48 to %struct.Rec*
-  %50 = getelementptr inbounds %struct.Rec, %struct.Rec* %49, i64 0
-  %51 = bitcast %struct.Rec* %50 to i8*
-  %52 = bitcast %struct.Rec* %Rec.obj.2 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %51, i8* align 4 %52, i64 4, i1 false), !alias.scope !4, !noalias !3
-  %53 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
-  %54 = getelementptr inbounds %struct.Rec, %struct.Rec* %53, i32 0, i32 0
-  %55 = load i32, i32* %54, align 4
-  %56 = call i8* @nish_str_from_i32(i32 %55)
-  call void @nish_print(i8* %56)
-  %57 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
-  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %57, i64 0, i32 2
-  %59 = load i8*, i8** %58, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %60 = bitcast i8* %59 to %struct.Rec*
-  %61 = getelementptr inbounds %struct.Rec, %struct.Rec* %60, i64 0
-  %62 = getelementptr inbounds %struct.Rec, %struct.Rec* %61, i32 0, i32 0
-  %63 = load i32, i32* %62, align 4
-  %64 = call i8* @nish_str_from_i32(i32 %63)
-  call void @nish_print(i8* %64)
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %43, i64 0, i32 2
+  %49 = load i8*, i8** %48, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %50 = bitcast i8* %49 to %struct.Rec*
+  %51 = getelementptr inbounds %struct.Rec, %struct.Rec* %50, i64 0
+  %52 = bitcast %struct.Rec* %51 to i8*
+  %53 = bitcast %struct.Rec* %Rec.obj.3 to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 4 %52, i8* align 4 %53, i64 4, i1 false), !alias.scope !4, !noalias !3
+  %54 = load %struct.Rec*, %struct.Rec** %r.addr, align 8
+  %55 = load %struct.Rec*, %struct.Rec** %q.addr, align 8
+  %56 = icmp eq %struct.Rec* %54, %55
+  br i1 %56, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %57 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %58 = call i8* @nish_str_from_i32(i32 %57)
+  call void @nish_print(i8* %58)
+  %59 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 2
+  %61 = load i8*, i8** %60, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %62 = bitcast i8* %61 to %struct.Rec*
+  %63 = getelementptr inbounds %struct.Rec, %struct.Rec* %62, i64 0
+  %64 = getelementptr inbounds %struct.Rec, %struct.Rec* %63, i32 0, i32 0
+  %65 = load i32, i32* %64, align 4
+  %66 = call i8* @nish_str_from_i32(i32 %65)
+  call void @nish_print(i8* %66)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

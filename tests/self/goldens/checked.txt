@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 726 programs, 51209 dump lines.
+# 726 programs, 51210 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37255,9 +37255,10 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
-  stackSites=4 stackLocals=1
-  local 10:9 ps: Rec[] (const)
-  local 13:9 r: Rec (const)
+  stackSites=5 stackLocals=2
+  local 12:9 ps: Rec[] (const)
+  local 15:9 q: Rec (const)
+  local 16:9 r: Rec (const)
 program tests/cases/port_rec_push_never_written_quiet.ts
 module tests/cases/port_rec_push_never_written_quiet.ts (entry)
 struct Point (interface) size=8 align=4
