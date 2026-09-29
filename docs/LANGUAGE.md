@@ -2488,9 +2488,10 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
 - An interface is a struct type with the same layout rules as a class, with
-  fields only: a method is
+  fields only: a method, or an accessor signature `get x(): i32`, is
   `` Interface `Shape` cannot declare methods (interfaces describe layout only) ``
-  (`tests/cases/reject_iface_method`), `extends`
+  (`tests/cases/reject_iface_method`, `reject_iface_accessor`; a field may
+  still be called `get` or `set`), `extends`
   is `Interface inheritance (`extends`) is not supported`, and `new` on an
   interface is `` Cannot `new` interface `Pair` `` (`tests/cases/reject_cls_new_interface`).
 - An **object literal** allocates in the arena and stores every property in
@@ -5208,7 +5209,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a destructuring pattern | `Destructured constants are not supported` / `Destructured parameters are not supported` / `Destructuring is not supported` (a local) | `reject_const_destructured`, `reject_param_destructured`, `reject_destructure_local` |
 | a default, optional or rest parameter | `Optional/default parameters are not supported` / `Rest parameters are not supported` | `reject_param_default`, `nl2233_optional_parameter`, `reject_param_rest` |
 | an arrow bound with `let`, annotated, or beside a second name | `` Function `f` must be declared `const`, not `let` `` / `` Function `f` takes its signature from the arrow; drop the annotation on `f` `` / `A function declaration binds one name` | `reject_arrow_let`, `reject_arrow_annotated`, `reject_fn_two_names` |
-| a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method` |
+| a getter or setter; a method in an interface | `` Getters and setters are not supported in class `Box` (use a method) `` / `` Interface `Shape` cannot declare methods (interfaces describe layout only) `` | `reject_cls_accessor`, `reject_iface_method`, `reject_iface_accessor` |
 | more than one function or binding form in one declaration | the first in source order, alone | `reject_fn_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |

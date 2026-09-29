@@ -790,7 +790,11 @@ const printTypeScriptTree = (source, sf) => {
         list(depth + 1, node.members, (m, d) => {
           // A method signature is a METHOD among the fields, with an EMPTY
           // body, for the checker to refuse (NL2048).
-          if (ts.isMethodSignature(m) && ts.isIdentifier(m.name)) {
+          if (
+            (ts.isMethodSignature(m) || ts.isGetAccessorDeclaration(m) || ts.isSetAccessorDeclaration(m)) &&
+            ts.isIdentifier(m.name) &&
+            m.body === undefined
+          ) {
             const [ms, me] = span(m)
             emit(d, `METHOD${memberFlags(m)}${memberMarker(m)}`, ms, me)
             identifier(m.name, d + 1)

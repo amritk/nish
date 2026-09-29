@@ -1893,12 +1893,22 @@ export class Parser {
           // field on either compiler, and `static x: i32` is refused with the
           // sentence that says `of interface \`I\``. Reading `?` here and not
           // these would be an arbitrary split in one grammar rule.
-          const modifiers = this.parseMemberModifiers()
+          let modifiers = this.parseMemberModifiers()
+          // `get x(): T;` and `set x(v: T);`, accessor signatures, read as a
+          // class reads the word (`parseMember`): before another name only, so
+          // `get: i32` is still a field called `get`.
+          const accessor =
+            this.at(TOK_IDENT) && (this.value === "get" || this.value === "set") && this.peek() === TOK_IDENT
+          if (accessor) {
+            this.advance()
+            modifiers = modifiers | FLAG_ACCESSOR
+          }
           // `m(): T;`, a method signature, for the checker to refuse (NL2048):
-          // a method with no body, among the fields.
+          // a method with no body, among the fields. An accessor is one too.
           if (
-            this.at(TOK_IDENT) &&
-            (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead())
+            accessor ||
+            (this.at(TOK_IDENT) &&
+              (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
           ) {
             fields.children.push(this.parseMethodSignature(fieldStart, modifiers))
             continue

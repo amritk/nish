@@ -7900,8 +7900,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // The fourth stage's forms open at `get`, `set`, `{`, `[`, `...`, `=` and
   // `,` where a syntax error used to be, and `tests/parser/names-bindings.ts`
   // holds the programs beside each that already compiled: `get` and `set` as
-  // fields, methods and locals, `get` before a method's parameters on the next
-  // line, a body on the line after its signature, and parenthesised
+  // class fields, methods and locals and as interface fields, `get` before a
+  // method's parameters or a field's type on the next line, a body on the line after its signature, and parenthesised
   // assignments and literals where an arrow's parameters could open.
   const bindingsLl = path.join(buildDir, "parser_names_bindings.ll")
   const bindingsRun = spawnSync(NISH, ["tests/parser/names-bindings.ts", "-o", bindingsLl], {
@@ -7912,6 +7912,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   const wantBindings = [
     "%struct.Accessors = type { i32, i32, i32 }",
     "%struct.Pair = type { i32, i32 }",
+    "%struct.Wrapped = type { i32, i32 }",
     "@GetSet.get(",
     "@GetSet.set(",
     "@LineBreaks.get(",
