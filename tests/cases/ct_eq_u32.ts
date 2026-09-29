@@ -22,6 +22,8 @@ export const main = (): i32 => {
   show(1, 0x80000001);
   // The literal may lead: it takes the type of the operand that is not one.
   console.log(ctEq(0, TOP));
+  // A parenthesised literal is still the literal, as it is beside an operator.
+  console.log(ctEq((0), ctSelect(0, TOP, 0)));
   console.log(ctEq(0, ctSelect(0, ONES, 0)));
   return 0;
 };

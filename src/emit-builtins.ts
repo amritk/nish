@@ -869,7 +869,13 @@ export const identifierBuiltinCalleesNamed = (
     panicTailCallees(out)
     return out
   }
-  return out // f64ToBits / bitsToF64: one bitcast; ctSelect / ctEq: bitwise and an empty asm. No call
+  // Declared here rather than left to fall through, so the table says it:
+  // `f64ToBits` / `bitsToF64` are one bitcast, and `ctSelect` / `ctEq` are
+  // bitwise instructions and an empty asm (WP34 N6). None calls anything.
+  if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+    return out
+  }
+  return out
 }
 
 // ---- Namespace properties -----------------------------------------------------------------

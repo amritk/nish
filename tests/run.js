@@ -2566,6 +2566,9 @@ if (!only || "ct_prelude".includes(only)) {
 // and held to tests/ct-asm.js: no conditional branch, no call, no load or store at an
 // address a secret reaches. `ct_asm_refused` holds one function written to fail each
 // way, and must fail exactly that way, so a check that read nothing cannot pass.
+// Section A compiled these cases too, but a filtered run may not have, and reading its
+// `.ll` would be the `existsSync` trap .claude/testing.md describes; three compiles buy
+// a count that does not depend on what ran before.
 if (!only || "ct_asm constant time assembly".includes(only)) {
   if (!HAS_CLANG) {
     skip("ct_asm: no clang to compile the constant-time fixtures to assembly")
@@ -2575,6 +2578,22 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // reading the `.ll` an earlier run wrote.
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
+    /** `clang -O2 -S` of `ll` for `triple`, or `null` (and a counted skip) when clang has no such target. */
+    const clangAsm = (ll, triple, label) => {
+      const cc = spawnSync(
+        "clang",
+        ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ll, "-o", "-"],
+        {
+          encoding: "utf8",
+          maxBuffer: 64 * 1024 * 1024,
+        }
+      )
+      if (cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)) {
+        skip(`ct_asm: ${label}: clang cannot target ${triple} (${cc.stderr.trim()})`)
+        return null
+      }
+      return cc
+    }
     const fixtures = fs
       .readdirSync(casesDir)
       .filter((f) => /^ct_asm_\w+\.ts$/.test(f))
@@ -2582,13 +2601,10 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     const all = []
     for (const file of fixtures) {
       const name = file.slice(0, -".ts".length)
-      const source = fs.readFileSync(path.join(casesDir, file), "utf8")
-      const specs = ctSpecs(source)
+      const specs = ctSpecs(fs.readFileSync(path.join(casesDir, file), "utf8"))
       all.push(...specs.map((spec) => ({ ...spec, fixture: name })))
-      const argsFile = path.join(casesDir, `${name}.args`)
-      const flags = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/) : []
       const ll = path.join(workDir, `${name}.ll`)
-      const built = spawnSync(NISH, [path.join(casesDir, file), ...flags, "-o", ll], {
+      const built = spawnSync(NISH, [path.join(casesDir, file), ...caseArgs(name), "-o", ll], {
         cwd: root,
         encoding: "utf8",
       })
@@ -2597,27 +2613,19 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         continue
       }
       for (const target of CT_TARGETS) {
-        const s = path.join(workDir, `${name}.${target.name}.s`)
-        const cc = spawnSync(
-          "clang",
-          ["-O2", "-S", "-Wno-override-module", `--target=${target.triple}`, ll, "-o", s],
-          { encoding: "utf8" }
-        )
-        if (cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)) {
-          skip(
-            `ct_asm: ${name} on ${target.name}: clang cannot target ${target.triple} (${cc.stderr.trim()})`
-          )
+        const cc = clangAsm(ll, target.triple, `${name} on ${target.name}`)
+        if (cc === null) {
           continue
         }
         if (cc.status !== 0) {
           check(`ct_asm: ${name} compiles to ${target.name} assembly`, false, cc.stderr)
           continue
         }
-        const asm = fs.readFileSync(s, "utf8")
+        const lines = cc.stdout.split("\n")
         // A spec that could not be read exactly fails below, in the fixture check,
         // rather than being run here with a secret it lost.
         for (const spec of specs.filter((sp) => sp.problems.length === 0)) {
-          const body = functionBody(asm, spec.name, target)
+          const body = functionBody(lines, spec.name, target)
           const found = body === null ? [] : ctViolations(body, spec, target)
           const kinds = [...new Set(found.map((v) => v.kind))]
           const promise =
@@ -2628,51 +2636,50 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
             `ct_asm: ${name} ${spec.name} on ${target.name}: ${promise}`,
             body !== null && (spec.expect === null ? found.length === 0 : kinds.includes(spec.expect)),
             body === null
-              ? `no symbol ${spec.name} in ${s}: a check that read nothing proves nothing`
-              : `${found.map((v) => `${v.kind}: ${v.line}`).join("\n") || "no violation found"}\n--- ${s}\n${body.join("\n")}`
+              ? `no symbol ${spec.name} in ${name}'s ${target.name} assembly: a check that read nothing proves nothing`
+              : `${found.map((v) => `${v.kind}: ${v.line}`).join("\n") || "no violation found"}\n---\n${body.join("\n")}`
           )
         }
       }
     }
-    // The barrier is load-bearing, and this is where that shows. After `opt -O2` the
-    // mask of `pickU32` is still an `and`/`or` blend of an opaque value; with each
-    // barrier replaced by its own operand the same IR becomes one `select` on
-    // `a === b`, which `llc` is free to lower as a branch. If LLVM ever learns to see
-    // through the asm, the first half fails; if the lowering stops needing it, the
-    // second does, and the rule's reason for the barrier is out of date.
-    const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
-    if (!HAS_OPT) {
-      skip("ct_asm: no opt, so nothing shows that the barrier is what keeps pickU32 from becoming a select")
-    } else if (fs.existsSync(primitivesLl)) {
-      const pickOf = (module) => {
-        const o = spawnSync("opt", ["-O2", "-S", "-"], { input: module, encoding: "utf8" })
-        const fn = String(o.stdout).match(/define[^\n]*@pickU32\([\s\S]*?\n\}/)
-        return fn === null ? `opt failed: ${o.stderr}` : fn[0]
-      }
-      const ir = fs.readFileSync(primitivesLl, "utf8")
-      const barriered = pickOf(ir)
-      const stripped = pickOf(
-        ir.replace(/call (i32|i64) asm "", "=r,0"\((?:i32|i64) ([^)]*)\) readnone nounwind/g, "add $1 $2, 0")
-      )
-      check(
-        "ct_asm: opt -O2 keeps pickU32 a bitwise blend behind the barrier, and makes it a select without one",
-        /asm ""/.test(barriered) && !/\bselect\b/.test(barriered) && /\bselect i1\b/.test(stripped),
-        `--- with the barrier\n${barriered}\n--- without\n${stripped}`
-      )
-    }
 
-    // wasm32 is not read for branches (the engine compiles the module again, so this
-    // `.s` is not what runs), but the rule says the builtins compile there with the
-    // same barrier, and that sentence needs something that could fail.
+    const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
     if (fs.existsSync(primitivesLl)) {
-      const wasm = spawnSync(
-        "clang",
-        ["-O2", "-S", "-Wno-override-module", "--target=wasm32-unknown-wasi", primitivesLl, "-o", "-"],
-        { encoding: "utf8" }
-      )
-      if (wasm.status !== 0 && /unknown target|No available targets/i.test(wasm.stderr)) {
-        skip(`ct_asm: clang cannot target wasm32 (${wasm.stderr.trim()})`)
+      // The barrier is load-bearing, and this is where that shows. After `opt -O2`
+      // the mask of `pickU32` is still an `and`/`or` blend of an opaque value; with
+      // each barrier replaced by its own operand the same IR becomes one `select` on
+      // `a === b`, which `llc` is free to lower as a branch. If LLVM ever learns to see
+      // through the asm, the first half fails; if the lowering stops needing it, the
+      // second does, and the rule's reason for the barrier is out of date. The barrier
+      // is matched by its empty string alone, and the count replaced is asserted, so a
+      // change to its constraint or attributes cannot quietly turn the second half off.
+      if (!HAS_OPT) {
+        skip("ct_asm: no opt, so nothing shows that the barrier is what keeps pickU32 from becoming a select")
       } else {
+        const pickOf = (module) => {
+          const o = spawnSync("opt", ["-O2", "-S", "-"], { input: module, encoding: "utf8" })
+          const fn = String(o.stdout).match(/define[^\n]*@pickU32\([\s\S]*?\n\}/)
+          return fn === null ? `opt failed: ${o.stderr}` : fn[0]
+        }
+        const ir = fs.readFileSync(primitivesLl, "utf8")
+        const barrier = /call (i\d+) asm "", "[^"]*"\(i\d+ ([^)]*)\)[^\n]*/g
+        const barriers = [...ir.matchAll(barrier)].length
+        const barriered = pickOf(ir)
+        const stripped = pickOf(ir.replace(barrier, "add $1 $2, 0"))
+        check(
+          `ct_asm: opt -O2 keeps pickU32 a bitwise blend behind the barrier, and makes it a select without one (${barriers} barriers)`,
+          barriers > 0 &&
+            /asm ""/.test(barriered) &&
+            !/\bselect\b/.test(barriered) &&
+            /\bselect i1\b/.test(stripped),
+          `--- with the barrier\n${barriered}\n--- without\n${stripped}`
+        )
+      }
+      // wasm32 is not read for branches (the engine compiles the module again, so this
+      // `.s` is not what runs), but the rule says the builtins compile there with the
+      // same barrier, and that sentence needs something that could fail.
+      const wasm = clangAsm(primitivesLl, "wasm32-unknown-wasi", "wasm32")
+      if (wasm !== null) {
         check(
           "ct_asm: the constant-time fixtures compile for wasm32, barrier and all",
           wasm.status === 0 && /^pickU32:/m.test(wasm.stdout) && /#APP/.test(wasm.stdout),
@@ -2702,8 +2709,7 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       [arm, "a", "call", ["b helper"]],
     ]
     const missed = corners.filter(([target, secret, kind, body]) => {
-      const source = `// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`
-      const [spec] = ctSpecs(source)
+      const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
       return !ctViolations(body, spec, target).some((v) => v.kind === kind)
     })
     check(
@@ -2714,23 +2720,18 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         .join("\n")
     )
 
-    // The fixtures themselves: every `ct-check` names a function its source declares,
-    // and the set still holds a positive case for each builtin and width and one
-    // refusal of each kind, so deleting a fixture cannot quietly narrow the check.
-    const missing = all.filter((spec) => !spec.found).map((spec) => `${spec.fixture}: ${spec.name}`)
+    // The fixtures themselves: every `ct-check` reads exactly (a function the source
+    // declares, each secret a parameter in a register), and the set still holds a
+    // positive case for each builtin and width and one refusal of each kind, so
+    // deleting a fixture cannot quietly narrow the check.
     const unreadable = all.flatMap((spec) => spec.problems.map((p) => `${spec.fixture}: ${spec.name}: ${p}`))
     const names = new Set(all.map((spec) => spec.name))
     const wanted = ["selectU32", "selectU64", "eqU32", "eqU64", "macEqual"].filter((n) => !names.has(n))
     const expects = new Set(all.map((spec) => spec.expect))
     check(
       `ct_asm: the fixtures name ${all.length} functions, covering both builtins, both widths, the MAC compare, and a refusal of each kind`,
-      missing.length === 0 &&
-        unreadable.length === 0 &&
-        wanted.length === 0 &&
-        expects.has("branch") &&
-        expects.has("load"),
+      unreadable.length === 0 && wanted.length === 0 && expects.has("branch") && expects.has("load"),
       [
-        missing.length > 0 ? `no such function: ${missing.join(", ")}` : "",
         ...unreadable,
         wanted.length > 0 ? `no ct-check for ${wanted.join(", ")}` : "",
         expects.has("branch") ? "" : "no fixture expects a branch",
@@ -4002,20 +4003,19 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
       calleesOf.set(name, symbols)
     }
   }
-  // Every builtin is read as having a branch in the callee table, or is one of the
-  // four that call nothing: two lower to a single bitcast and the constant-time pair (WP34 N6) to
-  // bitwise instructions and an empty asm. A builtin with neither would read as "calls nothing, so
+  // Every builtin is read as having a branch in the callee table, the ones that call
+  // nothing included: they have an empty branch of their own, so the table is where
+  // that fact is declared. A builtin with no branch would read as "calls nothing, so
   // allocates nothing" -- the silent miss this guard exists to prevent -- so a branch
   // this scan cannot see is a failure naming the builtin, not a pass.
-  const CALLS_NOTHING = new Set(["f64ToBits", "bitsToF64", "ctSelect", "ctEq"])
-  const unread = builtins.filter((b) => !calleesOf.has(b) && !CALLS_NOTHING.has(b))
+  const unread = builtins.filter((b) => !calleesOf.has(b))
   check(
     "src/builtins.ts and src/emit-builtins.ts still read as a builtin list and a callee table " +
       `(${builtins.length} builtins, ${calleesOf.size} with callees)`,
     builtins.length > 0 && calleesOf.size > 0 && unread.length === 0,
     unread.length > 0
       ? `no branch of identifierBuiltinCalleesNamed was read for ${unread.join(", ")}: teach this scan its ` +
-          "shape, or name the builtin in CALLS_NOTHING if it really calls no runtime symbol"
+          "shape, or give a builtin that calls no runtime symbol an empty branch of its own"
       : "`isBuiltinFunction` or `identifierBuiltinCalleesNamed` moved or changed shape; this check reads both " +
           "by name, so point it at the new one"
   )

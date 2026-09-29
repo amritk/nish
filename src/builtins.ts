@@ -14,8 +14,8 @@
 // builtin can compare against it. One field instead of a parent chain.
 
 import { CheckContext } from "./context"
-import { checkExpression } from "./expressions"
-import { N_CALL, N_IDENT, N_MEMBER, N_NUMBER, N_PAREN, Node } from "./nodes"
+import { checkExpression, literalOperand } from "./expressions"
+import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
   isNumeric,
@@ -161,7 +161,9 @@ const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: str
  * signed type reads as -1, and a mask narrower than a word is not what the
  * limb arithmetic the crypto lanes write deals in. A bare numeric literal takes
  * its type from the first operand that is not one, so `ctEq(x, 0)` and
- * `ctSelect(m, a, 0)` read naturally whichever side the literal is on.
+ * `ctSelect(m, a, 0)` read naturally whichever side the literal is on; what
+ * counts as the literal (`-1` and `(0)` do) is the operators' rule,
+ * `literalOperand`.
  */
 const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
   const arity = name === "ctSelect" ? 3 : 2
@@ -169,7 +171,7 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     return T_ERROR
   }
   let lead = 0
-  while (lead < arity - 1 && args.children[lead].kind === N_NUMBER) {
+  while (lead < arity - 1 && literalOperand(args.children[lead])) {
     lead = lead + 1
   }
   const type = checkExpression(ctx, args.children[lead], scope, -1)
@@ -189,7 +191,7 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
   let other = -1
   let failed = !admitted
   for (let i = 0; i < arity; i++) {
-    if (i !== lead && (admitted || args.children[i].kind !== N_NUMBER)) {
+    if (i !== lead && (admitted || !literalOperand(args.children[i]))) {
       const got = checkExpression(ctx, args.children[i], scope, admitted ? type : -1)
       if (got === T_ERROR) {
         failed = true
@@ -202,10 +204,9 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
     return T_ERROR
   }
   if (other >= 0) {
-    const want = ctx.table.typeName(type)
     return ctx.errorType(
       call,
-      `\`${name}\` needs every operand of one type, got ${want} and ${ctx.table.typeName(other)}`
+      `\`${name}\` needs every operand of one type, got ${ctx.table.typeName(type)} and ${ctx.table.typeName(other)}`
     )
   }
   return type

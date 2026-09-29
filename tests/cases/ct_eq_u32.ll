@@ -80,7 +80,7 @@ entry:
   %14 = zext i32 %13 to i64
   %15 = call i8* @nish_str_from_u64(i64 %14)
   call void @nish_print(i8* %15)
-  %16 = load i32, i32* %ONES.addr, align 4
+  %16 = load i32, i32* %TOP.addr, align 4
   %17 = call i32 asm "", "=r,0"(i32 0) readnone nounwind
   %18 = and i32 %16, %17
   %19 = xor i32 %17, -1
@@ -95,6 +95,21 @@ entry:
   %28 = zext i32 %27 to i64
   %29 = call i8* @nish_str_from_u64(i64 %28)
   call void @nish_print(i8* %29)
+  %30 = load i32, i32* %ONES.addr, align 4
+  %31 = call i32 asm "", "=r,0"(i32 0) readnone nounwind
+  %32 = and i32 %30, %31
+  %33 = xor i32 %31, -1
+  %34 = and i32 0, %33
+  %35 = or i32 %32, %34
+  %36 = xor i32 0, %35
+  %37 = sub i32 0, %36
+  %38 = or i32 %36, %37
+  %39 = lshr i32 %38, 31
+  %40 = sub i32 %39, 1
+  %41 = call i32 asm "", "=r,0"(i32 %40) readnone nounwind
+  %42 = zext i32 %41 to i64
+  %43 = call i8* @nish_str_from_u64(i64 %42)
+  call void @nish_print(i8* %43)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

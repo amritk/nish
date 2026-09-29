@@ -53,23 +53,6 @@
  * which is how the suite proves the check can: it must find that violation.
  */
 
-/** The two targets, with the registers the first integer arguments arrive in. */
-export const CT_TARGETS = [
-  {
-    name: "x86-64",
-    triple: "x86_64-unknown-linux-gnu",
-    args: ["di", "si", "d", "c", "r8", "r9"],
-    comment: /#.*$/,
-  },
-  {
-    name: "aarch64",
-    triple: "aarch64-unknown-linux-gnu",
-    args: ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"],
-    // `#` starts an immediate here, not a comment.
-    comment: /\/\/.*$/,
-  },
-]
-
 /** Parameter types a fixture may give a function: each arrives in one general register. */
 const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
 
@@ -86,7 +69,6 @@ export const ctSpecs = (source) => {
     if (m === null) {
       specs.push({
         name: line,
-        found: false,
         problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|load]`"],
       })
       continue
@@ -96,7 +78,7 @@ export const ctSpecs = (source) => {
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
     const types = params.map((p) => (p.split(":")[1] ?? "").trim())
-    const problems = []
+    const problems = signature === null ? [`no \`export const ${name}\` in the fixture`] : []
     // Parameters are matched to argument registers by position, which holds
     // only while every one takes a general register and there are no more of
     // them than the smaller target has (six on x86-64).
@@ -114,7 +96,6 @@ export const ctSpecs = (source) => {
     }
     specs.push({
       name,
-      found: signature !== null,
       problems,
       contents: secret.split(",").includes("contents"),
       secretArgs: secrets.map((n) => names.indexOf(n)),
@@ -125,14 +106,13 @@ export const ctSpecs = (source) => {
 }
 
 /**
- * The instruction lines of `symbol` in an ELF `.s` for `target`, from its label to the
+ * The instruction lines of `symbol` in the lines of an ELF `.s` for `target`, from its label to the
  * `.Lfunc_end` LLVM writes after it: no directives, labels or comments. `null`
  * when the symbol is not there, which the caller treats as a failure — a check
  * that read nothing has proved nothing.
  */
-export const functionBody = (asm, symbol, target) => {
-  const lines = asm.split("\n")
-  const start = lines.findIndex((line) => line === `${symbol}:` || line.startsWith(`${symbol}:`))
+export const functionBody = (lines, symbol, target) => {
+  const start = lines.findIndex((line) => line.startsWith(`${symbol}:`))
   if (start < 0) {
     return null
   }
@@ -259,10 +239,10 @@ class Taint {
     this.stackSecret = false
     this.stack = []
     this.contents = spec.contents
+    // `ctSpecs` has already refused a secret that names no parameter or one
+    // past the registers, so every index here is a register.
     for (const index of spec.secretArgs) {
-      if (index >= 0 && index < target.args.length) {
-        this.secret.add(target.args[index])
-      }
+      this.secret.add(target.args[index])
     }
   }
 
@@ -300,6 +280,13 @@ class Taint {
     if (secret) {
       this.secret.add("flags")
     }
+  }
+
+  /** A `push`: onto the model's own stack, and into `stackSecret` for good. */
+  push(value) {
+    this.stack.push(value)
+    this.stackSecret = this.stackSecret || value.secret
+    this.moveStack()
   }
 
   /** A store to the stack: remembered by the slot's text, and in `stackSecret` for good. */
@@ -372,10 +359,7 @@ const stepX86 = (t, mnemonic, operands) => {
     return null
   }
   if (mnemonic.startsWith("push")) {
-    const secret = t.anySecret(ops[0].registers)
-    t.stack.push({ secret, loaded: t.anyLoaded(ops[0].registers) })
-    t.stackSecret = t.stackSecret || secret
-    t.moveStack()
+    t.push({ secret: t.anySecret(ops[0].registers), loaded: t.anyLoaded(ops[0].registers) })
     return null
   }
   if (mnemonic.startsWith("pop")) {
@@ -400,7 +384,8 @@ const stepX86 = (t, mnemonic, operands) => {
     }
   }
   if (X86_COMPARE.test(mnemonic)) {
-    t.taintFlags(secret || (dest !== null && t.anySecret(dest.registers)))
+    // A compare reads both operands; `sources` stopped short of the last.
+    t.taintFlags(secret || t.anySecret(dest.registers))
     return null
   }
   if (X86_WIDE.test(mnemonic) && ops.length === 1) {
@@ -420,8 +405,7 @@ const stepX86 = (t, mnemonic, operands) => {
   const overwrite = !merge && (zeroIdiom || X86_OVERWRITE.test(mnemonic) || ops.length >= 3)
   if (!overwrite) {
     // A two-operand instruction reads its destination too: `andl %esi, %eax`.
-    const before = dest.memory ? t.loadFrom(dest) : { secret: t.anySecret(dest.registers), loaded: false }
-    secret = secret || before.secret
+    secret = secret || (dest.memory ? t.loadFrom(dest).secret : t.anySecret(dest.registers))
     loaded = loaded || t.anyLoaded(dest.registers)
   }
   if (zeroIdiom) {
@@ -536,10 +520,24 @@ const stepArm = (t, mnemonic, operands) => {
   return null
 }
 
-const STEPS = new Map([
-  ["x86-64", stepX86],
-  ["aarch64", stepArm],
-])
+/** The two targets, with the registers the first integer arguments arrive in. */
+export const CT_TARGETS = [
+  {
+    name: "x86-64",
+    triple: "x86_64-unknown-linux-gnu",
+    args: ["di", "si", "d", "c", "r8", "r9"],
+    comment: /#.*$/,
+    step: stepX86,
+  },
+  {
+    name: "aarch64",
+    triple: "aarch64-unknown-linux-gnu",
+    args: ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"],
+    // `#` starts an immediate here, not a comment.
+    comment: /\/\/.*$/,
+    step: stepArm,
+  },
+]
 
 /**
  * Every violation in one function body: `{ kind, line }`, where `kind` is
@@ -547,13 +545,12 @@ const STEPS = new Map([
  */
 export const ctViolations = (body, spec, target) => {
   const t = new Taint(spec, target)
-  const step = STEPS.get(target.name)
   const found = []
   for (const line of body) {
     const space = line.search(/\s/)
     const mnemonic = space < 0 ? line : line.slice(0, space)
     const operands = space < 0 ? [] : splitOperands(line.slice(space + 1))
-    const kind = step(t, mnemonic, operands)
+    const kind = target.step(t, mnemonic, operands)
     if (kind !== null) {
       found.push({ kind, line })
     }

@@ -101,24 +101,25 @@ export function bitsToF64(b) {
  * range with `>>> 0` or `asUintN(64, ...)`. These branch: only the native
  * lowering promises constant time.
  */
-function ctWide(name, operands) {
-  const wide = typeof operands[0] === "bigint";
-  for (const x of operands) {
-    if ((typeof x === "bigint") !== wide) {
-      throw new TypeError(`${name}: cannot mix a u64 (BigInt) with a u32 (number)`);
-    }
+function ctWide(name, first, second, third) {
+  const wide = typeof first === "bigint";
+  if ((typeof second === "bigint") !== wide || (typeof third === "bigint") !== wide) {
+    throw new TypeError(`${name}: cannot mix a u64 (BigInt) with a u32 (number)`);
   }
   return wide;
 }
 
+const U64_ONES = (1n << 64n) - 1n;
+
 export function ctSelect(mask, a, b) {
-  if (ctWide("ctSelect", [mask, a, b])) return BigInt.asUintN(64, (a & mask) | (b & ~mask));
+  if (ctWide("ctSelect", mask, a, b)) return wrapU64((a & mask) | (b & ~mask));
   return ((a & mask) | (b & ~mask)) >>> 0;
 }
 
 export function ctEq(a, b) {
-  if (ctWide("ctEq", [a, b])) return BigInt.asUintN(64, a ^ b) === 0n ? (1n << 64n) - 1n : 0n;
-  return (a ^ b) >>> 0 === 0 ? 0xffffffff : 0;
+  // `ctEq` has two operands, so the second one stands in for the third.
+  if (ctWide("ctEq", a, b, b)) return wrapU64(a ^ b) === 0n ? U64_ONES : 0n;
+  return (a ^ b) === 0 ? 0xffffffff : 0;
 }
 
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
