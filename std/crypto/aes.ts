@@ -3,7 +3,9 @@
  * (NIST SP 800-38D), and QUIC's AES header-protection mask (RFC 9001 §5.4.3).
  *
  * Written from the specifications and the papers below, in this module's own
- * layout: nothing here is ported from another implementation.
+ * layout, with one exception: `ghashMul32` is adapted from BearSSL's
+ * `bmul64`, and carries BearSSL's notice. Nothing else here is ported from
+ * another implementation.
  *
  * - **Bitslicing** is the idea of E. Käsper and P. Schwabe, "Faster and
  *   Timing-Attack Resistant AES-GCM" (CHES 2009): hold bit `b` of many bytes
@@ -17,8 +19,9 @@
  * - **GHASH's multiply** is carry-less multiplication done with the integer
  *   multiplier, by leaving three zero bits of "holes" between the bits of each
  *   operand so that the carries of an integer product land where nothing is
- *   read (T. Pornin describes the trick in BearSSL's notes on constant-time
- *   multiplication), with Karatsuba's three-for-four split on top, and the
+ *   read — T. Pornin's technique, and `ghashMul32` is his `bmul64` from
+ *   BearSSL narrowed to 32-bit operands — with Karatsuba's three-for-four
+ *   split on top (this module's own), and the
  *   reduction of S. Gueron and M. Kounavis, "Intel Carry-Less Multiplication
  *   Instruction and its Usage for Computing the GCM Mode" (2010), for GCM's
  *   bit-reflected field.
@@ -56,8 +59,9 @@
  *
  * **What is refused.** A key of any length but 16 or 32 bytes (AES-192 is out
  * of scope), a block or a sample that is not 16 bytes, an empty IV (SP 800-38D
- * §5.2.1.1 asks for at least one bit) and a sealed input shorter than its tag answer
- * `null`; so does a tag that does not verify. An IV of any other non-zero
+ * §5.2.1.1 asks for at least one bit), a sealed input shorter than its tag and
+ * a plaintext too long for its sealed form to be an array answer `null`; so
+ * does a tag that does not verify. An IV of any other non-zero
  * length is hashed into the first counter block as §7.1 says.
  *
  * Private names carry the `aes` / `ghash` prefix because a `std/` module's
@@ -623,6 +627,11 @@ export const aesHeaderMask = (key: AesKey, sample: u8[]): u8[] | null => {
   return mask
 }
 
+/*
+ * Adapted from BearSSL (https://www.bearssl.org/), src/hash/ghash_ctmul64.c
+ * bmul64(). Copyright (c) 2016 Thomas Pornin. Used under the MIT licence;
+ * see std/crypto/LICENSE-bearssl.
+ */
 /**
  * The carry-less product of two 32-bit polynomials, as a 64-bit one. Each
  * operand is split into four with one bit in every four kept, so that an
@@ -733,7 +742,11 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
   if (toI32(y.length) < 2) {
     return
   }
-  for (let at: i32 = 0; at < length; at = at + 16) {
+  // Counted in blocks rather than stepped by 16, so no offset is ever formed
+  // past `length`: an AAD or IV within 16 bytes of 2^31 would overflow `at + 16`.
+  const blocks: i32 = (length >> 4) + ((length & 15) !== 0 ? 1 : 0)
+  for (let block: i32 = 0; block < blocks; block++) {
+    const at: i32 = block * 16
     y[0] = y[0] ^ aesLoad64(data, at, length)
     y[1] = y[1] ^ aesLoad64(data, at + 8, length)
     ghashMultiply(y, key.hHi, key.hLo)
@@ -783,7 +796,10 @@ const aesGcmCtr = (key: AesKey, j0: u8[], src: u8[], dst: u8[], length: i32): vo
   const q: u64[] = new Array<u64>(8)
   const srcLength: i32 = toI32(src.length)
   const dstLength: i32 = toI32(dst.length)
-  for (let base: i32 = 0; base < length; base = base + AES_BATCH) {
+  // Counted in batches, like `ghashUpdate`'s blocks, so `base` never passes `length`.
+  const batches: i32 = (length >> 6) + ((length & 63) !== 0 ? 1 : 0)
+  for (let batch: i32 = 0; batch < batches; batch++) {
+    const base: i32 = batch * AES_BATCH
     for (let k: i32 = 0; k < 4; k++) {
       for (let i: i32 = 0; i < 12; i++) {
         buf[16 * k + i] = j0[i]
@@ -828,13 +844,18 @@ export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u
 /**
  * GCM authenticated encryption (SP 800-38D §7.1): the ciphertext followed by
  * the 16-byte tag, in one fresh array. The IV may be any non-zero length; 12
- * bytes is the fast and usual one. `null` for an empty IV.
+ * bytes is the fast and usual one. `null` for an empty IV, and for a
+ * plaintext longer than 2^31 - 17 bytes, whose sealed form would not fit in an
+ * array.
  */
 export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
-  if (toI32(iv.length) === 0) {
+  const length: i32 = toI32(plaintext.length)
+  // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
+  // is still an array length.
+  const longest: i32 = 0x7fffffef
+  if (toI32(iv.length) === 0 || length > longest) {
     return null
   }
-  const length: i32 = toI32(plaintext.length)
   const j0: u8[] = aesGcmJ0(key, iv)
   const out: u8[] = new Array<u8>(length + AES_GCM_TAG_SIZE)
   aesGcmCtr(key, j0, plaintext, out, length)
@@ -857,6 +878,8 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   if (toI32(iv.length) === 0 || total < AES_GCM_TAG_SIZE) {
     return null
   }
+  // `total` is an array length and at least a tag, so neither this nor the
+  // tag's second word at `length + 8` can leave the range of an `i32`.
   const length: i32 = total - AES_GCM_TAG_SIZE
   const j0: u8[] = aesGcmJ0(key, iv)
   const tag: u64[] = new Array<u64>(2)

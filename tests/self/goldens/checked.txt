@@ -5139,70 +5139,70 @@ function aesBitslicedRound(q: u64[], rk: u64[], at: i32): void -> @aesBitslicedR
 function ghashMul32(x: u64, y: u64): u64 -> @ghashMul32
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 249:9 m0: u64 (const)
-  local 250:9 m1: u64 (const)
-  local 251:9 m2: u64 (const)
-  local 252:9 m3: u64 (const)
-  local 253:9 x0: u64 (const)
-  local 254:9 x1: u64 (const)
-  local 255:9 x2: u64 (const)
-  local 256:9 x3: u64 (const)
-  local 257:9 y0: u64 (const)
-  local 258:9 y1: u64 (const)
-  local 259:9 y2: u64 (const)
-  local 260:9 y3: u64 (const)
-  local 261:9 z0: u64 (const)
-  local 262:9 z1: u64 (const)
-  local 263:9 z2: u64 (const)
-  local 264:9 z3: u64 (const)
-  local 265:9 w0: u64 (const)
+  local 252:9 m0: u64 (const)
+  local 253:9 m1: u64 (const)
+  local 254:9 m2: u64 (const)
+  local 255:9 m3: u64 (const)
+  local 256:9 x0: u64 (const)
+  local 257:9 x1: u64 (const)
+  local 258:9 x2: u64 (const)
+  local 259:9 x3: u64 (const)
+  local 260:9 y0: u64 (const)
+  local 261:9 y1: u64 (const)
+  local 262:9 y2: u64 (const)
+  local 263:9 y3: u64 (const)
+  local 264:9 z0: u64 (const)
+  local 265:9 z1: u64 (const)
+  local 266:9 z2: u64 (const)
+  local 267:9 z3: u64 (const)
+  local 268:9 w0: u64 (const)
 function ghashMultiply(y: u64[], hHi: u64, hLo: u64): void -> @ghashMultiply [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 313:3
+  sharedWrite: 316:3
   calls: ghashMul32 nish_panic_index
   pointer y: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 271:9 low32: u64 (const)
-  local 272:9 thirtyTwo: u64 (const)
-  local 273:9 a1: u64 (const)
-  local 274:9 a0: u64 (const)
-  local 275:9 a2: u64 (const)
-  local 276:9 b2: u64 (const)
-  local 279:9 l0: u64 (const)
-  callee 279:19 ghashMul32 -> @ghashMul32
-  local 280:9 l1: u64 (const)
-  callee 280:19 ghashMul32 -> @ghashMul32
-  local 281:9 l2: u64 (const)
-  callee 281:19 ghashMul32 -> @ghashMul32
-  local 282:9 lHi: u64 (const)
-  local 283:9 lLo: u64 (const)
-  local 286:9 h0: u64 (const)
-  callee 286:19 ghashMul32 -> @ghashMul32
-  local 287:9 h1: u64 (const)
-  callee 287:19 ghashMul32 -> @ghashMul32
-  local 288:9 h2: u64 (const)
-  callee 288:19 ghashMul32 -> @ghashMul32
-  local 289:9 hiHi: u64 (const)
-  local 290:9 hiLo: u64 (const)
-  local 293:9 m0: u64 (const)
-  callee 293:19 ghashMul32 -> @ghashMul32
-  local 294:9 m1: u64 (const)
-  callee 294:19 ghashMul32 -> @ghashMul32
-  local 295:9 m2: u64 (const)
-  callee 295:19 ghashMul32 -> @ghashMul32
-  local 296:9 mHi: u64 (const)
-  local 297:9 mLo: u64 (const)
-  local 300:9 r3: u64 (const)
-  local 301:9 r2: u64 (const)
-  local 302:9 r1: u64 (const)
-  local 303:9 r0: u64 (const)
-  local 304:9 one: u64 (const)
-  local 305:9 top: u64 (const)
-  local 306:9 p3: u64 (const)
-  local 307:9 p2: u64 (const)
-  local 308:9 p1: u64 (const)
-  local 309:9 p0: u64 (const)
-  local 312:9 d1: u64 (const)
+  local 274:9 low32: u64 (const)
+  local 275:9 thirtyTwo: u64 (const)
+  local 276:9 a1: u64 (const)
+  local 277:9 a0: u64 (const)
+  local 278:9 a2: u64 (const)
+  local 279:9 b2: u64 (const)
+  local 282:9 l0: u64 (const)
+  callee 282:19 ghashMul32 -> @ghashMul32
+  local 283:9 l1: u64 (const)
+  callee 283:19 ghashMul32 -> @ghashMul32
+  local 284:9 l2: u64 (const)
+  callee 284:19 ghashMul32 -> @ghashMul32
+  local 285:9 lHi: u64 (const)
+  local 286:9 lLo: u64 (const)
+  local 289:9 h0: u64 (const)
+  callee 289:19 ghashMul32 -> @ghashMul32
+  local 290:9 h1: u64 (const)
+  callee 290:19 ghashMul32 -> @ghashMul32
+  local 291:9 h2: u64 (const)
+  callee 291:19 ghashMul32 -> @ghashMul32
+  local 292:9 hiHi: u64 (const)
+  local 293:9 hiLo: u64 (const)
+  local 296:9 m0: u64 (const)
+  callee 296:19 ghashMul32 -> @ghashMul32
+  local 297:9 m1: u64 (const)
+  callee 297:19 ghashMul32 -> @ghashMul32
+  local 298:9 m2: u64 (const)
+  callee 298:19 ghashMul32 -> @ghashMul32
+  local 299:9 mHi: u64 (const)
+  local 300:9 mLo: u64 (const)
+  local 303:9 r3: u64 (const)
+  local 304:9 r2: u64 (const)
+  local 305:9 r1: u64 (const)
+  local 306:9 r0: u64 (const)
+  local 307:9 one: u64 (const)
+  local 308:9 top: u64 (const)
+  local 309:9 p3: u64 (const)
+  local 310:9 p2: u64 (const)
+  local 311:9 p1: u64 (const)
+  local 312:9 p0: u64 (const)
+  local 315:9 d1: u64 (const)
 function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @aesGcmTagMask [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

@@ -2,8 +2,9 @@
 // every bare `number` and every unannotated literal is an `f64`. The module
 // spells its widths, so its answers must not move: FIPS 197 C.1 and C.3, the
 // GCM specification's test cases 4 and 16 (sealed and opened), 6 and 18 (an IV
-// that is hashed), one GHASH multiply, RFC 9001 A.2's mask and a refusal of
-// each kind. `crypto_aes` has the rest, and the hex helper both programs share.
+// that is hashed), one GHASH multiply, RFC 9001 A.2's mask, and three
+// refusals: a 24-byte key, an empty IV and a flipped tag bit. `crypto_aes` has
+// the rest, and the hex helper both programs share.
 import { Suite } from "nish/testing";
 import { AesKey, aesEncryptBlock, aesGcmOpen, aesGcmSeal, aesHeaderMask, aesKey, ghashMultiply } from "nish/crypto/aes";
 import { fromHex, toHex } from "../crypto_aes/hex";

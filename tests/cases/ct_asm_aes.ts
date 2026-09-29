@@ -244,7 +244,10 @@ export const aesBitslicedRound = (q: u64[], rk: u64[], at: i32): void => {
   aesAddRoundKey(q, rk, at)
 }
 
-// Mirrors `ghashMul32` in std/crypto/aes.ts.
+// Mirrors `ghashMul32` in std/crypto/aes.ts, and carries the same notice:
+// Adapted from BearSSL (https://www.bearssl.org/), src/hash/ghash_ctmul64.c
+// bmul64(). Copyright (c) 2016 Thomas Pornin. Used under the MIT licence;
+// see std/crypto/LICENSE-bearssl.
 const ghashMul32 = (x: u64, y: u64): u64 => {
   const m0: u64 = toU64(0x11111111)
   const m1: u64 = toU64(0x22222222)
