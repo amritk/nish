@@ -1,0 +1,25 @@
+PASS  equal: two copies of one tag
+PASS  equal: two empty arrays
+PASS  equal: one byte
+PASS  equal: 0xff against 0xff
+PASS  unequal: each of the 256 single-bit flips is seen, both ways round
+PASS  unequal lengths: a 31-byte prefix of a 32-byte tag
+PASS  unequal lengths: the other way round
+PASS  unequal lengths: empty against one byte
+PASS  window: the same 32 bytes at offsets 3 and 0
+PASS  window: a sub-window of both
+PASS  window: shifted by one is unequal
+PASS  window: a flip in the last byte of the window
+PASS  window: a flip just past the window is not read
+PASS  window: an empty window is equal
+PASS  window: an empty window at the very end is in range
+PASS  out of range: a negative first offset
+PASS  out of range: a negative second offset
+PASS  out of range: a negative length
+PASS  out of range: the first window runs past its end
+PASS  out of range: the second window runs past its end
+PASS  out of range: an empty window past the end
+PASS  out of range: an offset near the i32 maximum does not wrap
+PASS  out of range: a length near the i32 maximum does not wrap
+PASS  out of range: a window of an empty array
+ct: 24 passed, 0 failed, 0 skipped
