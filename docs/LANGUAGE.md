@@ -2759,7 +2759,8 @@ terminate. Rules (`src/statements.ts`, `checker.ts`):
 called one, and a statement opens only where the word could not be that
 name — `with (…)` followed on the same line by a statement, `try` followed on
 the same line by a block, `var` followed on the same line by a name
-(`tests/cases/ident_with_try_var`).
+(`tests/parser/names.ts`; `tsc` reserves all three, so this is Nish accepting
+what TypeScript does not, as it did before these statements parsed).
 `enum` and `type` are top-level declarations ([Enums](#enums),
 [Type aliases](#type-aliases)); it is only inside a function body that they are
 a rejected statement.

@@ -7222,6 +7222,21 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     )
   }
 
+  // WP33 R1 parses `with (…)`, `try { }` and `var x` for Phase 0 to refuse,
+  // and each word is still a name wherever it cannot open the statement:
+  // `tests/parser/names.ts` compiled before R1 and has to go on compiling,
+  // with `with(n)` a call rather than a refused `with` statement.
+  const namesLl = path.join(buildDir, "parser_names.ll")
+  const namesRun = spawnSync(NISH, ["tests/parser/names.ts", "-o", namesLl], { cwd: root, encoding: "utf8" })
+  const namesIr = namesRun.status === 0 ? fs.readFileSync(namesLl, "utf8") : ""
+  check(
+    "src/parser.ts reads `with`, `try` and `var` as names where they cannot open a statement",
+    namesRun.status === 0 &&
+      namesIr.includes("call i32 @with(i32 %1)") &&
+      namesIr.includes("%try.addr = alloca i32"),
+    `exit ${namesRun.status}\n${namesRun.stdout}${namesRun.stderr}`
+  )
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
