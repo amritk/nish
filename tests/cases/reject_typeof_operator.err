@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+`typeof` is forbidden in Nish (no runtime type tags)

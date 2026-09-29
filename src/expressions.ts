@@ -41,13 +41,17 @@ import {
   structOf,
 } from "./members"
 import {
+  FLAG_ANGLE,
   FLAG_CONST,
+  FLAG_SATISFIES,
   N_ARRAY,
   N_ARROW,
+  N_AS,
   N_BIGINT,
   N_BINARY,
   N_CALL,
   N_CONDITIONAL,
+  N_EMPTY,
   N_FALSE,
   N_FUNCTION,
   N_IDENT,
@@ -61,6 +65,7 @@ import {
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
+  N_SPREAD,
   N_STRING,
   N_SUPER,
   N_TEMPLATE,
@@ -93,6 +98,53 @@ import {
   T_VOID,
   R_UNKNOWN,
 } from "./types"
+
+/**
+ * WP33 R1: one node of the pass 1 sweep (`refuseUnsupportedForms`), refusing
+ * the expressions the parser reads for the checker: those the language has no
+ * lowering for, each with the rule's own message. None needs a type, which is
+ * why they are refused in pass 1 rather than here in pass 2, where a template
+ * nothing instantiates would never be looked at.
+ */
+export const refuseExpressionForm = (ctx: CheckContext, node: Node): void => {
+  switch (node.kind) {
+    case N_BINARY:
+      if (node.text === "**") {
+        ctx.error(node, "Unsupported binary operator `**`")
+      } else if (node.text === "**=") {
+        ctx.error(node, "Unsupported assignment operator `**=`")
+      }
+      break
+    case N_ARRAY:
+      for (const element of node.children) {
+        if (element.kind === N_EMPTY) {
+          ctx.error(node, "Holes in array literals are not supported")
+          return
+        }
+      }
+      break
+    case N_SPREAD:
+      ctx.error(node, "Spread in array literals is not supported")
+      break
+    case N_NEW:
+      if (node.children[0].kind !== N_IDENT) {
+        ctx.error(node.children[0], "`new` requires a class name")
+      }
+      break
+    case N_AS:
+      // Named by TypeScript's `SyntaxKind`, as every Phase 1 gap is.
+      if ((node.flags & FLAG_SATISFIES) !== 0) {
+        ctx.error(node, "Unsupported expression in Phase 1: SatisfiesExpression")
+      } else if ((node.flags & FLAG_ANGLE) !== 0) {
+        ctx.error(node, "Unsupported expression in Phase 1: TypeAssertionExpression")
+      } else {
+        ctx.error(node, "Unsupported expression in Phase 1: AsExpression")
+      }
+      break
+    default:
+      break
+  }
+}
 
 /**
  * The type an expression has, recorded on the node for the emitter to read.

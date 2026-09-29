@@ -119,7 +119,9 @@ rejects. This table is the highest-value part of the page.
 | `xs.map(f)`, `.filter`, `.reduce`, `.forEach`, `.slice`, `.sort`, `.shift` | `` Unknown method `map` on i32[] (supported: push, pop, indexOf, join, set, fill) `` | a `for` loop, or a top-level `map(xs, f)` with a [function parameter](#function-parameters) |
 | `s.toUpperCase()`, `s.split()`, `s.trim()`, `s.replace()` | `` Unknown method … on string `` | index bytes with `charCodeAt` / `substring` |
 | `a?.b`, `a ?? b` | forbidden, except `m.get(k) ?? d` | `if (a !== null)` first |
-| `x as T`, `<T>x`, `x!` | `Unsupported expression in Phase 1: AsExpression` | there are no casts; `implements` is the only widening |
+| `x as T`, `<T>x`, `x satisfies T` | `Unsupported expression in Phase 1: AsExpression` (to `any` or `unknown`: `` Type assertion to `any` is forbidden ``); `x!` is a syntax error | there are no casts; `implements` is the only widening |
+| `typeof x`, `x instanceof C`, `"k" in o`, `delete o.k`, `void 0`, `a, b` | each refused by name (`` `typeof` is forbidden ``, …) | there is no runtime type information: a value's type is its declared one |
+| `a ** b`, `[...xs]`, `[1, , 2]` | `` Unsupported binary operator `**` `` / `Spread in array literals is not supported` / `Holes in array literals are not supported` | `Math.pow` on `f64`, a loop, every element written out |
 | `any`, `unknown` | forbidden | name the real type |
 | `undefined` | forbidden, except `x === undefined` on a `Map.get` result | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
@@ -137,7 +139,6 @@ rejects. This table is the highest-value part of the page.
 | `A \| B` unions | `` Union types other than `T \| null` are forbidden `` | one type, or an `interface` prefix |
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
-| `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |

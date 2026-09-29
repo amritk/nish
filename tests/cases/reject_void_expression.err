@@ -1,1 +1,1 @@
-expected `;`, found `NUMBER`
+`void` expressions are forbidden in Nish (no `undefined` value)

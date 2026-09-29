@@ -1,1 +1,1 @@
-expected `;`, found `IDENT`
+`eval` is forbidden in Nish (no interpreter at runtime)

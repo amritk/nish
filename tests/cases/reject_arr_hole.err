@@ -1,1 +1,1 @@
-expected an expression, found `,`
+Holes in array literals are not supported

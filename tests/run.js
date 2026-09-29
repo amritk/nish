@@ -7569,6 +7569,66 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     )
   }
 
+  // The operators of the second stage are words too: `typeof`, `delete`,
+  // `void`, `await` and `yield` before an operand, `in`, `instanceof`, `as`
+  // and `satisfies` after one. `tests/parser/names-operators.ts` uses each, and
+  // `of`, as a variable, a parameter and a field in every position a name can
+  // stand, and compiled before the operators were read; each local survives as
+  // its own slot. `names-operator-calls.ts` calls a function of each name,
+  // `typeof(n)` and `void (0)` among them, and every call survives as a call.
+  const operatorWords = [
+    "typeof",
+    "delete",
+    "void",
+    "instanceof",
+    "in",
+    "yield",
+    "await",
+    "satisfies",
+    "as",
+    "of",
+  ]
+  const wordsLl = path.join(buildDir, "parser_names_operators.ll")
+  const wordsRun = spawnSync(NISH, ["tests/parser/names-operators.ts", "-o", wordsLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const wordsIr = wordsRun.status === 0 ? fs.readFileSync(wordsLl, "utf8") : ""
+  const missingLocals = operatorWords.filter((word) => !wordsIr.includes(`%${word}.addr = alloca i32`))
+  check(
+    "src/parser.ts reads the operator words as names where an operator cannot stand (tests/parser/names-operators.ts)",
+    wordsRun.status === 0 && missingLocals.length === 0,
+    `exit ${wordsRun.status}, no slot for ${missingLocals.join(", ")}\n${wordsRun.stdout}${wordsRun.stderr}`
+  )
+  const callsLl = path.join(buildDir, "parser_names_operator_calls.ll")
+  const callsRun = spawnSync(NISH, ["tests/parser/names-operator-calls.ts", "-o", callsLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const callsIr = callsRun.status === 0 ? fs.readFileSync(callsLl, "utf8") : ""
+  // How many times each function is called in the source, the one in
+  // `through` included, so a call read as an operator is one fewer.
+  const wantCalls = {
+    typeof: 5,
+    delete: 2,
+    void: 3,
+    instanceof: 3,
+    in: 4,
+    yield: 2,
+    await: 3,
+    satisfies: 2,
+    as: 3,
+    of: 1,
+  }
+  const wrongCalls = operatorWords.filter(
+    (word) => callsIr.split(`call i32 @${word}(`).length - 1 !== wantCalls[word]
+  )
+  check(
+    "src/parser.ts reads a call of a function named like an operator as the call (tests/parser/names-operator-calls.ts)",
+    callsRun.status === 0 && wrongCalls.length === 0,
+    `exit ${callsRun.status}, wrong call count for ${wrongCalls.join(", ")}\n${callsRun.stdout}${callsRun.stderr}`
+  )
+
   // Wave C: the support library the checker and the emitter are written
   // over (docs/wp14-selfhost.md §3). It has no counterpart in stage0's `src/` to
   // diff phase by phase, so each function is matched with something that
@@ -8016,6 +8076,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // `for...of` sweep recovers per declaration; a `.err` cannot count.
       ["reject_stmt_forms_together", ["8:3-9:4 NL1056"]],
       ["reject_for_of_heads_together", ["4:3-6:4 NL2133", "12:8-12:9 NL2135"]],
+      // The expression forms: Phase 0's end the module the same way, and the
+      // checker's pass 1 sweep reports once per declaration, ahead of the
+      // declaration's own collection.
+      ["reject_expr_forms_together", ["6:50-6:56 NL1047"]],
+      ["reject_expr_sweep_together", ["6:18-6:26 NL2210", "8:40-8:51 NL2254", "10:35-10:41 NL2237"]],
     ]
     for (const [jsonName, spans] of jsonCases) {
       const jsonCase = path.join("tests", "cases", `${jsonName}.ts`)
