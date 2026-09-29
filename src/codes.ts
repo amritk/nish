@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 521
+export const RULE_COUNT: i32 = 524
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -272,10 +272,14 @@ const diagnosticRules = (): string[] => [
   "NL2309",
   "`declare function` declares a C function this program calls, so it must have no body",
   "NL2308",
+  " (an export is a declaration, and a declaration has a name; import it by that name)",
+  "NL1058",
   ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
   "NL2028",
   ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
   "NL2270",
+  " (an import names source this compiler reads, never a resource loaded at run time)",
+  "NL1057",
   " is not well-formed JSON, so this compiler could not read an entry point out of it",
   "NL3021",
   "`; check the nullable side against `null` first, then compare the narrowed values",
@@ -374,6 +378,8 @@ const diagnosticRules = (): string[] => [
   "NL2130",
   "`super(...)` must be the first statement of the constructor of `",
   "NL2156",
+  " (a module has no top-level code, so there is nothing to defer)",
+  "NL1059",
   ", not in your program. Please report it with the input file and",
   "NL3002",
   "` is generic: it must be written with its type arguments, e.g. ",

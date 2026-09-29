@@ -45,10 +45,13 @@ import {
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
+  FLAG_ATTRIBUTES,
   FLAG_AWAIT,
+  FLAG_COMPUTED,
   FLAG_CONST,
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
+  FLAG_DEFER,
   FLAG_FOR_IN,
   FLAG_USING,
   FLAG_VAR,
@@ -65,6 +68,7 @@ import {
   FLAG_SATISFIES,
   FLAG_STATIC,
   FLAG_STATIC_FIRST,
+  FLAG_TYPE_ONLY,
   N_ARRAY,
   N_AS,
   N_ARROW,
@@ -93,6 +97,7 @@ import {
   N_IDENT,
   N_IF,
   N_IMPORT,
+  N_IMPORT_EQUALS,
   N_IMPORT_SPEC,
   N_INDEX,
   N_INDEX_SIGNATURE,
@@ -103,6 +108,7 @@ import {
   N_METHOD,
   N_MODULE_CONST,
   N_NAMESPACE,
+  N_NAMESPACE_EXPORT,
   N_NEW,
   N_NULL,
   N_NUMBER,
@@ -125,6 +131,8 @@ import {
   N_TRY,
   N_UNARY,
   N_ENUM,
+  N_EXPORT_ASSIGNMENT,
+  N_EXPORT_DECLARATION,
   N_ENUM_MEMBER,
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
@@ -321,6 +329,24 @@ const isAssignment = (kind: i32): boolean =>
   kind === TOK_SHR_ASSIGN ||
   kind === TOK_USHR_ASSIGN ||
   kind === TOK_STAR_STAR_ASSIGN
+
+/**
+ * The words TypeScript reserves that the lexer reads as identifiers (the rest
+ * of its reserved words are keywords there): never a name an import binds.
+ */
+const isReservedWord = (word: string): boolean =>
+  word === "catch" ||
+  word === "debugger" ||
+  word === "delete" ||
+  word === "enum" ||
+  word === "finally" ||
+  word === "in" ||
+  word === "instanceof" ||
+  word === "try" ||
+  word === "typeof" ||
+  word === "var" ||
+  word === "void" ||
+  word === "with"
 
 export class Parser {
   /**
@@ -581,42 +607,26 @@ export class Parser {
     // `@dec class C { }`, for Phase 0 to refuse (NL1006). `@` is a token of
     // its own that nothing else in the language spells, so it is always this.
     if (this.at(TOK_AT)) {
-      const decorator = this.parseDecoratorHead(start)
-      const decorated = this.parseDeclaration()
-      // `export @a @b class C`: the flag is the class's, under every decorator.
-      let declaration = decorated
-      while (declaration.kind === N_DECORATOR && declaration.children.length > 1) {
-        declaration = declaration.children[1]
-      }
-      this.exportable(declaration, exported)
-      decorator.children.push(decorated)
-      decorator.end = this.previousEnd
-      return decorator
+      return this.parseDecorated(start, exported ? FLAG_EXPORTED : 0)
     }
-    // `export default function () { }`, anonymous, for the checker to refuse
-    // (NL2203). A named default export is not read yet.
-    if (exported && this.at(TOK_DEFAULT) && this.peek() === TOK_FUNCTION && this.anonymousFunctionAhead()) {
-      this.advance() // `default`
-      const declaration = this.parseFunction(start, true)
-      declaration.flags = declaration.flags | FLAG_DEFAULT
-      return this.exportable(declaration, exported)
+    // The export forms that are not a modifier on a declaration, each read
+    // for pass 1 to refuse: `export default`, `export =`, an export list or
+    // `*`, and `export as namespace` (NL2128-NL2131, NL2230). `export type`
+    // is an alias unless braces or `*` follow it, which is TypeScript's rule.
+    if (exported && this.at(TOK_DEFAULT)) {
+      return this.parseExportDefault(start)
     }
-    // `export default class { }`, anonymous, for the checker to refuse
-    // (NL2018), `abstract` or not. A named default export is not read yet.
-    if (exported && this.at(TOK_DEFAULT) && this.anonymousDefaultClassAhead()) {
-      this.advance() // `default`
-      let flags = FLAG_DEFAULT
-      if (this.at(TOK_IDENT)) {
-        this.advance() // `abstract`
-        flags = flags | FLAG_ABSTRACT
-      }
-      return this.exportable(this.flagged(this.parseClass(start), flags), exported)
+    if (exported && this.at(TOK_ASSIGN)) {
+      return this.parseExportAssignment(start)
     }
-    if (this.at(TOK_IMPORT)) {
-      if (exported) {
-        return this.fail("`export` cannot introduce an import")
-      }
-      return this.parseImport(start)
+    if (exported && (this.at(TOK_LBRACE) || this.at(TOK_STAR) || this.exportTypeListAhead())) {
+      return this.parseExportDeclaration(start)
+    }
+    if (exported && this.at(TOK_IDENT) && this.value === "as") {
+      return this.parseNamespaceExport(start)
+    }
+    if (this.at(TOK_IMPORT) && this.importDeclarationAhead()) {
+      return this.exportable(this.parseImport(start), exported)
     }
     if (this.at(TOK_FUNCTION)) {
       return this.exportable(this.parseFunction(start, false), exported)
@@ -715,13 +725,16 @@ export class Parser {
 
   /**
    * Whether the token in hand opens a statement rather than a declaration: a
-   * statement keyword, or a name that is not followed by another name or a
-   * keyword. That second half leaves the modifiers the language does not have
-   * — `async function`, `declare class`, `abstract class`, `namespace N` —
-   * to the refusal below, which is their own and not a statement's.
+   * statement keyword, `import` where it is not an import declaration
+   * (`import("./m")`, for Phase 0 to refuse, NL1002), or a name that is not
+   * followed by another name or a keyword. That last half leaves the
+   * modifiers the language does not have — `async function`, `declare
+   * class`, `abstract class`, `namespace N` — to the refusal below, which is
+   * their own and not a statement's.
    */
   startsTopLevelStatement(): boolean {
     switch (this.kind) {
+      case TOK_IMPORT:
       case TOK_IF:
       case TOK_WHILE:
       case TOK_DO:
@@ -739,27 +752,6 @@ export class Parser {
       default:
         return false
     }
-  }
-
-  /**
-   * After `export`, on `default`: whether an anonymous class follows —
-   * `class` (or `abstract class`, the two on one line) and then anything but
-   * a name, which is `{`, `<`, `extends` or `implements`.
-   */
-  anonymousDefaultClassAhead(): boolean {
-    const next = this.peek()
-    const isAbstract = next === TOK_IDENT && this.aheadValue === "abstract"
-    if (next !== TOK_CLASS && !isAbstract) {
-      return false
-    }
-    const scan = this.scanAfterAhead()
-    if (isAbstract) {
-      if (scan.kind !== TOK_CLASS || this.lineBreakBetween(this.aheadEnd, scan.start)) {
-        return false
-      }
-      scan.next()
-    }
-    return scan.kind !== TOK_IDENT
   }
 
   /**
@@ -1238,46 +1230,513 @@ export class Parser {
     return declaration
   }
 
-  /** `import { a, b as c } from "./m";` — the only import form there is. */
+  /**
+   * `@dec` in front of a declaration (NL1006): a DECORATOR around what it
+   * decorates, the next decorator or the declaration, and `flags` —
+   * `export`, and `default` after `export default @dec` — go on that
+   * declaration, under every decorator (`export @a @b class C`).
+   */
+  parseDecorated(start: i32, flags: i32): Node {
+    const decorator = this.parseDecoratorHead(start)
+    const decorated = this.parseDeclaration()
+    let declaration = decorated
+    while (declaration.kind === N_DECORATOR && declaration.children.length > 1) {
+      declaration = declaration.children[1]
+    }
+    declaration.flags = declaration.flags | flags
+    decorator.children.push(decorated)
+    decorator.end = this.previousEnd
+    return decorator
+  }
+
+  /**
+   * After `export`, on `default`. A function, a class, an interface or a
+   * decorated declaration is that declaration with FLAG_DEFAULT, named or
+   * not (NL2130, NL2131; an anonymous one NL2203, NL2018); anything else is
+   * the value `export default` exports (NL2129). The words TypeScript reads
+   * as modifiers here are its own: `async` before `function` and `abstract`
+   * before `class`, each on the line of the word after it.
+   */
+  parseExportDefault(start: i32): Node {
+    const next = this.peek()
+    const flags = FLAG_EXPORTED | FLAG_DEFAULT
+    if (next === TOK_FUNCTION) {
+      const anonymous = this.anonymousFunctionAhead()
+      this.advance() // `default`
+      return this.flagged(this.parseFunction(start, anonymous), flags)
+    }
+    if (next === TOK_IDENT && this.aheadValue === "async") {
+      const scan = this.scanAfterAhead()
+      if (scan.kind === TOK_FUNCTION && !this.lineBreakBetween(this.aheadEnd, scan.start)) {
+        scan.next()
+        if (scan.kind === TOK_STAR) {
+          scan.next()
+        }
+        const anonymous = scan.kind === TOK_LPAREN || scan.kind === TOK_LT
+        this.advance() // `default`
+        this.advance() // `async`
+        return this.flagged(this.parseFunction(start, anonymous), flags | FLAG_ASYNC)
+      }
+    }
+    if (next === TOK_CLASS || this.defaultAbstractClassAhead()) {
+      this.advance() // `default`
+      let classFlags = flags
+      if (this.at(TOK_IDENT)) {
+        this.advance() // `abstract`
+        classFlags = classFlags | FLAG_ABSTRACT
+      }
+      return this.flagged(this.parseClass(start), classFlags)
+    }
+    if (next === TOK_INTERFACE) {
+      this.advance() // `default`
+      return this.flagged(this.parseInterface(start), flags)
+    }
+    if (next === TOK_AT) {
+      this.advance() // `default`
+      return this.parseDecorated(start, flags)
+    }
+    return this.parseExportAssignment(start)
+  }
+
+  /** After `export`, on `default`: whether `abstract class` follows, the two on one line. */
+  defaultAbstractClassAhead(): boolean {
+    if (this.peek() !== TOK_IDENT || this.aheadValue !== "abstract") {
+      return false
+    }
+    const scan = this.scanAfterAhead()
+    return scan.kind === TOK_CLASS && !this.lineBreakBetween(this.aheadEnd, scan.start)
+  }
+
+  /** `export default <value>;` or `export = <value>;` (NL2129), on `default` or `=`. */
+  parseExportAssignment(start: i32): Node {
+    const node = this.node(N_EXPORT_ASSIGNMENT, start, this.end)
+    node.text = this.at(TOK_ASSIGN) ? "=" : "default"
+    this.advance()
+    node.children.push(this.parseExpression())
+    this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /**
+   * After `export`, on `type`: whether it opens `export type { A }` or
+   * `export type * from "./m"` rather than an exported alias, whose name
+   * cannot be `{` or `*`.
+   */
+  exportTypeListAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "type") {
+      return false
+    }
+    const next = this.peek()
+    return next === TOK_LBRACE || next === TOK_STAR
+  }
+
+  /**
+   * `export { a, b as c }`, with or without `from "./m"`, `export * from "./m"`
+   * and `export * as ns from "./m"`, after `export` (NL2128). Attributes after
+   * the specifier are passed over: the declaration is refused whatever it
+   * holds.
+   */
+  parseExportDeclaration(start: i32): Node {
+    const node = this.node(N_EXPORT_DECLARATION, start, this.end)
+    if (this.at(TOK_IDENT)) {
+      this.advance() // `type`
+      node.flags = FLAG_TYPE_ONLY
+    }
+    let from = false
+    if (this.eat(TOK_STAR)) {
+      if (this.at(TOK_IDENT) && this.value === "as") {
+        this.advance()
+        node.children.push(this.parseModuleExportName())
+      } else {
+        node.children.push(this.empty())
+      }
+      this.expectFrom()
+      from = true
+    } else {
+      node.children.push(this.parseSpecifiers(false))
+      if (this.at(TOK_IDENT) && this.value === "from") {
+        this.advance()
+        from = true
+      }
+    }
+    if (from) {
+      this.parseModuleSpecifier(node)
+      if (this.attributesAhead()) {
+        this.skipAttributes()
+      }
+    }
+    this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /** `export as namespace X;` (NL2230), after `export`, on `as`. */
+  parseNamespaceExport(start: i32): Node {
+    const node = this.node(N_NAMESPACE_EXPORT, start, this.end)
+    this.advance() // `as`
+    if (this.at(TOK_IDENT) && this.value === "namespace") {
+      this.advance()
+    } else {
+      this.report(`expected \`namespace\`, found \`${tokenName(this.kind)}\``, this.start, this.end)
+    }
+    node.children.push(this.parseIdentifier())
+    this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /**
+   * Whether `import` opens an import declaration rather than an expression,
+   * `import("./m")` or `import.meta`: TypeScript's test, a string, `*`, `{`,
+   * a name or a keyword after it.
+   */
+  importDeclarationAhead(): boolean {
+    const next = this.peek()
+    return (
+      next === TOK_STRING ||
+      next === TOK_STAR ||
+      next === TOK_LBRACE ||
+      next === TOK_IDENT ||
+      (next >= TOK_FUNCTION && next <= TOK_SUPER)
+    )
+  }
+
+  /**
+   * `import { a, b as c } from "./m";` — the only import form there is — and
+   * every other form TypeScript reads, each the N_IMPORT `src/nodes.ts`
+   * describes, for the phase that owns its rule to refuse: a default or a
+   * namespace import, a side-effect import, `import type`, `import defer`, a
+   * specifier that is not a string literal and attributes after it. `import
+   * x = require("./m")` is an N_IMPORT_EQUALS.
+   *
+   * `type` and `defer` are modifiers where TypeScript reads them as one, and
+   * names everywhere else: `import type from "./m"` imports a default called
+   * `type` (`typeModifierAhead`, `deferModifierAhead`).
+   */
   parseImport(start: i32): Node {
     this.advance() // `import`
     const node = this.node(N_IMPORT, start, this.end)
     const list = this.list()
-    if (!this.expect(TOK_LBRACE)) {
-      return this.finish(node, this.closeList(list))
+    if (this.typeModifierAhead()) {
+      this.advance()
+      node.flags = FLAG_TYPE_ONLY
+    } else if (this.deferModifierAhead()) {
+      this.advance()
+      node.flags = FLAG_DEFER
     }
-    while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
-      const specStart = this.start
-      const exported = this.parseIdentifier()
-      const spec = this.node(N_IMPORT_SPEC, specStart, exported.end)
-      spec.text = exported.text
-      spec.children.push(exported)
-      // `as` is not a keyword to this lexer; it is the identifier `as`.
+    let defaultName: Node | null = null
+    if (this.bindingNameAhead()) {
+      const name = this.parseIdentifier()
+      const clause = this.at(TOK_COMMA) || (this.at(TOK_IDENT) && this.value === "from")
+      if (!clause && (node.flags & FLAG_DEFER) === 0) {
+        return this.parseImportEquals(node, name)
+      }
+      defaultName = name
+    }
+    let bindings = list
+    if (defaultName !== null && !this.eat(TOK_COMMA)) {
+      bindings = this.empty()
+    } else if (this.at(TOK_STAR)) {
+      this.advance()
       if (this.at(TOK_IDENT) && this.value === "as") {
         this.advance()
-        const local = this.parseIdentifier()
-        spec.text = local.text
-        spec.end = local.end
+      } else {
+        this.report(`expected \`as\`, found \`${tokenName(this.kind)}\``, this.start, this.end)
       }
-      list.children.push(spec)
-      if (!this.eat(TOK_COMMA)) {
-        break
+      bindings = this.parseImportedName()
+    } else if (this.at(TOK_LBRACE) || defaultName !== null) {
+      if (!this.expect(TOK_LBRACE)) {
+        return this.finish(node, this.closeList(list))
       }
+      this.readSpecifiers(list, true)
+    } else {
+      // A side-effect import, `import "./m"`: no bindings and no `from`.
+      bindings = this.empty()
     }
-    this.expect(TOK_RBRACE)
+    node.children.push(bindings === list ? this.closeList(list) : bindings)
+    if (defaultName !== null) {
+      node.children.push(defaultName)
+    }
+    if (bindings.kind !== N_EMPTY || defaultName !== null) {
+      this.expectFrom()
+    }
+    this.parseModuleSpecifier(node)
+    if (this.attributesAhead()) {
+      this.skipAttributes()
+      node.flags = node.flags | FLAG_ATTRIBUTES
+    }
+    this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /**
+   * On `type` after `import`: whether it is the modifier of `import type`
+   * rather than a default import called `type`. TypeScript's rule: `{`, `*`
+   * or a name follows it, and when that name is `from`, the word after it is
+   * `from` or `=` — `import type from "./m"` is the default import, `import
+   * type from from "./m"` the type-only one.
+   */
+  typeModifierAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "type") {
+      return false
+    }
+    const next = this.peek()
+    if (next === TOK_LBRACE || next === TOK_STAR) {
+      return true
+    }
+    if (next !== TOK_IDENT || isReservedWord(this.aheadValue)) {
+      return false
+    }
+    if (this.aheadValue !== "from") {
+      return true
+    }
+    const scan = this.scanAfterAhead()
+    return (scan.kind === TOK_IDENT && scan.value === "from") || scan.kind === TOK_ASSIGN
+  }
+
+  /**
+   * On `defer` after `import`: whether it is the modifier of `import defer`
+   * (NL1059) rather than a default import called `defer`. TypeScript's rule:
+   * anything but `,` or `=` follows it, and `from` only when no string comes
+   * after that `from`.
+   */
+  deferModifierAhead(): boolean {
+    if (!this.at(TOK_IDENT) || this.value !== "defer") {
+      return false
+    }
+    const next = this.peek()
+    if (next === TOK_COMMA || next === TOK_ASSIGN) {
+      return false
+    }
+    if (next !== TOK_IDENT || this.aheadValue !== "from") {
+      return true
+    }
+    return this.scanAfterAhead().kind !== TOK_STRING
+  }
+
+  /**
+   * `import x = require("./m");` or `import x = A.B;`, on `=` after the name
+   * (NL2230, or NL2226 when exported). `node` is the N_IMPORT already made,
+   * which becomes the N_IMPORT_EQUALS, keeping `import type`'s flag.
+   */
+  parseImportEquals(node: Node, name: Node): Node {
+    node.kind = N_IMPORT_EQUALS
+    node.children.push(name)
+    this.expect(TOK_ASSIGN)
+    if (this.at(TOK_IDENT) && this.value === "require" && this.peek() === TOK_LPAREN) {
+      this.advance() // `require`
+      this.advance() // `(`
+      if (this.at(TOK_STRING)) {
+        const specifier = this.node(N_STRING, this.start, this.end)
+        specifier.text = this.value
+        this.advance()
+        node.children.push(specifier)
+      } else {
+        node.children.push(this.parseExpression())
+      }
+      this.expect(TOK_RPAREN)
+    } else {
+      const nameStart = this.start
+      let reference = this.parseIdentifier()
+      while (this.eat(TOK_DOT)) {
+        reference = this.parseMemberName(reference, nameStart)
+      }
+      node.children.push(reference)
+    }
+    this.expectSemicolon()
+    node.end = this.previousEnd
+    return node
+  }
+
+  /** `from`, or the syntax error that it is missing. */
+  expectFrom(): void {
     if (this.at(TOK_IDENT) && this.value === "from") {
       this.advance()
     } else {
       this.report(`expected \`from\`, found \`${tokenName(this.kind)}\``, this.start, this.end)
     }
+  }
+
+  /**
+   * The specifier of an import or an export: a string literal, whose value is
+   * `node`'s text, or anything else TypeScript reads there, which is an
+   * expression — read and dropped, with FLAG_COMPUTED for the refusal
+   * (NL2212).
+   */
+  parseModuleSpecifier(node: Node): void {
     if (this.at(TOK_STRING)) {
       node.text = this.value
       this.advance()
-    } else {
-      this.report("a module specifier must be a string literal", this.start, this.end)
+      return
     }
-    this.expectSemicolon()
-    return this.finish(node, this.closeList(list))
+    // A reserved word that cannot open an expression, `import with from`,
+    // is the syntax error TypeScript reports there too; `typeof`, `void` and
+    // `delete` open one.
+    const operator = this.value === "typeof" || this.value === "void" || this.value === "delete"
+    if (this.at(TOK_IDENT) && isReservedWord(this.value) && !operator) {
+      this.report(`expected a module specifier, found \`${this.value}\``, this.start, this.end)
+      return
+    }
+    node.flags = node.flags | FLAG_COMPUTED
+    this.parseExpression()
+  }
+
+  /**
+   * Whether a name that can be bound stands here: an identifier that is not a
+   * word TypeScript reserves. The lexer reads `with`, `var`, `in` and the rest
+   * as identifiers, so that each construct can be refused by its rule; where
+   * an import binds a name, TypeScript refuses them as syntax, and so does
+   * this parser.
+   */
+  bindingNameAhead(): boolean {
+    return this.at(TOK_IDENT) && !isReservedWord(this.value)
+  }
+
+  /** A name an import binds, `bindingNameAhead`'s, or the syntax error that it is not one. */
+  parseImportedName(): Node {
+    if (this.at(TOK_IDENT) && isReservedWord(this.value)) {
+      return this.fail(`expected a name, found the reserved word \`${this.value}\``)
+    }
+    return this.parseIdentifier()
+  }
+
+  /** `with` or `assert` after a specifier, on its line: import attributes. */
+  attributesAhead(): boolean {
+    return this.at(TOK_IDENT) && (this.value === "with" || this.value === "assert") && !this.newlineBefore()
+  }
+
+  /**
+   * `with { type: "json" }`, passed over unread as a namespace body is: the
+   * import is refused whatever the attributes say (NL1057).
+   */
+  skipAttributes(): void {
+    this.advance() // `with` or `assert`
+    if (!this.at(TOK_LBRACE)) {
+      this.expect(TOK_LBRACE)
+      return
+    }
+    const close = this.closingBrace(this.start)
+    while ((close < 0 || this.start < close) && !this.at(TOK_END)) {
+      this.advance()
+    }
+    if (close < 0) {
+      this.expect(TOK_RBRACE)
+    }
+  }
+
+  /** `{ a, b as c }`, from its `{`, as a LIST of IMPORT_SPEC. */
+  parseSpecifiers(isImport: boolean): Node {
+    const list = this.list()
+    if (this.expect(TOK_LBRACE)) {
+      this.readSpecifiers(list, isImport)
+    }
+    return this.closeList(list)
+  }
+
+  /** The specifiers between braces whose `{` is consumed, into `list`, and the `}`. */
+  readSpecifiers(list: Node, isImport: boolean): void {
+    while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
+      list.children.push(this.parseSpecifier(isImport))
+      if (!this.eat(TOK_COMMA)) {
+        break
+      }
+    }
+    this.expect(TOK_RBRACE)
+  }
+
+  /**
+   * One specifier between an import's or an export's braces, read the way
+   * TypeScript reads it (`parseImportOrExportSpecifier`). `type` in front is
+   * the modifier of a type-only specifier (NL2243) only where a name follows
+   * it that could not be its alias — `{ type }`, `{ type as t }` and
+   * `{ type as as }` each import a name `type` — and the name before `as`
+   * may be a keyword or a string (NL1058) where a local name may be neither:
+   * a keyword or a string there is the syntax error it is in TypeScript.
+   */
+  parseSpecifier(isImport: boolean): Node {
+    const specStart = this.start
+    let reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+    let name = this.parseModuleExportName()
+    // Made here, after the first name, so a specifier that compiles numbers
+    // its nodes as it always did.
+    const spec = this.node(N_IMPORT_SPEC, specStart, name.end)
+    let property = name
+    let alias = true
+    if (name.kind === N_IDENT && name.text === "type" && !reserved) {
+      if (this.at(TOK_IDENT) && this.value === "as") {
+        const firstAs = this.parseModuleExportName()
+        if (this.at(TOK_IDENT) && this.value === "as") {
+          const secondAs = this.parseModuleExportName()
+          if (this.moduleExportNameAhead()) {
+            // `{ type as as x }`: a type-only `as`, renamed.
+            spec.flags = FLAG_TYPE_ONLY
+            property = firstAs
+            reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+            name = this.parseModuleExportName()
+          } else {
+            // `{ type as as }`: `type`, renamed `as`.
+            name = secondAs
+          }
+          alias = false
+        } else if (this.moduleExportNameAhead()) {
+          // `{ type as x }`: `type`, renamed.
+          reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+          name = this.parseModuleExportName()
+          alias = false
+        } else {
+          // `{ type as }`: a type-only `as`.
+          spec.flags = FLAG_TYPE_ONLY
+          property = firstAs
+          name = firstAs
+        }
+      } else if (this.moduleExportNameAhead()) {
+        // `{ type x }`: a type-only `x`.
+        spec.flags = FLAG_TYPE_ONLY
+        reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+        name = this.parseModuleExportName()
+        property = name
+      }
+    }
+    if (alias && this.at(TOK_IDENT) && this.value === "as") {
+      this.advance()
+      reserved = this.kind !== TOK_IDENT && this.kind !== TOK_STRING
+      name = this.parseModuleExportName()
+    }
+    if (isImport && (reserved || name.kind !== N_IDENT)) {
+      this.report("expected a name, found a keyword or a string", name.start, name.end)
+    }
+    spec.text = name.text
+    spec.children.push(property)
+    spec.end = name.end
+    return spec
+  }
+
+  /** Whether a module export name stands here: a name, a keyword or a string. */
+  moduleExportNameAhead(): boolean {
+    return this.at(TOK_IDENT) || this.at(TOK_STRING) || (this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER)
+  }
+
+  /**
+   * A name in an import or export list: an IDENT, a keyword read as the name
+   * it spells (`{ default as d }`), or the STRING a module export name may be
+   * written as (NL1058).
+   */
+  parseModuleExportName(): Node {
+    if (this.at(TOK_STRING)) {
+      const name = this.node(N_STRING, this.start, this.end)
+      name.text = this.value
+      this.advance()
+      return name
+    }
+    if (this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER) {
+      const name = this.node(N_IDENT, this.start, this.end)
+      name.text = this.file.text.substring(this.start, this.end)
+      this.advance()
+      return name
+    }
+    return this.parseIdentifier()
   }
 
   /** Attach `list` and close `node` at the token just consumed. */
@@ -2657,6 +3116,12 @@ export class Parser {
         if (this.usingAhead() || this.varAhead()) {
           return this.parseVariableStatement(start)
         }
+        // `async function` in a body: the nested function below, which
+        // Phase 0 refuses first for its modifier (NL1015).
+        if (this.value === "async" && this.peek() === TOK_FUNCTION && this.aheadOnSameLine()) {
+          this.advance() // `async`
+          return this.flagged(this.parseFunction(start, false), FLAG_ASYNC)
+        }
         if (this.tryStatementAhead()) {
           return this.parseTry(start)
         }
@@ -2688,6 +3153,17 @@ export class Parser {
       case TOK_SEMICOLON:
         this.advance()
         return this.node(N_EMPTY, start, this.previousEnd)
+      // A function or an import declaration inside a body is the node it is
+      // at the top level, for the pass 1 sweep to refuse as a statement
+      // (NL2260): a nested function would be a closure, and a module's
+      // imports are its own, not a block's.
+      case TOK_FUNCTION:
+        return this.parseFunction(start, false)
+      case TOK_IMPORT:
+        if (this.importDeclarationAhead()) {
+          return this.parseImport(start)
+        }
+        return this.parseExpressionStatement(start)
       case TOK_CLASS: {
         // A class declaration inside a body is not an expression statement,
         // and TypeScript does not read one as a class expression either: it

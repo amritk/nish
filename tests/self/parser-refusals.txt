@@ -1,6 +1,25 @@
 # The parser-refusal register: the cases stage1 turns down in its *parser*,
 # before the phase that owns the rule can state it.
 #
+# What is left here is what is meant to be. WP33 R1 made the parser read every
+# construct the language forbids and the phase that owns its rule refuse it —
+# Phase 0 or the checker, once, by the rule's own sentence (the shapes are in
+# `src/nodes.ts`) — and its six stages took every forbidden statement,
+# expression, declaration, function and binding form, class, interface and
+# enum form, and import and export form off this list. Two kinds of entry
+# stay:
+#
+#   - syntax TypeScript itself refuses as syntax, which is a syntax error in
+#     any compiler and has no rule of its own to state: numeric separators
+#     where they cannot stand, octal and leading-zero literals, `#!` anywhere
+#     but the start of the file, a `\u{...}` escape out of range, `??` mixed
+#     with `&&` or `||` without parentheses, and a missing `;` where automatic
+#     semicolon insertion does not apply;
+#   - a few forms no stage of R1 was given, whose parser sentence already
+#     names the rule — a class field without a type, a computed or spread
+#     object key, type parameters on a constructor — each to come off, when
+#     it does, with the change that moves its rule.
+#
 # One entry per line, two fields:
 #
 #   <case>   <the syntax error stage1 answers with>
@@ -33,10 +52,10 @@
 #     so the next rule that leaves the parser's reach migrates a case into the
 #     bucket silently."
 #   - a case here and not in the bucket fails too, and that direction matters
-#     as much: the register's purpose is to *shrink*. The member-header family
-#     — `x?: T`, `x!: T`, `m?()` and `static` — left the parser for the checker
-#     in 0.3.0 and took the bucket from 92 to 89. A register that only ever
-#     grew would have recorded that improvement as an unchanged number.
+#     as much: the register's purpose is to *shrink*, and a rule that leaves
+#     the parser has to leave this file in the same change. A register that
+#     only ever grew would have recorded every stage of WP33 R1 as an
+#     unchanged number.
 #   - the sentence is compared as well, so an entry is a claim about what
 #     stage1 prints today rather than a note somebody wrote once. A reworded
 #     parser message fails the run and the failure quotes the new sentence.
@@ -75,25 +94,14 @@
 reject_asi_for_header	expected `;`, found `IDENT`
 reject_asi_same_line	expected `;`, found `const`
 reject_asi_template	expected `;`, found `TEMPLATE`
-reject_cls_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_cls_field_declare	a type annotation is required
 reject_cls_field_no_type	a type annotation is required
 reject_cls_field_optional_untyped	a type annotation is required
 reject_cls_static_field_untyped	a type annotation is required
 reject_computed_property	an object literal key must be a plain identifier
-reject_default_import	expected `{`, found `IDENT`
-reject_export_assignment	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `=`
-reject_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
-reject_export_import_equals	`export` cannot introduce an import
-reject_export_list	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `{`
-reject_fn_nested	expected an expression, found `function`
-reject_generic_export_default	a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `default`
 reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
-reject_import_template_specifier	a module specifier must be a string literal
-reject_import_type_only	expected `{`, found `IDENT`
 reject_leading_zero_decimal	Decimals with leading zeros are not allowed
 reject_leading_zero_octal	Octal literals are not allowed. Use the syntax '0o17'
-reject_namespace_import	expected `{`, found `*`
 reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
@@ -109,6 +117,5 @@ reject_separator_leading_zero	Numeric separators are not allowed here
 reject_separator_ranged_bound	Numeric separators are not allowed here
 reject_separator_trailing	Numeric separators are not allowed here
 reject_shebang_not_first	'#!' can only be used at the start of a file
-reject_side_effect_import	expected `{`, found `STRING`
 reject_surrogate_escape_too_large	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive
 reject_surrogate_escape_wraps	An extended Unicode escape value must be between 0x0 and 0x10FFFF inclusive

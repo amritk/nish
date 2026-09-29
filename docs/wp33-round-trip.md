@@ -473,8 +473,22 @@ and the stages in §9 build it.
 [LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags). NL8005, the
 zero-filled `new Array<T>(n)`, is live; the number, string and record rows are
 three stages written against the pass's row signature, and
-`tests/wordings/unreachable.txt` names the ones not live yet. The parser half
-(§5.0) is not started.
+`tests/wordings/unreachable.txt` names the ones not live yet.
+
+**R1's parser half is built.** The parser reads every construct the language
+forbids — statements, expressions, declarations, function and binding forms,
+class, interface and enum forms, and import and export forms — into the node
+it resembles, and the phase that owns its rule refuses it by that rule, with
+one diagnostic: Phase 0 for an NL1xxx code, the checker's pass 1 for an NL2xxx
+one. The "Retired at R6: stage1's parser refuses" section of
+`tests/wordings/unreachable.txt` is gone, every one of its codes provoked
+again by the case that pins it. What stays a syntax error is syntax TypeScript
+itself refuses as syntax — numeric separators where they cannot stand, octal
+and leading-zero literals, `#!` after the first line, a `\u{…}` escape out of
+range, `??` mixed with `&&` or `||` — and the entries left in
+`tests/self/parser-refusals.txt`. It was built in six stages: #292
+statements, #311 expressions, #313 declarations, #314 functions and bindings,
+#315 classes, interfaces and enums, and #NNN imports and exports.
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
 and it is also what gives R5 its differential.

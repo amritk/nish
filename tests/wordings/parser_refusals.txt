@@ -2,77 +2,33 @@
 # one case name per line.
 #
 # `.claude/selfhost.md`: lex and parse what is written, refuse in the phase
-# that owns the rule. stage1's parser turns down the syntax the language
-# forbids by name — `a class member is a field, a method or a constructor,
-# found `{`` — before Phase 0 or the checker can state the rule that stage0
-# stated. That is the declared parity class of
-# `docs/wp19-stage0-retirement.md` §A3 (602 rows), and closing it in code is
-# grammar for 45 constructs that never compile.
-#
-# The consequence for this corpus is exact: the rule's own wording was
-# stage0's, and it went with stage0 at R6 (its code is retired in
-# `unreachable.txt`). Each case's `.err` pins what a user sees instead — the
-# parser's first sentence — so a parser that rewords the refusal, or refuses
-# somewhere else, fails here.
+# that owns the rule. When stage0 went at R6, stage1's parser still turned
+# down 45 forbidden constructs by syntax error — the declared parity class of
+# `docs/wp19-stage0-retirement.md` §A3 — before Phase 0 or the checker could
+# state the rule stage0 had stated, so the code went with stage0 and this list
+# named the programs whose wording nothing printed any more. Each case's
+# `.err` pins what a user sees instead, the parser's first sentence, so a
+# parser that rewords the refusal, or refuses somewhere else, fails here.
 #
 # `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
 # case listed here that stage1 starts answering the same way is a failure: the
 # list shrinks as the parser learns a rule, and it cannot grow by accident.
 #
-# It has shrunk once, from 45 to 41. `nl2015_optional_field`,
-# `nl2029_definite_assignment`, `nl2046_optional_method` and
-# `nl2116_static_method` are one family — the *member header*, `x?: T`, `x!: T`
-# and `static` — and they came off together because they close the same way:
-# stage1's parser records the marker or the modifier as a flag and the checker
-# states the rule, which is the phase that knows whether this is a field or a
-# method and which class it is in. Those three facts are the whole difference
-# between the parser's sentence and stage0's, and they are why the parser could
-# not have said it.
+# The member-header family (`x?: T`, `x!: T`, `static`) came off first, as
+# flags the checker reads. WP33 R1 then made the parser read every form the
+# language forbids, in six stages — statements, expressions, declarations,
+# function and binding forms, class, interface and enum forms, and import and
+# export forms — each parsed into the node it resembles and refused by the
+# phase that owns its rule, the shape `src/nodes.ts` writes down; the last
+# stage took the six import and export wordings off. What is left is two
+# wordings no stage was given, each behind a parser sentence about a class:
+# `nl2118_override_method`, whose `override` method the parser reads as a
+# field with no type annotation before the checker can name the modifier, and
+# `nl2137_implements_expression`, whose `implements` names a member access the
+# class header does not read. Each comes off with the change that moves its
+# rule.
 #
-# It shrank again, from 41 to 39, when WP33 R1 made the parser read every
-# statement the language forbids (`nl2133_for_await`,
-# `nl2135_for_of_without_declaration`): each is parsed into the node it
-# resembles and refused by the phase that owns its rule, the shape
-# `src/nodes.ts` writes down for every construct that comes off this list.
-#
-# And again, from 39 to 33, when the second stage did the same for the
-# expressions (`nl2144_new_non_identifier`, `nl2210_array_hole`,
-# `nl2237_array_spread`, `nl2253_field_compound_operator`,
-# `nl2254_unsupported_binary`, `nl2256_satisfies_expression`); the NL1xxx
-# expression rules it reached have no case here, because their programs are
-# `reject_*` cases in `tests/self/parser-refusals.txt`.
-#
-# And again, from 33 to 31, when the third stage read the declarations
-# (`nl2038_keyof_type`, `nl2292_default_type_argument`): `keyof T` is a type
-# operator node and a default type argument a flag on its parameter, both
-# refused by the checker's pass 1 sweep. The NL1xxx declaration rules it
-# reached — `async`, generators, decorators, `namespace`, `declare global`,
-# generic aliases — have no case here, because their programs are the
-# `reject_*` cases that came off `tests/self/parser-refusals.txt`.
-#
-# And again, from 31 to 23, when the fourth stage read the function and
-# binding forms (`nl2191_destructured_constant`, `nl2192_destructured_parameter`,
-# `nl2193_destructuring_local`, `nl2203_anonymous_default_function`,
-# `nl2204_function_without_body`, `nl2233_optional_parameter`,
-# `nl2235_rest_parameter`, `nl2274_two_names_one_declaration`): a destructuring
-# pattern is a node of its own where a name is bound, a default, optional or
-# rest parameter a flag on its parameter, and a missing name or body an EMPTY
-# child, each refused by the checker's pass 1 sweep.
-#
-# And again, from 23 to 8, when the fifth stage read the class, interface and
-# enum forms (`nl2018_anonymous_class`, `nl2083_declare_class`,
-# `nl2090_method_without_body`, `nl2091_constructor_without_body`,
-# `nl2092_string_member_name`, `nl2189_constructor_return_type`,
-# `nl2213_class_index_signature`, `nl2214_interface_index_signature`,
-# `nl2215_interface_extends`, `nl2223_string_object_key`,
-# `nl2234_parameter_property`, `nl2255_class_static_block`,
-# `nl2257_interface_construct_signature`, `nl2258_object_literal_method`,
-# `nl2286_declare_enum`): each is a flag, an EMPTY or a different child on the
-# node it resembles, or an index signature's node of its own, refused by the
-# checker's pass 1 sweep, or by pass 1a for an anonymous class and a declared
-# enum.
-#
-# One warning from that change, because this list is where somebody will next
+# One warning from the member-header change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
 # can word more than one rule. `nl2116_static_method` reaches the method
 # sentence; the constructor's shares the code, so nothing in this directory
@@ -80,10 +36,4 @@
 # had. `tests/cases/reject_cls_ctor_static` is what pins it now, and a
 # `reject_*` case is the thing to write when a wording comes off this list.
 nl2118_override_method
-nl2128_export_list
-nl2129_export_default_value
-nl2131_export_default_class
 nl2137_implements_expression
-nl2212_template_specifier
-nl2226_export_import_equals
-nl2243_type_only_import

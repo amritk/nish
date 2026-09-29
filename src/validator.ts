@@ -18,14 +18,19 @@
 // operators the language does not have, a regex, a dynamic `import()` and an
 // assertion to `any` or `unknown` — and the forbidden declarations: `async`,
 // a generator, a decorator, a `namespace` or `module` block, `declare global`
-// and type parameters on an alias. What the parser still turns down itself is
-// listed, case by case, in `tests/self/parser-refusals.txt`.
+// and type parameters on an alias — and the import forms nothing could make
+// mean anything: `import defer`, a module export name written as a string,
+// and import attributes. What the parser still turns down itself is syntax
+// TypeScript refuses as syntax too, listed case by case in
+// `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { unwrapParens } from "./emit-util"
 import {
   FLAG_ASYNC,
+  FLAG_ATTRIBUTES,
+  FLAG_DEFER,
   FLAG_FOR_IN,
   FLAG_GENERATOR,
   FLAG_OPTIONAL,
@@ -40,12 +45,15 @@ import {
   N_DECORATOR,
   N_EMPTY,
   N_ENUM,
+  N_EXPORT_DECLARATION,
   N_FIELD,
   N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
+  N_IMPORT,
   N_INDEX,
   N_LABELED,
+  N_LIST,
   N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
@@ -382,6 +390,13 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
         )
       }
       break
+    case N_IMPORT:
+      rejectImportForms(ctx, node)
+      return
+    case N_EXPORT_DECLARATION:
+      // `export { a }` is refused by pass 1 whatever it names (NL2128), and
+      // the names in it are names, as they are in an import.
+      return
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -399,6 +414,48 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
   }
   for (const child of node.children) {
     visit(ctx, child, inTypePosition)
+  }
+}
+
+/**
+ * The import forms that are forbidden by design, in the order the source
+ * writes them: `import defer` (NL1059), a module export name written as a
+ * string (NL1058), and attributes after the specifier (NL1057). What an
+ * import *means* — a default, a namespace, a type-only one — is pass 1a's to
+ * refuse (`collectImports`).
+ */
+const rejectImportForms = (ctx: CheckContext, node: Node): void => {
+  if ((node.flags & FLAG_DEFER) !== 0) {
+    ctx.error(
+      node,
+      "`import defer` is forbidden in " +
+        LANGUAGE +
+        " (a module has no top-level code, so there is nothing to defer)"
+    )
+  }
+  const bindings = node.children[0]
+  if (bindings.kind === N_LIST) {
+    for (const spec of bindings.children) {
+      if (spec.children[0].kind === N_STRING) {
+        ctx.error(
+          spec.children[0],
+          "A module export name written as a string is forbidden in " +
+            LANGUAGE +
+            " (an export is a declaration, and a declaration has a name; import it by that name)"
+        )
+      }
+    }
+  }
+  for (const child of node.children) {
+    visit(ctx, child, false)
+  }
+  if ((node.flags & FLAG_ATTRIBUTES) !== 0) {
+    ctx.error(
+      node,
+      "Import attributes (`with { ... }`) are forbidden in " +
+        LANGUAGE +
+        " (an import names source this compiler reads, never a resource loaded at run time)"
+    )
   }
 }
 

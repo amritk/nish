@@ -1,0 +1,2 @@
+`import defer` is forbidden in
+ (a module has no top-level code, so there is nothing to defer)

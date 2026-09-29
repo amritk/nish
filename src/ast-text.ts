@@ -28,10 +28,13 @@ import {
   FLAG_ACCESSOR,
   FLAG_ANGLE,
   FLAG_ASYNC,
+  FLAG_ATTRIBUTES,
   FLAG_AWAIT,
+  FLAG_COMPUTED,
   FLAG_CONST,
   FLAG_CONSTRUCT,
   FLAG_DEFAULT,
+  FLAG_DEFER,
   FLAG_FOR_IN,
   FLAG_USING,
   FLAG_VAR,
@@ -45,6 +48,7 @@ import {
   FLAG_REST,
   FLAG_SATISFIES,
   FLAG_STATIC,
+  FLAG_TYPE_ONLY,
   N_STRING,
   N_TEMPLATE_TEXT,
   N_UNARY,
@@ -129,6 +133,18 @@ const kindWithFlags = (node: Node): string => {
   }
   if ((node.flags & FLAG_CONSTRUCT) !== 0) {
     name = `${name}+construct`
+  }
+  if ((node.flags & FLAG_TYPE_ONLY) !== 0) {
+    name = `${name}+type`
+  }
+  if ((node.flags & FLAG_DEFER) !== 0) {
+    name = `${name}+defer`
+  }
+  if ((node.flags & FLAG_COMPUTED) !== 0) {
+    name = `${name}+computed`
+  }
+  if ((node.flags & FLAG_ATTRIBUTES) !== 0) {
+    name = `${name}+attributes`
   }
   if ((node.flags & FLAG_STATIC) !== 0) {
     name = `${name}+static`

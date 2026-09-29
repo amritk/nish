@@ -608,8 +608,40 @@ const printTypeScriptTree = (source, sf) => {
       statementOf(node)(statement, depth + 1)
     }
   }
-  // `statementOf` exists only so `block` can be defined before `statement`.
+  // `statementOf` exists only so `block` can be defined before `statement`,
+  // and `declarationOf` so `statement` can hand a nested one back.
   const statementOf = () => statement
+  const declarationOf = () => declaration
+
+  /** A name in an import or export list: an IDENT, or a STRING (NL1058). */
+  const moduleExportName = (name, depth) => {
+    if (ts.isStringLiteral(name)) {
+      expression(name, depth)
+    } else {
+      identifier(name, depth)
+    }
+  }
+
+  /**
+   * One specifier of an import's or an export's braces: an IMPORT_SPEC whose
+   * text is the name after `as` (or the only one), whose child is the name
+   * before it, with `type` in front a flag (NL2243).
+   */
+  const specifierLine = (element, depth) => {
+    const [es, ee] = span(element)
+    emit(depth, `IMPORT_SPEC${element.isTypeOnly ? "+type" : ""}`, es, ee, element.name.text)
+    moduleExportName(element.propertyName ?? element.name, depth + 1)
+  }
+
+  /** `A.B.C` in `import x = A.B.C`: the IDENT, or a MEMBER for each dot. */
+  const entityName = (name, depth) => {
+    if (ts.isIdentifier(name)) {
+      identifier(name, depth)
+      return
+    }
+    emit(depth, "MEMBER", at(name.getStart(sf)), at(name.end), name.right.text)
+    entityName(name.left, depth + 1)
+  }
 
   const statement = (node, depth) => {
     const [s, e] = span(node)
@@ -728,6 +760,13 @@ const printTypeScriptTree = (source, sf) => {
       case ts.SyntaxKind.EmptyStatement:
         emit(depth, "EMPTY", s, e)
         return
+      // A declaration written where a statement stands is the node it is at
+      // the top level, for the checker to refuse (NL2260).
+      case ts.SyntaxKind.FunctionDeclaration:
+      case ts.SyntaxKind.ImportDeclaration:
+      case ts.SyntaxKind.ImportEqualsDeclaration:
+        declarationOf()(node, depth)
+        return
       default:
         unsupported(node)
     }
@@ -737,32 +776,89 @@ const printTypeScriptTree = (source, sf) => {
     const depth = decorated(node, declarationDepth)
     const [s, e] = span(node)
     switch (node.kind) {
+      // Every import form: the named one, and the rest stage1 reads for the
+      // phase that owns its rule to refuse (WP33 R1). The bindings child is
+      // the braces' LIST, the name after `* as`, or EMPTY, and a default
+      // import is a second child after it, there only when written.
       case ts.SyntaxKind.ImportDeclaration: {
         const clause = node.importClause
-        if (clause === undefined || clause.namedBindings === undefined) {
-          unsupported(node)
+        const specifier = node.moduleSpecifier
+        const literal = ts.isStringLiteral(specifier)
+        const phase = clause?.phaseModifier
+        emit(
+          depth,
+          `IMPORT${exported(node)}${phase === ts.SyntaxKind.TypeKeyword ? "+type" : ""}${
+            phase === ts.SyntaxKind.DeferKeyword ? "+defer" : ""
+          }${literal ? "" : "+computed"}${node.attributes === undefined ? "" : "+attributes"}`,
+          s,
+          e,
+          literal && specifier.text.length > 0 ? specifier.text : undefined
+        )
+        const bindings = clause?.namedBindings
+        if (bindings === undefined) {
+          empty(depth + 1)
+        } else if (ts.isNamespaceImport(bindings)) {
+          identifier(bindings.name, depth + 1)
+        } else {
+          list(depth + 1, bindings.elements, specifierLine)
         }
-        if (!ts.isNamedImports(clause.namedBindings)) {
-          unsupported(node)
+        if (clause?.name !== undefined) {
+          identifier(clause.name, depth + 1)
         }
-        emit(depth, "IMPORT", s, e, node.moduleSpecifier.text)
-        list(depth + 1, clause.namedBindings.elements, (element, elementDepth) => {
-          const [es, ee] = span(element)
-          emit(elementDepth, "IMPORT_SPEC", es, ee, element.name.text)
-          identifier(element.propertyName ?? element.name, elementDepth + 1)
-        })
         return
       }
+      // `import x = require("./m")` and `import x = A.B` (NL2230, NL2226).
+      case ts.SyntaxKind.ImportEqualsDeclaration: {
+        emit(depth, `IMPORT_EQUALS${exported(node)}${node.isTypeOnly ? "+type" : ""}`, s, e)
+        identifier(node.name, depth + 1)
+        const reference = node.moduleReference
+        if (ts.isExternalModuleReference(reference)) {
+          expression(reference.expression, depth + 1)
+        } else {
+          entityName(reference, depth + 1)
+        }
+        return
+      }
+      // `export { a }`, `export * from` and `export * as ns from` (NL2128).
+      case ts.SyntaxKind.ExportDeclaration: {
+        const specifier = node.moduleSpecifier
+        const literal = specifier === undefined || ts.isStringLiteral(specifier)
+        const text = specifier !== undefined && literal ? specifier.text : ""
+        emit(
+          depth,
+          `EXPORT_DECLARATION${node.isTypeOnly ? "+type" : ""}${literal ? "" : "+computed"}`,
+          s,
+          e,
+          text.length > 0 ? text : undefined
+        )
+        const clause = node.exportClause
+        if (clause === undefined) {
+          empty(depth + 1)
+        } else if (ts.isNamespaceExport(clause)) {
+          moduleExportName(clause.name, depth + 1)
+        } else {
+          list(depth + 1, clause.elements, specifierLine)
+        }
+        return
+      }
+      // `export default <value>` and `export = <value>` (NL2129).
+      case ts.SyntaxKind.ExportAssignment:
+        emit(depth, "EXPORT_ASSIGNMENT", s, e, node.isExportEquals ? "=" : "default")
+        expression(node.expression, depth + 1)
+        return
+      // `export as namespace X` (NL2230).
+      case ts.SyntaxKind.NamespaceExportDeclaration:
+        emit(depth, "NAMESPACE_EXPORT", s, e)
+        identifier(node.name, depth + 1)
+        return
       case ts.SyntaxKind.FunctionDeclaration: {
         // A missing name (`export default function ()`, NL2203), return type
-        // (NL2096) or body (NL2204) is an EMPTY child, for the checker to
-        // refuse; a `declare function`'s shape is not compared here.
+        // (NL2096) or body (NL2204) is an EMPTY child, and `export default`
+        // a flag (NL2130), for the checker to refuse; a `declare function`'s
+        // shape is not compared here.
         const modifiers = node.modifiers ?? []
         const isDefault = modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
         if (modifiers.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
-          unsupported(node)
-        }
-        if (isDefault && node.name !== undefined) {
           unsupported(node)
         }
         emit(depth, `FUNCTION${exported(node)}${functionFlags(node)}${isDefault ? "+default" : ""}`, s, e)
@@ -781,7 +877,8 @@ const printTypeScriptTree = (source, sf) => {
       }
       case ts.SyntaxKind.InterfaceDeclaration: {
         const heritage = node.heritageClauses ?? []
-        emit(depth, `INTERFACE${exported(node)}`, s, e)
+        const isDefault = (node.modifiers ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
+        emit(depth, `INTERFACE${exported(node)}${isDefault ? "+default" : ""}`, s, e)
         identifier(node.name, depth + 1)
         list(depth + 1, node.members, interfaceMember)
         typeParameters(node.typeParameters, depth + 1)
@@ -1007,17 +1104,14 @@ const printTypeScriptTree = (source, sf) => {
 
   /**
    * A class, declared or written where an operand stands: an anonymous one
-   * (NL2018) has an EMPTY name, and `export default` and `abstract` are flags
-   * (NL2168); `declare` (NL2083) is one the dump does not print.
+   * (NL2018) has an EMPTY name, and `export default` (NL2131) and `abstract`
+   * are flags (NL2168); `declare` (NL2083) is one the dump does not print.
    */
   const classLike = (node, depth) => {
     const [s, e] = span(node)
     const modifiers = node.modifiers ?? []
     const isDefault = modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)
     const isAbstract = modifiers.some((m) => m.kind === ts.SyntaxKind.AbstractKeyword)
-    if (isDefault && node.name !== undefined) {
-      unsupported(node)
-    }
     emit(depth, `CLASS${exported(node)}${isDefault ? "+default" : ""}${isAbstract ? "+abstract" : ""}`, s, e)
     optional(depth + 1, node.name, identifier)
     const heritage = node.heritageClauses ?? []

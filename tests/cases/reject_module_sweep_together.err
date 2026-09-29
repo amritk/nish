@@ -1,0 +1,11 @@
+Default imports are not supported; use `import { d } from "./absent"`
+Type-only imports are not supported
+Default imports are not supported; use `import { four } from "./absent"`
+Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)
+Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration)
+Only functions can be exported for now, plus classes and interfaces (found `export` on ImportDeclaration)
+`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself
+`export default` is not supported; use a named `export function`
+`export default` is not supported; use a named `export`
+`export default` / `export =` are not supported; use a named `export function`
+Only top-level function declarations are supported in Phase 1 (found NamespaceExportDeclaration)
