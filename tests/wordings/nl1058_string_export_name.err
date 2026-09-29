@@ -1,1 +1,1 @@
-A module export name written as a string is forbidden in
+A module export name written as a string is forbidden in Nish (an export is a declaration, and a declaration has a name; import it by that name)
