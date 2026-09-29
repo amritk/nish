@@ -1,0 +1,3 @@
+{"file":"tests/cases/port_num_libm.ts","line":7,"column":15,"endLine":7,"endColumn":33,"severity":"portability","code":"NL8010","message":"`Math.min` follows the native NaN and signed-zero rules here, not JavaScript's"}
+{"file":"tests/cases/port_num_libm.ts","line":8,"column":16,"endLine":8,"endColumn":40,"severity":"portability","code":"NL8010","message":"`Math.max` follows the native NaN and signed-zero rules here, not JavaScript's"}
+{"file":"tests/cases/port_num_libm.ts","line":9,"column":13,"endLine":9,"endColumn":46,"severity":"portability","code":"NL8010","message":"`Math.round` follows the native NaN and signed-zero rules here, not JavaScript's"}

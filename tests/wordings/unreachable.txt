@@ -212,14 +212,6 @@ NL4006  an error string in the generated N-API shim
 # is one stage's, and that stage deletes exactly its own block when its rows go
 # live; the blank comment lines keep the three deletions from touching.
 #
-# --- WP33 R1: lands with portability-numbers
-NL8006  not live yet: integer `/` truncates here and divides exactly in TypeScript
-NL8007  not live yet: u8/u16/u32 arithmetic (and i32 under --wrapping) wraps here
-NL8008  not live yet: an i32 `>>>` reads back signed here and unsigned in TypeScript
-NL8009  not live yet: an i64/u64 declaration is a double in TypeScript
-NL8010  not live yet: Math.min/max/round on f64 follow libm's NaN and signed-zero rules
-NL8011  not live yet: console.log prints a negative zero as 0 here
-#
 # --- WP33 R1: lands with portability-strings
 NL8001  not live yet: a UTF-8 offset that meets an outside fact
 NL8002  not live yet: a `slice` whose bounds are not proven inside its receiver
