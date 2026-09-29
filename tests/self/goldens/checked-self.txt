@@ -22781,7 +22781,7 @@ function validate(ctx: CheckContext, node: Node): void -> @validate [exported]
   pointer ctx: size=192 writesThrough=true captured=false passedTo=visit#0
   pointer node: size=40 writesThrough=false captured=false passedTo=visit#1
   stackSites=0 stackLocals=0
-  callee 178:3 visit -> @visit
+  callee 180:3 visit -> @visit
 function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> @visit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22790,35 +22790,35 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> 
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 rejectForbiddenMember#0 rejectForbiddenIndex#0 CheckContext.error#0 checkNullUnion#0 CheckContext.errorAtKey#0 rejectForbiddenNew#0 rejectForbiddenCall#0 rejectComputedEnumMembers#0 visit#0 rejectVar#0 visitDeclaration#0 rejectVar#0 refuseUndefinedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 visit#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 rejectForbiddenMember#1 rejectForbiddenIndex#1 CheckContext.error#1 checkNullUnion#1 CheckContext.errorAtKey#1 rejectForbiddenNew#1 rejectForbiddenCall#1 rejectComputedEnumMembers#1 rejectVar#1 rejectVar#1 refuseUndefinedIn#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 184:13 message: string (const)
-  callee 184:23 forbiddenValue -> @forbiddenValue
-  callee 186:9 CheckContext.error -> @CheckContext.error
-  local 191:13 message: string (const)
-  callee 191:23 forbiddenType -> @forbiddenType
-  callee 193:9 CheckContext.error -> @CheckContext.error
-  callee 198:7 rejectForbiddenMember -> @rejectForbiddenMember
-  callee 201:7 rejectForbiddenIndex -> @rejectForbiddenIndex
-  callee 204:7 CheckContext.error -> @CheckContext.error
-  callee 209:7 checkNullUnion -> @checkNullUnion
-  callee 213:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
-  callee 217:7 rejectForbiddenNew -> @rejectForbiddenNew
-  callee 220:7 rejectForbiddenCall -> @rejectForbiddenCall
-  callee 223:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
-  local 230:20 child: Node (const)
-  callee 231:16 isUndefined -> @isUndefined
-  callee 232:13 visit -> @visit
-  callee 239:7 rejectVar -> @rejectVar
-  local 243:18 decl: Node (const)
-  callee 244:9 visitDeclaration -> @visitDeclaration
-  callee 248:7 rejectVar -> @rejectVar
-  callee 249:7 refuseUndefinedIn -> @refuseUndefinedIn
-  callee 252:7 CheckContext.error -> @CheckContext.error
-  callee 258:7 CheckContext.error -> @CheckContext.error
-  callee 264:7 CheckContext.error -> @CheckContext.error
-  callee 268:9 CheckContext.error -> @CheckContext.error
-  callee 281:7 CheckContext.error -> @CheckContext.error
-  local 291:14 child: Node (const)
-  callee 292:5 visit -> @visit
+  local 186:13 message: string (const)
+  callee 186:23 forbiddenValue -> @forbiddenValue
+  callee 188:9 CheckContext.error -> @CheckContext.error
+  local 193:13 message: string (const)
+  callee 193:23 forbiddenType -> @forbiddenType
+  callee 195:9 CheckContext.error -> @CheckContext.error
+  callee 200:7 rejectForbiddenMember -> @rejectForbiddenMember
+  callee 203:7 rejectForbiddenIndex -> @rejectForbiddenIndex
+  callee 206:7 CheckContext.error -> @CheckContext.error
+  callee 211:7 checkNullUnion -> @checkNullUnion
+  callee 215:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
+  callee 219:7 rejectForbiddenNew -> @rejectForbiddenNew
+  callee 222:7 rejectForbiddenCall -> @rejectForbiddenCall
+  callee 225:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
+  local 232:20 child: Node (const)
+  callee 233:16 isUndefined -> @isUndefined
+  callee 234:13 visit -> @visit
+  callee 241:7 rejectVar -> @rejectVar
+  local 245:18 decl: Node (const)
+  callee 246:9 visitDeclaration -> @visitDeclaration
+  callee 250:7 rejectVar -> @rejectVar
+  callee 251:7 refuseUndefinedIn -> @refuseUndefinedIn
+  callee 254:7 CheckContext.error -> @CheckContext.error
+  callee 260:7 CheckContext.error -> @CheckContext.error
+  callee 266:7 CheckContext.error -> @CheckContext.error
+  callee 270:9 CheckContext.error -> @CheckContext.error
+  callee 283:7 CheckContext.error -> @CheckContext.error
+  local 293:14 child: Node (const)
+  callee 294:5 visit -> @visit
 function rejectVar(ctx: CheckContext, node: Node): void -> @rejectVar
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22826,7 +22826,7 @@ function rejectVar(ctx: CheckContext, node: Node): void -> @rejectVar
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 299:5 CheckContext.error -> @CheckContext.error
+  callee 301:5 CheckContext.error -> @CheckContext.error
 function isUndefined(node: Node): boolean -> @isUndefined [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -22842,19 +22842,19 @@ function isMaybeAnnotation(annotation: Node): boolean -> @isMaybeAnnotation [exp
   calls: isUndefinedType
   pointer annotation: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 319:7 undefineds: i32 (let)
-  local 320:7 nulls: i32 (let)
-  local 321:14 member: Node (const)
-  callee 322:9 isUndefinedType -> @isUndefinedType
+  local 321:7 undefineds: i32 (let)
+  local 322:7 nulls: i32 (let)
+  local 323:14 member: Node (const)
+  callee 324:9 isUndefinedType -> @isUndefinedType
 function isMaybeDeclaration(decl: Node): boolean -> @isMaybeDeclaration
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isMaybeAnnotation nish_panic_index nish_str_eq unwrapParens
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 340:9 init: Node (const)
-  callee 340:16 unwrapParens -> @unwrapParens
-  local 341:9 callsGet: boolean (const)
-  callee 343:22 isMaybeAnnotation -> @isMaybeAnnotation
+  local 342:9 init: Node (const)
+  callee 342:16 unwrapParens -> @unwrapParens
+  local 343:9 callsGet: boolean (const)
+  callee 345:22 isMaybeAnnotation -> @isMaybeAnnotation
 function refuseUndefinedIn(ctx: CheckContext, node: Node): void -> @refuseUndefinedIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22862,11 +22862,11 @@ function refuseUndefinedIn(ctx: CheckContext, node: Node): void -> @refuseUndefi
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 refuseUndefinedIn#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isUndefined#0 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 352:7 isUndefined -> @isUndefined
-  callee 353:5 CheckContext.error -> @CheckContext.error
-  callee 353:21 undefinedForbidden -> @undefinedForbidden
-  local 356:14 child: Node (const)
-  callee 357:5 refuseUndefinedIn -> @refuseUndefinedIn
+  callee 354:7 isUndefined -> @isUndefined
+  callee 355:5 CheckContext.error -> @CheckContext.error
+  callee 355:21 undefinedForbidden -> @undefinedForbidden
+  local 358:14 child: Node (const)
+  callee 359:5 refuseUndefinedIn -> @refuseUndefinedIn
 function visitDeclaration(ctx: CheckContext, decl: Node, inTypePosition: boolean): void -> @visitDeclaration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via visit
@@ -22875,13 +22875,13 @@ function visitDeclaration(ctx: CheckContext, decl: Node, inTypePosition: boolean
   pointer ctx: size=192 writesThrough=true captured=false passedTo=visit#0 visit#0 visit#0 visit#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=isMaybeDeclaration#0 visit#1
   stackSites=0 stackLocals=0
-  callee 363:8 isMaybeDeclaration -> @isMaybeDeclaration
-  callee 364:5 visit -> @visit
-  callee 367:3 visit -> @visit
-  local 368:14 member: Node (const)
-  callee 369:10 isUndefinedType -> @isUndefinedType
-  callee 370:7 visit -> @visit
-  callee 373:3 visit -> @visit
+  callee 365:8 isMaybeDeclaration -> @isMaybeDeclaration
+  callee 366:5 visit -> @visit
+  callee 369:3 visit -> @visit
+  local 370:14 member: Node (const)
+  callee 371:10 isUndefinedType -> @isUndefinedType
+  callee 372:7 visit -> @visit
+  callee 375:3 visit -> @visit
 function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void -> @rejectComputedEnumMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22889,10 +22889,10 @@ function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void -> @reje
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 383:14 member: Node (const)
-  local 384:11 initializer: Node (const)
-  callee 385:42 isNumericLiteralShape -> @isNumericLiteralShape
-  callee 386:7 CheckContext.error -> @CheckContext.error
+  local 385:14 member: Node (const)
+  local 386:11 initializer: Node (const)
+  callee 387:42 isNumericLiteralShape -> @isNumericLiteralShape
+  callee 388:7 CheckContext.error -> @CheckContext.error
 function isNumericLiteralShape(expr: Node): boolean -> @isNumericLiteralShape
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -22905,11 +22905,11 @@ function rejectForbiddenMember(ctx: CheckContext, node: Node): void -> @rejectFo
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 406:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 410:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  local 413:9 receiver: Node (const)
-  callee 414:66 isShapeMutation -> @isShapeMutation
-  callee 415:5 CheckContext.error -> @CheckContext.error
+  callee 408:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 412:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 415:9 receiver: Node (const)
+  callee 416:66 isShapeMutation -> @isShapeMutation
+  callee 417:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenIndex(ctx: CheckContext, node: Node): void -> @rejectForbiddenIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22917,10 +22917,10 @@ function rejectForbiddenIndex(ctx: CheckContext, node: Node): void -> @rejectFor
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 423:9 key: Node (const)
-  callee 425:5 CheckContext.error -> @CheckContext.error
-  callee 433:8 isNumericIndexShape -> @isNumericIndexShape
-  callee 434:5 CheckContext.error -> @CheckContext.error
+  local 425:9 key: Node (const)
+  callee 427:5 CheckContext.error -> @CheckContext.error
+  callee 435:8 isNumericIndexShape -> @isNumericIndexShape
+  callee 436:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenNew(ctx: CheckContext, node: Node): void -> @rejectForbiddenNew
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22928,9 +22928,9 @@ function rejectForbiddenNew(ctx: CheckContext, node: Node): void -> @rejectForbi
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 439:9 callee: Node (const)
-  callee 444:5 CheckContext.error -> @CheckContext.error
+  local 441:9 callee: Node (const)
   callee 446:5 CheckContext.error -> @CheckContext.error
+  callee 448:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenCall(ctx: CheckContext, node: Node): void -> @rejectForbiddenCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22938,9 +22938,9 @@ function rejectForbiddenCall(ctx: CheckContext, node: Node): void -> @rejectForb
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 451:9 callee: Node (const)
-  callee 456:5 CheckContext.error -> @CheckContext.error
+  local 453:9 callee: Node (const)
   callee 458:5 CheckContext.error -> @CheckContext.error
+  callee 460:5 CheckContext.error -> @CheckContext.error
 function checkNullUnion(ctx: CheckContext, node: Node): void -> @checkNullUnion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -22948,9 +22948,9 @@ function checkNullUnion(ctx: CheckContext, node: Node): void -> @checkNullUnion
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 464:7 nulls: i32 (let)
-  local 465:14 member: Node (const)
-  callee 471:5 CheckContext.error -> @CheckContext.error
+  local 466:7 nulls: i32 (let)
+  local 467:14 member: Node (const)
+  callee 473:5 CheckContext.error -> @CheckContext.error
 module src/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"

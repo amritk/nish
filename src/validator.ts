@@ -169,10 +169,12 @@ const isNumericIndexShape = (expr: Node): boolean => {
 }
 
 /**
- * Sweep a whole tree. Every rejection is reported and the walk continues, so
- * a file with several forbidden constructs names them all — which is the
- * behaviour stage0's sink gives Phase 0 and the reason it is a *sweep* rather
- * than a bail-out.
+ * Sweep a whole tree, and report the first forbidden construct in source
+ * order. The walk goes on past a refusal, but `ctx.error` stays quiet once the
+ * module has one (`CheckContext.errored`, which nothing here clears), and a
+ * Phase 0 refusal ends the module (`src/compilation.ts`, as stage0's `throw`
+ * out of `load` did): one diagnostic per module
+ * (`tests/cases/reject_stmt_forms_together`, pinned through `--json`).
  */
 export const validate = (ctx: CheckContext, node: Node): void => {
   visit(ctx, node, false)
