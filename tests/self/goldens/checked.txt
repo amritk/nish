@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 731 programs, 51253 dump lines.
+# 731 programs, 51254 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -37243,17 +37243,18 @@ function main(): i32 -> @nish_main [exported entry]
   local 10:9 left: i32 (const)
   callee 10:27 half -> @half
   callee 11:18 half -> @half
-program tests/cases/port_num_libm.ts --number-mode f64
+program tests/cases/port_num_libm.ts
 module tests/cases/port_num_libm.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: llvm.floor.f64 llvm.maxnum.f64 llvm.minnum.f64 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64
   stackSites=0 stackLocals=0
-  local 5:9 nan: f64 (const)
-  local 6:9 low: f64 (const)
-  local 7:9 high: f64 (const)
-  local 8:9 r: f64 (const)
+  local 5:9 one: f64 (const)
+  local 6:9 nan: f64 (const)
+  local 7:9 low: f64 (const)
+  local 8:9 high: f64 (const)
+  local 9:9 r: f64 (const)
 program tests/cases/port_num_libm_quiet.ts --number-mode f64
 module tests/cases/port_num_libm_quiet.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

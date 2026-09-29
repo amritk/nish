@@ -16,12 +16,15 @@
 // module constant once per module, at the root of its first walked body.
 
 import {
+  N_ARROW,
   N_BINARY,
   N_CALL,
   N_CONSTRUCTOR,
   N_EMPTY,
+  N_FUNCTION,
   N_IDENT,
   N_MEMBER,
+  N_METHOD,
   N_UNARY,
   N_VAR_DECL,
   Node,
@@ -203,7 +206,7 @@ const localFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding
  */
 const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): void => {
   const decl = walk.parents.parentOf(walk.body)
-  if (decl === null) {
+  if (decl === null || !isFunctionShaped(decl)) {
     return
   }
   const ctor = decl.kind === N_CONSTRUCTOR
@@ -228,6 +231,10 @@ const signatureFindings = (walk: PortabilityWalk, out: PortabilityFinding[]): vo
     out.push(wideFinding(annotation, `\`${walk.sig.sourceName}\`'s return value`))
   }
 }
+
+/** The declarations a body hangs from, each with its parameters where `signatureFindings` reads them. */
+const isFunctionShaped = (decl: Node): boolean =>
+  decl.kind === N_FUNCTION || decl.kind === N_METHOD || decl.kind === N_ARROW || decl.kind === N_CONSTRUCTOR
 
 /**
  * Whether this is the first body `portabilityFindings` walks in the module,
