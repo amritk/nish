@@ -80,13 +80,14 @@ Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
 1-based, `endLine`/`endColumn` exclusive.
 
-- **`severity`** is `"error"` or `"performance"`. A performance warning never
-  changes the exit code.
+- **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
+  never changes the exit code, and a portability warning prints only under
+  `--warn-portability`.
 - **`code`** is the stable rule identifier — `NL1013`, `NL2231` — and is the
   field to key on. The prose in `message` may improve between releases; the
   code may not. `NL0000` means the message has no rule yet. The bands
   (`NL1xxx` Phase 0, `NL2xxx` checker, `NL3xxx` driver, `NL4xxx` interop,
-  `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
+  `NL8xxx` portability, `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
   the registry are documented in
   [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry is
   `src/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next

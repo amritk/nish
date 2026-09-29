@@ -22,6 +22,12 @@
 // so what was missing was the driver printing them. `--no-warn-performance`
 // silences them, as it does on the other side.
 //
+// The WP33 portability warnings follow the same terms the other way round:
+// `--warn-portability` turns them on, because they are about the program's
+// TypeScript reading rather than about this build, and most programs never
+// have one. They print after the performance warnings, on the same streams,
+// and neither flag says anything about the other class.
+//
 // `--emit-header`, `--emit-dts` and `--emit-napi` write the WP8 sidecars
 // beside the IR, spelled and placed exactly as stage0 spells and places them
 // (`tests/self/interop_oracle.js` compares every byte), each into a directory
@@ -59,12 +65,13 @@ import { Options } from "./options"
 import { basenameWithout, dirname } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
+import { Diagnostic, formatList } from "./diagnostics"
 import { internalErrorFor, simulatedInternalError } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -194,19 +201,35 @@ const report = (compilation: Compilation, json: boolean): void => {
  * and the caller returns before this on an error.
  */
 const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
-  if (!enabled) {
-    return
+  if (enabled) {
+    reportWarnings(compilation.sink.warnings, "performance", json)
   }
-  if (compilation.sink.warnings.length === 0) {
+}
+
+/**
+ * The WP33 portability warnings, printed the way the performance ones are and
+ * right after them. The list is empty unless `--warn-portability` ran the pass
+ * (`Compilation.reportPortability`), so there is no flag to test here.
+ */
+const reportPortability = (compilation: Compilation, json: boolean): void => {
+  reportWarnings(compilation.sink.portability, "portability", json)
+}
+
+/**
+ * One warning list: its objects on stdout under `--json`, else its report on
+ * stderr, capped at the twenty the error report is; nothing when it is empty.
+ */
+const reportWarnings = (warnings: Diagnostic[], kind: string, json: boolean): void => {
+  if (warnings.length === 0) {
     return
   }
   if (json) {
-    for (const warning of compilation.sink.warnings) {
+    for (const warning of warnings) {
       console.log(warning.json())
     }
     return
   }
-  writeError(`${compilation.sink.formatWarnings(20)}\n`)
+  writeError(`${formatList(warnings, kind, 20)}\n`)
 }
 
 /**
@@ -436,6 +459,8 @@ export const main = (): number => {
       opts.threads = true
     } else if (value === "--no-warn-performance") {
       warnPerformance = false
+    } else if (value === "--warn-portability") {
+      opts.warnPortability = true
     } else if (value === "--runtime-decls") {
       opts.runtimeDecls = true
     } else if (value === "--range-reference") {
@@ -499,6 +524,7 @@ export const main = (): number => {
     }
     // Advice about the IR is for the compile a reader asked for; a script
     // prints it on every run, into the stream the script's own errors use.
+    // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
   }
   // What the build hands on decides who else may call the program's exports
@@ -595,6 +621,7 @@ export const main = (): number => {
     return 1
   }
   reportPerformance(compilation, warnPerformance, json)
+  reportPortability(compilation, json)
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {

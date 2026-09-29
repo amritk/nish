@@ -645,7 +645,8 @@ else on stdout and nothing on stderr, with the same exit code:
 
 `line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` was
 always `"error"` here; since WP15 §8 it is `"error"` for every error and
-`"performance"` for a performance warning, which is the field a tool filters
+`"performance"` for a performance warning, and since WP33 `"portability"` for a
+portability warning (`--warn-portability`), which is the field a tool filters
 on. Syntax errors keep the `syntax error: ` prefix in `message`.
 
 ### `code`
@@ -678,6 +679,7 @@ The band says which phase refused the program:
 | `NL2xxx` | the checker: signatures, bodies, types |
 | `NL3xxx` | the driver and module loading |
 | `NL4xxx` | the interop sidecar generators |
+| `NL8xxx` | a WP33 portability warning, under `--warn-portability` ([wp33-round-trip.md](wp33-round-trip.md) §5.2) |
 | `NL9xxx` | a WP15 §8 performance warning |
 
 A code is matched against the longest literal run of the message's template —
