@@ -1,0 +1,1 @@
+`name.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and `main` returns it as the exit code

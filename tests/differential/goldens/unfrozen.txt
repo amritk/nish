@@ -220,6 +220,13 @@ cases/port_rec_push_never_written_quiet added after R6: no rewriter to freeze it
 cases/port_rec_push_then_write added after R6: no rewriter to freeze it with
 cases/port_rec_slot_store_dead_ref_quiet added after R6: no rewriter to freeze it with
 cases/port_rec_slot_store_live_ref added after R6: no rewriter to freeze it with
+cases/port_str_ascii_literal_quiet added after R6: no rewriter to freeze it with
+cases/port_str_length_printed added after R6: no rewriter to freeze it with
+cases/port_str_needle_step_printed added after R6: no rewriter to freeze it with
+cases/port_str_nonascii_charcode added after R6: no rewriter to freeze it with
+cases/port_str_offset_roundtrip_quiet added after R6: no rewriter to freeze it with
+cases/port_str_slice_negative added after R6: no rewriter to freeze it with
+cases/port_str_slice_proven_quiet added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
