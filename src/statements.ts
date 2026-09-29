@@ -204,9 +204,8 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
   for (const decl of list.children[0].children) {
     const name = decl.children[0].text
     const annotation = decl.children[1]
-    // The annotation is resolved first so that, when the initializer is
-    // rejected, the variable is still declared with its declared type and
-    // later statements do not report it as unknown.
+    // The annotation is resolved first, so that a refused initializer still
+    // leaves the variable its declared type (see below).
     // WP32: `const a: V | undefined = m.get(k)`, the one spelling of the maybe type.
     let declared = -1
     if (annotation.kind !== N_EMPTY) {
@@ -244,16 +243,11 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       ctx.error(decl, "Cannot declare a variable of type void")
       type = T_ERROR
     }
-    // A rejected initializer leaves the variable declared only when the
-    // annotation says what it is — and an annotation that did not resolve does
-    // not say. Without a type there is nothing to declare it as, so it stays
-    // undeclared and its later uses are `Unknown identifier` —
-    // stage0's `catch` declares it in exactly the annotated case and rethrows
-    // otherwise (`checkVariableDeclaration` in stage0's `src/checker/statements.ts`),
-    // and the cascade that follows is the visible half of the difference
-    // (WP19 §A3: `const at = m.get(k, -1)` in f64 mode).
-    if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
-      continue
+    // A refused initializer still declares the variable, as its annotation or
+    // else as `T_ERROR`, so later uses stay silent rather than each reporting
+    // an `Unknown identifier` (#275).
+    if (ctx.errored && declared < 0) {
+      type = T_ERROR
     }
     declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
   }
