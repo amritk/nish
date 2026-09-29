@@ -78,7 +78,7 @@ import {
   Node,
 } from "./nodes"
 import { caseValue } from "./constants"
-import { isFreshArrayExpression } from "./arrays"
+import { annotationSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
 
@@ -276,8 +276,19 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     if (ctx.errored && declared < 0) {
       type = T_ERROR
     }
+    // WP33 R2: `const t = new Float64Array(n)` is a `Float64Array` to
+    // TypeScript as surely as an annotation would make it, so an unannotated
+    // binding takes its initialiser's spelling. Read before the name is
+    // declared, so that the initialiser's names are the outer ones.
+    const typedArray =
+      annotation.kind !== N_EMPTY
+        ? annotationSpelling(ctx, true, annotation)
+        : typedArraySpelling(ctx, initializer, scope)
     declareLocal(ctx, scope, decl, name, type, mutable, declaredOrigin(ctx, annotation, initializer, scope))
     const local = ctx.program.nodeLocals[decl.id]
+    if (local !== null) {
+      local.typedArray = typedArray
+    }
     if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
       local.fresh = allocatesArray(ctx, initializer)
     }

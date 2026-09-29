@@ -166,7 +166,7 @@ same `i32`).
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
 | `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
+| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. A receiver spelled with one of the names has no `push` or `pop`, as in TypeScript ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)). They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). An unsigned array crosses to a host as `Uint8Array`, `Uint16Array`, `Uint32Array` or `BigUint64Array` ([wp30-bytes-interop.md](wp30-bytes-interop.md)), but those four are **not** spellings in the language: a program writes `u8[]`. |
 | `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
@@ -3017,7 +3017,8 @@ divide with overflow` is simply unreachable on an unsigned type.
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
-  the same lowering (`tests/cases/arr_typed_views`); a type argument is
+  the same lowering (`tests/cases/arr_typed_views`), and no `push` or `pop`
+  on the result ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)); a type argument is
   `` `new Int32Array` takes no type argument ``
   (`reject_arr_typed_view_typearg`).
 - Anything else is `` Unsupported `new X` `` / `` Unknown class `X` ``;
@@ -4073,6 +4074,50 @@ string-to-number parsing is the bare
 `` Unknown method `shift` on i32[] ``, each with the supported list
 (`tests/cases/reject_str_method_unknown`, `reject_arr_method_unknown`).
 
+### Typed-array names have no `push` or `pop`
+
+`Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array` are the same
+type as `i32[]`, `f32[]`, `f64[]` and `i64[]`, but in TypeScript a typed array
+has a fixed length and no `push` or `pop`, so a call to either is a
+`TypeError` there. A receiver **spelled** with one of the four names refuses
+both (NL2415):
+
+```
+`push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop
+```
+
+(`tests/cases/reject_typed_push_i32`, `reject_typed_push_f32`,
+`reject_typed_push_f64`, `reject_typed_push_i64` and their `reject_typed_pop_*`
+twins). The rewrite is the one the message names: a binding that grows is
+declared `f64[]`, which is what it meant. Every other array operation is
+unchanged, and so is the type: `sameType` still holds, a `Float64Array` is an
+`f64[]` wherever one is expected, and no IR moves.
+
+The spelling is a fact about the program text, not a type. A receiver carries
+it when it is:
+
+- **`new X(n)` itself**, for the four names;
+- **an identifier** whose `let`, `const` or parameter is annotated with one of
+  the names — directly, in parentheses, as the one member of `X | null`, or
+  through a `type` alias declared or imported in the module
+  (`reject_typed_push_param`) — or is unannotated and initialised with a
+  receiver that carries it: `const t = new Float64Array(n)`, which TypeScript
+  infers as the typed array (`reject_typed_push_inferred`), or `const u = t`;
+- **a field read** `o.f` whose field is declared with one of the names;
+- **a call** whose callee declares one of the names as its return type
+  (`reject_typed_pop_receivers` has one of each).
+
+A field or return type declared in another module carries it when it writes
+the name itself; that module's `type` aliases are not followed. Nothing else
+carries it — an element of a `Float64Array[]`, a ternary, an index.
+
+**A typed array that flows into a binding spelled `T[]` may be pushed there**:
+`const a: f64[] = t; a.push(v)`, or a `Float64Array` passed to a parameter
+`xs: f64[]` that pushes (`tests/cases/arr_typed_push_pop`, whose IR is the
+`f64[]` program's). The refusal follows the spelling the program wrote, and
+TypeScript itself refuses `const a: number[] = new Float64Array(n)`, so no
+program `tsc` accepts reaches that push.
+
 ### `Arena`
 
 Explicit control of the arena the runtime allocates from
@@ -4608,8 +4653,10 @@ export const main = (): i32 => {
   types are rejected because a zeroed pointer would be null
   (`tests/cases/arr_new_zeroed`, `reject_arr_new_string`).
 - **Typed-array names are aliases, not views.** `Int32Array` is `i32[]` with
-  every array operation, `push` included; there is no separate buffer type and
-  no `subarray`. The alias names are exactly four — `Int32Array`,
+  every array operation but `push` and `pop`, which a receiver spelled with
+  the name refuses as TypeScript does
+  ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop));
+  there is no separate buffer type and no `subarray`. The alias names are exactly four — `Int32Array`,
   `Float32Array`, `Float64Array`, `BigInt64Array` — and an *unsigned* array has
   none: a program writes `u8[]`, and `Uint8Array` is not a type it can spell.
   That asymmetry is only a spelling. `u8[]`, `u16[]`, `u32[]` and `u64[]` cross
@@ -5351,6 +5398,7 @@ messages are exact for the cases cited; other rows quote the checker
 | I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
+| `push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` (NL2415) | `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop `` | `reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)) |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |

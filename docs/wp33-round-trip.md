@@ -2,7 +2,7 @@
 
 **Decided (§7, 2026-09-28); R1's portability half is built: the class, its
 flag and all eleven codes, with NL8005 live and the other rows landing in their
-own stages.** This is the plan of record for one
+own stages. R2 is built: the typed-array names refuse `push` and `pop`.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -165,7 +165,7 @@ collected in §7.
 | **A record put into an array is copied** (`push`, `[p, q]`, `ps[i] = p`, per [Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)) | `ps.push(p); p.x = 9` then `ps[0].x` is `1` natively and `9` in TS; `[p, p]` then writing `ps[0].x` leaves `ps[1].x` alone natively and changes it in TS | C | `{ ...p }` at each copy-in site (the copy is shallow natively too: a nested record field is a pointer, so the spread is exact) | Keep the layout, which is what makes `Point[]` vectorise. **On the way in, flag the aliasing** (§5.2): a write to a record, or to an element, while the other copy is still read afterwards. |
 | **A store into a slot overwrites what an element reference sees** | `const r = ps[0]; ps[0] = q` then `r.x` is `q.x` natively and the old value in TS | C | a field-by-field copy into the existing element: `ps[0].x = q.x; ps[0].y = q.y` | As above. Together the two translations are exact: a copy in is a fresh object, and a store is a write into the object already in the slot. |
 | `new Array<T>(n)` zero-fills | `new Array<f64>(3)` then `a[1] + 1.0` is `1` natively and `NaN` in TS | C | `new Array<T>(n).fill(0)` (`false` for `boolean`) | Keep. The translation is exact and obvious to a reader. |
-| `Float64Array` and the other three typed-array names are `f64[]`, with `push` and `pop` | `t.push(5.0)` is a `TypeError: t.push is not a function` in TS | C | `number[]` for a binding that ever calls `push` or `pop`, the typed array otherwise | **Open, §7 Q4.** The alternative is to refuse `push`/`pop` on the four names, which makes the row A. |
+| `Float64Array` and the other three typed-array names are `f64[]`, without `push` and `pop` | `t.push(5.0)` would be a `TypeError: t.push is not a function` in TS | A | none needed | **Built, R2 (§7 Q4(b)).** A receiver spelled with one of the four names refuses `push` and `pop` at compile time (NL2415, [LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)); every program that still compiles has the IR it had. A value that flows into a binding spelled `f64[]` may be pushed there, which `tsc` refuses at the assignment. |
 | `dst.set(src, offset)` on an array of numbers ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill), WP34 N2) | a `u8[]` is a plain `Array` under Node, and `Array` has no `set`: a `TypeError` without the prelude. `runtime/nish.mjs` adds `Array.prototype.set` with the typed array's copy-first meaning and the native panic, and the `bytes_*` programs agree byte for byte under it | C (A under the prelude) | an imported `set(dst, src, at)` helper, the prelude's own | Keep. `fill` needs no row: `Array.prototype.fill` already has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, so it is class A (§3.6). A range past the end panics natively and under the prelude, where a real typed array throws a `RangeError`: class B, as `a[i]` is. |
 | `ctSelect` / `ctEq` over `u64` ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq), WP34 N6) | a `u64` is a BigInt under `runtime/nish.mjs` and a bare `u64` literal a `number`, so a call mixing the two throws a `TypeError` there; over BigInts alone the prelude's answers are the native ones, which `ct_prelude` in `tests/run.js` checks against `ct_u64` | C, as all 64-bit arithmetic is | BigInt operands throughout, as `--emit ts` writes every `u64` | Keep. Over `u32` both are class A (§3.6): pure functions whose answers the prelude puts back in range with `>>> 0`, and `ct_select_u32` and `ct_eq_u32` agree unmodified. The timing is not part of any reading: Node promises no constant time. |
 | `a[i]` out of range, `pop()` on empty, `charCodeAt` past the end | panics natively; `undefined` / `NaN` in TS | B | nothing | — |
@@ -475,6 +475,12 @@ zero-filled `new Array<T>(n)`, is live; the number, string and record rows are
 three stages written against the pass's row signature, and
 `tests/wordings/unreachable.txt` names the ones not live yet. The parser half
 (§5.0) is not started.
+
+**R2 is built.** The typed-array row of §3.3 is class A: a receiver spelled
+`Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` refuses `push`
+and `pop` (NL2415, `src/arrays.ts`), no `.ll` golden moved, and the rule is
+stated with the receivers that carry the spelling in
+[LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop).
 
 R4 comes before R5 on purpose. The way out is what makes the way in low-risk,
 and it is also what gives R5 its differential.

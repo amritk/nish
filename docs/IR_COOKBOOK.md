@@ -10862,6 +10862,120 @@ attributes #0 = { nounwind willreturn readonly }
 ```
 <!-- cookbook:end arr-readonly -->
 
+### Typed-array names refuse `push` and `pop`
+
+WP33 R2. `Float64Array` and the other three names are the same type as `f64[]`
+and friends, and a receiver spelled with one refuses `push` and `pop` as
+TypeScript does
+([LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)). The rule is
+the checker's alone, so there is no IR of its own to show: `append` below is
+the `f64[]` push it always was, and `new Float64Array(2)` the zero-filled
+`new Array<f64>(2)`. A value spelled `Float64Array` may still flow into a
+binding or a parameter spelled `f64[]` and be grown there.
+
+<!-- cookbook:begin arr-typed-names -->
+```ts
+// `t.push(v)` on the `Float64Array` itself is NL2415. The value is still an
+// `f64[]`, so a parameter spelled `f64[]` grows it with the `f64[]` lowering.
+const append = (xs: f64[], v: f64): void => {
+  xs.push(v)
+}
+
+export const main = (): number => {
+  const t = new Float64Array(2)
+  append(t, 1.5)
+  return t.length
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+
+define internal void @append(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, double noundef %v) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 1
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %4 = icmp eq i64 %1, %3
+  br i1 %4, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %xs, i64 8)
+  br label %push.store
+
+push.store:
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %7 = bitcast i8* %6 to double*
+  %8 = getelementptr inbounds double, double* %7, i64 %1
+  store double %v, double* %8, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %9 = add i64 %1, 1
+  store i64 %9, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = trunc i64 %9 to i32
+  ret void
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %t.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [2 x double], align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = mul i64 2, 8
+  %3 = bitcast [2 x double]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %3, i8 0, i64 %2, i1 false), !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %t.addr, align 8
+  %5 = load %struct.nish_array*, %struct.nish_array** %t.addr, align 8
+  call void @append(%struct.nish_array* %5, double 0x3FF8000000000000)
+  %6 = load %struct.nish_array*, %struct.nish_array** %t.addr, align 8
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0
+  %8 = load i64, i64* %7, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %9 = trunc i64 %8 to i32
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element double", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end arr-typed-names -->
+
 ### An array of records is contiguous
 
 WP15 §2a. When the element type is an `interface` — a record, fields and
