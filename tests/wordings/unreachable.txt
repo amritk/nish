@@ -74,7 +74,6 @@ NL2302  retired at R6: stage1 answers nl2302_duplicate_type_parameter differentl
 # `codeFor` walks the table longest fragment first, so a fragment that is a
 # substring of another fragment of the *same* message is never the answer.
 NL1022  shadowed by NL1005, which is the longer run of the same sentence
-NL1041  shadowed by NL1007, which is the longer run of the same sentence
 NL2019  shadowed by NL2095, the same words with the closing backtick before them
 NL2031  shadowed by NL2118, the same words with the colon before them
 

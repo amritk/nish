@@ -270,7 +270,10 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     a method with `FLAG_ACCESSOR`, `abstract` the class or member with
     `FLAG_ABSTRACT`, `declare class`, `declare interface` and `declare enum`
     theirs with `FLAG_FOREIGN`, a parameter property the parameter with
-    `FLAG_PROPERTY`, `export default function f`, `class C` and
+    `FLAG_PROPERTY`, a computed name `[k]` — in an object literal, a class or
+    an interface — the property, field or method with `FLAG_COMPUTED` and the
+    key's expression where its name would be (an `N_PROPERTY`'s second child,
+    as a string key is), `export default function f`, `class C` and
     `interface I` theirs with `FLAG_DEFAULT`, and `import type` (or `type`
     in front of one name), `import defer`, attributes after the specifier, a
     specifier that is not a string literal and `export import` the
@@ -312,7 +315,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     signature with `FLAG_CONSTRUCT`), `interface I extends A` a fourth child
     of the `N_INTERFACE`, a key written as a string or a number a second
     child of the `N_PROPERTY`, a method in an object literal the
-    `N_METHOD` that is the property's value, a namespace import an
+    `N_METHOD` that is the property's value, object spread `{ ...a }` the
+    `N_SPREAD` an array's `...a` is, among the `N_OBJECT`'s properties, a
+    namespace import an
     `N_IMPORT` whose bindings child is the IDENT after `* as`, a side-effect
     import one whose bindings child is EMPTY, a default import a second
     child, a module export name written as a string the `N_STRING` where

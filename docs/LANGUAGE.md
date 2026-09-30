@@ -1764,7 +1764,10 @@ class Point {
   (`reject_generic_method_constructor`; a *method* may declare its own — see
   [Generic methods](#generic-methods)),
   decorators
-  (`reject_decorator`), computed member names (`reject_computed_property`),
+  (`reject_decorator`), computed member names
+  (`Computed property names are forbidden in Nish (member names are fixed at compile time)`,
+  `reject_cls_computed_field`, `reject_cls_computed_method`; `[Symbol.dispose]`
+  is the one bracketed name read, see [Scoped tasks](#scoped-tasks-using-s--scope)),
   overloaded constructors.
 
 ### Generic functions
@@ -5603,7 +5606,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `namespace` / `module` blocks, `declare module "m"` | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace`, `reject_module_declared` |
 | `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
 | decorators, on a class, a member or a parameter | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator`, `reject_decorator_member`, `reject_decl_shapes` |
-| computed property names | `` Computed property names are forbidden in Nish (object layout is fixed at compile time) `` | `reject_computed_property` |
+| computed property names, in an object literal (`{ [k]: 1 }`, `{ [k]() { } }`), a class (`[k]: i32`, `[Symbol.iterator]() { }`) or an interface (`[k]: i32`) | `Computed property names are forbidden in Nish (member names are fixed at compile time)` (NL1041, Phase 0; before a method in an object literal is refused) | `reject_computed_property`, `reject_computed_method`, `reject_cls_computed_field`, `reject_cls_computed_method`, `reject_iface_computed_member` |
 
 ### Imports
 
@@ -5652,7 +5655,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | `reject_yield` |
 | regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex`, `reject_regex_class` |
 | `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in Nish (object layout is fixed at compile time)` | `reject_object_spread` |
+| object spread `{ ...a }` | `Object spread is forbidden in Nish (set each field by name)` (NL1061, Phase 0) | `reject_object_spread` |
 | `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
 | `x.__proto__` | `` `__proto__` access is forbidden in Nish (no prototype chain) `` | `reject_proto_access` |
 | `x.prototype` | `` `.prototype` access is forbidden in Nish (no prototype chain) `` | `reject_prototype_access` |
