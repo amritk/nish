@@ -19,10 +19,26 @@
 
 import { isBuiltinFunction } from "./builtins"
 import { Emitter } from "./emit"
-import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit-strings"
+import {
+  emitConsoleError,
+  emitConsoleLog,
+  emitFromCharCode,
+  emitSliceCheck,
+  stringifyCallee,
+} from "./emit-strings"
+import { emitIndex } from "./emit-arrays"
 import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
+import {
+  isNetExport,
+  isNetRangeCall,
+  NET_INT,
+  NET_RANGE,
+  NET_STRING,
+  netSignature,
+  netSymbol,
+} from "./nish-modules"
 import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
@@ -784,6 +800,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "panic") {
     return emitPanic(emitter, expr)
   }
+  if (isNetExport(name)) {
+    return emitNetCall(emitter, expr, name)
+  }
   process.exit(internalErrorFor(`emitter: unexpected builtin \`${name}\``, emitter.opts.json))
 }
 
@@ -804,15 +823,20 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   return callee.text === "spawnSync" || callee.text === "spawnSyncTo"
 }
 
-export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] =>
-  identifierBuiltinCalleesNamed(program, table, call, call.children[0].text)
+export const identifierBuiltinCallees = (
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  uncheckedIndexing: boolean
+): string[] => identifierBuiltinCalleesNamed(program, table, call, call.children[0].text, uncheckedIndexing)
 
 /** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
 export const identifierBuiltinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
   call: Node,
-  name: string
+  name: string,
+  uncheckedIndexing: boolean
 ): string[] => {
   const out: string[] = []
   if (!isBuiltinFunction(name)) {
@@ -915,6 +939,15 @@ export const identifierBuiltinCalleesNamed = (
     panicTailCallees(out)
     return out
   }
+  // WP34 N5: one symbol each, and the slice panic behind the range check of
+  // `netRead` and `netWrite` unless `--unchecked-indexing` dropped it.
+  if (isNetExport(name)) {
+    out.push(netSymbol(name))
+    if (isNetRangeCall(name) && !uncheckedIndexing) {
+      out.push("nish_panic_slice")
+    }
+    return out
+  }
   // Declared here rather than left to fall through, so the table says it:
   // `f64ToBits` / `bitsToF64` are one bitcast, and `ctSelect` / `ctEq` are
   // bitwise instructions and an empty asm (WP34 N6). None calls anything.
@@ -922,6 +955,64 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   return out
+}
+
+// ---- WP34 N5: `nish:net` -------------------------------------------------------------------
+
+/**
+ * One call into runtime-net.c, its arguments emitted left to right as every
+ * call's are and passed as `netSignature` spells them: an `i32` as itself, a
+ * string as its `i8*`, a `u8[]` as its header, whose `len` and `data` the
+ * runtime reads, and an offset or a length (`n`) widened to an `i64` as an
+ * index is. The answer is the runtime's `i32` in either number mode.
+ *
+ * `netRead` and `netWrite` take the range `[off, off + len)` of their buffer,
+ * checked here the way `dst.set(src, at)` checks the range it writes, through
+ * the same panic and with the same words: `0 <= off <= off + len <=
+ * buf.length`. Both are `i32`s, so their sum cannot wrap an `i64`, and the
+ * unsigned compares refuse a negative one. The buffer's length is read after
+ * every argument is evaluated, as JavaScript reads it, and
+ * `--unchecked-indexing` drops the check with the rest.
+ */
+const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
+  const fn = emitter.fn
+  const params = netSignature(name)
+  const args = expr.children[1].children
+  const values: string[] = []
+  const parts: string[] = []
+  let buffers = false
+  // Bounded by both lengths, which the checker made equal, so neither index is checked.
+  for (let i = 0; i < args.length && i < params.length; i++) {
+    const param = params.charCodeAt(i)
+    if (param === NET_RANGE) {
+      const value = emitIndex(emitter, args[i])
+      values.push(value)
+      parts.push(`i64 ${value}`)
+    } else {
+      const value = emitter.emitExpression(args[i])
+      values.push(value)
+      if (param === NET_INT) {
+        parts.push(`i32 ${value}`)
+      } else if (param === NET_STRING) {
+        parts.push(`i8* ${value}`)
+      } else {
+        buffers = true
+        parts.push(`${ARRAY_STRUCT}* ${value}`)
+      }
+    }
+  }
+  if (buffers) {
+    emitter.declareType(ARRAY_TYPE)
+  }
+  if (isNetRangeCall(name) && !emitter.opts.uncheckedIndexing && values.length === 4) {
+    const end = fn.emitValue(`add i64 ${values[2]}, ${values[3]}`)
+    const field = fn.emitValue(
+      `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[1]}, i64 0, i32 0`
+    )
+    const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
+    emitSliceCheck(emitter, values[2], end, size, true, "net")
+  }
+  return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)
 }
 
 // ---- Namespace properties -----------------------------------------------------------------

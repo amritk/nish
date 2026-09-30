@@ -435,7 +435,15 @@ and fit the width: `const b: u8 = -1` is
 `` Literal `256` does not fit in u8 ``
 (`tests/cases/reject_u_literal_too_wide`). The largest `u64` values are past
 2^53 and cannot be written at all; build them arithmetically
-(`toU64(0) - toU64(1)` is 2^64 - 1, `tests/cases/u_print`).
+(`toU64(0) - toU64(1)` is 2^64 - 1, `tests/cases/u_print`). The same holds for
+the `i64` minimum, -2^63: `-9223372036854775808` is refused like any literal
+past 2^53 (NL2055), although 2^63 happens to be an exact double and its
+negation fits. The 2^53 bound is what keeps every literal exact in both
+readings, and admitting this value would be a one-literal exception to it for
+no gain: in the TypeScript reading `i64` is `number`, so the value is a double
+there anyway (NL8009). Build it from the widest literal instead:
+`const lo: i64 = -9007199254740992; const min: i64 = lo << 10;` is -2^63
+(`tests/cases/neg_literal_i64_min`).
 
 ### Unsigned integers
 
@@ -3452,6 +3460,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose` — each a global too ([`nish:net`](#nishnet-addresses-and-non-blocking-tcp)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -3681,7 +3690,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). `null` when the path cannot be read *as a file* — missing, a **directory**, a parent that cannot be searched, a pipe with no length to ask for — which is the same set `readFileSync` prints `nish: cannot read <path>` for. It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
-| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked` |
+| `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
@@ -3866,6 +3875,104 @@ its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
 [wp33-round-trip.md](wp33-round-trip.md) §3.5 gives the translation.
 
+### `nish:net`: addresses and non-blocking TCP
+
+Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
+and reads and writes bytes, and every socket is **non-blocking**, so a call that
+would wait answers "would block" instead, and the program decides what to do
+next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
+the program is the loop. Every socket is also **close-on-exec**, so a child that
+`spawnSync` starts inherits none of them. All eight functions are C in
+`runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
+ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
+others; section GC leaves every one of them out of a program that calls none
+(the `net_` block of `tests/run.js` links one and counts the symbols). Each is
+exported by `nish:net` and is a global too, as every `nish:` export is.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
+| `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
+| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_arity`, `reject_net_wasm` |
+| `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
+| `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
+| `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
+| `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
+| `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
+
+**Errors are numbers.** Every call answers an `i32`: `>= 0` is success (a
+descriptor, a count, `0`), and a negative number is the failure's errno,
+negated. The codes a loop branches on are **Linux's numbers on every platform**:
+`-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
+connection was reset, `-98` the address is in use and `-22` a bad argument; the
+Darwin runtime translates its own. Any other failure is the host's `-errno`
+(`-9` for a descriptor that is not open, on both). A number rather than a
+`Result`, because no builtin answers one and a failure here is routine — the
+same convention `signalFd` set — and because a number allocates nothing: no
+`nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
+in a loop whose pass scope gives back what each pass builds, and prints `flat`
+when that moved the arena no further than one message did).
+
+#### The address form
+
+An address is **18 bytes of a `u8[]`**: the 16 bytes of an IPv6 address, with
+an IPv4 address written as the mapped `::ffff:a.b.c.d`, then the port,
+big-endian. So `127.0.0.1:8080` is ten zeros, `255 255`, `127 0 0 1`, `31 144`
+(`net_tcp_calls`). One form for both families, in memory the caller owns, so a
+server that accepts a million connections allocates nothing to learn who they
+are from. An array longer than 18 bytes is fine; the rest is not touched.
+
+#### Bounds
+
+`netRead` and `netWrite` check `0 <= off <= off + len <= buf.length` **in the
+compiled code**, before the call, the way `dst.set(src, at)` checks the range it
+writes, and a range outside it panics with the same words, `slice out of range:
+[4, 9) of length 8`, exit 1 (`net_tcp_bounds`). A negative `off` or `len` fails
+it. `--unchecked-indexing` drops the check with every other one
+(`net_tcp_unchecked`). A `peer` or `out` array shorter than 18 bytes is not a
+panic but `-22`, from the runtime, because the length is the argument's
+property rather than the program's arithmetic.
+
+#### Types, threads and wasm
+
+- **Bytes only.** Each buffer is a `u8[]`, as `crypto.getRandomValues`'s is: a
+  socket carries bytes, and a wider element would make the byte order on the
+  wire a fact about the machine. Anything else is `` `netRead` fills a `u8[]`,
+  got i32[] `` (NL2402; `reject_net_element`) for a buffer the call writes, and
+  `` `netWrite` sends from a `u8[]`, got string `` (NL2405;
+  `reject_net_write_element`) for the one it reads. A descriptor, an offset, a
+  length, a port, a backlog and `how` are `i32` in both number modes, and an
+  `f64` is refused rather than converted (`reject_net_fd_type`).
+- **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer` and
+  `netRead`'s `buf` are written, so a `readonly u8[]` there is refused as a
+  store through it is (`reject_net_readonly`, `reject_net_accept_readonly`), a
+  parameter one of them fills is never `readonly` in the IR, and `netWrite`'s
+  `buf` may be `readonly`.
+- **Threads.** Every call changes the kernel's state of a socket, which is a
+  write its caller can see, so none may be made in a `scope()` task
+  (`reject_net_task`) or a parallel body (`reject_net_parallel`), and a call
+  that writes an array is refused in a scope's region on one a task may read,
+  as `fill` is (`reject_net_region`).
+- **On wasm.** A `wasm32` target and the `wasi` profile have no sockets for these
+  to reach, and `runtime-net.c` is empty there, so every call is refused by the
+  checker with the host builtins' words: `` `tcpListen` reaches the operating
+  system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
+  `reject_net_import_wasm`).
+- **Not yet.** There is no `tcpConnect` (`reject_net_unknown_export`), no name
+  resolution, and nothing to wait on readiness with; UDP and the readiness loop
+  are the next two slices of WP34 N5. Until the loop lands, a program waits for
+  a connection or a byte by calling again on `-11`, as `net_tcp_echo` does.
+
+**The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2) is
+**class C**, as `signalFd`'s is: Node's sockets are asynchronous only, and a
+socket becomes ready only to Node's event loop, which a program that owns its
+loop never returns to. `runtime/nish.d.ts` declares `nish:net` and the globals,
+so `npm run check` types these programs, and under `runtime/nish.mjs` each
+function throws `` `netAddress` has no synchronous reading under Node: a socket
+is ready only to the event loop, which a program that owns its loop never
+returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
+`net_` block of `tests/run.js`).
+
 ### Arrays and strings as receivers
 
 | Member | Semantics | Test |
@@ -3949,13 +4056,14 @@ whole.
   bare `fptosi`, whose answer for NaN or an infinity is poison. **NaN is `0`,
   a fraction truncates toward zero** (`2.7` is `2`, `-0.5` is `0`), and **an
   infinity or a value past the `i64` range saturates** to the `i64` bound on
-  its side. `fill` then clamps that bound to an end of the array, so
-  `a.fill(v, 0, Infinity)` fills all of it, as `Uint8Array.prototype.fill`
-  does (`bytes_offset_float`). `set` fails its range check with the saturated
-  offset in the message — `slice out of range: [9223372036854775807,
-  -9223372036854775808) of length 4` for `1e300` or `Infinity`, where the end
-  has wrapped — and exits 1 where JavaScript throws a `RangeError`
-  (`bytes_set_float_oob`, `bytes_set_float_panic`).
+  its side. `fill` then clamps that bound to an end of the array, so in f64
+  mode `a.fill(v, 0, 1 / 0)` fills all of it, as `Uint8Array.prototype.fill`
+  does (`bytes_offset_float`); `Infinity` itself is not a name in Nish. `set`
+  fails its range check with the saturated offset in the message —
+  `slice out of range: [9223372036854775807, -9223372036854775808) of length 4`
+  for `1e300` or an infinity, where the end has wrapped — and exits 1 where
+  JavaScript throws a `RangeError` (`bytes_set_float_oob`,
+  `bytes_set_float_panic`).
 - **An unsigned offset is never negative**, whatever its width. A `u64` of
   2^63 or more has the `i64` sign bit set, and `fill` still reads it as past
   the end: as a start it fills nothing, and as an end it fills to the length
@@ -5080,21 +5188,101 @@ by the caller.
 
   | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
-  | NL8001 | UTF-8 offsets (3.2) | a `.length`, `charCodeAt`, `indexOf` or `lastIndexOf` whose value meets an outside fact: printed, stored, returned from `main`, or compared with a literal offset into text that is not provably ASCII | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
-  | NL8002 | checked `slice` (3.2) | a `slice(a, b)` whose bounds are not proven inside `[0, length]` | clamps the bounds and counts a negative one from the end, where this panics |
-  | NL8003 | a record copied in (3.3) | a record pushed, listed or stored into an array while the original is written and one copy read afterwards | stores the same object, so a write through one is seen through the other |
-  | NL8004 | a store over a live element (3.3) | `ps[i] = q` while an element reference `r = ps[j]` is still read | puts a new object in the slot and leaves `r` holding the old one |
+  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored, compared or combined with a number literal, or taken from a width (`width - s.length`); the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
+  | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that the bounds proof which folds a `substring` clamp does not place inside `[0, length]`; one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
+  | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
+  | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
-  | NL8006 | integer `/` (3.1) | `/` on an integer type | divides exactly and keeps the fraction |
-  | NL8007 | wrapping (3.1) | `+ - *`, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping` | keeps counting past the range |
-  | NL8008 | `i32 >>>` (3.1) | `>>>` whose result is `i32` | reads the result back unsigned |
+  | NL8006 | integer `/` (3.1) | `/` or `/=` on an integer type | divides exactly and keeps the fraction |
+  | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
+  | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
-  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` | applies JavaScript's rules: a NaN operand makes `min` and `max` NaN, and `round` rounds a half towards +∞ and keeps `-0` |
-  | NL8011 | `console.log` of `-0` (3.5) | `console.log` of an `f64` | Node's console prints a negative zero as `-0` |
+  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32` | answers NaN from `min` or `max` when either operand is NaN, where this drops the NaN and answers the other; and answers `-0` from `round` for a negative number that rounds to zero (`Math.round(-0.4)`), where this answers `0`. Both round a half towards +∞ (`2.5` to `3`, `-2.5` to `-2`), so that is not a difference |
+  | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
 
-  NL8005 is live; the other rows are registered and land in the stages
-  `tests/wordings/unreachable.txt` names, which is the record of which rows
-  report today.
+  **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)` or
+  `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
+  `string` — an array's `.length` is not one — whose receiver is not
+  *provably ASCII*: a literal of bytes below 128, a module constant that folds
+  to one, a template, `+` or `?:` built only of ASCII parts and number or
+  boolean holes, or a local declared in the same body whose initialiser and
+  every `=` to it are one of those (`s = s + "x"` keeps `s` proven). A
+  parameter proves nothing. From a source the value is followed outward
+  through parentheses, `toI32` / `toI64` / `toF64`, either arm of a `?:` and
+  arithmetic (`+ - * / %` and the bitwise operators) with an operand that is
+  not a literal, and into a local and every read of it. It is reported where
+  it meets an outside fact:
+
+  - it is **printed**: an argument of `console.log` or `console.error`, or a
+    template literal's hole;
+  - it is **the exit code**: the value `main` returns, or its concise body;
+  - it is **stored**: into a field or an element, as an object literal's
+    property or an array literal's element, or pushed on to an array;
+  - it is **compared or combined with a number** — a literal, a signed one or
+    a module constant — whose value is, for an offset, anything but `0` and
+    `-1` (every string answers those two in both units: `s.length === 0`,
+    `s.indexOf(t) < 0`), and for a code unit, 128 or more (a code below 128
+    names the same character in both units);
+  - it is **taken from a width**: the right operand of a `-` whose left
+    operand does not itself hold an offset, as in `width - s.length`, the
+    room left in a column that was not counted in bytes.
+
+  One `+ k` on the offset an `indexOf` or `lastIndexOf` of a provably ASCII
+  needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
+  fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
+  the stepped offset is followed on like any other, so printing it is
+  reported. Everything else is quiet: an offset handed to a string method or
+  to any function, compared with another offset or with a local, or used as a
+  loop bound, stays inside the program's own counting, so
+  `const width = name.length;` alone is not reported
+  (`tests/cases/port_str_length_printed`, `port_str_nonascii_charcode`,
+  `port_str_needle_step_printed`; quiet: `port_str_ascii_literal_quiet`,
+  `port_str_offset_roundtrip_quiet`).
+
+  **NL8003 and NL8004, exactly.** A *record array* holds its records inline:
+  its element type is an `interface` no class `implements`, and not
+  `T | null`. The two rows tell arrays apart by name — a local, or a member
+  chain such as `this.ps` — except for an element type the body *aliases*:
+  when a record array is declared or assigned from anything but a literal or
+  a `new`, or used other than as an index or member receiver, a `for … of`
+  iterable, a call argument or such an assignment's target (`const qs = ps`,
+  `this.f = ps`, `return ps`), every array of that element type is taken to
+  be the same array. An arrow argument's body is its own.
+
+  - NL8003's *copy site* is a local `p`, as written, passed to `ps.push`, put
+    in an array literal that initialises or is assigned to a binding, or
+    stored by `ps[i] = p`. It is reported at `p` when a field write
+    (`x.f = e`, `x.f op= e`, `x.f++`, `x.f--`) through `p`, or through
+    `ps[k]` for any `k`, runs after the copy, and the other side is read after
+    that write: any use of `ps` after a write through `p`; any use of `p` after
+    a write through `ps[k]`, and any use of `ps` too when `p` was copied in at
+    two sites (`[p, p]`). "Runs after" is later in the source, or inside a
+    loop that encloses the earlier node and does not declare `p`. A write
+    through a nested record (`p.inner.x`) is not one: that field is a pointer
+    in both readings.
+  - NL8004 tracks the element references `reject_arr_element_across_push`
+    tracks, less `pop()`'s, whose slot no in-bounds store reaches; each is
+    live until its block ends, and inside a loop the loop's stores reach a
+    reference that was live on entry. It is reported at the store, naming the
+    reference and the line it is next read on.
+
+  Neither row sees an array that reaches a second name through a call, two
+  parameters or fields that already hold one array on entry, a write done in a
+  callee (`bump(p)`), a write through an element reference or a `for … of`
+  variable (for NL8003), or a copy whose source is not a local
+  (`ps.push(this.p)`). They warn where nothing diverges at a self-copy
+  (`r = ps[0]; ps[0] = r`), at a `let p` rebound between the copy and the
+  write, across `if`/`else` arms (which are ordered by source position), at a
+  read of `ps` that is only `ps.length`, and at any two arrays of an aliased
+  element type (`tests/cases/port_rec_push_then_write`,
+  `port_rec_literal_twice`, `port_rec_slot_store_live_ref`,
+  `port_rec_alias_copy`, `port_rec_alias_store`; quiet:
+  `port_rec_push_never_written_quiet`, `port_rec_slot_store_dead_ref_quiet`,
+  `port_rec_pop_ref_quiet`, `port_rec_alias_arrow_quiet`).
+
+  Every row but the retired NL8011 is live, each with a warning case and a
+  quiet counterpart among `tests/cases/port_*` and a wording pin in
+  `tests/wordings/`.
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

@@ -78,7 +78,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "collections, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text, threads"
+  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
