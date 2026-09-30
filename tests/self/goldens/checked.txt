@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 806 programs, 57683 dump lines.
+# 808 programs, 57715 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3025,6 +3025,24 @@ function main(): i32 -> @nish_main [exported entry]
   local 19:9 xs: i32[] (const)
   callee 20:3 fill -> @fill
   callee 21:15 sum -> @sum
+program tests/cases/arr_typed_push_pop.ts
+module tests/cases/arr_typed_push_pop.ts (entry)
+function grow(xs: f64[], v: f64): void -> @grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 6:3
+  escaping: v
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via grow
+  calls: grow nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_f64 nish_str_from_i32
+  stackSites=1 stackLocals=2
+  local 10:9 t: f64[] (const)
+  local 13:9 a: f64[] (const)
+  callee 15:3 grow -> @grow
+  local 16:9 last: f64 (const)
 program tests/cases/arr_typed_views.ts
 module tests/cases/arr_typed_views.ts (entry)
 function sumI32(xs: i32[]): i32 -> @sumI32
@@ -47612,6 +47630,22 @@ function Perm.swap(this: Perm, i: i32, j: i32): void -> @Perm.swap [method]
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 11:11 tmp: i32 (const)
+program docs/cookbook/arr-typed-names.ts
+module docs/cookbook/arr-typed-names.ts (entry)
+function append(xs: f64[], v: f64): void -> @append
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 4:3
+  escaping: v
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via append
+  calls: append nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=1
+  local 8:9 t: f64[] (const)
+  callee 9:3 append -> @append
 program docs/cookbook/arr-u8-elements.ts
 module docs/cookbook/arr-u8-elements.ts (entry)
 function get(bytes: u8[], i: i32): u8 -> @get
