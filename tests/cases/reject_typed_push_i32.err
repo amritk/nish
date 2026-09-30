@@ -1,0 +1,1 @@
+`push` is not a method of `Int32Array`, whose length is fixed: declare it `i32[]` to push and pop

@@ -10240,6 +10240,14 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // the interior pointer WP15 §2a is about.
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
+    [
+      "arr_typed_push_pop.ts",
+      // WP33 R2: the case pins that a `Float64Array` flowing into an `f64[]`
+      // binding may be pushed there, which is exactly the assignment lib.es5
+      // refuses (docs/LANGUAGE.md, "Typed-array names have no `push` or `pop`"),
+      // and it prints a popped value, the `pop` divergence above.
+      "a typed array flowing into `T[]`, refused by lib.es5 at the assignment (docs/LANGUAGE.md)",
+    ],
   ])
   const acceptedCases = fs
     .readdirSync(casesDir)

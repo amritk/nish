@@ -30,9 +30,18 @@ export class Local {
    * concrete — `T` is `Point` by the time a body is checked — so this is the
    * only record that the local came from `T`, which is what decides whether a
    * member may be read through it (`refuseParameterMember` in `src/generics.ts`).
-   * Declared second so the fields run widest first and pack into 32 bytes.
+   * Declared among the pointers, as `typedArray` is, so the fields run widest first.
    */
   origin: TypeOrigin | null
+  /**
+   * WP33 R2: the typed-array name this binding is spelled with —
+   * `Float64Array` for `xs: Float64Array` or `const t = new Float64Array(n)`
+   * — and `""` for every other binding, `f64[]` included. The name and `T[]`
+   * are one type, so this is the only record of which one the program wrote,
+   * and it is what refuses `push` and `pop` on the first (`typedArraySpelling`
+   * in `src/arrays.ts`).
+   */
+  typedArray: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -52,6 +61,7 @@ export class Local {
     this.mutable = mutable
     this.storage = storage
     this.origin = null
+    this.typedArray = ""
     this.fresh = false
   }
 }
