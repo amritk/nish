@@ -1378,9 +1378,9 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
-  collections, crypto/base64url, crypto/ct, crypto/hkdf, crypto/hmac,
-  crypto/sha256, crypto/sha512, crypto/x25519, json, map, pair, testing, text,
-  threads) ``
+  collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
+  crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256,
+  crypto/sha512, crypto/x25519, json, map, pair, testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1422,12 +1422,15 @@ and their `.ll` goldens are byte-identical files.
   side; `docs/wp23-language-surface.md` §5 is the reasoning.
 - **`nish/crypto/<primitive>` is a module in a subdirectory of the library**,
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
-  `ct` (constant-time compare), `base64url` and `x25519`
-  (`tests/link/crypto_base64url` is the case that resolves a nested
+  `ct` (constant-time compare), `base64url`, `x25519`, `chacha20poly1305`
+  (ChaCha20-Poly1305), `aes` (AES-128 and AES-256 with GCM) and `p256` (P-256
+  ECDSA) (`tests/link/crypto_base64url` is the case that resolves a nested
   specifier). Each is ordinary Nish source under the rules above, and a byte
-  string is a `u8[]`. They are written branch-free on secret data, which WP34
-  N6 is to verify and has not yet; `std/README.md` lists what each exports,
-  the specification it reproduces, and the three rules they share.
+  string is a `u8[]`. They are written branch-free on secret data, and WP34
+  N6's disassembly check (`tests/ct-asm.js`) verifies that of the functions
+  its `ct_asm_*` fixtures hold, on x86-64 and aarch64; the rest is discipline.
+  `std/README.md` lists what each module exports, the specification it
+  reproduces, which of its functions are verified, and the rules they share.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the

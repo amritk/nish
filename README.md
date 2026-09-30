@@ -35,13 +35,24 @@ TypeScript source ──▶ AST ──▶ validator + checker ──▶ LLVM IR 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
+> [!CAUTION]
+> **Do not use Nish in production.** It is a very early, pre-alpha
+> experiment in how far a static subset of TypeScript can go when it is
+> compiled straight to native code, not a tool to build on yet. Expect
+> miscompilations, crashes, missing features and diagnostics that are wrong
+> or confusing. No one has reviewed the compiler, the runtime or the
+> standard library for security, and that includes the cryptography in
+> `std/`. Nothing it produces should handle data, money or systems you care
+> about.
+
 > [!WARNING]
-> **Nish is pre-alpha.** The language, the CLI flags and the IR the compiler
-> emits all change without notice until 1.0. Every commit compiles,
-> tests and bootstraps itself — see [Project status](#project-status) for what
-> is done and what is next — but nothing here is frozen yet, so pin an exact
-> version rather than a range, expect to fix your source when you move to a
-> newer one, and read [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+> **Everything still changes.** Until 1.0, the language, the CLI flags and the
+> IR the compiler emits all change without notice, often from one minor
+> release to the next. Every commit compiles, tests and bootstraps itself (see
+> [Project status](#project-status) for what is done and what is next), but
+> nothing here is frozen. If you try it anyway, pin an exact version rather
+> than a range, expect to fix your source when you move to a newer one, and
+> read [CHANGELOG.md](CHANGELOG.md) before you upgrade.
 
 ---
 
@@ -505,9 +516,12 @@ Details, and the subset `src/` is written in, are in
 
 ## Project status
 
-Pre-alpha, as above: M4 is the milestone that freezes the language reference
-and tags a release, so until it lands a construct's spelling, a flag's name
-and the IR any of them lowers to are all still free to change.
+Pre-alpha, as above, and **not for production use**. The milestones below
+say what compiles, not what has been hardened: there has been no security
+review and there is no compatibility promise. M4 is the
+milestone that freezes the language reference and tags a release. Until it
+lands, a construct's spelling, a flag's name and the IR any of them lowers
+to are all still free to change.
 
 | Milestone | Contents | State |
 |:---|:---|:---|
