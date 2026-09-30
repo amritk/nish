@@ -27,6 +27,14 @@ specific program's hash table built around it is code.
 When you cannot tell, treat it as a copy. A notice on a file that did not need
 one costs two lines.
 
+**Name the closest upstream.** When an algorithm has a well-known
+implementation, such as BearSSL's constant-time AES and GHASH, fiat-crypto's
+field arithmetic or dudect's timing test, the pull request names it and says,
+function by function, whether the code follows its structure. A reviewer then
+compares the two. Writing "from the specification" without that comparison is
+how a function that follows an upstream line for line ships without its notice,
+which happened twice in WP34's crypto lane.
+
 ## What a copy must carry
 
 1. **The upstream notice, in the file.** A header naming where it came from
