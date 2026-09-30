@@ -1,0 +1,119 @@
+PASS  RFC 6979 A.2.5's key, localhost, 2026-01-01, 14 days: the golden DER
+PASS  its SHA-256 is OpenSSL's
+PASS  its PEM is OpenSSL's, byte for byte
+PASS  milliseconds are rounded down to the second
+PASS  X509_MAX_DAYS is fourteen
+PASS  days 0 answers null
+PASS  days 15 answers null
+PASS  days -1 answers null
+PASS  days 1 mints
+PASS  a time before 1970 answers null
+PASS  across a leap day: 2028-02-28T12:30:15Z + 2 days reads back
+PASS  2049-12-25 + 14 days, UTCTime then GeneralizedTime, reads back
+PASS  9999-12-20 + 11 days ends on 9999-12-31 and reads back
+PASS  9999-12-20 + 12 days is past 9999 and answers null
+PASS  X509_MAX_SERIAL is twenty
+PASS  leading zeros of the serial are ignored
+PASS  a zero serial answers null
+PASS  an empty serial answers null
+PASS  twenty octets, top bit clear, mint
+PASS  twenty octets, top bit set, need 21 and answer null
+PASS  twenty-one octets answer null
+PASS  a serial of 0x80 is written as the INTEGER 00 80
+PASS  an empty common name answers null
+PASS  a 64-byte common name mints
+PASS  a 65-byte common name answers null
+PASS  private key 0 answers null
+PASS  private key n answers null
+PASS  a 31-byte private key answers null
+x509 mint: 28 passed, 0 failed, 0 skipped
+PASS  the golden certificate parses
+PASS  its der is the input
+PASS  its serial
+PASS  its public key is A.2.5's
+PASS  the key is P-256
+PASS  the algorithm is ecdsa-with-SHA256
+PASS  notBefore
+PASS  notAfter
+PASS  issuer is subject
+PASS  the subject is CN=localhost
+PASS  tbs is the second element's 205 bytes
+PASS  it verifies under itself
+PASS  with the last byte of s flipped it parses
+PASS  and does not verify
+PASS  a truncated DER is refused
+PASS  an octet after the certificate is refused
+PASS  a length with a leading zero octet is refused
+PASS  a long-form length below 128 is refused
+PASS  an indefinite length is refused
+PASS  a high-tag-number identifier is refused
+PASS  a four-octet length past 2^31 - 1 is refused
+PASS  a serial with a redundant zero octet is refused
+PASS  a TBS algorithm unlike the outer one is refused
+PASS  month 13 is refused
+PASS  an explicit version v1 is refused
+PASS  a signature with unused bits is refused
+PASS  extensions in a v1 certificate are refused
+PASS  an empty DER is refused
+PASS  a truncated DER in PEM is refused by the chain reader
+x509 parse: 29 passed, 0 failed, 0 skipped
+PASS  one byte is AA==
+PASS  two bytes are AAE=
+PASS  three bytes are AAEC
+PASS  + and / are the alphabet's last two
+PASS  AA== reads back
+PASS  AAE= reads back
+PASS  +/8= reads back
+PASS  OpenSSL's golden PEM reads back to the golden DER
+PASS  CRLF line ends are read
+PASS  without a final line feed it is read
+PASS  text around blocks and blocks with other labels are skipped
+PASS  a wrong label answers null
+PASS  a label matches whole, not as a suffix
+PASS  an END label unlike its BEGIN answers null
+PASS  an unterminated block answers null
+PASS  an END outside a block answers null
+PASS  a 65-character line answers null
+PASS  a short line before the last answers null
+PASS  an RFC 1421 header answers null
+PASS  AB==, with a bit set past the byte, answers null
+PASS  a character outside the alphabet answers null
+PASS  = inside the data answers null
+PASS  a length not a multiple of four answers null
+PASS  an empty block answers null
+PASS  no block at all answers null
+x509 pem: 25 passed, 0 failed, 0 skipped
+PASS  OpenSSL's PKCS#8 key
+PASS  OpenSSL's SEC1 key, the same
+PASS  A.2.5's key as SEC1
+PASS  A.2.5's key as PKCS#8
+PASS  a P-384 PKCS#8 key answers null
+PASS  a P-384 SEC1 key answers null
+PASS  a bare SEC1 key that does not name its curve answers null
+PASS  a SEC1 key whose stored public key is not its own answers null
+PASS  scalar 0 answers null
+PASS  scalar n answers null
+PASS  a long-form length below 128 answers null
+PASS  SEC1 under the PKCS#8 label answers null
+PASS  a certificate is not a key
+PASS  two keys answer null
+PASS  a key in both forms answers null
+x509 keys: 15 passed, 0 failed, 0 skipped
+PASS  OpenSSL's leaf and CA read as a chain of two
+PASS  the leaf's hash is OpenSSL's
+PASS  the CA's hash is OpenSSL's
+PASS  the leaf's serial is 0x7a
+PASS  the leaf's notBefore
+PASS  the leaf's notAfter
+PASS  the CA's notBefore
+PASS  the CA's notAfter
+PASS  both keys are P-256
+PASS  the leaf's issuer is the CA's subject
+PASS  the leaf verifies under the CA
+PASS  the CA, with extensions, verifies under itself
+PASS  the leaf does not verify under itself
+PASS  the CA's parsed private key gives its certificate's public key
+PASS  a certificate minted with OpenSSL's key verifies under itself
+PASS  a chain with one bad certificate answers null
+PASS  a PEM with no certificate answers null
+x509 chain: 17 passed, 0 failed, 0 skipped

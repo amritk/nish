@@ -1419,7 +1419,8 @@ and their `.ll` goldens are byte-identical files.
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256,
-  crypto/sha512, crypto/x25519, json, map, pair, testing, text, threads) ``
+  crypto/sha512, crypto/x25519, crypto/x509, json, map, pair, testing, text,
+  threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1462,8 +1463,9 @@ and their `.ll` goldens are byte-identical files.
 - **`nish/crypto/<primitive>` is a module in a subdirectory of the library**,
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
   `ct` (constant-time compare), `base64url`, `x25519`, `chacha20poly1305`
-  (ChaCha20-Poly1305), `aes` (AES-128 and AES-256 with GCM) and `p256` (P-256
-  ECDSA) (`tests/link/crypto_base64url` is the case that resolves a nested
+  (ChaCha20-Poly1305), `aes` (AES-128 and AES-256 with GCM), `p256` (P-256
+  ECDSA) and `x509` (DER, PEM and self-signed P-256 certificates)
+  (`tests/link/crypto_base64url` is the case that resolves a nested
   specifier). Each is ordinary Nish source under the rules above, and a byte
   string is a `u8[]`. They are written branch-free on secret data, and WP34
   N6's disassembly check (`tests/ct-asm.js`) verifies that of the functions
