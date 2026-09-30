@@ -1,0 +1,45 @@
+PASS  a SEC1 key beside a malformed PRIVATE KEY block answers null
+PASS  a PKCS#8 key beside a malformed EC PRIVATE KEY block answers null
+PASS  the SEC1 key alone still reads
+PASS  a certificate beside a block of another label that is not base64 answers null
+PASS  a certificate beside a block of another label with padding bits set answers null
+PASS  a BEGIN line inside another label's block answers null
+PASS  a well-formed block of another label is still skipped
+X509-1, X509-2: every PEM block is decoded: 7 passed, 0 failed, 0 skipped
+PASS  an overlong NUL, C0 80, answers null
+PASS  an overlong slash, E0 80 AF, answers null
+PASS  a lone continuation octet answers null
+PASS  a truncated three-octet sequence answers null
+PASS  a truncated sequence at the very end answers null
+PASS  a surrogate, ED A0 80, answers null
+PASS  past U+10FFFF, F4 90 80 80, answers null
+PASS  F5 and above answer null
+PASS  FF answers null
+PASS  a NUL answers null
+PASS  ASCII still mints: CN=localhost
+PASS  two octets, U+00FC, mint as written
+PASS  three octets, U+20AC, mint as written
+PASS  U+D7FF, the last before the surrogates, mints
+PASS  four octets, U+10FFFF, mint as written
+X509-3: the minted common name is UTF-8 without NUL: 15 passed, 0 failed, 0 skipped
+PASS  the golden, v3 with nothing after the key, reads
+PASS  [3] holding a real extension reads
+PASS  [3] holding a NULL is refused
+PASS  [3] holding an empty SEQUENCE is refused
+PASS  [3] holding a SEQUENCE and then more is refused
+PASS  two [3] elements are refused
+PASS  [1] as an empty BIT STRING, 81 01 00, reads
+PASS  [1] with four unused bits of one octet reads
+PASS  [1], [2] and [3] in order read
+PASS  [1] with no contents at all is refused
+PASS  [1] claiming 8 unused bits is refused
+PASS  [1] claiming unused bits with no octet is refused
+PASS  [2] claiming 8 unused bits is refused
+PASS  [1] with an unused bit set is refused
+X509-4: what follows the key is well formed: 14 passed, 0 failed, 0 skipped
+PASS  a chain in the wrong order still reads
+PASS  a leaf and a certificate that did not issue it still read
+PASS  and the leaf does not verify under it
+PASS  notBefore after notAfter still reads
+PASS  a certificate whose fourteen days are long past still reads and verifies
+X509-5: a parser, not a validator: 5 passed, 0 failed, 0 skipped
