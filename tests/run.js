@@ -40,6 +40,7 @@ import { createRequire } from "node:module"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
+import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
@@ -1727,18 +1728,18 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // One, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`, and stage1 answers the empty statement of
-  // `tests/wordings/nl2260_empty_statement` with ``Unsupported statement `;` ``,
-  // which quotes the statement and has no words of its own. It was five until
-  // #174 gave the duplicate-symbol wordings -- a duplicate export, the same one
-  // reached through an import, and a duplicate internal name -- codes of their
-  // own (NL3024, NL3026), and two until WP32 S5 gave an import of a name a
-  // module does not export (`tests/link/unknown_export`,
-  // `reject_map_extras_unknown_export`) NL2376. The remainder is named on
-  // stdout by the run, so shrinking this backlog means giving that message a
-  // registry entry, or a literal run of its own first.
-  const UNCODED_BACKLOG = 1
+  // None now. The last was the empty statement of
+  // `tests/wordings/nl2260_empty_statement`, which stage1 answered with
+  // ``Unsupported statement `;` ``, quoting the statement with no words of its
+  // own; the statement dispatch's fallback names the syntax kind in NL2260's
+  // sentence since #320. It was five until #174 gave the duplicate-symbol
+  // wordings -- a duplicate export, the same one reached through an import,
+  // and a duplicate internal name -- codes of their own (NL3024, NL3026), and
+  // two until WP32 S5 gave an import of a name a module does not export
+  // (`tests/link/unknown_export`, `reject_map_extras_unknown_export`) NL2376.
+  // A new one is named on stdout by the run, so the answer is a registry
+  // entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 0
   const wordings = spawnSync(
     "node",
     [
@@ -6067,6 +6068,11 @@ if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
   }
 }
 
+// The `.d.ts` files the two interop sections below write, as `{ stem, file }`.
+// Each section queues its files where it used to spawn tsc on them, and all of
+// them are checked together after the second section (tests/typecheck.js).
+const declarationsForTsc = []
+
 // ---- WP8: interop ------------------------------------------------------------------
 // runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
@@ -6076,7 +6082,8 @@ if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
 //   - generated headers compile under the same flags and link a C driver (including a
 //     function named `double`, bound through NISH_SYMBOL), strings map to nish_str, and
 //     --strict-exports hides internal functions
-//   - the generated .d.ts type-checks with tsc; string functions are commented out
+//   - the generated .d.ts type-checks with tsc (queued, and checked with interop_rng's
+//     after that section); string functions are commented out
 //   - the N-API shim compiles warning-free, builds into a .node addon with the napi
 //     profile, loads in Node, type-checks its arguments, and agrees with the wasm build
 //     of the same module (skipped when the Node headers are not installed)
@@ -6134,13 +6141,6 @@ if (!only || "interop".includes(only)) {
     `-I${runtimeDir}`,
     `-I${interopDir}`,
   ]
-  // Resolve tsc the way `require("typescript")` does, so a worktree without its own node_modules still finds it.
-  let tsc = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tsc = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   /** Compile <src> to build/test/interop/<stem>.ll (or <stem>/ for a multi-module program) plus the requested sidecars. */
   const emit = (src, extra, stem = path.basename(src, ".ts"), multi = false) => {
     const out = multi ? path.join(interopDir, stem) + path.sep : path.join(interopDir, `${stem}.ll`)
@@ -6401,8 +6401,7 @@ if (!only || "interop".includes(only)) {
     if (!fs.existsSync(sidecar(stem, "d.ts"))) {
       continue
     }
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar(stem, "d.ts")], { cwd: root })
-    check(`${stem}.d.ts passes tsc --noEmit --strict`, r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem, file: sidecar(stem, "d.ts") })
   }
 
   // N-API addon.
@@ -6660,14 +6659,7 @@ if (!only || "interop".includes(only)) {
     genFnDts
   )
   if (genFnDts.length > 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_generic_fn", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "interop_generic_fn.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop_generic_fn", file: sidecar("interop_generic_fn", "d.ts") })
   }
   if (genFn.status === 0 && has("wasm-ld")) {
     const genWasm = path.join(interopDir, "interop_generic_fn.wasm")
@@ -6854,14 +6846,7 @@ if (!only || "interop".includes(only)) {
     genMethodDts + genMethodShim
   )
   if (genMethodDts.length > 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("gen_method_export", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "gen_method_export.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "gen_method_export", file: sidecar("gen_method_export", "d.ts") })
   }
   if (genMethod.status === 0 && hasNodeHeaders) {
     const syn = spawnSync("clang", [
@@ -7244,8 +7229,7 @@ if (!only || "interop".includes(only)) {
     resDts
   )
   if (fs.existsSync(sidecar("res_export", "d.ts"))) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("res_export", "d.ts")], { cwd: root })
-    check("res_export.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem: "res_export", file: sidecar("res_export", "d.ts") })
   }
   if (res.status === 0) {
     const syn = spawnSync("clang", [
@@ -7707,14 +7691,7 @@ if (!only || "interop".includes(only)) {
     unsignedMjs
   )
   if (unsigned.status === 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop-unsigned", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "interop-unsigned.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop-unsigned", file: sidecar("interop-unsigned", "d.ts") })
   }
   if (has("wasm-ld")) {
     const wasm = path.join(interopDir, "interop-unsigned.wasm")
@@ -7789,8 +7766,7 @@ if (!only || "interop".includes(only)) {
     arrays.stderr
   )
   if (fs.existsSync(sidecar("arrays", "d.ts"))) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("arrays", "d.ts")], { cwd: root })
-    check("arrays.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem: "arrays", file: sidecar("arrays", "d.ts") })
   }
   if (arrays.status === 0) {
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("arrays", "h")])
@@ -8114,19 +8090,8 @@ if (!only || "interop_rng".includes(only) || only.startsWith("interop_rng")) {
       dts.includes("  // slotDay(s: Slot): number  -- not exported to JS"),
     dts
   )
-  let tscPath = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tscPath = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   if (dts.length > 0) {
-    const r = spawnSync("node", [tscPath, "--noEmit", "--strict", rngFile("d.ts")], { cwd: root })
-    check(
-      "interop_rng.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop_rng", file: rngFile("d.ts") })
   }
 
   // One script for both bridges: each call's answer, or the class and message it threw.
@@ -8269,6 +8234,63 @@ if (!only || "interop_rng".includes(only) || only.startsWith("interop_rng")) {
   } else if (emitted.status === 0) {
     skip("wasm-ld not found: interop_rng wasm loader check skipped")
   }
+}
+
+// ---- WP8: the interop declarations under tsc ------------------------------------------
+// Every `.d.ts` the two sections above queued, each held to what
+// `tsc --noEmit --strict <file>` says about it alone, but in one process and one
+// program: a spawn per file checked the default libs and `@types` once per file,
+// about 2.4 s each. tests/typecheck.js says which files may share a program and why
+// the answer cannot change; the two checks after the loop hold it to that.
+if (declarationsForTsc.length > 0) {
+  // Two probes ride in the same program as the real files. If a type error could
+  // leak into another file's answer, or go missing from its own, the clean probe
+  // passing and the broken one failing on its own line is where it would show.
+  const probeDir = path.join(buildDir, "tsc-probe")
+  fs.mkdirSync(probeDir, { recursive: true })
+  const cleanProbe = path.join(probeDir, "clean.d.ts")
+  const brokenProbe = path.join(probeDir, "broken.d.ts")
+  fs.writeFileSync(cleanProbe, "export declare const fine: number;\n")
+  fs.writeFileSync(brokenProbe, "export declare const broken: NoSuchType;\n")
+  const files = [...declarationsForTsc.map((d) => d.file), cleanProbe, brokenProbe]
+  const results = typeCheckDeclarations(files, root)
+  for (const { stem, file } of declarationsForTsc) {
+    const r = results.get(file)
+    check(`${stem}.d.ts passes tsc --noEmit --strict`, r.ok, r.output)
+  }
+  const clean = results.get(cleanProbe)
+  const broken = results.get(brokenProbe)
+  check(
+    "tsc over many declaration files at once: a type error fails the file it is in, and no other",
+    standsAlone(cleanProbe, fs.readFileSync(cleanProbe, "utf8")) &&
+      standsAlone(brokenProbe, fs.readFileSync(brokenProbe, "utf8")) &&
+      clean.ok &&
+      !broken.ok &&
+      broken.output.includes("broken.d.ts(1,30): error TS") &&
+      broken.output.includes("'NoSuchType'"),
+    `clean.d.ts:\n${clean.output}\nbroken.d.ts:\n${broken.output}`
+  )
+  // A file that can reach past its own module could change what the others in
+  // the program see, so each of these has to be checked in a program of its own.
+  const reaching = [
+    ["a script", "declare const x: number;\n"],
+    ["`declare global`", "export {};\ndeclare global {\n  interface Probe {}\n}\n"],
+    ["`declare module`", 'export {};\ndeclare module "probe" {}\n'],
+    ["`export as namespace`", "export declare const x: number;\nexport as namespace Probe;\n"],
+    ["an import", 'import type { Exports } from "./add";\nexport declare const x: Exports;\n'],
+    ["an import type", 'export declare const x: import("./add").Exports;\n'],
+    ["a re-export", 'export * from "./add";\n'],
+    ["a `path` reference", '/// <reference path="./add.d.ts" />\nexport declare const x: number;\n'],
+    ["a `types` reference", '/// <reference types="node" />\nexport declare const x: number;\n'],
+    ["a `lib` reference", '/// <reference lib="es2022" />\nexport declare const x: number;\n'],
+    ["`no-default-lib`", '/// <reference no-default-lib="true" />\nexport declare const x: number;\n'],
+  ]
+  const wouldShare = reaching.filter(([, text]) => standsAlone("probe.d.ts", text)).map(([what]) => what)
+  check(
+    "tsc over many declaration files at once: a file that reaches past its own module gets a program of its own",
+    wouldShare.length === 0 && standsAlone("probe.d.ts", "export declare const x: number;\n"),
+    `would have shared a program: ${wouldShare.join(", ")}`
+  )
 }
 
 // ---- WP14: self-hosting ---------------------------------------------------------------
@@ -9204,6 +9226,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
       ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
+      // A type parameter list that repeats a name: one diagnostic, on the
+      // first repeat, however many there are.
+      ["reject_generic_duplicate_type_parameter_triple", ["5:19-5:20 NL2302"]],
       // The function and binding forms, all the checker's: one per
       // declaration, the first in source order.
       [
@@ -10513,14 +10538,11 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const ambientDir = path.join(buildDir, "ambient")
   fs.mkdirSync(ambientDir, { recursive: true })
-  let tscBin = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tscBin = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   const declarations = path.join(root, "runtime", "nish.d.ts")
-  /** Type-check `files` against the ambient declarations with a project of their own. */
+  /**
+   * Type-check `files` against the ambient declarations with a project of their
+   * own: `tsc -p` on the config written here, in this process (tests/typecheck.js).
+   */
   const typeCheck = (name, files) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`)
     fs.writeFileSync(
@@ -10536,8 +10558,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
         files: [declarations, ...files],
       })
     )
-    const r = spawnSync("node", [tscBin, "-p", config], { cwd: root, encoding: "utf8" })
-    return { ok: r.status === 0, output: `${r.stdout}${r.stderr}` }
+    return typeCheckProject(config, root)
   }
 
   const own = typeCheck("src", [])

@@ -192,7 +192,11 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
       checkExpression(ctx, stmt.children[0], scope, -1)
       return true
     default:
-      ctx.error(stmt, `Unsupported statement \`${ctx.textOf(stmt)}\``)
+      // Every other statement kind is refused before a body is checked — by
+      // Phase 0, the parser or the pass 1 sweep — so what arrives here is the
+      // empty statement `;`, named by its syntax kind as stage0 named it
+      // (NL2260, `tests/cases/reject_stmt_empty`).
+      ctx.error(stmt, `Unsupported statement in Phase 1: ${syntaxKindName(stmt.kind)}`)
       return false
   }
 }
@@ -534,7 +538,7 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
   // so they are swept first, in the order the source has them.
   const slot = typeParameterSlot(node)
   if (slot >= 0) {
-    sweepNested(ctx, node.children[slot])
+    sweepTypeParameters(ctx, node.children[slot])
   }
   // An interface's `extends`, written after its type parameters (the fourth
   // child, there only when written).
@@ -760,6 +764,31 @@ const refuseMembers = (ctx: CheckContext, owner: Node, members: Node): void => {
       ctx.error(member.children[0], `Members of \`${name}\` must have plain identifier names`)
     }
     sweepForms(ctx, member, owner)
+  }
+}
+
+/**
+ * A declaration's type parameter list, each parameter swept in source order
+ * after its name is asked whether an earlier one has it (NL2302). A second
+ * `T` would make every `T` in the signature ambiguous, and the rule needs no
+ * type, so it is the sweep's: a template nothing instantiates is refused too
+ * (`tests/cases/reject_generic_duplicate_type_parameter_template`).
+ *
+ * The first duplicate is the one reported, on the name that repeats: the
+ * sweep reports one diagnostic per declaration (`ctx.errored`), so in
+ * `<T, T, T>` the third `T` is the same mistake again and is not named
+ * (`reject_generic_duplicate_type_parameter_triple`).
+ */
+const sweepTypeParameters = (ctx: CheckContext, list: Node): void => {
+  for (let i: i32 = 0; i < list.children.length; i++) {
+    const param = list.children[i]
+    for (let j: i32 = 0; j < i; j++) {
+      if (list.children[j].text === param.text) {
+        ctx.error(param, `Duplicate type parameter \`${param.text}\``)
+        break
+      }
+    }
+    sweepNested(ctx, param)
   }
 }
 

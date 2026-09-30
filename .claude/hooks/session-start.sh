@@ -60,6 +60,20 @@ else
   seed="MISSING (bash scripts/fetch-seed.sh failed; npm test cannot build its compiler without one)"
 fi
 
+# The same seed as NISH_BOOTSTRAP, so that `npm test` also runs nish-cmp and
+# the stage1 fuzz, which compare HEAD with the last release. Without it they
+# are a counted skip -- a third one beside the two wasi skips, which the
+# definition of done does not allow. CI leaves the variable unset in its
+# `test` job and runs nish-cmp as a job of its own, so this is for sessions
+# only. A value already set wins.
+bootstrap=""
+if [ -z "${NISH_BOOTSTRAP:-}" ] && [ -x "$PWD/build/seed/bin/nish" ]; then
+  bootstrap="$PWD/build/seed/bin/nish"
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    echo "export NISH_BOOTSTRAP=\"$bootstrap\"" >> "$CLAUDE_ENV_FILE"
+  fi
+fi
+
 # Say what the session actually got, so the agent can see at a glance whether
 # `npm test` will run the real suite or the degraded one.
 echo "session-start: node $(node --version), npm $(npm --version)"
@@ -71,3 +85,4 @@ for tool in "${TOOLS[@]}"; do
   fi
 done
 printf 'session-start: %-8s %s\n' seed "$seed"
+printf 'session-start: %-8s %s\n' NISH_BOOTSTRAP "${NISH_BOOTSTRAP:-${bootstrap:-unset (npm test will skip nish-cmp and the stage1 fuzz)}}"
