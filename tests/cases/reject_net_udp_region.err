@@ -1,0 +1,2 @@
+reject_net_udp_region.ts:21:5
+`udpRecvFrom` writes memory a task of `s` may read, before the scope joins

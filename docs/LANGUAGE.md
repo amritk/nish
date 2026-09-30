@@ -3466,7 +3466,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose` — each a global too ([`nish:net`](#nishnet-addresses-and-non-blocking-tcp)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -3881,14 +3881,15 @@ its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
 [wp33-round-trip.md](wp33-round-trip.md) §3.5 gives the translation.
 
-### `nish:net`: addresses and non-blocking TCP
+### `nish:net`: addresses, non-blocking TCP and UDP
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
-and reads and writes bytes, and every socket is **non-blocking**, so a call that
+and reads and writes bytes, or binds and trades datagrams, and every socket is
+**non-blocking**, so a call that
 would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop. Every socket is also **close-on-exec**, so a child that
-`spawnSync` starts inherits none of them. All eight functions are C in
+`spawnSync` starts inherits none of them. All eleven functions are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
 others; section GC leaves every one of them out of a program that calls none
@@ -3912,7 +3913,8 @@ negated. The codes a loop branches on are **Linux's numbers on every platform**:
 `-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
 connection was reset, `-98` the address is in use and `-22` a bad argument; the
 Darwin runtime translates its own. Any other failure is the host's `-errno`
-(`-9` for a descriptor that is not open, on both). A number rather than a
+(`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
+answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
 `Result`, because no builtin answers one and a failure here is routine — the
 same convention `signalFd` set — and because a number allocates nothing: no
 `nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
@@ -3928,15 +3930,56 @@ big-endian. So `127.0.0.1:8080` is ten zeros, `255 255`, `127 0 0 1`, `31 144`
 server that accepts a million connections allocates nothing to learn who they
 are from. An array longer than 18 bytes is fine; the rest is not touched.
 
+#### UDP
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
+| `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to the address `to` in one `sendmsg`: the bytes sent. A `segment` above `0` is **GSO**: the kernel cuts the payload into datagrams of `segment` bytes, the last one shorter, so one call sends many. `ecn` is the two ECN bits of the IP header (`0` not ECN-capable, `1` ECT(1), `2` ECT(0), `3` CE). A `to` shorter than 18 bytes, a `segment` outside `0..65535` or an `ecn` outside `0..3` is `-22`, and so is a payload the kernel will not cut (more segments than it takes in one call, or a segment the route cannot carry); `-11` when the send buffer is full. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
+| `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`: its length, or `-11` when none is waiting. The sender's address goes into `from`, and two numbers into `meta`: `meta[0]` the **GRO** segment size, the size of each datagram the kernel coalesced into this one (`0` when it coalesced none), and `meta[1]` the ECN bits the datagram arrived with. A `from` shorter than 18 bytes or a `meta` shorter than 2 is `-22` before anything is taken. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`, `net_udp_unchecked`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
+
+A datagram carries no stream, so an echo is `udpRecvFrom` and then `udpSendTo`
+back to `from`, which is already an address; the `net_` block of
+`tests/run.js` drives `net_udp_echo` from Node's `dgram`, two hundred
+datagrams in a round, and requires every byte back and the arena flat. An
+empty datagram is a datagram: `udpRecvFrom` answers `0` for it, which is how
+`net_udp_echo` ends a round. Every address is the
+[18-byte form](#the-address-form), IPv4 as `::ffff:a.b.c.d`, and a socket that
+is IPv4 — bound to an IPv4 host, or to `"::"` on a kernel without IPv6 — sends
+to such an address as IPv4 (`net_udp_calls`).
+
+**Segmentation offload.** On Linux, one `udpSendTo` of 4,800 bytes with
+`segment = 1200` leaves as four datagrams of 1,200, which a Node `dgram` socket
+receives one by one. A socket bound with flag `2` receives what one such send
+left as **one** datagram of up to 64 KB with `meta[0] == 1200`, while a socket
+without it receives the four apart, each with `meta[0] == 0`
+(`net_udp_offload`, run by the `net_` block). A program that gets
+`meta[0] > 0` walks the buffer in steps of that size, the last datagram
+possibly shorter. The kernel coalesces only datagrams of one flow, and only
+those that arrive after the option is set, which is why it is a flag of
+`udpBind`; on loopback it coalesces what left as one GSO send, not datagrams
+sent one by one. The ECN bits a send asks for arrive in the receiver's
+`meta[1]` (`net_udp_offload`). Measured on loopback, Nish sender to Nish
+receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
+1,760,000 a second sent with `segment = 1200` over 49,200-byte sends.
+
+**Darwin has none of the three.** There `udpSendTo` with a `segment` or an
+`ecn` above `0`, and `udpBind` with flag `2`, answer `-95`, and `meta` is
+always `0, 0`. That branch is compiled by CI's Darwin rows and run by nothing.
+On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
+there by `tcpAccept` on a datagram socket instead, above), so the Darwin
+answers are a statement about the code, not about a test.
+
 #### Bounds
 
-`netRead` and `netWrite` check `0 <= off <= off + len <= buf.length` **in the
-compiled code**, before the call, the way `dst.set(src, at)` checks the range it
+`netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
+len <= buf.length` **in the compiled code**, before the call, the way `dst.set(src, at)` checks the range it
 writes, and a range outside it panics with the same words, `slice out of range:
-[4, 9) of length 8`, exit 1 (`net_tcp_bounds`). A negative `off` or `len` fails
-it. `--unchecked-indexing` drops the check with every other one
-(`net_tcp_unchecked`). A `peer` or `out` array shorter than 18 bytes is not a
-panic but `-22`, from the runtime, because the length is the argument's
+[4, 9) of length 8`, exit 1 (`net_tcp_bounds`, `net_udp_bounds`). A negative
+`off` or `len` fails it. `--unchecked-indexing` drops the check with every other
+one (`net_tcp_unchecked`, `net_udp_unchecked`). A `peer`, `out`, `to` or `from`
+array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
+`-22`, from the runtime, because the length is the argument's
 property rather than the program's arithmetic.
 
 #### Types, threads and wasm
@@ -3946,28 +3989,37 @@ property rather than the program's arithmetic.
   wire a fact about the machine. Anything else is `` `netRead` fills a `u8[]`,
   got i32[] `` (NL2402; `reject_net_element`) for a buffer the call writes, and
   `` `netWrite` sends from a `u8[]`, got string `` (NL2405;
-  `reject_net_write_element`) for the one it reads. A descriptor, an offset, a
-  length, a port, a backlog and `how` are `i32` in both number modes, and an
+  `reject_net_write_element`, `reject_net_udp_send_element`) for the one it
+  reads. `udpRecvFrom`'s `meta` holds numbers rather than bytes, a segment size
+  up to 65,535 among them, so it is an `i32[]`, and anything else is
+  `` `udpRecvFrom` fills an `i32[]`, got u8[] `` (NL2406;
+  `reject_net_udp_meta_element`). A descriptor, an offset, a length, a port, a
+  backlog, `how`, the flags, a segment size and the ECN bits are `i32` in both
+  number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
-- **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer` and
-  `netRead`'s `buf` are written, so a `readonly u8[]` there is refused as a
-  store through it is (`reject_net_readonly`, `reject_net_accept_readonly`), a
-  parameter one of them fills is never `readonly` in the IR, and `netWrite`'s
-  `buf` may be `readonly`.
+- **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
+  `netRead`'s `buf` and `udpRecvFrom`'s `buf`, `from` and `meta` are written, so
+  a `readonly` array there is refused as a store through it is
+  (`reject_net_readonly`, `reject_net_accept_readonly`,
+  `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`), a parameter one of
+  them fills is never `readonly` in the IR, and `netWrite`'s `buf` and
+  `udpSendTo`'s `buf` and `to` may be `readonly` (`net_udp_calls`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
   write its caller can see, so none may be made in a `scope()` task
-  (`reject_net_task`) or a parallel body (`reject_net_parallel`), and a call
-  that writes an array is refused in a scope's region on one a task may read,
-  as `fill` is (`reject_net_region`).
+  (`reject_net_task`, `reject_net_udp_task`) or a parallel body
+  (`reject_net_parallel`, `reject_net_udp_parallel`), and a call that writes an
+  array is refused in a scope's region on one a task may read, as `fill` is
+  (`reject_net_region`, and `reject_net_udp_region` for `meta`).
 - **On wasm.** A `wasm32` target and the `wasi` profile have no sockets for these
   to reach, and `runtime-net.c` is empty there, so every call is refused by the
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
-  `reject_net_import_wasm`).
+  `reject_net_import_wasm`, `reject_net_udp_wasm`).
 - **Not yet.** There is no `tcpConnect` (`reject_net_unknown_export`), no name
-  resolution, and nothing to wait on readiness with; UDP and the readiness loop
-  are the next two slices of WP34 N5. Until the loop lands, a program waits for
-  a connection or a byte by calling again on `-11`, as `net_tcp_echo` does.
+  resolution, no `sendmmsg` or `recvmmsg`, and nothing to wait on readiness
+  with; the readiness loop is the last slice of WP34 N5. Until it lands, a
+  program waits for a connection, a byte or a datagram by calling again on
+  `-11`, as `net_tcp_echo` and `net_udp_echo` do.
 
 **The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class C**, as `signalFd`'s is: Node's sockets are asynchronous only, and a
@@ -3977,7 +4029,7 @@ so `npm run check` types these programs, and under `runtime/nish.mjs` each
 function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
-`net_` block of `tests/run.js`).
+`net_` block of `tests/run.js`, for `netAddress` and `udpBind`).
 
 ### Arrays and strings as receivers
 

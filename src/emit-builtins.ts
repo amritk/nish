@@ -32,10 +32,10 @@ import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
   isNetExport,
-  isNetRangeCall,
   NET_INT,
   NET_RANGE,
   NET_STRING,
+  netRangeBuffer,
   netSignature,
   netSymbol,
 } from "./nish-modules"
@@ -940,10 +940,11 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // WP34 N5: one symbol each, and the slice panic behind the range check of
-  // `netRead` and `netWrite` unless `--unchecked-indexing` dropped it.
+  // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` unless
+  // `--unchecked-indexing` dropped it.
   if (isNetExport(name)) {
     out.push(netSymbol(name))
-    if (isNetRangeCall(name) && !uncheckedIndexing) {
+    if (netRangeBuffer(name) >= 0 && !uncheckedIndexing) {
       out.push("nish_panic_slice")
     }
     return out
@@ -962,17 +963,19 @@ export const identifierBuiltinCalleesNamed = (
 /**
  * One call into runtime-net.c, its arguments emitted left to right as every
  * call's are and passed as `netSignature` spells them: an `i32` as itself, a
- * string as its `i8*`, a `u8[]` as its header, whose `len` and `data` the
- * runtime reads, and an offset or a length (`n`) widened to an `i64` as an
- * index is. The answer is the runtime's `i32` in either number mode.
+ * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
+ * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
+ * to an `i64` as an index is. The answer is the runtime's `i32` in either
+ * number mode.
  *
- * `netRead` and `netWrite` take the range `[off, off + len)` of their buffer,
- * checked here the way `dst.set(src, at)` checks the range it writes, through
- * the same panic and with the same words: `0 <= off <= off + len <=
- * buf.length`. Both are `i32`s, so their sum cannot wrap an `i64`, and the
- * unsigned compares refuse a negative one. The buffer's length is read after
- * every argument is evaluated, as JavaScript reads it, and
- * `--unchecked-indexing` drops the check with the rest.
+ * `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` take the range `[off,
+ * off + len)` of the buffer before their first `n`, checked here the way
+ * `dst.set(src, at)` checks the range it writes, through the same panic and
+ * with the same words: `0 <= off <= off + len <= buf.length`. Both are
+ * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
+ * a negative one. The buffer's length is read after every argument is
+ * evaluated, as JavaScript reads it, and `--unchecked-indexing` drops the
+ * check with the rest.
  */
 const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   const fn = emitter.fn
@@ -1004,13 +1007,14 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (buffers) {
     emitter.declareType(ARRAY_TYPE)
   }
-  if (isNetRangeCall(name) && !emitter.opts.uncheckedIndexing && values.length === 4) {
-    const end = fn.emitValue(`add i64 ${values[2]}, ${values[3]}`)
+  const at = netRangeBuffer(name)
+  if (at >= 0 && !emitter.opts.uncheckedIndexing && values.length === params.length) {
+    const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
     const field = fn.emitValue(
-      `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[1]}, i64 0, i32 0`
+      `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`
     )
     const size = fn.emitValue(`load i64, i64* ${field}${emitter.align8()}`)
-    emitSliceCheck(emitter, values[2], end, size, true, "net")
+    emitSliceCheck(emitter, values[at + 1], end, size, true, "net")
   }
   return fn.emitValue(`call i32 ${emitter.useRuntime(netSymbol(name))}(${parts.join(", ")})`)
 }
