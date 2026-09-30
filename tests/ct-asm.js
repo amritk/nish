@@ -984,6 +984,11 @@ const STACK_CORNERS = [
     null,
     ["movl %esi, -12(%rsp)", "movq %rdi, -8(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"],
   ],
+  // The other direction: a secret spilled eight bytes wide and reloaded four
+  // bytes narrow, or one byte zero-extended, is still secret, because a read
+  // takes the taint of every byte it covers.
+  ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"]],
+  ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movzbl -13(%rsp), %eax", "movq (%rdx,%rax,8), %rax"]],
   // A pre-indexed store and a post-indexed load meet at the same slot.
   ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
 ]
