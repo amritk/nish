@@ -302,6 +302,12 @@ const armOperand = (text) => {
  * store only adds taint.
  */
 const x86Width = (mnemonic, others) => {
+  // A sign- or zero-extending move reads what its first suffix names, not
+  // its destination's width: `movslq` loads four bytes into a 64-bit register.
+  const extend = mnemonic.match(/^mov[sz]([bwl])[wlq]$/)
+  if (extend !== null) {
+    return [{ b: 1, w: 2, l: 4 }[extend[1]], true]
+  }
   const register = others.find((op) => !op.memory && op.registers.length > 0)
   if (register !== undefined) {
     const name = register.text.replace(/^\*/, "")
@@ -970,6 +976,14 @@ const STACK_CORNERS = [
   // `popcnt` is not a `pop`, and `cltq` leaves %rdx alone.
   ["x86-64", "b", "load", ["movl $0, %eax", "popcntl %esi, %eax", "movl (%rdi,%rax,4), %eax"]],
   ["x86-64", "b", "load", ["movq %rsi, %rdx", "cltq", "movl (%rdi,%rdx,4), %eax"]],
+  // A public four-byte spill beside a secret one, reloaded sign-extended: the
+  // reload reads its own four bytes and no more, so the index stays public.
+  [
+    "x86-64",
+    "a",
+    null,
+    ["movl %esi, -12(%rsp)", "movq %rdi, -8(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"],
+  ],
   // A pre-indexed store and a post-indexed load meet at the same slot.
   ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
 ]
@@ -1087,8 +1101,8 @@ const cornerMisses = () => {
     const target = CT_TARGETS.find((t) => t.name === name)
     const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
     const found = ctViolations(body, spec, target)
-    if (!found.some((v) => v.kind === kind)) {
-      missed.push(`${name}, expected ${kind}: ${body.join("; ")}`)
+    if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
+      missed.push(`${name}, expected ${kind ?? "no violation"}: ${body.join("; ")}`)
     }
   }
   const lines = CALL_LISTING.split("\n")
