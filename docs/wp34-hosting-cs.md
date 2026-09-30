@@ -330,19 +330,32 @@ and A1 need a socket.
 | --- | --- | --- | --- |
 | **K1** | #287 (the `std/` walker nested modules needed), #288, #291, #294, #298 | `nish/crypto/sha256`, `nish/crypto/sha512` (SHA-512 and SHA-384), `nish/crypto/hmac`, `nish/crypto/hkdf`, `nish/crypto/ct`, `nish/crypto/base64url` | Wycheproof's HMAC and HKDF vectors, a third-party file with its own notice. N6's disassembly check over every K1 module, and its weekly timing run over the MAC comparison |
 | **K4** | #289 | `nish/crypto/x25519` | Wycheproof `x25519`, as for K1. N6's disassembly check over the field arithmetic and the ladder, and its weekly timing run |
+| **K2** | #332 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, and RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: the check refuses a loop's own back-edge, so today it reads the Poly1305 block, its final reduction and the tag compare (`ct_asm_chacha20poly1305`). Its weekly timing run |
+| **K3** | #340 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | The key schedule, packing and the block loops by disassembly: `ct_asm_aes` reads one round, one GHASH multiply and the tag compare. AES-NI and PCLMUL as builtins, per §6 S1, when a profile asks for them. AES-192 is out of scope |
+| **K5** | #336 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | fiat's field multiply and the window's doubling and addition by disassembly: `ct_asm_p256` reads the field square, the scalar multiply, the conditional move and one table entry, and the multiply waits on the aarch64 model's reading of an `stp` spill (#334). A 64-bit or fixed-base-table P-256, when a profile of signing asks for one |
 
 Each module reproduces its specification's published vectors in a
 `tests/link/crypto_*` program: FIPS 180-4 and the NIST examples, RFC 4231,
-RFC 5869 Appendix A, RFC 4648 §10, and RFC 7748 §5.2 (the iterated vector to
-1,000) and §6.1. Neither lane waited for its **Needs** column. The modules
+RFC 5869 Appendix A, RFC 4648 §10, RFC 7748 §5.2 (the iterated vector to
+1,000) and §6.1, RFC 8439 §2 and Appendix A, RFC 9001 Appendix A, FIPS 197 and the GCM
+test cases, and RFC 6979 A.2.5. K3 and K5 also run Wycheproof's `aes_gcm` and
+`ecdsa_secp256r1_sha256` (`tests/link/crypto_wycheproof`, with its own
+notice). K1 and K4 did not wait for their **Needs** column: the modules
 export functions, classes and constants and no enum or alias, so N1 was not
 needed, and they are written branch-free on secrets by masking, so N6 is what
-will *verify* them rather than what they are written with. N6 has landed
-(#310), but its assembly check reads only its own fixtures so far
-(`tests/cases/ct_asm_*`): until it is pointed at these modules, being
-branch-free on secrets is their discipline, stated in each header, and not a
-checked fact. [`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
-lists what each module exports and the rules they share.
+*verifies* them rather than what they are written with. N6 has landed (#310),
+and its assembly check (`tests/ct-asm.js`, on x86-64 and aarch64) reads only
+golden fixtures, one module each, so a module is verified through a copy of
+its constant-time cores that a `tests/link/` case holds to the original. K2,
+K3 and K5 have such fixtures (`ct_asm_chacha20poly1305`, `ct_asm_aes`,
+`ct_asm_p256`); K1 and K4 have only `ct_asm_mac`, the two loop shapes their
+comparisons are built from. What no fixture holds is each module's
+discipline, stated in its header, and not a checked fact. K3's GHASH multiply
+is adapted from BearSSL and K5's field and scalar arithmetic is ported from
+fiat-crypto; both keep their notice, and their licence texts ship beside them
+and are named in every presence gate of `release.yml`.
+[`std/README.md`](../std/README.md#nishcrypto--the-primitives-under-tls-13)
+lists what each module exports, what is verified, and the rules they share.
 
 **One test suite belongs to no single lane:** a Nish server and a Nish client
 over loopback, for every carrier. It is what catches two lanes that each pass

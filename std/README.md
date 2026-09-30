@@ -19,12 +19,17 @@ whatever program imports it, and subject to the same rules as `examples/` or
 ## `nish/crypto` — the primitives under TLS 1.3
 
 The first lanes of [WP34](../docs/wp34-hosting-cs.md) §5: K1's hashes, MACs and
-key derivation, and K4's key exchange, in pure Nish (decision S1), each module
-imported by its own specifier. Every one is written from its specification
-rather than ported, and reproduces that specification's published vectors in
-its `tests/link/crypto_*` programs. The performance gate compiles every module
-with no diagnostics under both `--number-mode i32` and `f64`, and the hashes,
-HMAC, HKDF and X25519 also run their vectors in `f64` (`crypto_*_f64`).
+key derivation, K2's and K3's AEADs, K4's key exchange and K5's signatures, in
+pure Nish (decision S1), each module imported by its own specifier. Every one
+is written from its specification, with two exceptions that keep their
+upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL, and
+`crypto/p256.ts`'s field and scalar arithmetic is ported from fiat-crypto
+([`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)). Each reproduces its
+specification's published vectors in its `tests/link/crypto_*` programs. The
+performance gate compiles every module with no diagnostics under both
+`--number-mode i32` and `f64`, and the hashes, HMAC, HKDF, X25519,
+ChaCha20-Poly1305, AES-GCM and P-256 also run their vectors in `f64`
+(`crypto_*_f64`).
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |
@@ -35,6 +40,9 @@ HMAC, HKDF and X25519 also run their vectors in `f64` (`crypto_*_f64`).
 | [`crypto/ct.ts`](./crypto/ct.ts) | `timingSafeEqual(a, b)`, which reads every byte whatever it holds, and `timingSafeEqualAt(a, aOff, b, bOff, len)` over two windows, which answers `false` for a window outside its array. Two lengths that differ answer `false` at once, because a length is public | — |
 | [`crypto/base64url.ts`](./crypto/base64url.ts) | `base64urlEncode(data)` and `base64urlDecode(text)`, unpadded. Decoding is strict, so every byte string has one spelling: a `=`, a character outside the alphabet, a length of 1 mod 4 or nonzero unused low bits answer `null` | RFC 4648 §5, §10 |
 | [`crypto/x25519.ts`](./crypto/x25519.ts) | `x25519(scalar, u)` and `x25519Base(scalar)`, on ten 25.5-bit limbs in `i64`. Either answers `null` unless its arguments are `X25519_SIZE` (32) bytes; the scalar is clamped on a copy | RFC 7748 §5.2, §6.1 |
+| [`crypto/chacha20poly1305.ts`](./crypto/chacha20poly1305.ts) | `chacha20Poly1305Seal(key, nonce, aad, plaintext)`, which answers the ciphertext followed by the 16-byte tag, and `chacha20Poly1305Open`, which checks the whole tag before it decrypts anything and answers `null` for a message that does not authenticate. Beneath them `chacha20Block`, `chacha20`, `chacha20QuarterRound`, `poly1305` and `poly1305KeyGen`, and `chacha20HeaderMask`, QUIC's 5-byte header-protection mask. Every input of the wrong length answers `null` | RFC 8439 §2, RFC 9001 §5.4.4 |
+| [`crypto/aes.ts`](./crypto/aes.ts) | AES-128 and AES-256, bitsliced four blocks at a time with the Boyar–Peralta S-box circuit, so no table is read: `aesKey(key)` expands a 16- or 32-byte key into an `AesKey`, then `aesEncryptBlock`, `aesGcmSeal` / `aesGcmOpen` (tag last, checked in full before anything is decrypted; any non-empty IV) and `aesHeaderMask`. AES-192 is out of scope, and a wrong length answers `null` | FIPS 197, SP 800-38D, RFC 9001 §5.4.3, Wycheproof `aes_gcm` |
+| [`crypto/p256.ts`](./crypto/p256.ts) | ECDSA over P-256 with RFC 6979's deterministic nonces: `p256PublicKey(priv)` (65-byte uncompressed SEC1), `p256Sign` / `p256Verify` over a digest and `p256SignSha256` / `p256VerifySha256` over a message; a signature is `r` and `s`, 32 big-endian bytes each, not DER. A malformed key, a point off the curve or an `r` or `s` out of range answers `null` or `false`, never a panic | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` |
 
 Three rules hold across the modules:
 
@@ -47,14 +55,35 @@ Three rules hold across the modules:
 - **An all-zero X25519 result is returned, not refused.** It is what a
   low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol; TLS
   1.3 (WP34 T1) makes it. A key exchange outside TLS has to make it itself.
-- **Constant time by construction, not yet by proof.** No module branches on,
-  or indexes by, a secret: comparisons OR the differences into one word and
-  test it once, the ladder swaps with a mask and always runs 255 steps, and
-  base64url maps characters by arithmetic on range masks rather than a table.
-  Every branch is on a length, a loop counter or a bit position. What checks
-  that the machine code kept that shape is WP34 N6 — the `ctSelect` / `ctEq`
-  builtins behind an optimisation barrier, and a disassembly check — and it is
-  not built yet, so this is the discipline and not a verified property.
+- **Constant time by construction, and verified where the check reaches.** No
+  module branches on, or indexes by, a secret: comparisons OR the differences
+  into one word and test it once, the ladder swaps with a mask and always runs
+  255 steps, AES reads no table, P-256's window reads all sixteen entries and
+  keeps one by mask, and base64url maps characters by arithmetic on range masks
+  rather than a table. Every branch is on a length, a loop counter or a bit
+  position. WP34 N6 checks that the machine code kept that shape:
+  `tests/ct-asm.js` disassembles golden fixtures on x86-64 and aarch64 and
+  refuses a branch, a call or a secret-addressed load in them. What it holds,
+  per module, is what that module's header says:
+  - `tests/cases/ct_asm_mac` pins the two loop shapes the others are built
+    from, a full tag compare and a masked table read. `crypto/ct.ts` and
+    `crypto/hmac.ts`'s verifiers compare in the first shape, and
+    `crypto/x25519.ts`'s ladder and `crypto/base64url.ts` select by mask, but
+    none of the K1 or K4 modules is itself in a fixture, so they remain
+    discipline.
+  - `tests/cases/ct_asm_chacha20poly1305`: Poly1305's key clamp, one block,
+    the final reduction with `s`, and the tag compare. The ChaCha20 rounds and
+    the loops that drive both halves remain discipline.
+  - `tests/cases/ct_asm_aes`: one full bitsliced round, one GHASH multiply and
+    the tag compare. Packing, the key schedule and the loops over blocks
+    remain discipline.
+  - `tests/cases/ct_asm_p256`: fiat's field square, its scalar multiply, its
+    conditional move and one entry of the table read. The field multiply
+    (which the aarch64 model misreads, #334) and the window's doubling and
+    addition, straight lines of calls the check refuses, remain discipline.
+
+  The SHA-2 hashes and HKDF are additions, rotations and xors that branch
+  only on lengths, and are not in a fixture either.
 
 ## How a program imports it
 
