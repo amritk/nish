@@ -64,7 +64,8 @@ import {
   isAssignmentOperator,
   isAssignmentTarget,
   isPushCall,
-  builtinWrittenArgument,
+  builtinArgumentLetters,
+  isWrittenArgument,
   isStringMethodCall,
   isTemplateExpression,
   rangedStoreOf,
@@ -840,9 +841,10 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE)
     }
-    // WP34 N3: `crypto.getRandomValues(p)` writes every element of `p` and
+    // WP34 N3 and N5: `crypto.getRandomValues(p)` writes every element of
+    // `p`, and `netRead(fd, p, off, len)` the range it reads into, and each
     // keeps nothing, as `p.fill(v)` would; without this `p` would be `readonly`.
-    if (builtinWrittenArgument(program, owner) !== null) {
+    if (isWrittenArgument(builtinArgumentLetters(program, owner), index)) {
       return use(USE_WRITE)
     }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
@@ -1312,10 +1314,7 @@ class FactCollector {
       this.addCallees(builtinCallees(program, table, node))
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
-      const written = builtinWrittenArgument(program, node)
-      if (written !== null) {
-        this.noteArrayWrite(node, written)
-      }
+      this.noteWrittenArguments(node)
       return
     }
     if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {
@@ -1651,6 +1650,17 @@ class FactCollector {
     }
   }
 
+  /** Every array a builtin call writes the elements of (`builtinArgumentLetters`), each a write of its own. */
+  noteWrittenArguments(call: Node): void {
+    const letters = builtinArgumentLetters(this.unit.program, call)
+    const args = call.children[1].children
+    for (let i = 0; i < args.length; i++) {
+      if (isWrittenArgument(letters, i)) {
+        this.noteArrayWrite(call, args[i])
+      }
+    }
+  }
+
   /** WP7: `toI32`, `parseInt`, `readFileSync` and the rest, called by plain identifier. */
   collectIdentifierBuiltinFacts(node: Node): void {
     if (node.kind !== N_CALL || node.children[0].kind !== N_IDENT) {
@@ -1664,16 +1674,20 @@ class FactCollector {
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
+    const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
     if (imported.length > 0) {
       this.addCallees(
         imported.indexOf(".") < 0
-          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
+          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
       )
-      return
+    } else {
+      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node, unchecked))
     }
-    this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node))
+    // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
+    // are handed.
+    this.noteWrittenArguments(node)
   }
 }
 

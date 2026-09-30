@@ -12887,6 +12887,124 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin-host-facts -->
 
+### `nish:net`: `tcpListen`, `netRead` and `netWrite`
+
+Sockets (WP34 N5). Each function is one call into `runtime/runtime-net.c`
+answering an `i32`, a negative errno on failure, and every one is a write: it
+changes the kernel's state of a socket, so no two calls fold into one. A buffer
+travels as its array header. `netRead` and `netWrite` check `0 <= off <= off +
+len <= buf.length` before the call with the `slice` check `dst.set` uses, which
+is the `net.fail` block and its `noreturn` panic; `--unchecked-indexing`
+removes both. The buffer `netRead` fills keeps `nocapture` and loses
+`readonly`, and neither call is `willreturn`, because a blocking socket the
+program inherited can wait
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-and-non-blocking-tcp)).
+
+<!-- cookbook:begin builtin-net -->
+```ts
+// WP34 N5: `nish:net`. Each call is one call into runtime-net.c answering an
+// `i32`; `netRead` checks its range in the IR first, through the slice panic,
+// and the buffer it fills is `nocapture` but not `readonly`. `netWrite`'s is
+// `readonly`. Neither is `willreturn`: a blocking socket the program inherited
+// can wait.
+import { netRead, netWrite, tcpListen } from "nish:net"
+
+export const listen = (port: i32): i32 => tcpListen("::", port, 128)
+
+export const echoOnce = (fd: i32, buf: u8[]): i32 => {
+  const n = netRead(fd, buf, 0, buf.length)
+  return n > 0 ? netWrite(fd, buf, 0, n) : n
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"::\00" }, align 8
+
+declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #1
+declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @listen(i32 noundef %port) #0 {
+entry:
+  %0 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 128)
+  ret i32 %0
+}
+
+define noundef i32 @echoOnce(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf) #1 {
+entry:
+  %n.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_net_read(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3)
+  store i32 %10, i32* %n.addr, align 4
+  %11 = load i32, i32* %n.addr, align 4
+  %12 = icmp sgt i32 %11, 0
+  br i1 %12, label %cond.true, label %cond.false
+
+cond.true:
+  %13 = load i32, i32* %n.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = add i64 0, %14
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %17 = load i64, i64* %16, align 8
+  %18 = icmp ule i64 0, %15
+  %19 = icmp ule i64 %15, %17
+  %20 = and i1 %18, %19
+  br i1 %20, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 0, i64 %15, i64 %17)
+  unreachable
+
+net.ok.1:
+  %21 = call i32 @nish_net_write(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %14)
+  br label %cond.end
+
+cond.false:
+  %22 = load i32, i32* %n.addr, align 4
+  br label %cond.end
+
+cond.end:
+  %23 = phi i32 [ %21, %net.ok.1 ], [ %22, %cond.false ]
+  ret i32 %23
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+```
+<!-- cookbook:end builtin-net -->
+
 ### `Math.random`
 
 `nish_random` mutates global state (effect `write`), so `coin` is not pure.
@@ -13905,6 +14023,14 @@ declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocap
 declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_signal_fd() #2
 declare noundef i32 @nish_read_signal(i32 noundef) #5
+declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
+declare noundef i32 @nish_net_local_port(i32 noundef) #2
+declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_tcp_accept(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #5
+declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #5
+declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #5
+declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_net_close(i32 noundef) #5
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2

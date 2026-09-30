@@ -1,0 +1,2 @@
+reject_net_region.ts:19:5
+`netRead` writes memory a task of `s` may read, before the scope joins

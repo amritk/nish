@@ -1203,6 +1203,19 @@ path cannot be stat'd, so test `m !== m`), and `signalFd()` / `readSignal(fd)`:
 call `signalFd()` once at the top of `main`, then `readSignal(fd)` blocks until
 SIGTERM or SIGINT and answers 15 or 2. None of them exists on a wasm target.
 
+**Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
+backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
+`netWrite(fd, buf, off, len)`, `netShutdown(fd, how)`, `netClose(fd)`,
+`netLocalPort(fd)` and `netAddress(out, host, port)`. Every one answers an
+`i32`: **a negative number is a failure, not an exception** — `-11` means "would
+block, call again", `-32` a peer that has gone (never SIGPIPE), `-98` the port
+is in use, `-22` a bad argument. Every socket is non-blocking, and there is no
+`async`, no callback and no `tcpConnect` yet: your `main` is the loop. Buffers
+are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
+the port big-endian); hosts are numeric literals, because there is no DNS.
+`netRead` / `netWrite` panic on a range outside the buffer. None exists on a
+wasm target, and under Node each throws.
+
 **Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
 — see below.
 
