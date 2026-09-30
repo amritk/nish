@@ -24,6 +24,12 @@ PASS  a 2-byte digest signs and verifies
 PASS  and is the value 0x0102
 wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by the DER reader, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof: every case answers what the file expects
+wycheproof ecdsa_secp256r1_sha256_p1363: 262 cases, 173 valid verified, 89 invalid refused (all 89 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha256_p1363: every case answers what the file expects
+wycheproof ecdsa_secp256r1_sha512: 554 cases, 243 valid verified, 311 invalid refused (234 by the DER reader, 77 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha512: every case answers what the file expects
+wycheproof ecdsa_secp256r1_sha512_p1363: 332 cases, 242 valid verified, 90 invalid refused (all 90 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha512_p1363: every case answers what the file expects
 PASS  p256PublicKey(0) is null
 PASS  p256PublicKey(n) is null
 PASS  p256PublicKey(n + 1) is null
@@ -32,7 +38,10 @@ PASS  p256PublicKey of 31 bytes is null
 PASS  p256PublicKey of 33 bytes is null
 PASS  p256Sign with private key 0 is null
 PASS  p256Sign with private key n is null
+PASS  p256Sign with private key n + 1 is null
+PASS  p256Sign with private key 2^256 - 1 is null
 PASS  p256SignSha256 with a 31-byte key is null
+PASS  p256SignSha256 with a 33-byte key is null
 PASS  a key with a flipped bit in y is off the curve
 PASS  a key with a flipped bit in x is off the curve
 PASS  a key with prefix 0x03 is refused
@@ -52,4 +61,11 @@ PASS  r = n + 1 is refused
 PASS  s = n + 1 is refused
 PASS  a 63-byte signature is refused
 PASS  a 65-byte signature is refused
-p256: 53 passed, 0 failed, 0 skipped
+PASS  (r, n - s) of "sample" verifies as well: ECDSA is malleable
+PASS  a sum u1 G + u2 Q at the identity is refused
+PASS  a signature whose u1 G equals u2 Q (the sum is a doubling) verifies
+PASS  the digest n signs as the digest 0
+PASS  the digest n + 5 signs as the digest 5
+PASS  the signature of the digest 0 verifies (u1 = 0)
+PASS  the signature of 5 verifies under the digest n + 5
+p256: 66 passed, 0 failed, 0 skipped

@@ -480,9 +480,10 @@ const x25519Ladder = (k: u8[], u: i64[]): u8[] => {
  *
  * Answers `null` unless both arguments are exactly `X25519_SIZE` bytes. An
  * all-zero answer is **returned, not refused**: it is what a low-order `u`
- * gives, and RFC 7748 §6.1 leaves checking for it to the protocol, which is
- * where TLS 1.3 (WP34 T1) makes that check. A caller doing a key exchange
- * outside TLS should make it too.
+ * gives, and RFC 7748 §6.1 leaves checking for it to the protocol. Nothing in
+ * this tree makes that check for you yet (TLS 1.3, WP34 T1, is planned to), so
+ * every caller doing a key exchange must refuse an all-zero answer itself —
+ * with `timingSafeEqual` against 32 zero bytes, since the answer is a secret.
  */
 export const x25519 = (scalar: u8[], u: u8[]): u8[] | null => {
   if (toI32(scalar.length) !== 32 || toI32(u.length) !== 32) {

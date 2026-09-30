@@ -4273,6 +4273,11 @@ export const p256Sign = (priv: u8[], digest: u8[]): u8[] | null => {
  * that is not a point on the curve, and a sum that is the identity all answer
  * `false`. Every value here is public, so the answer may be reached by
  * branches; the multiplications are the constant-time ones all the same.
+ *
+ * ECDSA is malleable, and so is this: when `(r, s)` verifies, `(r, n - s)`
+ * verifies too, as FIPS 186-4 and SEC 1 have it. Nothing here asks for the
+ * lower `s`, so a protocol that needs one signature per message and key (a
+ * signature used as an identifier, say) has to refuse the upper half itself.
  */
 export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
   if (toI32(sig.length) !== 64) {

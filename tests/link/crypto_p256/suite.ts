@@ -1,14 +1,18 @@
 // `nish/crypto/p256` against RFC 6979 and Project Wycheproof: the key pair of
 // RFC 6979 A.2.5 and its deterministic SHA-256 signatures of "sample" and
-// "test" (the nonce `k` pinned through `r`), every case of Wycheproof's
-// ecdsa_secp256r1_sha256_test.json, and the refusals the module promises —
+// "test" (the nonce `k` pinned through `r`), every case of Wycheproof's four
+// secp256r1 ECDSA files this module can run (SHA-256 and SHA-512, each with DER
+// and with P1363 `r || s` signatures), and the refusals the module promises —
 // private keys of 0 and n and more, public keys that are the wrong length, off
-// the curve or the identity, and an `r` or `s` of 0 or n or more.
+// the curve or the identity, an `r` or `s` of 0 or n or more, and a sum
+// u1 G + u2 Q that is the identity. docs/security/crypto-ecc.md is the audit
+// these checks pin.
 //
 // The suite is a function rather than `main` so that `crypto_p256_f64` can run
 // the same checks with `--number-mode f64`.
 import { Suite } from "nish/testing";
 import { sha256 } from "nish/crypto/sha256";
+import { sha512 } from "nish/crypto/sha512";
 import {
   P256_POINT_SIZE,
   P256_SCALAR_SIZE,
@@ -23,6 +27,10 @@ import {
   WycheproofEcdsaCase,
   wycheproofEcdsaP256Sha256Cases,
   wycheproofEcdsaP256Sha256Keys,
+  wycheproofEcdsaP256Sha256P1363Cases,
+  wycheproofEcdsaP256Sha512Cases,
+  wycheproofEcdsaP256Sha512Keys,
+  wycheproofEcdsaP256Sha512P1363Cases,
 } from "../crypto_wycheproof/ecdsa_secp256r1_sha256";
 import { derSignature } from "./der";
 import { fromHex, toHex } from "./hex";
@@ -84,14 +92,21 @@ const GY: string = "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf
 const NEG_GY: string = "b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a";
 
 /**
- * Every Wycheproof case through `derSignature` and `p256Verify`, checked
- * against its expected result. `valid` must verify and `invalid` must not;
- * `acceptable` may go either way and is only counted. A mismatch is named by
- * its `tcId`. Answers the number of mismatches.
+ * Every case of one Wycheproof file through `p256Verify`, checked against its
+ * expected result: the message hashed with SHA-512 when `useSha512` is set and
+ * SHA-256 otherwise, and the signature read by `derSignature` when `der` is set
+ * and handed over as it is (P1363's `r || s`) otherwise. `valid` must verify
+ * and `invalid` must not; `acceptable` may go either way and is only counted.
+ * A mismatch is named by its file and `tcId`. Answers the number of mismatches.
  */
-const wycheproof = (t: Suite): i32 => {
-  const keys: string[] = wycheproofEcdsaP256Sha256Keys();
-  const cases: WycheproofEcdsaCase[] = wycheproofEcdsaP256Sha256Cases();
+const wycheproof = (
+  t: Suite,
+  file: string,
+  keys: string[],
+  cases: WycheproofEcdsaCase[],
+  useSha512: boolean,
+  der: boolean
+): i32 => {
   const keyCount: i32 = toI32(keys.length);
   let valid: i32 = 0;
   let invalidByDer: i32 = 0;
@@ -104,23 +119,24 @@ const wycheproof = (t: Suite): i32 => {
     const mark = Arena.mark();
     const keyAt: i32 = toI32(c.key);
     if (keyAt < 0 || keyAt >= keyCount) {
-      t.fail(`wycheproof tcId ${c.tcId}`, "no such key");
+      t.fail(`wycheproof ${file} tcId ${c.tcId}`, "no such key");
       mismatches += 1;
       continue;
     }
     const pub: u8[] = fromHex(keys[keyAt]);
-    const sig: u8[] | null = derSignature(fromHex(c.sig));
-    const verified: boolean = sig !== null && p256Verify(pub, sha256(fromHex(c.msg)), sig);
+    const sig: u8[] | null = der ? derSignature(fromHex(c.sig)) : fromHex(c.sig);
+    const msg: u8[] = fromHex(c.msg);
+    const verified: boolean = sig !== null && p256Verify(pub, useSha512 ? sha512(msg) : sha256(msg), sig);
     if (c.result === "valid") {
       if (verified) {
         valid += 1;
       } else {
-        t.fail(`wycheproof tcId ${c.tcId}`, "a valid signature did not verify");
+        t.fail(`wycheproof ${file} tcId ${c.tcId}`, "a valid signature did not verify");
         mismatches += 1;
       }
     } else if (c.result === "invalid") {
       if (verified) {
-        t.fail(`wycheproof tcId ${c.tcId}`, "an invalid signature verified");
+        t.fail(`wycheproof ${file} tcId ${c.tcId}`, "an invalid signature verified");
         mismatches += 1;
       } else if (sig === null) {
         invalidByDer += 1;
@@ -134,8 +150,11 @@ const wycheproof = (t: Suite): i32 => {
     }
     Arena.release(mark);
   }
+  const refusedBy: string = der
+    ? `${invalidByDer} by the DER reader, ${invalidByModule} by p256Verify`
+    : `all ${invalidByModule} by p256Verify`;
   console.log(
-    `wycheproof ecdsa_secp256r1_sha256: ${toI32(cases.length)} cases, ${valid} valid verified, ${invalidByDer + invalidByModule} invalid refused (${invalidByDer} by the DER reader, ${invalidByModule} by p256Verify), ${acceptableTrue + acceptableFalse} acceptable (${acceptableTrue} verified, ${acceptableFalse} refused), 0 filtered out`
+    `wycheproof ${file}: ${toI32(cases.length)} cases, ${valid} valid verified, ${invalidByDer + invalidByModule} invalid refused (${refusedBy}), ${acceptableTrue + acceptableFalse} acceptable (${acceptableTrue} verified, ${acceptableFalse} refused), 0 filtered out`
   );
   return mismatches;
 };
@@ -198,7 +217,30 @@ export const runSuite = (): i32 => {
   );
 
   // --- Wycheproof -------------------------------------------------------------
-  t.eqI32("wycheproof: every case answers what the file expects", wycheproof(t), toI32(0));
+  const keys256: string[] = wycheproofEcdsaP256Sha256Keys();
+  const keys512: string[] = wycheproofEcdsaP256Sha512Keys();
+  t.eqI32(
+    "wycheproof: every case answers what the file expects",
+    wycheproof(t, "ecdsa_secp256r1_sha256", keys256, wycheproofEcdsaP256Sha256Cases(), false, true),
+    toI32(0)
+  );
+  t.eqI32(
+    "wycheproof sha256_p1363: every case answers what the file expects",
+    wycheproof(t, "ecdsa_secp256r1_sha256_p1363", keys256, wycheproofEcdsaP256Sha256P1363Cases(), false, false),
+    toI32(0)
+  );
+  // A SHA-512 digest is 64 bytes, and ECDSA takes its leftmost 256 bits: these
+  // two files are the check of that truncation against someone else's answers.
+  t.eqI32(
+    "wycheproof sha512: every case answers what the file expects",
+    wycheproof(t, "ecdsa_secp256r1_sha512", keys512, wycheproofEcdsaP256Sha512Cases(), true, true),
+    toI32(0)
+  );
+  t.eqI32(
+    "wycheproof sha512_p1363: every case answers what the file expects",
+    wycheproof(t, "ecdsa_secp256r1_sha512_p1363", keys512, wycheproofEcdsaP256Sha512P1363Cases(), true, false),
+    toI32(0)
+  );
 
   // --- Private keys: [1, n) and 32 bytes, or null ----------------------------
   t.eqStr("p256PublicKey(0) is null", toHex(p256PublicKey(fromHex(ZERO))), "null");
@@ -209,7 +251,14 @@ export const runSuite = (): i32 => {
   t.eqStr("p256PublicKey of 33 bytes is null", toHex(p256PublicKey(new Array<u8>(33))), "null");
   t.eqStr("p256Sign with private key 0 is null", toHex(p256Sign(fromHex(ZERO), sha256(sample))), "null");
   t.eqStr("p256Sign with private key n is null", toHex(p256Sign(fromHex(N), sha256(sample))), "null");
+  t.eqStr("p256Sign with private key n + 1 is null", toHex(p256Sign(fromHex(N_PLUS_1), sha256(sample))), "null");
+  t.eqStr(
+    "p256Sign with private key 2^256 - 1 is null",
+    toHex(p256Sign(fromHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"), sha256(sample))),
+    "null"
+  );
   t.eqStr("p256SignSha256 with a 31-byte key is null", toHex(p256SignSha256(new Array<u8>(31), sample)), "null");
+  t.eqStr("p256SignSha256 with a 33-byte key is null", toHex(p256SignSha256(new Array<u8>(33), sample)), "null");
 
   // --- Public keys: 65 bytes, 0x04, on the curve, not the identity ----------
   t.ok("a key with a flipped bit in y is off the curve", !p256VerifySha256(flip(pub, 64, 0), sample, sampleSig));
@@ -248,6 +297,49 @@ export const runSuite = (): i32 => {
   t.ok("s = n + 1 is refused", !p256VerifySha256(pub, sample, fromHex(`${SAMPLE_R}${N_PLUS_1}`)));
   t.ok("a 63-byte signature is refused", !p256VerifySha256(pub, sample, fromHex(`${SAMPLE_R}${SAMPLE_S}`.substring(0, 126))));
   t.ok("a 65-byte signature is refused", !p256VerifySha256(pub, sample, fromHex(`${SAMPLE_R}${SAMPLE_S}00`)));
+
+  // --- Malleability: (r, n - s) verifies too -----------------------------------
+  // ECDSA is malleable by design: if (r, s) verifies, so does (r, n - s), because
+  // -k gives the same x as k. p256Verify accepts both, as FIPS 186-4 and SEC 1
+  // do, and p256Sign does not normalise s; a protocol that needs one signature
+  // per message must ask for low s itself (docs/security/crypto-ecc.md).
+  const highS: string = "0834e36ad29a83bf2bc9385e491d6099c8fdf9d1ed67aa7ea5f51f93782857a9";
+  t.ok("(r, n - s) of \"sample\" verifies as well: ECDSA is malleable", p256VerifySha256(pub, sample, fromHex(`${SAMPLE_R}${highS}`)));
+
+  // --- The sum u1 G + u2 Q ------------------------------------------------------
+  // With Q = d G, u1 G + u2 Q = (z + r d) / s G, which is the identity when
+  // z = -r d mod n. The identity has no x, so the signature must be refused
+  // rather than compared with whatever the zero Z inverts to. The digest below is
+  // -r d for A.2.5's key and "sample"'s r.
+  const infinityDigest: u8[] = fromHex("08ee301548cd9aa52ec3f69fd87f9c57bdf20e9f20419649d0e1b6c700f22e78");
+  t.ok("a sum u1 G + u2 Q at the identity is refused", !p256Verify(pub, infinityDigest, sampleSig));
+  // And when u1 G = u2 Q the final addition is a doubling, which the complete
+  // formulas take without a special case. Built from the verification equation
+  // (u2 = b, u1 = b d, R = 2 u1 G, r = R.x, s = r / b, z = u1 s), so it verifies.
+  t.ok(
+    "a signature whose u1 G equals u2 Q (the sum is a doubling) verifies",
+    p256Verify(
+      pub,
+      fromHex("ccaac173cdc64c39aa399fbfab53e03a89ae99115e17fd0b558781dedb78e4fa"),
+      fromHex(
+        "f79a5fa6555e3f3bd9d6137f38e31b68e8d182de79f062388b82a1f776562d6147edd776562b11a50a1ec1173db066cd15216748b190afd6c133e80f239f9b74"
+      )
+    )
+  );
+
+  // --- The digest is taken mod n ------------------------------------------------
+  // A 32-byte digest is below 2^256 < 2n, so one subtraction of n reduces it
+  // (SEC 1 §4.1.3 step 5, §4.1.4 step 5). The digest n is the scalar 0 and the
+  // digest n + 5 is 5: each signs exactly as its reduction does, and verifies
+  // under it.
+  const digestFive: u8[] = fromHex("0000000000000000000000000000000000000000000000000000000000000005");
+  const digestNPlusFive: u8[] = fromHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632556");
+  t.eqStr("the digest n signs as the digest 0", toHex(p256Sign(priv, fromHex(N))), toHex(p256Sign(priv, fromHex(ZERO))));
+  t.eqStr("the digest n + 5 signs as the digest 5", toHex(p256Sign(priv, digestNPlusFive)), toHex(p256Sign(priv, digestFive)));
+  const zeroSig: u8[] | null = p256Sign(priv, fromHex(ZERO));
+  t.ok("the signature of the digest 0 verifies (u1 = 0)", zeroSig !== null && p256Verify(pub, fromHex(N), zeroSig));
+  const fiveSig: u8[] | null = p256Sign(priv, digestFive);
+  t.ok("the signature of 5 verifies under the digest n + 5", fiveSig !== null && p256Verify(pub, digestNPlusFive, fiveSig));
 
   return t.done();
 };
