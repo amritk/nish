@@ -70,6 +70,7 @@ typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array
 void nish_array_grow(nish_array *, uint64_t);
 nish_array *nish_alloc_array(uint64_t, uint64_t);
 /* WP34 N5: runtime-net.c */
+int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
@@ -77,6 +78,11 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
+int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);
+int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t len, const nish_array *to,
+                         int32_t segment, int32_t ecn);
+int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len, nish_array *from,
+                           nish_array *meta);
 /* WP7: process.argv and string parsing */
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t, char **);
@@ -475,6 +481,45 @@ static void test_net(void) {
   expect_i64(nish_net_close(fd), 0, "the listener closed");
 }
 
+/* The UDP half of runtime-net.c: a socket bound to 127.0.0.1 sends to itself,
+   and on Linux one segmented send comes back from one GRO receive whole, with
+   its segment size and the ECN bits it was sent with. */
+static void test_udp(void) {
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  int32_t fd = nish_udp_bind(loopback, 0, 2);
+#if defined(__linux__)
+  assert(fd >= 0);
+  assert((fcntl(fd, F_GETFD) & FD_CLOEXEC) != 0 && (fcntl(fd, F_GETFL) & O_NONBLOCK) != 0);
+  char space[18];
+  nish_array to = {18, 18, space};
+  expect_i64(nish_net_address(&to, loopback, nish_net_local_port(fd)), 0, "the socket's own address");
+  static char payload[3000];
+  for (int i = 0; i < 3000; i++) payload[i] = (char)(i % 251);
+  nish_array data = {3000, 3000, payload};
+  static char into[4096];
+  nish_array buf = {4096, 4096, into};
+  char who[18];
+  nish_array from = {18, 18, who};
+  int32_t words[2] = {-1, -1};
+  nish_array meta = {2, 2, (char *)words};
+  expect_i64(nish_udp_recv_from(fd, &buf, 0, 4096, &from, &meta), -11, "a receive with nothing waiting");
+  expect_i64(nish_udp_send_to(fd, &data, 0, 3000, &to, 1000, 2), 3000, "one segmented send");
+  int32_t got = -11;
+  for (int i = 0; i < 1000000 && got == -11; i++) got = nish_udp_recv_from(fd, &buf, 0, 4096, &from, &meta);
+  expect_i64(got, 3000, "the three segments in one receive");
+  expect_i64(words[0], 1000, "the segment size");
+  expect_i64(words[1], 2, "the ECN bits");
+  assert(memcmp(into, payload, 3000) == 0 && memcmp(who, space, 18) == 0);
+  nish_array word = {1, 1, (char *)words};
+  expect_i64(nish_udp_recv_from(fd, &buf, 0, 4096, &from, &word), -22, "a one-word meta");
+  expect_i64(nish_udp_send_to(fd, &data, 0, 3, &to, 0, 4), -22, "ECN bits past 3");
+  expect_i64(nish_udp_bind(loopback, 0, 4), -22, "an unknown flag");
+  expect_i64(nish_net_close(fd), 0, "the socket closed");
+#else
+  expect_i64(fd, -95, "UDP_GRO where there is none");
+#endif
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -747,6 +792,7 @@ int main(void) {
   test_parallel_common();
   nish_free_arena();
   test_net();
+  test_udp();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();
