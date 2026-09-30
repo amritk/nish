@@ -989,6 +989,14 @@ const STACK_CORNERS = [
   // takes the taint of every byte it covers.
   ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"]],
   ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movzbl -13(%rsp), %eax", "movq (%rdx,%rax,8), %rax"]],
+  // One eight-byte reload across a public four-byte spill and a secret one:
+  // its taint is every byte's, not only the first.
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movl %esi, -12(%rsp)", "movl %edi, -8(%rsp)", "movq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"],
+  ],
   // A pre-indexed store and a post-indexed load meet at the same slot.
   ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
 ]
