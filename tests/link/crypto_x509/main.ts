@@ -37,7 +37,9 @@ import {
 import {
   BAD_ALGORITHM_MISMATCH,
   BAD_EXTENSIONS_IN_V1,
+  BAD_HIGH_TAG,
   BAD_INDEFINITE,
+  BAD_LENGTH_OVER_I32,
   BAD_LONG_LENGTH,
   BAD_MONTH_13,
   BAD_SERIAL_PADDED,
@@ -249,6 +251,8 @@ const parseSuite = (): i32 => {
   t.ok("a length with a leading zero octet is refused", refused(fromHex(BAD_LONG_LENGTH)))
   t.ok("a long-form length below 128 is refused", refused(fromHex(BAD_SHORT_LONG_FORM)))
   t.ok("an indefinite length is refused", refused(fromHex(BAD_INDEFINITE)))
+  t.ok("a high-tag-number identifier is refused", refused(fromHex(BAD_HIGH_TAG)))
+  t.ok("a four-octet length past 2^31 - 1 is refused", refused(fromHex(BAD_LENGTH_OVER_I32)))
   t.ok("a serial with a redundant zero octet is refused", refused(fromHex(BAD_SERIAL_PADDED)))
   t.ok("a TBS algorithm unlike the outer one is refused", refused(fromHex(BAD_ALGORITHM_MISMATCH)))
   t.ok("month 13 is refused", refused(fromHex(BAD_MONTH_13)))

@@ -46,6 +46,8 @@ PASS  an octet after the certificate is refused
 PASS  a length with a leading zero octet is refused
 PASS  a long-form length below 128 is refused
 PASS  an indefinite length is refused
+PASS  a high-tag-number identifier is refused
+PASS  a four-octet length past 2^31 - 1 is refused
 PASS  a serial with a redundant zero octet is refused
 PASS  a TBS algorithm unlike the outer one is refused
 PASS  month 13 is refused
@@ -54,7 +56,7 @@ PASS  a signature with unused bits is refused
 PASS  extensions in a v1 certificate are refused
 PASS  an empty DER is refused
 PASS  a truncated DER in PEM is refused by the chain reader
-x509 parse: 27 passed, 0 failed, 0 skipped
+x509 parse: 29 passed, 0 failed, 0 skipped
 PASS  one byte is AA==
 PASS  two bytes are AAE=
 PASS  three bytes are AAEC
