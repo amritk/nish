@@ -213,12 +213,6 @@ jobs:
           bash scripts/fetch-seed.sh
           build/seed/bin/nish --version
 
-      # `build/nish` is what the steps after the suite drive: stage1, one
-      # directory below the repository root, which is where its package root is
-      # found from (`packageRoot` in src/compile.ts).
-      - name: Build the compiler with the seed
-        run: build/seed/bin/nish src/compile.ts --link build/nish
-
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
       # row per seed, and whose `cmpSince` rule that job's matrix states.
@@ -233,6 +227,23 @@ jobs:
       # stopped running `scripts/bootstrap.sh --verify`.
       - name: Test
         run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point
+
+      # `build/nish` is what the steps after the suite drive: stage1, one
+      # directory below the repository root, which is where its package root is
+      # found from (`packageRoot` in src/compile.ts).
+      #
+      # It is the binary the suite just tested, copied rather than built again.
+      # `npm test` links stage1 with this seed into build/nish-test before its
+      # first check, and a separate `build/seed/bin/nish src/compile.ts --link
+      # build/nish` step used to repeat that link, about 30 s on this runner.
+      # The two writes are byte-identical binaries: the only difference is that
+      # the suite names `src/compile.ts` by its absolute path, which moves the
+      # `source_filename` line of each module's IR and not one byte of the
+      # linked binary. The suite still builds its own compiler on every run, so nothing
+      # here can hand it a stale one, and when the suite fails this step and
+      # every step after it are skipped.
+      - name: Keep the compiler the suite tested
+        run: cp build/nish-test build/nish
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler this job built.
@@ -637,7 +648,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The same seed and the same build the `test` job makes; see there.
+      # The same seed, and the same compiler `npm test` builds in the `test`
+      # job; see there. This job has no suite to borrow it from, so it links
+      # its own.
       - name: Fetch the seed
         run: bash scripts/fetch-seed.sh
 
