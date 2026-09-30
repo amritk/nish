@@ -1,0 +1,14 @@
+PASS  FIPS 197 C.1 AES-128
+PASS  FIPS 197 C.3 AES-256
+PASS  GCM test case 4
+PASS  GCM test case 4 opens
+PASS  GCM test case 6, a 480-bit IV
+PASS  GCM test case 16
+PASS  GCM test case 16 opens
+PASS  GCM test case 18, a 480-bit IV
+PASS  ghashMultiply: test case 2's X1
+PASS  RFC 9001 A.2 client Initial mask
+PASS  a 24-byte key answers null
+PASS  seal with an empty IV answers null
+PASS  a flipped tag bit answers null
+aes (f64 mode): 13 passed, 0 failed, 0 skipped
