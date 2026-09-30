@@ -64,11 +64,9 @@ NL8011  retired: WP33's printed negative zero; the reference reading's console (
 # those forms and the phase that owns each rule state it, in six stages, and
 # the last took the last of them off this list: each code is provoked again by
 # the program that pins it. What is left is not the parser's: a rule that went
-# away, and a program stage1 answers differently (`stage1_divergence.txt`),
-# whose number stays reserved like every retired one while its program pins
-# what stage1 says instead.
+# away. NL2302, the duplicate type parameter stage1 used to compile, left it
+# when the pass 1 sweep began to refuse one (#320).
 NL1055  retired: Phase 0's refusal of a type parameter on a method; generic methods compile since WP18 G8 (wp18 §15.8), and reject_generic_method now pins type arguments at a method call
-NL2302  retired at R6: stage1 answers nl2302_duplicate_type_parameter differently (stage1_divergence.txt)
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
 # `codeFor` walks the table longest fragment first, so a fragment that is a

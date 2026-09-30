@@ -196,8 +196,9 @@ Type rules:
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
-  `keyof T` is one of those, `` Unsupported type `keyof T` `` (NL2038), and it
-  is refused in a generic declaration nothing instantiates too, because the
+  `keyof T` is one of those, `` Unsupported type `keyof T` (Phase 1 supports
+  number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void) ``
+  (NL2038), and it is refused in a generic declaration nothing instantiates too, because the
   rule is a pass over the whole module rather than a step in resolving an
   annotation (`reject_type_keyof`, `reject_type_keyof_template`). `keyof` is
   the operator only before a type on its own line, so a class a program names
@@ -1964,6 +1965,16 @@ export const main = (): i32 => {
   argument can be written in is a request of its own — a field, an array
   element, a `Result` arm, inside another instantiation, an `implements`
   clause (`reject_generic_unsatisfied_constraint_positions`).
+- **A type parameter list names each parameter once**, on a function, an
+  arrow, a method, a class and an interface alike:
+  `` Duplicate type parameter `T` `` (NL2302). The second `T` could never be
+  bound to anything the first was not, so the list is refused on the first
+  name that repeats, and only there: `<T, T, T>` is one diagnostic, on the
+  second `T`, because a declaration reports one. The rule needs no type, so a
+  template nothing instantiates is refused too
+  (`tests/cases/reject_generic_duplicate_type_parameter`, `…_arrow`,
+  `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple`). A type
+  alias's list is refused before it is read, by NL1054.
 - **Not supported yet**: a default type argument (`<T = string>`,
   `` a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments ``,
   NL2292, refused on a template nothing instantiates too,
@@ -2968,6 +2979,16 @@ parsed.
 `enum` and `type` are top-level declarations ([Enums](#enums),
 [Type aliases](#type-aliases)); it is only inside a function body that they are
 a rejected statement.
+
+The empty statement, a lone `;` where a statement stands, is refused in a
+body: `Unsupported statement in Phase 1: EmptyStatement` (NL2260,
+`tests/cases/reject_stmt_empty`). It is the sentence every statement kind with
+no checker gets, named by its syntax kind as a nested `function` or `import`
+is; every other such kind is refused earlier by a rule of its own. It is
+refused where a body is checked, so a `;` in a template nothing instantiates
+still compiles, as it did in every release. A `;` at the top level is the
+syntax error `` a module holds only `function`, `class`, `interface`, `const`,
+`type`, `enum` and `import`, found `;` `` (NL0001).
 
 ## Expressions
 
@@ -5710,6 +5731,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member the constraint does not declare | `` Unknown field `radius` on interface `Shape`, the constraint of `T`: a constrained type parameter has only the members its constraint declares `` | `reject_generic_member_not_in_constraint` |
 | a constraint that is not a class or interface | `` `T extends i32` is not supported: a constraint must be a declared class or interface, because the members a type parameter has are its constraint's `` | `reject_generic_constraint` |
 | a constraint that mentions a type parameter | `` `U extends T` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out `` | `reject_generic_constraint` |
+| a type parameter list that names one parameter twice | `` Duplicate type parameter `T` ``, on the first repeat alone | `reject_generic_duplicate_type_parameter`, `…_arrow`, `…_method`, `…_class`, `…_interface`, `…_template`, `…_triple` |
 | a type argument that does not satisfy its constraint | `` `T` of `areaOf` requires `T extends Shape`, and `i32` does not implement it; pass a class or interface that declares `implements Shape` `` | `reject_generic_unsatisfied_constraint` |
 | a function parameter used as a value | `` `f` is a function parameter and can only be called or passed on as a function argument: ... `` | `reject_fnarg_store`, `reject_fnarg_return` |
 | an arrow argument that captures | `` The arrow reads `step`, which belongs to the function it is written in: ... `` | `reject_fnarg_capture` |
@@ -5770,6 +5792,7 @@ messages are exact for the cases cited; other rows quote the checker
 | `export import` | `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) `` (or `ImportDeclaration`) | `reject_export_import_equals`, `nl2226_export_import_equals` |
 | `import x = require("./m")`, `import x = A.B`, `export as namespace X` | `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)` (or `NamespaceExportDeclaration`) | `reject_module_sweep_together` |
 | a function or an import declared inside a body | `Unsupported statement in Phase 1: FunctionDeclaration` (or `ImportDeclaration`) | `reject_fn_nested`, `reject_fn_nested_template` |
+| the empty statement `;` in a body | `Unsupported statement in Phase 1: EmptyStatement` | `reject_stmt_empty` |
 | more than one import or export form in one module | the checker's refusals one each, since each is its own declaration; a Phase 0 one (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the module before the checker runs | `reject_module_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |

@@ -22,7 +22,7 @@ PASS  a 48-byte digest signs as its leftmost 32 bytes
 PASS  and verifies
 PASS  a 2-byte digest signs and verifies
 PASS  and is the value 0x0102
-wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by the DER reader, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by x509DerSignatureRS, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof: every case answers what the file expects
 PASS  p256PublicKey(0) is null
 PASS  p256PublicKey(n) is null
