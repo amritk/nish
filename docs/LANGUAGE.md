@@ -5684,6 +5684,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `o["x"]`, `` o[`x`] `` | `` String-keyed element access is forbidden in Nish; use `obj.name` (no dynamic property lookup) `` | `reject_string_key_access` |
 | `o[true]`, `o[{}]`, ... (non-numeric-shaped key) | `Element access requires a numeric index in Nish (no dynamic property lookup)` | `reject_non_numeric_index` |
 | dynamic `import(...)` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
+| `import.meta`, and a member access or a call through it (`import.foo` stays a syntax error, and `meta` is a name everywhere else: `tests/parser/names-meta.ts`) | `` `import.meta` is forbidden in Nish (a module has no runtime object; resolve paths at compile time) `` | `reject_import_meta`, `reject_import_meta_call` |
 
 "Numeric-shaped" index keys pass the validator (identifiers, numeric
 literals, parentheses, unary `+`/`-`, `+ - * / %` over those, calls,

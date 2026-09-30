@@ -15,15 +15,16 @@
 // stated here rather than as a syntax error (WP33 R1; the shapes are in
 // `src/nodes.ts`): `var`, `try`, `with`, a labelled statement, `for...in`, and
 // the forbidden expressions — `==`, `?.`, `typeof` and the rest of the
-// operators the language does not have, a regex, a dynamic `import()` and an
-// assertion to `any` or `unknown` — and the forbidden declarations: `async`,
-// a generator, a decorator, a `namespace` or `module` block, `declare global`
-// and type parameters on an alias — and the import forms nothing could make
-// mean anything: `import defer`, a module export name written as a string,
-// and import attributes — and the shapes a fixed layout rules out: a computed
-// name in an object literal, a class or an interface, and object spread. What
-// the parser still turns down itself is syntax TypeScript refuses as syntax
-// too, listed case by case in `tests/self/parser-refusals.txt`.
+// operators the language does not have, a regex, a dynamic `import()`,
+// `import.meta` and an assertion to `any` or `unknown` — and the forbidden
+// declarations: `async`, a generator, a decorator, a `namespace` or `module`
+// block, `declare global` and type parameters on an alias — and the import
+// forms nothing could make mean anything: `import defer`, a module export
+// name written as a string, and import attributes — and the shapes a fixed
+// layout rules out: a computed name in an object literal, a class or an
+// interface, and object spread. What the parser still turns down itself is
+// syntax TypeScript refuses as syntax too, listed case by case in
+// `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
@@ -640,6 +641,18 @@ const rejectForbiddenMember = (ctx: CheckContext, node: Node): void => {
     return
   }
   const receiver = node.children[0]
+  // `import` is a keyword, so an IDENT of that name is only ever the
+  // parser's receiver of `import.meta` (`src/nodes.ts`). A member access or a
+  // call after it is read through and costs nothing more.
+  if (receiver.kind === N_IDENT && receiver.text === "import") {
+    ctx.error(
+      node,
+      "`import.meta` is forbidden in " +
+        LANGUAGE +
+        " (a module has no runtime object; resolve paths at compile time)"
+    )
+    return
+  }
   if (receiver.kind === N_IDENT && receiver.text === "Object" && isShapeMutation(node.text)) {
     ctx.error(
       node,
