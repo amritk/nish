@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Two of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Three of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -27,6 +27,14 @@ the whole `std/` directory. BearSSL is under the MIT licence, which asks for
 the notice in "all copies or substantial portions of the Software" and, unlike
 the Boost licence, makes no exception for object code: a program built with
 `nish/crypto/aes` and distributed carries BearSSL's notice with it.
+
+The third is `std/crypto/p256.ts`, whose field and scalar arithmetic is ported
+from fiat-crypto. The package carries `std/crypto/LICENSE-fiat-crypto` beside
+it, for the same reason. fiat-crypto is offered under MIT, Apache-2.0 or
+BSD-1-Clause, and this repository takes MIT, the one of the three on
+[`.claude/licensing.md`](.claude/licensing.md)'s list. As with BearSSL, the MIT
+licence makes no exception for object code: a program built with
+`nish/crypto/p256` and distributed carries fiat-crypto's notice with it.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -97,6 +105,19 @@ the MIT licence. The file is BearSSL's `LICENSE.txt`, verbatim.
 Adapted from BearSSL (https://www.bearssl.org/), src/hash/ghash_ctmul64.c bmul64(). Copyright (c) 2016 Thomas Pornin. Used under the MIT licence; see std/crypto/LICENSE-bearssl.
 ```
 
+### `std/crypto/LICENSE-fiat-crypto`
+
+[fiat-crypto](https://github.com/mit-plv/fiat-crypto), Copyright (c) 2015-2020
+the fiat-crypto authors (see the AUTHORS file), under the MIT licence (upstream
+also offers Apache-2.0 and BSD-1-Clause). The port reads `fiat-c/src/p256_32.c`
+and `fiat-c/src/p256_scalar_32.c` at commit
+`abe078c5149bc15bc368c27cc364fdef56470136`; the licence text is that commit's
+`LICENSE-MIT`, verbatim.
+
+```notice
+Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
+```
+
 ## Files
 
 | File | Derived from | Licence | Licence text |
@@ -113,7 +134,10 @@ Adapted from BearSSL (https://www.bearssl.org/), src/hash/ghash_ctmul64.c bmul64
 | `bench/spectral.rs` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
+| `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
+| `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/ecdsa_secp256r1_sha256_test.json` at `3fa63dd`: all 484 cases and the 113 group keys, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 
 ## Public-domain algorithms
 
