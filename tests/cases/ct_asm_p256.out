@@ -1,0 +1,17 @@
+ok    p256FiatMul: a b / R mod p
+ok    p256FiatMul: (p - 1)^2 / R mod p
+ok    p256FiatMul: one times a is a
+ok    p256FiatMul: zero times a is zero
+ok    p256FiatMul: out may be arg1
+ok    p256FiatSquare: a^2 / R mod p
+ok    p256FiatSquare: (p - 1)^2 / R mod p
+ok    p256FiatScalarMul: a b / R mod n
+ok    p256FiatScalarMul: (n - 1)^2 / R mod n
+ok    p256FiatCmovznzU32: 0 keeps arg2
+ok    p256FiatCmovznzU32: 1 takes arg3
+ok    p256FiatCmovznzU32: any non-zero takes arg3
+ok    p256TableMove: hit 0 leaves out as it was
+ok    p256TableMove: hit 1 takes the entry at the offset
+ok    RFC 6979 A.2.5 public key
+ok    RFC 6979 A.2.5 SHA-256 "sample": k G has x = r
+ok    RFC 6979 A.2.5 SHA-256 "test": k G has x = r
