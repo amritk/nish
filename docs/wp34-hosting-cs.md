@@ -257,7 +257,7 @@ one by one, so the observation pairs a Nish GSO sender with a Nish GRO
 receiver: one receive returns 4,800 bytes with a segment size of 1,200, while
 Node counts the four datagrams the one send became. The Darwin branch (kqueue,
 and `-95` for GSO, GRO and ECN) is compiled by CI's Darwin rows and run by
-nothing. The C is a fifth runtime unit, `runtime/runtime-net.c`, of 2,089 bytes
+nothing. The C is a fifth runtime unit, `runtime/runtime-net.c`, of 2,071 bytes
 of `.text*` against a ceiling of its own of 2,304; the other four units did not
 move. LANGUAGE.md §"`nish:net`" has the rules, and the module is WP33 class C
 with no synchronous shim ([wp33](wp33-round-trip.md) §3.5).

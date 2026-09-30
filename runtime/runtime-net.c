@@ -412,9 +412,15 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
    stack, at most `NISH_POLL_CHUNK` of them, and whatever did not fit is still
    ready at the next wait. */
 #define NISH_POLL_CHUNK 64
+#if defined(__linux__)
+#define NISH_POLL_ADD EPOLL_CTL_ADD
+#define NISH_POLL_MODIFY EPOLL_CTL_MOD
+#define NISH_POLL_REMOVE EPOLL_CTL_DEL
+#else
 #define NISH_POLL_ADD 0
 #define NISH_POLL_MODIFY 1
 #define NISH_POLL_REMOVE 2
+#endif
 
 /* `pollCreate()`: a loop descriptor, close-on-exec like every socket here. */
 int32_t nish_poll_create(void) {
@@ -449,12 +455,11 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
-  static const int ops[3] = {EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL};
   struct epoll_event e;
   memset(&e, 0, sizeof e);
   e.events = ((events & 1) ? EPOLLIN : 0) | ((events & 2) ? EPOLLOUT : 0);
   e.data.u32 = (uint32_t)token;
-  return epoll_ctl(loop, ops[op], fd, &e) != 0 ? nish_net_fail() : 0;
+  return epoll_ctl(loop, op, fd, &e) != 0 ? nish_net_fail() : 0;
 #else
   int e = 0;
   if (op != NISH_POLL_ADD) {
@@ -497,7 +502,8 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   int32_t *out = (int32_t *)ready->data;
 #if defined(__linux__)
   struct epoll_event e[NISH_POLL_CHUNK];
-  int n = epoll_wait(loop, e, max, timeout_ms < 0 ? -1 : timeout_ms);
+  /* epoll waits forever for any negative timeout, as the language does. */
+  int n = epoll_wait(loop, e, max, timeout_ms);
 #else
   struct kevent e[NISH_POLL_CHUNK];
   struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};

@@ -525,6 +525,7 @@ static void test_udp(void) {
 }
 
 #include <signal.h>
+#include <sys/time.h>
 #include <time.h>
 
 /* A signal that interrupts a wait and does nothing else. */
@@ -563,12 +564,13 @@ static void test_poll(void) {
     nish_net_close(fds[i]);
   }
 
-  /* One SIGALRM a second from now, into a ten-second wait on nothing: 0, and
+  /* One SIGALRM 20 ms from now, into a ten-second wait on nothing: 0, and
      long before the timeout. A finite timeout, so a signal that arrived
      before the wait began costs ten seconds and a failure, never a hang. */
   signal(SIGALRM, poll_interrupt);
   time_t started = time(NULL);
-  alarm(1);
+  struct itimerval once = {{0, 0}, {0, 20000}};
+  assert(setitimer(ITIMER_REAL, &once, NULL) == 0);
   expect_i64(nish_poll_wait(loop, &ready, 10000), 0, "a wait a signal interrupts");
   assert(time(NULL) - started < 5);
   signal(SIGALRM, SIG_DFL);
