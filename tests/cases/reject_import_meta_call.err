@@ -1,0 +1,2 @@
+`import.meta` is forbidden in
+ (a module has no runtime object; resolve paths at compile time)

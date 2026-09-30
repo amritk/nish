@@ -295,7 +295,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
     `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access, type
+    `new a.B()` an `N_NEW` whose callee is the member access, `import.meta`
+    an `N_MEMBER` whose receiver is the IDENT `import`, as `import(...)` is
+    an `N_CALL` whose callee is, type
     parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
     when written, a missing name, return type or body an EMPTY child of the
     `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an

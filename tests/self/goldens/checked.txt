@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 819 programs, 58648 dump lines.
+# 820 programs, 58703 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -57525,6 +57525,62 @@ function Methods.module<i32>(this: Methods, x: i32): i32 -> @Methods.module$i32 
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+program tests/parser/names-meta.ts
+module tests/parser/names-meta.ts (entry)
+const meta: i32 = 3
+struct Meta (class) size=4 align=4
+  field meta: i32 index=0 offset=0 initialized
+  method meta2 -> @Meta.meta2
+  method metaOf -> @Meta.metaOf
+struct Holder (class) size=8 align=8
+  field inner: Meta index=0 offset=0
+  constructor -> @Holder.constructor
+  method meta -> @Holder.meta
+struct Tagged (interface) size=16 align=8
+  field meta: i32 index=0 offset=0
+  field name: string index=1 offset=8
+function Meta.meta2(this: Meta): i32 -> @Meta.meta2 [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Meta.metaOf(this: Meta, meta: i32): i32 -> @Meta.metaOf [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_alloc_struct
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.meta(this: Holder): i32 -> @Holder.meta [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function bump(m: Meta): i32 -> @bump
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 40:3
+  pointer m: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function lineStart(h: Holder): i32 -> @lineStart
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via bump
+  calls: Holder.constructor Holder.meta Meta.meta2 Meta.metaOf bump lineStart nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 49:9 local: Meta (const)
+  local 50:9 h: Holder (const)
+  callee 50:13 new Holder -> @Holder.constructor
+  local 51:9 t: Tagged (const)
+  local 52:9 text: string (const)
+  local 53:9 total: i32 (const)
+  callee 53:17 bump -> @bump
+  callee 53:31 Meta.meta2 -> @Meta.meta2
+  callee 53:47 Meta.metaOf -> @Meta.metaOf
+  callee 53:68 Holder.meta -> @Holder.meta
+  callee 53:88 lineStart -> @lineStart
 program tests/parser/names-modules-lib.ts
 module tests/parser/names-modules-lib.ts (entry)
 function type(): i32 -> @type [exported]

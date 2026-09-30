@@ -647,7 +647,7 @@ export class Parser {
       const previous = this.beginForm()
       return this.endForm(this.parseNamespaceExport(start), previous, false)
     }
-    if (this.at(TOK_IMPORT) && this.peek() !== TOK_LPAREN) {
+    if (this.at(TOK_IMPORT) && this.peek() !== TOK_LPAREN && (exported || !this.importMetaAhead())) {
       if (this.importDeclarationAhead()) {
         const previous = this.beginForm()
         return this.exportable(this.endForm(this.parseImport(start), previous, false), exported)
@@ -755,8 +755,8 @@ export class Parser {
 
   /**
    * Whether the token in hand opens a statement rather than a declaration: a
-   * statement keyword, `import` before `(` (`import("./m")`, for Phase 0 to
-   * refuse, NL1002), or a name that is not
+   * statement keyword, `import` before `(` or `.meta` (`import("./m")` and
+   * `import.meta`, for Phase 0 to refuse, NL1002 and NL1060), or a name that is not
    * followed by another name or a keyword. That last half leaves the
    * modifiers the language does not have — `async function`, `declare
    * class`, `abstract class`, `namespace N` — to the refusal below, which is
@@ -765,7 +765,7 @@ export class Parser {
   startsTopLevelStatement(): boolean {
     switch (this.kind) {
       case TOK_IMPORT:
-        return this.peek() === TOK_LPAREN
+        return this.peek() === TOK_LPAREN || this.importMetaAhead()
       case TOK_IF:
       case TOK_WHILE:
       case TOK_DO:
@@ -1423,6 +1423,19 @@ export class Parser {
   }
 
   /**
+   * Whether `import` opens the meta-property `import.meta`: a `.` and the
+   * word `meta` after it, the only name TypeScript reads there. Any other
+   * name after the dot stays the syntax error it always was.
+   */
+  importMetaAhead(): boolean {
+    if (!this.at(TOK_IMPORT) || this.peek() !== TOK_DOT) {
+      return false
+    }
+    const scan = this.scanAfterAhead()
+    return scan.kind === TOK_IDENT && scan.value === "meta"
+  }
+
+  /**
    * `import { a, b as c } from "./m";` — the only import form there is — and
    * every other form TypeScript reads, each the N_IMPORT `src/nodes.ts`
    * describes, for the phase that owns its rule to refuse: a default or a
@@ -1619,8 +1632,8 @@ export class Parser {
   }
 
   /**
-   * `import` followed by nothing an import or `import(...)` could open —
-   * `import;`, `import 5`, `import.meta` — reported as it always was, the `{`
+   * `import` followed by nothing an import, `import(...)` or `import.meta`
+   * could open — `import;`, `import 5`, `import.foo` — reported as it always was, the `{`
    * the one import form wants, so a malformed import costs no more
    * diagnostics than it did.
    */
@@ -4058,9 +4071,10 @@ export class Parser {
       case TOK_SLASH_ASSIGN:
         return this.parseRegex(start)
       case TOK_IMPORT: {
-        // `import("./m")`: the keyword as the callee of the call that follows,
-        // for Phase 0 to refuse (NL1002). Nothing else can name it.
-        if (this.peek() !== TOK_LPAREN) {
+        // `import("./m")` and `import.meta`: the keyword as the callee of the
+        // call or the receiver of the member access that follows, for Phase 0
+        // to refuse (NL1002, NL1060). Nothing else can name it.
+        if (this.peek() !== TOK_LPAREN && !this.importMetaAhead()) {
           return this.fail(`expected an expression, found \`${tokenName(this.kind)}\``)
         }
         const node = this.node(N_IDENT, start, this.end)
