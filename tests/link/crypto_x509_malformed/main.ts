@@ -39,6 +39,7 @@ import {
   x509VerifySignature,
 } from "nish/crypto/x509"
 import {
+  A25_PRIVATE,
   CA_PEM,
   CA_PKCS8_PEM,
   CA_PRIVATE,
@@ -48,10 +49,8 @@ import {
   KEY_SEC1,
   LEAF_PEM,
 } from "../crypto_x509/fixtures"
-import { fromHex, toHex } from "../crypto_x509/hex"
+import { bytesOf, fromHex, sameBytes, textOf, toHex } from "../crypto_x509/hex"
 
-// RFC 6979 A.2.5's scalar, KEY_SEC1's and KEY_PKCS8's.
-const PRIVATE: string = "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"
 const SEED: i32 = 0x2545f491
 // Random edits per DER fixture and per PEM fixture.
 const DER_EDITS: i32 = 600
@@ -112,9 +111,6 @@ const certOf = (pem: string): X509Certificate => {
   return cert
 }
 
-/** Whether two byte strings are equal. */
-const same = (a: u8[], b: u8[]): boolean => toHex(a) === toHex(b)
-
 /** `der[0 .. n)`. */
 const prefix = (der: u8[], n: i32): u8[] => {
   const out: u8[] = []
@@ -165,7 +161,7 @@ const edited = (der: u8[], state: i32): u8[] => {
     out = next
   }
   // Edits can undo each other; an input equal to the fixture is not malformed.
-  return same(out, der) ? flipped(der, 0, 0) : out
+  return sameBytes(out, der) ? flipped(der, 0, 0) : out
 }
 
 /** How many inputs `mutant` derives from a fixture of `n` octets. */
@@ -197,7 +193,7 @@ const mutant = (fixture: u8[], i: i32, state: i32, everyBit: boolean): u8[] => {
  * TBS unchanged and its signature accepted by `issuer`.
  */
 const passesFor = (cert: X509Certificate, original: X509Certificate, issuer: X509Certificate): boolean =>
-  same(cert.tbs, original.tbs) && x509VerifySignature(cert, issuer)
+  sameBytes(cert.tbs, original.tbs) && x509VerifySignature(cert, issuer)
 
 /** A certificate input's outcome: refused, or read, not cut, and not passing for `original`. */
 const certOutcome = (input: u8[], cut: boolean, original: X509Certificate, issuer: X509Certificate): i32 => {
@@ -248,29 +244,11 @@ const chainOutcome = (input: string, cut: boolean, certs: X509Certificate[], iss
     }
     const original: X509Certificate = certs[i]
     const issuer: X509Certificate = issuers[i]
-    if (!same(chain[i].der, original.der) && (cut || passesFor(chain[i], original, issuer))) {
+    if (!sameBytes(chain[i].der, original.der) && (cut || passesFor(chain[i], original, issuer))) {
       return VIOLATION
     }
   }
   return HARMLESS
-}
-
-/** The bytes of `text`. */
-const bytesOf = (text: string): u8[] => {
-  const out: u8[] = []
-  for (let i: i32 = 0; i < toI32(text.length); i++) {
-    out.push(toU8(toI32(text.charCodeAt(i))))
-  }
-  return out
-}
-
-/** `bytes` as a string. */
-const textOf = (bytes: u8[]): string => {
-  const parts: string[] = []
-  for (let i: i32 = 0; i < toI32(bytes.length); i++) {
-    parts.push(String.fromCharCode(toI32(bytes[i])))
-  }
-  return parts.join("")
 }
 
 // Each corpus runs every input between an `Arena.mark` and its `Arena.release`:
@@ -377,8 +355,8 @@ export const main = (): i32 => {
   total = total + certCorpus(t, "leaf certificate DER", leaf, ca, SEED ^ 2)
   total = total + signatureCorpus(t, "golden signature DER", golden.signature, SEED ^ 11)
   total = total + signatureCorpus(t, "leaf signature DER", leaf.signature, SEED ^ 12)
-  total = total + keyCorpus(t, "A.2.5 SEC1 key DER", fromHex(KEY_SEC1), "EC PRIVATE KEY", PRIVATE, SEED ^ 3)
-  total = total + keyCorpus(t, "A.2.5 PKCS#8 key DER", fromHex(KEY_PKCS8), "PRIVATE KEY", PRIVATE, SEED ^ 4)
+  total = total + keyCorpus(t, "A.2.5 SEC1 key DER", fromHex(KEY_SEC1), "EC PRIVATE KEY", A25_PRIVATE, SEED ^ 3)
+  total = total + keyCorpus(t, "A.2.5 PKCS#8 key DER", fromHex(KEY_PKCS8), "PRIVATE KEY", A25_PRIVATE, SEED ^ 4)
   total = total + keyCorpus(t, "CA SEC1 key DER", onlyBlock(CA_SEC1_PEM, "EC PRIVATE KEY"), "EC PRIVATE KEY", CA_PRIVATE, SEED ^ 5)
   total = total + keyCorpus(t, "CA PKCS#8 key DER", onlyBlock(CA_PKCS8_PEM, "PRIVATE KEY"), "PRIVATE KEY", CA_PRIVATE, SEED ^ 6)
   total = total + chainCorpus(t, "golden PEM", GOLDEN_PEM, [golden], [golden], SEED ^ 7)

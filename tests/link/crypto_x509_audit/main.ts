@@ -20,11 +20,17 @@ import {
   x509ParseP256PrivateKey,
   x509VerifySignature,
 } from "nish/crypto/x509"
-import { CA_PEM, CA_PKCS8_PEM, CA_PRIVATE, CA_SEC1_PEM, GOLDEN_PEM, LEAF_PEM } from "../crypto_x509/fixtures"
-import { fromHex, toHex } from "../crypto_x509/hex"
+import {
+  A25_PRIVATE,
+  CA_PEM,
+  CA_PKCS8_PEM,
+  CA_PRIVATE,
+  CA_SEC1_PEM,
+  GOLDEN_PEM,
+  LEAF_PEM,
+} from "../crypto_x509/fixtures"
+import { fromHex, textOf, toHex } from "../crypto_x509/hex"
 
-// RFC 6979 A.2.5's P-256 key, as `crypto_x509` mints its golden with.
-const PRIVATE: string = "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"
 // 2026-01-01T00:00:00Z.
 const NOT_BEFORE: i64 = 1767225600000
 // The golden certificate with its two validity times swapped: notBefore 2026-01-15, notAfter 2026-01-01.
@@ -64,19 +70,12 @@ const withTrailing = (extraHex: string): u8[] => {
 /** Whether `x509ParseCertificate` reads the golden with `extraHex` after the key. */
 const readsWith = (extraHex: string): boolean => x509ParseCertificate(withTrailing(extraHex)) !== null
 
-/** The mint with the golden's key, time, days and serial, under `name`. */
+/** The mint with the golden's key, time and days, serial 1, under `name`. */
 const mintName = (name: string): u8[] | null =>
-  x509MintSelfSigned(fromHex(PRIVATE), name, NOT_BEFORE, 14, fromHex("01"))
+  x509MintSelfSigned(fromHex(A25_PRIVATE), name, NOT_BEFORE, 14, fromHex("01"))
 
 /** `hex` as a string of those bytes, which need not be UTF-8. */
-const rawString = (hex: string): string => {
-  const bytes: u8[] = fromHex(hex)
-  const parts: string[] = []
-  for (let i: i32 = 0; i < toI32(bytes.length); i++) {
-    parts.push(String.fromCharCode(toI32(bytes[i])))
-  }
-  return parts.join("")
-}
+const rawString = (hex: string): string => textOf(fromHex(hex))
 
 /** Whether a mint under the name spelled by `hex` answers `null`. */
 const mintRefuses = (hex: string): boolean => mintName(`a${rawString(hex)}z`) === null

@@ -294,11 +294,28 @@ const x509DerSmallInteger = (der: u8[], e: X509DerElement): i32 => {
 }
 
 /**
+ * Whether `e`'s contents are a DER BIT STRING's, whatever its tag (an IMPLICIT
+ * one keeps the grammar): an unused-bits count of 0 to 7, none without an
+ * octet to hold them, and those bits zero (X.690 §8.6.2 and §11.2.1).
+ */
+const x509DerBitStringSound = (der: u8[], e: X509DerElement): boolean => {
+  const n: i32 = e.end - e.start
+  if (n < 1) {
+    return false
+  }
+  const unused: i32 = toI32(der[e.start])
+  if (unused > 7 || (n === 1 && unused !== 0)) {
+    return false
+  }
+  return (toI32(der[e.end - 1]) & ((1 << unused) - 1)) === 0
+}
+
+/**
  * The octets of a BIT STRING that has no unused bits, or `null`. Keys and
  * signatures are whole octets, so the leading unused-bits count must be 0.
  */
 const x509DerBitStringOctets = (der: u8[], e: X509DerElement): u8[] | null => {
-  if (e.tag !== X509_TAG_BIT_STRING || e.end - e.start < 1 || toI32(der[e.start]) !== 0) {
+  if (e.tag !== X509_TAG_BIT_STRING || !x509DerBitStringSound(der, e) || toI32(der[e.start]) !== 0) {
     return null
   }
   return x509DerSlice(der, e.start + 1, e.end)
@@ -1005,25 +1022,11 @@ export const x509ParseP256PrivateKey = (pem: string): u8[] | null => {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether a unique identifier or the extensions wrapper after the key is well
- * formed as far as its outer shape: an IMPLICIT BIT STRING (`0x81`, `0x82`)
- * has an unused-bits count of 0 to 7, no unused bits without an octet to hold
- * them, and those bits zero; `[3]` (`0xa3`) is one non-empty SEQUENCE and
- * nothing after it (RFC 5280 §4.1's `SIZE (1..MAX)`). What an extension says
- * is not read.
+ * Whether a `[3]` extensions wrapper holds one non-empty SEQUENCE and nothing
+ * after it (RFC 5280 §4.1's `SIZE (1..MAX)`). What an extension says is not
+ * read.
  */
-const x509DerTrailingSound = (der: u8[], e: X509DerElement): boolean => {
-  if (e.tag !== 0xa3) {
-    if (e.end - e.start < 1) {
-      return false
-    }
-    const unused: i32 = toI32(der[e.start])
-    if (unused === 0 || e.end - e.start === 1) {
-      return unused === 0
-    }
-    // DER (X.690 §11.2.1) sets the unused bits of the last octet to zero.
-    return unused <= 7 && (toI32(der[e.end - 1]) & ((1 << unused) - 1)) === 0
-  }
+const x509DerExtensionsSound = (der: u8[], e: X509DerElement): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
   return seq !== null && seq.end === e.end && seq.end > seq.start
 }
@@ -1134,12 +1137,15 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   at = spki.end
   // [1] issuerUniqueID and [2] subjectUniqueID are IMPLICIT BIT STRINGs (so
   // primitive, 0x81 and 0x82) from v2; [3] extensions is explicit (0xa3), v3.
-  // `x509DerTrailingSound` holds each to its shape.
+  // Each is held to its outer shape; what it says is not read.
   const trailing: i32[] = [0x81, 0x82, 0xa3]
   for (let i: i32 = 0; i < 3; i++) {
     if (x509DerPeek(der, at, tbs.end) === trailing[i]) {
       const e: X509DerElement | null = x509DerRead(der, at, tbs.end)
-      if (e === null || version < (i === 2 ? 2 : 1) || !x509DerTrailingSound(der, e)) {
+      if (e === null || version < (i === 2 ? 2 : 1)) {
+        return null
+      }
+      if (i === 2 ? !x509DerExtensionsSound(der, e) : !x509DerBitStringSound(der, e)) {
         return null
       }
       at = e.end
