@@ -299,14 +299,20 @@ jobs:
       # static and the file is what is missing. The smoke step below grew a
       # third program for it: a list is a claim about names, and only running
       # one of those modules says the library is whole.
+      #
+      # The nested `std/crypto/` modules are on all three lists too, and so are
+      # the licence texts two of them are ported under (BearSSL's beside
+      # aes.ts, fiat-crypto's beside p256.ts): a copy that ships takes its
+      # notice with it. tests/run.js holds every module in std/, nested or not,
+      # to each gate.
       - name: The tarball carries a whole compiler
         run: |
           tar -tzf "${{ steps.binary.outputs.asset }}" |
             sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts LICENSE INSTALL.md; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the fourteen that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the twenty-seven that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
@@ -391,7 +397,7 @@ jobs:
           # which is louder and no less broken. No smoke test of the unpacked
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts package.json; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -508,7 +514,7 @@ jobs:
           # packages the matrix above built. The three `bin/` paths are the command
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
