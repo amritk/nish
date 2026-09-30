@@ -25,6 +25,11 @@ Todos:
 Stage detail (from the plan):
 For each elimination rule in bounds.ts, try to write a well-typed program that reaches an out-of-bounds access once the check is gone, and run it under the native harness. Every attribute must carry the proof orientation rule 3 demands. A reproducer that crashes or reads out of bounds is a High finding.
 
+`tests/self/goldens/checked.txt` is a generated golden every positive `tests/cases/*.ts` is dumped into: if you add a tests/cases fixture you may regenerate it (`node tests/self/goldens.js checked --update --seed build/seed/bin/nish`) and nothing else in it; on a merge conflict regenerate it, never hand-edit.
+An undegraded `npm test` needs WASI_SYSROOT pointed at a wasi-sdk sysroot and NISH_BOOTSTRAP at the last release's seed (build/seed/bin/nish); set them rather than accepting skips.
+
+**Routed finding K1-6 (High, from the crypto-k1 stage, PR #375) — fix it in this stage.** Under `--number-mode i32`, `a.length` truncates an array's i64 length to i32 (`src/emit-arrays.ts:1098`, `emitArrayLength` -> `emitNumberFromI64`), and nothing stops an array growing past 2^31 - 1 elements (`runtime/runtime.c:1164`, `nish_array_grow`). For a 2^32 + 5 byte `u8[]`, `length` reads 5, `sha256` of it equals `sha256` of its first 5 bytes, `hmacSha256Verify` accepts the 5-byte message's tag, and `timingSafeEqual` against a 5-byte array answers true. Suggested fix: make `.length` panic instead of truncating under i32 mode (this stage owns src/emit-arrays.ts), with a failing-first link test. The runtime-c stage owns runtime/runtime.c; do not edit it — if an allocation-side refusal is also needed, record it as open for that stage.
+
 Rules that apply to every stage (from the plan's Approach):
 - **Audit, then fix in the same PR.** A stage that finds nothing still ships its record and the regression tests that pin the properties it checked. A stage that finds something fixes it, with a test that fails on the base SHA and passes on the branch.
 - **Severity.** Critical: forgery, key recovery, remote code execution. High: memory corruption, a verifier that accepts bad input, secret-dependent timing in a fixture path. Medium: denial of service (panic, unbounded loop or allocation) on attacker input. Low: hardening and documentation drift.

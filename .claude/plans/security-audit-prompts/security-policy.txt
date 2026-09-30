@@ -23,6 +23,9 @@ Todos:
 Stage detail (from the plan):
 Starts only after every other stage has merged or escalated. It indexes their records and applies the std/README.md corrections their PR bodies listed.
 
+`tests/self/goldens/checked.txt` is a generated golden every positive `tests/cases/*.ts` is dumped into: if you add a tests/cases fixture you may regenerate it (`node tests/self/goldens.js checked --update --seed build/seed/bin/nish`) and nothing else in it; on a merge conflict regenerate it, never hand-edit.
+An undegraded `npm test` needs WASI_SYSROOT pointed at a wasi-sdk sysroot and NISH_BOOTSTRAP at the last release's seed (build/seed/bin/nish); set them rather than accepting skips.
+
 Rules that apply to every stage (from the plan's Approach):
 - **Audit, then fix in the same PR.** A stage that finds nothing still ships its record and the regression tests that pin the properties it checked. A stage that finds something fixes it, with a test that fails on the base SHA and passes on the branch.
 - **Severity.** Critical: forgery, key recovery, remote code execution. High: memory corruption, a verifier that accepts bad input, secret-dependent timing in a fixture path. Medium: denial of service (panic, unbounded loop or allocation) on attacker input. Low: hardening and documentation drift.
