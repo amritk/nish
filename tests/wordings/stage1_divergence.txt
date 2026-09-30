@@ -24,15 +24,13 @@
 # `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
 # line here that stops being true fails the run and has to be deleted.
 
-# Ten of the lines this file opened with are gone, closed rather than declared:
-# the clash wordings, `++` on a string, the void ternary, the two 2^53 literals,
-# the three `for...of` head rules and `new C<T>()`. Each was stage1 saying
-# something else or compiling what stage0 refuses, and each is now the same
-# sentence at the same column on both sides, with a `reject_*` case of its own
-# in `tests/cases`. What is left is the three nobody has taken yet.
-
-# --- stage1 says something else ----------------------------------------------
-nl2260_empty_statement  stage1 says "Unsupported statement `;`", which carries no code (NL0000)
-
-# --- stage1 compiles what stage0 refuses -------------------------------------
-nl2302_duplicate_type_parameter  stage1 accepts `<T, T>` and compiles it; the second parameter can never be bound to anything the first was not, so the program means what stage0 refuses to let it mean
+# The file is empty of cases: every line it opened with is gone, closed rather
+# than declared. Among them: the clash wordings, `++` on a string,
+# the void ternary, the two 2^53 literals, the three `for...of` head rules and
+# `new C<T>()`. The last two went together (#320): a duplicate type parameter,
+# which stage1 compiled and now refuses in the pass 1 sweep (NL2302,
+# `tests/cases/reject_generic_duplicate_type_parameter*`), and the empty
+# statement `;`, which stage1 refused with an uncoded sentence and now refuses
+# with NL2260's (`tests/cases/reject_stmt_empty`). Each is the same sentence at
+# the same column on both sides. The header stays, and the tool still reads the
+# file, so the next difference somebody finds has a place to be written down.
