@@ -134,7 +134,7 @@ rejects. This table is the highest-value part of the page.
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
 | `namespace N { }`, `declare global { }`, `@decorator` | forbidden | one module per file; a plain function in place of a decorator |
-| `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
+| `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
 | `const [a, b] = xs`, `({ x }: Point) =>`, `(n = 1)`, `(n?: i32)`, `(...ns: i32[])` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional/default parameters are not supported` / `Rest parameters are not supported` | one name per binding, every parameter passed; an array for a variable count |
