@@ -269,8 +269,14 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `FLAG_DEFAULT`, `FLAG_OPTIONAL` or `FLAG_REST`, `get x()` / `set x(v)`
     a method with `FLAG_ACCESSOR`, `abstract` the class or member with
     `FLAG_ABSTRACT`, `declare class`, `declare interface` and `declare enum`
-    theirs with `FLAG_FOREIGN`, and a parameter property the parameter with
-    `FLAG_PROPERTY`. An operator is the operator node whose text it is: `==`,
+    theirs with `FLAG_FOREIGN`, a parameter property the parameter with
+    `FLAG_PROPERTY`, `export default function f`, `class C` and
+    `interface I` theirs with `FLAG_DEFAULT`, and `import type` (or `type`
+    in front of one name), `import defer`, attributes after the specifier, a
+    specifier that is not a string literal and `export import` the
+    `N_IMPORT` (or `N_IMPORT_SPEC`) with `FLAG_TYPE_ONLY`, `FLAG_DEFER`,
+    `FLAG_ATTRIBUTES`, `FLAG_COMPUTED` and `FLAG_EXPORTED`. An operator is
+    the operator node whose text it is: `==`,
     `in`, `**` and the comma an `N_BINARY`, `typeof`, `void`, `delete`,
     `await` and `yield` an `N_UNARY`;
   - it **resembles nothing** → a kind of its own with its child layout written
@@ -279,8 +285,12 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     `N_DECORATOR` (around what it decorates), `N_NAMESPACE` (`namespace`,
     `module` and `declare global`, its body passed over unread) and
     `N_TYPE_OPERATOR` (`keyof T`), `N_BINDING_PATTERN` (a destructuring
-    pattern where a name is bound, passed over unread) and
-    `N_INDEX_SIGNATURE` (`[k: string]: T`, in a class or an interface);
+    pattern where a name is bound, passed over unread),
+    `N_INDEX_SIGNATURE` (`[k: string]: T`, in a class or an interface),
+    `N_EXPORT_ASSIGNMENT` (`export default <value>`, `export =`),
+    `N_EXPORT_DECLARATION` (`export { a }`, `export * from`),
+    `N_IMPORT_EQUALS` (`import x = require("./m")`) and
+    `N_NAMESPACE_EXPORT` (`export as namespace X`);
   - it **differs in what one child is** → the same node with that child, when
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
@@ -301,8 +311,14 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     interface's call signature an `N_METHOD` with an EMPTY name (a construct
     signature with `FLAG_CONSTRUCT`), `interface I extends A` a fourth child
     of the `N_INTERFACE`, a key written as a string or a number a second
-    child of the `N_PROPERTY`, and a method in an object literal the
-    `N_METHOD` that is the property's value.
+    child of the `N_PROPERTY`, a method in an object literal the
+    `N_METHOD` that is the property's value, a namespace import an
+    `N_IMPORT` whose bindings child is the IDENT after `* as`, a side-effect
+    import one whose bindings child is EMPTY, a default import a second
+    child, a module export name written as a string the `N_STRING` where
+    the specifier's IDENT would be, and a function or an import declared
+    where a statement stands the `N_FUNCTION`, `N_IMPORT` or
+    `N_IMPORT_EQUALS` it would be at the top level.
 
   The refusal runs before anything else reads the node, so no later rule has
   to know the shape exists. An NL2xxx rule that needs no type is a sweep over
@@ -336,10 +352,16 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   arrow's parameters or a member's name on its line, `namespace` and `module`
   before a name or a string on theirs, `keyof` before a type on its line,
   `abstract`, `declare` and the accessibility words before what they modify
-  on theirs, and `static` before `{` on any (`asyncArrowAhead`,
+  on theirs, `static` before `{` on any, and `type` and `defer` after
+  `import` and in an import's braces exactly where TypeScript's
+  `parseImportDeclarationOrImportEqualsDeclaration` and
+  `parseImportOrExportSpecifier` read the modifier (`asyncArrowAhead`,
   `namespaceAhead`, `keyofAhead`, `declaredTypeAhead`,
-  `parameterModifierAhead`) — and `tests/parser/names*.ts` pin the name
-  readings. Check a new word against the
+  `parameterModifierAhead`, `typeModifierAhead`, `deferModifierAhead`,
+  `Parser.parseSpecifier`) — and `tests/parser/names*.ts` pin the name
+  readings. Where an import binds a new name, a word TypeScript reserves and
+  the lexer reads as an identifier (`with`, `var`, `in`, …) is the syntax
+  error it is in TypeScript (`bindingNameAhead`). Check a new word against the
   seed in every position a name can stand, line breaks included, before it
   goes in. A regex is the one token the lexer cannot decide alone: the parser
   asks it again where an operand is due (`Lexer.scanRegex`). When a case comes off, it leaves both

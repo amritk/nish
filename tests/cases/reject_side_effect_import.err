@@ -1,1 +1,1 @@
-expected `{`, found `STRING`
+Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code

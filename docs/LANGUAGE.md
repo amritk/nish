@@ -1011,7 +1011,9 @@ spelling; the two compile to identical IR, instruction for instruction
   function expressions, an arrow anywhere but as a function argument
   (`reject_fnarg_arrow_value`),
   and nested function declarations (`Unsupported statement in Phase 1:
-  FunctionDeclaration`).
+  FunctionDeclaration`, `reject_fn_nested`, in a template nothing
+  instantiates too, `reject_fn_nested_template`; an `import` in a body is
+  `Unsupported statement in Phase 1: ImportDeclaration`).
 - A non-`void` function must return on every path
   (`` Function `f` must return a value of type i32 on every path ``,
   `tests/cases/reject_missing_return`, `reject_cf_missing_return_loop`); see
@@ -1311,10 +1313,25 @@ and their `.ll` goldens are byte-identical files.
 - `export` is accepted on `function`, `class`, `interface`, `enum`, `type`
   and `const` declarations (`tests/cases/export_fn`, `tests/link/class_export`,
   `tests/link/enum_export_uses`, `tests/link/alias_export_class`,
-  `tests/link/const_export`). `export default`, `export { ... }`,
-  `export * from`, and `export =` are rejected
-  (`Only functions can be exported`; `` `export default` is not supported ``,
-  `tests/cases/reject_export_default`).
+  `tests/link/const_export`). Every other export form is refused by its rule,
+  once: `export { a }`, with or without `from`, `export * from`,
+  `export * as ns from` and `export type { A }` are
+  `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself ``
+  (`tests/cases/reject_export_list`); `export default <value>` and `export =`
+  are `` `export default` / `export =` are not supported; use a named `export function` ``
+  (`reject_export_assignment`); `export default function f` is
+  `` `export default` is not supported; use a named `export function` ``
+  (`reject_export_default`), and `export default class C` or
+  `export default interface I` `` `export default` is not supported; use a named `export` ``
+  (`reject_cls_export_default`, `reject_generic_export_default`); an
+  anonymous one is `Functions must be named` or `Classes must be named`.
+  `export import` is
+  `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) ``
+  (or `ImportDeclaration`; `reject_export_import_equals`), and
+  `export as namespace X` is
+  `Only top-level function declarations are supported in Phase 1 (found NamespaceExportDeclaration)`.
+  Several in one module report one each (`reject_module_sweep_together`),
+  unless one is a Phase 0 form below, which is then reported alone.
 - **What `export` promises depends on the build.** In every build it makes a
   declaration importable by another module of the program. A build whose
   output something else links or loads — `-o` alone (IR for a C host to link),
@@ -1346,11 +1363,33 @@ and their `.ll` goldens are byte-identical files.
   `` Cannot find package `hash` ``, `tests/cases/reject_bare_package`). Anything
   else is `Import specifier ... must be relative`
   (`tests/cases/reject_bare_import`). `.ts` is optional and `./x.js` maps to
-  `./x.ts`; a relative path resolves relative to the importing file. Default imports
-  (`Default imports are not supported`, `reject_default_import`), namespace
-  imports (`Namespace imports`, `reject_namespace_import`), side-effect
-  imports (`Side-effect imports`, `reject_side_effect_import`), and
-  type-only imports are rejected. A missing file is
+  `./x.ts`; a relative path resolves relative to the importing file. Every
+  other import form is refused by its rule, once, before anything is loaded:
+  a default import, `import d from "./m"`, `import d, { a } from "./m"` or
+  `import { default as d } from "./m"`, is
+  `` Default imports are not supported; use `import { d } from "./m"` ``
+  (`reject_default_import`); a namespace import is
+  `` Namespace imports (`import * as ns`) are not supported; import functions by name ``
+  (`reject_namespace_import`); a side-effect import is
+  `` Side-effect imports (`import "./m"`) are not supported; modules have no top-level code ``
+  (`reject_side_effect_import`); `import type`, and `type` in front of one
+  name, is `Type-only imports are not supported` (`reject_import_type_only`);
+  a specifier that is not a string literal is
+  `Import specifier must be a string literal`
+  (`reject_import_template_specifier`); and `import x = require("./m")` or
+  `import x = A.B` is
+  `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)`.
+  Three are refused by Phase 0, because no later release could give them a
+  meaning: import attributes (`with { type: "json" }`, `assert { ... }`,
+  `reject_import_attributes`), a module export name written as a string
+  (`import { "a-b" as b }`, `reject_import_string_name`) and `import defer`
+  (`reject_import_defer`) — see
+  [Forbidden constructs](#forbidden-constructs-phase-0-validator). `type`,
+  `as`, `from`, `defer`, `require` and `assert` are not reserved, and are the
+  modifier only where TypeScript reads one: `import type from "./m"` is a
+  default import of a binding called `type`, and `{ type }`, `{ type as t }`
+  and `{ type as as }` each import a function called `type`
+  (`tests/parser/names-modules.ts`). A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
 - **A file is one module however it is named.** The command line and the
   imports may spell one file differently — `./types.ts`, its absolute path,
@@ -5491,6 +5530,14 @@ fragment `tests/run.js` matches and the case that proves it.
 | decorators, on a class, a member or a parameter | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator`, `reject_decorator_member`, `reject_decl_shapes` |
 | computed property names | `` Computed property names are forbidden in Nish (object layout is fixed at compile time) `` | `reject_computed_property` |
 
+### Imports
+
+| Construct | Message | Test |
+| --- | --- | --- |
+| import attributes, `with { type: "json" }` or `assert { ... }` | `` Import attributes (`with { ... }`) are forbidden in Nish (an import names source this compiler reads, never a resource loaded at run time) `` | `reject_import_attributes`, `nl1057_import_attributes` |
+| a module export name written as a string, `import { "a-b" as b }` | `` A module export name written as a string is forbidden in Nish (an export is a declaration, and a declaration has a name; import it by that name) `` | `reject_import_string_name`, `nl1058_string_export_name` |
+| `import defer` | `` `import defer` is forbidden in Nish (a module has no top-level code, so there is nothing to defer) `` | `reject_import_defer`, `nl1059_import_defer` |
+
 ### Statements
 
 | Construct | Message | Test |
@@ -5633,6 +5680,19 @@ messages are exact for the cases cited; other rows quote the checker
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
+| a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
+| `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |
+| a default import: `import d from`, `import d, { a } from`, `{ default as d }` | `` Default imports are not supported; use `import { math } from "./locals"` `` | `reject_default_import` |
+| a namespace import | `` Namespace imports (`import * as math`) are not supported; import functions by name `` | `reject_namespace_import` |
+| a specifier that is not a string literal | `Import specifier must be a string literal` | `reject_import_template_specifier`, `nl2212_template_specifier` |
+| `export { a }`, `export { a } from`, `export * from`, `export * as ns from`, `export type { A }` | `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself `` | `reject_export_list`, `nl2128_export_list` |
+| `export default <value>`, `export =` | `` `export default` / `export =` are not supported; use a named `export function` `` | `reject_export_assignment`, `nl2129_export_default_value` |
+| `export default function f` | `` `export default` is not supported; use a named `export function` `` | `reject_export_default` |
+| `export default class C`, `export default interface I` | `` `export default` is not supported; use a named `export` `` | `reject_cls_export_default`, `reject_generic_export_default`, `nl2131_export_default_class` |
+| `export import` | `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) `` (or `ImportDeclaration`) | `reject_export_import_equals`, `nl2226_export_import_equals` |
+| `import x = require("./m")`, `import x = A.B`, `export as namespace X` | `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)` (or `NamespaceExportDeclaration`) | `reject_module_sweep_together` |
+| a function or an import declared inside a body | `Unsupported statement in Phase 1: FunctionDeclaration` (or `ImportDeclaration`) | `reject_fn_nested`, `reject_fn_nested_template` |
+| more than one import or export form in one module | the checker's refusals one each, since each is its own declaration; a Phase 0 one (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the module before the checker runs | `reject_module_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
