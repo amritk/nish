@@ -442,8 +442,10 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
 /* Add, modify or remove `fd` in `loop`. epoll does each in one call, with
    the token in `data.u32`. kqueue has a filter per direction rather than a
    set of events, so a change is the filters deleted and then the ones asked
-   for added, each carrying the token in `udata`; deleting a filter that was
-   never added is not an error unless neither was, which is epoll's ENOENT. */
+   for added, each carrying the token in `udata`. Deleting a filter that was
+   never added is not an error, except to a removal that finds neither, which
+   answers epoll's ENOENT; a modification adds what it asks for either way, so
+   a descriptor added watching nothing, which has no filter, can be modified. */
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
@@ -458,8 +460,7 @@ static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, i
   if (op != NISH_POLL_ADD) {
     int r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
     int w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
-    if (r != 0 && w != 0) return nish_net_err(r);
-    if (op == NISH_POLL_REMOVE) return 0;
+    if (op == NISH_POLL_REMOVE) return r != 0 && w != 0 ? nish_net_err(r) : 0;
   }
   if (events & 1) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_ENABLE, token);
   if (e == 0 && (events & 2)) e = nish_poll_change(loop, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, token);

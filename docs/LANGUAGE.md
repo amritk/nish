@@ -3975,7 +3975,7 @@ answers are a statement about the code, not about a test.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
-| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches, or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
+| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches (on Linux; kqueue adds it again), or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
 | `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a descriptor the loop watches: `0`, or `-2` for one it does not | write | `net_loop_calls`, `net_loop_two` |
 | `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`: `0`, or `-2` for a descriptor the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
 | `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` milliseconds pass, **forever for `-1`** (any negative number), and writes one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable with **`4` added for a hang-up or an error**. It answers the count, at most `ready.length / 2` and at most 64, or **`0` on a timeout**. A `ready` shorter than 2 is `-22`. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
@@ -3985,8 +3985,8 @@ again is reported again, so a loop that handles one pair of several, or leaves
 a datagram unread, loses nothing: `net_loop_calls` sends a datagram and waits
 twice, and both waits report it. The same is why the 64 a call reports at most
 is a bound on a stack array rather than on the program: the rest are still
-ready at the next wait. A UDP socket is always writable, and one whose both
-sides are shut is readable, writable and hung up, `7` (`net_loop_calls`).
+ready at the next wait. A UDP socket is always writable, and on Linux one whose
+both sides are shut is readable, writable and hung up, `7` (`net_loop_calls`).
 Nothing allocates; `ready` is the caller's.
 
 **A signal wakes the loop.** The descriptor `signalFd()` answers is a
@@ -4023,8 +4023,11 @@ while (running) {
 
 **Darwin** is kqueue, with a filter per direction rather than a set of events:
 `pollModify` there deletes the descriptor's filters and adds the ones asked
-for, and a descriptor both readable and writable is two pairs with the same
-token, one per filter. That branch is compiled by CI's Darwin rows and run by
+for, so it adds a descriptor the loop did not watch rather than answer `-2`;
+`pollAdd` of a descriptor already watched adds it again rather than answer
+`-17`; a descriptor added watching nothing has no filter, so `pollRemove` of it
+answers `-2`; and a descriptor both readable and writable is two pairs with the
+same token, one per filter. That branch is compiled by CI's Darwin rows and run by
 nothing, as the rest of the Darwin network code is.
 
 #### Bounds
