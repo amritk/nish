@@ -1,1 +1,1 @@
-syntax error: a module holds only `function`, `class`, `interface`, `const`, `type`, `enum` and `import`, found `{`
+`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself

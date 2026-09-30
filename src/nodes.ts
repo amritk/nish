@@ -26,8 +26,22 @@ export const N_LIST: i32 = 2 // children: the elements
 // ---- Declarations ------------------------------------------------------------------
 
 export const N_SOURCE_FILE: i32 = 3 // children: the top-level declarations
-export const N_IMPORT: i32 = 4 // text: the specifier; children: LIST of IMPORT_SPEC
-export const N_IMPORT_SPEC: i32 = 5 // text: local name; children: exported name IDENT
+// `import { a, b as c } from "./m"`. The refused forms (WP33 R1) are this node
+// too: its one child is the braces' LIST, the IDENT `ns` of `* as ns`
+// (NL2119), or EMPTY where there are neither — a side-effect import (NL2033)
+// or a default import alone (NL2190) — and a default import is a second child,
+// there only when written. `import type` is FLAG_TYPE_ONLY (NL2243), `import
+// defer` FLAG_DEFER (NL1059), a specifier that is not a string literal
+// FLAG_COMPUTED with an empty text (NL2212), attributes after it,
+// `with { ... }`, FLAG_ATTRIBUTES (NL1057), and `export import` FLAG_EXPORTED
+// (NL2226).
+export const N_IMPORT: i32 = 4 // text: the specifier; children: LIST of IMPORT_SPEC, and see above
+// text: the name after `as`, or the only one; children: the name before it,
+// an IDENT, or a STRING for a module export name written as one (NL1058).
+// In an import that is the local name and the exported one; in an
+// N_EXPORT_DECLARATION the exported name and the local one. `{ type a }` is
+// FLAG_TYPE_ONLY (NL2243).
+export const N_IMPORT_SPEC: i32 = 5
 export const N_FUNCTION: i32 = 6 // children: name, LIST of PARAM, return type, BLOCK, LIST of type parameters (WP18)
 export const N_PARAM: i32 = 7 // children: name, type
 export const N_CLASS: i32 = 8 // children: name, extends, LIST of implements, LIST of members, LIST of type parameters (WP18 G5)
@@ -226,8 +240,36 @@ export const N_BINDING_PATTERN: i32 = 73
 // member's modifiers; children: the key's PARAM, the value's type.
 export const N_INDEX_SIGNATURE: i32 = 74
 
+// ---- Refused import and export forms (WP33 R1) ----------------------------------------
+//
+// The module forms. Most are an N_IMPORT (see beside it) or a declaration
+// with a flag: `export default function f` an N_FUNCTION and `export default
+// class C` / `export default interface I` an N_CLASS or N_INTERFACE with
+// FLAG_DEFAULT (NL2130, NL2131). A `function` or an `import` written where a
+// statement stands is the N_FUNCTION, N_IMPORT or N_IMPORT_EQUALS it would be
+// at the top level (NL2260). The rest resemble nothing, and each is refused by
+// pass 1 whatever it holds.
+
+// `export default <value>` and `export = <value>` (NL2129): text: `default` or
+// `=`; children: the expression.
+export const N_EXPORT_ASSIGNMENT: i32 = 75
+// `export { a, b as c }`, `export { a } from "./m"`, `export * from "./m"` and
+// `export * as ns from "./m"` (NL2128): text: the specifier, empty without a
+// `from`; flags: FLAG_TYPE_ONLY for `export type`, FLAG_COMPUTED for a
+// specifier that is not a string literal; children: the braces' LIST
+// of IMPORT_SPEC, the name after `* as` (an IDENT or a STRING), or EMPTY for a
+// bare `*`. Attributes after the specifier are passed over unread.
+export const N_EXPORT_DECLARATION: i32 = 76
+// `import x = require("./m")` and `import x = A.B` (NL2230; NL2226 with
+// FLAG_EXPORTED): flags: FLAG_TYPE_ONLY for `import type x = ...`; children:
+// the name, and what it names — the STRING (or the expression) inside
+// `require(...)`, or the IDENT or dotted MEMBER of an entity name.
+export const N_IMPORT_EQUALS: i32 = 77
+// `export as namespace X` (NL2230): children: the name.
+export const N_NAMESPACE_EXPORT: i32 = 78
+
 /** @public One past the last node kind: the size of a table indexed by kind. */
-export const N_COUNT: i32 = 75
+export const N_COUNT: i32 = 79
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0
@@ -297,7 +339,9 @@ export const FLAG_USING: i32 = 256
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
 //     N_LABELED, N_REGEX, N_AS, N_SPREAD, N_DECORATOR, N_NAMESPACE,
-//     N_TYPE_OPERATOR, N_BINDING_PATTERN, N_INDEX_SIGNATURE.
+//     N_TYPE_OPERATOR, N_BINDING_PATTERN, N_INDEX_SIGNATURE,
+//     N_EXPORT_ASSIGNMENT, N_EXPORT_DECLARATION, N_IMPORT_EQUALS and
+//     N_NAMESPACE_EXPORT.
 //   - A variant that differs only in what one child is keeps the node and
 //     puts the other thing in that child, when the child's own kind is the
 //     tell: `for (x of a)` is a FOR_OF whose head is an expression rather
@@ -306,8 +350,9 @@ export const FLAG_USING: i32 = 256
 //     alias are an N_TYPE_ALIAS's third child, there only when written, a
 //     missing name, return type or body is an EMPTY child, a method in an
 //     interface an N_METHOD among its fields, a `let` bound to an arrow
-//     a module constant whose initialiser is the N_ARROW, and the class,
-//     interface and enum forms listed beside N_INDEX_SIGNATURE.
+//     a module constant whose initialiser is the N_ARROW, the class,
+//     interface and enum forms listed beside N_INDEX_SIGNATURE, and the
+//     import forms listed beside N_IMPORT.
 //
 // Every one is refused with exactly one diagnostic, and the refusal comes
 // before anything else looks at the node, so no later rule has to know the
@@ -337,7 +382,7 @@ export const FLAG_GENERATOR: i32 = 32768
 // `flags` on a type parameter's IDENT: bit 16 is a default, `<T = i32>`
 // (NL2292). The default type is read and dropped, as a `catch` binding's
 // annotation is: the declaration is refused whatever it names.
-export const FLAG_DEFAULT: i32 = 65536 // and on N_PARAM, `x = 1` (NL2233); on N_FUNCTION and N_CLASS, `export default` (NL2203, NL2018)
+export const FLAG_DEFAULT: i32 = 65536 // and on N_PARAM, `x = 1` (NL2233); on N_FUNCTION, N_CLASS and N_INTERFACE, `export default` (NL2203, NL2018, NL2130, NL2131)
 // `flags` on N_PARAM: bit 17 is `...xs` (NL2235). `x?: T` is FLAG_OPTIONAL and
 // a default FLAG_DEFAULT, whose value is read and dropped.
 export const FLAG_REST: i32 = 131072
@@ -353,6 +398,17 @@ export const FLAG_PROPERTY: i32 = 1048576
 // `flags` on an interface's N_METHOD with an EMPTY name: bit 21 is `new`, a
 // construct signature rather than a call signature (NL2257).
 export const FLAG_CONSTRUCT: i32 = 2097152
+// `flags` on N_IMPORT, N_IMPORT_SPEC, N_IMPORT_EQUALS and N_EXPORT_DECLARATION:
+// bit 22 is `type` in front of what it imports or exports (NL2243).
+export const FLAG_TYPE_ONLY: i32 = 4194304
+// `flags` on N_IMPORT: bit 23 is a specifier that is not a string literal,
+// read as the expression it is and dropped (NL2212; on an
+// N_EXPORT_DECLARATION too, which is refused whatever it holds); bit 24 import
+// attributes after the specifier, `with { ... }` or `assert { ... }`,
+// passed over unread (NL1057); and bit 25 `import defer` (NL1059).
+export const FLAG_COMPUTED: i32 = 8388608
+export const FLAG_ATTRIBUTES: i32 = 16777216
+export const FLAG_DEFER: i32 = 33554432
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored
@@ -541,6 +597,14 @@ export const nodeName = (kind: i32): string => {
       return "BINDING_PATTERN"
     case N_INDEX_SIGNATURE:
       return "INDEX_SIGNATURE"
+    case N_EXPORT_ASSIGNMENT:
+      return "EXPORT_ASSIGNMENT"
+    case N_EXPORT_DECLARATION:
+      return "EXPORT_DECLARATION"
+    case N_IMPORT_EQUALS:
+      return "IMPORT_EQUALS"
+    case N_NAMESPACE_EXPORT:
+      return "NAMESPACE_EXPORT"
     default:
       return "?"
   }

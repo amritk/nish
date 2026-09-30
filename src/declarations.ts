@@ -2,14 +2,13 @@
 // docs/wp14-selfhost.md milestone S3): function signatures, `export`,
 // `import`, and the entry point.
 //
-// It is shorter than stage0's, and the reason is worth writing down: half of
-// that file rejects TypeScript the *parser* here never builds a node for.
-// `function f<T>()`, `async function`, `export default`, `import * as ns`,
-// a destructured or defaulted parameter — the S2 parser reads each one and
-// turns it down by name, because a message about what the programmer wrote
-// beats one about a node kind. What is left is the semantic half: names,
-// types, arity and the rules about `main`.
+// The forms of TypeScript the language forbids are parsed into the nodes they
+// resemble and refused where their rule is owned (WP33 R1, `src/nodes.ts`):
+// every import form but `import { a, b as c } from "..."` is refused here, in
+// `collectImports`, in the order stage0 asked, and the rest of this file is
+// the semantic half: names, types, arity and the rules about `main`.
 
+import { refuseTopLevelForm } from "./checker"
 import { CheckContext } from "./context"
 import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
@@ -17,7 +16,7 @@ import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
 import { functionTypeHereMessage, isFunctionParameter } from "./generics"
 import { isThreadsSource } from "./parallel"
-import { FLAG_EXPORTED, N_EMPTY, N_LIST, Node } from "./nodes"
+import { FLAG_COMPUTED, FLAG_EXPORTED, FLAG_TYPE_ONLY, N_EMPTY, N_IDENT, N_LIST, Node } from "./nodes"
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
 import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
 
@@ -241,11 +240,23 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
 }
 
 /**
- * One binding per name in an `import`. The parser has already refused every
- * form but `import { a, b as c } from "..."`, so what is left is the
- * specifier rule and the empty list.
+ * One binding per name in an `import`. Every form but `import { a, b as c }
+ * from "..."` is refused first, once, in the order stage0 asked and the source
+ * writes them — `export import` (NL2226), a specifier that is not a string literal (NL2212), the
+ * specifier rule, a side-effect import (NL2033), `import type` (NL2243), a
+ * default import (NL2190), a namespace import (NL2119), and then per name a
+ * type-only one (NL2243) or `default as x`, which is the default import by
+ * another spelling — so a refused import binds nothing and loads nothing.
  */
 export const collectImports = (ctx: CheckContext, decl: Node): void => {
+  if (isExported(decl)) {
+    refuseTopLevelForm(ctx, decl)
+    return
+  }
+  if ((decl.flags & FLAG_COMPUTED) !== 0) {
+    ctx.error(decl, "Import specifier must be a string literal")
+    return
+  }
   const specifier = decl.text
   // Four forms are legal. `nish:` names a builtin and resolves to no file, so
   // it is let through here and validated in pass 1b, where an unknown one reads
@@ -271,9 +282,42 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     return
   }
   const specs = decl.children[0]
+  const defaultName: Node | null = decl.children.length > 1 ? decl.children[1] : null
+  if (specs.kind === N_EMPTY && defaultName === null) {
+    ctx.error(
+      decl,
+      `Side-effect imports (\`import "${specifier}"\`) are not supported; modules have no top-level code`
+    )
+    return
+  }
+  if ((decl.flags & FLAG_TYPE_ONLY) !== 0) {
+    ctx.error(decl, "Type-only imports are not supported")
+    return
+  }
+  if (defaultName !== null) {
+    refuseDefaultImport(ctx, defaultName, defaultName.text, specifier)
+    return
+  }
+  if (specs.kind === N_IDENT) {
+    ctx.error(
+      specs,
+      `Namespace imports (\`import * as ${specs.text}\`) are not supported; import functions by name`
+    )
+    return
+  }
   if (specs.kind !== N_LIST || specs.children.length === 0) {
     ctx.error(decl, "Empty import list")
     return
+  }
+  for (const spec of specs.children) {
+    if ((spec.flags & FLAG_TYPE_ONLY) !== 0) {
+      ctx.error(spec, "Type-only imports are not supported")
+      return
+    }
+    if (spec.children[0].kind === N_IDENT && spec.children[0].text === "default") {
+      refuseDefaultImport(ctx, spec, spec.text, specifier)
+      return
+    }
   }
   for (const spec of specs.children) {
     const importedName = spec.children[0].text
@@ -283,4 +327,9 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     // ones that turn out to be functions or constants.
     ctx.program.typeNames.add(spec.text)
   }
+}
+
+/** A default import, `import d from` or `import { default as d } from`, naming the spelling that works (NL2190). */
+const refuseDefaultImport = (ctx: CheckContext, at: Node, name: string, specifier: string): void => {
+  ctx.error(at, `Default imports are not supported; use \`import { ${name} } from "${specifier}"\``)
 }

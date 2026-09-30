@@ -54,7 +54,10 @@ import {
   N_FUNCTION,
   N_IDENT,
   N_IF,
+  N_EXPORT_ASSIGNMENT,
+  N_EXPORT_DECLARATION,
   N_IMPORT,
+  N_IMPORT_EQUALS,
   N_INDEX,
   N_INTERFACE,
   N_LABELED,
@@ -62,6 +65,7 @@ import {
   N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
+  N_NAMESPACE_EXPORT,
   N_ARRAY,
   N_CALL,
   N_NEW,
@@ -160,6 +164,9 @@ export class Checker {
   declareNames(): void {
     for (const stmt of this.program.file.children) {
       if (stmt.kind === N_IMPORT) {
+        // One diagnostic per import, as stage0 recovered per statement: a
+        // refused import binds nothing, so the next one is still read.
+        this.ctx.errored = false
         collectImports(this.ctx, stmt)
       } else if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
         // WP18 G5: a class or interface with type parameters is a template, not
@@ -273,13 +280,7 @@ export class Checker {
       } else if (stmt.kind === N_FUNCTION) {
         this.collectFunction(stmt)
       } else if (stmt.kind !== N_IMPORT && stmt.kind !== N_TYPE_ALIAS && stmt.kind !== N_ENUM) {
-        // A statement the parser read where a declaration was expected: a
-        // module has no top-level code for it to be part of (WP33 R1). The
-        // kind is named the way stage0 named it, by TypeScript's `SyntaxKind`.
-        this.ctx.error(
-          stmt,
-          `Only top-level function declarations are supported in Phase 1 (found ${syntaxKindName(stmt.kind)})`
-        )
+        refuseTopLevelForm(this.ctx, stmt)
       }
     }
     this.ctx.errored = false
@@ -2617,11 +2618,42 @@ const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean,
 }
 
 /**
+ * WP33 R1: what the parser read where a declaration was expected, refused
+ * whatever it holds — an export that is not a modifier on a declaration
+ * (NL2128, NL2129), an `export` on an import (NL2226), and otherwise a
+ * statement, `import x = require(...)` or `export as namespace`, which a
+ * module has no top-level code for (NL2230). The kind is named the way
+ * stage0 named it, by TypeScript's `SyntaxKind`.
+ */
+export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
+  if (stmt.kind === N_EXPORT_DECLARATION) {
+    ctx.error(
+      stmt,
+      "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself"
+    )
+  } else if (stmt.kind === N_EXPORT_ASSIGNMENT) {
+    ctx.error(stmt, "`export default` / `export =` are not supported; use a named `export function`")
+  } else if (isExported(stmt)) {
+    ctx.error(
+      stmt,
+      `Only functions can be exported for now, plus classes and interfaces (found \`export\` on ${syntaxKindName(stmt.kind)})`
+    )
+  } else {
+    ctx.error(
+      stmt,
+      `Only top-level function declarations are supported in Phase 1 (found ${syntaxKindName(stmt.kind)})`
+    )
+  }
+}
+
+/**
  * The `SyntaxKind` TypeScript gives a statement found at the top level, which
  * is the word NL2230's message has always ended with. Every statement the
- * parser reads there has one (`Parser.startsTopLevelStatement`).
+ * parser reads there has one (`Parser.startsTopLevelStatement`), and so does
+ * every import form NL2226 and NL2230 name and every declaration NL2260
+ * finds where a statement stands.
  */
-const syntaxKindName = (kind: i32): string => {
+export const syntaxKindName = (kind: i32): string => {
   switch (kind) {
     case N_EXPR_STMT:
       return "ExpressionStatement"
@@ -2651,6 +2683,14 @@ const syntaxKindName = (kind: i32): string => {
       return "WithStatement"
     case N_LABELED:
       return "LabeledStatement"
+    case N_FUNCTION:
+      return "FunctionDeclaration"
+    case N_IMPORT:
+      return "ImportDeclaration"
+    case N_IMPORT_EQUALS:
+      return "ImportEqualsDeclaration"
+    case N_NAMESPACE_EXPORT:
+      return "NamespaceExportDeclaration"
     default:
       return "Statement"
   }

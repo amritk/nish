@@ -19,7 +19,8 @@ whatever program imports it, and subject to the same rules as `examples/` or
 ## `nish/crypto` — the primitives under TLS 1.3
 
 The first lanes of [WP34](../docs/wp34-hosting-cs.md) §5: K1's hashes, MACs and
-key derivation, K2's and K3's AEADs, K4's key exchange and K5's signatures, in
+key derivation, K2's and K3's AEADs, K4's key exchange, K5's signatures and
+K6's certificates, in
 pure Nish (decision S1), each module imported by its own specifier. Every one
 is written from its specification, with two exceptions that keep their
 upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL, and
@@ -28,7 +29,7 @@ upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL, and
 specification's published vectors in its `tests/link/crypto_*` programs. The
 performance gate compiles every module with no diagnostics under both
 `--number-mode i32` and `f64`, and the hashes, HMAC, HKDF, X25519,
-ChaCha20-Poly1305, AES-GCM and P-256 also run their vectors in `f64`
+ChaCha20-Poly1305, AES-GCM, P-256 and X.509 also run their vectors in `f64`
 (`crypto_*_f64`).
 
 | Module | What it is | Reproduces |
@@ -43,6 +44,7 @@ ChaCha20-Poly1305, AES-GCM and P-256 also run their vectors in `f64`
 | [`crypto/chacha20poly1305.ts`](./crypto/chacha20poly1305.ts) | `chacha20Poly1305Seal(key, nonce, aad, plaintext)`, which answers the ciphertext followed by the 16-byte tag, and `chacha20Poly1305Open`, which checks the whole tag before it decrypts anything and answers `null` for a message that does not authenticate. Beneath them `chacha20Block`, `chacha20`, `chacha20QuarterRound`, `poly1305` and `poly1305KeyGen`, and `chacha20HeaderMask`, QUIC's 5-byte header-protection mask. Every input of the wrong length answers `null` | RFC 8439 §2, RFC 9001 §5.4.4 |
 | [`crypto/aes.ts`](./crypto/aes.ts) | AES-128 and AES-256, bitsliced four blocks at a time with the Boyar–Peralta S-box circuit, so no table is read: `aesKey(key)` expands a 16- or 32-byte key into an `AesKey`, then `aesEncryptBlock`, `aesGcmSeal` / `aesGcmOpen` (tag last, checked in full before anything is decrypted; any non-empty IV) and `aesHeaderMask`. AES-192 is out of scope, and a wrong length answers `null` | FIPS 197, SP 800-38D, RFC 9001 §5.4.3, Wycheproof `aes_gcm` |
 | [`crypto/p256.ts`](./crypto/p256.ts) | ECDSA over P-256 with RFC 6979's deterministic nonces: `p256PublicKey(priv)` (65-byte uncompressed SEC1), `p256Sign` / `p256Verify` over a digest and `p256SignSha256` / `p256VerifySha256` over a message; a signature is `r` and `s`, 32 big-endian bytes each, not DER. A malformed key, a point off the curve or an `r` or `s` out of range answers `null` or `false`, never a panic | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` |
+| [`crypto/x509.ts`](./crypto/x509.ts) | DER, PEM and X.509 over P-256: `pemToDer` / `derToPem` (RFC 7468, padded standard base64, strict labels), `x509ParseP256PrivateKey` (SEC1 or PKCS#8), `x509ParseCertificate` / `x509ParseChain` into an `X509Certificate`, `x509VerifySignature` (ecdsa-with-SHA256 under an issuer's key), `x509MintSelfSigned`, the 1-to-14-day self-signed P-256 certificate WebTransport's `serverCertificateHashes` accepts, and `x509CertificateHash`, its SHA-256. DER is read strictly — non-minimal lengths and integers, indefinite lengths and trailing bytes answer `null` | X.690, RFC 5280, RFC 7468, RFC 5915, RFC 5208 / 5958; certificates checked against OpenSSL |
 
 Three rules hold across the modules:
 
@@ -83,7 +85,9 @@ Three rules hold across the modules:
     addition, straight lines of calls the check refuses, remain discipline.
 
   The SHA-2 hashes and HKDF are additions, rotations and xors that branch
-  only on lengths, and are not in a fixture either.
+  only on lengths, and are not in a fixture either; nor is `crypto/x509.ts`,
+  whose one secret, a private key, is base64-decoded by range masks and
+  otherwise only copied and handed to `crypto/p256.ts`.
 
 ## How a program imports it
 

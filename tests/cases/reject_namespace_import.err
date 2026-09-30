@@ -1,1 +1,1 @@
-expected `{`, found `*`
+Namespace imports (`import * as math`) are not supported; import functions by name

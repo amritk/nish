@@ -24,6 +24,7 @@ import {
   WANT_MAYBE,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
+import { syntaxKindName } from "./checker"
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
@@ -62,6 +63,8 @@ import {
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
+  N_IMPORT,
+  N_IMPORT_EQUALS,
   N_IDENT,
   N_IF,
   N_INDEX_SIGNATURE,
@@ -493,10 +496,16 @@ export const refuseUnsupportedForms = (ctx: CheckContext, node: Node): void => {
  * The sweep over a node inside a declaration. A class here is a class
  * expression, which is never a value: an anonymous one is refused by the rule
  * an anonymous declaration is (NL2018), a named one as the expression it is
- * (NL2256), and nothing inside either is read.
+ * (NL2256), and nothing inside either is read. A function or an import here
+ * is a declaration written where a statement stands — a nested function
+ * would be a closure, and a module's imports are its own — and is refused as
+ * the statement kind it is (NL2260), unread, in a template nothing
+ * instantiates too.
  */
 const sweepNested = (ctx: CheckContext, node: Node): void => {
-  if (node.kind !== N_CLASS) {
+  if (node.kind === N_FUNCTION || node.kind === N_IMPORT || node.kind === N_IMPORT_EQUALS) {
+    ctx.error(node, `Unsupported statement in Phase 1: ${syntaxKindName(node.kind)}`)
+  } else if (node.kind !== N_CLASS) {
     sweepForms(ctx, node, null)
   } else if (node.children[0].kind === N_EMPTY) {
     ctx.error(node, "Classes must be named")
@@ -556,7 +565,8 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
 
 /**
  * The function and binding forms a node's own head holds, asked before any of
- * its children: an anonymous default function (NL2203), a top-level `let`
+ * its children: an anonymous default function (NL2203) or a named one
+ * (NL2130), a top-level `let`
  * (NL2084) or one bound to an arrow (NL2272), a destructuring pattern where a
  * constant or a local binds its name (NL2191, NL2193), an annotated arrow
  * binding (NL2273), and a rest, destructured or optional parameter (NL2235,
@@ -565,6 +575,8 @@ const sweepForms = (ctx: CheckContext, node: Node, owner: Node | null): void => 
 const refuseBindingForm = (ctx: CheckContext, node: Node): void => {
   if (node.kind === N_FUNCTION && node.children[0].kind === N_EMPTY) {
     ctx.error(node, "Functions must be named")
+  } else if (node.kind === N_FUNCTION && (node.flags & FLAG_DEFAULT) !== 0) {
+    ctx.error(node, "`export default` is not supported; use a named `export function`")
   } else if (node.kind === N_MODULE_CONST) {
     const first = node.children[0].children[0]
     if ((node.flags & (FLAG_CONST | FLAG_VAR)) === 0) {
@@ -666,14 +678,19 @@ const leftToCollector = (member: Node, owner: Node, flags: i32): boolean =>
 
 /**
  * The header of a class or an interface declaration, before its type
- * parameters: `declare` (NL2083) and `abstract` (NL2168). An anonymous class
- * is not swept at all: pass 1a named it (NL2018, `declareStruct`).
+ * parameters: `export default` (NL2131), `declare` (NL2083) and `abstract`
+ * (NL2168). An anonymous class is not swept at all: pass 1a named it (NL2018,
+ * `declareStruct`).
  */
 const refuseStructHeader = (ctx: CheckContext, node: Node): void => {
   if (node.kind !== N_CLASS && node.kind !== N_INTERFACE) {
     return
   }
-  if ((node.flags & FLAG_FOREIGN) !== 0) {
+  // `default` is written first, so it is the refusal. An anonymous class is
+  // pass 1a's to refuse, and the sweep never reads it (NL2018).
+  if ((node.flags & FLAG_DEFAULT) !== 0) {
+    ctx.error(node, "`export default` is not supported; use a named `export`")
+  } else if ((node.flags & FLAG_FOREIGN) !== 0) {
     ctx.error(node, `\`declare ${node.kind === N_CLASS ? "class" : "interface"}\` is not supported`)
   } else if ((node.flags & FLAG_ABSTRACT) !== 0) {
     ctx.error(node, "Abstract classes are not supported")

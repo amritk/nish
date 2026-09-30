@@ -1,0 +1,2 @@
+A module export name written as a string is forbidden in
+ (an export is a declaration, and a declaration has a name; import it by that name)

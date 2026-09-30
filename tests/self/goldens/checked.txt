@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 816 programs, 57668 dump lines.
+# 818 programs, 57751 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -56626,6 +56626,91 @@ function test(): i32 -> @test [exported]
 function Methods.module<i32>(this: Methods, x: i32): i32 -> @Methods.module$i32 [method instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/parser/names-modules-lib.ts
+module tests/parser/names-modules-lib.ts (entry)
+function type(): i32 -> @type [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function as(): i32 -> @as [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function from(): i32 -> @from [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function require(): i32 -> @require [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function namespace(): i32 -> @namespace [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function assert(): i32 -> @assert [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function defer(): i32 -> @defer [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+program tests/parser/names-modules.ts
+module tests/parser/names-modules.ts (entry)
+import type from "./names-modules-lib" -> function @type
+import from from "./names-modules-lib" -> function @from
+import asWord from "./names-modules-lib" -> function @as
+import require from "./names-modules-lib" -> function @require
+import namespace from "./names-modules-lib" -> function @namespace
+import as from "./names-modules-lib" -> function @type
+import typeWord from "./names-modules-lib" -> function @type
+import assert from "./names-modules-lib" -> function @assert
+import defer from "./names-modules-lib" -> function @defer
+import typeLine from "./names-modules-lib" -> function @type
+import fromLine from "./names-modules-lib" -> function @from
+import typeComment from "./names-modules-lib" -> function @type
+function words(): i32 -> @words [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: as assert defer from namespace require type
+  stackSites=0 stackLocals=0
+  callee 26:3 type -> @type
+  callee 26:12 from -> @from
+  callee 26:21 as -> @as
+  callee 26:32 require -> @require
+  callee 26:44 namespace -> @namespace
+  callee 26:58 type -> @type
+  callee 26:65 type -> @type
+  callee 26:78 assert -> @assert
+  callee 26:89 defer -> @defer
+function lines(): i32 -> @lines [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: from type
+  stackSites=0 stackLocals=0
+  callee 28:33 type -> @type
+  callee 28:46 from -> @from
+  callee 28:59 type -> @type
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: lines words
+  stackSites=0 stackLocals=0
+  callee 30:32 words -> @words
+  callee 30:42 lines -> @lines
+module tests/parser/names-modules-lib.ts
+function type(): i32 -> @type [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function as(): i32 -> @as [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function from(): i32 -> @from [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function require(): i32 -> @require [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function namespace(): i32 -> @namespace [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function assert(): i32 -> @assert [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function defer(): i32 -> @defer [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 program tests/parser/names-operator-calls.ts
 module tests/parser/names-operator-calls.ts (entry)
