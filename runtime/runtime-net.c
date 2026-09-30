@@ -422,7 +422,10 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
 #define NISH_POLL_REMOVE 2
 #endif
 
-/* `pollCreate()`: a loop descriptor, close-on-exec like every socket here. */
+/* `pollCreate()`: a loop descriptor, close-on-exec from the moment it exists
+   on Linux, where `epoll_create1(EPOLL_CLOEXEC)` sets it atomically, and from
+   the `fcntl` after `kqueue()` on Darwin, where a child another thread spawns
+   in between can inherit it, as `nish_net_setup`'s sockets can. */
 int32_t nish_poll_create(void) {
 #if defined(__linux__)
   int fd = epoll_create1(EPOLL_CLOEXEC);
