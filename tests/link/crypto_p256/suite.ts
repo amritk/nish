@@ -19,12 +19,12 @@ import {
   p256Verify,
   p256VerifySha256,
 } from "nish/crypto/p256";
+import { x509DerSignatureRS } from "nish/crypto/x509";
 import {
   WycheproofEcdsaCase,
   wycheproofEcdsaP256Sha256Cases,
   wycheproofEcdsaP256Sha256Keys,
 } from "../crypto_wycheproof/ecdsa_secp256r1_sha256";
-import { derSignature } from "./der";
 import { fromHex, toHex } from "./hex";
 
 /** The bytes of an ASCII string, for the RFC's messages. */
@@ -84,7 +84,7 @@ const GY: string = "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf
 const NEG_GY: string = "b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a";
 
 /**
- * Every Wycheproof case through `derSignature` and `p256Verify`, checked
+ * Every Wycheproof case through `x509DerSignatureRS` and `p256Verify`, checked
  * against its expected result. `valid` must verify and `invalid` must not;
  * `acceptable` may go either way and is only counted. A mismatch is named by
  * its `tcId`. Answers the number of mismatches.
@@ -109,7 +109,7 @@ const wycheproof = (t: Suite): i32 => {
       continue;
     }
     const pub: u8[] = fromHex(keys[keyAt]);
-    const sig: u8[] | null = derSignature(fromHex(c.sig));
+    const sig: u8[] | null = x509DerSignatureRS(fromHex(c.sig));
     const verified: boolean = sig !== null && p256Verify(pub, sha256(fromHex(c.msg)), sig);
     if (c.result === "valid") {
       if (verified) {
@@ -135,7 +135,7 @@ const wycheproof = (t: Suite): i32 => {
     Arena.release(mark);
   }
   console.log(
-    `wycheproof ecdsa_secp256r1_sha256: ${toI32(cases.length)} cases, ${valid} valid verified, ${invalidByDer + invalidByModule} invalid refused (${invalidByDer} by the DER reader, ${invalidByModule} by p256Verify), ${acceptableTrue + acceptableFalse} acceptable (${acceptableTrue} verified, ${acceptableFalse} refused), 0 filtered out`
+    `wycheproof ecdsa_secp256r1_sha256: ${toI32(cases.length)} cases, ${valid} valid verified, ${invalidByDer + invalidByModule} invalid refused (${invalidByDer} by x509DerSignatureRS, ${invalidByModule} by p256Verify), ${acceptableTrue + acceptableFalse} acceptable (${acceptableTrue} verified, ${acceptableFalse} refused), 0 filtered out`
   );
   return mismatches;
 };

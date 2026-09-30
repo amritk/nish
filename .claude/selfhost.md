@@ -13,7 +13,8 @@ IR(stage1, src/)  ==  IR(stage2, src/)      byte for byte
 The seed is the last released `nish`. stage1 is `src/` built by the seed,
 stage2 is `src/` built by stage1, stage3 is `src/` built by stage2 and must be
 byte-identical to stage2. `npm test` and CI's `bootstrap` job hold all of that
-on every run.
+on every run; in CI the `test` job delegates its copy to the `bootstrap` row
+for its platform rather than proving it twice (`.claude/testing.md`).
 
 `src/` is the only implementation of Nish. Until WP19 R6 a second one in
 TypeScript, "stage0" (built by `tsc` into `dist/`; it lived in its own `src/`
@@ -295,7 +296,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
     `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access, type
+    `new a.B()` an `N_NEW` whose callee is the member access, `import.meta`
+    an `N_MEMBER` whose receiver is the IDENT `import`, as `import(...)` is
+    an `N_CALL` whose callee is, type
     parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
     when written, a missing name, return type or body an EMPTY child of the
     `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an
@@ -365,9 +368,17 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   seed in every position a name can stand, line breaks included, before it
   goes in. A regex is the one token the lexer cannot decide alone: the parser
   asks it again where an operand is due (`Lexer.scanRegex`). When a case comes off, it leaves both
-  parser-refusal registers and the R6 section of
-  `tests/wordings/unreachable.txt` in the same change, with its `.err`
-  re-pinned to the rule.
+  parser-refusal registers (and its code's line in
+  `tests/wordings/unreachable.txt`, if it has one) in the same change, with
+  its `.err` re-pinned to the rule.
+- **A parse path stops at its first failed `expect`.** `expect` reports and
+  returns `false`; a caller that ignores the `false` and parses on is a
+  cascade, the second and third diagnostics describing the first one's
+  wreckage. A malformed form costs no more diagnostics than it did before the
+  path existed, and usually one. Check a new path by truncating the form at
+  every token, followed by a real declaration, against the last release
+  (`reject_import_malformed`, `reject_import_equals_malformed`; #337 found two
+  such cascades in review).
 - **A disagreement is triaged before the next phase starts.** Three stage0 bugs
   came out of S3 that way and three more out of S4 — all wrong *attributes*
   rather than wrong instructions, which is the class of bug a golden `.ll` is
