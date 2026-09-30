@@ -80,18 +80,27 @@ const fail = (message) => {
 
 const args = process.argv.slice(2)
 let samples = SAMPLES
-let seed = Date.now() % 1000000007
+// Never 0: dudect.c reads a seed of 0 as "keep the built-in one".
+let seed = (Date.now() % 1000000007) + 1
 let nish = null
 let only = null
+/** The value after the option at `i`, refusing an option given last or followed by another. */
+const optionValue = (i) => {
+  const value = args[i + 1]
+  if (value === undefined || value.startsWith("-")) {
+    fail(`${args[i]} is missing its value (see the header of tests/ct-timing.js)`)
+  }
+  return value
+}
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--quick") {
     samples = QUICK_SAMPLES
   } else if (args[i] === "--samples") {
-    samples = Number(args[++i])
+    samples = Number(optionValue(i++))
   } else if (args[i] === "--seed") {
-    seed = Number(args[++i])
+    seed = Number(optionValue(i++))
   } else if (args[i] === "--nish") {
-    nish = path.resolve(args[++i])
+    nish = path.resolve(optionValue(i++))
   } else if (args[i].startsWith("-")) {
     fail(`unknown option ${args[i]} (see the header of tests/ct-timing.js)`)
   } else {
@@ -100,6 +109,12 @@ for (let i = 0; i < args.length; i++) {
 }
 if (!Number.isInteger(samples) || samples < 1000) {
   fail("--samples needs a whole number of at least 1000")
+}
+if (!Number.isSafeInteger(seed) || seed < 1) {
+  fail("--seed needs a whole number of at least 1, which is what makes a run repeatable")
+}
+if (nish !== null && !fs.existsSync(nish)) {
+  fail(`--nish ${nish}: no compiler there`)
 }
 if (nish === null) {
   // build/nish is what CI builds and `npm run build` leaves; build/nish-test is what `npm test` leaves.
