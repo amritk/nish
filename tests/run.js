@@ -8121,17 +8121,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // which is the shape of the defect rather than a check on it.
     const gateLines = releaseYmlText.split("\n").filter((l) => /^\s*for f in \S+ /.test(l))
     //
-    // TODO(WP34): the gates name the top-level modules only, so this holds them
-    // to those. A module in a subdirectory (`std/crypto/sha256.ts`) is not named
-    // in release.yml yet; until it is, "npm pack ships every std/ module" below
-    // is what proves those reach the package, and this list takes them in once
-    // the gates do.
-    const listedModules = actual.split(", ").filter((m) => !m.includes("/"))
+    // Every module, a nested one (`std/crypto/sha256.ts`) included: a gate that
+    // named only the top level would let a subdirectory drop out of the staging
+    // unnoticed, which is the defect this check exists for.
+    const listedModules = actual.split(", ")
     const holes = gateLines.flatMap((line) =>
       listedModules.filter((m) => !line.includes(`std/${m}.ts`)).map((m) => `std/${m}.ts in: ${line.trim()}`)
     )
     check(
-      `release.yml's ${gateLines.length} presence gates each name every top-level std module, so none can ship missing (${listedModules.join(", ")})`,
+      `release.yml's ${gateLines.length} presence gates each name every std module, nested ones included, so none can ship missing (${listedModules.join(", ")})`,
       gateLines.length === 3 && holes.length === 0,
       gateLines.length !== 3
         ? `expected 3 \`for f in ...\` gates in release.yml, found ${gateLines.length}`
