@@ -756,8 +756,8 @@ export class Parser {
   /**
    * Whether the token in hand opens a statement rather than a declaration: a
    * statement keyword, `import` before `(` or `.meta` (`import("./m")` and
-   * `import.meta`, for Phase 0 to refuse, NL1002 and NL1060), or a name that is not
-   * followed by another name or a keyword. That last half leaves the
+   * `import.meta`, for Phase 0 to refuse, NL1002 and NL1060), or a name
+   * that is not followed by another name or a keyword. That last half leaves the
    * modifiers the language does not have — `async function`, `declare
    * class`, `abstract class`, `namespace N` — to the refusal below, which is
    * their own and not a statement's.
@@ -1633,9 +1633,9 @@ export class Parser {
 
   /**
    * `import` followed by nothing an import, `import(...)` or `import.meta`
-   * could open — `import;`, `import 5`, `import.foo` — reported as it always was, the `{`
-   * the one import form wants, so a malformed import costs no more
-   * diagnostics than it did.
+   * could open — `import;`, `import 5`, `import.foo` — reported as it
+   * always was, the `{` the one import form wants, so a malformed import
+   * costs no more diagnostics than it did.
    */
   parseMalformedImport(start: i32): Node {
     this.advance() // `import`
