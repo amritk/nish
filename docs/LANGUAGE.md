@@ -196,8 +196,9 @@ Type rules:
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
-  `keyof T` is one of those, `` Unsupported type `keyof T` `` (NL2038), and it
-  is refused in a generic declaration nothing instantiates too, because the
+  `keyof T` is one of those, `` Unsupported type `keyof T` (Phase 1 supports
+  number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void) ``
+  (NL2038), and it is refused in a generic declaration nothing instantiates too, because the
   rule is a pass over the whole module rather than a step in resolving an
   annotation (`reject_type_keyof`, `reject_type_keyof_template`). `keyof` is
   the operator only before a type on its own line, so a class a program names
