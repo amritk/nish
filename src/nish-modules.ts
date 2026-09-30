@@ -77,7 +77,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose"
+    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, udpBind, udpSendTo, udpRecvFrom"
   }
   return "write, writeError, panic"
 }
@@ -90,7 +90,7 @@ export const nishModuleExports = (specifier: string): string => {
  * which.
  *
  * Each name is a global too, as every `nish:` export is, and each carries a
- * `net` or `tcp` prefix so that none of them collides with a global that
+ * `net`, `tcp` or `udp` prefix so that none of them collides with a global that
  * already exists (`write`).
  */
 export const netSignature = (name: string): string => {
@@ -115,10 +115,19 @@ export const netSignature = (name: string): string => {
   if (name === "netShutdown") {
     return "ii"
   }
+  if (name === "udpBind") {
+    return "sii"
+  }
+  if (name === "udpSendTo") {
+    return "irnnrii"
+  }
+  if (name === "udpRecvFrom") {
+    return "iwnnwm"
+  }
   return ""
 }
 
-/** `i`: an `i32` (a descriptor, a port, a backlog, `how`). */
+/** `i`: an `i32` (a descriptor, a port, a backlog, `how`, flags, a segment size, ECN bits). */
 export const NET_INT: i32 = 105
 /** `s`: a `string`, a numeric host. */
 export const NET_STRING: i32 = 115
@@ -126,14 +135,23 @@ export const NET_STRING: i32 = 115
 export const NET_WRITTEN: i32 = 119
 /** `r`: a `u8[]` the call only reads. */
 export const NET_READ: i32 = 114
+/** `m`: an `i32[]` the call writes, `udpRecvFrom`'s `meta`. */
+export const NET_WORDS: i32 = 109
 /**
  * `n`: an `i32` offset or length into the `u8[]` before it, which the call
  * range-checks in the IR and hands to the runtime widened to an `i64`.
  */
 export const NET_RANGE: i32 = 110
 
-/** Whether a `nish:net` call range-checks a `(buf, off, len)` triple: `netRead` and `netWrite`. */
-export const isNetRangeCall = (name: string): boolean => netSignature(name).indexOf("n") >= 0
+/**
+ * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or
+ * -1: the buffer is the argument before the first `n`. `netRead`, `netWrite`,
+ * `udpSendTo` and `udpRecvFrom` have one, at 1.
+ */
+export const netRangeBuffer = (name: string): i32 => {
+  const at = netSignature(name).indexOf("n")
+  return at < 0 ? -1 : at - 1
+}
 
 /**
  * The runtime-net.c symbol a `nish:net` function lowers to: `nish_` and the

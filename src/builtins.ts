@@ -16,7 +16,7 @@
 import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
-import { isNetExport, NET_READ, NET_STRING, NET_WRITTEN, netSignature } from "./nish-modules"
+import { isNetExport, NET_READ, NET_STRING, NET_WORDS, NET_WRITTEN, netSignature } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
@@ -551,7 +551,7 @@ const checkCrypto = (
     return ctx.errorType(call.children[0], cryptoRefusal(name))
   }
   if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
-    checkByteBuffer(ctx, args.children[0], scope, name, true)
+    checkBuffer(ctx, args.children[0], scope, name, T_U8, true)
   }
   requireStatementPosition(ctx, call, name)
   return T_VOID
@@ -789,7 +789,9 @@ const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i3
       const param = params.charCodeAt(i)
       const arg = args.children[i]
       if (param === NET_WRITTEN || param === NET_READ) {
-        checkByteBuffer(ctx, arg, scope, name, param === NET_WRITTEN)
+        checkBuffer(ctx, arg, scope, name, T_U8, param === NET_WRITTEN)
+      } else if (param === NET_WORDS) {
+        checkBuffer(ctx, arg, scope, name, T_I32, true)
       } else {
         checkArgumentType(ctx, arg, scope, name, param === NET_STRING ? T_STRING : T_I32)
       }
@@ -804,26 +806,31 @@ const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i3
  * a socket are written in, and a wider element would make the byte order a
  * fact about the machine. A `readonly u8[]` is refused where the call writes
  * it, with the words every write through a readonly array gets, and accepted
- * where it only reads.
+ * where it only reads. The one other `element` is `udpRecvFrom`'s `meta`, an
+ * `i32[]` it writes numbers rather than bytes into.
  */
-const checkByteBuffer = (
+const checkBuffer = (
   ctx: CheckContext,
   arg: Node,
   scope: Scope,
   name: string,
+  element: i32,
   written: boolean
 ): void => {
-  const bytes = ctx.table.arrayOf(T_U8)
-  const got = checkExpression(ctx, arg, scope, bytes)
-  if (got === T_ERROR || got === bytes) {
+  const want = ctx.table.arrayOf(element)
+  const got = checkExpression(ctx, arg, scope, want)
+  if (got === T_ERROR || got === want) {
     return
   }
-  const readonlyBytes = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === T_U8
-  if (readonlyBytes && written) {
+  const readonlyWant = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === element
+  if (readonlyWant && written) {
     ctx.error(arg, readonlyWriteMessage(ctx, got, `\`${name}\` through`))
-  } else if (!readonlyBytes) {
-    const verb = written ? "fills" : "sends from"
-    ctx.error(arg, `\`${name}\` ${verb} a \`u8[]\`, got ${ctx.table.typeName(got)}`)
+  } else if (!readonlyWant) {
+    let what = written ? "fills a `u8[]`" : "sends from a `u8[]`"
+    if (element !== T_U8) {
+      what = "fills an `i32[]`"
+    }
+    ctx.error(arg, `\`${name}\` ${what}, got ${ctx.table.typeName(got)}`)
   }
 }
 

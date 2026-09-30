@@ -12898,7 +12898,7 @@ is the `net.fail` block and its `noreturn` panic; `--unchecked-indexing`
 removes both. The buffer `netRead` fills keeps `nocapture` and loses
 `readonly`, and neither call is `willreturn`, because a blocking socket the
 program inherited can wait
-([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-and-non-blocking-tcp)).
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp)).
 
 <!-- cookbook:begin builtin-net -->
 ```ts
@@ -13004,6 +13004,158 @@ attributes #2 = { nounwind noreturn cold }
 !10 = !{!9, !7, i64 0}
 ```
 <!-- cookbook:end builtin-net -->
+
+### `nish:net`: `udpBind`, `udpSendTo` and `udpRecvFrom`
+
+UDP (WP34 N5), the same shape as TCP's calls: one call into
+`runtime/runtime-net.c` each, answering an `i32`, and each a write. `udpBind`
+creates, configures and binds a socket, none of which waits, so it keeps
+`willreturn`; `udpSendTo` and `udpRecvFrom` are one `sendmsg` and one `recvmsg`,
+which wait on a blocking socket, so they are `nounwind` alone. The range check
+covers the buffer before the first offset, as `netRead`'s does, and `meta`, an
+`i32[]`, travels as its header like every buffer. Echoing `meta[0]` back as the
+segment size re-segments a GRO-coalesced receive on the way out, and `meta[1]`
+reflects the ECN bits it arrived with
+([LANGUAGE.md](LANGUAGE.md#udp)).
+
+<!-- cookbook:begin builtin-net-udp -->
+```ts
+// WP34 N5: UDP in `nish:net`. `udpRecvFrom` checks its range in the IR first,
+// through the slice panic, and every array it fills (the datagram, `from` and
+// `meta`) is `nocapture` but not `readonly`; `udpSendTo`'s buffer and address
+// are `readonly`. `udpBind` is `willreturn`, and neither of the other two is:
+// a blocking socket the program inherited can wait.
+import { udpBind, udpRecvFrom, udpSendTo } from "nish:net"
+
+export const bind = (port: i32): i32 => udpBind("::", port, 2)
+
+export const echoOnce = (fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 => {
+  const n = udpRecvFrom(fd, buf, 0, buf.length, from, meta)
+  return n > 0 ? udpSendTo(fd, buf, 0, n, from, meta[0], meta[1]) : n
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"::\00" }, align 8
+
+declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #1
+declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @bind(i32 noundef %port) #0 {
+entry:
+  %0 = call i32 @nish_udp_bind(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 2)
+  ret i32 %0
+}
+
+define noundef i32 @echoOnce(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %from, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %meta) #1 {
+entry:
+  %n.addr = alloca i32, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_udp_recv_from(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %3, %struct.nish_array* %from, %struct.nish_array* %meta)
+  store i32 %10, i32* %n.addr, align 4
+  %11 = load i32, i32* %n.addr, align 4
+  %12 = icmp sgt i32 %11, 0
+  br i1 %12, label %cond.true, label %cond.false
+
+cond.true:
+  %13 = load i32, i32* %n.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %meta, i64 0, i32 0
+  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %17 = icmp ult i64 0, %16
+  br i1 %17, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %16)
+  unreachable
+
+bounds.ok:
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %meta, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %20 = bitcast i8* %19 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 0
+  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %meta, i64 0, i32 0
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %25 = icmp ult i64 1, %24
+  br i1 %25, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 1, i64 %24)
+  unreachable
+
+bounds.ok.1:
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %meta, i64 0, i32 2
+  %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %28 = bitcast i8* %27 to i32*
+  %29 = getelementptr inbounds i32, i32* %28, i64 1
+  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %31 = add i64 0, %14
+  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %33 = load i64, i64* %32, align 8
+  %34 = icmp ule i64 0, %31
+  %35 = icmp ule i64 %31, %33
+  %36 = and i1 %34, %35
+  br i1 %36, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 0, i64 %31, i64 %33)
+  unreachable
+
+net.ok.1:
+  %37 = call i32 @nish_udp_send_to(i32 %fd, %struct.nish_array* %buf, i64 0, i64 %14, %struct.nish_array* %from, i32 %22, i32 %30)
+  br label %cond.end
+
+cond.false:
+  %38 = load i32, i32* %n.addr, align 4
+  br label %cond.end
+
+cond.end:
+  %39 = phi i32 [ %37, %net.ok.1 ], [ %38, %cond.false ]
+  ret i32 %39
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end builtin-net-udp -->
 
 ### `Math.random`
 
@@ -14031,6 +14183,9 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #5
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #5
+declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #5
+declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #5
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
