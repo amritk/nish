@@ -866,6 +866,37 @@ if (!only || "os_host".includes(only)) {
   )
 }
 
+// A socket program of the `net_` blocks, run with `args`: `onPort(port)` is called
+// once it prints `port <n>`, and the answer waits for that promise as well as the
+// exit. A program that prints no port is simply run, with `results` empty.
+const runWithPort = (exe, args, onPort) =>
+  new Promise((resolve) => {
+    const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
+    let out = ""
+    let err = ""
+    let timedOut = false
+    let talks = null
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGKILL")
+    }, 10000)
+    child.stdout.on("data", (chunk) => {
+      out += chunk
+      const port = /^port (\d+)\n/.exec(out)
+      if (talks === null && port !== null) {
+        talks = onPort(Number(port[1]))
+      }
+    })
+    child.stderr.on("data", (chunk) => {
+      err += chunk
+    })
+    child.on("close", (code, signal) => {
+      clearTimeout(timer)
+      const done = talks ?? Promise.resolve([])
+      done.then((results) => resolve({ code, signal, out, err, timedOut, results }))
+    })
+  })
+
 // ---- `nish:net`, against Node's sockets (WP34 N5) ---------------------------------
 //
 // What a golden cannot say about the sockets, because the other end is the
@@ -912,37 +943,12 @@ if (!only || "net_tcp".includes(only)) {
       socket.on("close", () => resolve(next === messages && got === sent))
     })
   const echoRun = (exe, rounds) =>
-    new Promise((resolve) => {
-      const child = spawn(exe, [], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
-      let out = ""
-      let err = ""
-      let timedOut = false
-      let talks = null
-      const timer = setTimeout(() => {
-        timedOut = true
-        child.kill("SIGKILL")
-      }, 10000)
-      child.stdout.on("data", (chunk) => {
-        out += chunk
-        const port = /^port (\d+)\n/.exec(out)
-        if (talks === null && port !== null) {
-          talks = (async () => {
-            const results = []
-            for (const messages of rounds) {
-              results.push(await talk(Number(port[1]), messages))
-            }
-            return results
-          })()
-        }
-      })
-      child.stderr.on("data", (chunk) => {
-        err += chunk
-      })
-      child.on("close", (code, signal) => {
-        clearTimeout(timer)
-        const done = talks ?? Promise.resolve([])
-        done.then((results) => resolve({ code, signal, out, err, timedOut, results }))
-      })
+    runWithPort(exe, [], async (port) => {
+      const results = []
+      for (const messages of rounds) {
+        results.push(await talk(port, messages))
+      }
+      return results
     })
 
   const echoExe = buildCaseIn(netDir, "net_tcp_echo")
@@ -1067,39 +1073,10 @@ if (!only || "net_udp".includes(only)) {
   fs.rmSync(netDir, { recursive: true, force: true })
   fs.mkdirSync(netDir, { recursive: true })
 
-  // Runs `exe` with `args`, calling `onPort(port)` once it prints `port <n>`;
-  // resolves when it exits, after `onPort`'s promise, with what it printed.
-  const runWithPort = (exe, args, onPort) =>
-    new Promise((resolve) => {
-      const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
-      let out = ""
-      let err = ""
-      let timedOut = false
-      let talks = null
-      const timer = setTimeout(() => {
-        timedOut = true
-        child.kill("SIGKILL")
-      }, 10000)
-      child.stdout.on("data", (chunk) => {
-        out += chunk
-        const port = /^port (\d+)\n/.exec(out)
-        if (talks === null && port !== null) {
-          talks = onPort(Number(port[1]))
-        }
-      })
-      child.stderr.on("data", (chunk) => {
-        err += chunk
-      })
-      child.on("close", (code, signal) => {
-        clearTimeout(timer)
-        const done = talks ?? Promise.resolve([])
-        done.then((results) => resolve({ code, signal, out, err, timedOut, results }))
-      })
-    })
-
   // One round: `count` datagrams, each sent once the one before it has come
   // back, then the empty datagram that ends the round; true when every one
   // came back unchanged.
+  const datagram = (i) => `datagram ${i} ${"x".repeat(i % 97)}`
   const udpRound = (socket, port, count) =>
     new Promise((resolve) => {
       let next = 0
@@ -1116,7 +1093,7 @@ if (!only || "net_udp".includes(only)) {
           socket.send(Buffer.alloc(0), port, "127.0.0.1", () => resolve(ok))
           return
         }
-        sent = Buffer.from(`datagram ${next} ${"x".repeat(next % 97)}`)
+        sent = Buffer.from(datagram(next))
         socket.send(sent, port, "127.0.0.1")
       }
       socket.on("message", onMessage)
@@ -1127,10 +1104,7 @@ if (!only || "net_udp".includes(only)) {
   if (echoExe !== null) {
     const rounds = [1, 200]
     const bytes = (count) =>
-      Array.from({ length: count }, (_, i) => `datagram ${i} ${"x".repeat(i % 97)}`.length).reduce(
-        (a, b) => a + b,
-        0
-      )
+      Array.from({ length: count }, (_, i) => datagram(i).length).reduce((a, b) => a + b, 0)
     const want = rounds.map((c) => `echoed ${c} datagrams, ${bytes(c)} bytes\n`).join("") + "flat\n"
     const socket = dgram.createSocket("udp4")
     await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
@@ -1177,32 +1151,23 @@ if (!only || "net_udp".includes(only)) {
     if (offloadExe !== null) {
       const socket = dgram.createSocket("udp4")
       const arrived = []
-      socket.on("message", (message) => arrived.push(message))
-      await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
-      const r = await new Promise((resolve) => {
-        const run = spawn(offloadExe, [String(socket.address().port)], {
-          cwd: root,
-          stdio: ["ignore", "pipe", "pipe"],
-        })
-        let out = ""
-        let err = ""
-        const timer = setTimeout(() => run.kill("SIGKILL"), 10000)
-        run.stdout.on("data", (chunk) => {
-          out += chunk
-        })
-        run.stderr.on("data", (chunk) => {
-          err += chunk
-        })
-        run.on("close", (code, signal) => {
-          clearTimeout(timer)
-          resolve({ code, signal, out, err })
-        })
+      let allArrived = null
+      const four = new Promise((resolve) => {
+        allArrived = resolve
       })
+      socket.on("message", (message) => {
+        arrived.push(message)
+        if (arrived.length === 4) {
+          allArrived()
+        }
+      })
+      await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
+      const r = await runWithPort(offloadExe, [String(socket.address().port)], async () => [])
       // The four datagrams were queued before the program printed a line, so
       // they are Node's to read; wait for the event loop to deliver them.
-      for (let i = 0; i < 200 && arrived.length < 4; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 10))
-      }
+      let late = null
+      await Promise.race([four, new Promise((resolve) => (late = setTimeout(resolve, 2000)))])
+      clearTimeout(late)
       socket.close()
       const pattern = Buffer.from(Array.from({ length: 4800 }, (_, i) => i % 251))
       const whole = Buffer.concat(arrived)
@@ -1213,7 +1178,8 @@ if (!only || "net_udp".includes(only)) {
           arrived.length === 4 &&
           arrived.every((m) => m.length === 1200) &&
           whole.equals(pattern),
-        `exit ${r.code} signal ${r.signal}\ndatagrams: ${JSON.stringify(arrived.map((m) => m.length))}\n` +
+        `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+          `datagrams: ${JSON.stringify(arrived.map((m) => m.length))}\n` +
           `stdout: ${JSON.stringify(r.out)}\nstderr: ${r.err}`
       )
       const gro = /^gro (\d+) bytes, segment (\d+), intact true$/m.exec(r.out)
@@ -5773,7 +5739,7 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * `udpSendTo` and `udpRecvFrom`.
  *
  * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`,
- * and **1,802 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
+ * and **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
  * control messages were added (the ceiling went from 1,024 to 2,048).
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
  * surface grows -- UDP and the readiness loop are the next two slices of N5, and each

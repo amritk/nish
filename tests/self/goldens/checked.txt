@@ -37142,7 +37142,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 59:11 n: i32 (const)
   callee 59:15 receive -> @receive
   callee 60:91 intact -> @intact
-  local 63:14 ecn: i32 (const)
+  local 64:14 ecn: i32 (const)
   local 67:9 n: i32 (let)
   callee 67:13 receive -> @receive
   callee 69:11 receive -> @receive

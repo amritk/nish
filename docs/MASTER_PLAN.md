@@ -108,7 +108,7 @@ Design rules that every WP must respect:
   `runtime-os.c` had left, which is why they are a file of their own, and
   `runtime-os.c` itself is unchanged by them. A fifth, `runtime-net.c`, holds
   the sockets of `nish:net` (WP34 N5): 853 of 1,024 for addresses and
-  non-blocking TCP, measured the same day the same way, and 1,802 of 2,048
+  non-blocking TCP, measured the same day the same way, and 1,782 of 2,048
   once UDP, its segmentation offload and its ECN marks joined them
   (2026-09-30).
 

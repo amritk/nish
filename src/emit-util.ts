@@ -11,7 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { NET_WORDS, NET_WRITTEN, netSignature } from "./nish-modules"
+import { isNetWrittenLetter, netSignature } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
   N_BINARY,
@@ -162,13 +162,8 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
 }
 
 /** Whether argument `index` of a builtin call is an array whose elements it writes (`builtinArgumentLetters`). */
-export const isWrittenArgument = (letters: string, index: i32): boolean => {
-  if (index < 0 || index >= letters.length) {
-    return false
-  }
-  const letter = letters.charCodeAt(index)
-  return letter === NET_WRITTEN || letter === NET_WORDS
-}
+export const isWrittenArgument = (letters: string, index: i32): boolean =>
+  index >= 0 && index < letters.length && isNetWrittenLetter(letters.charCodeAt(index))
 
 /**
  * The builtin a plain-identifier call reaches: the one a `nish:` import bound,

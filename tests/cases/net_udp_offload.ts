@@ -60,8 +60,8 @@ export const main = (): number => {
     console.log(`${fd === gro ? "gro" : "plain"} ${n} bytes, segment ${meta[0]}, intact ${intact(buf, n)}`);
   }
 
+  netAddress(to, "127.0.0.1", netLocalPort(plain));
   for (const ecn of [1, 2, 3, 0]) {
-    netAddress(to, "127.0.0.1", netLocalPort(plain));
     udpSendTo(sender, data, 0, 16, to, 0, ecn);
     // The three datagrams left from the GSO send come first.
     let n = receive(plain, buf, from, meta);

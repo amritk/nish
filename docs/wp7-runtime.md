@@ -690,14 +690,14 @@ the same way as the control that shows the count would see them.
 
 The second slice of N5 adds `udpBind`, `udpSendTo` and `udpRecvFrom`, with
 `SO_REUSEPORT`, `UDP_SEGMENT` (GSO), `UDP_GRO` and the ECN control messages.
-`runtime-net.c` measured **1,802 bytes**, all `.text`, with clang 18.1.3 on
+`runtime-net.c` measured **1,782 bytes**, all `.text`, with clang 18.1.3 on
 linux-x64 at `-Oz`:
 
 | function | bytes |
 | --- | ---: |
 | `nish_net_bound` (what `nish_tcp_listen` was, now shared with `udpBind`: the `sockaddr` inlined, the `::` fallback, `IPV6_V6ONLY`, `SO_REUSEADDR` for a stream, `SO_REUSEPORT`, `UDP_GRO`, `IP_RECVTOS` and `IPV6_RECVTCLASS` for a datagram socket, `bind`, `listen`) | 527 |
-| `nish_udp_send_to` (the address, the `UDP_SEGMENT` and `IP_TOS` / `IPV6_TCLASS` control messages on the stack, `sendmsg`) | 408 |
-| `nish_udp_recv_from` (`recvmsg`, the `UDP_GRO` and TOS / traffic-class control messages, writing `meta` and the sender's 18-byte form) | 347 |
+| `nish_udp_send_to` (the address, the `UDP_SEGMENT` and `IP_TOS` / `IPV6_TCLASS` control messages on the stack, `sendmsg`) | 403 |
+| `nish_udp_recv_from` (`recvmsg`, the `UDP_GRO` and TOS / traffic-class control messages, writing `meta` and the sender's 18-byte form) | 332 |
 | `nish_tcp_accept` | 113 |
 | `nish_net_parse`, `nish_net_address`, `nish_net_local_port` | 99, 86, 53 |
 | `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |

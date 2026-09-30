@@ -132,9 +132,9 @@ export const NET_INT: i32 = 105
 /** `s`: a `string`, a numeric host. */
 export const NET_STRING: i32 = 115
 /** `w`: a `u8[]` the call writes. */
-export const NET_WRITTEN: i32 = 119
+const NET_WRITTEN: i32 = 119
 /** `r`: a `u8[]` the call only reads. */
-export const NET_READ: i32 = 114
+const NET_READ: i32 = 114
 /** `m`: an `i32[]` the call writes, `udpRecvFrom`'s `meta`. */
 export const NET_WORDS: i32 = 109
 /**
@@ -142,6 +142,12 @@ export const NET_WORDS: i32 = 109
  * range-checks in the IR and hands to the runtime widened to an `i64`.
  */
 export const NET_RANGE: i32 = 110
+
+/** Whether a letter is an array the call writes the elements of: `w` and `m`. */
+export const isNetWrittenLetter = (letter: i32): boolean => letter === NET_WRITTEN || letter === NET_WORDS
+
+/** Whether a letter is an array at all: the two written ones and `r`. */
+export const isNetBufferLetter = (letter: i32): boolean => isNetWrittenLetter(letter) || letter === NET_READ
 
 /**
  * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or

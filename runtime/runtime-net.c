@@ -204,11 +204,6 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
        peer reports its TOS byte, one from an IPv6 peer its traffic class. */
     setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &one, sizeof one);
     setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof one);
-#else
-    if (arg & 2) {
-      close(fd);
-      return -95;
-    }
 #endif
   }
   nish_sockaddr s;
@@ -293,6 +288,9 @@ int32_t nish_net_close(int32_t fd) { return close(fd) != 0 ? nish_net_fail() : 0
    and `UDP_GRO` for flag 2; any other bit is -22. */
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags) {
   if ((uint32_t)flags > 3) return -22;
+#if !defined(__linux__)
+  if (flags & 2) return -95;
+#endif
   return nish_net_bound(host, port, SOCK_DGRAM, flags);
 }
 
@@ -328,14 +326,11 @@ int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t
   nish_sockaddr s;
   socklen_t n = nish_net_sockaddr(&s, p, (p[16] << 8) | p[17], v4);
   struct iovec iov = {buf->data + off, (size_t)len};
+  struct msghdr m = {.msg_name = &s, .msg_namelen = n, .msg_iov = &iov, .msg_iovlen = 1};
+#if defined(__linux__)
+  /* Zeroed, so the padding `CMSG_SPACE` adds after each message is too. */
   nish_cmsgs c;
   memset(&c, 0, sizeof c);
-  struct msghdr m = {0};
-  m.msg_name = &s;
-  m.msg_namelen = n;
-  m.msg_iov = &iov;
-  m.msg_iovlen = 1;
-#if defined(__linux__)
   size_t used = 0;
   struct cmsghdr *h = &c.h;
   if (segment > 0) {
@@ -377,16 +372,10 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
                            nish_array *meta) {
   if (from->len < NISH_ADDR_BYTES || meta->len < 2) return -22;
   nish_sockaddr s;
-  memset(&s, 0, sizeof s);
   struct iovec iov = {buf->data + off, (size_t)len};
   nish_cmsgs c;
-  struct msghdr m = {0};
-  m.msg_name = &s;
-  m.msg_namelen = sizeof s;
-  m.msg_iov = &iov;
-  m.msg_iovlen = 1;
-  m.msg_control = c.b;
-  m.msg_controllen = sizeof c;
+  struct msghdr m = {
+      .msg_name = &s, .msg_namelen = sizeof s, .msg_iov = &iov, .msg_iovlen = 1, .msg_control = c.b, .msg_controllen = sizeof c};
   ssize_t got = recvmsg(fd, &m, 0);
   if (got < 0) return nish_net_fail();
   /* Darwin sets neither option, so both stay 0 there. */

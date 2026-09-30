@@ -16,7 +16,14 @@
 import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
-import { isNetExport, NET_READ, NET_STRING, NET_WORDS, NET_WRITTEN, netSignature } from "./nish-modules"
+import {
+  isNetBufferLetter,
+  isNetExport,
+  isNetWrittenLetter,
+  NET_STRING,
+  NET_WORDS,
+  netSignature,
+} from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
 import {
@@ -788,10 +795,8 @@ const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i3
     for (let i = 0; i < params.length && i < args.children.length; i++) {
       const param = params.charCodeAt(i)
       const arg = args.children[i]
-      if (param === NET_WRITTEN || param === NET_READ) {
-        checkBuffer(ctx, arg, scope, name, T_U8, param === NET_WRITTEN)
-      } else if (param === NET_WORDS) {
-        checkBuffer(ctx, arg, scope, name, T_I32, true)
+      if (isNetBufferLetter(param)) {
+        checkBuffer(ctx, arg, scope, name, param === NET_WORDS ? T_I32 : T_U8, isNetWrittenLetter(param))
       } else {
         checkArgumentType(ctx, arg, scope, name, param === NET_STRING ? T_STRING : T_I32)
       }
