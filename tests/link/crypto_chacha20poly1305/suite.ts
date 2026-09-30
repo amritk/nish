@@ -5,7 +5,9 @@
 // including the edge cases #5 to #11, A.4's keys and A.5's decryption — and
 // RFC 9001 A.5's ChaCha20 header protection. Then the refusals: a flipped bit
 // in the tag, the ciphertext and the AAD, every wrong length, and a counter
-// that would wrap. Last, tests/cases/ct_asm_chacha20poly1305's copies of the
+// that would wrap. Then every case of Wycheproof's chacha20_poly1305_test.json,
+// whose edge cases aim at Poly1305's limb arithmetic and final addition, and
+// at partial tag checks. Last, tests/cases/ct_asm_chacha20poly1305's copies of the
 // Poly1305 cores are held to the module: they must compute the same tags.
 //
 // The suite is a function rather than `main` so that `crypto_chacha20poly1305_f64` can run
@@ -50,6 +52,11 @@ import {
   SUNSCREEN,
   SUNSCREEN_CIPHER,
 } from "./vectors";
+import {
+  WYCHEPROOF_CHACHA20_POLY1305_TOTAL,
+  WycheproofChaCha20Poly1305Case,
+  wycheproofChaCha20Poly1305Cases,
+} from "../crypto_wycheproof_aead/chacha20_poly1305";
 
 const WORD_DIGITS: string = "0123456789abcdef";
 
@@ -139,6 +146,45 @@ const tagBoth = (t: Suite, name: string, keyHex: string, msgHex: string, want: s
 const fixtureMatch = (tag: u8[], sealed: u8[], at: i32): string => {
   const m: u32[] = [ctChacha20Poly1305TagMatch(tag, sealed, at)];
   return wordsHex(m);
+};
+
+/**
+ * What one Wycheproof case did wrong, or "" when it held: a valid case must
+ * seal to exactly `ct || tag` and open back to `msg`, and an invalid one must
+ * open to `null` and, when its nonce is the wrong length, seal to `null` too.
+ */
+const wycheproofProblem = (c: WycheproofChaCha20Poly1305Case): string => {
+  const key: u8[] = fromHex(c.key);
+  const nonce: u8[] = fromHex(c.iv);
+  const aad: u8[] = fromHex(c.aad);
+  const sealed: string = `${c.ct}${c.tag}`;
+  const opened: string = toHex(chacha20Poly1305Open(key, nonce, aad, fromHex(sealed)));
+  const resealed: string = toHex(chacha20Poly1305Seal(key, nonce, aad, fromHex(c.msg)));
+  if (!c.valid) {
+    if (opened !== "null") {
+      return `an invalid case opened to ${opened}`;
+    }
+    const nonceOk: boolean = toI32(nonce.length) === CHACHA20POLY1305_NONCE_SIZE;
+    return nonceOk || resealed === "null" ? "" : `a ${toI32(nonce.length)}-byte nonce sealed to ${resealed}`;
+  }
+  return opened === c.msg && resealed === sealed ? "" : `opened ${opened}, sealed ${resealed}`;
+};
+
+/** Runs every Wycheproof case, failing each that does not hold by its `tcId`, and answers how many failed. */
+const wycheproof = (t: Suite, cases: WycheproofChaCha20Poly1305Case[]): i32 => {
+  let failed: i32 = 0;
+  for (const c of cases) {
+    // A pass allocates only garbage once it is judged, so hand it back; a
+    // failure is run again outside the mark for the text the suite keeps.
+    const mark = Arena.mark();
+    const held: boolean = toI32(wycheproofProblem(c).length) === 0;
+    Arena.release(mark);
+    if (!held) {
+      t.fail(`wycheproof tcId ${c.tcId} (${c.comment})`, wycheproofProblem(c));
+      failed++;
+    }
+  }
+  return failed;
 };
 
 export const runSuite = (): i32 => {
@@ -450,6 +496,7 @@ export const runSuite = (): i32 => {
   t.eqStr("the AAD left out answers null", toHex(chacha20Poly1305Open(aeadKey, aeadNonce, zeros(0), good)), "null");
   t.eqStr("a sealed message shorter than a tag answers null", toHex(chacha20Poly1305Open(aeadKey, aeadNonce, aeadAad, zeros(15))), "null");
   t.eqStr("sixteen zero bytes are not the tag of nothing", toHex(chacha20Poly1305Open(aeadKey, aeadNonce, aeadAad, zeros(16))), "null");
+  t.eqStr("the tag cut to 12 bytes answers null: only the full tag is accepted", toHex(chacha20Poly1305Open(aeadKey, aeadNonce, aeadAad, fromHex(aeadSealed.substring(0, toI32(aeadSealed.length) - 8)))), "null");
 
   // --- Refusals: wrong lengths -------------------------------------------------
   t.eqStr("seal with a 31-byte key answers null", toHex(chacha20Poly1305Seal(zeros(31), aeadNonce, aeadAad, sunscreen)), "null");
@@ -474,6 +521,21 @@ export const runSuite = (): i32 => {
   t.eqStr("counter 2^32 - 1 encrypts one block", toHex(chacha20(zeros(32), 0xffffffff, zeros(12), zeros(64))), toHex(lastBlock));
   t.eqStr("a 65th byte at counter 2^32 - 1 would wrap the counter, and answers null", toHex(chacha20(zeros(32), 0xffffffff, zeros(12), zeros(65))), "null");
   t.eqStr("nothing to encrypt at counter 2^32 - 1 is an empty answer", toHex(chacha20(zeros(32), 0xffffffff, zeros(12), zeros(0))), "");
+
+  // --- Wycheproof --------------------------------------------------------------
+  const cases: WycheproofChaCha20Poly1305Case[] = wycheproofChaCha20Poly1305Cases();
+  let valid: i32 = 0;
+  for (const c of cases) {
+    if (c.valid) {
+      valid++;
+    }
+  }
+  const ran: i32 = toI32(cases.length);
+  const failed: i32 = wycheproof(t, cases);
+  t.ok(
+    `Wycheproof chacha20_poly1305_test.json: ${ran} of ${WYCHEPROOF_CHACHA20_POLY1305_TOTAL} cases ran (${valid} valid, ${ran - valid} invalid), ${failed} failed`,
+    failed === 0 && ran === WYCHEPROOF_CHACHA20_POLY1305_TOTAL
+  );
 
   // --- The fixture's tag compare against the module's answer ------------------
   const expected: u8[] = fromHex("1ae10b594f09e26a7e902ecbd0600691");

@@ -4,7 +4,8 @@
 // for AES-128 and 13–18 for AES-256; 7–12 are AES-192, which is not offered),
 // its published GHASH intermediates, RFC 9001's header-protection masks
 // (Appendix A.2 and A.3), every Wycheproof AES-GCM case with a 128- or
-// 256-bit key, and the refusals. Each exported function is exercised here.
+// 256-bit key, the refusal of every Wycheproof key of 192 bits, and the other
+// refusals. Each exported function is exercised here.
 //
 // The suite is a function rather than `main` so that `crypto_aes_f64` can run
 // the same checks with `--number-mode f64`.
@@ -30,6 +31,11 @@ import {
   wycheproofAesGcmCases,
 } from "../crypto_wycheproof/aes_gcm";
 import {
+  WYCHEPROOF_AES_GCM_192_KEPT,
+  WycheproofAesGcm192Case,
+  wycheproofAesGcm192Cases,
+} from "../crypto_wycheproof_aead/aes_gcm_192";
+import {
   aesBitslicedRound as copiedRound,
   aesGcmTagMask as copiedTagMask,
   ghashMultiply as copiedMultiply,
@@ -52,6 +58,10 @@ const seal = (key: string, iv: string, aad: string, plaintext: string): string =
 /** `aesGcmOpen` in hex, or "null". */
 const open = (key: string, iv: string, aad: string, sealed: string): string =>
   toHex(aesGcmOpen(keyOf(key), fromHex(iv), fromHex(aad), fromHex(sealed)));
+
+/** `aesGcmOpen` under an `AesKey` already made, in hex, or "null". */
+const open2 = (key: AesKey, iv: string, aad: string, sealed: string): string =>
+  toHex(aesGcmOpen(key, fromHex(iv), fromHex(aad), fromHex(sealed)));
 
 /** The bytes of `hex` with bit `bit` of byte `at` flipped, in hex. */
 const flip = (hex: string, at: i32, bit: i32): string => {
@@ -386,6 +396,36 @@ export const runSuite = (): i32 => {
   t.eqStr("a flipped AAD bit answers null", open(K, IV, flip(A, 19, 0), `${C4}${T4}`), "null");
   t.eqStr("a different IV answers null", open(K, IV8, A, `${C4}${T4}`), "null");
   t.eqStr("the AES-256 key for an AES-128 message answers null", open(KK, IV, A, `${C4}${T4}`), "null");
+  t.eqStr("a tag cut to 96 bits answers null: only the full tag is accepted", open(K, IV, A, `${C4}${T4.substring(0, 24)}`), "null");
+  t.eqStr("the tag alone, with the ciphertext left out, answers null", open(K, IV, A, T4), "null");
+  t.ok(
+    "a 16-byte IV spelling J0 = IV || 1 is hashed (SP 800-38D §7.1), not used as J0",
+    seal(K, `${IV}00000001`, A, P60) !== seal(K, IV, A, P60)
+  );
+
+  // --- A key aesKey did not make ------------------------------------------------
+  // AesKey's constructor and fields are public, so a key can be built or edited
+  // by hand. One built with a real key's round keys but no H has H = 0, under
+  // which GHASH is zero and the tag E(K, J0) covers nothing: it must open no
+  // forgery. One whose round count disagrees with its round keys must answer
+  // null rather than index past them.
+  const real: AesKey = keyOf(K);
+  const handMade: AesKey = new AesKey(real.rounds, real.roundKeys);
+  const handSealed: string = toHex(aesGcmSeal(handMade, fromHex(IV), fromHex(A), fromHex(P60)));
+  const handTag: string = handSealed.substring(toI32(handSealed.length) - 32, toI32(handSealed.length));
+  t.eqStr("a hand-built AesKey with H = 0 opens no forged ciphertext", open2(handMade, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
+  t.eqStr("a hand-built AesKey with H = 0 opens no forged AAD", open2(handMade, IV, flip(A, 0, 0), handSealed), "null");
+  const edited: AesKey = keyOf(K);
+  edited.hHi = toU64(0);
+  edited.hLo = toU64(0);
+  t.eqStr("an AesKey whose H is set to 0 opens no forgery", open2(edited, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
+  t.eqStr("an AesKey whose H is not set to 0 still opens", open2(real, IV, A, `${C4}${T4}`), P60);
+  const wrongRounds: AesKey = new AesKey(14, real.roundKeys);
+  t.eqStr("seal under an AesKey with 14 rounds and 11 round keys answers null", toHex(aesGcmSeal(wrongRounds, fromHex(IV), fromHex(A), fromHex(P60))), "null");
+  t.eqStr("open under it answers null", open2(wrongRounds, IV, A, `${C4}${T4}`), "null");
+  t.eqStr("aesEncryptBlock under it answers null", toHex(aesEncryptBlock(wrongRounds, input)), "null");
+  t.eqStr("aesHeaderMask under it answers null", toHex(aesHeaderMask(wrongRounds, fromHex("d1b1c98dd7689fb8ec11d242b123dc1d"))), "null");
+  t.eqStr("an AesKey with 12 rounds, AES-192's count, answers null", toHex(aesEncryptBlock(new AesKey(12, real.roundKeys), input)), "null");
 
   // --- Wycheproof ----------------------------------------------------------------
   const cases: WycheproofAesGcmCase[] = wycheproofAesGcmCases();
@@ -400,6 +440,35 @@ export const runSuite = (): i32 => {
   t.ok(
     `Wycheproof aes_gcm_test.json: ${ran} of ${WYCHEPROOF_AES_GCM_TOTAL} cases ran (${valid} valid, ${ran - valid} invalid), ${failed} failed; filtered out: ${WYCHEPROOF_AES_GCM_KEY_192} with a 192-bit key, ${WYCHEPROOF_AES_GCM_SHORT_TAG} with a tag shorter than 128 bits`,
     failed === 0 && ran + WYCHEPROOF_AES_GCM_KEY_192 + WYCHEPROOF_AES_GCM_SHORT_TAG === WYCHEPROOF_AES_GCM_TOTAL
+  );
+  // The cases whose comment names a pre-counter block J0 were built from a
+  // hashed IV chosen for that J0, several so that GCTR's 32-bit counter wraps
+  // inside the message; inc32 must wrap it without touching the first 96 bits
+  // (SP 800-38D §6.2, §6.5).
+  let wrapCases: i32 = 0;
+  let wrapHeld: i32 = 0;
+  for (const c of cases) {
+    if (c.comment.startsWith("J0:")) {
+      wrapCases++;
+      if (toI32(wycheproofProblem(c).length) === 0) {
+        wrapHeld++;
+      }
+    }
+  }
+  t.ok(
+    `Wycheproof: ${wrapHeld} of ${wrapCases} cases built for a chosen J0, the 32-bit counter wrapping in several, hold`,
+    wrapCases > 0 && wrapHeld === wrapCases
+  );
+  const refused192: WycheproofAesGcm192Case[] = wycheproofAesGcm192Cases();
+  let refused: i32 = 0;
+  for (const c of refused192) {
+    if (toI32(fromHex(c.key).length) === 24 && aesKey(fromHex(c.key)) === null) {
+      refused++;
+    }
+  }
+  t.ok(
+    `Wycheproof aes_gcm_test.json: aesKey refuses the key of all ${refused} of ${WYCHEPROOF_AES_GCM_192_KEPT} cases with a 192-bit key`,
+    refused === WYCHEPROOF_AES_GCM_192_KEPT && WYCHEPROOF_AES_GCM_192_KEPT === WYCHEPROOF_AES_GCM_KEY_192
   );
 
   return t.done();
