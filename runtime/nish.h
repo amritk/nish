@@ -364,7 +364,18 @@ int32_t nish_read_signal(int32_t fd);
  * Darwin is -95. `nish_udp_recv_from(fd, buf, off, len, from, meta)` takes
  * one datagram, or several `UDP_GRO` coalesced, writes the sender into `from`
  * and into `meta` (element type `int32_t`, at least 2) the segment size, 0
- * when none was coalesced, and the ECN bits. */
+ * when none was coalesced, and the ECN bits.
+ *
+ * The readiness loop, level-triggered: epoll on Linux, kqueue on Darwin.
+ * `nish_poll_create()` is a close-on-exec loop descriptor.
+ * `nish_poll_add(loop, fd, events, token)` and `nish_poll_modify` watch `fd`
+ * for `events` (1 readable, 2 writable; any other bit is -22) under `token`,
+ * and `nish_poll_remove(loop, fd)` stops. `nish_poll_wait(loop, ready,
+ * timeout_ms)` waits at most `timeout_ms` (a negative one forever) and writes
+ * into `ready` (element type `int32_t`) a token and its events, 4 added for a
+ * hang-up or an error, per ready descriptor: at most `ready->len / 2` pairs
+ * and at most 64 in one call. It answers the count, 0 on a timeout or an
+ * interrupting signal, and -22 for a `ready` shorter than 2. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
@@ -378,6 +389,11 @@ int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t
                          int32_t segment, int32_t ecn);
 int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len, nish_array *from,
                            nish_array *meta);
+int32_t nish_poll_create(void);
+int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
+int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
+int32_t nish_poll_remove(int32_t loop, int32_t fd);
+int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`

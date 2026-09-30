@@ -77,21 +77,22 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, udpBind, udpSendTo, udpRecvFrom"
+    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   return "write, writeError, panic"
 }
 
 /**
  * WP34 N5: the parameters of a `nish:net` function, one letter each, or "" for
- * a name `nish:net` does not export. Every one answers an `i32`. The checker,
+ * a name `nish:net` does not export (and for `pollCreate`, which takes none). Every one answers an `i32`. The checker,
  * the emitter and the written-argument rule all read this one string, through
  * the letters below, so the three cannot disagree about which argument is
  * which.
  *
  * Each name is a global too, as every `nish:` export is, and each carries a
- * `net`, `tcp` or `udp` prefix so that none of them collides with a global that
- * already exists (`write`).
+ * `net`, `tcp`, `udp` or `poll` prefix so that none of them collides with a
+ * global that already exists (`write`). `pollCreate` takes nothing, so its
+ * signature is the one empty answer that is an export (`isNetExport`).
  */
 export const netSignature = (name: string): string => {
   if (name === "netAddress") {
@@ -124,10 +125,22 @@ export const netSignature = (name: string): string => {
   if (name === "udpRecvFrom") {
     return "iwnnwm"
   }
+  if (name === "pollAdd" || name === "pollModify") {
+    return "iiii"
+  }
+  if (name === "pollRemove") {
+    return "ii"
+  }
+  if (name === "pollWait") {
+    return "imi"
+  }
   return ""
 }
 
-/** `i`: an `i32` (a descriptor, a port, a backlog, `how`, flags, a segment size, ECN bits). */
+/**
+ * `i`: an `i32` (a descriptor, a port, a backlog, `how`, flags, a segment
+ * size, ECN bits, a loop, readiness events, a token, a timeout).
+ */
 export const NET_INT: i32 = 105
 /** `s`: a `string`, a numeric host. */
 export const NET_STRING: i32 = 115
@@ -135,7 +148,7 @@ export const NET_STRING: i32 = 115
 const NET_WRITTEN: i32 = 119
 /** `r`: a `u8[]` the call only reads. */
 const NET_READ: i32 = 114
-/** `m`: an `i32[]` the call writes, `udpRecvFrom`'s `meta`. */
+/** `m`: an `i32[]` the call writes, `udpRecvFrom`'s `meta` and `pollWait`'s `ready`. */
 export const NET_WORDS: i32 = 109
 /**
  * `n`: an `i32` offset or length into the `u8[]` before it, which the call
@@ -178,8 +191,8 @@ export const netSymbol = (name: string): string => {
   return parts.join("")
 }
 
-/** Whether `nish:net` exports `name`. */
-export const isNetExport = (name: string): boolean => netSignature(name).length > 0
+/** Whether `nish:net` exports `name`: every name with a signature, and `pollCreate`, whose is empty. */
+export const isNetExport = (name: string): boolean => netSignature(name).length > 0 || name === "pollCreate"
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {

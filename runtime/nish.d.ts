@@ -286,6 +286,16 @@ declare function udpSendTo(
 ): i32;
 /** One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN]. */
 declare function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32;
+/** A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin. */
+declare function pollCreate(): i32;
+/** Watch `fd` for `events` (1 readable, 2 writable) under `token`. */
+declare function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
+/** New events or a new token for a watched `fd`. */
+declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
+/** Stop watching `fd`. */
+declare function pollRemove(loop: i32, fd: i32): i32;
+/** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
+declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
@@ -387,6 +397,16 @@ declare module "nish:net" {
   ): i32;
   /** One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN]. */
   export function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32;
+  /** A readiness loop, level-triggered: epoll on Linux, kqueue on Darwin. */
+  export function pollCreate(): i32;
+  /** Watch `fd` for `events` (1 readable, 2 writable) under `token`. */
+  export function pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32;
+  /** New events or a new token for a watched `fd`. */
+  export function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
+  /** Stop watching `fd`. */
+  export function pollRemove(loop: i32, fd: i32): i32;
+  /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
+  export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 }
 
 declare module "nish:io" {

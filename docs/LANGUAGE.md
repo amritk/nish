@@ -3505,7 +3505,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -3926,15 +3926,17 @@ its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
 [wp33-round-trip.md](wp33-round-trip.md) §3.5 gives the translation.
 
-### `nish:net`: addresses, non-blocking TCP and UDP
+### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
 and reads and writes bytes, or binds and trades datagrams, and every socket is
 **non-blocking**, so a call that
 would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
-the program is the loop. Every socket is also **close-on-exec**, so a child that
-`spawnSync` starts inherits none of them. All eleven functions are C in
+the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
+whichever of its descriptors is ready. Every socket is also **close-on-exec**,
+so a child that `spawnSync` starts inherits none of them. All sixteen functions
+are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
 others; section GC leaves every one of them out of a program that calls none
@@ -4015,6 +4017,66 @@ On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
 there by `tcpAccept` on a datagram socket instead, above), so the Darwin
 answers are a statement about the code, not about a test.
 
+#### The readiness loop
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
+| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches (on Linux; kqueue adds it again), or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
+| `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a descriptor the loop watches: `0`, or `-2` for one it does not | write | `net_loop_calls`, `net_loop_two` |
+| `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`: `0`, or `-2` for a descriptor the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
+| `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` milliseconds pass, **forever for `-1`** (any negative number), and writes one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable with **`4` added for a hang-up or an error**. It answers the count, at most `ready.length / 2` and at most 64, or **`0` on a timeout**. A `ready` shorter than 2 is `-22`. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
+
+**Level-triggered.** A descriptor that is still ready when the program waits
+again is reported again, so a loop that handles one pair of several, or leaves
+a datagram unread, loses nothing: `net_loop_calls` sends a datagram and waits
+twice, and both waits report it. The same is why the 64 a call reports at most
+is a bound on a stack array rather than on the program: the rest are still
+ready at the next wait. A UDP socket is always writable, and on Linux one whose
+both sides are shut is readable, writable and hung up, `7` (`net_loop_calls`).
+Nothing allocates; `ready` is the caller's.
+
+**A signal wakes the loop.** The descriptor `signalFd()` answers is a
+descriptor like any other, readable when SIGTERM or SIGINT arrives, so a server
+adds it to its loop and shuts down when its token comes back: `readSignal`
+then answers the number without waiting. A signal that interrupts the wait
+itself makes `pollWait` answer **`0`**, as a timeout does, rather than wait on
+past the deadline it was given; the loop comes round and the next wait finds
+the signal descriptor ready (`tests/runtime-test.c`). `net_loop_two` watches
+two UDP sockets and `signalFd()` in one loop, and the `net_` block of
+`tests/run.js` drives it from Node: it writes to one socket and waits for the
+line that says that socket woke the loop before it writes to the other, in both
+orders, and then sends SIGTERM, which wakes the loop through the signal
+descriptor; the program reads `15`, prints `flat` because the arena stood
+where it did at the top of every pass, and exits `0`.
+
+```ts
+const loop = pollCreate();
+pollAdd(loop, server, 1, 1);
+pollAdd(loop, signalFd(), 1, 2);
+const ready: i32[] = new Array<i32>(32);
+let running = true;
+while (running) {
+  const n = pollWait(loop, ready, -1);
+  for (let k = 0; k < n; k++) {
+    if (ready[2 * k] === 2) {
+      running = false;             // SIGTERM or SIGINT
+    } else {
+      serve(server);               // until it answers -11
+    }
+  }
+}
+```
+
+**Darwin** is kqueue, with a filter per direction rather than a set of events:
+`pollModify` there deletes the descriptor's filters and adds the ones asked
+for, so it adds a descriptor the loop did not watch rather than answer `-2`;
+`pollAdd` of a descriptor already watched adds it again rather than answer
+`-17`; a descriptor added watching nothing has no filter, so `pollRemove` of it
+answers `-2`; and a descriptor both readable and writable is two pairs with the
+same token, one per filter. That branch is compiled by CI's Darwin rows and run by
+nothing, as the rest of the Darwin network code is.
+
 #### Bounds
 
 `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` check `0 <= off <= off +
@@ -4025,7 +4087,8 @@ writes, and a range outside it panics with the same words, `slice out of range:
 one (`net_tcp_unchecked`, `net_udp_unchecked`). A `peer`, `out`, `to` or `from`
 array shorter than 18 bytes, or a `meta` shorter than 2, is not a panic but
 `-22`, from the runtime, because the length is the argument's
-property rather than the program's arithmetic.
+property rather than the program's arithmetic. So is a `ready` shorter than 2,
+and `pollWait` never writes past `ready.length`, so it has no range to check.
 
 #### Types, threads and wasm
 
@@ -4038,33 +4101,40 @@ property rather than the program's arithmetic.
   reads. `udpRecvFrom`'s `meta` holds numbers rather than bytes, a segment size
   up to 65,535 among them, so it is an `i32[]`, and anything else is
   `` `udpRecvFrom` fills an `i32[]`, got u8[] `` (NL2406;
-  `reject_net_udp_meta_element`). A descriptor, an offset, a length, a port, a
-  backlog, `how`, the flags, a segment size and the ECN bits are `i32` in both
-  number modes, and an
+  `reject_net_udp_meta_element`), and so is `pollWait`'s `ready`, whose tokens
+  are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
+  `reject_net_poll_element`). A descriptor, an offset, a length, a port, a
+  backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
+  a token and a timeout are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
-  `netRead`'s `buf` and `udpRecvFrom`'s `buf`, `from` and `meta` are written, so
+  `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, and `pollWait`'s
+  `ready` are written, so
   a `readonly` array there is refused as a store through it is
   (`reject_net_readonly`, `reject_net_accept_readonly`,
-  `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`), a parameter one of
+  `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`,
+  `reject_net_poll_readonly`), a parameter one of
   them fills is never `readonly` in the IR, and `netWrite`'s `buf` and
   `udpSendTo`'s `buf` and `to` may be `readonly` (`net_udp_calls`).
 - **Threads.** Every call changes the kernel's state of a socket, which is a
-  write its caller can see, so none may be made in a `scope()` task
-  (`reject_net_task`, `reject_net_udp_task`) or a parallel body
-  (`reject_net_parallel`, `reject_net_udp_parallel`), and a call that writes an
-  array is refused in a scope's region on one a task may read, as `fill` is
-  (`reject_net_region`, and `reject_net_udp_region` for `meta`).
+  write its caller can see, and a loop is a socket's state as much as its
+  bytes, so none may be made in a `scope()` task
+  (`reject_net_task`, `reject_net_udp_task`, `reject_net_poll_task`) or a
+  parallel body (`reject_net_parallel`, `reject_net_udp_parallel`,
+  `reject_net_poll_parallel`), and a call that writes an array is refused in a
+  scope's region on one a task may read, as `fill` is (`reject_net_region`,
+  `reject_net_udp_region` for `meta` and `reject_net_poll_region` for
+  `ready`).
 - **On wasm.** A `wasm32` target and the `wasi` profile have no sockets for these
   to reach, and `runtime-net.c` is empty there, so every call is refused by the
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
-  `reject_net_import_wasm`, `reject_net_udp_wasm`).
+  `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`).
 - **Not yet.** There is no `tcpConnect` (`reject_net_unknown_export`), no name
-  resolution, no `sendmmsg` or `recvmmsg`, and nothing to wait on readiness
-  with; the readiness loop is the last slice of WP34 N5. Until it lands, a
-  program waits for a connection, a byte or a datagram by calling again on
-  `-11`, as `net_tcp_echo` and `net_udp_echo` do.
+  resolution, no `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
+  but `pollWait`'s timeout. A program that does not want a loop can still wait
+  for a connection, a byte or a datagram by calling again on `-11`, as
+  `net_tcp_echo` and `net_udp_echo` do.
 
 **The TypeScript reading** ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 **class C**, as `signalFd`'s is: Node's sockets are asynchronous only, and a
@@ -4074,7 +4144,10 @@ so `npm run check` types these programs, and under `runtime/nish.mjs` each
 function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
-`net_` block of `tests/run.js`, for `netAddress` and `udpBind`).
+`net_` block of `tests/run.js`, for `netAddress`, `udpBind` and `pollCreate`).
+A loop has no reading either: the one a Node program has is Node's own, which
+it returns to between callbacks, and `pollWait` is a program that never
+returns to it.
 
 ### Arrays and strings as receivers
 

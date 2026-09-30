@@ -13012,7 +13012,7 @@ is the `net.fail` block and its `noreturn` panic; `--unchecked-indexing`
 removes both. The buffer `netRead` fills keeps `nocapture` and loses
 `readonly`, and neither call is `willreturn`, because a blocking socket the
 program inherited can wait
-([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp)).
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
 
 <!-- cookbook:begin builtin-net -->
 ```ts
@@ -13270,6 +13270,130 @@ attributes #2 = { nounwind noreturn cold }
 !13 = !{!12, !12, i64 0}
 ```
 <!-- cookbook:end builtin-net-udp -->
+
+### `nish:net`: `pollCreate`, `pollAdd` and `pollWait`
+
+The readiness loop (WP34 N5), one call into `runtime/runtime-net.c` each,
+answering an `i32` and each a write. `pollCreate`, `pollAdd`, `pollModify` and
+`pollRemove` make a loop or change what it watches, and none of them waits, so
+they keep `willreturn`. `pollWait` waits as long as its timeout says, forever
+for a negative one, so it is `nounwind` alone, and the `ready` array it fills
+with token and event pairs travels as its header and loses `readonly`. There is
+no range check: the runtime fills at most `ready.length / 2` pairs and answers
+`-22` for a `ready` shorter than 2
+([LANGUAGE.md](LANGUAGE.md#the-readiness-loop)).
+
+<!-- cookbook:begin builtin-net-loop -->
+```ts
+// WP34 N5: the readiness loop in `nish:net`. `pollCreate`, `pollAdd` and the
+// rest that change what a loop watches never wait, so they keep `willreturn`;
+// `pollWait` can wait forever and is `nounwind` alone. Its `ready` is an
+// `i32[]` it fills, so it travels as its header, `nocapture` but not
+// `readonly`.
+import { pollAdd, pollCreate, pollWait } from "nish:net"
+
+export const watch = (fd: i32, token: i32): i32 => {
+  const loop = pollCreate()
+  if (loop < 0) {
+    return loop
+  }
+  return pollAdd(loop, fd, 1, token) === 0 ? loop : -1
+}
+
+export const firstReady = (loop: i32, ready: i32[]): i32 => (pollWait(loop, ready, 100) > 0 ? ready[0] : -1)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i32 @nish_poll_create() #0
+declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #0
+declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+
+define noundef i32 @watch(i32 noundef %fd, i32 noundef %token) #0 {
+entry:
+  %loop.addr = alloca i32, align 4
+  %0 = call i32 @nish_poll_create()
+  store i32 %0, i32* %loop.addr, align 4
+  %1 = load i32, i32* %loop.addr, align 4
+  %2 = icmp slt i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = load i32, i32* %loop.addr, align 4
+  ret i32 %3
+
+if.end:
+  %4 = load i32, i32* %loop.addr, align 4
+  %5 = call i32 @nish_poll_add(i32 %4, i32 %fd, i32 1, i32 %token)
+  %6 = icmp eq i32 %5, 0
+  br i1 %6, label %cond.true, label %cond.false
+
+cond.true:
+  %7 = load i32, i32* %loop.addr, align 4
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %8 = phi i32 [ %7, %cond.true ], [ -1, %cond.false ]
+  ret i32 %8
+}
+
+define noundef i32 @firstReady(i32 noundef %loop, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %ready) #1 {
+entry:
+  %0 = call i32 @nish_poll_wait(i32 %loop, %struct.nish_array* %ready, i32 100)
+  %1 = icmp sgt i32 %0, 0
+  br i1 %1, label %cond.true, label %cond.false
+
+cond.true:
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ready, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ult i64 0, %3
+  br i1 %4, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %3)
+  unreachable
+
+bounds.ok:
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ready, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 0
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %10 = phi i32 [ %9, %bounds.ok ], [ -1, %cond.false ]
+  ret i32 %10
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end builtin-net-loop -->
 
 ### `Math.random`
 
@@ -14300,6 +14424,11 @@ declare noundef i32 @nish_net_close(i32 noundef) #5
 declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #5
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #5
+declare noundef i32 @nish_poll_create() #2
+declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #5
 declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
