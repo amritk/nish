@@ -185,7 +185,7 @@ compatible only when their types are identical.
 | `boolean` | `i1` | no truthiness anywhere |
 | `string` | immutable UTF-8 bytes | `length` is the **byte** length |
 | `T[]`, `Array<T>` | one element type, bounds-checked | `readonly T[]` refuses every write |
-| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | aliases of `i32[]`, `f32[]`, `f64[]`, `i64[]` | not distinct types |
+| `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | aliases of `i32[]`, `f32[]`, `f64[]`, `i64[]` | not distinct types; fixed length, so no `push` or `pop` (NL2415): declare `f64[]` to grow one |
 | `class C`, `interface I` | a struct, fields in declaration order | no header, no vtable |
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |

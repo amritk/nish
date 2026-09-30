@@ -15,9 +15,12 @@ import {
   N_BLOCK,
   N_CALL,
   N_CASE,
+  N_CONDITIONAL,
+  N_CONSTRUCTOR,
   N_DEFAULT,
   N_DO,
   N_EMPTY,
+  N_FIELD,
   N_FOR,
   N_FOR_OF,
   N_IDENT,
@@ -27,6 +30,12 @@ import {
   N_NEW,
   N_PAREN,
   N_THIS,
+  N_TYPE_ARRAY,
+  N_TYPE_NULL,
+  N_TYPE_PAREN,
+  N_TYPE_READONLY,
+  N_TYPE_REF,
+  N_TYPE_UNION,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -171,6 +180,133 @@ export const checkArrayProperty = (ctx: CheckContext, expr: Node, receiver: i32)
   return T_ERROR
 }
 
+/**
+ * WP33 R2: the typed-array name `expr` is spelled with, or `""`. The four
+ * names are the same type as `T[]` (`typedArrayElement`), so the answer is
+ * read from the program text rather than the type: `new Float64Array(n)`
+ * itself, a binding whose `Local.typedArray` says so, a field declared with
+ * the name, a call whose callee declares it as the return type, either
+ * branch of a ternary, or an element of an array spelled
+ * `Float64Array[]`. A spelling ends in one `[]` per array level around the
+ * name, so `Float64Array[]` is an array whose elements carry it and the
+ * array itself does not. TypeScript gives each of those the typed array's
+ * type, or a union with it, and so no `push` or `pop`; these are the
+ * receivers docs/LANGUAGE.md lists.
+ */
+export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope): string => {
+  const e = unwrapParens(expr)
+  if (e.kind === N_NEW) {
+    const callee = e.children[0]
+    return callee.kind === N_IDENT && typedArrayElement(callee.text) >= 0 ? callee.text : ""
+  }
+  if (e.kind === N_IDENT) {
+    const local = scope.lookup(e.text)
+    return local === null ? "" : local.typedArray
+  }
+  if (e.kind === N_MEMBER) {
+    // A receiver with no recorded type (`Kind.A`, an enum) is not a struct.
+    const holder = ctx.program.nodeTypes[e.children[0].id]
+    if (holder < 0) {
+      return ""
+    }
+    const owner = ctx.program.struct(ctx.table.nameOf(ctx.table.stripNull(holder)))
+    if (owner === null) {
+      return ""
+    }
+    const field = owner.field(e.text)
+    if (field === null || field.decl.kind !== N_FIELD) {
+      return ""
+    }
+    return annotationSpelling(ctx, owner.origin === ctx.source, field.decl.children[1])
+  }
+  if (e.kind === N_CALL) {
+    const callee = ctx.program.nodeCallees[e.id]
+    if (callee === null || callee.decl.kind === N_CONSTRUCTOR || callee.decl.children.length < 3) {
+      return ""
+    }
+    return annotationSpelling(ctx, callee.definedIn(ctx.source), callee.decl.children[2])
+  }
+  if (e.kind === N_INDEX) {
+    return elementSpelling(typedArraySpelling(ctx, e.children[0], scope))
+  }
+  // `c ? t : xs` is `Float64Array | number[]` to TypeScript, which has no
+  // `push` either, so one spelled branch is enough.
+  if (e.kind === N_CONDITIONAL) {
+    return eitherSpelling(
+      typedArraySpelling(ctx, e.children[1], scope),
+      typedArraySpelling(ctx, e.children[2], scope)
+    )
+  }
+  // `[new Float64Array(n)]` is a `Float64Array[]` to TypeScript.
+  if (e.kind === N_ARRAY) {
+    for (const item of e.children) {
+      const spelled = typedArraySpelling(ctx, item, scope)
+      if (spelled.length > 0) {
+        return `${spelled}[]`
+      }
+    }
+  }
+  return ""
+}
+
+/** The spelling of an element of an array spelled `spelling`: one `[]` fewer, or `""`. */
+export const elementSpelling = (spelling: string): string =>
+  spelling.endsWith("[]") ? spelling.slice(0, spelling.length - 2) : ""
+
+const eitherSpelling = (a: string, b: string): string => (a.length > 0 ? a : b)
+
+/**
+ * WP33 R2: the typed-array name a type annotation spells, or `""`: the name
+ * itself, in parentheses, as the one member of `| null`, or behind a `type`
+ * alias, with a `[]` for each array level around it, `T[]` or `Array<T>`
+ * (`typedArraySpelling`). `local` says the annotation is written in the
+ * module being checked, whose names `ctx` resolves; one read from another
+ * module's declaration is matched only by the four names, since its aliases
+ * are that module's.
+ */
+export const annotationSpelling = (ctx: CheckContext, local: boolean, node: Node): string => {
+  let program: CheckedProgram | null = local ? ctx.program : null
+  let at = node
+  // An alias names another type, which may be an alias too; a cycle is
+  // refused where aliases are resolved, and the bound stops this walk on one.
+  let hops = 0
+  const levels: string[] = []
+  while (hops < 16) {
+    if (at.kind === N_TYPE_PAREN || at.kind === N_TYPE_READONLY) {
+      at = at.children[0]
+    } else if (at.kind === N_TYPE_ARRAY) {
+      levels.push("[]")
+      at = at.children[0]
+    } else if (at.kind === N_TYPE_REF && at.text === "Array" && at.children[0].children.length === 1) {
+      levels.push("[]")
+      at = at.children[0].children[0]
+    } else if (at.kind === N_TYPE_UNION) {
+      const members = at.children
+      if (members.length !== 2 || (members[0].kind === N_TYPE_NULL) === (members[1].kind === N_TYPE_NULL)) {
+        return ""
+      }
+      at = members[0].kind === N_TYPE_NULL ? members[1] : members[0]
+    } else if (at.kind === N_TYPE_REF && at.children[0].children.length === 0) {
+      if (typedArrayElement(at.text) >= 0) {
+        return `${at.text}${levels.join("")}`
+      }
+      if (program === null || (program === ctx.program && ctx.typeBindings.has(at.text))) {
+        return ""
+      }
+      const alias = program.alias(at.text)
+      if (alias === null) {
+        return ""
+      }
+      program = alias.home.program
+      at = alias.decl.children[1]
+    } else {
+      return ""
+    }
+    hops = hops + 1
+  }
+  return ""
+}
+
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`, `a.set(b, at)`, `a.fill(v, from, to)`. */
 export const checkArrayMethod = (
   ctx: CheckContext,
@@ -186,6 +322,16 @@ export const checkArrayMethod = (
   }
   if (isArrayWriteMethod(name) && ctx.table.isReadonlyArray(receiver)) {
     return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`))
+  }
+  if (name === "push" || name === "pop") {
+    const alias = typedArraySpelling(ctx, access.children[0], scope)
+    if (alias.length > 0 && !alias.endsWith("]")) {
+      ctx.errorAtProperty(
+        access,
+        `\`${name}\` is not a method of \`${alias}\`, whose length is fixed: declare it \`${ctx.table.typeName(receiver)}\` to push and pop`
+      )
+      return T_ERROR
+    }
   }
   const elem = ctx.table.refOf(receiver)
   const spelled = ctx.table.typeName(receiver)

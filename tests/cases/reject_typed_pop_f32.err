@@ -1,0 +1,1 @@
+`pop` is not a method of `Float32Array`, whose length is fixed: declare it `f32[]` to push and pop
