@@ -16,8 +16,10 @@
  *                    per line (WP33: the case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
- *     `build/nish-test` once per run -- one process per case, `defaultJobs()` at
- *     a time (tests/pool.js). The link is against the runtime and the driver as
+ *     `build/nish-test` once per run -- then compared, assembled, linked and
+ *     run, `defaultJobs()` cases at a time (tests/pool.js) and reported in
+ *     corpus order; the native programs alone take turns, because they share
+ *     the files they write. The link is against the runtime and the driver as
  *     object files, built once per run (`runtimeObjects`) rather than
  *     recompiled per case; the `runtime objects:` checks at the end of the run
  *     are what say that is the same link.
@@ -159,21 +161,30 @@ const runtimeObjects = (defines) => {
  */
 const linkSpecimens = new Map()
 
+/** Keep `specimen` as the one for `key`, unless a link before it already was. */
+const keepSpecimen = (key, specimen) => {
+  if (!linkSpecimens.has(key)) {
+    linkSpecimens.set(key, specimen)
+  }
+}
+
 /**
- * Link one compiled case into a runnable binary, against the prebuilt runtime.
+ * The `clang` line that links one compiled case against the prebuilt runtime,
+ * without running it: `args` wants only `-o <exe>` after it.
  *
  * `driver` is `DRIVER_C` for the shared driver, a path for a case that brings
  * its own `.c`, and null when the module carries its own `main`. `defines` says
  * how the runtime has to have been built, and is what selects the objects.
+ * `error` is the runtime's own compile failure, and null when there is a line.
  *
- * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
- * way it always did; a runtime that would not compile is reported as a link
- * failure against the case, because that is what it is from here.
+ * The specimen comes back rather than being kept here because section A links
+ * its cases concurrently, and has to keep them in corpus order, not in the
+ * order the links started; {@link linkNative} keeps it straight away.
  */
-const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
+const linkLine = (ll, { driver = null, defines = [], libm = false } = {}) => {
   const rt = runtimeObjects(defines)
   if (rt.error !== null) {
-    return { status: 1, stdout: "", stderr: rt.error }
+    return { error: rt.error, args: null, key: null, specimen: null }
   }
   const tail = libm ? ["-lm"] : []
   const driverObject = driver === DRIVER_C ? rt.driver : driver
@@ -185,25 +196,40 @@ const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {})
     ...rt.objects,
     ...tail,
   ]
-  if (!linkSpecimens.has(defines.join(" "))) {
-    linkSpecimens.set(defines.join(" "), {
+  const specimen = {
+    ll,
+    fromObjects: args,
+    // `-D` sits on the from-source line because it is compiling the runtime
+    // there; on the object line it is already baked in, which is precisely
+    // what the byte comparison of the two is asserting.
+    fromSource: [
+      "-Wno-override-module",
+      "-O2",
+      ...defines,
       ll,
-      fromObjects: args,
-      // `-D` sits on the from-source line because it is compiling the runtime
-      // there; on the object line it is already baked in, which is precisely
-      // what the byte comparison of the two is asserting.
-      fromSource: [
-        "-Wno-override-module",
-        "-O2",
-        ...defines,
-        ll,
-        ...(driver === null ? [] : [driver]),
-        ...RUNTIME_C,
-        ...tail,
-      ],
-    })
+      ...(driver === null ? [] : [driver]),
+      ...RUNTIME_C,
+      ...tail,
+    ],
   }
-  return spawnSync("clang", [...args, "-o", exe], { cwd: root })
+  return { error: null, args, key: defines.join(" "), specimen }
+}
+
+/**
+ * Link one compiled case into a runnable binary, against the prebuilt runtime,
+ * with the options {@link linkLine} takes.
+ *
+ * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
+ * way it always did; a runtime that would not compile is reported as a link
+ * failure against the case, because that is what it is from here.
+ */
+const linkNative = (exe, ll, options = {}) => {
+  const line = linkLine(ll, options)
+  if (line.error !== null) {
+    return { status: 1, stdout: "", stderr: line.error }
+  }
+  keepSpecimen(line.key, line.specimen)
+  return spawnSync("clang", [...line.args, "-o", exe], { cwd: root })
 }
 
 let failures = 0
@@ -456,11 +482,12 @@ if (
 
 // ---- A. Golden cases -------------------------------------------------------------
 //
-// Every case is compiled by the compiler under test, one process per case and
-// `defaultJobs()` of them at a time. The compiles are independent of each other
-// and the checks are not -- a later section reads the `.ll` a case left in
-// `build/test` -- so all of them run first and the checks then walk the results
-// in corpus order, which keeps the output the same at any width.
+// Every case is taken from its compile by the compiler under test to its native
+// run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
+// cases are independent of each other and the sections after this one are not
+// -- a later section reads the `.ll` a case left in `build/test` -- so every
+// case has finished before the next section starts, and the checks are
+// reported in corpus order, which keeps the output the same at any width.
 const only = withoutSeed(process.argv.slice(2)).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
@@ -507,20 +534,58 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
-const caseResults = await pool(selectedCases, defaultJobs(), (name) =>
-  spawnAsync(
-    NISH,
-    [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, `${name}.ll`), ...caseArgs(name)],
-    { cwd: root }
-  )
-)
 
-for (const [at, name] of selectedCases.entries()) {
+/**
+ * The lane a case's native program runs in: one program at a time, whatever
+ * else section A has in flight.
+ *
+ * The compiles, assemblies and links around it are separate processes writing
+ * separate files, but the programs share a world. Each runs from the repository
+ * root, and some write the same file: `io_nish_import` and
+ * `io_nish_import_global` both write and read back
+ * `build/test/io_nish_import.txt`, and have to, because a check below requires
+ * the two to emit the same IR. Side by side, one could read the other's file
+ * half-written. So they take turns, as they did when the whole loop was
+ * sequential; a program is a small part of its case's time, and the links of
+ * the cases around it still overlap it.
+ */
+let nativeLane = Promise.resolve()
+const inNativeLane = (job) => {
+  const turn = nativeLane.then(job)
+  nativeLane = turn
+  return turn
+}
+
+/**
+ * One golden case from its compile to its native run, with what it found kept
+ * as a list of steps rather than printed.
+ *
+ * The cases run `defaultJobs()` at a time and finish in any order, so nothing
+ * here may reach the run's output or its counters directly: the loop below
+ * replays each case's steps in corpus order, and N jobs print what one did. A
+ * step is a check, a line to print, or the link specimen `linkNative` would
+ * have kept at that point -- which case is kept first decides what the
+ * `runtime objects:` check replays, so that is settled in corpus order too
+ * rather than by whichever link happened to start first. A passing check's
+ * detail is dropped on the spot, since `check` prints one only for a failure,
+ * so that a finished case waiting its turn does not hold two copies of its IR.
+ *
+ * Every file a case writes is named after it (`build/test/<name>.ll`, its
+ * `.portability.ll`, its executable), so two cases in flight never share an
+ * output; the one thing they can share is the world their programs run in,
+ * which is what {@link inNativeLane} is for.
+ */
+const runCase = async (name) => {
   const src = path.join(casesDir, `${name}.ts`)
   const side = (ext) => path.join(casesDir, `${name}.${ext}`)
   const args = caseArgs(name)
   const outLl = path.join(buildDir, `${name}.ll`)
-  const r = caseResults[at]
+  const steps = []
+  const expect = (label, ok, detail) => {
+    steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
+  }
+  const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
+  const done = { compiled: r, steps }
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -531,32 +596,32 @@ for (const [at, name] of selectedCases.entries()) {
       .map((l) => l.trim())
       .filter(Boolean)
     const missing = needles.filter((n) => !stderr.includes(n))
-    check(
+    expect(
       `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`,
       r.status === 1 && missing.length === 0,
       stderr || "(compiled successfully)"
     )
-    continue
+    return done
   }
   if (r.status !== 0) {
-    check(`${name}: compiles`, false, stderr)
-    continue
+    expect(`${name}: compiles`, false, stderr)
+    return done
   }
   // A `port_*` case exists for its warnings, and without the golden nothing
   // would compile it with the flag: it would pass while asserting nothing.
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
-    check(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
+    expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
   if (fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
     // for `.stdout`.
-    const warned = spawnSync(
-      NISH,
-      [src, "-o", path.join(buildDir, `${name}.portability.ll`), ...args, "--warn-portability", "--json"],
-      { cwd: root, encoding: "utf8" }
-    )
+    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
+    const warned = await spawnAsync(NISH, [src, "-o", warnedLl, ...args, "--warn-portability", "--json"], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const want = fs.readFileSync(side("portability"), "utf8").trim()
     const got = warned.stdout
       .split("\n")
@@ -564,14 +629,13 @@ for (const [at, name] of selectedCases.entries()) {
       .join("\n")
       .split(`${root}/`)
       .join("")
-    check(
+    expect(
       `${name}: --warn-portability --json matches .portability`,
       warned.status === 0 && got === want,
       `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
     )
     // Warnings never reach the IR (wp33 §1 rule 6): both compiles wrote the same bytes.
-    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
-    check(
+    expect(
       `${name}: --warn-portability changes no byte of the IR`,
       fs.existsSync(warnedLl) && fs.readFileSync(warnedLl, "utf8") === fs.readFileSync(outLl, "utf8"),
       "the two .ll files differ"
@@ -585,8 +649,8 @@ for (const [at, name] of selectedCases.entries()) {
     // the root would see it.
     const want = fs.readFileSync(side("stdout"), "utf8").trim()
     const got = String(r.stdout).split(`${root}/`).join("").trim()
-    check(`${name}: stdout matches .stdout`, got === want, `--- expected\n${want}\n--- actual\n${got}`)
-    continue
+    expect(`${name}: stdout matches .stdout`, got === want, `--- expected\n${want}\n--- actual\n${got}`)
+    return done
   }
 
   // `-g` names the working directory in `DIFile`; keep the golden machine-independent.
@@ -601,18 +665,22 @@ for (const [at, name] of selectedCases.entries()) {
   if (!fs.existsSync(side("ll"))) {
     if (process.env.UPDATE_GOLDENS) {
       fs.writeFileSync(side("ll"), actual + "\n")
-      console.log(`WROTE ${name}.ll`)
+      steps.push({ kind: "log", text: `WROTE ${name}.ll` })
     } else {
-      check(`${name}: has golden .ll (run with UPDATE_GOLDENS=1 to create)`, false)
-      continue
+      expect(`${name}: has golden .ll (run with UPDATE_GOLDENS=1 to create)`, false)
+      return done
     }
   }
   const expected = normaliseProducer(fs.readFileSync(side("ll"), "utf8").trim())
-  check(`${name}: IR matches golden`, actual === expected, `--- expected\n${expected}\n--- actual\n${actual}`)
+  expect(
+    `${name}: IR matches golden`,
+    actual === expected,
+    `--- expected\n${expected}\n--- actual\n${actual}`
+  )
 
   if (HAS_LLVM_AS) {
-    const as = spawnSync("llvm-as", [outLl, "-o", "/dev/null"])
-    check(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
+    const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
+    expect(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
   }
 
   if (fs.existsSync(side("out"))) {
@@ -630,27 +698,67 @@ for (const [at, name] of selectedCases.entries()) {
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
-    const cc = linkNative(exe, outLl, {
+    const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
       defines: threads,
       libm: true,
     })
+    if (line.error !== null) {
+      expect(`${name}: links natively`, false, line.error)
+      return done
+    }
+    steps.push({ kind: "specimen", key: line.key, specimen: line.specimen })
+    const cc = await spawnAsync("clang", [...line.args, "-o", exe], { cwd: root })
     if (cc.status !== 0) {
-      check(`${name}: links natively`, false, String(cc.stderr))
-      continue
+      expect(`${name}: links natively`, false, String(cc.stderr))
+      return done
     }
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : []
-    const run = spawnSync(exe, argv, { env: caseEnv(side("env")) })
+    const run = await inNativeLane(() => spawnAsync(exe, argv, { env: caseEnv(side("env")) }))
     const want = fs.readFileSync(side("out"), "utf8").trim()
-    check(
+    expect(
       `${name}: native output matches .out`,
       run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     )
   }
+  return done
 }
+
+/** Put one finished case's steps on the record, as the sequential loop would have. */
+const reportCase = ({ steps }) => {
+  for (const step of steps) {
+    switch (step.kind) {
+      case "check":
+        check(step.label, step.ok, step.detail)
+        break
+      case "log":
+        console.log(step.text)
+        break
+      case "specimen":
+        keepSpecimen(step.key, step.specimen)
+        break
+      default:
+        throw new Error(`section A: no step of kind ${step.kind}`)
+    }
+  }
+}
+
+// Each case is reported as soon as every case before it has been, so the log
+// moves while the corpus runs and a slow case is still named where it sits.
+const caseRuns = new Array(selectedCases.length).fill(null)
+let reported = 0
+await pool(selectedCases, defaultJobs(), async (name, at) => {
+  caseRuns[at] = await runCase(name)
+  while (reported < caseRuns.length && caseRuns[reported] !== null) {
+    reportCase(caseRuns[reported])
+    reported++
+  }
+})
+/** Each selected case's own compile, in corpus order, for the checks below that read it again. */
+const caseResults = caseRuns.map((run) => run.compiled)
 
 // ---- Programs the world answers, built and run by the blocks below -----------------
 
