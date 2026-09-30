@@ -109,6 +109,9 @@ for (const name of [
   "netWrite",
   "netShutdown",
   "netClose",
+  "udpBind",
+  "udpSendTo",
+  "udpRecvFrom",
 ]) {
   provide(name, () => shim.noNetReading(name));
 }

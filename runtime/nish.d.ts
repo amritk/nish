@@ -272,6 +272,20 @@ declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
 declare function netClose(fd: i32): i32;
+/** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
+declare function udpBind(host: string, port: i32, flags: i32): i32;
+/** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
+declare function udpSendTo(
+  fd: i32,
+  buf: readonly u8[],
+  off: i32,
+  len: i32,
+  to: readonly u8[],
+  segment: i32,
+  ecn: i32
+): i32;
+/** One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN]. */
+declare function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32;
 
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
@@ -359,6 +373,20 @@ declare module "nish:net" {
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;
+  /** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
+  export function udpBind(host: string, port: i32, flags: i32): i32;
+  /** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
+  export function udpSendTo(
+    fd: i32,
+    buf: readonly u8[],
+    off: i32,
+    len: i32,
+    to: readonly u8[],
+    segment: i32,
+    ecn: i32
+  ): i32;
+  /** One datagram, or several GRO coalesced, into `buf[off, off + len)`; the sender in `from`, `meta` [segment size, ECN]. */
+  export function udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32;
 }
 
 declare module "nish:io" {

@@ -570,6 +570,34 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // UDP. `udpBind` makes a socket, sets options and binds, none of which
+    // waits, so it is `willreturn` as `tcpListen` is. `sendmsg` and `recvmsg`
+    // wait on a blocking socket, as `send` and `recv` do, so the other two are
+    // `nounwind` alone. `udpSendTo` only reads its buffer and its address;
+    // `udpRecvFrom` writes its buffer, `from` and `meta`.
+    this.add(
+      plain(
+        "nish_udp_bind",
+        `declare noundef i32 @nish_udp_bind(${STR_NOCAP}, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_udp_send_to",
+        `declare noundef i32 @nish_udp_send_to(i32 noundef, ${NET_BUFFER} readonly, i64 noundef, i64 noundef, ${NET_BUFFER} readonly, i32 noundef, i32 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_udp_recv_from",
+        `declare noundef i32 @nish_udp_recv_from(i32 noundef, ${NET_BUFFER}, i64 noundef, i64 noundef, ${NET_BUFFER}, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

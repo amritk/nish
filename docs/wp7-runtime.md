@@ -686,6 +686,33 @@ symbol in it, against nine without `--gc-sections`, and links `net_tcp_echo`
 the same way as the control that shows the count would see them.
 
 
+### 2026-09-30: UDP, and the net ceiling raised to 2,048
+
+The second slice of N5 adds `udpBind`, `udpSendTo` and `udpRecvFrom`, with
+`SO_REUSEPORT`, `UDP_SEGMENT` (GSO), `UDP_GRO` and the ECN control messages.
+`runtime-net.c` measured **1,782 bytes**, all `.text`, with clang 18.1.3 on
+linux-x64 at `-Oz`:
+
+| function | bytes |
+| --- | ---: |
+| `nish_net_bound` (what `nish_tcp_listen` was, now shared with `udpBind`: the `sockaddr` inlined, the `::` fallback, `IPV6_V6ONLY`, `SO_REUSEADDR` for a stream, `SO_REUSEPORT`, `UDP_GRO`, `IP_RECVTOS` and `IPV6_RECVTCLASS` for a datagram socket, `bind`, `listen`) | 527 |
+| `nish_udp_send_to` (the address, the `UDP_SEGMENT` and `IP_TOS` / `IPV6_TCLASS` control messages on the stack, `sendmsg`) | 403 |
+| `nish_udp_recv_from` (`recvmsg`, the `UDP_GRO` and TOS / traffic-class control messages, writing `meta` and the sender's 18-byte form) | 332 |
+| `nish_tcp_accept` | 113 |
+| `nish_net_parse`, `nish_net_address`, `nish_net_local_port` | 99, 86, 53 |
+| `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
+| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_tcp_listen` | 19, 14, 13, 7 |
+
+The ceiling goes from 1,024 to **2,048**, the next 256-byte boundary above the
+measurement; the owner approved raising it at the plan's sign-off, and it is the
+one ceiling that moves. `runtime.c`, `runtime-os.c`, `runtime-parallel.c` and
+`runtime-host.c` are unchanged, and so are their ceilings. The Darwin branch
+(`-95` for a segment, an ECN mark or the GRO flag) is not in this number,
+because the budget is measured on linux-x64. Section GC still leaves all of it
+out of a program that calls none: the `net_` block's check now names the three
+UDP symbols among the ones a quiet program drops.
+
+
 ### What FFI does and does not do to the budget
 
 WP27 lets a program declare and call a C function of its own, and

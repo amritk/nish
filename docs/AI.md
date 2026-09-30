@@ -1213,8 +1213,14 @@ is in use, `-22` a bad argument. Every socket is non-blocking, and there is no
 `async`, no callback and no `tcpConnect` yet: your `main` is the loop. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
 the port big-endian); hosts are numeric literals, because there is no DNS.
-`netRead` / `netWrite` panic on a range outside the buffer. None exists on a
-wasm target, and under Node each throws.
+`netRead` / `netWrite` panic on a range outside the buffer. UDP is
+`udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
+`udpSendTo(fd, buf, off, len, to, segment, ecn)` and
+`udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one
+buffer as many datagrams of that size, `meta` is an `i32[]` of at least 2 that
+receives the GRO segment size (0 when nothing was coalesced) and the ECN bits,
+and an empty datagram answers 0. GSO, GRO and ECN are Linux's: on Darwin they
+answer `-95`. None exists on a wasm target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
 — see below.
