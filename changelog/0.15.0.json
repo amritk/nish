@@ -1,0 +1,474 @@
+{
+  "version": "0.15.0",
+  "date": "2026-09-30",
+  "tag": "v0.15.0",
+  "range": {
+    "from": "v0.14.0",
+    "to": "88752d48"
+  },
+  "entries": [
+    {
+      "id": "mark-wp34-n1-n2-n3-and-n6-built",
+      "type": "docs",
+      "breaking": false,
+      "title": "mark WP34 N1, N2, N3 and N6 built and bring MASTER_PLAN §9 up to date",
+      "body": "The status line of the WP34 note said only lanes K1 and K4 had landed. It\nnow says N1, N2, N3 and N6 have too. Each of those sections names the pull\nrequests that built it: N1 in #296 (enums) and #300 (aliases), N2 in #295,\nN3 in #312, N6 in #310. N5 and the remaining lanes are marked not built.\n§5a no longer waits for N6. It says what N6 checks today: its own fixtures,\nnot yet the crypto modules.\n\nMASTER_PLAN §9 \"Next\" now lists the live work, each item linking its note:\n- WP34 wave 1: N5 and the K2, K3, K5 and K6 crypto lanes\n- WP33 R2 to R4\n- threads P3\n\nThreads P1 and P2, ranged integers and Map/Set move to a shipped line, with\ntheir releases and pull requests. The 0.10.0 breaking-change note is written\nas history instead of \"the next release\".\n\nThe branch also carries the v0.14.0 package-lock.json from #319,\nbyte-identical, so `npm ci` passes on it. It is a no-op once #319 lands.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md",
+        "docs/MASTER_PLAN.md"
+      ],
+      "tests": [
+        "node docs/check-links.mjs"
+      ],
+      "commits": [
+        "8423cee"
+      ],
+      "pr": 328,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-14-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.14.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b8e6b24"
+      ],
+      "pr": 319,
+      "author": "github-actions[bot]",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "chacha20-poly1305-and-chacha20-header-protection-in-nish",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "ChaCha20-Poly1305 and ChaCha20 header protection in nish/crypto/chacha20poly1305",
+      "body": "`nish/crypto/chacha20poly1305` adds the ChaCha20-Poly1305 AEAD of RFC 8439, its two halves and QUIC's ChaCha20 header-protection mask (RFC 9001 §5.4.4), in pure Nish. The module was written from the RFCs, not ported, and is WP34's lane K2.\n\n- `chacha20Block` and `chacha20` compute the block function and the keystream. The twenty rounds run on sixteen `u32` locals. A request that would wrap the 32-bit block counter answers `null` rather than repeat the keystream.\n- `poly1305` and `poly1305KeyGen` work on five 26-bit limbs in `u64`, reduced by carries and masks. The final reduction picks `h` or `h - p` with `ctSelect` on a borrow mask, so nothing compares a secret.\n- `chacha20Poly1305Seal` answers the ciphertext followed by the tag. `chacha20Poly1305Open` computes the tag over the received ciphertext and compares all sixteen bytes in constant time, through `ctEq`, before it decrypts anything. A forged message answers `null`, as does any wrong length.\n- `chacha20HeaderMask` answers the five bytes QUIC XORs over a short header.\n\n`tests/cases/ct_asm_chacha20poly1305` holds the Poly1305 clamp, one block, the final reduction and the tag compare to `tests/ct-asm.js` on x86-64 and aarch64: no branch, no call, and no secret-addressed load. The fixture's copies are pinned to the module's own output on every RFC 8439 A.3 vector.",
+      "metrics": [
+        "seal 302 MB/s at 16 KiB against Node's chacha20-poly1305 at 778 MB/s on the same box (0.39x)"
+      ],
+      "refs": [
+        "RFC 8439",
+        "RFC 9001 §5.4.4",
+        "docs/wp34-hosting-cs.md §5"
+      ],
+      "tests": [
+        "tests/link/crypto_chacha20poly1305",
+        "tests/link/crypto_chacha20poly1305_f64",
+        "tests/cases/ct_asm_chacha20poly1305"
+      ],
+      "commits": [
+        "fd78feb"
+      ],
+      "pr": 332,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "retire-nl8011-and-stop-nl8008-on-a-constant",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "retire NL8011 and stop NL8008 on a constant shift",
+      "body": "Two portability warnings flagged sites that behave the same way in both\nreadings.\n\nNL8011 (\"prints a negative zero as 0 here, and Node's console prints -0\") is\nretired. The TypeScript reading runs under `runtime/nish.mjs`, whose\n`console.log` and `console.error` print `String(x)`, and `String(-0)` is \"0\".\nSo a negative zero prints `0` in both readings, and no site is left for the\nrow to name. Retiring it rather than narrowing it follows from that: only an\nunshimmed console would differ, and no output of the compiler produces one\nyet. As the registry requires, the rule keeps its entry and its number, so\nthe NL8 band stays gap-free. `tests/wordings/unreachable.txt` records why it\nwent. `port_num_negzero` is now its quiet counterpart.\n\nNL8008 (an i32 `>>>` reads back signed here, and unsigned in TypeScript) is\nnow quiet when the shift count is a constant k with `k & 31` not 0. The\nconstant can be a literal, a parenthesised or signed literal, or a named\nmodule constant that the checker folded. Such a shift moves a zero into the\nsign bit, so the result is at most 2^31 - 1 and reads the same either way:\n`-16 >>> 2` prints 1073741820 in both. A count of 0, one that is 0 mod 32, and\na count only known at run time still warn.\n\nThe two notes that retired NL2288 and NL2276 now name NL2045, the code the\ncompiler actually emits for importing an enum or alias that is not exported.\nNo existing `.ll` golden moved.",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md",
+        "#309",
+        "#308"
+      ],
+      "tests": [
+        "tests/cases/port_num_ushr_const_quiet",
+        "tests/cases/port_num_ushr_count",
+        "tests/cases/port_num_negzero"
+      ],
+      "commits": [
+        "1b3fd97"
+      ],
+      "pr": 329,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "make-the-portability-rows-and-wp33-s-status",
+      "type": "docs",
+      "breaking": false,
+      "title": "make the portability rows and wp33's status match the code",
+      "body": "LANGUAGE.md's portability section now describes the rows the compiler\nreports under `--warn-portability`, row for row, and it no longer says that\nonly NL8005 is live.\n\n- NL8001 states its full predicate: the outside facts it follows (printed,\n  stored, `main`'s exit code, compared or combined with a number, taken from\n  a width as in `width - s.length`), the 0/-1 and 128 thresholds, and the\n  needle-step exception after `indexOf` or `lastIndexOf`.\n- NL8003 and NL8004 state what a record array is, what the rows can and\n  cannot see, and where they are conservative.\n- NL8008 is quiet for a constant count k with `k & 31` not 0.\n- NL8010 no longer implies that the two readings round a half differently.\n  Native already rounds it towards +Infinity. Only `Math.round(-0.4)`'s -0 and\n  the NaN rule of `min`/`max` differ.\n- NL8011 is marked retired, with the reason: the reference reading's console\n  prints `String(x)`, so -0 prints 0 in both readings.\n\nIn wp33:\n- R1's portability half is marked built.\n- The -0 printing ledger row moves out of class C.\n- The §5.2 example is a site NL8001 really reports.\n- §9 says every row is live except the retired NL8011.\n\nEach of the 34 `tests/cases/port_*` cases was compiled with\n`--warn-portability`, and the codes each one prints match the table.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/wp33-round-trip.md",
+        "#309"
+      ],
+      "tests": [
+        "tests/cases/port_*"
+      ],
+      "commits": [
+        "873b91c"
+      ],
+      "pr": 327,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "pin-readfilebytessync-s-refusals-and-fix-the-fill",
+      "type": "docs",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pin readFileBytesSync's refusals and fix the fill and i64-literal rules",
+      "body": "Three places in LANGUAGE.md said something the compiler does not do, or left\nit unpinned.\n\nThe typed-array `fill` rule showed `a.fill(v, 0, Infinity)`, which does not\ncompile: `Infinity` is not a name in Nish. It now shows `a.fill(v, 0, 1 / 0)`\nin f64 mode, which fills the whole array, and says why `Infinity` itself is\nnot available.\n\n`readFileBytesSync` now has goldens for its two refusals:\n`reject_bytes_read_arity` (NL2061) and `reject_bytes_read_type` (NL2268). Its\nrule lists both in its Tests column.\n\nThe integer-literal rule now says that the `i64` minimum, -2^63, cannot be\nwritten as a literal (`-9223372036854775808` is NL2055), and why. A numeric\nliteral is read as a double, as TypeScript reads it, and the 2^53 bound is\nwhat keeps every literal exact in both readings. Admitting this one value\nwould be a one-literal exception to that rule, for no gain, since the\nTypeScript reading holds `i64` as a double anyway. The rule shows the\narithmetic form instead: `lo << 10` from `lo = -9007199254740992`, as\n`neg_literal_i64_min` computes it.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "#317",
+        "#307"
+      ],
+      "tests": [
+        "tests/cases/reject_bytes_read_arity",
+        "tests/cases/reject_bytes_read_type",
+        "tests/cases/neg_literal_i64_min"
+      ],
+      "commits": [
+        "f210096"
+      ],
+      "pr": 331,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "nish-net-with-a-runtime-net-c-unit",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "nish:net with a runtime-net.c unit and non-blocking TCP (WP34 N5)",
+      "body": "A builtin module `nish:net` whose handles are `i32` descriptors: `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`, each also a global. Every socket is non-blocking and close-on-exec, and the program owns its loop: a call that would wait answers -11 instead of blocking. Failures are negative errnos in Linux's numbering on every platform (-11, -95, -32, -104, -98, -22; Darwin translates its own). An address is 18 bytes of the caller's `u8[]`: 16 address bytes (IPv4 as `::ffff:a.b.c.d`), then the port, big-endian. Hosts are numeric literals, and nothing allocates. A listener on `::` is dual-stack and falls back to IPv4 when the kernel has no IPv6.\n\nThe C is a fifth runtime translation unit, `runtime/runtime-net.c`, with a `.text*` ceiling of its own. It is named in the five places a new unit is: `scripts/build.sh`, `RUNTIME_C` and the `npm pack` list in `tests/run.js`, the golden runner's link line, the `nish run` cache key and `NET_TEXT_BUDGET`. Section GC drops all of it from a program that calls none of it.\n\n`netRead` and `netWrite` range-check `off` and `len` in the IR through the slice check `dst.set` uses, which `--unchecked-indexing` drops. The written-argument rule now covers identifier builtins and several written arguments, with these effects:\n- a filled buffer is never `readonly`;\n- a readonly one is refused;\n- a scope's region refuses a write to an array a task reads.\n\nEvery call is also refused in a `scope()` task, in a parallel body, and on wasm (NL2404). Under Node, each function throws, naming itself: the TypeScript reading is class C. There is one new diagnostic, NL2405, for a `netWrite` buffer that is not a `u8[]`.",
+      "metrics": [
+        "runtime-net.c 853 bytes of .text*, ceiling 1024; runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c unchanged"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#nishnet-addresses-and-non-blocking-tcp",
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/cases/net_tcp_echo",
+        "net_tcp_calls",
+        "net_tcp_bounds",
+        "net_tcp_import",
+        "net_tcp_unchecked",
+        "reject_net_*",
+        "tests/runtime-test.c test_net"
+      ],
+      "commits": [
+        "a46b7ee"
+      ],
+      "pr": 341,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "bitsliced-aes-128-and-aes-256-with-gcm",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "bitsliced AES-128 and AES-256 with GCM in nish/crypto/aes",
+      "body": "`nish/crypto/aes` adds AES-128 and AES-256 (FIPS 197), GCM seal and open (NIST SP 800-38D), and QUIC's AES header-protection mask (RFC 9001 §5.4.3), in pure Nish with no lookup table anywhere. It is WP34's lane K3.\n\n- **Bitsliced.** Four blocks sit in eight `u64` words, one word per bit of every byte. SubBytes is Boyar and Peralta's 113-gate circuit, run on whole words. The key schedule's SubWord uses the same circuit, so no key, state byte or plaintext byte is ever an index.\n- **GHASH** multiplies in GF(2^128) with the integer multiplier on operands spread out with zero \"holes\", Karatsuba twice over, followed by Gueron and Kounavis's reduction for GCM's bit-reflected field. Its 32-bit multiply, `ghashMul32`, is adapted from BearSSL's `bmul64` (`src/hash/ghash_ctmul64.c`, MIT, Copyright (c) 2016 Thomas Pornin). It carries BearSSL's notice, and the licence text ships beside it as `std/crypto/LICENSE-bearssl`.\n- **GCM** takes an IV of any non-zero length. `aesGcmOpen` computes the whole tag over the received ciphertext and compares it with `ctEq` before decrypting anything. A key of the wrong length, an empty IV, a short sealed input, a plaintext over 2^31 − 17 bytes, or a failed tag each answer `null`.\n\nThe FIPS 197, GCM-specification, RFC 9001 and Wycheproof `aes_gcm` vectors pass. Of Wycheproof's 316 cases, 213 run; the 103 with a 192-bit key are out of scope. The Wycheproof cases are vendored under Apache-2.0 with their notice. `tests/cases/ct_asm_aes` holds one AES round, the GHASH multiply and the tag compare to the disassembly check on x86-64 and aarch64.",
+      "metrics": [
+        "AES-128-GCM seal 57 MB/s and AES-256-GCM 46 MB/s at 16 KiB, against Node's AES-NI/PCLMUL at 896 and 880 MB/s on the same box"
+      ],
+      "refs": [
+        "FIPS 197",
+        "NIST SP 800-38D",
+        "RFC 9001 §5.4.3",
+        "docs/wp34-hosting-cs.md §5"
+      ],
+      "tests": [
+        "tests/link/crypto_aes",
+        "tests/link/crypto_aes_f64",
+        "tests/cases/ct_asm_aes"
+      ],
+      "commits": [
+        "9042a8b"
+      ],
+      "pr": 340,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "p-256-ecdsa-with-rfc-6979-nonces-in",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "P-256 ECDSA with RFC 6979 nonces in nish/crypto/p256",
+      "body": "`nish/crypto/p256` adds ECDSA over NIST P-256 in pure Nish: key derivation, signing with RFC 6979 deterministic nonces, and verification. It is WP34's lane K5, and the signature TLS 1.3 and WebTransport certificates need.\n\n- **The field and scalar arithmetic is ported from fiat-crypto**'s 32-bit output. It uses Montgomery form on eight `u32` limbs with `u64` products, from `fiat-c/src/p256_32.c` and `p256_scalar_32.c`, keeping fiat's function names under a `p256Fiat` prefix. The port is used under the MIT licence, one of the three fiat-crypto offers. The file carries fiat-crypto's notice, and `std/crypto/LICENSE-fiat-crypto` ships beside it.\n- **The point arithmetic** uses Renes, Costello and Batina's complete formulas for a = −3, so addition has no exceptional case to branch on. Multiplication by a secret scalar is a fixed 4-bit window that reads every table entry and keeps one with `ctSelect`, always in the same number of steps. Verification's `u1·G + u2·Q` involves no secret.\n- **The API.** `p256PublicKey(priv)` gives an uncompressed SEC1 point. `p256Sign` and `p256SignSha256` give `r || s`. `p256Verify` and `p256VerifySha256` answer a boolean. A private key of 0 or ≥ n, a public key off the curve, the identity, a wrong length, or `r` or `s` of 0 or ≥ n are all refused.\n\nRFC 6979 A.2.5 reproduces: the key pair, and for SHA-256 the `k`, `r` and `s` of \"sample\" and \"test\". All 484 Wycheproof `ecdsa_secp256r1_sha256` cases give their expected verdicts. They are vendored under Apache-2.0 beside the AES vectors. `tests/cases/ct_asm_p256` holds fiat's field square, the conditional move, the scalar-field multiply and the window's table scan to the disassembly check on x86-64 and aarch64. The field multiply and the window's doubling and addition are constant time by construction. They are not yet verified by disassembly: the check refuses calls, and it has an aarch64 register-pair spill corner (#334).",
+      "metrics": [
+        "see the pull request body's table of key generation, sign and verify operations per second beside Node's prime256v1 on the same box"
+      ],
+      "refs": [
+        "RFC 6979",
+        "SEC 1",
+        "FIPS 186-5",
+        "docs/wp34-hosting-cs.md §5"
+      ],
+      "tests": [
+        "tests/link/crypto_p256",
+        "tests/link/crypto_p256_f64",
+        "tests/link/crypto_p256_ct",
+        "tests/cases/ct_asm_p256"
+      ],
+      "commits": [
+        "e437a58"
+      ],
+      "pr": 336,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-push-and-pop-on-the-typed-array",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "refuse push and pop on the typed-array names",
+      "body": "`Int32Array`, `Float32Array`, `Float64Array` and `BigInt64Array` are the\nsame type as `i32[]`, `f32[]`, `f64[]` and `i64[]`, and until now they\naccepted `push` and `pop`. In TypeScript a typed array has a fixed length\nand neither method exists, so such a program was a `TypeError` under Node.\nA receiver spelled with one of the four names now refuses both (NL2415):\n\n    `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop\n\nThe spelling is carried beside the type, never as a type: `sameType`, the\ntype table and the emitter are unchanged, so every program that still\ncompiles has the IR it had and no existing `.ll` golden moved.\n\nA receiver carries the spelling when it is one of these:\n\n- `new X(n)`.\n- An identifier whose binding or parameter is annotated with the name:\n  directly, in parentheses, in `X | null`, or through a `type` alias of\n  the module.\n- An unannotated binding initialised with such a receiver.\n- A field declared with the name.\n- A call whose callee declares it as its return type.\n- An element of an array spelled `X[]` or `Array<X>`: an index or a\n  `for...of` variable.\n- A ternary either of whose branches carries it.\n\nA typed array that flows into a binding spelled `T[]` may still be pushed\nthere, since the refusal follows the spelling the program wrote and `tsc`\nalready refuses that assignment. The spelling does not reach three\nshapes: a declaration written through another module's `type` alias, a\nvalue read out of a `Map` or `Set`, and a generic's `T` result.\ndocs/LANGUAGE.md names these and the wp33 §3.3 row classes them C.\n\nMeasured: 0 existing .ll goldens moved\nRefs: docs/LANGUAGE.md#typed-array-names-have-no-push-or-pop\nTests: tests/cases/reject_typed_*, tests/cases/arr_typed_push_pop\nBREAKING CHANGE: `push` and `pop` on a receiver spelled `Int32Array`,\n`Float32Array`, `Float64Array` or `BigInt64Array` no longer compile.\nDeclare a binding that grows as `i32[]`, `f32[]`, `f64[]` or `i64[]`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "9598afa"
+      ],
+      "pr": 335,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "warn-against-production-use-and-say-how-early",
+      "type": "docs",
+      "breaking": false,
+      "title": "warn against production use and say how early Nish is",
+      "body": "The README's pre-alpha note only covered churn in the language, the flags\nand the emitted IR. It now opens with a caution that Nish is a very early\nexperiment not to be used in production: expect miscompilations and crashes,\nand nothing (the compiler, the runtime, or the cryptography in `std/`) has\nhad a security review. The \"Project status\" section repeats the point, since\nits milestone table says what compiles, not what has been hardened.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8d5dd20"
+      ],
+      "pr": 344,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "gate-every-std-crypto-module-in-the-release",
+      "type": "ci",
+      "scope": "release",
+      "breaking": false,
+      "title": "gate every std/crypto module in the release presence checks, and list the new modules",
+      "body": "The release tarball, the npm package and the per-platform packages each have a presence gate in `release.yml`. All three now name every `std/crypto` module: base64url, chacha20poly1305, aes, ct, hkdf, hmac, p256, sha256, sha512 and x25519. They also name the licence texts that ship beside two of them, `std/crypto/LICENSE-bearssl` and `std/crypto/LICENSE-fiat-crypto`. Until now the gates named only the top-level modules, so a release could have shipped without its crypto library and passed.\n\nThe `tests/run.js` check that holds the gates to `std/` no longer filters out nested modules. A module in any subdirectory that is missing from any one gate now fails the suite. Removing `std/crypto/ct.ts` from the third gate makes it fail.\n\nThe library is listed everywhere it is documented. `std/README.md` gains rows for ChaCha20-Poly1305, AES-GCM and P-256. Its constant-time rule now says, module by module, what `tests/ct-asm.js` verifies by disassembly and what remains discipline: P-256's field multiply and the window's doubling and addition are among the latter (#334). `docs/LANGUAGE.md`'s module list and `nish/crypto` rule, `llms.txt`, and WP34 §5a's Landed table (K2 #332, K3 #340, K5 #336) follow.",
+      "metrics": [],
+      "refs": [
+        "#306",
+        "docs/wp34-hosting-cs.md §5a",
+        "std/README.md"
+      ],
+      "tests": [
+        "tests/run.js (release.yml's presence gates each name every std module",
+        "nested ones included)"
+      ],
+      "commits": [
+        "32c9dc8"
+      ],
+      "pr": 345,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "nish-net-udp-with-gso-gro-ecn-and",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT (WP34 N5)",
+      "body": "UDP for `nish:net`, adding three calls that are also globals:\n- `udpBind(host, port, flags)`\n- `udpSendTo(fd, buf, off, len, to, segment, ecn)`\n- `udpRecvFrom(fd, buf, off, len, from, meta)`\n\nEach call is one `sendmsg` or `recvmsg` with its control messages on the stack, and nothing allocates:\n- **GSO:** a `segment` above 0 sends through `UDP_SEGMENT`, so one call leaves as several datagrams.\n- **GRO:** flag 2 turns on `UDP_GRO`, and `meta[0]` receives the segment size (0 when nothing was coalesced).\n- **ECN:** `ecn` sets the two ECN bits through `IP_TOS` / `IPV6_TCLASS`, and `meta[1]` reads them back.\n- **Port sharing:** flag 1 is `SO_REUSEPORT`.\n\nA dual-stack `\"::\"` falls back to IPv4 when the kernel has no IPv6, and an IPv4 destination in the address form's `::ffff:` spelling reaches either kind of socket. On Darwin, a segment, an ECN mark or the GRO flag answers -95. That branch is compiled by CI but never run.\n\nOn loopback, GRO keeps a GSO super-packet whole but does not merge separately sent datagrams. So the offload test pairs a Nish GSO sender with a Nish GRO receiver: one receive returns 4,800 bytes with a segment size of 1,200. Node counts the four 1,200-byte datagrams the sender's single call produced. Node also drives a UDP echo written in Nish through 1 and 200 datagrams, with the arena flat across both.\n\nThe signature alphabet gains `m`, a written `i32[]`, so the checker, the written-argument rule and the emitter cover `meta` like any written buffer. There is one new diagnostic, NL2406, for a `meta` that is not an `i32[]`. `tcpAccept` on a datagram socket pins a Linux -95. `runtime-net.c` grows to 1,782 bytes, and only its own ceiling moves, to 2,048.",
+      "metrics": [
+        "loopback 1,200-byte datagrams, Nish to Nish, median of three 3 s runs on an Intel Xeon @ 2.10 GHz (4 vCPU, Linux 6.18): 459,000/s sent (456,000/s received) one per call, against 1,760,000/s sent (1,310,000/s received) with segment = 1200 over 49,200-byte sends",
+        "runtime-net.c 1,782 bytes of .text*, ceiling 2,048; runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c unchanged"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp",
+        "docs/wp34-hosting-cs.md"
+      ],
+      "tests": [
+        "tests/cases/net_udp_echo",
+        "net_udp_offload",
+        "net_udp_calls",
+        "net_udp_bounds",
+        "net_udp_unchecked",
+        "reject_net_udp_*",
+        "tests/runtime-test.c test_udp"
+      ],
+      "commits": [
+        "ea3dde7"
+      ],
+      "pr": 343,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "refuse-forbidden-import-and-export-forms-by-their",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse forbidden import and export forms by their rule, not NL0001",
+      "body": "Every import and export form TypeScript can write and Nish forbids used to stop at a syntax error, so `--json` never named the rule. The parser now reads each one into the node it resembles, and the phase that owns the rule refuses it once, with that rule's existing code and message: a side-effect import (NL2033), `import * as` (NL2119), `export { … }`, `export * from` and `export * as ns from` (NL2128), `export default <value>` and `export =` (NL2129), `export default function f` (NL2130), `export default class C` and `export default interface I` (NL2131), a default import, including `import d, { a }` and `{ default as d }` (NL2190), a specifier that is not a string literal (NL2212), `export import` (NL2226), and `import type` or `{ type A }` (NL2243). `import x = require(\"./m\")`, `import x = A.B` and `export as namespace X` are NL2230, the sentence stage0 gave them. A nested `function` declaration, and an `import` inside a body, is `Unsupported statement in Phase 1: FunctionDeclaration` (NL2260), in function and arrow bodies, methods, constructors, nested blocks and templates nothing instantiates.\n\nThree forms that no later release could give a meaning have Phase 0 rules of their own:\n\n- import attributes, `with { type: \"json\" }` or `assert { … }` (NL1057)\n- a module export name written as a string, `import { \"a-b\" as b }` (NL1058)\n- `import defer` (NL1059)\n\nPass 1a refuses an import before binding it, so a refused import loads nothing. The checker's import refusals are reported one each; a Phase 0 one is reported alone, as every Phase 0 rule is.\n\nA malformed import or export form reports its first syntax error and no cascade. `import x = 5;`, `import { a,` and `import \"m\" with { type` each cost one diagnostic, and none costs more than it did before.\n\nThe words stay names wherever TypeScript reads a name. `import type from \"./m\"` is a default import of a binding called `type`, and `{ type }`, `{ type as t }` and `{ type as as }` each import a function called `type`. These readings follow TypeScript's `parseImportDeclarationOrImportEqualsDeclaration` and `parseImportOrExportSpecifier`. A generated sweep of 10,392 programs (import and export shapes × ten words × four separators) covers them. Its 420 programs that 0.14.0 compiles give byte-identical IR, and it compiles none that 0.14.0 refused. `tests/parser/names-modules.ts` pins the name readings.\n\nTwelve cases left `tests/self/parser-refusals.txt`, and the two malformed-import cases that pin the cascade fix joined it (40 to 30). Six left `tests/wordings/parser_refusals.txt` (8 to 2). The parser section of `unreachable.txt`'s R6 block is gone, and NL2260 is live again. What stays a syntax error is syntax TypeScript itself refuses as syntax: numeric separators, octal and leading-zero literals, `#!` mid-file, `\\u{…}` out of range, `??` mixing and ASI. No `.ll` golden moved, and the compiler still rebuilds itself to a fixed point.",
+      "metrics": [
+        "scripts/bootstrap.sh --verify user time 1m34.3s on main vs 1m29.1s on the branch"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/AI.md",
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/reject_module_sweep_together",
+        "tests/cases/reject_fn_nested_template",
+        "tests/cases/reject_import_equals_malformed",
+        "tests/parser/names-modules.ts"
+      ],
+      "commits": [
+        "2081008"
+      ],
+      "pr": 337,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "der-pem-and-x-509-and-a-self",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "DER, PEM and X.509, and a self-signed P-256 certificate, in nish/crypto/x509",
+      "body": "`nish/crypto/x509` is WP34 K6.\n\n- It reads a P-256 private key (SEC1 or PKCS#8) and a certificate chain out of PEM.\n- It verifies an ecdsa-with-SHA256 signature under an issuer's key.\n- It mints the self-signed X.509 v3 ECDSA P-256 certificate, valid 1 to 14 days, that WebTransport's `serverCertificateHashes` accepts. `x509CertificateHash` returns that certificate's SHA-256.\n\nThe module is written from X.690, RFC 5280, RFC 7468, RFC 5915 and RFC 5208/5958.\n\nDER is read strictly. Each of the following answers `null` rather than being tolerated:\n- a non-minimal length or integer;\n- an indefinite length;\n- a high-tag identifier;\n- a length past 2^31;\n- a TBS algorithm that differs from the outer one;\n- trailing bytes.\n\nThe golden certificate uses RFC 6979 A.2.5's key, CN `localhost`, and runs 2026-01-01 to 2026-01-15. It is pinned byte for byte. OpenSSL reads it as v3 / P-256, `openssl verify` (also with `-x509_strict`) accepts it, and its SHA-256 equals `x509CertificateHash`.\n\nThe module is listed in the release presence gates, `stdModuleNames`, std/README.md, docs/LANGUAGE.md and llms.txt.",
+      "metrics": [
+        "mint 861/s (one public key and one ECDSA signature; Node has no minting API); parse a PEM chain of one 104,000/s vs Node X509Certificate 41,000/s; parse a PKCS#8 key 1,860/s vs Node createPrivateKey 41,700/s"
+      ],
+      "refs": [
+        "std/README.md",
+        "docs/LANGUAGE.md"
+      ],
+      "tests": [
+        "tests/link/crypto_x509",
+        "tests/link/crypto_x509_f64"
+      ],
+      "commits": [
+        "fe6dc4e"
+      ],
+      "pr": 346,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "verify-the-x25519-ladder-by-disassembly-pin-sha",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "verify the X25519 ladder by disassembly, pin SHA-384/512's 448-bit vector, and time the constant-time code weekly",
+      "body": "This change does three things.\n\n**X25519 under the disassembly check.** `tests/cases/ct_asm_x25519` puts X25519's field multiply, square, a24 multiply, add, sub, conditional swap and one ladder step under the constant-time check. The secret inputs are the scalar bit and every limb. To check them, `tests/ct-asm.js` models more than it did:\n- It follows the stack by offset, byte by byte. A reload takes the taint of every byte it covers, and a `movs`/`movz` reads the width its suffix names.\n- It follows a call into the same listing, on the caller's own state.\n- It refuses a stack address written off the stack, and string instructions.\n- It fixes four gaps it already had: `(%rbp)` used as an array pointer, `popcnt`, `cltq`, and three-operand destinations.\n\nEvery rule has a must-pass or must-refuse corner, checked when the module loads, and `ct_asm_refused` is still refused.\n\n**SHA-384 and SHA-512 of FIPS 180-4's 448-bit message** are pinned in `crypto_sha512` and its f64 twin (closes #305).\n\n**A weekly timing test.** `tests/ct-timing.js` and `tests/ct-timing/dudect.{c,h}` are a dudect-style harness. For every function a `ct_asm_*` fixture names, it times a fixed and a random secret and runs Welch's t-test: uncropped, cropped, and second order. `.github/workflows/ct-timing.yml` runs it every Monday on x86-64 and arm64, and opens or updates a `ct-timing` issue when any |t| exceeds 4.5. It is not part of `npm test` and is not a required check (closes #316). On a full run of 16 functions, the largest |t| was 2.41. The harness catches `ct_asm_refused`'s early-exit compare at |t| = 359.\n\ndudect is adapted with its notice kept and is listed in THIRD_PARTY_NOTICES.md.",
+      "metrics": [
+        "16 constant-time functions, max |t| 2.41 at 1,000,000 measurements each (threshold 4.5); a known early-exit leak reads |t| 359"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#constant-time"
+      ],
+      "tests": [
+        "tests/cases/ct_asm_x25519",
+        "tests/link/crypto_sha512"
+      ],
+      "commits": [
+        "916c3af"
+      ],
+      "pr": 339,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "nish-net-readiness-loop-that-wakes-on-sockets",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "nish:net readiness loop that wakes on sockets and SIGTERM (WP34 N5)",
+      "body": "A readiness loop that the program owns: `pollCreate`, `pollAdd`, `pollModify`, `pollRemove` and `pollWait`, in `nish:net` and as globals.\n\n- **Events.** Events are 1 for readable and 2 for writable. `pollWait` adds 4 for a hang-up or an error.\n- **Level-triggered.** Whatever a program leaves unhandled is reported again at the next wait.\n- **Waiting.** `pollWait` fills at most `ready.length / 2` pairs, and at most 64 per call, with a token and its events. It answers the count, 0 on a timeout, and waits forever for a negative timeout. A signal that interrupts the wait answers 0, so the wait never runs past its deadline.\n- **Signals.** N3's `signalFd()` goes into the loop like any other descriptor, so a server wakes on SIGTERM without a handler in the language.\n- **Platforms.** On Linux it is `epoll`, with the token in `data.u32`. On Darwin it is `kqueue`, with the token in `udata`; that branch is compiled by CI's Darwin rows and never run.\n- **Allocation.** Nothing allocates: the event array is a bounded chunk on the stack.\n\n`ready` is a written `i32[]`, the same kind as UDP's `meta`, so the checker, the written-argument rule and the region rule cover it without new code, and no new diagnostic was needed. `pollWait` is not `willreturn`, because it can wait forever. The other four never wait.\n\nNode drives `net_loop_two`, a Nish program that owns a loop over two UDP sockets and the signal descriptor:\n- Node writes to one socket, then the other, in both orders. The program reports which woke.\n- On SIGTERM the program reads 15, prints that the arena stayed flat, and exits 0.\n\n`net_loop_calls` pins the timeout, level-triggered re-reporting, the cap, modify, remove, hang-up and the error answers. `test_poll` in the runtime tests pins close-on-exec, the 64-pair bound and the prompt return on a signal.\n\nWith this slice WP34 N5 is built. wp34 §N5 has its State line, and wp33 §3.5 records the module as class C: Node's sockets are asynchronous only, so there is no synchronous reading, and the translation is `await` on a queue. `runtime-net.c` grows to 2,071 bytes; only its own ceiling moves, to 2,304.",
+      "metrics": [
+        "runtime-net.c 2,071 bytes of .text*, ceiling 2,304 (the loop is 289 of them); runtime.c, runtime-os.c, runtime-parallel.c and runtime-host.c unchanged"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#the-readiness-loop",
+        "docs/wp34-hosting-cs.md",
+        "docs/wp33-round-trip.md"
+      ],
+      "tests": [
+        "tests/cases/net_loop_two",
+        "net_loop_calls",
+        "reject_net_poll_*",
+        "tests/runtime-test.c test_poll"
+      ],
+      "commits": [
+        "61ce010"
+      ],
+      "pr": 349,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "run-every-vector-in-the-f64-twins-of",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "run every vector in the f64 twins of chacha20poly1305, aes and p256",
+      "body": "The `_f64` twins of `crypto_chacha20poly1305`, `crypto_aes` and `crypto_p256` ran only a handful of vectors each, so \"passes in both number profiles\" held for a subset. Each program's body is now `runSuite()` in a shared `suite.ts`, as `crypto_sha512` already does. The default and `--number-mode f64` programs both drive it, so the two profiles run the same checks and cannot drift apart.\n\nEach f64 twin now runs the default program's full set:\n\n- **chacha20poly1305:** 6 → 91 checks, including every RFC 8439 and RFC 9001 vector and the tag, ciphertext and AAD bit-flip refusals.\n- **aes:** 13 → 50 checks, including RFC 9001 A.3 and the 213-case Wycheproof `aes_gcm` run.\n- **p256:** 5 → 53 checks, including RFC 6979 A.2.5 \"test\" and all 484 Wycheproof `ecdsa_secp256r1_sha256` cases.\n\nEach `_f64/expected.out` is byte-identical to its default-profile twin, and those are unchanged.\n\nThe Wycheproof case interfaces declare `tcId` and `key` as `number` rather than `i32`, so the data compiles in either mode. Every use of `key` as an index goes through `toI32`.",
+      "metrics": [
+        "f64 twin build time 1.0→1.7 s (chacha), 1.4→3.4 s (aes), 2.4→4.2 s (p256); p256_f64 run 8→298 ms"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/crypto_chacha20poly1305_f64",
+        "tests/link/crypto_aes_f64",
+        "tests/link/crypto_p256_f64"
+      ],
+      "commits": [
+        "4df93c2"
+      ],
+      "pr": 350,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    },
+    {
+      "id": "hold-p-256-s-field-multiply-and-window",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "hold P-256's field multiply and window step to the disassembly check",
+      "body": "`tests/cases/ct_asm_p256` now holds the rest of P-256's constant-time core to `tests/ct-asm.js` on x86-64 and aarch64:\n\n- fiat's field multiply, add and subtract;\n- the sixteen-entry table read by a secret digit;\n- the complete doubling and addition (Renes–Costello–Batina);\n- one window step of `p256ScalarMult`: four doublings, the table read and an addition.\n\nThis relies on the byte-precise stack model and call-following from #339.\n\nThe field multiply had been left out because the aarch64 model misread a pointer spilled as the second register of an `stp` pair. Two corners now pin that shape: one must pass, and one must still be refused. Planting `table[digit]` in the table read makes the check refuse both the read and the window step, through the calls.\n\nThe copies take coordinate arrays, since a checked parameter cannot be a class. The fixture's `main` runs P-256's scalar multiplication through them and requires RFC 6979 A.2.5's public key, and `x(k·G) = r` for \"sample\" and \"test\". It also carries the known answers `tests/link/crypto_p256_ct` held, and that program is removed. std/README.md and the module header now say what the check verifies for X25519 and P-256, and what remains discipline: the 64-window loop, the table build, the inversions, the encodings and the nonce derivation.\n\nP-256's throughput is re-measured here. The squash of #336 pointed at its PR body instead of carrying the numbers.\n\nCloses #334.",
+      "metrics": [
+        "P-256 sign 1,250/s and verify 660/s (varied 32-byte messages, --profile speed) beside Node prime256v1 sign 26,000/s and verify 11,900/s on the same box"
+      ],
+      "refs": [
+        "std/README.md",
+        "std/crypto/p256.ts"
+      ],
+      "tests": [
+        "tests/cases/ct_asm_p256"
+      ],
+      "commits": [
+        "88752d4"
+      ],
+      "pr": 354,
+      "author": "Amrit Kahlon",
+      "date": "2026-09-29"
+    }
+  ]
+}
