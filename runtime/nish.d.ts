@@ -248,6 +248,31 @@ declare function signalFd(): i32;
  */
 declare function readSignal(fd: i32): i32;
 
+// ---- `nish:net` (WP34 N5) --------------------------------------------------------
+//
+// Every call answers an `i32`: `>= 0` on success, a negative errno otherwise, in
+// Linux's numbering on every platform for -11 (would block), -95, -32, -104,
+// -98 and -22. An address is 18 bytes of a `u8[]`: 16 of IPv6 address (IPv4 as
+// `::ffff:a.b.c.d`), then the port, big-endian. Every socket is non-blocking and
+// close-on-exec. No reading under Node, where each throws.
+
+/** Write the address form of a numeric `host` and `port` into `out`: 0, or -22. */
+declare function netAddress(out: u8[], host: string, port: i32): i32;
+/** The port the socket `fd` is bound to. */
+declare function netLocalPort(fd: i32): i32;
+/** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
+declare function tcpListen(host: string, port: i32, backlog: i32): i32;
+/** The next connection's descriptor, its address in `peer`; -11 when none waits. */
+declare function tcpAccept(fd: i32, peer: u8[]): i32;
+/** Up to `len` bytes into `buf` from `off`: the count, 0 at end of stream, or -11. */
+declare function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
+/** Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE. */
+declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+/** Shut the read side (0), the write side (1) or both (2). */
+declare function netShutdown(fd: i32, how: i32): i32;
+/** Close the descriptor. */
+declare function netClose(fd: i32): i32;
+
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
 // `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it,
@@ -316,6 +341,24 @@ declare module "nish:process" {
   export const platform: string;
   /** The architecture: `"x64"`, `"arm64"`, or `"unknown"`. */
   export const arch: string;
+}
+
+declare module "nish:net" {
+  /** The address form of a numeric `host` and `port` in `out`'s first 18 bytes: 0, or -22. */
+  export function netAddress(out: u8[], host: string, port: i32): i32;
+  /** The port the socket is bound to. */
+  export function netLocalPort(fd: i32): i32;
+  /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
+  export function tcpListen(host: string, port: i32, backlog: i32): i32;
+  /** The next connection's descriptor, its address in `peer`; -11 when none waits. */
+  export function tcpAccept(fd: i32, peer: u8[]): i32;
+  /** Up to `len` bytes into `buf` from `off`: the count, 0 at end of stream, or -11. */
+  export function netRead(fd: i32, buf: u8[], off: i32, len: i32): i32;
+  /** Up to `len` bytes of `buf` from `off`: the count; a gone peer is -32, never SIGPIPE. */
+  export function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
+  /** Shut the read side (0), the write side (1) or both (2). */
+  export function netShutdown(fd: i32, how: i32): i32;
+  export function netClose(fd: i32): i32;
 }
 
 declare module "nish:io" {

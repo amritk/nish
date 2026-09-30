@@ -61,11 +61,12 @@ export const isNishSpecifier = (specifier: string): boolean => specifier.startsW
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
-  specifier === `${BUILTIN_SCHEME}io`
+  specifier === `${BUILTIN_SCHEME}io` ||
+  specifier === `${BUILTIN_SCHEME}net`
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net`
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
@@ -75,8 +76,86 @@ export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
+  if (specifier === `${BUILTIN_SCHEME}net`) {
+    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose"
+  }
   return "write, writeError, panic"
 }
+
+/**
+ * WP34 N5: the parameters of a `nish:net` function, one letter each, or "" for
+ * a name `nish:net` does not export. Every one answers an `i32`. The checker,
+ * the emitter and the written-argument rule all read this one string, through
+ * the letters below, so the three cannot disagree about which argument is
+ * which.
+ *
+ * Each name is a global too, as every `nish:` export is, and each carries a
+ * `net` or `tcp` prefix so that none of them collides with a global that
+ * already exists (`write`).
+ */
+export const netSignature = (name: string): string => {
+  if (name === "netAddress") {
+    return "wsi"
+  }
+  if (name === "netLocalPort" || name === "netClose") {
+    return "i"
+  }
+  if (name === "tcpListen") {
+    return "sii"
+  }
+  if (name === "tcpAccept") {
+    return "iw"
+  }
+  if (name === "netRead") {
+    return "iwnn"
+  }
+  if (name === "netWrite") {
+    return "irnn"
+  }
+  if (name === "netShutdown") {
+    return "ii"
+  }
+  return ""
+}
+
+/** `i`: an `i32` (a descriptor, a port, a backlog, `how`). */
+export const NET_INT: i32 = 105
+/** `s`: a `string`, a numeric host. */
+export const NET_STRING: i32 = 115
+/** `w`: a `u8[]` the call writes. */
+export const NET_WRITTEN: i32 = 119
+/** `r`: a `u8[]` the call only reads. */
+export const NET_READ: i32 = 114
+/**
+ * `n`: an `i32` offset or length into the `u8[]` before it, which the call
+ * range-checks in the IR and hands to the runtime widened to an `i64`.
+ */
+export const NET_RANGE: i32 = 110
+
+/** Whether a `nish:net` call range-checks a `(buf, off, len)` triple: `netRead` and `netWrite`. */
+export const isNetRangeCall = (name: string): boolean => netSignature(name).indexOf("n") >= 0
+
+/**
+ * The runtime-net.c symbol a `nish:net` function lowers to: `nish_` and the
+ * name in snake case, so `netLocalPort` is `nish_net_local_port`. Derived
+ * rather than listed, so a new export cannot fall through to another's.
+ */
+export const netSymbol = (name: string): string => {
+  const parts: string[] = ["nish_"]
+  for (let i = 0; i < name.length; i++) {
+    const c = name.charCodeAt(i)
+    if (c >= 65 && c <= 90) {
+      parts.push("_")
+      parts.push(String.fromCharCode(c + 32))
+    } else {
+      parts.push(String.fromCharCode(c))
+    }
+  }
+  return parts.join("")
+}
+
+/** Whether `nish:net` exports `name`. */
+export const isNetExport = (name: string): boolean => netSignature(name).length > 0
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
@@ -121,6 +200,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       return new BuiltinExport("", name, false)
     }
     return null
+  }
+  if (specifier === `${BUILTIN_SCHEME}net`) {
+    return isNetExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }
