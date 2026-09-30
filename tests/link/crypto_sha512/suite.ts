@@ -1,9 +1,10 @@
 // `nish/crypto/sha512` against its specification. Each vector is cited where it
 // is checked: the FIPS 180-4 examples ("abc", the 896-bit message) and the
 // one-million-`a` message are the published digests of NIST's examples for
-// SHA-384 and SHA-512; the padding-boundary lengths have no published digest,
-// so those are checked against an independent implementation (Python's
-// `hashlib`), and the pattern that fills them is `(7 * i + 3) & 255`.
+// SHA-384 and SHA-512. The padding-boundary lengths and the 448-bit message of
+// NIST's SHA-256 examples have no published SHA-384 or SHA-512 digest, so those
+// are checked against an independent implementation (Python's `hashlib`), and
+// the pattern that fills the boundary lengths is `(7 * i + 3) & 255`.
 //
 // The suite is a function rather than `main` so that `crypto_sha512_f64` can run
 // the same checks with `--number-mode f64`.
@@ -137,6 +138,17 @@ export const runSuite = (): i32 => {
     bytesOf("abc"),
     "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
     "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
+  );
+  // The 448-bit message of NIST's SHA-256 examples ("Two-Block Message Sample"),
+  // which NIST publishes no SHA-384 or SHA-512 digest of: these are `hashlib`'s,
+  // and Node's `crypto` agrees. It is 56 bytes, one block here, so it pins the
+  // FIPS 180-4 example message rather than a padding boundary.
+  checkBoth(
+    t,
+    "of the 448-bit message",
+    bytesOf("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+    "204a8fc6dda82f0a0ced7beb8e08a41657c16ef468b228a8279be331a703c33596fd15c13b1b07f9aa1d3bea57789ca031ad85c7a71dd70354ec631238ca3445",
+    "3391fdddfc8dc7393707a65b1b4709397cf8b1d162af05abfe8f450de5f36bc6b0455a8520bc4e6f5fe95b1fe3c8452b"
   );
   // FIPS 180-4 examples, "Two-Block Message Sample": the 896-bit message.
   const m896 = bytesOf(MESSAGE_896);

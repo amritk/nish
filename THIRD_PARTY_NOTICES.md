@@ -148,3 +148,7 @@ notice, and each is marked public domain where its constants appear:
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
   `std/collections.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).
+- dudect's cropping schedule, its 100 percentiles and the 10,000-measurement
+  gate on its second-order test (`tests/ct-timing/dudect.c`), from
+  `src/dudect.h` in oreparaz/dudect, which is public domain under the
+  Unlicense.

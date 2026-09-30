@@ -13,9 +13,10 @@
  *     `jrcxz` on x86-64; `b.<cond>`, `cbz`, `cbnz`, `tbz` and `tbnz` on
  *     aarch64 — whether or not it depends on a secret, because a function
  *     that is straight-line cannot leak through its branches at all;
- *   - **any call**, because the callee is code this check does not read —
- *     and so any jump out of the function too: a `jmp` or `b` to a symbol is a
- *     tail call, and `br` or an indirect `jmp` goes who knows where;
+ *   - **any call to code this check does not read** — and so any jump out of
+ *     the function too: a `jmp` or `b` to a symbol is a tail call, and `br` or
+ *     an indirect `jmp` goes who knows where. A call to a function whose body
+ *     is in the same listing is not refused but followed (below);
  *   - **any load or store whose address depends on a secret**.
  *
  * The last is a taint analysis over registers, and it is only as good as what
@@ -27,18 +28,41 @@
  * came out of memory: an array is a header whose `data` field is loaded first,
  * so the header read is public and the element read behind it is not.
  *
+ * **The stack is followed by offset.** The model knows where the stack pointer
+ * is relative to where it was on entry, through every `push`, `pop`, `sub` and
+ * pre- or post-indexed store, and it knows which registers hold a stack
+ * address and at which offset (`lea 16(%rsp)`, `add x8, sp, #16`, a frame
+ * pointer, a copy of any of them). Each byte stored to the stack keeps the
+ * taint of what was stored, so a value spilled and reloaded, or an array the
+ * function builds on its own stack and reads back, comes back exactly as it
+ * went in, whichever register the address was spelled through. A pointer to
+ * the stack that is itself reloaded from the stack stays a pointer to the
+ * stack, but one written anywhere else is refused (`escape`), because the model
+ * could no longer tell which writes land in the frame.
+ *
+ * **A call is followed into the callee.** A ladder step or a window step is
+ * a sequence of field operations that LLVM does not inline, so it calls them.
+ * When the callee's body is in the same listing, the call is not refused: the
+ * callee is read on the caller's own state, from a return address pushed where
+ * the call pushes it, so its arguments carry exactly the taint they have, what
+ * it stores into the caller's frame lands in the bytes it lands in, and a
+ * violation inside it is reported at the call. A callee elsewhere, the
+ * runtime's for one, is code this check does not read, and a chain of calls
+ * deeper than `CALL_DEPTH` is refused rather than followed.
+ *
  * Where the model cannot be exact it errs towards refusing. The flags only ever
  * gain a secret, since telling apart the instructions that leave them alone is
  * a table this would get wrong. A write to an 8- or 16-bit register, a lane
- * insert or a bit-set keeps the taint already in the register. A value stored
- * to the stack comes back with its taint, found by the slot's text; once the
- * stack pointer moves that text names another slot, so every slot then reads
- * as secret if anything secret was ever stored there. The pass runs once, in
- * order, which is exact for straight-line code; code with a conditional branch
- * has already failed. What it does not model is other memory: a secret written
- * through a pointer and read back through another is lost, which the fixtures,
- * small and register-allocated, do not do. `tests/run.js` holds each of these
- * corners to a hand-written leak the check must refuse.
+ * insert or a bit-set keeps the taint already in the register. A store whose
+ * width or place this cannot tell only ever adds taint to the bytes it may
+ * have written, and a read it cannot place is secret if any stack byte might
+ * be. The pass runs once, in order, which is exact for straight-line code; code
+ * with a conditional branch has already failed. Memory other than the stack
+ * is not followed byte by byte: a secret stored there makes every element read
+ * from then on secret, since it could come back through another pointer. `tests/run.js` holds each of these corners to a hand-written leak the
+ * check must refuse; the stack and call rules' own corners are at the foot of
+ * this file and are checked when it loads; and `ct_asm_x25519` holds the call
+ * rule to one leak in real compiler output.
  *
  * A fixture says which functions to read and what is secret in comments:
  *
@@ -60,7 +84,9 @@ const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
  * Every `// ct-check:` line of a fixture, with each secret parameter turned into
  * its position from the function's own signature. A spec that cannot be read
  * exactly carries `problems`, which the suite fails on: a misspelt secret would
- * otherwise leave a register untainted and the check reading as a pass.
+ * otherwise leave a register untainted and the check reading as a pass. Each
+ * spec also carries the parameter and return types, which is what
+ * `tests/ct-timing.js` calls the function with.
  */
 export const ctSpecs = (source) => {
   const specs = []
@@ -74,7 +100,7 @@ export const ctSpecs = (source) => {
       continue
     }
     const [, name, secret, expect] = m
-    const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)`))
+    const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)(?::\\s*([^=]+?))?\\s*=>`))
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
     const types = params.map((p) => (p.split(":")[1] ?? "").trim())
@@ -99,11 +125,16 @@ export const ctSpecs = (source) => {
       problems,
       contents: secret.split(",").includes("contents"),
       secretArgs: secrets.map((n) => names.indexOf(n)),
+      types,
+      returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
       expect: expect ?? null,
     })
   }
   return specs
 }
+
+/** The whole listing each body was read from, so that a call can find its callee's body. */
+const LISTINGS = new WeakMap()
 
 /**
  * The instruction lines of `symbol` in the lines of an ELF `.s` for `target`, from its label to the
@@ -127,6 +158,7 @@ export const functionBody = (lines, symbol, target) => {
     }
     body.push(text)
   }
+  LISTINGS.set(body, lines)
   return body
 }
 
@@ -196,49 +228,162 @@ const armRegister = (name) => {
   return r
 }
 
-/** The registers an operand reads, and whether it is a memory operand (and then which address). */
+/** A decimal or hexadecimal immediate, or `null` for anything symbolic. */
+const immediate = (text) => {
+  const m = text.match(/^[$#]?(-?(?:0x[\da-f]+|\d+))$/i)
+  return m === null ? null : Number(m[1])
+}
+
+/**
+ * The registers an operand reads, and whether it is a memory operand; for one
+ * that is, its base, index and constant displacement (`null` when symbolic).
+ */
 const x86Operand = (text) => {
   const open = text.indexOf("(")
   if (open >= 0) {
-    const inside = text.slice(open + 1, text.lastIndexOf(")"))
-    const address = [...inside.matchAll(/%\w+/g)].map((m) => x86Register(m[0]))
-    return { memory: true, address, registers: address, text }
+    const parts = text
+      .slice(open + 1, text.lastIndexOf(")"))
+      .split(",")
+      .map((p) => p.trim())
+    const reg = (part) => (part !== undefined && part.startsWith("%") ? x86Register(part) : null)
+    const base = reg(parts[0])
+    const index = reg(parts[1])
+    const disp = text.slice(0, open).replace(/^\*/, "").trim()
+    const address = [base, index].filter((r) => r !== null)
+    return {
+      memory: true,
+      address,
+      registers: address,
+      text,
+      base,
+      index,
+      disp: disp.length === 0 ? 0 : immediate(disp),
+      imm: null,
+    }
   }
   const registers = [...text.matchAll(/%\w+/g)].map((m) => x86Register(m[0]))
-  return { memory: false, address: [], registers, text }
+  return { memory: false, address: [], registers, text, imm: text.startsWith("$") ? immediate(text) : null }
 }
 
 const ARM_REGISTER = /\b(?:[xw]\d+|[vqdshb]\d+(?:\.\w+)?|sp|wsp|xzr|wzr)\b/g
+/** `ARM_REGISTER` without the `g`, whose `test` would otherwise keep a position between calls. */
+const ARM_ONE_REGISTER = new RegExp(ARM_REGISTER.source)
 
 const armOperand = (text) => {
   if (text.startsWith("[")) {
-    const inside = text.slice(1, text.indexOf("]"))
-    const address = [...inside.matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
-    return { memory: true, address, registers: address, text: `[${inside}]`, writeback: text.endsWith("!") }
+    const parts = text
+      .slice(1, text.indexOf("]"))
+      .split(",")
+      .map((p) => p.trim())
+    const address = [...parts.join(",").matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
+    const second = parts[1]
+    const indexed = second !== undefined && ARM_ONE_REGISTER.test(second)
+    const disp = second === undefined || indexed ? 0 : immediate(second)
+    return {
+      memory: true,
+      address,
+      registers: address,
+      text: `[${parts.join(", ")}]`,
+      base: armRegister(parts[0]),
+      index: indexed ? armRegister(second) : null,
+      disp,
+      writeback: text.endsWith("!"),
+      imm: null,
+    }
   }
   const registers = [...text.matchAll(ARM_REGISTER)].map((m) => armRegister(m[0]))
-  return { memory: false, address: [], registers, text }
+  return { memory: false, address: [], registers, text, imm: immediate(text) }
 }
 
-/** A stack slot is memory this check can follow, by the operand's text. */
-const isStackSlot = (operand) =>
-  operand.memory &&
-  operand.address.length === 1 &&
-  (operand.address[0] === "sp" || operand.address[0] === "bp")
+/**
+ * How many bytes an x86-64 memory access moves, as `[width, exact]`: from the
+ * register on the other side, or from the mnemonic's suffix beside an
+ * immediate. `exact` is false when only an upper bound is known, and then a
+ * store only adds taint.
+ */
+const x86Width = (mnemonic, others) => {
+  // A sign- or zero-extending move reads what its first suffix names, not
+  // its destination's width: `movslq` loads four bytes into a 64-bit register.
+  const extend = mnemonic.match(/^mov[sz]([bwl])[wlq]$/)
+  if (extend !== null) {
+    return [{ b: 1, w: 2, l: 4 }[extend[1]], true]
+  }
+  const register = others.find((op) => !op.memory && op.registers.length > 0)
+  if (register !== undefined) {
+    const name = register.text.replace(/^\*/, "")
+    if (/^%[xyz]mm/.test(name)) {
+      const full = { x: 16, y: 32, z: 64 }[name[1]]
+      if (/^v?(movq|movsd|movlp[sd]|movhp[sd]|pextrq)$/.test(mnemonic)) {
+        return [8, true]
+      }
+      if (/^v?(movd|movss|pextrd|extractps)$/.test(mnemonic)) {
+        return [4, true]
+      }
+      if (/^v?(mov[au]p[sd]|movdq[au]|movnt\w+)$/.test(mnemonic)) {
+        return [full, true]
+      }
+      return [full, false]
+    }
+    if (/^%(?:[abcd][lh]|[sd]il|[bs]pl|r\d+b)$/.test(name)) {
+      return [1, true]
+    }
+    if (/^%(?:[abcd]x|[sd]i|[bs]p|r\d+w)$/.test(name)) {
+      return [2, true]
+    }
+    if (/^%(?:e\w+|r\d+d)$/.test(name)) {
+      return [4, true]
+    }
+    return [8, true]
+  }
+  const suffix = { b: 1, w: 2, l: 4, q: 8 }[mnemonic.slice(-1)]
+  return suffix === undefined ? [64, false] : [suffix, true]
+}
 
 /**
- * Taint state: per register, whether it is secret and whether it came out of
- * memory (a loaded pointer, whose element reads are secret under `contents`).
- * `flags` is the condition register, as a register of its own.
+ * How many bytes one aarch64 register operand of a load or store moves, as
+ * `[width, exact]`. A register list (`{ v0.16b, v1.16b }`) is read as its
+ * registers' whole width, and only ever adds taint.
+ */
+const armWidth = (mnemonic, op) => {
+  if (/^(ld|st)\w*b$/.test(mnemonic)) {
+    return [1, true]
+  }
+  if (/^(ld|st)\w*h$/.test(mnemonic)) {
+    return [2, true]
+  }
+  if (/^ldu?rsw$/.test(mnemonic)) {
+    return [4, true]
+  }
+  if (op.text.startsWith("{")) {
+    return [16 * op.registers.length, false]
+  }
+  const width = { x: 8, w: 4, q: 16, d: 8, s: 4, h: 2, b: 1 }[op.text[0]]
+  return width === undefined ? [16, false] : [width, true]
+}
+
+/** How deep a chain of followed calls may go before the model stops and refuses. */
+const CALL_DEPTH = 8
+
+/**
+ * Taint state: per register, whether it is secret, whether it came out of
+ * memory (a loaded pointer, whose element reads are secret under `contents`),
+ * and which stack offset it holds, if it holds a stack address. `flags` is the condition register, as a register of
+ * its own. `sp` is the stack pointer's offset from its value on entry, or
+ * `null` once an instruction moves it by something this cannot follow.
  */
 class Taint {
   constructor(spec, target) {
+    this.target = target
     this.secret = new Set()
     this.loaded = new Set()
-    this.slots = new Map()
-    this.stackSecret = false
-    this.stack = []
+    this.stackAt = new Map()
+    this.sp = 0
+    this.bytes = new Map()
+    this.unknownSecret = false
     this.contents = spec.contents
+    this.listing = null
+    this.depth = 0
+    this.found = []
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
     for (const index of spec.secretArgs) {
@@ -254,19 +399,54 @@ class Taint {
     return registers.some((r) => this.loaded.has(r))
   }
 
+  /** The stack offset `register` holds: a number, `null` for one this cannot place, `undefined` for none. */
+  stackOf(register) {
+    if (register === "sp") {
+      return this.sp
+    }
+    return this.stackAt.get(register)
+  }
+
+  isStack(register) {
+    return this.stackOf(register) !== undefined
+  }
+
+  /** What a register operand, or an immediate, holds. */
+  valueOf(op) {
+    const single = op.registers.length === 1 ? op.registers[0] : null
+    return {
+      secret: this.anySecret(op.registers),
+      loaded: this.anyLoaded(op.registers),
+      stack: single === null ? undefined : this.stackOf(single),
+    }
+  }
+
   set(register, secret, loaded) {
+    this.setValue(register, { secret, loaded, stack: undefined })
+  }
+
+  setValue(register, value) {
     if (register === "zero") {
       return
     }
-    if (secret) {
+    if (register === "sp") {
+      this.sp = typeof value.stack === "number" ? value.stack : null
+      return
+    }
+    if (value.secret) {
       this.secret.add(register)
     } else {
       this.secret.delete(register)
     }
-    if (loaded) {
+    if (value.loaded) {
       this.loaded.add(register)
     } else {
       this.loaded.delete(register)
+    }
+    if (value.stack === undefined) {
+      this.stackAt.delete(register)
+    } else {
+      this.stackAt.set(register, value.stack)
     }
   }
 
@@ -282,38 +462,145 @@ class Taint {
     }
   }
 
-  /** A `push`: onto the model's own stack, and into `stackSecret` for good. */
-  push(value) {
-    this.stack.push(value)
-    this.stackSecret = this.stackSecret || value.secret
-    this.moveStack()
+  /** The stack pointer moves by `delta`, or by an amount this cannot follow when `delta` is `null`. */
+  moveSp(delta) {
+    this.sp = this.sp === null || delta === null ? null : this.sp + delta
   }
 
-  /** A store to the stack: remembered by the slot's text, and in `stackSecret` for good. */
-  store(operand, value) {
-    this.slots.set(operand.text, value)
-    this.stackSecret = this.stackSecret || value.secret
-  }
-
-  /**
-   * The stack pointer moved, so the same text now names another slot. What is
-   * loaded from the stack after this is secret if anything secret was ever
-   * stored there.
-   */
-  moveStack() {
-    this.slots.clear()
-  }
-
-  /**
-   * What a load from `operand` yields: a stack slot gives back what was stored
-   * there; an element read through a loaded pointer is secret under `contents`;
-   * anything else is public, and is itself a loaded value.
-   */
-  loadFrom(operand) {
-    if (isStackSlot(operand)) {
-      return this.slots.get(operand.text) ?? { secret: this.stackSecret, loaded: true }
+  /** Where a memory operand points: `{ stack, at }`, `at` the stack offset or `null` when it cannot be placed. */
+  addressOf(op) {
+    const base = op.base === null ? undefined : this.stackOf(op.base)
+    if (base !== undefined) {
+      const exact = typeof base === "number" && op.index === null && op.disp !== null
+      return { stack: true, at: exact ? base + op.disp : null }
     }
-    return { secret: this.contents && this.anyLoaded(operand.address), loaded: true }
+    return { stack: op.index !== null && this.isStack(op.index), at: null }
+  }
+
+  /** What `width` bytes of the stack at `at` hold; exactly what was stored when one store wrote them all. */
+  readStack(at, width) {
+    if (at === null) {
+      let secret = this.unknownSecret
+      let stack = false
+      for (const b of this.bytes.values()) {
+        secret = secret || b.secret
+        stack = stack || b.stack !== undefined
+      }
+      return { secret, loaded: true, stack: stack ? null : undefined }
+    }
+    const first = this.bytes.get(at)
+    let whole = first !== undefined && first.from === at && first.width === width
+    let secret = false
+    let loaded = false
+    let stack = false
+    for (let i = 0; i < width; i++) {
+      const b = this.bytes.get(at + i)
+      if (b === undefined) {
+        whole = false
+        secret = secret || this.unknownSecret
+        loaded = true
+        continue
+      }
+      whole = whole && b.from === at
+      secret = secret || b.secret
+      loaded = loaded || b.loaded
+      stack = stack || b.stack !== undefined
+    }
+    if (whole) {
+      return { secret: first.secret, loaded: first.loaded, stack: first.stack }
+    }
+    return { secret, loaded, stack: stack ? null : undefined }
+  }
+
+  /**
+   * Stores `value` into `width` bytes of the stack at `at`. An inexact store,
+   * or one this cannot place, only adds taint to what it may have written.
+   */
+  writeStack(at, width, value, exact) {
+    if (at === null) {
+      if (value.secret) {
+        this.unknownSecret = true
+        for (const b of this.bytes.values()) {
+          b.secret = true
+        }
+      }
+      return
+    }
+    for (let i = 0; i < width; i++) {
+      const old = this.bytes.get(at + i)
+      if (exact || old === undefined) {
+        this.bytes.set(at + i, {
+          ...value,
+          from: at,
+          width,
+          secret: value.secret || (!exact && this.unknownSecret),
+        })
+      } else {
+        old.secret = old.secret || value.secret
+        old.loaded = old.loaded || value.loaded
+        old.from = null
+      }
+    }
+  }
+
+  /** A load: from the stack, what was stored there; through a loaded pointer, secret under `contents`. */
+  loadFrom(op, width) {
+    const place = this.addressOf(op)
+    if (place.stack) {
+      return this.readStack(place.at, width)
+    }
+    return { secret: this.contents && this.anyLoaded(op.address), loaded: true, stack: undefined }
+  }
+
+  /**
+   * A store through `op`. A stack address written anywhere but the stack is
+   * refused, since the frame could then be written through memory this does
+   * not follow; a secret written anywhere but the stack makes every element
+   * read from then on secret, since it could be read back through another
+   * pointer.
+   */
+  storeTo(op, width, exact, value) {
+    const place = this.addressOf(op)
+    if (place.stack) {
+      this.writeStack(place.at, width, value, exact)
+      return null
+    }
+    if (value.stack !== undefined) {
+      return "escape"
+    }
+    if (value.secret) {
+      this.contents = true
+    }
+    return null
+  }
+
+  /**
+   * A call (`tail` false) or tail call to `operands`. A function whose body is
+   * in the same listing is followed: its body is walked on this same state, so
+   * its arguments carry exactly the taint they have here, what it stores to
+   * this frame lands in the bytes it lands in, and a violation inside it is
+   * reported at the call. Anything else is code this check does not read.
+   */
+  call(operands, tail) {
+    const symbol = operands.length === 1 ? operands[0].replace(/@PLT$/, "") : ""
+    const body =
+      this.listing === null || symbol.length === 0 ? null : functionBody(this.listing, symbol, this.target)
+    if (body === null || this.depth >= CALL_DEPTH) {
+      return "call"
+    }
+    const returnAddress = tail ? 0 : this.target.returnAddress
+    this.moveSp(-returnAddress)
+    this.depth++
+    const outer = this.found
+    this.found = []
+    walk(this, body)
+    for (const v of this.found) {
+      outer.push({ kind: v.kind, line: `${symbol}: ${v.line}` })
+    }
+    this.found = outer
+    this.depth--
+    this.moveSp(returnAddress)
+    return null
   }
 }
 
@@ -323,12 +610,22 @@ const X86_JUMP = /^jmp[wlq]?$/
 const X86_BRANCH = /^(j[a-z]+|loop\w*)$/
 const X86_OVERWRITE =
   /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf|bsf|bsr|tzcnt|lzcnt|popcnt)/
+/** A plain move: the destination is exactly the source, stack address and all. */
+const X86_COPY = /^(mov[bwlq]?|movabsq)$/
 const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
 /** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers. */
 const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
+/**
+ * Three operands, and the last is only written. Any other three-operand
+ * instruction is read as reading its destination too (`shld`, a fused
+ * multiply-add), because a wrong guess that way costs a false alarm and the
+ * other way a missed leak.
+ */
+const X86_THREE_OVERWRITE =
+  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m))/
 /** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
 const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
-const X86_READS_FLAGS = /^(set|cmov|sbb|adc|rcl|rcr)/
+const X86_READS_FLAGS = /^(set|cmov|sbb|adc|adox|rcl|rcr)/
 const X86_ZERO_IDIOM = /^(v?p?xor|sub|v?xorp[sd]|v?psub[bwdq])/
 const X86_WIDE = /^(i?mul|i?div)[bwlq]?$/
 
@@ -338,57 +635,86 @@ const stepX86 = (t, mnemonic, operands) => {
     return "branch"
   }
   if (mnemonic.startsWith("call")) {
-    return "call"
+    return t.call(operands, false)
   }
   // A jump to a local label is control flow inside the function; one anywhere
-  // else is a tail call or an indirect jump, code this check does not read.
+  // else is a tail call, followed like a call, or an indirect jump, code this
+  // check does not read.
   if (X86_JUMP.test(mnemonic)) {
-    return operands.length === 1 && operands[0].startsWith(".L") ? null : "call"
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands, true)
   }
   if (mnemonic.startsWith("ret") || mnemonic.startsWith("nop") || mnemonic === "endbr64") {
     return null
   }
+  // A string instruction repeats over memory by a count in a register, which
+  // this does not follow.
+  if (/^rep|^(stos|movs|cmps|scas|lods)[bwlq]?$|^(push|pop)f[wlq]?$/.test(mnemonic)) {
+    return "unmodelled"
+  }
   // `lea` computes an address and touches no memory, so its operand is read as
   // the registers in it.
   const lea = mnemonic.startsWith("lea")
-  const ops = operands.map(x86Operand).map((op) => (lea ? { ...op, memory: false } : op))
+  const ops = operands.map(x86Operand)
   for (const op of ops) {
-    if (op.memory && t.anySecret(op.address)) {
+    if (op.memory && !lea && t.anySecret(op.address)) {
       return "load"
     }
   }
-  if (/^(cltq|cwtl|cqto|cltd|cdqe|cqo)$/.test(mnemonic)) {
+  // Sign extensions with no operands: within %rax, or %rax's sign into %rdx.
+  if (/^(cltq|cwtl|cdqe|cbtw)$/.test(mnemonic)) {
+    t.set("a", t.anySecret(["a"]), false)
+    return null
+  }
+  if (/^(cqto|cltd|cwtd|cqo)$/.test(mnemonic)) {
     t.set("d", t.anySecret(["a"]), false)
     return null
   }
-  if (mnemonic.startsWith("push")) {
-    t.push({ secret: t.anySecret(ops[0].registers), loaded: t.anyLoaded(ops[0].registers) })
+  if (/^push[wlq]?$/.test(mnemonic)) {
+    const value = ops[0].memory ? t.loadFrom(ops[0], 8) : t.valueOf(ops[0])
+    t.moveSp(-8)
+    t.writeStack(t.sp, 8, value, true)
     return null
   }
-  if (mnemonic.startsWith("pop")) {
-    const top = t.stack.pop() ?? { secret: t.stackSecret, loaded: true }
-    t.set(ops[0].registers[0], top.secret, top.loaded)
-    t.moveStack()
+  if (/^pop[wlq]?$/.test(mnemonic)) {
+    const top = t.readStack(t.sp, 8)
+    t.moveSp(8)
+    t.setValue(ops[0].registers[0], top)
+    return null
+  }
+  if (/^xchg[bwlq]?$/.test(mnemonic) && ops.every((op) => !op.memory)) {
+    const [a, b] = ops.map((op) => t.valueOf(op))
+    t.setValue(ops[0].registers[0], b)
+    t.setValue(ops[1].registers[0], a)
     return null
   }
   const readsFlags = X86_READS_FLAGS.test(mnemonic)
   const sources = ops.length > 1 ? ops.slice(0, -1) : ops
   const dest = ops.length > 0 ? ops[ops.length - 1] : null
+  const memory = ops.find((op) => op.memory && !lea)
+  const [width, exact] = x86Width(
+    mnemonic,
+    ops.filter((op) => op !== memory)
+  )
   let secret = readsFlags && t.secret.has("flags")
   let loaded = false
+  let stack = false
+  let copied = null
   for (const op of sources) {
-    if (op.memory) {
-      const value = t.loadFrom(op)
-      secret = secret || value.secret
-      loaded = loaded || value.loaded
-    } else {
-      secret = secret || t.anySecret(op.registers)
-      loaded = loaded || t.anyLoaded(op.registers)
-    }
+    const value = op.memory && !lea ? t.loadFrom(op, width) : t.valueOf(op)
+    secret = secret || value.secret
+    loaded = loaded || value.loaded
+    stack = stack || value.stack !== undefined
+    copied = value
+  }
+  // What the last operand held: read by a compare, and by an instruction that
+  // modifies rather than overwrites it.
+  let old = null
+  if (dest !== null && !lea) {
+    old = dest.memory ? t.loadFrom(dest, width) : t.valueOf(dest)
   }
   if (X86_COMPARE.test(mnemonic)) {
     // A compare reads both operands; `sources` stopped short of the last.
-    t.taintFlags(secret || t.anySecret(dest.registers))
+    t.taintFlags(secret || old.secret)
     return null
   }
   if (X86_WIDE.test(mnemonic) && ops.length === 1) {
@@ -405,29 +731,41 @@ const stepX86 = (t, mnemonic, operands) => {
     ops.length === 2 && !dest.memory && ops[0].text === ops[1].text && X86_ZERO_IDIOM.test(mnemonic)
   const partial = !dest.memory && X86_PARTIAL.test(dest.text)
   const merge = partial || X86_MERGE.test(mnemonic)
-  const overwrite = !merge && (zeroIdiom || X86_OVERWRITE.test(mnemonic) || ops.length >= 3)
+  const overwrite =
+    !merge &&
+    (zeroIdiom || X86_OVERWRITE.test(mnemonic) || (ops.length >= 3 && X86_THREE_OVERWRITE.test(mnemonic)))
   if (!overwrite) {
     // A two-operand instruction reads its destination too: `andl %esi, %eax`.
-    secret = secret || (dest.memory ? t.loadFrom(dest).secret : t.anySecret(dest.registers))
-    loaded = loaded || t.anyLoaded(dest.registers)
+    secret = secret || old.secret
+    loaded = loaded || old.loaded
+    stack = stack || old.stack !== undefined
   }
+  // Where the result points, if at the stack: a copy keeps the source's
+  // offset, `lea` and an immediate `add` or `sub` move it, and anything else
+  // computed from a stack address is one this cannot place.
+  let result = { secret, loaded, stack: stack ? null : undefined }
   if (zeroIdiom) {
-    secret = false
-    loaded = false
+    result = { secret: false, loaded: false, stack: undefined }
+  } else if (lea) {
+    const place = t.addressOf(ops[0])
+    result.stack = place.stack ? place.at : undefined
+  } else if (X86_COPY.test(mnemonic) && ops.length === 2 && !partial && copied !== null) {
+    result = copied
+  } else if (/^(add|sub)q$/.test(mnemonic) && sources[0].imm !== null && typeof old.stack === "number") {
+    result.stack = old.stack + (mnemonic.startsWith("add") ? sources[0].imm : -sources[0].imm)
   }
-  if (dest.memory) {
-    if (isStackSlot(dest)) {
-      t.store(dest, { secret, loaded })
-    }
-  } else if (dest.registers.length > 0) {
-    t.set(dest.registers[0], secret, loaded)
-    if (dest.registers[0] === "sp") {
-      t.moveStack()
-    }
+  if (partial && old !== null && old.stack !== undefined) {
+    result.stack = null
   }
   // Whether this one writes the flags is not asked: they only gain taint, so
   // a `mov` that leaves them alone costs at most a false alarm.
-  t.taintFlags(secret)
+  t.taintFlags(result.secret)
+  if (dest.memory) {
+    return t.storeTo(dest, width, exact && !merge, result)
+  }
+  if (dest.registers.length > 0) {
+    t.setValue(dest.registers[0], result)
+  }
   return null
 }
 
@@ -440,10 +778,23 @@ const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp
 const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
 const ARM_READ_MODIFY_WRITE = /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx)$/
 
+/** An aarch64 immediate operand with the `lsl #12` that may follow it, or `null`. */
+const armImmediate = (ops, i) => {
+  const value = ops[i]?.imm ?? null
+  if (value === null) {
+    return null
+  }
+  const shift = ops[i + 1]?.text.match(/^lsl #(\d+)$/)
+  return shift === undefined || shift === null ? value : value * 2 ** Number(shift[1])
+}
+
 /** One aarch64 instruction, likewise. The destination is the first operand. */
 const stepArm = (t, mnemonic, operands) => {
   if (ARM_BRANCH.test(mnemonic)) {
     return "branch"
+  }
+  if (mnemonic === "bl") {
+    return t.call(operands, false)
   }
   if (ARM_CALL.test(mnemonic)) {
     return "call"
@@ -451,7 +802,7 @@ const stepArm = (t, mnemonic, operands) => {
   // `b` to a local label stays inside the function; to a symbol it is a tail
   // call, and `br` jumps through a register to code this check does not read.
   if (mnemonic === "b") {
-    return operands.length === 1 && operands[0].startsWith(".L") ? null : "call"
+    return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands, true)
   }
   if (mnemonic === "br") {
     return "call"
@@ -466,32 +817,46 @@ const stepArm = (t, mnemonic, operands) => {
     return null
   }
   const memoryAt = ops.findIndex((op) => op.memory)
-  // Pre-index (`[sp, #-16]!`) and post-index (`[sp], #16`) both move the base.
-  const movesStack =
-    memoryAt >= 0 &&
-    ops[memoryAt].address[0] === "sp" &&
-    (ops[memoryAt].writeback || memoryAt < ops.length - 1)
-  if (ARM_STORE.test(mnemonic) && memoryAt > 0) {
-    const stored = ops.slice(0, memoryAt).flatMap((op) => op.registers)
-    if (isStackSlot(ops[memoryAt])) {
-      t.store(ops[memoryAt], { secret: t.anySecret(stored), loaded: t.anyLoaded(stored) })
-    }
-    if (movesStack) {
-      t.moveStack()
-    }
-    return null
-  }
-  if (ARM_LOAD.test(mnemonic) && memoryAt > 0) {
-    const value = t.loadFrom(ops[memoryAt])
-    for (const op of ops.slice(0, memoryAt)) {
-      for (const r of op.registers) {
-        t.set(r, value.secret, value.loaded)
+  const store = ARM_STORE.test(mnemonic)
+  if ((store || ARM_LOAD.test(mnemonic)) && memoryAt > 0) {
+    const mem = ops[memoryAt]
+    // Pre-index (`[sp, #-16]!`) moves the base before the access, post-index
+    // (`[sp], #16`) after it; either way the base register changes, by an
+    // amount this cannot place when it is not an immediate.
+    const moveBase = (delta) => {
+      if (mem.base === "sp") {
+        t.moveSp(delta)
+        return
+      }
+      const base = t.stackOf(mem.base)
+      if (base !== undefined) {
+        t.stackAt.set(mem.base, typeof base === "number" && delta !== null ? base + delta : null)
       }
     }
-    if (movesStack) {
-      t.moveStack()
+    let access = mem
+    if (mem.writeback) {
+      moveBase(mem.disp)
+      access = { ...mem, disp: 0 }
     }
-    return null
+    let offset = 0
+    let violation = null
+    for (const op of ops.slice(0, memoryAt)) {
+      const [width, exact] = armWidth(mnemonic, op)
+      const piece = { ...access, disp: access.disp === null ? null : access.disp + offset }
+      if (store) {
+        violation = violation ?? t.storeTo(piece, width, exact, t.valueOf(op))
+      } else {
+        const value = t.loadFrom(piece, width)
+        for (const r of op.registers) {
+          t.setValue(r, value)
+        }
+      }
+      offset += width
+    }
+    if (memoryAt < ops.length - 1) {
+      moveBase(ops[memoryAt + 1].imm)
+    }
+    return violation
   }
   const readsFlags = ARM_READS_FLAGS.test(mnemonic)
   const flagSecret = readsFlags && t.secret.has("flags")
@@ -511,11 +876,24 @@ const stepArm = (t, mnemonic, operands) => {
   const zeroIdiom = mnemonic === "eor" && ops.length === 3 && ops[1].text === ops[2].text
   const secret = !zeroIdiom && (flagSecret || t.anySecret(sourceRegs))
   const loaded = !zeroIdiom && t.anyLoaded(sourceRegs)
-  if (dest.registers.length > 0) {
-    t.set(dest.registers[0], secret, loaded)
-    if (dest.registers[0] === "sp") {
-      t.moveStack()
+  // Where the result points, if at the stack, as on x86-64: `mov` copies, an
+  // immediate `add` or `sub` moves, anything else loses the place.
+  const fromStack = sourceRegs.some((r) => t.isStack(r))
+  let stack = fromStack ? null : undefined
+  const first = ops[1]?.registers.length === 1 ? t.stackOf(ops[1].registers[0]) : undefined
+  if (mnemonic === "mov" && ops.length === 2 && ops[1].registers.length === 1) {
+    stack = first
+  } else if ((mnemonic === "add" || mnemonic === "sub") && typeof first === "number") {
+    const imm = armImmediate(ops, 2)
+    if (imm !== null) {
+      stack = first + (mnemonic === "add" ? imm : -imm)
     }
+  }
+  if (zeroIdiom) {
+    stack = undefined
+  }
+  if (dest.registers.length > 0) {
+    t.setValue(dest.registers[0], { secret, loaded, stack })
   }
   if (ARM_SETS_FLAGS.test(mnemonic)) {
     t.taintFlags(secret)
@@ -523,12 +901,16 @@ const stepArm = (t, mnemonic, operands) => {
   return null
 }
 
-/** The two targets, with the registers the first integer arguments arrive in. */
+/**
+ * The two targets, with the registers the first integer arguments arrive in
+ * and how far a call moves the stack pointer to hold its return address.
+ */
 export const CT_TARGETS = [
   {
     name: "x86-64",
     triple: "x86_64-unknown-linux-gnu",
     args: ["di", "si", "d", "c", "r8", "r9"],
+    returnAddress: 8,
     comment: /#.*$/,
     step: stepX86,
   },
@@ -536,27 +918,224 @@ export const CT_TARGETS = [
     name: "aarch64",
     triple: "aarch64-unknown-linux-gnu",
     args: ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"],
+    // The return address goes to the link register, not the stack.
+    returnAddress: 0,
     // `#` starts an immediate here, not a comment.
     comment: /\/\/.*$/,
     step: stepArm,
   },
 ]
 
-/**
- * Every violation in one function body: `{ kind, line }`, where `kind` is
- * `branch`, `call` or `load`. An empty list is a pass.
- */
-export const ctViolations = (body, spec, target) => {
-  const t = new Taint(spec, target)
-  const found = []
+/** Runs `body` on `t`, adding every violation to `t.found`. */
+const walk = (t, body) => {
   for (const line of body) {
     const space = line.search(/\s/)
     const mnemonic = space < 0 ? line : line.slice(0, space)
     const operands = space < 0 ? [] : splitOperands(line.slice(space + 1))
-    const kind = target.step(t, mnemonic, operands)
+    const kind = t.target.step(t, mnemonic, operands)
     if (kind !== null) {
-      found.push({ kind, line })
+      t.found.push({ kind, line })
     }
   }
-  return found
+}
+
+/**
+ * Every violation in one function body: `{ kind, line }`, where `kind` is
+ * `branch`, `call`, `load`, `escape` (a stack address stored off the stack) or
+ * `unmodelled` (an instruction this does not follow). An empty list is a pass.
+ */
+export const ctViolations = (body, spec, target) => {
+  const t = new Taint(spec, target)
+  t.listing = LISTINGS.get(body) ?? null
+  walk(t, body)
+  return t.found
+}
+
+/**
+ * The corners of the stack and call rules, each a hand-written leak the model
+ * must refuse, or a shape it must pass (`null`). `tests/run.js` holds the
+ * model's older corners the same way; these sit beside the rules they pin and
+ * run when this module loads, so `npm test`, which imports it, cannot run with
+ * a model that misreads one.
+ */
+const STACK_CORNERS = [
+  // A stack address written to the heap: the model can no longer see the frame.
+  ["x86-64", "b", "escape", ["leaq 8(%rsp), %rax", "movq %rax, (%rdi)"]],
+  ["x86-64", "a", "unmodelled", ["rep stosq %rax, %es:(%rdi)"]],
+  // %rbp holding an array's `data` is not a stack slot.
+  ["x86-64", "contents", "load", ["movq 16(%rdi), %rbp", "movq 8(%rbp), %rax", "movl (%rsi,%rax,4), %eax"]],
+  // `shld` reads its destination.
+  ["x86-64", "a", "load", ["movl %edi, %eax", "shldl $3, %esi, %eax", "movl (%rdx,%rax,4), %eax"]],
+  // A slot written through %rsp and read back through a register that points at it.
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movq %rdi, 16(%rsp)", "leaq 8(%rsp), %rax", "movq 8(%rax), %rcx", "movl (%rsi,%rcx,4), %eax"],
+  ],
+  // `popcnt` is not a `pop`, and `cltq` leaves %rdx alone.
+  ["x86-64", "b", "load", ["movl $0, %eax", "popcntl %esi, %eax", "movl (%rdi,%rax,4), %eax"]],
+  ["x86-64", "b", "load", ["movq %rsi, %rdx", "cltq", "movl (%rdi,%rdx,4), %eax"]],
+  // A public four-byte spill beside a secret one, reloaded sign-extended: the
+  // reload reads its own four bytes and no more, so the index stays public.
+  [
+    "x86-64",
+    "a",
+    null,
+    ["movl %esi, -12(%rsp)", "movq %rdi, -8(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"],
+  ],
+  // The other direction: a secret spilled eight bytes wide and reloaded four
+  // bytes narrow, or one byte zero-extended, is still secret, because a read
+  // takes the taint of every byte it covers.
+  ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movslq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"]],
+  ["x86-64", "a", "load", ["movq %rdi, -16(%rsp)", "movzbl -13(%rsp), %eax", "movq (%rdx,%rax,8), %rax"]],
+  // One eight-byte reload across a public four-byte spill and a secret one:
+  // its taint is every byte's, not only the first.
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movl %esi, -12(%rsp)", "movl %edi, -8(%rsp)", "movq -12(%rsp), %rax", "movq (%rdx,%rax,8), %rax"],
+  ],
+  // A pre-indexed store and a post-indexed load meet at the same slot.
+  ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
+]
+
+/** A listing to follow calls through: the callees first, as LLVM lays them out. */
+const CALL_LISTING = `get:
+	movq	16(%rdi), %rax
+	movq	(%rax,%rsi,8), %rax
+	retq
+.Lfunc_end0:
+put:
+	movq	16(%rdi), %rax
+	movq	%rsi, (%rax)
+	retq
+.Lfunc_end1:
+below:
+	movq	16(%rdi), %rax
+	movq	(%rax), %rcx
+	movq	%rcx, -8(%rax)
+	retq
+.Lfunc_end2:
+calm:
+	callq	get@PLT
+	retq
+.Lfunc_end3:
+leak:
+	callq	get@PLT
+	retq
+.Lfunc_end4:
+heap:
+	pushq	%rbx
+	pushq	%r12
+	movq	%rdi, %rbx
+	movq	%rdx, %r12
+	callq	put@PLT
+	movq	16(%rbx), %rax
+	movq	(%rax), %rax
+	movq	16(%r12), %rcx
+	movq	(%rcx,%rax,8), %rax
+	popq	%r12
+	popq	%rbx
+	retq
+.Lfunc_end5:
+under:
+	pushq	%rbx
+	movq	%rsi, %rbx
+	subq	$48, %rsp
+	movq	$0, 24(%rsp)
+	movq	16(%rdi), %rcx
+	movq	(%rcx), %rcx
+	movq	%rcx, 32(%rsp)
+	leaq	32(%rsp), %rax
+	movq	%rax, 16(%rsp)
+	movq	%rsp, %rdi
+	callq	below@PLT
+	movq	24(%rsp), %rax
+	movq	16(%rbx), %rcx
+	movq	(%rcx,%rax,8), %rax
+	addq	$48, %rsp
+	popq	%rbx
+	retq
+.Lfunc_end6:
+above:
+	movq	8(%rsp), %rax
+	movq	(%rdi,%rax,8), %rax
+	retq
+.Lfunc_end7:
+spill:
+	subq	$8, %rsp
+	movq	%rsi, (%rsp)
+	callq	above@PLT
+	addq	$8, %rsp
+	retq
+.Lfunc_end8:
+`
+
+const CALL_SOURCE = `// ct-check: get secret=contents
+// ct-check: put secret=v,contents
+// ct-check: below secret=contents
+// ct-check: calm secret=contents
+// ct-check: leak secret=i,contents
+// ct-check: heap secret=bit
+// ct-check: under secret=contents
+// ct-check: above secret=contents
+// ct-check: spill secret=s
+export const get = (a: i64[], i: i32): i64 => a[i]
+export const put = (a: i64[], v: i64): void => {}
+export const below = (a: i64[]): void => {}
+export const calm = (a: i64[], i: i32): i64 => get(a, i)
+export const leak = (a: i64[], i: i32): i64 => get(a, i)
+export const heap = (a: i64[], bit: i64, table: i64[]): i64 => 0
+export const under = (a: i64[], table: i64[]): i64 => 0
+export const above = (a: i64[]): i64 => 0
+export const spill = (a: i64[], s: i64): i64 => 0
+`
+
+const CALL_CORNERS = [
+  // A call with a public index into a checked callee is followed.
+  ["calm", null],
+  // A secret index handed to the callee is refused where the callee uses it.
+  ["leak", "load"],
+  // What the callee stored through an array's `data` is secret, even to a
+  // caller that did not ask for `contents`.
+  ["heap", "load"],
+  // What it stored into this frame is secret where it landed, below `data` too.
+  ["under", "load"],
+  // The callee's stack starts below the return address the call pushed, so
+  // its first stack slot above that is the caller's own.
+  ["spill", "load"],
+]
+
+const cornerMisses = () => {
+  const missed = []
+  for (const [name, secret, kind, body] of STACK_CORNERS) {
+    const target = CT_TARGETS.find((t) => t.name === name)
+    const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
+    const found = ctViolations(body, spec, target)
+    if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
+      missed.push(`${name}, expected ${kind ?? "no violation"}: ${body.join("; ")}`)
+    }
+  }
+  const lines = CALL_LISTING.split("\n")
+  const specs = ctSpecs(CALL_SOURCE)
+  for (const [fn, kind] of CALL_CORNERS) {
+    const found = ctViolations(
+      functionBody(lines, fn, CT_TARGETS[0]),
+      specs.find((sp) => sp.name === fn),
+      CT_TARGETS[0]
+    )
+    if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
+      missed.push(
+        `${fn}, expected ${kind ?? "no violation"}: ${found.map((v) => `${v.kind}: ${v.line}`).join("; ")}`
+      )
+    }
+  }
+  return missed
+}
+
+const missedCorners = cornerMisses()
+if (missedCorners.length > 0) {
+  throw new Error(`tests/ct-asm.js misreads the corners of its own model:\n${missedCorners.join("\n")}`)
 }
