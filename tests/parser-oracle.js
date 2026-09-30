@@ -397,6 +397,15 @@ const printTypeScriptTree = (source, sf) => {
       case ts.SyntaxKind.ImportKeyword:
         emit(depth, "IDENT", s, e, "import")
         return
+      // `import.meta`, which stage1 reads as the member `meta` of that name.
+      // `new.target` is the other meta-property, and stays a syntax error.
+      case ts.SyntaxKind.MetaProperty:
+        if (node.keywordToken !== ts.SyntaxKind.ImportKeyword) {
+          unsupported(node)
+        }
+        emit(depth, "MEMBER", s, e, node.name.text)
+        emit(depth + 1, "IDENT", s, at(node.getStart(sf) + "import".length), "import")
+        return
       // `typeof`, `void`, `delete`, `await` and `yield` are prefix operators
       // there, whose text is the word.
       case ts.SyntaxKind.TypeOfExpression:
