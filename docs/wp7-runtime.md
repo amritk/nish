@@ -701,7 +701,7 @@ linux-x64 at `-Oz`:
 | `nish_tcp_accept` | 113 |
 | `nish_net_parse`, `nish_net_address`, `nish_net_local_port` | 99, 86, 53 |
 | `nish_net_write`, `nish_net_read`, `nish_net_shutdown`, `nish_net_close` | 34, 31, 31, 20 |
-| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_tcp_listen` | 19, 14, 13, 10 |
+| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_tcp_listen` | 19, 14, 13, 7 |
 
 The ceiling goes from 1,024 to **2,048**, the next 256-byte boundary above the
 measurement; the owner approved raising it at the plan's sign-off, and it is the
