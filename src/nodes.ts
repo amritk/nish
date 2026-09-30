@@ -159,7 +159,9 @@ export const N_LABELED: i32 = 66
 // `typeof`, `void`, `delete`, `await` and `yield` an N_UNARY whose text is
 // the word, `?.` an N_MEMBER, N_INDEX or N_CALL with FLAG_OPTIONAL, a dynamic
 // `import(...)` an N_CALL whose callee is the IDENT `import` (a keyword, so
-// no program can declare it), a hole in an array literal an EMPTY element,
+// no program can declare it), `import.meta` an N_MEMBER whose text is `meta`
+// and whose receiver is that IDENT (NL1060; any other name after the dot
+// stays a syntax error), a hole in an array literal an EMPTY element,
 // and `new` of something other than a name an N_NEW whose callee is that
 // expression.
 
