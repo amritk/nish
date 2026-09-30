@@ -2650,8 +2650,9 @@ export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
  * The `SyntaxKind` TypeScript gives a statement found at the top level, which
  * is the word NL2230's message has always ended with. Every statement the
  * parser reads there has one (`Parser.startsTopLevelStatement`), and so does
- * every import form NL2226 and NL2230 name and every declaration NL2260
- * finds where a statement stands.
+ * every import form NL2226 and NL2230 name, every declaration NL2260
+ * finds where a statement stands, and the empty statement `;` NL2260 refuses
+ * in a body.
  */
 export const syntaxKindName = (kind: i32): string => {
   switch (kind) {
@@ -2691,6 +2692,8 @@ export const syntaxKindName = (kind: i32): string => {
       return "ImportEqualsDeclaration"
     case N_NAMESPACE_EXPORT:
       return "NamespaceExportDeclaration"
+    case N_EMPTY:
+      return "EmptyStatement"
     default:
       return "Statement"
   }

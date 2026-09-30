@@ -468,9 +468,11 @@ const x509DerUnsignedInto = (der: u8[], e: X509DerElement, out: u8[], off: i32):
 /**
  * `r || s`, 32 octets each, out of an ECDSA-Sig-Value `SEQUENCE { INTEGER r,
  * INTEGER s }` (RFC 5480 §2.2 by way of RFC 3279 §2.2.3), or `null` unless it
- * is exactly one with both integers minimal, positive and below 2^256.
+ * is exactly one with both integers minimal, positive and below 2^256. This is
+ * the form a TLS `CertificateVerify` or an X.509 signature carries, and
+ * `nish/crypto/p256` takes the `r || s` it answers.
  */
-const x509DerSignatureRS = (sig: u8[]): u8[] | null => {
+export const x509DerSignatureRS = (sig: u8[]): u8[] | null => {
   const total: i32 = toI32(sig.length)
   const seq: X509DerElement | null = x509DerExpect(sig, 0, total, X509_TAG_SEQUENCE)
   if (seq === null || seq.end !== total) {
