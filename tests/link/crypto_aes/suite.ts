@@ -60,7 +60,7 @@ const open = (key: string, iv: string, aad: string, sealed: string): string =>
   toHex(aesGcmOpen(keyOf(key), fromHex(iv), fromHex(aad), fromHex(sealed)));
 
 /** `aesGcmOpen` under an `AesKey` already made, in hex, or "null". */
-const open2 = (key: AesKey, iv: string, aad: string, sealed: string): string =>
+const openWith = (key: AesKey, iv: string, aad: string, sealed: string): string =>
   toHex(aesGcmOpen(key, fromHex(iv), fromHex(aad), fromHex(sealed)));
 
 /** The bytes of `hex` with bit `bit` of byte `at` flipped, in hex. */
@@ -413,16 +413,16 @@ export const runSuite = (): i32 => {
   const handMade: AesKey = new AesKey(real.rounds, real.roundKeys);
   const handSealed: string = toHex(aesGcmSeal(handMade, fromHex(IV), fromHex(A), fromHex(P60)));
   const handTag: string = handSealed.substring(toI32(handSealed.length) - 32, toI32(handSealed.length));
-  t.eqStr("a hand-built AesKey with H = 0 opens no forged ciphertext", open2(handMade, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
-  t.eqStr("a hand-built AesKey with H = 0 opens no forged AAD", open2(handMade, IV, flip(A, 0, 0), handSealed), "null");
+  t.eqStr("a hand-built AesKey with H = 0 opens no forged ciphertext", openWith(handMade, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
+  t.eqStr("a hand-built AesKey with H = 0 opens no forged AAD", openWith(handMade, IV, flip(A, 0, 0), handSealed), "null");
   const edited: AesKey = keyOf(K);
   edited.hHi = toU64(0);
   edited.hLo = toU64(0);
-  t.eqStr("an AesKey whose H is set to 0 opens no forgery", open2(edited, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
-  t.eqStr("an AesKey whose H is not set to 0 still opens", open2(real, IV, A, `${C4}${T4}`), P60);
+  t.eqStr("an AesKey whose H is set to 0 opens no forgery", openWith(edited, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
+  t.eqStr("an AesKey whose H is not set to 0 still opens", openWith(real, IV, A, `${C4}${T4}`), P60);
   const wrongRounds: AesKey = new AesKey(14, real.roundKeys);
   t.eqStr("seal under an AesKey with 14 rounds and 11 round keys answers null", toHex(aesGcmSeal(wrongRounds, fromHex(IV), fromHex(A), fromHex(P60))), "null");
-  t.eqStr("open under it answers null", open2(wrongRounds, IV, A, `${C4}${T4}`), "null");
+  t.eqStr("open under it answers null", openWith(wrongRounds, IV, A, `${C4}${T4}`), "null");
   t.eqStr("aesEncryptBlock under it answers null", toHex(aesEncryptBlock(wrongRounds, input)), "null");
   t.eqStr("aesHeaderMask under it answers null", toHex(aesHeaderMask(wrongRounds, fromHex("d1b1c98dd7689fb8ec11d242b123dc1d"))), "null");
   t.eqStr("an AesKey with 12 rounds, AES-192's count, answers null", toHex(aesEncryptBlock(new AesKey(12, real.roundKeys), input)), "null");
