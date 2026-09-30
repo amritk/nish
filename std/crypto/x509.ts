@@ -840,7 +840,7 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
         return null
       }
       // Every block is decoded, whatever its label: a malformed block beside the
-      // one asked for is refused, not skipped (docs/security/crypto-x509.md X509-1).
+      // one asked for is refused, not skipped (docs/security/crypto-x509.md, X509-1).
       const der: u8[] | null = x509Base64Decode(body.join(""))
       if (der === null) {
         return null
@@ -1008,8 +1008,9 @@ export const x509ParseP256PrivateKey = (pem: string): u8[] | null => {
  * Whether a unique identifier or the extensions wrapper after the key is well
  * formed as far as its outer shape: an IMPLICIT BIT STRING (`0x81`, `0x82`)
  * has an unused-bits count of 0 to 7, no unused bits without an octet to hold
- * them, and those bits zero; `[3]` (`0xa3`) is one SEQUENCE with at least one element's worth
- * of contents and nothing after it. What an extension says is not read.
+ * them, and those bits zero; `[3]` (`0xa3`) is one non-empty SEQUENCE and
+ * nothing after it (RFC 5280 §4.1's `SIZE (1..MAX)`). What an extension says
+ * is not read.
  */
 const x509DerTrailingSound = (der: u8[], e: X509DerElement): boolean => {
   if (e.tag !== 0xa3) {
@@ -1132,9 +1133,8 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   }
   at = spki.end
   // [1] issuerUniqueID and [2] subjectUniqueID are IMPLICIT BIT STRINGs (so
-  // primitive, 0x81 and 0x82) from v2, whose contents are an unused-bits count
-  // of 0 to 7 and, when it is not 0, at least one octet; [3] extensions is
-  // explicit (0xa3), v3, and holds exactly one non-empty SEQUENCE (§4.1).
+  // primitive, 0x81 and 0x82) from v2; [3] extensions is explicit (0xa3), v3.
+  // `x509DerTrailingSound` holds each to its shape.
   const trailing: i32[] = [0x81, 0x82, 0xa3]
   for (let i: i32 = 0; i < 3; i++) {
     if (x509DerPeek(der, at, tbs.end) === trailing[i]) {
@@ -1226,9 +1226,9 @@ export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certifica
  * `serial`, and signed with ecdsa-with-SHA256 — see the module comment for why
  * it has no extensions. `null` when `days` is below 1 or above
  * `X509_MAX_DAYS`, `notBeforeMs` is negative or the validity would end after
- * 9999, `commonName` is empty, longer than 64 bytes, not UTF-8 or holds a
- * NUL (it is written as a UTF8String), `priv` is not a P-256
- * private key, or `serial` — big-endian, leading zeros ignored — is zero or
+ * 9999, `commonName` is empty, longer than 64 bytes, not UTF-8 or holds a NUL
+ * (it is written as a UTF8String), `priv` is not a P-256 private key, or
+ * `serial` — big-endian, leading zeros ignored — is zero or
  * needs more than `X509_MAX_SERIAL` octets as a positive INTEGER (clear the top
  * bit of 20 random bytes, or use fewer).
  */

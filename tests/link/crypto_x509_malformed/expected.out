@@ -1,13 +1,15 @@
-PASS  golden certificate DER: 3246 inputs, 1395 refused, 1851 read and not the original
-PASS  CA certificate DER: 4173 inputs, 1557 refused, 2616 read and not the original
-PASS  leaf certificate DER: 3201 inputs, 1374 refused, 1827 read and not the original
+PASS  golden certificate DER: 3246 inputs, 1402 refused, 1844 read and not the original
+PASS  CA certificate DER: 4173 inputs, 1547 refused, 2626 read and not the original
+PASS  leaf certificate DER: 3201 inputs, 1368 refused, 1833 read and not the original
+PASS  golden signature DER: 1230 inputs, 574 refused, 656 read as another r || s
+PASS  leaf signature DER: 1239 inputs, 590 refused, 649 read as another r || s
 PASS  A.2.5 SEC1 key DER: 1689 inputs, 1689 refused, 0 the same key
 PASS  A.2.5 PKCS#8 key DER: 1842 inputs, 1841 refused, 1 the same key
-PASS  CA SEC1 key DER: 1689 inputs, 1687 refused, 2 the same key
+PASS  CA SEC1 key DER: 1689 inputs, 1689 refused, 0 the same key
 PASS  CA PKCS#8 key DER: 1842 inputs, 1841 refused, 1 the same key
-PASS  golden PEM: 1206 inputs, 1006 refused, 200 read as the original or not passing for it
-PASS  leaf and CA PEM: 2388 inputs, 1899 refused, 489 read as the original or not passing for it
-PASS  CA SEC1 key PEM: 754 inputs, 753 refused, 1 the same key
+PASS  golden PEM: 1206 inputs, 1012 refused, 194 read as the original or not passing for it
+PASS  leaf and CA PEM: 2388 inputs, 1918 refused, 470 read as the original or not passing for it
+PASS  CA SEC1 key PEM: 754 inputs, 752 refused, 2 the same key
 PASS  CA PKCS#8 key PEM: 782 inputs, 781 refused, 1 the same key
-PASS  22812 malformed inputs in all, at least 10,000
-x509 malformed corpus: 12 passed, 0 failed, 0 skipped
+PASS  25281 malformed inputs in all, at least 10,000
+x509 malformed corpus: 14 passed, 0 failed, 0 skipped

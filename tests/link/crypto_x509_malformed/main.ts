@@ -1,20 +1,23 @@
 // The fixed-seed malformed-input corpus of the X.509 security audit
 // (docs/security/crypto-x509.md): every valid fixture `crypto_x509` holds —
-// three certificates, four private keys and four PEM files — cut short at
-// every length, with every bit of the DER and a random bit of each PEM
-// character flipped in turn, and put through random edits drawn from one fixed
-// xorshift32 seed. Every input must come back from
-// the parser without a panic (the process reaching its summary is that proof),
-// and none may come back as something it should not be:
+// three certificates, two of their signatures, four private keys and four PEM
+// files — cut short at every length, with every bit of the DER and a random
+// bit of each PEM character flipped in turn, and put through random edits
+// drawn from one fixed xorshift32 seed. Every input must come back from the
+// parser without a panic (the process reaching its summary is that proof), and
+// none may come back as something it should not be:
 //
+//   a cut DER          null
 //   a certificate      null, or a certificate that is not the original
 //                      signed bytes under a signature the original issuer's
 //                      key accepts: no edit to the framing, the algorithm or
 //                      the signature's encoding keeps a valid signature
+//   an ECDSA signature null, or an `r || s` other than the original's: DER
+//                      spells each value one way
 //   a private key      null, or the original scalar: no edit yields another key
-//   a truncated PEM    null, or the blocks before the cut, unchanged
-//   an edited PEM      null, or certificates each the original or unverifiable,
-//                      and keys that are the original
+//   a cut PEM          null, or the blocks before the cut, unchanged
+//   an edited PEM      null, or certificates each the original or not passing
+//                      for it, and keys that are the original
 //
 // An edit inside tbsCertificate makes a different message, and a signature
 // valid over it would be an ECDSA forgery rather than a parser's mistake, so
@@ -29,6 +32,7 @@ import {
   X509Certificate,
   derToPem,
   pemToDer,
+  x509DerSignatureRS,
   x509ParseCertificate,
   x509ParseChain,
   x509ParseP256PrivateKey,
@@ -85,6 +89,12 @@ class Tally {
       this.violations = this.violations + 1
     }
   }
+
+  /** One check for the fixture: no violation, with the counts in its name. */
+  report(t: Suite, name: string, harmless: string): i32 {
+    t.eqI32(`${name}: ${this.inputs} inputs, ${this.refused} refused, ${this.harmless} ${harmless}`, this.violations, 0)
+    return this.inputs
+  }
 }
 
 /** The one block of `label` in `pem`, or an empty array. */
@@ -127,7 +137,8 @@ const flipped = (der: u8[], at: i32, bit: i32): u8[] => {
  * `der` after one to four edits drawn from `state`: an octet set to a random
  * value or to one of DER's boundary values (0, 7F, 80, 81, 82, 84, FF), an
  * octet deleted, or one inserted. Deletion and insertion move every length
- * after the edit, which is what probes the length arithmetic.
+ * after the edit, which is what probes the length arithmetic. Never `der`
+ * itself.
  */
 const edited = (der: u8[], state: i32): u8[] => {
   const boundary: i32[] = [0x00, 0x7f, 0x80, 0x81, 0x82, 0x84, 0xff]
@@ -153,7 +164,32 @@ const edited = (der: u8[], state: i32): u8[] => {
     }
     out = next
   }
-  return out
+  // Edits can undo each other; an input equal to the fixture is not malformed.
+  return same(out, der) ? flipped(der, 0, 0) : out
+}
+
+/** How many inputs `mutant` derives from a fixture of `n` octets. */
+const mutantCount = (n: i32, everyBit: boolean, edits: i32): i32 => n + (everyBit ? 8 * n : n) + edits
+
+/**
+ * The `i`-th malformed input derived from `fixture`: first every cut, `i`
+ * octets long; then every bit flipped (`everyBit`) or one bit of each octet,
+ * drawn from `state`; then random edits from `state`, which the caller steps
+ * once an input.
+ */
+const mutant = (fixture: u8[], i: i32, state: i32, everyBit: boolean): u8[] => {
+  const n: i32 = toI32(fixture.length)
+  if (i < n) {
+    return prefix(fixture, i)
+  }
+  const flip: i32 = i - n
+  if (everyBit && flip < 8 * n) {
+    return flipped(fixture, flip >> 3, flip & 7)
+  }
+  if (!everyBit && flip < n) {
+    return flipped(fixture, flip, below(state, 8))
+  }
+  return edited(fixture, state)
 }
 
 /**
@@ -163,114 +199,60 @@ const edited = (der: u8[], state: i32): u8[] => {
 const passesFor = (cert: X509Certificate, original: X509Certificate, issuer: X509Certificate): boolean =>
   same(cert.tbs, original.tbs) && x509VerifySignature(cert, issuer)
 
-/** A certificate input's outcome: refused, or read and not passing for `original`. */
-const certOutcome = (input: u8[], original: X509Certificate, issuer: X509Certificate): i32 => {
+/** A certificate input's outcome: refused, or read, not cut, and not passing for `original`. */
+const certOutcome = (input: u8[], cut: boolean, original: X509Certificate, issuer: X509Certificate): i32 => {
   const cert: X509Certificate | null = x509ParseCertificate(input)
   if (cert === null) {
     return REFUSED
   }
-  return passesFor(cert, original, issuer) ? VIOLATION : HARMLESS
+  return cut || passesFor(cert, original, issuer) ? VIOLATION : HARMLESS
 }
 
-/** A key input's outcome: refused, the original scalar, or another key. */
-const keyOutcome = (input: u8[], label: string, scalar: string): i32 => {
-  const key: u8[] | null = x509ParseP256PrivateKey(derToPem(input, label))
+/** A signature input's outcome: refused, or read, not cut, and not the original's `r || s`. */
+const signatureOutcome = (input: u8[], cut: boolean, rs: string): i32 => {
+  const out: u8[] | null = x509DerSignatureRS(input)
+  if (out === null) {
+    return REFUSED
+  }
+  return cut || toHex(out) === rs ? VIOLATION : HARMLESS
+}
+
+/** A private-key PEM's outcome: refused, or the original scalar. */
+const keyPemOutcome = (input: string, scalar: string): i32 => {
+  const key: u8[] | null = x509ParseP256PrivateKey(input)
   if (key === null) {
     return REFUSED
   }
   return toHex(key) === scalar ? HARMLESS : VIOLATION
 }
 
-// One outcome per input, each between an `Arena.mark` and its `Arena.release`:
-// what parsing one input allocates is gone before the next, so the corpus runs
-// in the memory of one input rather than of all of them.
-
-const certTruncated = (der: u8[], n: i32): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = x509ParseCertificate(prefix(der, n)) === null ? REFUSED : VIOLATION
-  Arena.release(mark)
-  return outcome
+/** A private-key DER's outcome, put in a PEM block of `label`: refused, or not cut and the original scalar. */
+const keyOutcome = (input: u8[], cut: boolean, label: string, scalar: string): i32 => {
+  const outcome: i32 = keyPemOutcome(derToPem(input, label), scalar)
+  return cut && outcome !== REFUSED ? VIOLATION : outcome
 }
 
-const certFlipped = (cert: X509Certificate, at: i32, bit: i32, issuer: X509Certificate): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = certOutcome(flipped(cert.der, at, bit), cert, issuer)
-  Arena.release(mark)
-  return outcome
-}
-
-const certEdited = (cert: X509Certificate, state: i32, issuer: X509Certificate): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = certOutcome(edited(cert.der, state), cert, issuer)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyTruncated = (der: u8[], n: i32, label: string, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyOutcome(prefix(der, n), label, scalar)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyFlipped = (der: u8[], at: i32, bit: i32, label: string, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyOutcome(flipped(der, at, bit), label, scalar)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyEdited = (der: u8[], state: i32, label: string, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyOutcome(edited(der, state), label, scalar)
-  Arena.release(mark)
-  return outcome
-}
-
-/** Every truncation, every bit flip and `DER_EDITS` random edits of a certificate. */
-const certCorpus = (t: Suite, name: string, cert: X509Certificate, issuer: X509Certificate, seed: i32): i32 => {
-  const tally = new Tally()
-  const n: i32 = toI32(cert.der.length)
-  for (let k: i32 = 0; k < n; k++) {
-    tally.add(certTruncated(cert.der, k))
+/**
+ * A certificate PEM's outcome against the original `certs` and their
+ * `issuers`, index for index: refused; or no more certificates than the
+ * original, each the original's bytes or, unless `cut`, not passing for it.
+ */
+const chainOutcome = (input: string, cut: boolean, certs: X509Certificate[], issuers: X509Certificate[]): i32 => {
+  const chain: X509Certificate[] | null = x509ParseChain(input)
+  if (chain === null) {
+    return REFUSED
   }
-  for (let at: i32 = 0; at < n; at++) {
-    for (let bit: i32 = 0; bit < 8; bit++) {
-      tally.add(certFlipped(cert, at, bit, issuer))
+  for (let i: i32 = 0; i < toI32(chain.length); i++) {
+    if (i >= toI32(certs.length) || i >= toI32(issuers.length)) {
+      return VIOLATION
+    }
+    const original: X509Certificate = certs[i]
+    const issuer: X509Certificate = issuers[i]
+    if (!same(chain[i].der, original.der) && (cut || passesFor(chain[i], original, issuer))) {
+      return VIOLATION
     }
   }
-  let s: i32 = seed
-  for (let k: i32 = 0; k < DER_EDITS; k++) {
-    s = xorshift(s)
-    tally.add(certEdited(cert, s, issuer))
-  }
-  t.eqI32(
-    `${name}: ${tally.inputs} inputs, ${tally.refused} refused, ${tally.harmless} read and not the original`,
-    tally.violations,
-    0
-  )
-  return tally.inputs
-}
-
-/** The same for a private key, each input put in a PEM block of `label`. */
-const keyCorpus = (t: Suite, name: string, der: u8[], label: string, scalar: string, seed: i32): i32 => {
-  const tally = new Tally()
-  const n: i32 = toI32(der.length)
-  for (let k: i32 = 0; k < n; k++) {
-    tally.add(keyTruncated(der, k, label, scalar))
-  }
-  for (let at: i32 = 0; at < n; at++) {
-    for (let bit: i32 = 0; bit < 8; bit++) {
-      tally.add(keyFlipped(der, at, bit, label, scalar))
-    }
-  }
-  let s: i32 = seed
-  for (let k: i32 = 0; k < DER_EDITS; k++) {
-    s = xorshift(s)
-    tally.add(keyEdited(der, s, label, scalar))
-  }
-  t.eqI32(`${name}: ${tally.inputs} inputs, ${tally.refused} refused, ${tally.harmless} the same key`, tally.violations, 0)
-  return tally.inputs
+  return HARMLESS
 }
 
 /** The bytes of `text`. */
@@ -291,85 +273,62 @@ const textOf = (bytes: u8[]): string => {
   return parts.join("")
 }
 
-/**
- * A certificate chain PEM input's outcome against the original `certs` and
- * their `issuers`, index for index: refused; or no more certificates than the
- * original, each the original's bytes or not passing for it. With `truncated`,
- * each must be the original's bytes.
- */
-const chainOutcome = (input: string, certs: X509Certificate[], issuers: X509Certificate[], truncated: boolean): i32 => {
-  const chain: X509Certificate[] | null = x509ParseChain(input)
-  if (chain === null) {
-    return REFUSED
+// Each corpus runs every input between an `Arena.mark` and its `Arena.release`:
+// what parsing one input allocates is gone before the next, so the corpus runs
+// in the memory of one input rather than of all of them.
+
+/** Every cut, every bit flip and `DER_EDITS` random edits of a certificate. */
+const certCorpus = (t: Suite, name: string, cert: X509Certificate, issuer: X509Certificate, seed: i32): i32 => {
+  const tally = new Tally()
+  const n: i32 = toI32(cert.der.length)
+  let s: i32 = seed
+  for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
+    s = xorshift(s)
+    const mark: i64 = Arena.mark()
+    tally.add(certOutcome(mutant(cert.der, i, s, true), i < n, cert, issuer))
+    Arena.release(mark)
   }
-  for (let i: i32 = 0; i < toI32(chain.length); i++) {
-    if (i >= toI32(certs.length) || i >= toI32(issuers.length)) {
-      return VIOLATION
-    }
-    const original: X509Certificate = certs[i]
-    const issuer: X509Certificate = issuers[i]
-    if (!same(chain[i].der, original.der) && (truncated || passesFor(chain[i], original, issuer))) {
-      return VIOLATION
-    }
+  return tally.report(t, name, "read and not the original")
+}
+
+/** The same for a certificate's ECDSA-Sig-Value, read by `x509DerSignatureRS` alone. */
+const signatureCorpus = (t: Suite, name: string, der: u8[], seed: i32): i32 => {
+  const tally = new Tally()
+  const rsOrNull: u8[] | null = x509DerSignatureRS(der)
+  if (rsOrNull === null) {
+    t.fail(name, "the fixture signature did not read")
+    return 0
   }
-  return HARMLESS
-}
-
-/** A key PEM input's outcome: refused, or the original scalar. */
-const keyPemOutcome = (input: string, scalar: string): i32 => {
-  const key: u8[] | null = x509ParseP256PrivateKey(input)
-  if (key === null) {
-    return REFUSED
+  const rs: string = toHex(rsOrNull)
+  const n: i32 = toI32(der.length)
+  let s: i32 = seed
+  for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
+    s = xorshift(s)
+    const mark: i64 = Arena.mark()
+    tally.add(signatureOutcome(mutant(der, i, s, true), i < n, rs))
+    Arena.release(mark)
   }
-  return toHex(key) === scalar ? HARMLESS : VIOLATION
+  return tally.report(t, name, "read as another r || s")
 }
 
-const chainTruncated = (pem: u8[], n: i32, certs: X509Certificate[], issuers: X509Certificate[]): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = chainOutcome(textOf(prefix(pem, n)), certs, issuers, true)
-  Arena.release(mark)
-  return outcome
-}
-
-const chainFlipped = (pem: u8[], at: i32, bit: i32, certs: X509Certificate[], issuers: X509Certificate[]): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = chainOutcome(textOf(flipped(pem, at, bit)), certs, issuers, false)
-  Arena.release(mark)
-  return outcome
-}
-
-const chainEdited = (pem: u8[], state: i32, certs: X509Certificate[], issuers: X509Certificate[]): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = chainOutcome(textOf(edited(pem, state)), certs, issuers, false)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyPemTruncated = (pem: u8[], n: i32, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyPemOutcome(textOf(prefix(pem, n)), scalar)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyPemFlipped = (pem: u8[], at: i32, bit: i32, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyPemOutcome(textOf(flipped(pem, at, bit)), scalar)
-  Arena.release(mark)
-  return outcome
-}
-
-const keyPemEdited = (pem: u8[], state: i32, scalar: string): i32 => {
-  const mark: i64 = Arena.mark()
-  const outcome: i32 = keyPemOutcome(textOf(edited(pem, state)), scalar)
-  Arena.release(mark)
-  return outcome
+/** The same for a private key, each input put in a PEM block of `label`. */
+const keyCorpus = (t: Suite, name: string, der: u8[], label: string, scalar: string, seed: i32): i32 => {
+  const tally = new Tally()
+  const n: i32 = toI32(der.length)
+  let s: i32 = seed
+  for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
+    s = xorshift(s)
+    const mark: i64 = Arena.mark()
+    tally.add(keyOutcome(mutant(der, i, s, true), i < n, label, scalar))
+    Arena.release(mark)
+  }
+  return tally.report(t, name, "the same key")
 }
 
 /**
- * Every truncation, one random bit flipped in each character, and `PEM_EDITS`
- * random edits of a certificate PEM file. The DER corpus flips every bit;
- * here most flips only make a character base64 does not have.
+ * Every cut, one random bit flipped in each character, and `PEM_EDITS` random
+ * edits of a certificate PEM file. The DER corpus flips every bit; here most
+ * flips only make a character base64 does not have.
  */
 const chainCorpus = (
   t: Suite,
@@ -382,45 +341,29 @@ const chainCorpus = (
   const tally = new Tally()
   const pem: u8[] = bytesOf(text)
   const n: i32 = toI32(pem.length)
-  for (let k: i32 = 0; k < n; k++) {
-    tally.add(chainTruncated(pem, k, certs, issuers))
-  }
   let s: i32 = seed
-  for (let at: i32 = 0; at < n; at++) {
+  for (let i: i32 = 0; i < mutantCount(n, false, PEM_EDITS); i++) {
     s = xorshift(s)
-    tally.add(chainFlipped(pem, at, below(s, 8), certs, issuers))
+    const mark: i64 = Arena.mark()
+    tally.add(chainOutcome(textOf(mutant(pem, i, s, false)), i < n, certs, issuers))
+    Arena.release(mark)
   }
-  for (let k: i32 = 0; k < PEM_EDITS; k++) {
-    s = xorshift(s)
-    tally.add(chainEdited(pem, s, certs, issuers))
-  }
-  t.eqI32(
-    `${name}: ${tally.inputs} inputs, ${tally.refused} refused, ${tally.harmless} read as the original or not passing for it`,
-    tally.violations,
-    0
-  )
-  return tally.inputs
+  return tally.report(t, name, "read as the original or not passing for it")
 }
 
-/** The same for a private-key PEM file. */
+/** The same for a private-key PEM file: a cut or edited file answers null or the same key. */
 const keyPemCorpus = (t: Suite, name: string, text: string, scalar: string, seed: i32): i32 => {
   const tally = new Tally()
   const pem: u8[] = bytesOf(text)
   const n: i32 = toI32(pem.length)
-  for (let k: i32 = 0; k < n; k++) {
-    tally.add(keyPemTruncated(pem, k, scalar))
-  }
   let s: i32 = seed
-  for (let at: i32 = 0; at < n; at++) {
+  for (let i: i32 = 0; i < mutantCount(n, false, PEM_EDITS); i++) {
     s = xorshift(s)
-    tally.add(keyPemFlipped(pem, at, below(s, 8), scalar))
+    const mark: i64 = Arena.mark()
+    tally.add(keyPemOutcome(textOf(mutant(pem, i, s, false)), scalar))
+    Arena.release(mark)
   }
-  for (let k: i32 = 0; k < PEM_EDITS; k++) {
-    s = xorshift(s)
-    tally.add(keyPemEdited(pem, s, scalar))
-  }
-  t.eqI32(`${name}: ${tally.inputs} inputs, ${tally.refused} refused, ${tally.harmless} the same key`, tally.violations, 0)
-  return tally.inputs
+  return tally.report(t, name, "the same key")
 }
 
 export const main = (): i32 => {
@@ -432,6 +375,8 @@ export const main = (): i32 => {
   total = total + certCorpus(t, "golden certificate DER", golden, golden, SEED)
   total = total + certCorpus(t, "CA certificate DER", ca, ca, SEED ^ 1)
   total = total + certCorpus(t, "leaf certificate DER", leaf, ca, SEED ^ 2)
+  total = total + signatureCorpus(t, "golden signature DER", golden.signature, SEED ^ 11)
+  total = total + signatureCorpus(t, "leaf signature DER", leaf.signature, SEED ^ 12)
   total = total + keyCorpus(t, "A.2.5 SEC1 key DER", fromHex(KEY_SEC1), "EC PRIVATE KEY", PRIVATE, SEED ^ 3)
   total = total + keyCorpus(t, "A.2.5 PKCS#8 key DER", fromHex(KEY_PKCS8), "PRIVATE KEY", PRIVATE, SEED ^ 4)
   total = total + keyCorpus(t, "CA SEC1 key DER", onlyBlock(CA_SEC1_PEM, "EC PRIVATE KEY"), "EC PRIVATE KEY", CA_PRIVATE, SEED ^ 5)
