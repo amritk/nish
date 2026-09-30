@@ -16,7 +16,11 @@
  * The counter `i` is one byte, so `L` is at most 255 × HashLen (§2.3): 8160
  * bytes for SHA-256 and 12240 for SHA-384. A longer `L`, or a negative one,
  * answers `null` rather than panicking, because `L` usually comes from a
- * protocol field; `L = 0` answers an empty array.
+ * protocol field; `L = 0` answers an empty array. So does an `info` longer
+ * than 2^31 - 1 bytes, which `toI32` would cut to a prefix under
+ * `--number-mode f64`, so that two `info`s sharing it gave one key, and a PRK
+ * shorter than HashLen, which §2.3 does not allow: an empty one is a key
+ * anybody can compute with.
  *
  * HKDF-Expand-Label, TLS 1.3's wrapper around `expand`, belongs with TLS and is
  * not here. Written from RFC 5869, not ported from another implementation.
@@ -64,10 +68,16 @@ export const hkdfExtractSha384 = (salt: u8[], ikm: u8[]): u8[] => hmacSha384(hkd
 /**
  * HKDF-Expand with HMAC-SHA-256 (RFC 5869 §2.3): `length` bytes of output
  * keying material from `prk` and `info`, or `null` when `length` is negative
- * or past 255 × 32.
+ * or past 255 × 32, when `info` is longer than 2^31 - 1 bytes, or when `prk`
+ * is shorter than 32 bytes.
  */
 export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | null => {
-  if (length < 0 || length > HKDF_MAX_BLOCKS * SHA256_SIZE) {
+  if (
+    length < 0 ||
+    length > HKDF_MAX_BLOCKS * SHA256_SIZE ||
+    info.length > 2147483647 ||
+    toI32(prk.length) < SHA256_SIZE
+  ) {
     return null
   }
   const out: u8[] = new Array<u8>(length)
@@ -92,10 +102,16 @@ export const hkdfExpandSha256 = (prk: u8[], info: u8[], length: i32): u8[] | nul
 /**
  * HKDF-Expand with HMAC-SHA-384 (RFC 5869 §2.3): `length` bytes of output
  * keying material from `prk` and `info`, or `null` when `length` is negative
- * or past 255 × 48.
+ * or past 255 × 48, when `info` is longer than 2^31 - 1 bytes, or when `prk`
+ * is shorter than 48 bytes.
  */
 export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | null => {
-  if (length < 0 || length > HKDF_MAX_BLOCKS * SHA384_SIZE) {
+  if (
+    length < 0 ||
+    length > HKDF_MAX_BLOCKS * SHA384_SIZE ||
+    info.length > 2147483647 ||
+    toI32(prk.length) < SHA384_SIZE
+  ) {
     return null
   }
   const out: u8[] = new Array<u8>(length)

@@ -435,8 +435,19 @@ export class Sha256 {
   }
 }
 
-/** The SHA-256 digest of all of `data`, as a fresh 32-byte array. */
+/**
+ * The SHA-256 digest of all of `data`, as a fresh 32-byte array.
+ *
+ * An array longer than 2^31 - 1 bytes panics. A window's length is an `i32`,
+ * and under `--number-mode f64` `toI32` of a longer length saturates, so
+ * hashing `toI32(data.length)` bytes would answer the digest of a prefix: one
+ * digest for every message that shares its first 2^31 - 1 bytes. The length
+ * is compared as the `number` it is, before any `toI32`.
+ */
 export const sha256 = (data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("sha256: a message longer than 2^31 - 1 bytes")
+  }
   const hasher: Sha256 = new Sha256()
   const from: i32 = 0
   hasher.update(data, from, toI32(data.length))

@@ -1,0 +1,12 @@
+PASS  sha256: the tag verifies
+PASS  sha256: the tag and one more byte is refused
+PASS  sha256: an empty tag is refused
+PASS  sha256: a one-byte tag is refused
+PASS  sha256: the SHA-384 tag is refused
+PASS  sha256: none of the 256 single-bit flips verifies
+PASS  sha384: the tag verifies
+PASS  sha384: the tag and one more byte is refused
+PASS  sha384: an empty tag is refused
+PASS  sha384: the SHA-256 tag is refused
+PASS  sha384: none of the 384 single-bit flips verifies
+hmac k1 verify: 11 passed, 0 failed, 0 skipped
