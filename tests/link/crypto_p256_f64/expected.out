@@ -1,0 +1,6 @@
+PASS  A.2.5 public key of the private key
+PASS  A.2.5 SHA-256 "sample": r || s
+PASS  it verifies
+PASS  with a bit of s flipped it does not
+PASS  private key 0 answers null
+p256 (f64 mode): 5 passed, 0 failed, 0 skipped
