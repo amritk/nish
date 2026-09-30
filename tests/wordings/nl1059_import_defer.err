@@ -1,0 +1,1 @@
+`import defer` is forbidden in Nish (a module has no top-level code, so there is nothing to defer)

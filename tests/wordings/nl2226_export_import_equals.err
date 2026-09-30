@@ -1,1 +1,1 @@
-syntax error: `export` cannot introduce an import
+Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration)

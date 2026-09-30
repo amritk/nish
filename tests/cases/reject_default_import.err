@@ -1,1 +1,1 @@
-expected `{`, found `IDENT`
+Default imports are not supported; use `import { math } from "./locals"`

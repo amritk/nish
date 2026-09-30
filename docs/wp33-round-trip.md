@@ -477,8 +477,22 @@ record rows with their exact predicates. Every row is live
 (#293, #301, #302, #304, #329) except NL8011, which #329 retired: the `-0` it flagged
 prints `0` in both readings, because `runtime/nish.mjs` prints `String(x)`
 (§3.5). Its code stays reserved, and `tests/wordings/unreachable.txt` records
-it as retired. The parser half
-(§5.0) is not started.
+it as retired.
+
+**R1's parser half is built.** The parser reads every construct the language
+forbids — statements, expressions, declarations, function and binding forms,
+class, interface and enum forms, and import and export forms — into the node
+it resembles, and the phase that owns its rule refuses it by that rule, with
+one diagnostic: Phase 0 for an NL1xxx code, the checker's pass 1 for an NL2xxx
+one. The "Retired at R6: stage1's parser refuses" section of
+`tests/wordings/unreachable.txt` is gone, every one of its codes provoked
+again by the case that pins it. What stays a syntax error is syntax TypeScript
+itself refuses as syntax — numeric separators where they cannot stand, octal
+and leading-zero literals, `#!` after the first line, a `\u{…}` escape out of
+range, `??` mixed with `&&` or `||` — and the entries left in
+`tests/self/parser-refusals.txt`. It was built in six stages: #292
+statements, #311 expressions, #313 declarations, #314 functions and bindings,
+#315 classes, interfaces and enums, and #337 imports and exports.
 
 **R2 is built.** The typed-array row of §3.3 is class A for every receiver
 [LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop) lists: a

@@ -147,7 +147,9 @@ rejects. This table is the highest-value part of the page.
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
-| `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
+| `export default f` | `` `export default` / `export =` are not supported; use a named `export function` `` | `export const f = …` |
+| `export { f }`, `export * from "./m"`, `export default function f` | `` `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself `` / `` `export default` is not supported; use a named `export function` `` | `export` on the declaration itself |
+| `import d from "./m"`, `import * as m from "./m"`, `import "./m"`, `import type { T } from "./m"` | `` Default imports are not supported; use `import { d } from "./m"` `` / `` Namespace imports (`import * as m`) are not supported; import functions by name `` / `` Side-effect imports (`import "./m"`) are not supported; modules have no top-level code `` / `Type-only imports are not supported` | `import { d, T } from "./m"`, naming what you use |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
 | `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
@@ -1020,11 +1022,15 @@ export const main = (): i32 => {
 ### Modules
 
 - `export` goes on `const` (function or constant), `class`, `interface`,
-  `enum` and `type` declarations. No `export default`, no `export { … }`, no `export *`.
+  `enum` and `type` declarations. No `export default`, no `export { … }`, no
+  `export *`, no `export =`: each is refused by its own rule, once.
 - The only import form is a **named import**:
   `import { square, cube as pow3 } from "./math"`. `.ts` is optional. Default
-  imports, namespace imports, side-effect imports and type-only imports are all
-  rejected.
+  imports, namespace imports, side-effect imports, type-only imports,
+  `import x = require(…)`, import attributes (`with { … }`) and
+  `import defer` are all rejected, each by its own rule and before anything
+  is loaded. `type`, `as` and `from` are still names: `import { type } from`
+  imports a function called `type`.
 - A specifier is a relative path (`./x`, `../x`), a builtin module (`nish:fs`),
   a standard-library module (`nish/text`, `nish/pair`), or a **package name** (`hash`,
   `@scope/hash`, with a subpath after it if you want one).

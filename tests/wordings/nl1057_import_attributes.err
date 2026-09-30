@@ -1,0 +1,1 @@
+Import attributes (`with { ... }`) are forbidden in Nish (an import names source this compiler reads, never a resource loaded at run time)
