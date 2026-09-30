@@ -1,0 +1,7 @@
+reject_typed_pop_receivers.ts:17:10: error: `pop` is not a method of `Float64Array`
+reject_typed_pop_receivers.ts:18:11: error: `pop` is not a method of `Int32Array`
+reject_typed_pop_receivers.ts:19:23: error: `pop` is not a method of `Float32Array`
+reject_typed_pop_receivers.ts:21:8: error: `pop` is not a method of `Float64Array`
+reject_typed_pop_receivers.ts:23:5: error: `pop` is not a method of `Float64Array`
+reject_typed_pop_receivers.ts:26:7: error: `pop` is not a method of `BigInt64Array`
+6 errors

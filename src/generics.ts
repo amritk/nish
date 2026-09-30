@@ -33,6 +33,7 @@ import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { annotationSpelling } from "./arrays"
 import { StringMap, StringSet } from "./map"
 import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
 import {
@@ -1868,6 +1869,7 @@ const liftArrow = (
     // that a `T` has only its constraint's members has to see it; where it
     // came from is not followed through a lifted arrow, so it fails closed.
     local.origin = ctx.typeBindings.size() === 0 ? null : unknownOrigin(param)
+    local.typedArray = annotationSpelling(ctx, true, param.children[1])
     if (!scope.declare(local)) {
       refuseOnce(ctx, param, `Duplicate parameter \`${name}\``)
       return null
