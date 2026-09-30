@@ -1586,8 +1586,11 @@ export class Parser {
    * Finish the form `beginForm` started. When it reported a syntax error, the
    * rest of its statement is passed over — up to a `;`, which is consumed,
    * a line break or the end of the file, or, in a body, the `}` that closes
-   * it — so the next declaration starts clean, as it did when the parser
-   * refused the form at its first token.
+   * it. A declaration on the next line therefore starts clean; anything later
+   * on the same line, a declaration included, is part of the statement passed
+   * over (`import x = 5 export const y = ...` is one syntax error and nothing
+   * about `y`), which reports no more than refusing the form at its first
+   * token did.
    */
   endForm(node: Node, previous: i32, nested: boolean): Node {
     if (this.diagnostics.length > this.formStart) {

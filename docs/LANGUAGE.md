@@ -1330,7 +1330,8 @@ and their `.ll` goldens are byte-identical files.
   (or `ImportDeclaration`; `reject_export_import_equals`), and
   `export as namespace X` is
   `Only top-level function declarations are supported in Phase 1 (found NamespaceExportDeclaration)`.
-  Several in one module report one each (`reject_module_sweep_together`).
+  Several in one module report one each (`reject_module_sweep_together`),
+  unless one is a Phase 0 form below, which is then reported alone.
 - **What `export` promises depends on the build.** In every build it makes a
   declaration importable by another module of the program. A build whose
   output something else links or loads — `-o` alone (IR for a C host to link),
@@ -5569,7 +5570,7 @@ messages are exact for the cases cited; other rows quote the checker
 | `export import` | `` Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration) `` (or `ImportDeclaration`) | `reject_export_import_equals`, `nl2226_export_import_equals` |
 | `import x = require("./m")`, `import x = A.B`, `export as namespace X` | `Only top-level function declarations are supported in Phase 1 (found ImportEqualsDeclaration)` (or `NamespaceExportDeclaration`) | `reject_module_sweep_together` |
 | a function or an import declared inside a body | `Unsupported statement in Phase 1: FunctionDeclaration` (or `ImportDeclaration`) | `reject_fn_nested`, `reject_fn_nested_template` |
-| more than one import or export form in one module | one each, since each is its own declaration | `reject_module_sweep_together` |
+| more than one import or export form in one module | the checker's refusals one each, since each is its own declaration; a Phase 0 one (NL1057–NL1059) alone, as every Phase 0 rule is, because Phase 0 halts the module before the checker runs | `reject_module_sweep_together` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
