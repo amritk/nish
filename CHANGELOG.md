@@ -26,6 +26,49 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-30
+
+### Breaking changes
+
+- checker: Refuse push and pop on the typed-array names ([#335](https://github.com/amritk/nish/pull/335))
+
+### Added
+
+- std: ChaCha20-Poly1305 and ChaCha20 header protection in nish/crypto/chacha20poly1305 ([#332](https://github.com/amritk/nish/pull/332))
+- runtime: Nish:net with a runtime-net.c unit and non-blocking TCP (WP34 N5) ([#341](https://github.com/amritk/nish/pull/341))
+- std: Bitsliced AES-128 and AES-256 with GCM in nish/crypto/aes ([#340](https://github.com/amritk/nish/pull/340))
+- std: P-256 ECDSA with RFC 6979 nonces in nish/crypto/p256 ([#336](https://github.com/amritk/nish/pull/336))
+- runtime: Nish:net UDP with GSO, GRO, ECN and SO_REUSEPORT (WP34 N5) ([#343](https://github.com/amritk/nish/pull/343))
+- checker: Refuse forbidden import and export forms by their rule, not NL0001 ([#337](https://github.com/amritk/nish/pull/337))
+- std: DER, PEM and X.509, and a self-signed P-256 certificate, in nish/crypto/x509 ([#346](https://github.com/amritk/nish/pull/346))
+- runtime: Nish:net readiness loop that wakes on sockets and SIGTERM (WP34 N5) ([#349](https://github.com/amritk/nish/pull/349))
+
+### Fixed
+
+- checker: Retire NL8011 and stop NL8008 on a constant shift ([#329](https://github.com/amritk/nish/pull/329))
+
+### Documentation
+
+- Mark WP34 N1, N2, N3 and N6 built and bring MASTER_PLAN §9 up to date ([#328](https://github.com/amritk/nish/pull/328))
+- Make the portability rows and wp33's status match the code ([#327](https://github.com/amritk/nish/pull/327))
+- checker: Pin readFileBytesSync's refusals and fix the fill and i64-literal rules ([#331](https://github.com/amritk/nish/pull/331))
+- Warn against production use and say how early Nish is ([#344](https://github.com/amritk/nish/pull/344))
+
+### Tests
+
+- std: Verify the X25519 ladder by disassembly, pin SHA-384/512's 448-bit vector, and time the constant-time code weekly ([#339](https://github.com/amritk/nish/pull/339))
+- std: Run every vector in the f64 twins of chacha20poly1305, aes and p256 ([#350](https://github.com/amritk/nish/pull/350))
+- std: Hold P-256's field multiply and window step to the disassembly check ([#354](https://github.com/amritk/nish/pull/354))
+
+### Build
+
+- Regenerate package-lock.json for v0.14.0 ([#319](https://github.com/amritk/nish/pull/319))
+
+### CI
+
+- release: Gate every std/crypto module in the release presence checks, and list the new modules ([#345](https://github.com/amritk/nish/pull/345))
+
+
 ## [0.14.0] - 2026-09-29
 
 ### Breaking changes
@@ -562,3 +605,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.12.0]: https://github.com/amritk/nish/releases/tag/v0.12.0
 [0.13.0]: https://github.com/amritk/nish/releases/tag/v0.13.0
 [0.14.0]: https://github.com/amritk/nish/releases/tag/v0.14.0
+[0.15.0]: https://github.com/amritk/nish/releases/tag/v0.15.0
