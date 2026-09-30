@@ -247,6 +247,24 @@ const skip = (reason) => {
   console.log(`SKIP  ${reason}`)
   skipped.push(reason)
 }
+/**
+ * Checks this run handed to another job of the same CI run, each with the job
+ * that proves it. A third column beside passed and skipped, because it is
+ * neither: nothing here proved it, so it is not a pass, and something else in
+ * the same run did, so it is not the "unproven by this run" a skip is. Counted
+ * and named in the summary so that a reader of this job's log can see the
+ * claim, and whom to hold to it, without opening the workflow.
+ *
+ * Only a check that another job proves *with the same inputs on the same
+ * platform* may be delegated, and only when the workflow asks for it by flag.
+ * There is one today, the bootstrap's fixed point, and the WP14 section below
+ * says when the request is honoured and what makes it true.
+ */
+const delegated = []
+const delegate = (name, provedBy) => {
+  console.log(`DELEGATED  ${name} -- proved by ${provedBy}`)
+  delegated.push({ name, provedBy })
+}
 const check = (name, ok, detail) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`)
   if (ok) {
@@ -340,7 +358,21 @@ const summarise = () => {
   if (skipped.length > 0) {
     summary.push(`${skipped.length} skipped`)
   }
+  if (delegated.length > 0) {
+    summary.push(`${delegated.length} delegated`)
+  }
   console.log(`\n${summary.join(", ")}.`)
+
+  // Before the skip note, and apart from it, because the two say different
+  // things: a skip is unproven, a delegation is proved by the job it names --
+  // which is also why this run is only as green as that job is.
+  if (delegated.length > 0) {
+    console.log(
+      `\nDelegated: ${delegated.length} check(s) are proved by another job of this CI run rather than by this one, ` +
+        "so read this result together with that job's:\n" +
+        delegated.map((d) => `  ${d.name}: ${d.provedBy}`).join("\n")
+    )
+  }
 
   if (skipped.length > 0) {
     const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"]
@@ -8984,20 +9016,107 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // fixed point -- nothing about the seed leaks into the result any more --
   // and stage3 must be byte-identical to stage2 so the binaries are compared
   // as well as the text. Three links, so it is the slowest check here.
-  const bootstrap = spawnSync(
-    "node",
-    [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec],
-    {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
+  //
+  // It is also a check CI was running twice. ci.yml's
+  // `bootstrap` job has a row per seed the last release attaches, and its
+  // x86_64-linux row runs `scripts/bootstrap.sh --verify` on the runner the
+  // `test` job uses, with the seed the `test` job fetches -- `seeds` reads the
+  // newest release and scripts/fetch-seed.sh the latest one, which are the
+  // same tag unless a prerelease heads the list, and .github/seed-matrix.sh
+  // turns red on a newest tag that is not a plain version.
+  // `--verify` asserts these two equalities, byte for byte, with the speed
+  // profile this check uses (the profile changes the link, not the IR). About
+  // eighty seconds of the `test` job, the critical path, bought nothing the
+  // run did not already have in parallel.
+  //
+  // So the `test` job passes `--delegate-fixed-point`, and when the request is
+  // honest the check is delegated to that row rather than run here: counted as
+  // delegated, not as passed, and not as a skip -- a skip says "unproven", and
+  // this is proved, by a job the summary names. What makes the request honest:
+  //
+  //   * It is a GitHub Actions run. The flag is a claim about the workflow this
+  //     run is part of; from a terminal it names a job that is not running, and
+  //     the check runs here as it always has. A local `npm test` pays for the
+  //     fixed point, and is the only place outside CI that proves it.
+  //   * This host has a seed row, which is to say a `bootstrap` row: the job is
+  //     named from .github/seed-targets.json by this host's triple, the way the
+  //     `seeds` job names it. A host with no seed target has no row to hand the
+  //     check to, and it runs here.
+  //   * That row exists whenever this job can go green. x86_64-linux has been
+  //     due since 0.1.1, so a release that does not carry its seed turns
+  //     `seeds` red (.github/seed-matrix.sh); and with no release at all
+  //     scripts/fetch-seed.sh has nothing to fetch and this job is red before
+  //     it gets here. release.yml runs this whole workflow through
+  //     `workflow_call` and its `release` job is `needs: ci`, so a red row
+  //     stops a release as a red check here would.
+  //   * The workflow still says so. The check after this one reads ci.yml and
+  //     fails if the `test` job asks for the delegation while the `bootstrap`
+  //     job has stopped running `scripts/bootstrap.sh --verify`, and the one
+  //     after that holds `--verify` to asserting both equalities.
+  //
+  // Nothing reads what this check builds: tests/self/bootstrap.js deletes its
+  // stages on the way out, and the checks below build their own. And the
+  // equalities are not absent from the `test` job even so -- the perturbed-seed
+  // check below runs `--verify` over three debug-profile stages and requires
+  // both to hold.
+  const fixedPointName = "src/ compiles src/: the bootstrap reaches a fixed point"
+  const hostSeedTarget = JSON.parse(
+    fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
+  ).targets.find((t) => t.triple === HOST_TRIPLE)
+  if (
+    process.argv.includes("--delegate-fixed-point") &&
+    process.env.GITHUB_ACTIONS === "true" &&
+    hostSeedTarget !== undefined
+  ) {
+    delegate(
+      fixedPointName,
+      `ci.yml's \`bootstrap (${hostSeedTarget.asset})\` job, which runs scripts/bootstrap.sh --verify with the same seed`
+    )
+  } else {
+    const bootstrap = spawnSync(
+      "node",
+      [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec],
+      {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      }
+    )
+    const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? ""
+    check(
+      `${fixedPointName} (${bootstrapSummary})`,
+      bootstrap.status === 0,
+      `${bootstrap.stdout}${bootstrap.stderr}`
+    )
+  }
+
+  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
+  // every run, local ones included: a `test` job that still asks for it while
+  // the `bootstrap` job no longer runs `--verify` would be a green run with
+  // the fixed point proved nowhere. Comment lines are left out, because a
+  // comment that mentions a flag is not a step that passes it.
+  const ciJob = (text, name) => {
+    const lines = text.split("\n")
+    const start = lines.indexOf(`  ${name}:`)
+    if (start < 0) {
+      return ""
     }
-  )
-  const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? ""
+    const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l))
+    return lines
+      .slice(start, end < 0 ? lines.length : end)
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n")
+  }
+  const ciYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
+  const testJobText = ciJob(ciYmlText, "test")
+  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
   check(
-    `src/ compiles src/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
-    bootstrap.status === 0,
-    `${bootstrap.stdout}${bootstrap.stderr}`
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJobText !== "" &&
+      (!testJobText.includes("--delegate-fixed-point") ||
+        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
+          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
+    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
   )
 
   // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts, and
