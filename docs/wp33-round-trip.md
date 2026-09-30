@@ -291,12 +291,12 @@ work, and none of it waits for compat mode. It is useful against strict today.
 
 ### 5.0 Every refusal names its rule
 
-The agent's first input is the diagnostic, and today the diagnostic for most of
-ordinary TypeScript is the wrong one. The parser stops at syntax the language
-forbids before Phase 0 can name the rule (wp19's declared divergence 602). So
-the rule's message, its code and its rewrite hint never reach the agent.
-`nish` 0.12.0, `--json`, one construct each; a row R1 has closed gives what
-the compiler says since:
+The agent's first input is the diagnostic. Until R1 the diagnostic for most of
+ordinary TypeScript was the wrong one: the parser stopped at syntax the language
+forbids before Phase 0 could name the rule (wp19's declared divergence 602), so
+the rule's message, its code and its rewrite hint never reached the agent. R1's
+parser half closed that (§9). `nish` 0.14.0 and later, `--json`, one construct
+each:
 
 | Written | First diagnostic | Count | The rule LANGUAGE.md documents |
 | --- | --- | --- | --- |
@@ -309,12 +309,13 @@ the compiler says since:
 | `for (const k in a)` | `NL1056`, the rule (R1, stage 1) | 1 | `` `for...in` is forbidden … use `for...of` ``, a code of its own since R1 ([Rejected statements](LANGUAGE.md#rejected-statements)) |
 | `throw 1` | `NL1001`, the rule | 1 | reached |
 
-**The parser must read all of TypeScript's syntax**, and refuse each construct
+**The parser reads all of TypeScript's syntax**, and each construct is refused
 in the phase that owns its rule, with one diagnostic per construct. wp19 costed
-this at grammar for 43 constructs, and it is the precondition for everything
-else in this section: a fix cannot be attached to a cascade of syntax errors. It
-also makes LANGUAGE.md's forbidden-construct table true for these rows, which it
-is not today.
+this at grammar for 43 constructs; the inventory R1 closed was the 75 codes of
+`tests/wordings/unreachable.txt`'s old "Retired at R6" parser section, plus
+`for...in`. It is the precondition for everything else in this section: a fix
+cannot be attached to a cascade of syntax errors. It also made LANGUAGE.md's
+forbidden-construct table true for these rows.
 
 ### 5.1 Fixes in `--json`
 
