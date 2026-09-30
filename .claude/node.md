@@ -27,6 +27,9 @@ commands a user would.
   `--link` runs) and `NISH_SIMULATE_ICE` (the test hook for the exit-70 path,
   in `src/ice.ts`); `scripts/build.sh` reads `CC`, the C compiler a link
   invokes; the harness reads `UPDATE_GOLDENS` and `NISH_BOOTSTRAP` (the seed).
+  Without `NISH_BOOTSTRAP`, `npm test` skips nish-cmp and the stage1 fuzz, a
+  third skip beside the two wasi ones. A cloud session's start hook exports it
+  as `build/seed/bin/nish`; elsewhere, set it to run an undegraded suite.
   A new one is a CLI design decision, not a shortcut.
 - Bun-specific APIs (`Bun.file`, `Bun.$`, `bun:sqlite`, HTML imports) do not
   exist here; use `node:fs` and `spawnSync` / `execFileSync`, as
