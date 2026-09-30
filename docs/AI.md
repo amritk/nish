@@ -518,6 +518,9 @@ const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be re
 export const main = (): i32 => areaOf(new Circle(2)) - 12;
 ```
 
+- **Each type parameter is named once**: `<T, T>` is
+  `` Duplicate type parameter `T` ``, on a function, method, class or
+  interface, and in a template nothing calls too.
 - **Not supported yet**: a default type argument (`<T = string>`) and type
   parameters on a **constructor**, each with its own message, and a generic
   **type alias**, which is only the syntax error `` expected `=`, found `<` ``.
