@@ -7,6 +7,8 @@ PASS  sha512 of the empty message
 PASS  sha384 of the empty message
 PASS  sha512 of "abc"
 PASS  sha384 of "abc"
+PASS  sha512 of the 448-bit message
+PASS  sha384 of the 448-bit message
 PASS  sha512 of the 896-bit message
 PASS  sha384 of the 896-bit message
 PASS  sha512 of one million "a"
@@ -32,4 +34,4 @@ PASS  Sha512.copy is updated on its own
 PASS  Sha384.copy digests the prefix
 PASS  Sha384.copy leaves the original's digest unchanged
 PASS  Sha384.copy is updated on its own
-sha512: 34 passed, 0 failed, 0 skipped
+sha512: 36 passed, 0 failed, 0 skipped

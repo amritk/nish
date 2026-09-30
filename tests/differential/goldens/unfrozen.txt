@@ -81,6 +81,7 @@ cases/cls_inline_array_local added after R6: no rewriter to freeze it with
 cases/cls_inline_array_order added after R6: no rewriter to freeze it with
 cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
+cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
 cases/ct_select_u32 added after R6: no rewriter to freeze it with
 cases/ct_u64 added after R6: no rewriter to freeze it with

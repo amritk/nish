@@ -26,13 +26,28 @@
  * nicety: each function states what it accepts and what it answers, and
  * `f25519Mul` says why its sums fit.
  *
- * **Constant time, by construction and not yet by proof.** Nothing branches
- * on, or indexes by, a secret: the ladder swaps with a mask and runs all 255
- * steps whatever the scalar, and the final reduction subtracts p by adding a
- * carry bit times 19 rather than by comparing. Every `if` and every loop bound
- * here is on a public quantity — a limb number, a bit position or an input
- * length. WP34 N6's `ctSelect` and its disassembly check are what will verify
- * that; they do not exist yet.
+ * **Constant time, by construction, and in part by disassembly.** Nothing
+ * branches on, or indexes by, a secret: the ladder swaps with a mask and runs
+ * all 255 steps whatever the scalar, and the final reduction subtracts p by
+ * adding a carry bit times 19 rather than by comparing. Every `if` and every
+ * loop bound here is on a public quantity — a limb number, a bit position or
+ * an input length.
+ *
+ * WP34 N6's disassembly check (`tests/ct-asm.js`) verifies the part a secret
+ * flows through: `tests/cases/ct_asm_x25519` holds copies of `f25519Mul`,
+ * `f25519Square`, `f25519MulA24`, `f25519Add`, `f25519Sub`, `f25519Swap` and
+ * one pass of `x25519Ladder`'s loop, and the check reads each one's `clang -O2`
+ * machine code for x86-64 and aarch64 and finds no branch and no load or store
+ * at an address the scalar bit or a limb reaches. They are copies because the
+ * check refuses every branch, loop back-edges included, and this module's own
+ * functions keep their loops and the early `return`s below; the copies drop the
+ * guards and write `f25519Mul`'s outer loop out a row at a time, and the
+ * fixture's `main` holds them to the same RFC 7748 vectors as this module. A
+ * change to one of those functions belongs in that fixture too. What stays
+ * discipline rather than proof is the rest: the loops around the step,
+ * `f25519Decode`, `f25519Encode` and `f25519Invert`, whose branches are all on
+ * public positions. Weekly, `tests/ct-timing.js` times the fixture's functions
+ * on real x86-64 and aarch64 hardware as well.
  *
  * **Loop bounds are literals.** A field element is always ten limbs and an
  * encoding always 32 bytes, and each function that indexes one opens with an

@@ -1,0 +1,180 @@
+# The weekly timing test of the constant-time code (WP34 N6, #316).
+#
+# `npm test` already reads the machine code of every function a
+# tests/cases/ct_asm_* fixture names and refuses a branch or a secret-indexed
+# access (tests/ct-asm.js). What it cannot see is what the processor does with
+# the instructions it passes. tests/ct-timing.js measures that instead: a
+# dudect-style Welch's t-test between a fixed and a random secret, over every
+# one of those functions, on an x86-64 and an aarch64 runner.
+#
+# It is not a check on pull requests and must not become one. Timing on a
+# shared runner is noisy, so a finding goes to one open issue labelled
+# `ct-timing` (a comment on it when it is already open) for a person to read,
+# not to a red pull request somebody else then has to explain. A run that
+# could not measure at all is filed there too, and says so. There is no
+# `pull_request` trigger, and nothing here is a required check.
+name: Constant-time timing
+
+on:
+  schedule:
+    # Mondays, 04:37 UTC: off the hour, where most scheduled jobs queue.
+    - cron: "37 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# ci.yml says why this cache is set for every job, and why it is outside the checkout.
+env:
+  NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+
+concurrency:
+  group: ct-timing
+  cancel-in-progress: false
+
+jobs:
+  timing:
+    name: timing (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ci.yml's install, less valgrind, which nothing here runs.
+      - name: Install LLVM 18 + lld (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Toolchain versions
+        run: |
+          clang --version | head -n 1
+          node --version
+          uname -m
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The compiler the way ci.yml's `test` job builds it: the last release's
+      # binary for this platform, then src/ built by it into build/nish, which
+      # tests/ct-timing.js uses when no --nish is given.
+      - name: Fetch the seed
+        run: |
+          bash scripts/fetch-seed.sh
+          build/seed/bin/nish --version
+
+      - name: Build the compiler with the seed
+        run: build/seed/bin/nish src/compile.ts --link build/nish
+
+      # The exit code is kept rather than acted on here, so that the table is
+      # uploaded whatever it says: 0 none above the threshold, 1 a function
+      # above it, 2 the harness could not run. The `report` job reads it. The
+      # step still fails on anything but 0, so the run itself is red.
+      - name: Time the constant-time fixtures
+        run: |
+          mkdir -p build/ct-timing-report
+          set +e
+          node tests/ct-timing.js > build/ct-timing-report/table.md 2> build/ct-timing-report/stderr.txt
+          code=$?
+          set -e
+          echo "$code" > build/ct-timing-report/code
+          cat build/ct-timing-report/table.md build/ct-timing-report/stderr.txt
+          {
+            echo "### ct-timing (${{ matrix.os }})"
+            echo
+            cat build/ct-timing-report/table.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ct-timing-${{ matrix.os }}
+          path: build/ct-timing-report/
+          if-no-files-found: ignore
+
+  # One job files for both rows, so two failing rows open one issue rather than
+  # racing to open two. A row that never reached the harness (the install or
+  # the build failed) has no `code` file and is reported as not having run.
+  report:
+    name: report
+    needs: timing
+    if: always() && needs.timing.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ct-timing-*
+          path: reports
+
+      - name: Open or update the ct-timing issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failed=0
+          {
+            echo "The weekly constant-time timing run needs a look: $RUN_URL"
+            echo
+            echo "Each row below says whether it found a difference or could not run at all."
+            echo "A |t| above 4.5 means the fixed and the random secret took measurably different"
+            echo "time. On a shared runner that can be noise, so re-run the workflow before reading"
+            echo "it as a leak; one that repeats, on the same function, is a finding."
+            for os in ubuntu-latest ubuntu-24.04-arm; do
+              dir="reports/ct-timing-$os"
+              echo
+              echo "## $os"
+              echo
+              if [ ! -f "$dir/code" ]; then
+                echo "Did not run: the job failed before the harness. See the run's log."
+                failed=1
+                continue
+              fi
+              code="$(cat "$dir/code")"
+              [ "$code" = 0 ] || failed=1
+              case "$code" in
+                0) echo "Ran; nothing above the threshold." ;;
+                1) echo "**A function was above the threshold.**" ;;
+                *) echo "The harness could not run (exit $code): a build or link failure, not a timing result." ;;
+              esac
+              echo
+              cat "$dir/table.md"
+              if [ -s "$dir/stderr.txt" ]; then
+                echo
+                echo '```'
+                cat "$dir/stderr.txt"
+                echo '```'
+              fi
+            done
+          } > body.md
+          if [ "$failed" = 0 ]; then
+            echo "Both rows ran and nothing was above the threshold."
+            exit 0
+          fi
+          gh label create ct-timing --color d93f0b \
+            --description "The weekly constant-time timing run found a difference or could not run" 2>/dev/null || true
+          number="$(gh issue list --label ct-timing --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file body.md
+          else
+            gh issue create --label ct-timing \
+              --title "ct-timing: the weekly timing run needs a look" --body-file body.md
+          fi
