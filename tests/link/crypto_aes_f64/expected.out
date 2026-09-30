@@ -1,14 +1,51 @@
+PASS  AES_BLOCK is 16 bytes
+PASS  AES_GCM_TAG_SIZE is 16 bytes
 PASS  FIPS 197 C.1 AES-128
 PASS  FIPS 197 C.3 AES-256
+PASS  aesEncryptBlock leaves its input as it was
+PASS  aesBitslicedRound of all 0x00 is all 0x63
+PASS  aesBitslicedRound of all 0xff is all 0x16
+PASS  ghashMultiply: test case 2's X1 = C1 · H
+PASS  ghashMultiply: test case 2's GHASH = (X1 ⊕ len(A) || len(C)) · H
+PASS  ghashMultiply: test case 3's X1 = C1 · H
+PASS  ghashMultiply by one is the identity
+PASS  ghashMultiply of all ones by all ones
+PASS  tests/cases/ct_asm_aes's copies agree with the module on 1,000 generated inputs
+PASS  aesGcmTagMask of equal tags is all ones
+PASS  aesGcmTagMask is zero for a tag one low bit out
+PASS  aesGcmTagMask is zero for a tag one high bit out
+PASS  GCM test case 1
+PASS  GCM test case 2
+PASS  GCM test case 3
 PASS  GCM test case 4
-PASS  GCM test case 4 opens
+PASS  GCM test case 5, a 64-bit IV
 PASS  GCM test case 6, a 480-bit IV
+PASS  GCM test case 13
+PASS  GCM test case 14
+PASS  GCM test case 15
 PASS  GCM test case 16
-PASS  GCM test case 16 opens
+PASS  GCM test case 17, a 64-bit IV
 PASS  GCM test case 18, a 480-bit IV
-PASS  ghashMultiply: test case 2's X1
+PASS  GCM test case 1 opens to nothing
+PASS  GCM test case 4 opens
+PASS  GCM test case 18 opens
 PASS  RFC 9001 A.2 client Initial mask
-PASS  a 24-byte key answers null
+PASS  RFC 9001 A.3 server Initial mask
+PASS  a 0-byte key answers null
+PASS  a 15-byte key answers null
+PASS  a 24-byte key answers null: no AES-192
+PASS  a 33-byte key answers null
+PASS  a 15-byte block answers null
+PASS  a 17-byte block answers null
+PASS  a 15-byte sample answers null
 PASS  seal with an empty IV answers null
+PASS  open with an empty IV answers null
+PASS  open of 15 bytes, shorter than a tag, answers null
 PASS  a flipped tag bit answers null
-aes (f64 mode): 13 passed, 0 failed, 0 skipped
+PASS  a flipped first tag bit answers null
+PASS  a flipped ciphertext bit answers null
+PASS  a flipped AAD bit answers null
+PASS  a different IV answers null
+PASS  the AES-256 key for an AES-128 message answers null
+PASS  Wycheproof aes_gcm_test.json: 213 of 316 cases ran (155 valid, 58 invalid), 0 failed; filtered out: 103 with a 192-bit key, 0 with a tag shorter than 128 bits
+aes: 50 passed, 0 failed, 0 skipped

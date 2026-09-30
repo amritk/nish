@@ -7,12 +7,15 @@
 // Nish source, each test group's public key is listed once and each case names
 // its group's key by index, and the per-case comments and flags are left out.
 // Every case is kept, and every value kept is as upstream wrote it. The file has
-// no case whose result is "acceptable". `tests/link/crypto_p256` runs them.
+// no case whose result is "acceptable". `tests/link/crypto_p256` and
+// `crypto_p256_f64` run them.
 
 /** One `EcdsaVerify` case: its id, its group's key, the expected result, and the message and DER signature in hex. */
 export interface WycheproofEcdsaCase {
-  tcId: i32;
-  key: i32;
+  // `number` rather than `i32`, so the file compiles in either number mode: a
+  // bare literal in an object literal takes the mode's width.
+  tcId: number;
+  key: number;
   result: string;
   msg: string;
   sig: string;

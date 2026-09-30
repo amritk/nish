@@ -1,6 +1,55 @@
+PASS  P256_SCALAR_SIZE is 32 bytes
+PASS  P256_POINT_SIZE is 65 bytes
+PASS  P256_SIGNATURE_SIZE is 64 bytes
 PASS  A.2.5 public key of the private key
+PASS  the public key of 1 is G
+PASS  the public key of n - 1 is -G
+PASS  A.2.5 SHA-256 "sample": k G has x = r
+PASS  A.2.5 SHA-256 "test": k G has x = r
 PASS  A.2.5 SHA-256 "sample": r || s
-PASS  it verifies
-PASS  with a bit of s flipped it does not
-PASS  private key 0 answers null
-p256 (f64 mode): 5 passed, 0 failed, 0 skipped
+PASS  A.2.5 SHA-256 "test": r || s
+PASS  p256Sign of the SHA-256 is p256SignSha256
+PASS  signing again gives the same signature
+PASS  A.2.5 "sample" verifies
+PASS  A.2.5 "test" verifies
+PASS  p256Verify of the SHA-256 verifies
+PASS  "sample"'s signature does not verify "test"
+PASS  a flipped bit in r is refused
+PASS  a flipped bit in s is refused
+PASS  a flipped bit in the message is refused
+PASS  another key does not verify it
+PASS  a 48-byte digest signs as its leftmost 32 bytes
+PASS  and verifies
+PASS  a 2-byte digest signs and verifies
+PASS  and is the value 0x0102
+wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by the DER reader, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof: every case answers what the file expects
+PASS  p256PublicKey(0) is null
+PASS  p256PublicKey(n) is null
+PASS  p256PublicKey(n + 1) is null
+PASS  p256PublicKey(2^256 - 1) is null
+PASS  p256PublicKey of 31 bytes is null
+PASS  p256PublicKey of 33 bytes is null
+PASS  p256Sign with private key 0 is null
+PASS  p256Sign with private key n is null
+PASS  p256SignSha256 with a 31-byte key is null
+PASS  a key with a flipped bit in y is off the curve
+PASS  a key with a flipped bit in x is off the curve
+PASS  a key with prefix 0x03 is refused
+PASS  the identity's SEC 1 encoding, 0x00, is refused
+PASS  65 zero bytes are refused
+PASS  0x04 then (0, 0) is refused
+PASS  a 64-byte key is refused
+PASS  a 66-byte key is refused
+PASS  the point (5, y) verifies its signature
+PASS  the same point with x = 5 + p is refused
+PASS  a key with y = p is refused
+PASS  r = 0 is refused
+PASS  s = 0 is refused
+PASS  r = n is refused
+PASS  s = n is refused
+PASS  r = n + 1 is refused
+PASS  s = n + 1 is refused
+PASS  a 63-byte signature is refused
+PASS  a 65-byte signature is refused
+p256: 53 passed, 0 failed, 0 skipped

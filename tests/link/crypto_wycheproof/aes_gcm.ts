@@ -6,7 +6,8 @@
 // 3fa63dd0344abb611f1fb1d77e119938603ea230, and changed: the JSON is rewritten as
 // Nish source, and only the 213 cases with a 128- or 256-bit key and a 128-bit tag
 // are kept, since nish/crypto/aes offers neither AES-192 nor a truncated tag.
-// Every value kept is as upstream wrote it. `tests/link/crypto_aes` runs them.
+// Every value kept is as upstream wrote it. `tests/link/crypto_aes` and
+// `crypto_aes_f64` run them.
 
 /** One Wycheproof AEAD case, its byte strings in lowercase hex as upstream writes them. */
 export interface WycheproofAesGcmCase {
@@ -17,7 +18,8 @@ export interface WycheproofAesGcmCase {
   msg: string
   ct: string
   tag: string
-  tcId: i32
+  /** A `number`, so the file compiles in either number mode: a bare literal in an object literal takes the mode's width. */
+  tcId: number
   /** `"result": "valid"`; every other case in this file is `"invalid"`. */
   valid: boolean
 }
