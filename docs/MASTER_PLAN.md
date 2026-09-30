@@ -55,7 +55,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
 │    runtime/runtime-os.c            files, spawn, env (C, 1.5 KB) │
 │    runtime/runtime-host.c          clock, rng, signals (C, 0.5 KB)│
-│    runtime/runtime-net.c           sockets (C, 1.8 KB)           │
+│    runtime/runtime-net.c           sockets (C, 2.1 KB)           │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -109,8 +109,8 @@ Design rules that every WP must respect:
   `runtime-os.c` itself is unchanged by them. A fifth, `runtime-net.c`, holds
   the sockets of `nish:net` (WP34 N5): 853 of 1,024 for addresses and
   non-blocking TCP, measured the same day the same way, and 1,782 of 2,048
-  once UDP, its segmentation offload and its ECN marks joined them
-  (2026-09-30).
+  once UDP, its segmentation offload and its ECN marks joined them, and 2,071
+  of 2,304 with the readiness loop (2026-09-30).
 
 ## 3. Consolidated language specification (Nish)
 

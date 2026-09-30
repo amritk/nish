@@ -866,36 +866,45 @@ if (!only || "os_host".includes(only)) {
   )
 }
 
-// A socket program of the `net_` blocks, run with `args`: `onPort(port)` is called
-// once it prints `port <n>`, and the answer waits for that promise as well as the
-// exit. A program that prints no port is simply run, with `results` empty.
-const runWithPort = (exe, args, onPort) =>
+// A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
+// called with everything it has printed so far each time it prints, and the answer
+// comes once it exits, or once it has been killed after 10 s.
+const runWatched = (exe, args, onChunk) =>
   new Promise((resolve) => {
     const child = spawn(exe, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
     let out = ""
     let err = ""
     let timedOut = false
-    let talks = null
     const timer = setTimeout(() => {
       timedOut = true
       child.kill("SIGKILL")
     }, 10000)
     child.stdout.on("data", (chunk) => {
       out += chunk
-      const port = /^port (\d+)\n/.exec(out)
-      if (talks === null && port !== null) {
-        talks = onPort(Number(port[1]))
-      }
+      onChunk(out, child)
     })
     child.stderr.on("data", (chunk) => {
       err += chunk
     })
     child.on("close", (code, signal) => {
       clearTimeout(timer)
-      const done = talks ?? Promise.resolve([])
-      done.then((results) => resolve({ code, signal, out, err, timedOut, results }))
+      resolve({ code, signal, out, err, timedOut })
     })
   })
+
+// `runWatched`, with `onPort(port)` called once the program prints `port <n>`; the
+// answer waits for that promise as well as the exit. A program that prints no port
+// is simply run, with `results` empty.
+const runWithPort = async (exe, args, onPort) => {
+  let talks = null
+  const r = await runWatched(exe, args, (out) => {
+    const port = /^port (\d+)\n/.exec(out)
+    if (talks === null && port !== null) {
+      talks = onPort(Number(port[1]))
+    }
+  })
+  return { ...r, results: await (talks ?? Promise.resolve([])) }
+}
 
 // ---- `nish:net`, against Node's sockets (WP34 N5) ---------------------------------
 //
@@ -1009,7 +1018,9 @@ if (!only || "net_tcp".includes(only)) {
               { cwd: root, encoding: "utf8" }
             )
           : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp)_\w+)/g)].map((m) => m[1])
+      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll)_\w+)/g)].map(
+        (m) => m[1]
+      )
       return { ok: cc.status === 0, removed, why: String(cc.stderr) }
     }
     const quietLl = path.join(netDir, "net_quiet.ll")
@@ -1037,6 +1048,11 @@ if (!only || "net_tcp".includes(only)) {
       "nish_udp_bind",
       "nish_udp_send_to",
       "nish_udp_recv_from",
+      "nish_poll_create",
+      "nish_poll_add",
+      "nish_poll_modify",
+      "nish_poll_remove",
+      "nish_poll_wait",
     ]
     const used = [
       "nish_net_local_port",
@@ -1201,6 +1217,71 @@ if (!only || "net_udp".includes(only)) {
       )
     }
   }
+}
+
+// ---- The `nish:net` readiness loop, against Node and a signal (WP34 N5) ----------
+//
+// `tests/cases/net_loop_two` watches two UDP sockets and its `signalFd()` in one
+// loop and prints both ports. Node writes to one socket, waits for the line that
+// names the socket that woke, and only then writes to the other, so which wakes
+// first is decided by Node rather than by timing: b then a, then a then b. Then it
+// sends SIGTERM, which the loop wakes on through the signal descriptor, and the
+// program exits 0 having printed `flat` when the arena stood where it did at the
+// top of every pass. Nothing sleeps; a lost wake is a timeout and a SIGKILL,
+// never a hang.
+if (!only || "net_loop".includes(only)) {
+  const netDir = path.join(buildDir, "net-loop")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  // The next action each time another `woke` line arrives: a datagram to the next
+  // socket in `order`, or SIGTERM once every one has woken the loop.
+  const loopRun = async (exe, order) => {
+    const socket = dgram.createSocket("udp4")
+    // How many `woke` lines the last action answered; -1 before the ports arrive.
+    let acted = -1
+    const r = await runWatched(exe, [], (out, child) => {
+      const m = /^ports (\d+) (\d+)\n/.exec(out)
+      const woke = out.split("\n").filter((line) => line.startsWith("woke ")).length
+      if (m === null || woke === acted) {
+        return
+      }
+      acted = woke
+      if (woke < order.length) {
+        const which = order[woke]
+        socket.send(Buffer.from(`to ${which}`), Number(which === "a" ? m[1] : m[2]), "127.0.0.1")
+      } else {
+        child.kill("SIGTERM")
+      }
+    })
+    socket.close()
+    return r
+  }
+
+  const loopExe = buildCaseIn(netDir, "net_loop_two")
+  if (loopExe !== null) {
+    for (const order of [
+      ["b", "a"],
+      ["a", "b"],
+    ]) {
+      const want = `${order.map((w) => `woke ${w}: 4 bytes, events 1\n`).join("")}signal 15\nflat\n`
+      const r = await loopRun(loopExe, order)
+      const body = r.out.replace(/^ports \d+ \d+\n/, "")
+      check(
+        `net_loop_two: the loop wakes on ${order[0]} and then ${order[1]} as Node writes to them, then on SIGTERM through signalFd, the arena stays flat, and the program exits 0`,
+        !r.timedOut && r.code === 0 && body === want,
+        `${r.timedOut ? "timed out after 10 s: a wake was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+          `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(`ports <a> <b>\n${want}`)}\nstderr: ${r.err}`
+      )
+    }
+  }
+
+  const loud = runCaseUnderPrelude("net_loop_calls", [])
+  check(
+    "net_loop_calls: under the prelude pollCreate fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`pollCreate` has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- A `nish:` import is the same builtin, not another one -----------------------
@@ -5736,19 +5817,21 @@ const RUNTIME_HOST_TEXT_BUDGET = 768
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-net.c`
  * -- the sockets of `nish:net` (WP34 N5): `netAddress`, `netLocalPort`, `tcpListen`,
  * `tcpAccept`, `netRead`, `netWrite`, `netShutdown` and `netClose`, then `udpBind`,
- * `udpSendTo` and `udpRecvFrom`.
+ * `udpSendTo` and `udpRecvFrom`, then the readiness loop: `pollCreate`, `pollAdd`,
+ * `pollModify`, `pollRemove` and `pollWait`.
  *
  * Measured **853 bytes** on 2026-09-29 with clang 18 on linux-x64, all of it `.text`,
- * and **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
- * control messages were added (the ceiling went from 1,024 to 2,048).
+ * **1,782 bytes** on 2026-09-30 once UDP, its segmentation offload and its ECN
+ * control messages were added (the ceiling went from 1,024 to 2,048), and
+ * **2,071 bytes** the same day once the epoll loop was added (2,048 to 2,304).
  * They are a fifth translation unit rather than more of `runtime-host.c` because the
- * surface grows -- UDP and the readiness loop are the next two slices of N5, and each
- * raises this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
+ * surface grows -- UDP and the readiness loop were the second and third slices of N5,
+ * and each raised this ceiling alone, with a fresh measurement in docs/wp7-runtime.md -- and
  * the rule is a new file with its own measured ceiling, never a raised one. The
  * budget is the next 256-byte boundary above the measurement, as every ceiling here
  * was set.
  */
-const NET_TEXT_BUDGET = 2048
+const NET_TEXT_BUDGET = 2304
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number

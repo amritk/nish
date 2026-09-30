@@ -141,8 +141,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * of `isArrayWriteMethod`. `crypto.getRandomValues(bytes)` (WP34 N3) is `w`;
  * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
  * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
- * `udpRecvFrom`'s `buf` and `from`, and whose one `m` is `udpRecvFrom`'s
- * `meta`. A user function that shares a builtin's name wins it, as it wins
+ * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
+ * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`. A user function that shares a builtin's name wins it, as it wins
  * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks
  * `isArrayWriteMethod`; a string rather than a list, because they ask it of

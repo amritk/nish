@@ -1,0 +1,2 @@
+reject_net_poll_region.ts:19:5
+`pollWait` writes memory a task of `s` may read, before the scope joins

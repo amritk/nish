@@ -811,8 +811,8 @@ const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i3
  * a socket are written in, and a wider element would make the byte order a
  * fact about the machine. A `readonly u8[]` is refused where the call writes
  * it, with the words every write through a readonly array gets, and accepted
- * where it only reads. The one other `element` is `udpRecvFrom`'s `meta`, an
- * `i32[]` it writes numbers rather than bytes into.
+ * where it only reads. The one other `element` is `i32`, for `udpRecvFrom`'s
+ * `meta` and `pollWait`'s `ready`, which are written numbers rather than bytes.
  */
 const checkBuffer = (
   ctx: CheckContext,
