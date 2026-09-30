@@ -241,11 +241,11 @@ network through the host.
 - GSO and GRO observed from the Nish side: one `send` leaves as many
   datagrams, and one `recv` returns several, with the segment size.
 
-**State.** Done in #341, #343 and #PRNUM. `nish:net` is sixteen calls on `i32`
+**State.** Done in #341, #343 and #349. `nish:net` is sixteen calls on `i32`
 descriptors, each a global too: addresses and non-blocking TCP (#341), UDP with
 `SO_REUSEPORT`, `UDP_SEGMENT`, `UDP_GRO` and the ECN bits (#343), and a
 level-triggered readiness loop, `pollCreate`, `pollAdd`, `pollModify`,
-`pollRemove` and `pollWait` with a millisecond timeout, over epoll on Linux and kqueue on Darwin (#PRNUM). Every
+`pollRemove` and `pollWait` with a millisecond timeout, over epoll on Linux and kqueue on Darwin (#349). Every
 socket is non-blocking and close-on-exec, a failure is a negative errno in
 Linux's numbering on every platform, an address is 18 bytes of the caller's
 `u8[]`, and nothing allocates. N3's `signalFd()` goes into the loop like any
