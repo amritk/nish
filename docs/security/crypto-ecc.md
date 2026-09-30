@@ -66,6 +66,26 @@ difference that wraps modulo 2^64, which is the borrow; `cmovznz` is
 `ctSelect(ctEq(arg1, 0), arg2, arg3)`, which answers `arg2` for a zero `arg1`,
 as fiat's does.
 
+**The closest upstream for X25519.** `std/crypto/x25519.ts` says it was written
+from RFC 7748. The nearest well-known implementations are ref10's field code
+(SUPERCOP, public domain) and curve25519-donna. Both also use ten signed limbs
+of alternately 26 and 25 bits. Function by function:
+
+- `f25519Mul` does not follow ref10's `fe_mul`. It loops over a doubled copy
+  and a 19-limb wide product, where ref10 writes out 100 products with the
+  factors 2 and 19 folded in by hand.
+- `f25519Carry` and `f25519Encode` share ref10's idea: an arithmetic-shift
+  carry, and adding 19 to decide whether the value is at least p. They do not
+  share its statement order, and the byte packing is a loop over an
+  accumulator.
+- `f25519Invert` uses the same addition chain as ref10's `fe_invert` (254
+  squarings and 11 multiplications to reach p − 2). That chain is Bernstein's
+  published construction, an idea rather than code, and ref10 is public domain
+  in any case.
+- `x25519Ladder` is RFC 7748 §5's pseudocode, step for step.
+
+Nothing here needs a notice that it does not already carry.
+
 **Constants.** p, n, R² mod p, R² mod n, b·R mod p, R mod p (fiat's
 `set_one`), R mod n (the scalar `set_one`), both inversion exponents p − 2 and
 n − 2, and G's coordinates were recomputed from SEC 2 in Python and compared

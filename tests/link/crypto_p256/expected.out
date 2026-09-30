@@ -22,11 +22,11 @@ PASS  a 48-byte digest signs as its leftmost 32 bytes
 PASS  and verifies
 PASS  a 2-byte digest signs and verifies
 PASS  and is the value 0x0102
-wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by the DER reader, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+wycheproof ecdsa_secp256r1_sha256: 484 cases, 174 valid verified, 310 invalid refused (235 by x509DerSignatureRS, 75 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof: every case answers what the file expects
 wycheproof ecdsa_secp256r1_sha256_p1363: 262 cases, 173 valid verified, 89 invalid refused (all 89 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof sha256_p1363: every case answers what the file expects
-wycheproof ecdsa_secp256r1_sha512: 554 cases, 243 valid verified, 311 invalid refused (234 by the DER reader, 77 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+wycheproof ecdsa_secp256r1_sha512: 554 cases, 243 valid verified, 311 invalid refused (234 by x509DerSignatureRS, 77 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof sha512: every case answers what the file expects
 wycheproof ecdsa_secp256r1_sha512_p1363: 332 cases, 242 valid verified, 90 invalid refused (all 90 by p256Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
 PASS  wycheproof sha512_p1363: every case answers what the file expects

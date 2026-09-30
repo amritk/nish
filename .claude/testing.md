@@ -432,6 +432,12 @@ oracles that compared stage1 with stage0 and were deleted with it.
 regenerating one, because regenerating without reading the diff is how a
 golden records a bug as the specification.
 
+`checked.txt` changes whenever a `tests/cases` program is added, so two open
+pull requests that each add a case conflict there as soon as one merges.
+Resolve it by merging `main` and running `node tests/self/goldens.js --update`,
+never by hand. Do it as the last push before merging, since each case another
+pull request lands makes the file stale again.
+
 `tests/differential/goldens/` is the third: the JavaScript every whole program
 rewrites to, which the WP13 oracle compares against Node. It is the one golden
 in the repository that **cannot be regenerated** — the rewriter typed its output

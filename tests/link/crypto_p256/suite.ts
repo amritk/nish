@@ -23,6 +23,7 @@ import {
   p256Verify,
   p256VerifySha256,
 } from "nish/crypto/p256";
+import { x509DerSignatureRS } from "nish/crypto/x509";
 import {
   WycheproofEcdsaCase,
   wycheproofEcdsaP256Sha256Cases,
@@ -32,7 +33,6 @@ import {
   wycheproofEcdsaP256Sha512Keys,
   wycheproofEcdsaP256Sha512P1363Cases,
 } from "../crypto_wycheproof/ecdsa_secp256r1_sha256";
-import { derSignature } from "./der";
 import { fromHex, toHex } from "./hex";
 
 /** The bytes of an ASCII string, for the RFC's messages. */
@@ -94,8 +94,8 @@ const NEG_GY: string = "b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97
 /**
  * Every case of one Wycheproof file through `p256Verify`, checked against its
  * expected result: the message hashed with SHA-512 when `useSha512` is set and
- * SHA-256 otherwise, and the signature read by `derSignature` when `der` is set
- * and handed over as it is (P1363's `r || s`) otherwise. `valid` must verify
+ * SHA-256 otherwise, and the signature read by `x509DerSignatureRS` when `der`
+ * is set and handed over as it is (P1363's `r || s`) otherwise. `valid` must verify
  * and `invalid` must not; `acceptable` may go either way and is only counted.
  * A mismatch is named by its file and `tcId`. Answers the number of mismatches.
  */
@@ -124,7 +124,7 @@ const wycheproof = (
       continue;
     }
     const pub: u8[] = fromHex(keys[keyAt]);
-    const sig: u8[] | null = der ? derSignature(fromHex(c.sig)) : fromHex(c.sig);
+    const sig: u8[] | null = der ? x509DerSignatureRS(fromHex(c.sig)) : fromHex(c.sig);
     const msg: u8[] = fromHex(c.msg);
     const verified: boolean = sig !== null && p256Verify(pub, useSha512 ? sha512(msg) : sha256(msg), sig);
     if (c.result === "valid") {
@@ -151,7 +151,7 @@ const wycheproof = (
     Arena.release(mark);
   }
   const refusedBy: string = der
-    ? `${invalidByDer} by the DER reader, ${invalidByModule} by p256Verify`
+    ? `${invalidByDer} by x509DerSignatureRS, ${invalidByModule} by p256Verify`
     : `all ${invalidByModule} by p256Verify`;
   console.log(
     `wycheproof ${file}: ${toI32(cases.length)} cases, ${valid} valid verified, ${invalidByDer + invalidByModule} invalid refused (${refusedBy}), ${acceptableTrue + acceptableFalse} acceptable (${acceptableTrue} verified, ${acceptableFalse} refused), 0 filtered out`
