@@ -999,6 +999,19 @@ const STACK_CORNERS = [
   ],
   // A pre-indexed store and a post-indexed load meet at the same slot.
   ["aarch64", "a", "load", ["str w0, [sp, #-16]!", "ldr w5, [sp], #16", "ldr w6, [x4, x5]"]],
+  // #334: an `stp` writes two slots. A public pointer spilled as its second
+  // register and reloaded from offset + 8 is public, beside a secret in the
+  // first slot and over a secret the slot held before, so a load through it is
+  // no violation (fiat's P-256 field multiply spills an array's `data` this
+  // way on aarch64).
+  [
+    "aarch64",
+    "a",
+    null,
+    ["sub sp, sp, #32", "str x0, [sp, #24]", "stp x0, x1, [sp, #16]", "ldr x2, [sp, #24]", "ldr w3, [x2]"],
+  ],
+  // The first slot of the same pair is the secret, and still refused.
+  ["aarch64", "a", "load", ["sub sp, sp, #32", "stp x0, x1, [sp, #16]", "ldr x2, [sp, #16]", "ldr w3, [x2]"]],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */

@@ -30,8 +30,8 @@
  * fiat goes on to read. And each function opens with
  * a length guard, so that the literal indices after it compile with no bounds
  * check. And `square` reads its input's eight limbs into locals first, which
- * changes no arithmetic but keeps the input's pointer from living across the
- * body, where the aarch64 disassembly check would lose track of it. The
+ * changes no arithmetic; it kept the input's pointer from being spilled in a
+ * way the aarch64 disassembly check once misread (#334). The
  * scalar functions use the field's four helpers, which fiat generates
  * identically for both. Everything else in this file — the curve, the encodings, the
  * inversions and ECDSA — is written for this module from the documents it
@@ -59,15 +59,17 @@
  * candidate nonce is not below n.
  *
  * **What is verified by disassembly and what is discipline.**
- * `tests/cases/ct_asm_p256` holds copies of fiat's field square, its scalar
- * multiply, its conditional move and `p256TableMove` (one entry of the table
- * read) to the check of `tests/ct-asm.js`, which refuses any branch, call or
- * secret-indexed access in them on x86-64 and aarch64. fiat's field multiply
- * passes on x86-64 but is not named there: on aarch64 the model misreads a
- * pointer spilled in an `stp` pair (#334), as that fixture's header says. The
- * doubling and the addition are straight lines of calls to the field
- * functions, and the check refuses any call, so they, the table read's loop
- * and the multiply are constant time by construction rather than by that proof.
+ * `tests/cases/ct_asm_p256` holds copies of fiat's field multiply, square, add
+ * and subtract, its scalar multiply and its conditional move, the table read
+ * by a secret digit, the complete doubling and addition, and one window step
+ * of `p256ScalarMult` to the check of `tests/ct-asm.js`, which refuses any
+ * branch, call it cannot follow or secret-indexed access in them on x86-64 and
+ * aarch64, following each call into the field functions. The copies of the
+ * point functions take coordinate arrays rather than points, and the table
+ * read's loop is written out there, as that fixture's header says; its `main`
+ * runs RFC 6979 A.2.5 through them. The 64-window loop, the table build, the
+ * inversions, the encodings and the nonce derivation are constant time by
+ * construction rather than by that proof.
  *
  * Verification multiplies only public values, and uses the same routine.
  *

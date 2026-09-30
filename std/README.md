@@ -69,20 +69,27 @@ Three rules hold across the modules:
   per module, is what that module's header says:
   - `tests/cases/ct_asm_mac` pins the two loop shapes the others are built
     from, a full tag compare and a masked table read. `crypto/ct.ts` and
-    `crypto/hmac.ts`'s verifiers compare in the first shape, and
-    `crypto/x25519.ts`'s ladder and `crypto/base64url.ts` select by mask, but
-    none of the K1 or K4 modules is itself in a fixture, so they remain
-    discipline.
+    `crypto/hmac.ts`'s verifiers compare in the first shape and
+    `crypto/base64url.ts` selects by mask, but none of those K1 modules is
+    itself in a fixture, so they remain discipline.
+  - `tests/cases/ct_asm_x25519`: X25519's field multiply, square, add,
+    subtract and multiply by a24, its conditional swap, and one step of the
+    Montgomery ladder, the check following each call into the field functions.
+    The 255-step loop that drives the ladder, the inversion and the encodings
+    remain discipline.
   - `tests/cases/ct_asm_chacha20poly1305`: Poly1305's key clamp, one block,
     the final reduction with `s`, and the tag compare. The ChaCha20 rounds and
     the loops that drive both halves remain discipline.
   - `tests/cases/ct_asm_aes`: one full bitsliced round, one GHASH multiply and
     the tag compare. Packing, the key schedule and the loops over blocks
     remain discipline.
-  - `tests/cases/ct_asm_p256`: fiat's field square, its scalar multiply, its
-    conditional move and one entry of the table read. The field multiply
-    (which the aarch64 model misreads, #334) and the window's doubling and
-    addition, straight lines of calls the check refuses, remain discipline.
+  - `tests/cases/ct_asm_p256`: fiat's field multiply, square, add and
+    subtract, its scalar multiply and its conditional move; the sixteen-entry
+    table read by a secret digit; the complete doubling and addition; and one
+    window step of the scalar multiplication (four doublings, the table read
+    and an addition), the check following each call into the field functions.
+    The 64-window loop, the table build, the inversions, the encodings and
+    RFC 6979's nonce derivation remain discipline.
 
   The SHA-2 hashes and HKDF are additions, rotations and xors that branch
   only on lengths, and are not in a fixture either; nor is `crypto/x509.ts`,

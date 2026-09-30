@@ -3,29 +3,44 @@
 // so these are copies, and each is the module's function of the same name
 // without the length guard that opens it there: that guard is a branch, and
 // here --unchecked-indexing (ct_asm_p256.args) stands in for the bounds proof
-// it gives. tests/link/crypto_p256_ct runs every copy on known answers, so one
-// that drifted from the arithmetic fails there.
+// it gives. `main` runs every copy on known answers and on RFC 6979, so one
+// that drifted from the arithmetic fails there (ct_asm_p256.out).
 //
 // Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 //
-// What is held: fiat's field square, its scalar multiply, its conditional
-// move, and one table entry's move — the body of the window step's table
-// scan, whose loop runs over public positions and whose digit reaches only a
-// `ctEq` mask. What is not, and why:
+// What is held, on x86-64 and aarch64: fiat's field multiply, square, add and
+// subtract, its scalar multiply and its conditional move; one table entry's
+// move and the whole sixteen-entry table read; the complete doubling and
+// addition; and one window step of the scalar multiplication — four
+// doublings, the table read of a secret digit and an addition. The check
+// follows each call into its callee in this listing (tests/ct-asm.js), which is
+// what lets the doubling, the addition and the window step, which call the
+// field functions rather than inline them, be held at all.
 //
-// - fiat's field multiply is here and pinned by the link test, but has no
-//   ct-check line. On x86-64 it passes. On aarch64 clang spills the first
-//   argument's data pointer with an `stp` pair and reloads it from the pair's
-//   second slot, which the model looks up by a text it never stored, so it
-//   falls back to "the stack held a secret" and refuses the loads through that
-//   pointer. That is the model's corner, not a secret-indexed load (#334).
-// - the doubling and the addition of the window step are straight lines of
-//   calls to these functions; clang does not inline a multiply this size and
-//   the check refuses any call.
+// The doubling, the addition and the table read are copies in a different
+// shape from the module's, and say so where they are defined: the module
+// passes points and a scratch object, which no parameter the check reads can
+// be, so these take coordinate arrays and keep their temporaries on their own
+// stack; and the table read's sixteen iterations are written out, because a
+// rolled loop is a back-edge. Their field steps are the module's, in order.
+//
+// `main` keeps the copies honest: it runs P-256's scalar multiplication on
+// them — the table built with `p256PointAdd`, 64 `p256WindowStep`s — and
+// requires RFC 6979 A.2.5's public key and the `r` of its two SHA-256
+// signatures (ct_asm_p256.out). tests/link/crypto_p256 holds the module to the
+// same vectors, so the two agree through the RFC; the field copies are also
+// held to known answers computed from their definitions.
+// ct-check: p256FiatMul secret=contents
 // ct-check: p256FiatSquare secret=contents
 // ct-check: p256FiatScalarMul secret=contents
 // ct-check: p256FiatCmovznzU32 secret=arg1,arg2,arg3
+// ct-check: p256FiatAdd secret=contents
+// ct-check: p256FiatSub secret=contents
 // ct-check: p256TableMove secret=hit,contents
+// ct-check: p256TableSelect secret=digit,contents
+// ct-check: p256PointDouble secret=contents
+// ct-check: p256PointAdd secret=contents
+// ct-check: p256WindowStep secret=digit,contents
 
 /**
  * fiat's `addcarryx_u32`: `arg1 + arg2 + arg3` with `arg1` a carry of 0 or 1.
@@ -3170,4 +3185,529 @@ export const p256TableMove = (out: u32[], table: u32[], at: i32, hit: u32): void
   out[5] = p256FiatCmovznzU32(hit, out[5], table[at + 5])
   out[6] = p256FiatCmovznzU32(hit, out[6], table[at + 6])
   out[7] = p256FiatCmovznzU32(hit, out[7], table[at + 7])
+}
+
+/** fiat's `fiat_p256_add`: adds two field elements in the Montgomery domain. */
+export const p256FiatAdd = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
+  const w1: u64 = p256FiatAddcarryxU32(0x0, arg1[0], arg2[0])
+  const x1: u32 = toU32(w1)
+  const x2: u32 = toU32(w1 >> 32)
+  const w3: u64 = p256FiatAddcarryxU32(x2, arg1[1], arg2[1])
+  const x3: u32 = toU32(w3)
+  const x4: u32 = toU32(w3 >> 32)
+  const w5: u64 = p256FiatAddcarryxU32(x4, arg1[2], arg2[2])
+  const x5: u32 = toU32(w5)
+  const x6: u32 = toU32(w5 >> 32)
+  const w7: u64 = p256FiatAddcarryxU32(x6, arg1[3], arg2[3])
+  const x7: u32 = toU32(w7)
+  const x8: u32 = toU32(w7 >> 32)
+  const w9: u64 = p256FiatAddcarryxU32(x8, arg1[4], arg2[4])
+  const x9: u32 = toU32(w9)
+  const x10: u32 = toU32(w9 >> 32)
+  const w11: u64 = p256FiatAddcarryxU32(x10, arg1[5], arg2[5])
+  const x11: u32 = toU32(w11)
+  const x12: u32 = toU32(w11 >> 32)
+  const w13: u64 = p256FiatAddcarryxU32(x12, arg1[6], arg2[6])
+  const x13: u32 = toU32(w13)
+  const x14: u32 = toU32(w13 >> 32)
+  const w15: u64 = p256FiatAddcarryxU32(x14, arg1[7], arg2[7])
+  const x15: u32 = toU32(w15)
+  const x16: u32 = toU32(w15 >> 32)
+  const w17: u64 = p256FiatSubborrowxU32(0x0, x1, 0xffffffff)
+  const x17: u32 = toU32(w17)
+  const x18: u32 = toU32(w17 >> 32)
+  const w19: u64 = p256FiatSubborrowxU32(x18, x3, 0xffffffff)
+  const x19: u32 = toU32(w19)
+  const x20: u32 = toU32(w19 >> 32)
+  const w21: u64 = p256FiatSubborrowxU32(x20, x5, 0xffffffff)
+  const x21: u32 = toU32(w21)
+  const x22: u32 = toU32(w21 >> 32)
+  const w23: u64 = p256FiatSubborrowxU32(x22, x7, 0x0)
+  const x23: u32 = toU32(w23)
+  const x24: u32 = toU32(w23 >> 32)
+  const w25: u64 = p256FiatSubborrowxU32(x24, x9, 0x0)
+  const x25: u32 = toU32(w25)
+  const x26: u32 = toU32(w25 >> 32)
+  const w27: u64 = p256FiatSubborrowxU32(x26, x11, 0x0)
+  const x27: u32 = toU32(w27)
+  const x28: u32 = toU32(w27 >> 32)
+  const w29: u64 = p256FiatSubborrowxU32(x28, x13, 0x1)
+  const x29: u32 = toU32(w29)
+  const x30: u32 = toU32(w29 >> 32)
+  const w31: u64 = p256FiatSubborrowxU32(x30, x15, 0xffffffff)
+  const x31: u32 = toU32(w31)
+  const x32: u32 = toU32(w31 >> 32)
+  const w33: u64 = p256FiatSubborrowxU32(x32, x16, 0x0)
+  const x34: u32 = toU32(w33 >> 32)
+  const x35: u32 = p256FiatCmovznzU32(x34, x17, x1)
+  const x36: u32 = p256FiatCmovznzU32(x34, x19, x3)
+  const x37: u32 = p256FiatCmovznzU32(x34, x21, x5)
+  const x38: u32 = p256FiatCmovznzU32(x34, x23, x7)
+  const x39: u32 = p256FiatCmovznzU32(x34, x25, x9)
+  const x40: u32 = p256FiatCmovznzU32(x34, x27, x11)
+  const x41: u32 = p256FiatCmovznzU32(x34, x29, x13)
+  const x42: u32 = p256FiatCmovznzU32(x34, x31, x15)
+  out1[0] = x35
+  out1[1] = x36
+  out1[2] = x37
+  out1[3] = x38
+  out1[4] = x39
+  out1[5] = x40
+  out1[6] = x41
+  out1[7] = x42
+}
+
+/** fiat's `fiat_p256_sub`: subtracts two field elements in the Montgomery domain. */
+export const p256FiatSub = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
+  const w1: u64 = p256FiatSubborrowxU32(0x0, arg1[0], arg2[0])
+  const x1: u32 = toU32(w1)
+  const x2: u32 = toU32(w1 >> 32)
+  const w3: u64 = p256FiatSubborrowxU32(x2, arg1[1], arg2[1])
+  const x3: u32 = toU32(w3)
+  const x4: u32 = toU32(w3 >> 32)
+  const w5: u64 = p256FiatSubborrowxU32(x4, arg1[2], arg2[2])
+  const x5: u32 = toU32(w5)
+  const x6: u32 = toU32(w5 >> 32)
+  const w7: u64 = p256FiatSubborrowxU32(x6, arg1[3], arg2[3])
+  const x7: u32 = toU32(w7)
+  const x8: u32 = toU32(w7 >> 32)
+  const w9: u64 = p256FiatSubborrowxU32(x8, arg1[4], arg2[4])
+  const x9: u32 = toU32(w9)
+  const x10: u32 = toU32(w9 >> 32)
+  const w11: u64 = p256FiatSubborrowxU32(x10, arg1[5], arg2[5])
+  const x11: u32 = toU32(w11)
+  const x12: u32 = toU32(w11 >> 32)
+  const w13: u64 = p256FiatSubborrowxU32(x12, arg1[6], arg2[6])
+  const x13: u32 = toU32(w13)
+  const x14: u32 = toU32(w13 >> 32)
+  const w15: u64 = p256FiatSubborrowxU32(x14, arg1[7], arg2[7])
+  const x15: u32 = toU32(w15)
+  const x16: u32 = toU32(w15 >> 32)
+  const x17: u32 = p256FiatCmovznzU32(x16, 0x0, 0xffffffff)
+  const w18: u64 = p256FiatAddcarryxU32(0x0, x1, x17)
+  const x18: u32 = toU32(w18)
+  const x19: u32 = toU32(w18 >> 32)
+  const w20: u64 = p256FiatAddcarryxU32(x19, x3, x17)
+  const x20: u32 = toU32(w20)
+  const x21: u32 = toU32(w20 >> 32)
+  const w22: u64 = p256FiatAddcarryxU32(x21, x5, x17)
+  const x22: u32 = toU32(w22)
+  const x23: u32 = toU32(w22 >> 32)
+  const w24: u64 = p256FiatAddcarryxU32(x23, x7, 0x0)
+  const x24: u32 = toU32(w24)
+  const x25: u32 = toU32(w24 >> 32)
+  const w26: u64 = p256FiatAddcarryxU32(x25, x9, 0x0)
+  const x26: u32 = toU32(w26)
+  const x27: u32 = toU32(w26 >> 32)
+  const w28: u64 = p256FiatAddcarryxU32(x27, x11, 0x0)
+  const x28: u32 = toU32(w28)
+  const x29: u32 = toU32(w28 >> 32)
+  const w30: u64 = p256FiatAddcarryxU32(x29, x13, x17 & 0x1)
+  const x30: u32 = toU32(w30)
+  const x31: u32 = toU32(w30 >> 32)
+  const w32: u64 = p256FiatAddcarryxU32(x31, x15, x17)
+  const x32: u32 = toU32(w32)
+  out1[0] = x18
+  out1[1] = x20
+  out1[2] = x22
+  out1[3] = x24
+  out1[4] = x26
+  out1[5] = x28
+  out1[6] = x30
+  out1[7] = x32
+}
+
+/**
+ * `p256CurveB`: the curve's `b` in the Montgomery domain, written into `out`
+ * rather than into a fresh array, so the doubling and the addition can keep it
+ * on their own stack.
+ */
+const p256CurveB = (out: u32[]): void => {
+  out[0] = 0x29c4bddf
+  out[1] = 0xd89cdf62
+  out[2] = 0x78843090
+  out[3] = 0xacf005cd
+  out[4] = 0xf7212ed6
+  out[5] = 0xe5a220ab
+  out[6] = 0x04874834
+  out[7] = 0xdc30061d
+}
+
+/** `p256Copy`. */
+const p256Copy = (out: u32[], a: u32[]): void => {
+  for (let i: i32 = 0; i < 8; i++) {
+    out[i] = a[i]
+  }
+}
+
+/**
+ * `p256PointAdd`, Renes, Costello and Batina's Algorithm 4: (x1 : y1 : z1) +=
+ * (x2 : y2 : z2). The module takes points and a scratch object; this takes the
+ * six coordinates and keeps its temporaries on its own stack. The 43 steps are
+ * the module's, generated from it in order.
+ */
+export const p256PointAdd = (x1: u32[], y1: u32[], z1: u32[], x2: u32[], y2: u32[], z2: u32[]): void => {
+  const t0: u32[] = new Array<u32>(8)
+  const t1: u32[] = new Array<u32>(8)
+  const t2: u32[] = new Array<u32>(8)
+  const t3: u32[] = new Array<u32>(8)
+  const t4: u32[] = new Array<u32>(8)
+  const x3: u32[] = new Array<u32>(8)
+  const y3: u32[] = new Array<u32>(8)
+  const z3: u32[] = new Array<u32>(8)
+  const b: u32[] = new Array<u32>(8)
+  p256CurveB(b)
+  p256FiatMul(t0, x1, x2) // 1
+  p256FiatMul(t1, y1, y2)
+  p256FiatMul(t2, z1, z2)
+  p256FiatAdd(t3, x1, y1)
+  p256FiatAdd(t4, x2, y2) // 5
+  p256FiatMul(t3, t3, t4)
+  p256FiatAdd(t4, t0, t1)
+  p256FiatSub(t3, t3, t4)
+  p256FiatAdd(t4, y1, z1)
+  p256FiatAdd(x3, y2, z2) // 10
+  p256FiatMul(t4, t4, x3)
+  p256FiatAdd(x3, t1, t2)
+  p256FiatSub(t4, t4, x3)
+  p256FiatAdd(x3, x1, z1)
+  p256FiatAdd(y3, x2, z2) // 15
+  p256FiatMul(x3, x3, y3)
+  p256FiatAdd(y3, t0, t2)
+  p256FiatSub(y3, x3, y3)
+  p256FiatMul(z3, b, t2)
+  p256FiatSub(x3, y3, z3) // 20
+  p256FiatAdd(z3, x3, x3)
+  p256FiatAdd(x3, x3, z3)
+  p256FiatSub(z3, t1, x3)
+  p256FiatAdd(x3, t1, x3)
+  p256FiatMul(y3, b, y3) // 25
+  p256FiatAdd(t1, t2, t2)
+  p256FiatAdd(t2, t1, t2)
+  p256FiatSub(y3, y3, t2)
+  p256FiatSub(y3, y3, t0)
+  p256FiatAdd(t1, y3, y3) // 30
+  p256FiatAdd(y3, t1, y3)
+  p256FiatAdd(t1, t0, t0)
+  p256FiatAdd(t0, t1, t0)
+  p256FiatSub(t0, t0, t2)
+  p256FiatMul(t1, t4, y3) // 35
+  p256FiatMul(t2, t0, y3)
+  p256FiatMul(y3, x3, z3)
+  p256FiatAdd(y3, y3, t2)
+  p256FiatMul(x3, t3, x3)
+  p256FiatSub(x3, x3, t1) // 40
+  p256FiatMul(z3, t4, z3)
+  p256FiatMul(t1, t3, t0)
+  p256FiatAdd(z3, z3, t1)
+  p256Copy(x1, x3)
+  p256Copy(y1, y3)
+  p256Copy(z1, z3)
+}
+
+/** `p256PointDouble`, Algorithm 6: (x : y : z) doubled in place, the module's 34 steps in order. */
+export const p256PointDouble = (x: u32[], y: u32[], z: u32[]): void => {
+  const t0: u32[] = new Array<u32>(8)
+  const t1: u32[] = new Array<u32>(8)
+  const t2: u32[] = new Array<u32>(8)
+  const t3: u32[] = new Array<u32>(8)
+  const x3: u32[] = new Array<u32>(8)
+  const y3: u32[] = new Array<u32>(8)
+  const z3: u32[] = new Array<u32>(8)
+  const b: u32[] = new Array<u32>(8)
+  p256CurveB(b)
+  p256FiatSquare(t0, x) // 1
+  p256FiatSquare(t1, y)
+  p256FiatSquare(t2, z)
+  p256FiatMul(t3, x, y)
+  p256FiatAdd(t3, t3, t3) // 5
+  p256FiatMul(z3, x, z)
+  p256FiatAdd(z3, z3, z3)
+  p256FiatMul(y3, b, t2)
+  p256FiatSub(y3, y3, z3)
+  p256FiatAdd(x3, y3, y3) // 10
+  p256FiatAdd(y3, x3, y3)
+  p256FiatSub(x3, t1, y3)
+  p256FiatAdd(y3, t1, y3)
+  p256FiatMul(y3, x3, y3)
+  p256FiatMul(x3, x3, t3) // 15
+  p256FiatAdd(t3, t2, t2)
+  p256FiatAdd(t2, t2, t3)
+  p256FiatMul(z3, b, z3)
+  p256FiatSub(z3, z3, t2)
+  p256FiatSub(z3, z3, t0) // 20
+  p256FiatAdd(t3, z3, z3)
+  p256FiatAdd(z3, z3, t3)
+  p256FiatAdd(t3, t0, t0)
+  p256FiatAdd(t0, t3, t0)
+  p256FiatSub(t0, t0, t2) // 25
+  p256FiatMul(t0, t0, z3)
+  p256FiatAdd(y3, y3, t0)
+  p256FiatMul(t0, y, z)
+  p256FiatAdd(t0, t0, t0)
+  p256FiatMul(z3, t0, z3) // 30
+  p256FiatSub(x3, x3, z3)
+  p256FiatMul(z3, t0, t1)
+  p256FiatAdd(z3, z3, z3)
+  p256FiatAdd(z3, z3, z3)
+  p256Copy(x, x3)
+  p256Copy(y, y3)
+  p256Copy(z, z3)
+}
+
+/** One entry of `p256TableSelect`'s loop: entry `i` moved into the output when `i` is the digit. */
+const p256TableSelectEntry = (outX: u32[], outY: u32[], outZ: u32[], table: u32[], i: i32, digit: u32): void => {
+  const hit: u32 = ctEq(toU32(i), digit) & 1
+  p256TableMove(outX, table, i * 24, hit)
+  p256TableMove(outY, table, i * 24 + 8, hit)
+  p256TableMove(outZ, table, i * 24 + 16, hit)
+}
+
+/**
+ * `p256TableSelect`, with its sixteen iterations written out: a rolled loop is
+ * a back-edge, which the check refuses. The digit reaches only `ctEq`.
+ */
+export const p256TableSelect = (outX: u32[], outY: u32[], outZ: u32[], table: u32[], digit: u32): void => {
+  for (let j: i32 = 0; j < 8; j++) {
+    outX[j] = 0
+    outY[j] = 0
+    outZ[j] = 0
+  }
+  p256TableSelectEntry(outX, outY, outZ, table, 0, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 1, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 2, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 3, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 4, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 5, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 6, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 7, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 8, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 9, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 10, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 11, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 12, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 13, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 14, digit)
+  p256TableSelectEntry(outX, outY, outZ, table, 15, digit)
+}
+
+/**
+ * One pass of `p256ScalarMult`'s loop: four doublings of the accumulator, the
+ * table read of `digit`, and one complete addition. Every window of a scalar
+ * multiplication is this, whatever its digit.
+ */
+export const p256WindowStep = (x: u32[], y: u32[], z: u32[], table: u32[], digit: u32): void => {
+  const ex: u32[] = new Array<u32>(8)
+  const ey: u32[] = new Array<u32>(8)
+  const ez: u32[] = new Array<u32>(8)
+  p256PointDouble(x, y, z)
+  p256PointDouble(x, y, z)
+  p256PointDouble(x, y, z)
+  p256PointDouble(x, y, z)
+  p256TableSelect(ex, ey, ez, table, digit)
+  p256PointAdd(x, y, z, ex, ey, ez)
+}
+
+// ---- P-256 on the copies, for main ----------------------------------------------
+
+/** Eight little-endian limbs of 64 big-endian hex digits, plain (not Montgomery). */
+const limbsOfHex = (text: string): u32[] => {
+  const out: u32[] = new Array<u32>(8)
+  for (let i: i32 = 0; i < 64; i++) {
+    const code: i32 = toI32(text.charCodeAt(i))
+    const nibble: u32 = toU32(code <= 57 ? code - 48 : code - 87)
+    const limb: i32 = (63 - i) >> 3
+    if (limb >= 0 && limb < 8) {
+      out[limb] = out[limb] | (nibble << toU32(4 * ((63 - i) & 7)))
+    }
+  }
+  return out
+}
+
+/** Plain limbs as 64 big-endian hex digits. */
+const hexOfLimbs = (a: u32[]): string => {
+  const digits: string = "0123456789abcdef"
+  const parts: string[] = []
+  for (let i: i32 = 63; i >= 0; i--) {
+    const limb: i32 = i >> 3
+    if (limb >= 0 && limb < 8) {
+      const v: i32 = toI32((a[limb] >> toU32(4 * (i & 7))) & 15)
+      if (v >= 0 && v < toI32(digits.length)) {
+        parts.push(digits.substring(v, v + 1))
+      }
+    }
+  }
+  return parts.join("")
+}
+
+/** `a` into the Montgomery domain, by a Montgomery multiply by R^2 mod p. */
+const toMontgomery = (a: u32[]): void => {
+  p256FiatMul(a, a, limbsOfHex("00000004fffffffdfffffffffffffffefffffffbffffffff0000000000000003"))
+}
+
+/** `a` out of the Montgomery domain, by a Montgomery multiply by the plain 1. */
+const fromMontgomery = (a: u32[]): void => {
+  p256FiatMul(a, a, limbsOfHex("0000000000000000000000000000000000000000000000000000000000000001"))
+}
+
+/** `a^(p - 2)`: the inverse, by square-and-multiply over the public exponent. */
+const invert = (out: u32[], a: u32[]): void => {
+  const e: u32[] = limbsOfHex("ffffffff00000001000000000000000000000000fffffffffffffffffffffffd")
+  // One in the Montgomery domain, R mod p.
+  const acc: u32[] = limbsOfHex("00000000fffffffeffffffffffffffffffffffff000000000000000000000001")
+  for (let i: i32 = 255; i >= 0; i--) {
+    p256FiatSquare(acc, acc)
+    const limb: i32 = i >> 5
+    if (limb >= 0 && limb < 8 && ((e[limb] >> toU32(i & 31)) & 1) === 1) {
+      p256FiatMul(acc, acc, a)
+    }
+  }
+  p256Copy(out, acc)
+}
+
+/**
+ * `k * G`'s affine x and y as hex, by `p256ScalarMult`'s method on the copies:
+ * the table of 0G to 15G built with `p256PointAdd`, then 64 `p256WindowStep`s.
+ */
+const baseMult = (k: string): string => {
+  const gx: u32[] = limbsOfHex("6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296")
+  const gy: u32[] = limbsOfHex("4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
+  const gz: u32[] = limbsOfHex("00000000fffffffeffffffffffffffffffffffff000000000000000000000001")
+  toMontgomery(gx)
+  toMontgomery(gy)
+  const table: u32[] = new Array<u32>(384)
+  const ax: u32[] = new Array<u32>(8)
+  const ay: u32[] = limbsOfHex("00000000fffffffeffffffffffffffffffffffff000000000000000000000001")
+  const az: u32[] = new Array<u32>(8)
+  for (let i: i32 = 0; i < 16; i++) {
+    for (let j: i32 = 0; j < 8; j++) {
+      table[i * 24 + j] = ax[j]
+      table[i * 24 + 8 + j] = ay[j]
+      table[i * 24 + 16 + j] = az[j]
+    }
+    p256PointAdd(ax, ay, az, gx, gy, gz)
+  }
+  const x: u32[] = new Array<u32>(8)
+  const y: u32[] = limbsOfHex("00000000fffffffeffffffffffffffffffffffff000000000000000000000001")
+  const z: u32[] = new Array<u32>(8)
+  for (let i: i32 = 0; i < 64; i++) {
+    const code: i32 = toI32(k.charCodeAt(i))
+    p256WindowStep(x, y, z, table, toU32(code <= 57 ? code - 48 : code - 87))
+  }
+  const zInverse: u32[] = new Array<u32>(8)
+  invert(zInverse, z)
+  p256FiatMul(x, x, zInverse)
+  p256FiatMul(y, y, zInverse)
+  fromMontgomery(x)
+  fromMontgomery(y)
+  return `${hexOfLimbs(x)} ${hexOfLimbs(y)}`
+}
+
+/** `ok` or `FAIL`, the name, and on a failure what came out. */
+const report = (name: string, actual: string, expected: string): i32 => {
+  if (actual === expected) {
+    console.log(`ok    ${name}`)
+    return 0
+  }
+  console.log(`FAIL  ${name}: ${actual}`)
+  return 1
+}
+
+/** `p256FiatMul(a, b)` as hex. */
+const mulHex = (a: string, b: string): string => {
+  const out: u32[] = new Array<u32>(8)
+  p256FiatMul(out, limbsOfHex(a), limbsOfHex(b))
+  return hexOfLimbs(out)
+}
+
+/** `p256FiatSquare(a)` as hex. */
+const squareHex = (a: string): string => {
+  const out: u32[] = new Array<u32>(8)
+  p256FiatSquare(out, limbsOfHex(a))
+  return hexOfLimbs(out)
+}
+
+/** `p256FiatScalarMul(a, b)` as hex. */
+const scalarMulHex = (a: string, b: string): string => {
+  const out: u32[] = new Array<u32>(8)
+  p256FiatScalarMul(out, limbsOfHex(a), limbsOfHex(b))
+  return hexOfLimbs(out)
+}
+
+/**
+ * The field copies on known answers, each computed from the definition with
+ * Python's integers (a Montgomery product is `a * b * 2^-256` mod p or n), not
+ * from either copy.
+ */
+const knownAnswers = (): i32 => {
+  const a: string = "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+  const b: string = "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+  const pMinus1: string = "ffffffff00000001000000000000000000000000fffffffffffffffffffffffe"
+  const pMinus1Squared: string = "fffffffe00000003fffffffd0000000200000001fffffffe0000000300000000"
+  const montOne: string = "00000000fffffffeffffffffffffffffffffffff000000000000000000000001"
+  const zero: string = "0000000000000000000000000000000000000000000000000000000000000000"
+  const nMinus1: string = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
+  let failed: i32 = 0
+  failed += report("p256FiatMul: a b / R mod p", mulHex(a, b), "f7b77f634d49e7b16931916fe806ae02c4dc1b3efbc56b5da7aeefc0c3f6f39e")
+  failed += report("p256FiatMul: (p - 1)^2 / R mod p", mulHex(pMinus1, pMinus1), pMinus1Squared)
+  failed += report("p256FiatMul: one times a is a", mulHex(montOne, a), a)
+  failed += report("p256FiatMul: zero times a is zero", mulHex(zero, a), zero)
+  const inPlace: u32[] = limbsOfHex(a)
+  p256FiatMul(inPlace, inPlace, limbsOfHex(b))
+  failed += report("p256FiatMul: out may be arg1", hexOfLimbs(inPlace), mulHex(a, b))
+  failed += report("p256FiatSquare: a^2 / R mod p", squareHex(a), "33a5f07927935fea028224afa6d52c6009966566f231cc001f60a3910a739a85")
+  failed += report("p256FiatSquare: (p - 1)^2 / R mod p", squareHex(pMinus1), pMinus1Squared)
+  failed += report(
+    "p256FiatScalarMul: a b / R mod n",
+    scalarMulHex("4cf6829aa93728e8f3c97df913fb1bfa95fe5810e2933a05943f8312a98d9cf2", "b831b33e0c05b45e15bbdd9b3bfa43825fee0aa0b6e5a54e31e2bd8b073b76b7"),
+    "398644212c9efd1fda959b7a3c3ccdc275942d68c27a8c80b6b19bfc9937d033"
+  )
+  failed += report(
+    "p256FiatScalarMul: (n - 1)^2 / R mod n",
+    scalarMulHex(nMinus1, nMinus1),
+    "60d066334905c1e907f8b6041e607725badef3e243566fafce1bc8f79c197c79"
+  )
+  failed += report("p256FiatCmovznzU32: 0 keeps arg2", `${p256FiatCmovznzU32(0, 7, 9)}`, "7")
+  failed += report("p256FiatCmovznzU32: 1 takes arg3", `${p256FiatCmovznzU32(1, 7, 9)}`, "9")
+  failed += report("p256FiatCmovznzU32: any non-zero takes arg3", `${p256FiatCmovznzU32(0x80000000, 7, 9)}`, "9")
+  // A three-entry table of eight limbs each, entry i holding 100 i + limb.
+  const table: u32[] = new Array<u32>(24)
+  for (let i: i32 = 0; i < 24; i++) {
+    table[i] = toU32(100 * (i >> 3) + (i & 7))
+  }
+  const moved: u32[] = limbsOfHex(a)
+  p256TableMove(moved, table, 8, 0)
+  failed += report("p256TableMove: hit 0 leaves out as it was", hexOfLimbs(moved), a)
+  p256TableMove(moved, table, 8, 1)
+  failed += report(
+    "p256TableMove: hit 1 takes the entry at the offset",
+    hexOfLimbs(moved),
+    "0000006b0000006a000000690000006800000067000000660000006500000064"
+  )
+  return failed
+}
+
+// The field copies on known answers, then RFC 6979 A.2.5 through the whole
+// scalar multiplication: the key pair, and for SHA-256 the nonces of "sample"
+// and "test", whose k G has x = r (both below n, so r is that x exactly).
+export const main = (): i32 => {
+  let failed: i32 = knownAnswers()
+  failed += report(
+    "RFC 6979 A.2.5 public key",
+    baseMult("c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"),
+    "60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6 7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299"
+  )
+  const sample: string = baseMult("a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60")
+  failed += report(
+    "RFC 6979 A.2.5 SHA-256 \"sample\": k G has x = r",
+    sample.substring(0, 64),
+    "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716"
+  )
+  const test: string = baseMult("d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0")
+  failed += report(
+    "RFC 6979 A.2.5 SHA-256 \"test\": k G has x = r",
+    test.substring(0, 64),
+    "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367"
+  )
+  return failed
 }
