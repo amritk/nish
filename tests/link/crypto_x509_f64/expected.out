@@ -1,0 +1,11 @@
+PASS  the golden DER
+PASS  its SHA-256
+PASS  days 15 answers null
+PASS  notBefore
+PASS  notAfter
+PASS  it verifies under itself
+PASS  its PEM is OpenSSL's
+PASS  and reads back
+PASS  OpenSSL's PKCS#8 key
+PASS  OpenSSL's CA verifies under itself
+x509 (f64 mode): 10 passed, 0 failed, 0 skipped
