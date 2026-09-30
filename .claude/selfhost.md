@@ -13,7 +13,8 @@ IR(stage1, src/)  ==  IR(stage2, src/)      byte for byte
 The seed is the last released `nish`. stage1 is `src/` built by the seed,
 stage2 is `src/` built by stage1, stage3 is `src/` built by stage2 and must be
 byte-identical to stage2. `npm test` and CI's `bootstrap` job hold all of that
-on every run.
+on every run; in CI the `test` job delegates its copy to the `bootstrap` row
+for its platform rather than proving it twice (`.claude/testing.md`).
 
 `src/` is the only implementation of Nish. Until WP19 R6 a second one in
 TypeScript, "stage0" (built by `tsc` into `dist/`; it lived in its own `src/`

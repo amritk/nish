@@ -124,6 +124,12 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
+In CI the `test` job's summary also ends `…, 1 delegated.` That is the
+bootstrap's fixed point, which the job hands to the `bootstrap (x86_64-linux)`
+row of the same run rather than proving it twice; it is not a skip, and it is
+named with the job that proves it. A local `npm test` delegates nothing
+(`.claude/testing.md`).
+
 ## Shipping a change: what a pull request must be, and who merges it
 
 **A pull request that goes up is finished work: fully tested, and clear of

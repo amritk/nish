@@ -115,6 +115,16 @@ test is **data, not code**: a source file next to the output it must produce.
   `console.log`, so it is counted. The run ends `N passed, M failed, K skipped`
   and prints a `DEGRADED:` banner when the toolchain is what was missing;
   that count is how a reader knows what a green run was worth.
+- **A delegated check is neither a pass nor a skip.** `delegate(name, job)`
+  records a check that another job of the same CI run proves with the same
+  inputs on the same platform; the summary then ends `…, K delegated.` and
+  names the job, and the run is only as green as that job is. There is one:
+  CI's `test` job passes `--delegate-fixed-point`, and the bootstrap's fixed
+  point is left to the `bootstrap (x86_64-linux)` row, which asserts the same
+  two equalities with the same seed. The flag is honoured only inside GitHub
+  Actions, so a local `npm test` still runs it, and a check reads `ci.yml` so
+  the delegation cannot outlive the job it names. Do not delegate anything
+  that is not already proved elsewhere in the same workflow run.
 
 ## What every construct ships with
 
