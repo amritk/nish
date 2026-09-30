@@ -76,10 +76,11 @@ the same commit.
   no synchronous answer to give ([wp33-round-trip.md](wp33-round-trip.md) §3.5)
 - `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`,
   `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`,
-  `udpRecvFrom` — installed only to **throw**, each
+  `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`,
+  `pollWait` — installed only to **throw**, each
   naming itself: Node's sockets are ready only to its event loop, which a
   program that owns its loop never returns to
-  ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp)). A
+  ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
   `nish:net` import does not resolve under Node at all, as no `nish:` import
   does; the globals are what the prelude can answer
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`

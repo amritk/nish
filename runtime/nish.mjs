@@ -112,6 +112,11 @@ for (const name of [
   "udpBind",
   "udpSendTo",
   "udpRecvFrom",
+  "pollCreate",
+  "pollAdd",
+  "pollModify",
+  "pollRemove",
+  "pollWait",
 ]) {
   provide(name, () => shim.noNetReading(name));
 }

@@ -1,8 +1,8 @@
 # WP34: Hosting cs — the network stack first
 
 **Proposed, and partly built. Lanes K1 and K4 of §5 have landed (§5a), and
-so have N1, N2, N3 and N6 of §4 (each section's State line names its pull
-requests); N5 and everything else here are not built.** This note covers the
+so have N1, N2, N3, N5 and N6 of §4 (each section's State line names its pull
+requests); everything else here is not built.** This note covers the
 compiler's half of a
 plan whose other half lives in the program being ported,
 [`amritk/cs` → `docs/nish-port.md`](https://github.com/amritk/cs/blob/main/docs/nish-port.md).
@@ -240,6 +240,27 @@ network through the host.
 - A two-socket loop that wakes on whichever socket is readable first.
 - GSO and GRO observed from the Nish side: one `send` leaves as many
   datagrams, and one `recv` returns several, with the segment size.
+
+**State.** Done in #341, #343 and #PRNUM. `nish:net` is sixteen calls on `i32`
+descriptors, each a global too: addresses and non-blocking TCP (#341), UDP with
+`SO_REUSEPORT`, `UDP_SEGMENT`, `UDP_GRO` and the ECN bits (#343), and a
+level-triggered readiness loop, `pollCreate`, `pollAdd`, `pollModify`,
+`pollRemove` and `pollWait` with a millisecond timeout, over epoll on Linux and kqueue on Darwin (#PRNUM). Every
+socket is non-blocking and close-on-exec, a failure is a negative errno in
+Linux's numbering on every platform, an address is 18 bytes of the caller's
+`u8[]`, and nothing allocates. N3's `signalFd()` goes into the loop like any
+other descriptor: `net_loop_two` wakes on whichever of two sockets Node writes
+to first, in both orders, and then on SIGTERM, with the arena flat. Both echoes
+are Nish, driven from Node. One finding changed the GSO/GRO acceptance: on
+loopback, GRO keeps a GSO super-packet whole but does not merge datagrams sent
+one by one, so the observation pairs a Nish GSO sender with a Nish GRO
+receiver: one receive returns 4,800 bytes with a segment size of 1,200, while
+Node counts the four datagrams the one send became. The Darwin branch (kqueue,
+and `-95` for GSO, GRO and ECN) is compiled by CI's Darwin rows and run by
+nothing. The C is a fifth runtime unit, `runtime/runtime-net.c`, of 2,089 bytes
+of `.text*` against a ceiling of its own of 2,304; the other four units did not
+move. LANGUAGE.md §"`nish:net`" has the rules, and the module is WP33 class C
+with no synchronous shim ([wp33](wp33-round-trip.md) §3.5).
 
 ### N6. Constant time (S–M, builtins lane)
 

@@ -712,6 +712,35 @@ because the budget is measured on linux-x64. Section GC still leaves all of it
 out of a program that calls none: the `net_` block's check now names the three
 UDP symbols among the ones a quiet program drops.
 
+### 2026-09-30: the readiness loop, and the net ceiling raised to 2,304
+
+The third slice of N5 adds `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`
+and `pollWait`: epoll on Linux, kqueue on Darwin. `runtime-net.c` measured
+**2,089 bytes**, all `.text`, with clang 18.1.3 on linux-x64 at `-Oz`. The
+per-function sizes are `llvm-nm --print-size` of that object, and they sum to
+the total:
+
+| function | bytes |
+| --- | ---: |
+| `nish_net_bound` | 527 |
+| `nish_udp_send_to` | 403 |
+| `nish_udp_recv_from` | 332 |
+| `nish_poll_wait` (`epoll_wait` into 64 `epoll_event`s on the stack, `EINTR` answered as 0, and the token and event pairs written into `ready`) | 166 |
+| `nish_tcp_accept` | 113 |
+| `nish_net_parse`, `nish_net_address`, `nish_poll_ctl` (the events checked and mapped, then one `epoll_ctl` for add, modify or remove), `nish_net_local_port` | 99, 86, 83, 53 |
+| `nish_net_write`, `nish_net_shutdown`, `nish_net_read`, `nish_poll_create`, `nish_net_close` | 34, 31, 31, 23, 20 |
+| `nish_udp_bind`, `nish_net_fail`, `nish_net_socket`, `nish_poll_modify`, `nish_poll_remove`, `nish_poll_add`, `nish_tcp_listen` | 19, 14, 13, 12, 12, 11, 7 |
+
+The loop is 307 of those bytes, which put the unit 41 over its ceiling of 2,048,
+so the ceiling goes to **2,304**, the next 256-byte boundary above the
+measurement, and it is the one ceiling that moves. The five entry points share
+one `nish_poll_ctl` and leave nothing else to fold. `runtime.c`, `runtime-os.c`,
+`runtime-parallel.c` and `runtime-host.c` are unchanged, and so are their
+ceilings. The kqueue branch is not in this number, because the budget is
+measured on linux-x64. Section GC still leaves all of it out of a program that
+calls none: the `net_` block's check names the five `nish_poll_` symbols among
+the ones a quiet program drops.
+
 
 ### What FFI does and does not do to the budget
 

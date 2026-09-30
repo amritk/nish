@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 813 programs, 57584 dump lines.
+# 816 programs, 57668 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -41252,6 +41252,76 @@ function main(): i32 -> @nish_main [exported entry]
   local 6:9 b: u16 (const)
   local 7:9 c: u32 (const)
   local 8:9 d: u64 (const)
+program tests/cases/net_loop_calls.ts
+module tests/cases/net_loop_calls.ts (entry)
+const MS: i64 = 1000000
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_poll_create
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_net_local_port nish_net_shutdown nish_panic_div nish_panic_index nish_panic_slice nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to
+  stackSites=5 stackLocals=5
+  local 14:9 loop: i32 (const)
+  local 15:9 a: i32 (const)
+  local 16:9 b: i32 (const)
+  local 18:9 ready: i32[] (const)
+  local 19:9 pair: i32[] (const)
+  local 20:9 none: i32[] (const)
+  local 24:9 started: i64 (const)
+  local 26:9 waited: i64 (const)
+  local 30:9 toA: u8[] (const)
+  local 32:9 data: u8[] (const)
+program tests/cases/net_loop_two.ts
+module tests/cases/net_loop_two.ts (entry)
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import pollAdd from "nish:net" -> builtin pollAdd
+import pollCreate from "nish:net" -> builtin pollCreate
+import pollModify from "nish:net" -> builtin pollModify
+import pollRemove from "nish:net" -> builtin pollRemove
+import pollWait from "nish:net" -> builtin pollWait
+import udpBind from "nish:net" -> builtin udpBind
+import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import readSignal from "nish:process" -> builtin readSignal
+import signalFd from "nish:process" -> builtin signalFd
+const A: i32 = 1
+const B: i32 = 2
+const SIGNAL: i32 = 3
+const READABLE: i32 = 1
+const WOULD_BLOCK: i32 = -11
+function drain(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @drain
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 33:15
+  calls: nish_panic_slice nish_udp_recv_from
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 31:7 bytes: i32 (let)
+  local 33:11 n: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_bind
+  calls: drain nish_arena_mark nish_arena_release nish_arena_used nish_net_close nish_net_local_port nish_panic_index nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_read_signal nish_signal_fd nish_str_concat nish_str_from_i32 nish_udp_bind
+  stackSites=5 stackLocals=5
+  local 45:9 a: i32 (const)
+  local 46:9 b: i32 (const)
+  local 47:9 signals: i32 (const)
+  local 48:9 loop: i32 (const)
+  local 54:9 added: i32[] (const)
+  local 60:14 r: i32 (const)
+  local 68:9 ready: i32[] (const)
+  local 69:9 buf: u8[] (const)
+  local 70:9 from: u8[] (const)
+  local 71:9 meta: i32[] (const)
+  local 72:9 top: i64 (const)
+  local 73:7 flat: boolean (let)
+  local 74:7 signal: i32 (let)
+  local 80:11 n: i32 (const)
+  local 85:14 k: i32 (let)
+  local 86:13 token: i32 (const)
+  local 90:15 name: string (const)
+  local 91:15 bytes: i32 (const)
+  callee 91:23 drain -> @drain
 program tests/cases/net_tcp_bounds.ts
 module tests/cases/net_tcp_bounds.ts (entry)
 function readAt(off: i32, len: i32): i32 -> @readAt
@@ -47628,6 +47698,23 @@ function magnitude(x: i32): i32 -> @magnitude
   stackSites=0 stackLocals=0
 function tau(): f64 -> @tau
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/builtin-net-loop.ts
+module docs/cookbook/builtin-net-loop.ts (entry)
+import pollAdd from "nish:net" -> builtin pollAdd
+import pollCreate from "nish:net" -> builtin pollCreate
+import pollWait from "nish:net" -> builtin pollWait
+function watch(fd: i32, token: i32): i32 -> @watch [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_poll_create
+  calls: nish_poll_add nish_poll_create
+  stackSites=0 stackLocals=0
+  local 9:9 loop: i32 (const)
+function firstReady(loop: i32, ready: i32[]): i32 -> @firstReady [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:62
+  calls: nish_panic_index nish_poll_wait
+  pointer ready: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 program docs/cookbook/builtin-net-udp.ts
 module docs/cookbook/builtin-net-udp.ts (entry)

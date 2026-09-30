@@ -1214,7 +1214,15 @@ the port big-endian); hosts are numeric literals, because there is no DNS.
 buffer as many datagrams of that size, `meta` is an `i32[]` of at least 2 that
 receives the GRO segment size (0 when nothing was coalesced) and the ECN bits,
 and an empty datagram answers 0. GSO, GRO and ECN are Linux's: on Darwin they
-answer `-95`. None exists on a wasm target, and under Node each throws.
+answer `-95`. To wait for whichever descriptor is ready, `pollCreate()` makes a
+loop, `pollAdd(loop, fd, events, token)` / `pollModify(...)` watch `fd` for
+`events` (1 readable, 2 writable) under a `token` you choose, and
+`pollRemove(loop, fd)` stops. `pollWait(loop, ready, timeoutMs)` waits (forever
+for `-1`), fills `ready: i32[]` with pairs — `ready[2k]` a token,
+`ready[2k + 1]` its events, 4 added for a hang-up or error — and answers how
+many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
+unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
+exists on a wasm target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
 — see below.

@@ -83,6 +83,10 @@ int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t
                          int32_t segment, int32_t ecn);
 int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len, nish_array *from,
                            nish_array *meta);
+int32_t nish_poll_create(void);
+int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
+int32_t nish_poll_remove(int32_t loop, int32_t fd);
+int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
 /* WP7: process.argv and string parsing */
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t, char **);
@@ -520,6 +524,57 @@ static void test_udp(void) {
 #endif
 }
 
+#include <signal.h>
+#include <time.h>
+
+/* A signal that interrupts a wait and does nothing else. */
+static void poll_interrupt(int sig) { (void)sig; }
+
+/* The readiness loop of runtime-net.c: what `net_loop_calls` and the
+   Node-driven `net_loop_two` cannot reach. The loop descriptor is
+   close-on-exec; a negative token comes back as it went in; one wait reports
+   at most 64 descriptors however long `ready` is, and the rest stay ready for
+   the next; a `ready` shorter than 2 is -22; and a signal that interrupts a
+   wait answers 0 at once rather than waiting out the timeout. */
+static void test_poll(void) {
+  int32_t loop = nish_poll_create();
+  assert(loop >= 0);
+  assert((fcntl(loop, F_GETFD) & FD_CLOEXEC) != 0);
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  enum { MANY = 70 };
+  int32_t fds[MANY];
+  for (int i = 0; i < MANY; i++) {
+    fds[i] = nish_udp_bind(loopback, 0, 0);
+    assert(fds[i] >= 0);
+    expect_i64(nish_poll_add(loop, fds[i], 2, -1000 - i), 0, "a writable socket watched");
+  }
+  static int32_t pairs[200];
+  nish_array ready = {200, 200, (char *)pairs};
+  expect_i64(nish_poll_wait(loop, &ready, 0), 64, "one wait reports at most 64");
+  for (int i = 0; i < 64; i++) {
+    int32_t token = pairs[2 * i];
+    assert(token <= -1000 && token > -1000 - MANY && pairs[2 * i + 1] == 2);
+  }
+  expect_i64(nish_poll_wait(loop, &ready, 0), 64, "and they are still ready at the next");
+  nish_array one = {1, 1, (char *)pairs};
+  expect_i64(nish_poll_wait(loop, &one, 0), -22, "a ready array of one number");
+  for (int i = 0; i < MANY; i++) {
+    expect_i64(nish_poll_remove(loop, fds[i]), 0, "a socket no longer watched");
+    nish_net_close(fds[i]);
+  }
+
+  /* One SIGALRM a second from now, into a ten-second wait on nothing: 0, and
+     long before the timeout. A finite timeout, so a signal that arrived
+     before the wait began costs ten seconds and a failure, never a hang. */
+  signal(SIGALRM, poll_interrupt);
+  time_t started = time(NULL);
+  alarm(1);
+  expect_i64(nish_poll_wait(loop, &ready, 10000), 0, "a wait a signal interrupts");
+  assert(time(NULL) - started < 5);
+  signal(SIGALRM, SIG_DFL);
+  expect_i64(nish_net_close(loop), 0, "the loop closed");
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -793,6 +848,7 @@ int main(void) {
   nish_free_arena();
   test_net();
   test_udp();
+  test_poll();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();

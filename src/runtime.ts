@@ -598,6 +598,42 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // The readiness loop. `epoll_create1` / `kqueue` and `epoll_ctl` /
+    // `kevent` with no events to wait for never block, so the four that make
+    // a loop or change what it watches are `willreturn` as `tcpListen` is.
+    // `pollWait` waits for as long as its timeout says, forever for a
+    // negative one, so it is `nounwind` alone; it writes `ready`, which
+    // therefore loses `readonly`.
+    this.add(plain("nish_poll_create", "declare noundef i32 @nish_poll_create()", EFFECT_WRITE))
+    this.add(
+      plain(
+        "nish_poll_add",
+        "declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_poll_modify",
+        "declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      plain(
+        "nish_poll_remove",
+        "declare noundef i32 @nish_poll_remove(i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      new RuntimeFunction(
+        "nish_poll_wait",
+        `declare noundef i32 @nish_poll_wait(i32 noundef, ${NET_BUFFER}, i32 noundef)`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

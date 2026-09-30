@@ -1,12 +1,13 @@
-/* Nish runtime, the network half: addresses, non-blocking TCP and UDP (WP34
- * N5), the `nish:net` builtin module. Every socket it makes is non-blocking
+/* Nish runtime, the network half: addresses, non-blocking TCP and UDP, and
+ * the readiness loop that waits on them (WP34 N5), the `nish:net` builtin
+ * module. Every socket it makes is non-blocking
  * and close-on-exec, so a program owns the loop that waits on it, and a child
  * `spawnSync` starts inherits none of them.
  *
  * A translation unit of its own for the reason runtime-host.c is one: each
  * file carries its own measured `.text*` ceiling in tests/run.js, and sockets
- * are a surface that grows (the readiness loop follows UDP), which would
- * push another unit past its ceiling rather than into a new one. Section GC
+ * are a surface that grows, which would push another unit past its ceiling
+ * rather than into a new one. Section GC
  * means a program that calls none of these pays for none of them, and
  * scripts/build.sh pairs this file with runtime.c like the other halves, so a
  * link line still names one runtime.
@@ -26,12 +27,13 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in four places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in five places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
- * both, never SIGPIPE), the errno numbers, and UDP's segmentation offload
+ * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
  * (`UDP_SEGMENT`, `UDP_GRO`) and ECN marks, which Linux has and for which
- * Darwin answers -95. The Darwin branch is compiled by CI's Darwin bootstrap
+ * Darwin answers -95, and the readiness loop, which is epoll on Linux and
+ * kqueue on Darwin. The Darwin branch is compiled by CI's Darwin bootstrap
  * rows and run by nothing. A WASI build has none of this (the checker refuses
  * every `nish:net` call under a wasm target), so there the file is empty.
  */
@@ -53,6 +55,7 @@ typedef int nish_net_unused;
 #include <unistd.h>
 #if defined(__linux__)
 #include <netinet/udp.h>
+#include <sys/epoll.h>
 /* glibc before 2.29 names neither; the numbers are the kernel's ABI. */
 #ifndef UDP_SEGMENT
 #define UDP_SEGMENT 103
@@ -60,6 +63,9 @@ typedef int nish_net_unused;
 #ifndef UDP_GRO
 #define UDP_GRO 104
 #endif
+#else
+#include <sys/event.h>
+#include <sys/time.h>
 #endif
 
 #include "nish.h"
@@ -395,5 +401,118 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
   memcpy(meta->data, info, sizeof info);
   nish_net_put(from, &s);
   return (int32_t)got;
+}
+
+/* The readiness loop. Level-triggered: a descriptor that is still ready is
+   reported again by the next wait, so a program that handles one event of
+   many loses none. The events a program asks for and is told of are bits: 1
+   readable, 2 writable, and, told only, 4 for a hang-up or an error. A token
+   is the program's own `i32` for the descriptor, handed back as it was
+   given. Nothing allocates: the kernel's records for one wait are on the
+   stack, at most `NISH_POLL_CHUNK` of them, and whatever did not fit is still
+   ready at the next wait. */
+#define NISH_POLL_CHUNK 64
+#define NISH_POLL_ADD 0
+#define NISH_POLL_MODIFY 1
+#define NISH_POLL_REMOVE 2
+
+/* `pollCreate()`: a loop descriptor, close-on-exec like every socket here. */
+int32_t nish_poll_create(void) {
+#if defined(__linux__)
+  int fd = epoll_create1(EPOLL_CLOEXEC);
+#else
+  int fd = kqueue();
+  if (fd >= 0) fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
+  return fd < 0 ? nish_net_fail() : fd;
+}
+
+#if !defined(__linux__)
+/* One kqueue change, answered as an errno or 0. `EV_RECEIPT` returns each
+   change's own result rather than failing the whole call, and takes no event
+   off the queue. */
+static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int32_t token) {
+  struct kevent k;
+  EV_SET(&k, fd, filter, flags | EV_RECEIPT, 0, 0, (void *)(intptr_t)token);
+  if (kevent(loop, &k, 1, &k, 1, NULL) < 0) return errno;
+  return (k.flags & EV_ERROR) ? (int)k.data : 0;
+}
+#endif
+
+/* Add, modify or remove `fd` in `loop`. epoll does each in one call, with
+   the token in `data.u32`. kqueue has a filter per direction rather than a
+   set of events, so a change is the filters deleted and then the ones asked
+   for added, each carrying the token in `udata`; deleting a filter that was
+   never added is not an error unless neither was, which is epoll's ENOENT. */
+static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
+  if ((uint32_t)events > 3) return -22;
+#if defined(__linux__)
+  static const int ops[3] = {EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL};
+  struct epoll_event e;
+  memset(&e, 0, sizeof e);
+  e.events = ((events & 1) ? EPOLLIN : 0) | ((events & 2) ? EPOLLOUT : 0);
+  e.data.u32 = (uint32_t)token;
+  return epoll_ctl(loop, ops[op], fd, &e) != 0 ? nish_net_fail() : 0;
+#else
+  int e = 0;
+  if (op != NISH_POLL_ADD) {
+    int r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
+    int w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
+    if (r != 0 && w != 0) return nish_net_err(r);
+    if (op == NISH_POLL_REMOVE) return 0;
+  }
+  if (events & 1) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_ENABLE, token);
+  if (e == 0 && (events & 2)) e = nish_poll_change(loop, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, token);
+  return e != 0 ? nish_net_err(e) : 0;
+#endif
+}
+
+/* `pollAdd(loop, fd, events, token)`: watch `fd` for `events` under `token`. */
+int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token) {
+  return nish_poll_ctl(loop, NISH_POLL_ADD, fd, events, token);
+}
+
+/* `pollModify(loop, fd, events, token)`: the same descriptor, new events or a new token. */
+int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token) {
+  return nish_poll_ctl(loop, NISH_POLL_MODIFY, fd, events, token);
+}
+
+/* `pollRemove(loop, fd)`: stop watching `fd`. Closing it does the same. */
+int32_t nish_poll_remove(int32_t loop, int32_t fd) { return nish_poll_ctl(loop, NISH_POLL_REMOVE, fd, 0, 0); }
+
+/* `pollWait(loop, ready, timeoutMs)`: wait until a descriptor is ready or
+   `timeout_ms` milliseconds pass, a negative one never, and write a token and
+   its events into `ready` per ready descriptor, `ready[2k]` and
+   `ready[2k + 1]`. The count is at most `ready.length / 2` and at most
+   `NISH_POLL_CHUNK`. A signal that interrupts the wait answers 0, as a
+   timeout does, rather than waiting again past the deadline; the program's
+   loop comes round and, if it watches `signalFd()`, finds the signal ready.
+   On Darwin a descriptor both readable and writable is two pairs with the
+   same token, one per filter. A `ready` shorter than 2 is -22. */
+int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
+  uint64_t room = ready->len / 2;
+  if (room == 0) return -22;
+  int max = room < NISH_POLL_CHUNK ? (int)room : NISH_POLL_CHUNK;
+  int32_t *out = (int32_t *)ready->data;
+#if defined(__linux__)
+  struct epoll_event e[NISH_POLL_CHUNK];
+  int n = epoll_wait(loop, e, max, timeout_ms < 0 ? -1 : timeout_ms);
+#else
+  struct kevent e[NISH_POLL_CHUNK];
+  struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};
+  int n = kevent(loop, NULL, 0, e, max, timeout_ms < 0 ? NULL : &t);
+#endif
+  if (n < 0) return errno == EINTR ? 0 : nish_net_fail();
+  for (int i = 0; i < n; i++) {
+#if defined(__linux__)
+    uint32_t got = e[i].events;
+    out[2 * i] = (int32_t)e[i].data.u32;
+    out[2 * i + 1] = ((got & EPOLLIN) ? 1 : 0) | ((got & EPOLLOUT) ? 2 : 0) | ((got & (EPOLLHUP | EPOLLERR)) ? 4 : 0);
+#else
+    out[2 * i] = (int32_t)(intptr_t)e[i].udata;
+    out[2 * i + 1] = (e[i].filter == EVFILT_READ ? 1 : 2) | ((e[i].flags & (EV_EOF | EV_ERROR)) ? 4 : 0);
+#endif
+  }
+  return n;
 }
 #endif
