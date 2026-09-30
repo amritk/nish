@@ -59,10 +59,11 @@
  *
  * **What is refused.** A key of any length but 16 or 32 bytes (AES-192 is out
  * of scope), a block or a sample that is not 16 bytes, an empty IV (SP 800-38D
- * §5.2.1.1 asks for at least one bit), a sealed input shorter than its tag and
- * a plaintext too long for its sealed form to be an array answer `null`; so
- * does a tag that does not verify. An IV of any other non-zero
- * length is hashed into the first counter block as §7.1 says.
+ * §5.2.1.1 asks for at least one bit), a sealed input shorter than its tag, a
+ * plaintext too long for its sealed form to be an array, and an `AesKey`
+ * `aesKey` did not make answer `null`; so does a tag that does not verify. An
+ * IV of any other non-zero length is hashed into the first counter block as
+ * §7.1 says.
  *
  * Private names carry the `aes` / `ghash` prefix because a `std/` module's
  * private functions share the importing program's flat symbol namespace
@@ -80,6 +81,12 @@ const AES_BATCH: i32 = 64
 /**
  * An AES key, expanded: the round keys already bitsliced, and GCM's hash key
  * H = E(K, 0^128), so a key used for many messages is expanded once.
+ *
+ * Make one with `aesKey`. The constructor and the fields are public only
+ * because the language has no private ones, and a key built or edited by hand
+ * is not trusted: one whose shape is not what `aesKey` makes answers `null`
+ * everywhere (`aesKeyUsable`), and one whose H is zero opens nothing
+ * (`aesGcmOpen`).
  */
 export class AesKey {
   /** Nr: 10 for AES-128, 14 for AES-256. */
@@ -575,6 +582,19 @@ const aesCopyPrefix = (dst: u8[], src: u8[], count: i32): void => {
 }
 
 /**
+ * Whether `key` has the shape `aesKey` makes: 10 or 14 rounds and the
+ * `(rounds + 1) * 8` round-key words the cipher reads. A key of another shape
+ * could only have been built or edited by hand, and would index past its round
+ * keys and panic, so every entry point answers `null` for it instead. The
+ * branch is on the shape, which is not secret.
+ */
+const aesKeyUsable = (key: AesKey): boolean => {
+  const rounds: i32 = key.rounds
+  const words: i32 = (rounds + 1) * 8
+  return (rounds === 10 || rounds === 14) && toI32(key.roundKeys.length) === words
+}
+
+/**
  * The first 16 bytes of `block` encrypted, in the first 16 bytes of a fresh
  * batch; the rest of the batch is the cipher of zeros and is not read.
  */
@@ -605,7 +625,7 @@ export const aesKey = (key: u8[]): AesKey | null => {
 
 /** One block encrypted (FIPS 197 §5.1, ECB): 16 bytes in, 16 fresh bytes out, or `null` for another length. */
 export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
-  if (toI32(block.length) !== AES_BLOCK) {
+  if (!aesKeyUsable(key) || toI32(block.length) !== AES_BLOCK) {
     return null
   }
   const out: u8[] = new Array<u8>(AES_BLOCK)
@@ -619,7 +639,7 @@ export const aesEncryptBlock = (key: AesKey, block: u8[]): u8[] | null => {
  * a sample of another length.
  */
 export const aesHeaderMask = (key: AesKey, sample: u8[]): u8[] | null => {
-  if (toI32(sample.length) !== AES_BLOCK) {
+  if (!aesKeyUsable(key) || toI32(sample.length) !== AES_BLOCK) {
     return null
   }
   const mask: u8[] = new Array<u8>(5)
@@ -782,6 +802,17 @@ const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
 }
 
 /**
+ * Whether GCTR can encrypt `length` bytes from inc32(J0) without its 32-bit
+ * counter coming back round to J0's, whose block masks the tag: SP 800-38D
+ * §5.2.1.1 caps a plaintext at 2^32 - 2 blocks (2^39 - 256 bits). An array
+ * length is below 2^31, so this never refuses today; it is here so that the
+ * bound is stated where the counter is, rather than left to the width of an
+ * array length.
+ */
+const aesGcmLengthFits = (length: i32): boolean =>
+  (toI64(length) + toI64(15)) >> toI64(4) <= (toI64(1) << toI64(32)) - toI64(2)
+
+/**
  * GCTR (SP 800-38D §6.5) from inc32(J0): `dst[i] = src[i] ⊕ keystream[i]` for
  * `i` below `length`, four blocks per pass of the cipher. The counter is the
  * last four bytes of J0 as a big-endian `u32` and wraps modulo 2^32, as
@@ -844,16 +875,16 @@ export const aesGcmTagMask = (tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u
 /**
  * GCM authenticated encryption (SP 800-38D §7.1): the ciphertext followed by
  * the 16-byte tag, in one fresh array. The IV may be any non-zero length; 12
- * bytes is the fast and usual one. `null` for an empty IV, and for a
- * plaintext longer than 2^31 - 17 bytes, whose sealed form would not fit in an
- * array.
+ * bytes is the fast and usual one. `null` for an empty IV, for a key
+ * `aesKey` did not make, and for a plaintext longer than 2^31 - 17 bytes,
+ * whose sealed form would not fit in an array.
  */
 export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null => {
   const length: i32 = toI32(plaintext.length)
   // 2^31 - 17: the longest plaintext whose sealed form, sixteen bytes longer,
   // is still an array length.
   const longest: i32 = 0x7fffffef
-  if (toI32(iv.length) === 0 || length > longest) {
+  if (!aesKeyUsable(key) || toI32(iv.length) === 0 || length > longest || !aesGcmLengthFits(length)) {
     return null
   }
   const j0: u8[] = aesGcmJ0(key, iv)
@@ -869,18 +900,22 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
 /**
  * GCM authenticated decryption (SP 800-38D §7.2): `sealed` is the ciphertext
  * followed by its 16-byte tag, and the answer is the plaintext, or `null` when
- * the tag does not verify, the IV is empty or `sealed` is shorter than a tag.
+ * the tag does not verify, the IV is empty, `sealed` is shorter than a tag or
+ * the key is not one `aesKey` made.
  * The tag is computed over the received ciphertext and compared in constant
  * time before anything is decrypted, so a forgery yields no plaintext at all.
  */
 export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null => {
   const total: i32 = toI32(sealed.length)
-  if (toI32(iv.length) === 0 || total < AES_GCM_TAG_SIZE) {
+  if (!aesKeyUsable(key) || toI32(iv.length) === 0 || total < AES_GCM_TAG_SIZE) {
     return null
   }
   // `total` is an array length and at least a tag, so neither this nor the
   // tag's second word at `length + 8` can leave the range of an `i32`.
   const length: i32 = total - AES_GCM_TAG_SIZE
+  if (!aesGcmLengthFits(length)) {
+    return null
+  }
   const j0: u8[] = aesGcmJ0(key, iv)
   const tag: u64[] = new Array<u64>(2)
   aesGcmTag(tag, key, j0, aad, sealed, length)
@@ -890,7 +925,12 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
     aesLoad64(sealed, length, total),
     aesLoad64(sealed, length + 8, total)
   )
-  if (same === toU64(0)) {
+  // Under H = 0 GHASH is zero for every input, so the tag E(K, J0) would
+  // authenticate any ciphertext and AAD. Only a key built or edited by hand
+  // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
+  // nothing. H is secret, so this is folded into the mask, not branched on.
+  const hashKeySet: u64 = ~ctEq(key.hHi | key.hLo, toU64(0))
+  if ((same & hashKeySet) === toU64(0)) {
     return null
   }
   const out: u8[] = new Array<u8>(length)

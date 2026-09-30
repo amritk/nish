@@ -274,7 +274,10 @@ const chacha20Poly1305Setup = (state: u32[]): u8[] => {
  * Whether the blocks `len` bytes need, from `counter` on, fit before the
  * 32-bit counter wraps.
  * RFC 8439 §2.4 leaves a wrap undefined, and a wrapped counter repeats the
- * keystream, so a request that would need one answers `null` instead.
+ * keystream, so a request that would need one answers `null` instead. The
+ * AEAD asks it too, from counter 1: an array length is below 2^31, so that
+ * never refuses today, but the bound is then stated where the counter is
+ * rather than left to the width of an array length.
  */
 const chacha20CounterFits = (counter: u32, len: i32): boolean => {
   const blocks: i64 = (toI64(len) + toI64(63)) >> toI64(6)
@@ -634,7 +637,8 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
   if (
     toI32(key.length) !== CHACHA20_KEY_SIZE ||
     toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE ||
-    len > longest
+    len > longest ||
+    !chacha20CounterFits(1, len)
   ) {
     return null
   }
@@ -668,6 +672,9 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
     return null
   }
   const len: i32 = total - POLY1305_TAG_SIZE
+  if (!chacha20CounterFits(1, len)) {
+    return null
+  }
   const state: u32[] = chacha20State(key, 0, nonce, 0)
   const polyKey: u8[] = chacha20Poly1305Setup(state)
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
