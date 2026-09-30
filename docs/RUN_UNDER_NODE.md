@@ -141,10 +141,15 @@ no prelude can reach it. They are language decisions
 - **`new Array<T>(n)` has holes here.** Natively it zero-fills, and under Node
   every slot is `undefined` until written, so `a[1] + 1.0` is `1` natively and
   `NaN` here.
-- **The typed-array names are plain arrays natively.** `Float64Array` is
-  `f64[]` in the language, `push` and `pop` included, and under Node it is
-  JavaScript's fixed-length typed array: `t.push(5.0)` is
-  `TypeError: t.push is not a function`.
+- **The typed-array names are plain arrays natively, without `push` and
+  `pop`.** `Float64Array` is `f64[]` in the language, and under Node it is
+  JavaScript's fixed-length typed array. A receiver spelled with the name
+  refuses `push` and `pop` at compile time (NL2415), so the
+  `TypeError: t.push is not a function` a program could once reach here is a
+  compile error natively too. A value the spelling does not reach — through
+  another module's `type` alias, out of a `Map` or `Set`, or a generic's `T`
+  result — still pushes natively and throws here
+  ([LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)).
 - **A ranged integer is unchecked.** `integer<Lo, Hi>` is an alias of `number`
   in `runtime/nish.d.ts`, so a value that leaves its range is silent here and
   an exit-1 panic natively ([wp31-ranged-integers.md](wp31-ranged-integers.md)

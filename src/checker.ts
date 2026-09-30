@@ -11,7 +11,7 @@
 // than the six `try`/`catch` sites stage0's `src/` uses.
 
 import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations"
-import { checkElementReferences } from "./arrays"
+import { annotationSpelling, checkElementReferences } from "./arrays"
 import { checkExpression } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
@@ -812,6 +812,7 @@ export class Checker {
       // too — which is what makes `this = x` a parameter assignment error.
       const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM)
       local.origin = parameterOrigin(this.ctx, sig, i)
+      local.typedArray = parameterSpelling(this.ctx, sig, sig.paramNames[i])
       if (!scope.declare(local)) {
         this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``)
       }
@@ -1369,6 +1370,23 @@ const declaredEnum = (target: CheckedProgram | null, name: string): EnumInfo | n
 /** The alias `target` itself declares as `name`, or `null`, for the reason `declaredEnum` answers so. */
 const declaredAlias = (target: CheckedProgram | null, name: string): AliasInfo | null =>
   target === null ? null : target.ownAlias(name)
+
+/**
+ * WP33 R2: the typed-array name parameter `name` of `sig` is declared with,
+ * or `""` — `this` and a signature with no parameter list of its own among them.
+ */
+const parameterSpelling = (ctx: CheckContext, sig: FunctionSig, name: string): string => {
+  const at = sig.decl.kind === N_CONSTRUCTOR ? 0 : 1
+  if (sig.decl.children.length <= at || sig.decl.children[at].kind !== N_LIST) {
+    return ""
+  }
+  for (const param of sig.decl.children[at].children) {
+    if (param.children[0].text === name) {
+      return annotationSpelling(ctx, sig.definedIn(ctx.source), param.children[1])
+    }
+  }
+  return ""
+}
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
 // A lifted arrow (WP29) has no name to point at, so the arrow itself is the span.

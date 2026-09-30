@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 525
+export const RULE_COUNT: i32 = 526
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -652,6 +652,8 @@ const diagnosticRules = (): string[] => [
   "NL2236",
   " (fields must match exactly, in order)",
   "NL2004",
+  "`, whose length is fixed: declare it `",
+  "NL2415",
   "`slice` expects 1 or 2 arguments, got ",
   "NL2289",
   "Cannot declare a variable of type void",
