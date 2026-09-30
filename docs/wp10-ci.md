@@ -532,6 +532,28 @@ it ran one section, and the substring filter is the trap described above. A
 `--section` mechanism with honest skip counting is the piece of work that
 unlocks splitting `test` at all, if a fresh profile says it is worth splitting.
 
+### A check the workflow was running twice
+
+One check did not need splitting out, because another job already ran it.
+`src/ compiles src/: the bootstrap reaches a fixed point` was the most
+expensive single check in `npm test` on run 36610344594 (`main`, `ff3a7c2`):
+about 80 s of the `test` job's 8 m 40 s `npm test` step, in a job of 9 m 50 s
+that is the workflow's critical path. Its two equalities, `IR(stage1) ==
+IR(stage2)` and `stage3 == stage2`, are what `scripts/bootstrap.sh --verify`
+asserts, and the `bootstrap (x86_64-linux)` row ran that in the same run, on
+the same runner image, with the same release as the seed, in 57 s and in
+parallel.
+
+So the `test` job passes `--delegate-fixed-point`, and `tests/run.js` records
+the check as **delegated** to that row: a third count beside passed and
+skipped, printed with the job's name, so the run neither claims a pass it did
+not make nor reports as unproven something the same run proves. The flag is
+honoured only under GitHub Actions and only on a host that has a seed target,
+and a check reads `ci.yml` and fails if the `test` job asks for it while the
+`bootstrap` job has stopped running `--verify`. A local `npm test` still runs
+the fixed point. The WP14 section of `tests/run.js` has the full argument for
+why the row always exists when the `test` job can be green.
+
 ## Running the same steps locally
 
 ```bash

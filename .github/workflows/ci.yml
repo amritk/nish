@@ -222,8 +222,17 @@ jobs:
       # `--seed` rather than NISH_BOOTSTRAP: the variable also turns on
       # `tests/nish-cmp.js`, which the `nish-cmp` job below already runs, one
       # row per seed, and whose `cmpSince` rule that job's matrix states.
+      #
+      # `--delegate-fixed-point` for the same kind of reason: the
+      # `bootstrap (x86_64-linux)` row below asserts IR(stage1) == IR(stage2)
+      # and stage3 == stage2 with this seed on this runner, so the suite counts
+      # its own copy of that check as delegated to the row instead of spending
+      # about eighty seconds of this job, the longest in the file, on it again.
+      # The WP14 section of tests/run.js says when it honours the flag, and a
+      # check there fails if this step asks for it while `bootstrap` has
+      # stopped running `scripts/bootstrap.sh --verify`.
       - name: Test
-        run: npm test -- --seed build/seed/bin/nish
+        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point
 
       # `NISH` names the compiler scripts/smoke.sh and docs/cookbook/regen.sh
       # run, the compiler this job built.
