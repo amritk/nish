@@ -354,7 +354,17 @@ int32_t nish_read_signal(int32_t fd);
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a
  * gone peer is -32, never SIGPIPE. `nish_net_shutdown(fd, how)`: 0 read, 1
- * write, 2 both. `nish_net_close(fd)`. */
+ * write, 2 both. `nish_net_close(fd)`.
+ *
+ * UDP: `nish_udp_bind(host, port, flags)` binds a datagram socket, flag 1
+ * `SO_REUSEPORT` and flag 2 `UDP_GRO` (-95 on Darwin). `nish_udp_send_to(fd,
+ * buf, off, len, to, segment, ecn)` sends `buf[off, off + len)` to the
+ * address `to` in one `sendmsg`, cut into `segment`-byte datagrams by
+ * `UDP_SEGMENT` when `segment > 0`, with the ECN bits `ecn` (0..3); either on
+ * Darwin is -95. `nish_udp_recv_from(fd, buf, off, len, from, meta)` takes
+ * one datagram, or several `UDP_GRO` coalesced, writes the sender into `from`
+ * and into `meta` (element type `int32_t`, at least 2) the segment size, 0
+ * when none was coalesced, and the ECN bits. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
@@ -363,6 +373,11 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
+int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);
+int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t len, const nish_array *to,
+                         int32_t segment, int32_t ecn);
+int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len, nish_array *from,
+                           nish_array *meta);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`

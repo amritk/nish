@@ -64,7 +64,7 @@ Compilation                                                            src/compi
   | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,393 | 1,536 |
   | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (901 threaded) | 320 (1,024) |
   | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 571 | 768 |
-  | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses and non-blocking TCP | 853 | 1,024 |
+  | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses, non-blocking TCP and UDP | 1,782 | 2,048 |
 
   They are apart so that a new builtin in one area cannot move another's
   number; the source bytes of any of them are history rather than a limit.

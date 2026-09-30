@@ -11,7 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { NET_WRITTEN, netSignature } from "./nish-modules"
+import { isNetWrittenLetter, netSignature } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
   N_BINARY,
@@ -140,9 +140,10 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * or "" for a call that writes no argument's elements: the argument-side twin
  * of `isArrayWriteMethod`. `crypto.getRandomValues(bytes)` (WP34 N3) is `w`;
  * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
- * `netAddress`'s `out`, `tcpAccept`'s `peer` and `netRead`'s `buf`. A user
- * function that shares a builtin's name wins it, as it wins every identifier
- * builtin, and writes nothing here. The parameter classification, the fact
+ * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
+ * `udpRecvFrom`'s `buf` and `from`, and whose one `m` is `udpRecvFrom`'s
+ * `meta`. A user function that shares a builtin's name wins it, as it wins
+ * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks
  * `isArrayWriteMethod`; a string rather than a list, because they ask it of
  * every call and most answers are "".
@@ -162,7 +163,7 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
 
 /** Whether argument `index` of a builtin call is an array whose elements it writes (`builtinArgumentLetters`). */
 export const isWrittenArgument = (letters: string, index: i32): boolean =>
-  index >= 0 && index < letters.length && letters.charCodeAt(index) === NET_WRITTEN
+  index >= 0 && index < letters.length && isNetWrittenLetter(letters.charCodeAt(index))
 
 /**
  * The builtin a plain-identifier call reaches: the one a `nish:` import bound,

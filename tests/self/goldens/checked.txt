@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 807 programs, 57367 dump lines.
+# 813 programs, 57584 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -41406,6 +41406,210 @@ function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 5:9 n: i32 (const)
+program tests/cases/net_udp_bounds.ts
+module tests/cases/net_udp_bounds.ts (entry)
+function sendAt(off: i32, len: i32): i32 -> @sendAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_send_to
+  calls: nish_panic_slice nish_udp_send_to
+  stackSites=2 stackLocals=2
+  local 8:9 buf: u8[] (const)
+  local 9:9 to: u8[] (const)
+function receiveAt(off: i32, len: i32): i32 -> @receiveAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_recv_from
+  calls: nish_panic_slice nish_udp_recv_from
+  stackSites=3 stackLocals=3
+  local 14:9 buf: u8[] (const)
+  local 15:9 from: u8[] (const)
+  local 16:9 meta: i32[] (const)
+function pastEnd(): i32 -> @pastEnd [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sendAt
+  calls: sendAt
+  stackSites=0 stackLocals=0
+  callee 20:35 sendAt -> @sendAt
+function negativeOffset(): i32 -> @negativeOffset [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via receiveAt
+  calls: receiveAt
+  stackSites=0 stackLocals=0
+  callee 22:42 receiveAt -> @receiveAt
+function negativeLength(): i32 -> @negativeLength [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sendAt
+  calls: sendAt
+  stackSites=0 stackLocals=0
+  callee 24:42 sendAt -> @sendAt
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sendAt
+  calls: receiveAt sendAt
+  stackSites=0 stackLocals=0
+  callee 26:32 sendAt -> @sendAt
+  callee 26:47 receiveAt -> @receiveAt
+program tests/cases/net_udp_calls.ts
+module tests/cases/net_udp_calls.ts (entry)
+const WOULD_BLOCK: i32 = -11
+function receive(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32 -> @receive
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:11
+  calls: nish_panic_slice nish_udp_recv_from
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 15:7 n: i32 (let)
+function send(fd: i32, data: readonly u8[], to: readonly u8[]): i32 -> @send
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_send_to
+  calls: nish_panic_slice nish_udp_send_to
+  pointer data: size=0 writesThrough=false captured=false
+  pointer to: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_bind
+  calls: nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_index nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_tcp_accept nish_udp_bind nish_udp_recv_from nish_udp_send_to receive send
+  stackSites=7 stackLocals=7
+  local 26:9 a: i32 (const)
+  local 27:9 b: i32 (const)
+  local 29:9 toB: u8[] (const)
+  local 31:9 from: u8[] (const)
+  local 32:9 meta: i32[] (const)
+  local 33:9 buf: u8[] (const)
+  local 34:9 data: u8[] (const)
+  callee 37:15 send -> @send
+  callee 38:15 receive -> @receive
+  local 40:9 port: i32 (const)
+  callee 42:15 send -> @send
+  callee 43:15 receive -> @receive
+  local 45:9 short: u8[] (const)
+  local 46:9 one: i32[] (const)
+  local 57:9 shared: i32 (const)
+  local 58:9 again: i32 (const)
+  local 61:9 both: i32 (const)
+  callee 62:15 send -> @send
+  callee 63:15 receive -> @receive
+program tests/cases/net_udp_echo.ts
+module tests/cases/net_udp_echo.ts (entry)
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import udpBind from "nish:net" -> builtin udpBind
+import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import udpSendTo from "nish:net" -> builtin udpSendTo
+const WOULD_BLOCK: i32 = -11
+struct Served (class) size=12 align=4
+  field datagrams: i32 index=0 offset=0
+  field bytes: i32 index=1 offset=4
+  field notes: i32 index=2 offset=8
+  constructor -> @Served.constructor
+function Served.constructor(this: Served, datagrams: i32, bytes: i32, notes: i32): void -> @Served.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: bytes datagrams notes
+  pointer this: size=12 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function serve(fd: i32, buf: u8[], from: u8[], meta: i32[]): Served -> @serve
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=12
+  sharedWrite: 31:15
+  calls: Served.constructor nish_alloc_struct nish_arena_release nish_panic_slice nish_str_concat nish_str_from_i32 nish_udp_recv_from nish_udp_send_to
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 26:7 datagrams: i32 (let)
+  local 27:7 bytes: i32 (let)
+  local 28:7 notes: i32 (let)
+  local 29:7 failed: boolean (let)
+  local 31:11 n: i32 (const)
+  local 43:11 note: string (const)
+  callee 48:10 new Served -> @Served.constructor
+function oneRound(fd: i32, buf: u8[], from: u8[], meta: i32[]): i64 -> @oneRound
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via serve
+  escaping: fd
+  calls: nish_arena_mark nish_arena_release nish_arena_used nish_print nish_str_concat nish_str_from_i32 serve
+  pointer buf: size=0 writesThrough=true captured=false passedTo=serve#1
+  pointer from: size=0 writesThrough=true captured=false passedTo=serve#2
+  pointer meta: size=0 writesThrough=true captured=false passedTo=serve#3
+  stackSites=0 stackLocals=0
+  local 53:9 before: i64 (const)
+  local 54:9 served: Served (const)
+  callee 54:18 serve -> @serve
+  local 55:9 grown: i64 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_bind
+  calls: nish_arena_mark nish_arena_release nish_net_close nish_net_local_port nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_udp_bind oneRound
+  stackSites=3 stackLocals=3
+  local 61:9 fd: i32 (const)
+  local 67:9 buf: u8[] (const)
+  local 68:9 from: u8[] (const)
+  local 69:9 meta: i32[] (const)
+  local 70:9 one: i64 (const)
+  callee 70:15 oneRound -> @oneRound
+  local 71:9 many: i64 (const)
+  callee 71:16 oneRound -> @oneRound
+program tests/cases/net_udp_offload.ts
+module tests/cases/net_udp_offload.ts (entry)
+import netAddress from "nish:net" -> builtin netAddress
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import udpBind from "nish:net" -> builtin udpBind
+import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import udpSendTo from "nish:net" -> builtin udpSendTo
+const WOULD_BLOCK: i32 = -11
+const SEGMENT: i32 = 1200
+const TOTAL: i32 = 4800
+function receive(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @receive
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 20:11
+  calls: nish_panic_slice nish_udp_recv_from
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 20:7 n: i32 (let)
+function intact(buf: u8[], n: i32): boolean -> @intact
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 32:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 44:5
+  calls: intact llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_div nish_panic_index nish_panic_slice nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to receive
+  stackSites=5 stackLocals=3
+  local 41:9 node: i32 (const)
+  local 42:9 data: u8[] (const)
+  local 43:12 i: i32 (let)
+  local 46:9 to: u8[] (const)
+  local 47:9 sender: i32 (const)
+  local 51:9 buf: u8[] (const)
+  local 52:9 from: u8[] (const)
+  local 53:9 meta: i32[] (const)
+  local 54:9 gro: i32 (const)
+  local 55:9 plain: i32 (const)
+  local 56:14 fd: i32 (const)
+  local 59:11 n: i32 (const)
+  callee 59:15 receive -> @receive
+  callee 60:91 intact -> @intact
+  local 64:14 ecn: i32 (const)
+  local 67:9 n: i32 (let)
+  callee 67:13 receive -> @receive
+  callee 69:11 receive -> @receive
+program tests/cases/net_udp_unchecked.ts
+module tests/cases/net_udp_unchecked.ts (entry)
+function echoOnce(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @echoOnce [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 5:13
+  calls: nish_panic_index nish_panic_slice nish_udp_recv_from nish_udp_send_to
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 5:9 n: i32 (const)
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4
@@ -47425,6 +47629,25 @@ function magnitude(x: i32): i32 -> @magnitude
 function tau(): f64 -> @tau
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin-net-udp.ts
+module docs/cookbook/builtin-net-udp.ts (entry)
+import udpBind from "nish:net" -> builtin udpBind
+import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import udpSendTo from "nish:net" -> builtin udpSendTo
+function bind(port: i32): i32 -> @bind [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_udp_bind
+  calls: nish_udp_bind
+  stackSites=0 stackLocals=0
+function echoOnce(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @echoOnce [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:13
+  calls: nish_panic_index nish_panic_slice nish_udp_recv_from nish_udp_send_to
+  pointer buf: size=0 writesThrough=true captured=false
+  pointer from: size=0 writesThrough=true captured=false
+  pointer meta: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 11:9 n: i32 (const)
 program docs/cookbook/builtin-net.ts
 module docs/cookbook/builtin-net.ts (entry)
 import netRead from "nish:net" -> builtin netRead
