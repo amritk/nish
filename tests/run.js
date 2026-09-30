@@ -1651,18 +1651,18 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // One, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`, and stage1 answers the empty statement of
-  // `tests/wordings/nl2260_empty_statement` with ``Unsupported statement `;` ``,
-  // which quotes the statement and has no words of its own. It was five until
-  // #174 gave the duplicate-symbol wordings -- a duplicate export, the same one
-  // reached through an import, and a duplicate internal name -- codes of their
-  // own (NL3024, NL3026), and two until WP32 S5 gave an import of a name a
-  // module does not export (`tests/link/unknown_export`,
-  // `reject_map_extras_unknown_export`) NL2376. The remainder is named on
-  // stdout by the run, so shrinking this backlog means giving that message a
-  // registry entry, or a literal run of its own first.
-  const UNCODED_BACKLOG = 1
+  // None now. The last was the empty statement of
+  // `tests/wordings/nl2260_empty_statement`, which stage1 answered with
+  // ``Unsupported statement `;` ``, quoting the statement with no words of its
+  // own; the statement dispatch's fallback names the syntax kind in NL2260's
+  // sentence since #320. It was five until #174 gave the duplicate-symbol
+  // wordings -- a duplicate export, the same one reached through an import,
+  // and a duplicate internal name -- codes of their own (NL3024, NL3026), and
+  // two until WP32 S5 gave an import of a name a module does not export
+  // (`tests/link/unknown_export`, `reject_map_extras_unknown_export`) NL2376.
+  // A new one is named on stdout by the run, so the answer is a registry
+  // entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 0
   const wordings = spawnSync(
     "node",
     [
@@ -9215,6 +9215,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
       ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
+      // A type parameter list that repeats a name: one diagnostic, on the
+      // first repeat, however many there are.
+      ["reject_generic_duplicate_type_parameter_triple", ["5:19-5:20 NL2302"]],
       // The function and binding forms, all the checker's: one per
       // declaration, the first in source order.
       [
