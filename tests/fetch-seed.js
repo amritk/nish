@@ -526,6 +526,13 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
     ["a .. in the version", `nish-9..9-${hostAsset}.tar.gz`],
     ["no nish- prefix", `9.9.9-${hostAsset}.tar.gz`],
     ["a version of latest", `nish-latest-${hostAsset}.tar.gz`],
+    ["an upper-case extra platform segment", `nish-9.9.9-AARCH64-DARWIN-${hostAsset}.tar.gz`],
+    ["a capitalised platform word", `nish-9.9.9-Linux-${hostAsset}.tar.gz`],
+    ["a pre-release version", `nish-1.0.0-rc.1-${hostAsset}.tar.gz`],
+    ["an empty version component", `nish-1..0-${hostAsset}.tar.gz`],
+    ["a leading empty component", `nish-.1.0-${hostAsset}.tar.gz`],
+    ["a trailing empty component", `nish-1.0.-${hostAsset}.tar.gz`],
+    ["a build-metadata version", `nish-1.0.0+abc-${hostAsset}.tar.gz`],
   ]) {
     const box = installSandbox("9.9.9")
     fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
@@ -533,6 +540,20 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
     check(
       `install.sh --expect-tarball with no version refuses ${what} before the latest-release lookup`,
       refused(box, r) && r.stderr.includes(name) && curled(box) === "",
+      told(box, r)
+    )
+  }
+  // The allow-list is dotted integers of any length: a well-formed name gets
+  // past the early check to the lookup, and only the whole-name compare after
+  // it refuses one that is not the latest release.
+  for (const version of ["9.9.9", "10.0.2.1", "7"]) {
+    const box = installSandbox("9.9.9")
+    const name = `nish-${version}-${hostAsset}.tar.gz`
+    const r = install(box, ["--expect-tarball", name, "--dir", box.home])
+    check(
+      `install.sh --expect-tarball with no version lets ${name} past the early check to the lookup`,
+      curled(box).startsWith("https://github.com/amritk/nish/releases/latest\n") &&
+        !r.stderr.includes("nish-<version>-"),
       told(box, r)
     )
   }

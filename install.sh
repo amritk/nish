@@ -338,11 +338,14 @@ fi
 # exactly `nish-`, a release version, `-$asset.tar.gz`, or it is refused with
 # nothing requested and what is installed left alone.
 #
-# The version between them is held to nish_valid_version and may not name a
-# platform. That rule allows `-` for a pre-release, so on its own it would read
-# `nish-9.9.9-aarch64-darwin-x86_64-linux.tar.gz` as version
-# `9.9.9-aarch64-darwin`; no release is spelled that way, and a name carrying
-# two platforms is the drifted row this guard is for.
+# The version between them has to be dotted integers -- `^[0-9]+(\.[0-9]+)*$`,
+# no empty component, nothing else. That is the scheme .github/seed-due.sh
+# holds every release to and the only one seed-matrix.sh can emit, so it is an
+# allow-list of what a row can name rather than a deny-list of what it should
+# not. nish_valid_version is wider -- it allows letters and `-` -- and read
+# `nish-9.9.9-AARCH64-DARWIN-x86_64-linux.tar.gz` as version
+# `9.9.9-AARCH64-DARWIN`; a list of platform words to refuse missed every
+# spelling it did not list. Letters and `-` cannot appear here at all now.
 nish_expect_refuse() {
   die "this machine ($(uname -s)-$(uname -m)) resolves $1, but the caller expects $expect_tarball.
   The runner and the row it was meant to check disagree about the platform: fix
@@ -353,9 +356,8 @@ nish_expect_version() {
   [ "$_want" != "$1" ] || return 1
   _rest="${_want%-"$2".tar.gz}"
   [ "$_rest" != "$_want" ] || return 1
-  nish_valid_version "$_rest" || return 1
   case "$_rest" in
-    *x86_64* | *aarch64* | *linux* | *darwin*) return 1 ;;
+    "" | .* | *. | *..* | *[!0-9.]*) return 1 ;;
   esac
   return 0
 }
