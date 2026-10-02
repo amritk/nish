@@ -45,6 +45,30 @@ released `nish` — the seed, which `scripts/fetch-seed.sh` puts in `build/seed/
 release: the rolling freeze, which CI's `bootstrap` job checks by building
 `src/` with that release.
 
+**Generated goldens are regenerated, never edited or merged by hand.**
+`tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's
+`--emit-checked` dump of the golden cases and of `src/`, so any change to
+`src/` or to a positive `tests/cases/*.ts` moves them, and every `src/` commit
+on `main` conflicts with every open pull request that touches `src/`. Rewrite
+them only with `node tests/self/goldens.js --update` (add
+`--seed build/seed/bin/nish` when `build/nish` is not built) and read the diff
+before committing it. On a conflict, merge `main` in and regenerate rather
+than resolving lines ([`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it),
+[`.claude/selfhost.md`](.claude/selfhost.md)).
+
+## Security
+
+Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,
+and each audited area keeps its record under
+[`docs/security/`](docs/security/README.md).
+
+**Secret material in `std/crypto` is wiped once it can be.** The runtime has no
+wipe primitive yet that the optimiser cannot drop (#385). Until a release ships
+one, a function that holds a private key, a secret scalar or another secret
+intermediate records it as unwiped in its area's record, as ECC-2 and X509-7
+do. Once it ships, every such function wipes before it returns, and a test pins
+that the wipe survives `-O2`.
+
 ## Git & PR Guidelines
 
 NEVER include Claude session links, tracking IDs, model names, or platform
