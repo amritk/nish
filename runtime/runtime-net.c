@@ -202,7 +202,7 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
   int zero = 0;
   /* Both families at once on an IPv6 socket; on an IPv4 one this fails with
      `ENOPROTOOPT` and changes nothing, which is cheaper than asking. */
-  setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof one);
+  setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
   int bad = 0;
   if (type == SOCK_STREAM) {
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
