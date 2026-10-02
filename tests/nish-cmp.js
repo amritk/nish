@@ -1829,6 +1829,96 @@ const DECLARED = [
     changelog: "Type an object literal in an `I | null` context as the struct, not the union",
     why: "it builds an object literal in a parameter, an enclosing literal's field and a field store that expect `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
   },
+  {
+    program: "tests/link/crypto_hkdf/main.ts",
+    file: "hkdf.ll",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings; with this tree's hkdf.ts the reference compiler writes the same bytes",
+  },
+  {
+    program: "tests/link/crypto_hkdf_f64/main.ts",
+    file: "hkdf.ll",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
+  },
+  {
+    program: "tests/link/crypto_hkdf_k1_bounds/main.ts",
+    file: "hkdf.ll",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings; with this tree's hkdf.ts the reference compiler writes the same bytes",
+  },
+  {
+    program: "tests/link/crypto_hkdf_k1_bounds_f64/main.ts",
+    file: "hkdf.ll",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
+  },
+  {
+    program: "tests/link/crypto_hkdf_long_f64/main.ts",
+    file: "hkdf.ll",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "std/crypto/hkdf.ts gains `hkdfLabel` and the two `hkdfExpandLabel` functions, so its module carries their code and strings under --number-mode f64; with this tree's hkdf.ts the reference compiler writes the same bytes",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: the RFC 8448 and RFC 9001 vectors through `hkdfExpandLabelSha256` and `hkdfExpandLabelSha384`, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_f64/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: the same vectors under --number-mode f64, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_empty_label/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: an empty label's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_long_context/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a context past 255 bytes' panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_long_context_f64/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a context past 255 bytes' panic under --number-mode f64, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_long_label/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a label past 249 bytes' panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_long_length/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a length past 255's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_negative_length/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a negative length's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_short_secret/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a secret shorter than HashLen's panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
+    program: "tests/link/crypto_hkdf_expand_label_short_secret_sha384/main.ts",
+    file: "exit",
+    changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
+    why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
