@@ -145,6 +145,8 @@ Concurrent stages have disjoint `Owns`. Five files are shared on purpose, becaus
 | [`tests/run.js`](../../tests/run.js) | net-client, t2 and q2* each add only their own `net_*` block |
 | `tests/self/goldens/*` | regenerated with `node tests/self/goldens.js --update`, never edited |
 | `THIRD_PARTY_NOTICES.md` | a row only if a stage copies code ([`.claude/licensing.md`](../../.claude/licensing.md)) |
+| [`src/std-modules.ts`](../../src/std-modules.ts) `stdModuleNames()` | each stage adds only its own module names to the list (added 2026-10-02T22:35Z: the repo's checks require it for every new `std/` file) |
+| [`.github/workflows/release.yml`](../../.github/workflows/release.yml) presence gates | each stage adds only its own `std/` file paths to the three presence lists, and updates the count in the message beside the first. Nothing else in the workflow changes (added 2026-10-02T22:35Z, same reason) |
 
 When one of these conflicts, merge `main` into the branch and redo your own hunk. Do not resolve someone else's lines. Another `/feature` run (#394) is live and touches `runtime/runtime-net.c` (#355, #356) and `src/`, so net-client should expect conflicts the same way.
 
