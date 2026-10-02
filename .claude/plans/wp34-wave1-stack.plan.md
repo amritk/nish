@@ -147,6 +147,7 @@ Concurrent stages have disjoint `Owns`. Five files are shared on purpose, becaus
 | `THIRD_PARTY_NOTICES.md` | a row only if a stage copies code ([`.claude/licensing.md`](../../.claude/licensing.md)) |
 | [`src/std-modules.ts`](../../src/std-modules.ts) `stdModuleNames()` | each stage adds only its own module names to the list (added 2026-10-02T22:35Z: the repo's checks require it for every new `std/` file) |
 | [`.github/workflows/release.yml`](../../.github/workflows/release.yml) presence gates | each stage adds only its own `std/` file paths to the three presence lists, and updates the count in the message beside the first. Nothing else in the workflow changes (added 2026-10-02T22:35Z, same reason) |
+| [`tests/nish-cmp.js`](../../tests/nish-cmp.js) `DECLARED` | each stage adds one narrow entry per new or changed program of its own (`program`, and `file` where only one file differs), with `changelog` set to its own PR subject as `scripts/changelog-gen.mjs` renders it (scope dropped, first letter raised, no `(#N)`). The 0.16.0 seed refuses every program that imports a module it does not have, so nish-cmp fails without them (added 2026-10-02T23:35Z, after #398 turned main red) |
 
 When one of these conflicts, merge `main` into the branch and redo your own hunk. Do not resolve someone else's lines. Another `/feature` run (#394) is live and touches `runtime/runtime-net.c` (#355, #356) and `src/`, so net-client should expect conflicts the same way.
 
