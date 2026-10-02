@@ -1,0 +1,4 @@
+probe_wrap: trap
+probe_truncate: trap
+probe_array: trap
+probe_grow: trap

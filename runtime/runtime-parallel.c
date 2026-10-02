@@ -109,7 +109,11 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
   if (grain < 1) grain = 1;
   /* Never more threads than there is work for at the requested granularity,
    * and never more than the machine has. */
-  int64_t chunks = (len + grain - 1) / grain;
+  /* Rounded up without `len + grain - 1`, which overflows -- undefined
+     behaviour, and in practice a negative count that ran the whole range on
+     one thread -- once `len` is within `grain` of 2^63
+     (docs/security/runtime.md, RT-8). */
+  int64_t chunks = len / grain + (len % grain != 0);
   int64_t n = nish_cpu_count();
   if (n > NISH_PAR_MAX) n = NISH_PAR_MAX;
   if (chunks < n) n = chunks;

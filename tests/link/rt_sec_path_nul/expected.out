@@ -1,0 +1,10 @@
+endsWith .txt: true
+readFileSyncOrNull: null
+readFileBytesSync: null
+isDirectorySync: false
+readdirSync: null
+realpathSync: null
+getenv: null
+spawnSync: -1
+spawnSync argument: -1
+spawnSync plain: 0
