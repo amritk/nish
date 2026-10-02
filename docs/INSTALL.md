@@ -403,8 +403,15 @@ release is expected to move it. `--stages 1` stops one link sooner.
 and `--profile` spellings as an installed `nish`, because it is the same
 program, and makes every directory in the way of the IR, a sidecar or the
 binary itself. It looks for `scripts/build.sh` and the two `runtime/*.c` files
-one level up from wherever it was invoked, then in the working directory, so
-it wants a checkout or an installed package around it the way `nish` does.
+one level up from wherever it was invoked (and one level up from the file a
+symbolic link to it names), so it wants a checkout or an installed package
+around it the way `nish` does. It falls back to the working directory only
+when the compiler itself lies inside that directory, so a checkout you merely
+`cd` into cannot hand it a `scripts/build.sh` to run. Keep `bin/nish` beside
+`scripts/`, `runtime/` and `std/`, as every install above does, and keep that
+directory's parent writable only by you: the package root is the parent of
+the compiler's directory, so a compiler at `/tmp/x/nish` would trust
+`/tmp/scripts/build.sh` (CLI-9 in [docs/security/cli.md](security/cli.md)).
 
 Because the seed is the last release, `src/` may only *use* in its own
 source the constructs that release compiles. A new construct is implemented
@@ -457,9 +464,11 @@ nish run hello.ts
 `$XDG_CACHE_HOME/nish/run` (or `~/.cache/nish/run`) when that program has not
 been linked before, and starts it with the arguments after the file. The first
 run of a new edit pays for one link, and later runs start the cached binary.
-It needs clang only for that link. It needs `HOME` or `XDG_CACHE_HOME` set,
-and refuses the run without them rather than keep a binary in a shared
-directory.
+It needs clang only for that link. It needs `HOME` or `XDG_CACHE_HOME` set
+to an absolute path (a relative one is ignored, as if it were unset), and
+refuses the run without one rather than keep a binary in a shared directory.
+The first run that builds into the cache makes its root `0700`, so no other
+user can plant a binary in it ([docs/security/cli.md](security/cli.md)).
 
 ## 4. Exit codes
 
@@ -469,7 +478,7 @@ directory.
 | 1 | the program was rejected: compile error (`file:line:col: error: ...`), missing input file, or an `-o` layout that does not fit the module count |
 | 2 | usage error: unknown flag, missing argument, no input files |
 | 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) — or the `nish` command found no prebuilt compiler for this platform, or one that would not start. Under `--json` all of these are one `NL0002` object |
-| | `nish run` answers these codes until the program starts, and the program's own exit status (`128 + n` for a signal) after that. With neither `HOME` nor `XDG_CACHE_HOME` set it answers 3 |
+| | `nish run` answers these codes until the program starts, and the program's own exit status (`128 + n` for a signal) after that. With neither `HOME` nor `XDG_CACHE_HOME` set to an absolute path it answers 3 |
 | 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/nish/issues> with the input and command line; `NISH_DEBUG=1` prints the stack trace |
 
 ## Troubleshooting

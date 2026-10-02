@@ -94,6 +94,24 @@ and read what the victim's cache holds.
 | A script's name cannot collide with the entry's own files. | `tests/nish/cli.ts` CLI-1's checks |
 | The cache root is private to its owner after any miss. | `tests/nish/cli.ts` "CLI-4: the cache root is private to its owner" |
 
+## Status after the runtime stage
+
+The runtime stage ([`runtime.md`](runtime.md)) merged after this record and
+changed what is open. The table keeps this stage's findings as they stood;
+this is what is true now.
+
+- **CLI-6 is fixed in the runtime** (RT-4): `writeFileSync`, `appendFileSync`
+  and `spawnSyncTo`'s two paths open with `O_NOFOLLOW` and refuse a symbolic
+  link as the last component. The compiler is built by the last release, so
+  the fix reaches `nish` itself with the next release (the rolling freeze);
+  until then a released compiler still follows the link.
+- **CLI-7 and CLI-9 have their primitives** (RT-9): `nish_lstat_owner_mode`,
+  `nish_euid` and `nish_is_executable` in `runtime/runtime-host.c`. `src/` may
+  call them only once a release declares them, so both stay open until the
+  release after the runtime stage, and then need the change in
+  `src/compile.ts` that uses them.
+- CLI-8 is unchanged.
+
 ## Doc corrections for the security-policy stage
 
 - `docs/INSTALL.md`, the `nish run` section: "It needs `HOME` or

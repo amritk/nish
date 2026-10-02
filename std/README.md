@@ -32,19 +32,33 @@ performance gate compiles every module with no diagnostics under both
 ChaCha20-Poly1305, AES-GCM, P-256 and X.509 also run their vectors in `f64`
 (`crypto_*_f64`).
 
+Every module here was security-audited (#363); the records are in
+[`docs/security/`](../docs/security/README.md), and how to report a
+vulnerability is in [`SECURITY.md`](../SECURITY.md). Two limits hold across the
+modules. **Lengths stop at 2^31 − 1.** No array built by `push` or `new Array`,
+and no array or string the runtime makes (a file read, a concatenation, a
+template), can pass 2^31 − 1 elements or bytes, and the one-shot functions
+below refuse a longer input as each row says. A string built by `join` still
+can, and under `--number-mode i32` its `length` is then wrong, which nothing in
+`std` can tell (CG-3, open): a program built in that mode must not hand these
+functions anything built from such a string. **Secrets are not wiped.** Private keys,
+nonces and intermediate state stay in arena memory after a call returns, until
+that memory is reused, because the language has no store the optimiser is
+barred from removing (ECC-2, X509-7, open).
+
 | Module | What it is | Reproduces |
 | --- | --- | --- |
-| [`crypto/sha256.ts`](./crypto/sha256.ts) | `sha256(data)`, and `Sha256`, a streaming hasher: `update(buf, off, len)` over a window of a `u8[]`, `copy()` for the hash of a prefix while the original keeps going, and `digest()`, a fresh 32-byte array. `SHA256_SIZE` and `SHA256_BLOCK` | FIPS 180-4 §6.2 |
-| [`crypto/sha512.ts`](./crypto/sha512.ts) | SHA-512 and SHA-384 on one compression function: `sha512` and `sha384`, and the streaming `Sha512` and `Sha384` with `Sha256`'s three methods; digests of 64 and 48 bytes. `SHA512_SIZE`, `SHA384_SIZE` and `SHA512_BLOCK` | FIPS 180-4 §6.4, §6.5 |
-| [`crypto/hmac.ts`](./crypto/hmac.ts) | `hmacSha256` and `hmacSha384`, the streaming `HmacSha256` and `HmacSha384` (keyed in the constructor, then `update` and `digest`), and `hmacSha256Verify` / `hmacSha384Verify`, which compare a received tag with `timingSafeEqual` | RFC 2104, RFC 4231 §4 |
-| [`crypto/hkdf.ts`](./crypto/hkdf.ts) | `hkdfExtractSha256` / `hkdfExtractSha384` (an empty salt is HashLen zeros) and `hkdfExpandSha256` / `hkdfExpandSha384`, which answer `null` for a length below zero or above 255 × HashLen. TLS 1.3's HKDF-Expand-Label is not here; it belongs with TLS | RFC 5869 §2, Appendix A |
-| [`crypto/ct.ts`](./crypto/ct.ts) | `timingSafeEqual(a, b)`, which reads every byte whatever it holds, and `timingSafeEqualAt(a, aOff, b, bOff, len)` over two windows, which answers `false` for a window outside its array. Two lengths that differ answer `false` at once, because a length is public | — |
-| [`crypto/base64url.ts`](./crypto/base64url.ts) | `base64urlEncode(data)` and `base64urlDecode(text)`, unpadded. Decoding is strict, so every byte string has one spelling: a `=`, a character outside the alphabet, a length of 1 mod 4 or nonzero unused low bits answer `null` | RFC 4648 §5, §10 |
-| [`crypto/x25519.ts`](./crypto/x25519.ts) | `x25519(scalar, u)` and `x25519Base(scalar)`, on ten 25.5-bit limbs in `i64`. Either answers `null` unless its arguments are `X25519_SIZE` (32) bytes; the scalar is clamped on a copy | RFC 7748 §5.2, §6.1 |
-| [`crypto/chacha20poly1305.ts`](./crypto/chacha20poly1305.ts) | `chacha20Poly1305Seal(key, nonce, aad, plaintext)`, which answers the ciphertext followed by the 16-byte tag, and `chacha20Poly1305Open`, which checks the whole tag before it decrypts anything and answers `null` for a message that does not authenticate. Beneath them `chacha20Block`, `chacha20`, `chacha20QuarterRound`, `poly1305` and `poly1305KeyGen`, and `chacha20HeaderMask`, QUIC's 5-byte header-protection mask. Every input of the wrong length answers `null` | RFC 8439 §2, RFC 9001 §5.4.4 |
-| [`crypto/aes.ts`](./crypto/aes.ts) | AES-128 and AES-256, bitsliced four blocks at a time with the Boyar–Peralta S-box circuit, so no table is read: `aesKey(key)` expands a 16- or 32-byte key into an `AesKey`, then `aesEncryptBlock`, `aesGcmSeal` / `aesGcmOpen` (tag last, checked in full before anything is decrypted; any non-empty IV) and `aesHeaderMask`. AES-192 is out of scope, and a wrong length answers `null` | FIPS 197, SP 800-38D, RFC 9001 §5.4.3, Wycheproof `aes_gcm` |
-| [`crypto/p256.ts`](./crypto/p256.ts) | ECDSA over P-256 with RFC 6979's deterministic nonces: `p256PublicKey(priv)` (65-byte uncompressed SEC1), `p256Sign` / `p256Verify` over a digest and `p256SignSha256` / `p256VerifySha256` over a message; a signature is `r` and `s`, 32 big-endian bytes each, not DER (`crypto/x509.ts`'s `x509DerSignatureRS` converts one). A malformed key, a point off the curve or an `r` or `s` out of range answers `null` or `false`, never a panic | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256` |
-| [`crypto/x509.ts`](./crypto/x509.ts) | DER, PEM and X.509 over P-256: `pemToDer` / `derToPem` (RFC 7468, padded standard base64, strict labels), `x509ParseP256PrivateKey` (SEC1 or PKCS#8), `x509ParseCertificate` / `x509ParseChain` into an `X509Certificate`, `x509VerifySignature` (ecdsa-with-SHA256 under an issuer's key), `x509DerSignatureRS` (a DER ECDSA-Sig-Value as the `r || s` `crypto/p256.ts` takes), `x509MintSelfSigned`, the 1-to-14-day self-signed P-256 certificate WebTransport's `serverCertificateHashes` accepts, and `x509CertificateHash`, its SHA-256. DER is read strictly — non-minimal lengths and integers, indefinite lengths and trailing bytes answer `null` | X.690, RFC 5280, RFC 7468, RFC 5915, RFC 5208 / 5958; certificates checked against OpenSSL |
+| [`crypto/sha256.ts`](./crypto/sha256.ts) | `sha256(data)`, and `Sha256`, a streaming hasher: `update(buf, off, len)` over a window of a `u8[]`, `copy()` for the hash of a prefix while the original keeps going, and `digest()`, a fresh 32-byte array. `SHA256_SIZE` and `SHA256_BLOCK`. `sha256` panics on an array longer than 2^31 − 1 bytes | FIPS 180-4 §6.2 |
+| [`crypto/sha512.ts`](./crypto/sha512.ts) | SHA-512 and SHA-384 on one compression function: `sha512` and `sha384`, and the streaming `Sha512` and `Sha384` with `Sha256`'s three methods; digests of 64 and 48 bytes. `SHA512_SIZE`, `SHA384_SIZE` and `SHA512_BLOCK`. The one-shot `sha512` and `sha384` panic on an array longer than 2^31 − 1 bytes | FIPS 180-4 §6.4, §6.5 |
+| [`crypto/hmac.ts`](./crypto/hmac.ts) | `hmacSha256` and `hmacSha384`, the streaming `HmacSha256` and `HmacSha384` (keyed in the constructor, then `update` and `digest`), and `hmacSha256Verify` / `hmacSha384Verify`, which compare a received tag with `timingSafeEqual`. The one-shot functions panic on a message longer than 2^31 − 1 bytes | RFC 2104, RFC 4231 §4 |
+| [`crypto/hkdf.ts`](./crypto/hkdf.ts) | `hkdfExtractSha256` / `hkdfExtractSha384` (an empty salt is HashLen zeros) and `hkdfExpandSha256` / `hkdfExpandSha384`, which answer `null` for a length below zero or above 255 × HashLen, for an `info` longer than 2^31 − 1 bytes, and for a PRK shorter than HashLen. TLS 1.3's HKDF-Expand-Label is not here; it belongs with TLS | RFC 5869 §2, Appendix A |
+| [`crypto/ct.ts`](./crypto/ct.ts) | `timingSafeEqual(a, b)`, which reads every byte whatever it holds, and `timingSafeEqualAt(a, aOff, b, bOff, len)` over two windows, which answers `false` for a window outside its array. Two lengths that differ answer `false` at once, because a length is public, and so does an array longer than 2^31 − 1 bytes | — |
+| [`crypto/base64url.ts`](./crypto/base64url.ts) | `base64urlEncode(data)` and `base64urlDecode(text)`, unpadded. Decoding is strict, so every byte string has one spelling: a `=`, a character outside the alphabet, a length of 1 mod 4 or nonzero unused low bits answer `null`, as does a text longer than 2^31 − 1 bytes; `base64urlEncode` panics on such an array | RFC 4648 §5, §10 |
+| [`crypto/x25519.ts`](./crypto/x25519.ts) | `x25519(scalar, u)` and `x25519Base(scalar)`, on ten 25.5-bit limbs in `i64`. Either answers `null` unless its arguments are `X25519_SIZE` (32) bytes; the scalar is clamped on a copy | RFC 7748 §5.2, §6.1, Wycheproof `x25519_test` |
+| [`crypto/chacha20poly1305.ts`](./crypto/chacha20poly1305.ts) | `chacha20Poly1305Seal(key, nonce, aad, plaintext)`, which answers the ciphertext followed by the 16-byte tag, and `chacha20Poly1305Open`, which checks the whole tag before it decrypts anything and answers `null` for a message that does not authenticate. Beneath them `chacha20Block`, `chacha20`, `chacha20QuarterRound`, `poly1305` and `poly1305KeyGen`, and `chacha20HeaderMask`, QUIC's 5-byte header-protection mask. Every input of the wrong length answers `null` | RFC 8439 §2, RFC 9001 §5.4.4, Wycheproof `chacha20_poly1305` (all 325 cases) |
+| [`crypto/aes.ts`](./crypto/aes.ts) | AES-128 and AES-256, bitsliced four blocks at a time with the Boyar–Peralta S-box circuit, so no table is read: `aesKey(key)` expands a 16- or 32-byte key into an `AesKey`, then `aesEncryptBlock`, `aesGcmSeal` / `aesGcmOpen` (tag last, checked in full before anything is decrypted; any non-empty IV) and `aesHeaderMask`. AES-192 is out of scope, and a wrong length answers `null`, as does an `AesKey` not made by `aesKey`; one whose H is zero opens nothing | FIPS 197, SP 800-38D, RFC 9001 §5.4.3, Wycheproof `aes_gcm` (all 316 cases; the 103 AES-192 ones check that the key is refused) |
+| [`crypto/p256.ts`](./crypto/p256.ts) | ECDSA over P-256 with RFC 6979's deterministic nonces: `p256PublicKey(priv)` (65-byte uncompressed SEC1), `p256Sign` / `p256Verify` over a digest and `p256SignSha256` / `p256VerifySha256` over a message; a signature is `r` and `s`, 32 big-endian bytes each, not DER (`crypto/x509.ts`'s `x509DerSignatureRS` converts one). A malformed key, a point off the curve or an `r` or `s` out of range answers `null` or `false`, never a panic. ECDSA is malleable, and `p256Verify` accepts a high `s`: when `(r, s)` verifies, so does `(r, n − s)` | RFC 6979 A.2.5, Wycheproof `ecdsa_secp256r1_sha256`, `_sha256_p1363`, `_sha512` and `_sha512_p1363` |
+| [`crypto/x509.ts`](./crypto/x509.ts) | DER, PEM and X.509 over P-256: `pemToDer` / `derToPem` (RFC 7468, padded standard base64, strict labels), `x509ParseP256PrivateKey` (SEC1 or PKCS#8), `x509ParseCertificate` / `x509ParseChain` into an `X509Certificate`, `x509VerifySignature` (ecdsa-with-SHA256 under an issuer's key), `x509DerSignatureRS` (a DER ECDSA-Sig-Value as the `r || s` `crypto/p256.ts` takes), `x509MintSelfSigned`, the 1-to-14-day self-signed P-256 certificate WebTransport's `serverCertificateHashes` accepts, and `x509CertificateHash`, its SHA-256. DER is read strictly — non-minimal lengths and integers, indefinite lengths and trailing bytes answer `null`. `x509ParseCertificate` and `x509ParseChain` parse and do not validate: there is no path validation, no extension is read or exposed, and no clock is consulted. `pemToDer` refuses a file in which any block, of any label, is malformed. `x509MintSelfSigned` refuses a common name that is not UTF-8 or holds a NUL, and its key and serial must come from `crypto.getRandomValues`, which the module cannot call itself without refusing wasm32 (X509-6) | X.690, RFC 5280, RFC 7468, RFC 5915, RFC 5208 / 5958; certificates checked against OpenSSL |
 
 Three rules hold across the modules:
 
@@ -55,8 +69,10 @@ Three rules hold across the modules:
   that is itself spent, so any `update` or `digest` on it panics. Either way,
   copy *before* `digest` when the computation has to go on.
 - **An all-zero X25519 result is returned, not refused.** It is what a
-  low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol; TLS
-  1.3 (WP34 T1) makes it. A key exchange outside TLS has to make it itself.
+  low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol.
+  Nothing in this tree makes that check yet (TLS 1.3, WP34 T1, is planned to),
+  so every caller doing a key exchange must refuse an all-zero answer itself,
+  with `timingSafeEqual` against 32 zero bytes, since the answer is a secret.
 - **Constant time by construction, and verified where the check reaches.** No
   module branches on, or indexes by, a secret: comparisons OR the differences
   into one word and test it once, the ladder swaps with a mask and always runs
@@ -65,13 +81,22 @@ Three rules hold across the modules:
   rather than a table. Every branch is on a length, a loop counter or a bit
   position. WP34 N6 checks that the machine code kept that shape:
   `tests/ct-asm.js` disassembles golden fixtures on x86-64 and aarch64 and
-  refuses a branch, a call or a secret-addressed load in them. What it holds,
-  per module, is what that module's header says:
+  refuses a branch, a call, a secret-addressed load, or a divide or square
+  root of a secret (whose latency follows its operands) in them. It reads what
+  `clang -O2` emits for each target's baseline CPU, and only the functions a
+  fixture names: the fixtures are copies of each module's straight-line cores,
+  so the module functions themselves, and every loop, rest on review.
+  [`docs/security/ct-verification.md`](../docs/security/ct-verification.md)
+  lists every secret-handling function no fixture reads. What it holds, per
+  module, is what that module's header says:
   - `tests/cases/ct_asm_mac` pins the two loop shapes the others are built
-    from, a full tag compare and a masked table read. `crypto/ct.ts` and
-    `crypto/hmac.ts`'s verifiers compare in the first shape and
-    `crypto/base64url.ts` selects by mask, but none of those K1 modules is
-    itself in a fixture, so they remain discipline.
+    from, a full tag compare and a masked table read; `crypto/hmac.ts`'s
+    verifiers compare in the first shape.
+  - `tests/cases/ct_asm_k1_ct`: copies of `timingSafeEqual`'s loop at 32 and
+    48 bytes and `timingSafeEqualAt`'s at a 16-byte window.
+  - `tests/cases/ct_asm_k1_base64url`: the two character maps verbatim, and
+    one encode group and one decode group. The length-driven loops, the
+    decoder's store guard and the encoder's string building remain discipline.
   - `tests/cases/ct_asm_x25519`: X25519's field multiply, square, add,
     subtract and multiply by a24, its conditional swap, and one step of the
     Montgomery ladder, the check following each call into the field functions.

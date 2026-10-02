@@ -40,10 +40,12 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 > experiment in how far a static subset of TypeScript can go when it is
 > compiled straight to native code, not a tool to build on yet. Expect
 > miscompilations, crashes, missing features and diagnostics that are wrong
-> or confusing. No one has reviewed the compiler, the runtime or the
-> standard library for security, and that includes the cryptography in
-> `std/`. Nothing it produces should handle data, money or systems you care
-> about.
+> or confusing. The compiler, the runtime and the standard library,
+> cryptography included, have had one audit by the project itself
+> ([docs/security/](docs/security/README.md)), which fixed what it found and
+> left findings open. No one independent has reviewed them. Nothing it
+> produces should handle data, money or systems you care about. To report a
+> vulnerability, see [SECURITY.md](SECURITY.md).
 
 > [!WARNING]
 > **Everything still changes.** Until 1.0, the language, the CLI flags and the
@@ -517,8 +519,9 @@ Details, and the subset `src/` is written in, are in
 ## Project status
 
 Pre-alpha, as above, and **not for production use**. The milestones below
-say what compiles, not what has been hardened: there has been no security
-review and there is no compatibility promise. M4 is the
+say what compiles, not what has been hardened: the one security audit so far
+was the project's own ([docs/security/](docs/security/README.md), with findings
+still open), and there is no compatibility promise. M4 is the
 milestone that freezes the language reference and tags a release. Until it
 lands, a construct's spelling, a flag's name and the IR any of them lowers
 to are all still free to change.
@@ -578,6 +581,16 @@ CI runs the suite on Ubuntu and macOS with LLVM 18
 ([docs/wp10-ci.md](docs/wp10-ci.md)). The documentation index is
 [docs/README.md](docs/README.md). Coding guidelines for contributors and
 coding agents are in [AGENTS.md](AGENTS.md) and [`.claude/`](.claude/).
+
+---
+
+## Security
+
+Report a vulnerability privately, through GitHub's **Security → Report a
+vulnerability**, never in a public issue. [SECURITY.md](SECURITY.md) has the
+reporting channel, the supported versions and the threat model.
+[docs/security/](docs/security/README.md) holds the audit record of every area
+and the list of findings still open.
 
 ---
 
