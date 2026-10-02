@@ -328,7 +328,6 @@ export class TlsServer {
   input: u8[]
   outputInitial: u8[]
   outputHandshake: u8[]
-  outputApplication: u8[]
 
   handshakeSecret: u8[]
   clientHandshakeSecret: u8[]
@@ -345,8 +344,8 @@ export class TlsServer {
   /**
    * A server for one connection under `config`, with the 32-byte server
    * random and the 32-byte x25519 private key drawn for it. A random or key of
-   * another length, or a configuration with no certificate, leaves the server
-   * failed with `internal_error` before it reads anything.
+   * another length, or a configuration `tlsConfigFits` refuses, leaves the
+   * server failed with `internal_error` before it reads anything.
    */
   constructor(config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]) {
     this.config = config
@@ -357,7 +356,6 @@ export class TlsServer {
     this.input = []
     this.outputInitial = []
     this.outputHandshake = []
-    this.outputApplication = []
     this.handshakeSecret = []
     this.clientHandshakeSecret = []
     this.serverHandshakeSecret = []
@@ -719,11 +717,9 @@ export class TlsServer {
         this.outputHandshake = none
         return out
       }
-      default: {
-        const out: u8[] = this.outputApplication
-        this.outputApplication = none
-        return out
-      }
+      default:
+        // Nothing is written at the Application level before NewSessionTicket, which is out of scope.
+        return none
     }
   }
 
