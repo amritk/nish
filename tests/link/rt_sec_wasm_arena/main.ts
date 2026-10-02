@@ -1,8 +1,9 @@
 // The wasm runtime traps on a request that cannot fit wasm32's address space,
 // where it used to hand back memory it did not have: a wrapped offset, a page
 // count truncated to 32 bits, a wrapped array size, and an array grown past
-// 2^31 - 1 elements. `probe.c` holds the four requests and `probe.mjs` runs
-// each in a fresh instance under Node; every line must say `trap`.
+// 2^31 - 1 elements. `probe.c` holds the four requests, and a fifth for
+// exactly 2^31 - 1 elements that must still succeed; `probe.mjs` runs each in
+// a fresh instance under Node.
 // docs/security/runtime.md, RT-7; docs/security/codegen.md, CG-9.
 import { failed } from "./lib";
 

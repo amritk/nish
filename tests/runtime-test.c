@@ -609,6 +609,56 @@ int64_t nish_lstat_owner_mode(const nish_str *);
 int64_t nish_euid(void);
 _Bool nish_is_executable(const nish_str *);
 
+#include <sys/mman.h>
+
+/* The longest string or array the runtime may make, and a size every page
+   size divides (4 KiB on Linux x86-64, 16 KiB on Darwin arm64, 64 KiB on some
+   arm64 Linux). */
+#define SEC_MAX 2147483647u
+#define SEC_PAGE 65536u
+
+/* Address space for the checks at exactly SEC_MAX, which must get past each
+   limit without two gigabytes ever being resident. A sparse file is mapped
+   whole with no access, private, so nothing is committed and nothing is
+   written back: 4 GiB of address space in two halves, each of one
+   read-write page followed by pages that fault. The first half's page holds
+   a string header whose bytes start in the faulting pages; the second half
+   is where the check points the arena. A fault in a child that has got past
+   the limit lands in `sec_fault`, which answers 42 if the arena handed out
+   exactly the block that length needs. */
+#define SEC_HALF ((uint64_t)SEC_MAX + 1 + 2 * SEC_PAGE)
+static char *sec_space;
+static uint64_t sec_fault_off;
+
+static void sec_fault(int sig) {
+  (void)sig;
+  _exit(nish_arena.off == sec_fault_off ? 42 : 43);
+}
+
+static int sec_reserve(const char *path) {
+  int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int ok = fd >= 0 && ftruncate(fd, (off_t)(2 * SEC_HALF)) == 0;
+  if (ok) sec_space = mmap(NULL, 2 * SEC_HALF, PROT_NONE, MAP_PRIVATE, fd, 0);
+  if (fd >= 0) close(fd);
+  unlink(path);
+  return ok && sec_space != MAP_FAILED && mprotect(sec_space, SEC_PAGE, PROT_READ | PROT_WRITE) == 0 &&
+         mprotect(sec_space + SEC_HALF, SEC_PAGE, PROT_READ | PROT_WRITE) == 0;
+}
+
+/* In a child: the arena is the second half from `at` bytes in, and a fault is
+   `sec_fault`'s to answer. */
+static void sec_arena_at(uint64_t at, uint64_t fault_off) {
+  nish_arena.buf = sec_space + SEC_HALF + at;
+  nish_arena.off = 0;
+  nish_arena.cap = SEC_HALF - at;
+  nish_arena.chunks = NULL;
+  sec_fault_off = fault_off;
+  signal(SIGSEGV, sec_fault);
+#ifdef SIGBUS
+  signal(SIGBUS, sec_fault);
+#endif
+}
+
 static int sec_failed;
 
 static void sec_check(int ok, const char *finding, const char *what) {
@@ -724,6 +774,59 @@ static void test_security(void) {
     }
     sec_check(sec_status(child) == 1, "RT-7", "nish_alloc_array of a length past 2^31 - 1 was not refused");
   }
+
+  /* RT-1, RT-2 and RT-7 at exactly 2^31 - 1, which each must still allow:
+     the checks above would pass against a limit one too low. Each child
+     points its arena at `sec_space`, so getting past the limit costs address
+     space and not memory. */
+  snprintf(path, sizeof path, "%s/space.bin", dir);
+  sec_check(sec_reserve(path), "RT-1", "4 GiB of address space could not be reserved");
+
+  /* A u8[] of 2^31 - 1 elements from the host entry: the header in the
+     read-write page, the elements never touched. */
+  child = fork();
+  if (child == 0) {
+    close(2);
+    sec_arena_at(0, 0);
+    nish_array *a = nish_alloc_array(1, SEC_MAX);
+    _exit(a->len == SEC_MAX && a->cap == SEC_MAX && a->data == sec_space + SEC_HALF + 24 ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 0, "RT-7", "nish_alloc_array of exactly 2^31 - 1 elements was refused");
+
+  /* `a + b` of exactly 2^31 - 1 bytes: `a` is 2^31 - 2 bytes that start in
+     the faulting pages of the first half, so the copy faults on its first
+     read, after the limit and with the whole result allocated. */
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_str *x = lit("x");
+    nish_str *a = (nish_str *)(sec_space + SEC_PAGE - 8);
+    a->len = SEC_MAX - 1;
+    sec_arena_at(0, 8 + (uint64_t)SEC_MAX + 1);
+    nish_str_concat(a, x);
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 42, "RT-2", "a + b of exactly 2^31 - 1 bytes was refused");
+
+  /* A file of exactly 2^31 - 1 bytes, sparse. The arena starts eight bytes
+     short of the faulting pages, so the header is written, `pread` answers
+     EFAULT without a byte, and the NUL after the bytes read faults: after
+     the limit, with the whole block allocated. Refused, the reader answers
+     null and the child exits 0. */
+  snprintf(path, sizeof path, "%s/longest.bin", dir);
+  big = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  sec_check(big >= 0 && ftruncate(big, SEC_MAX) == 0, "RT-1", "a sparse (2^31 - 1)-byte file could not be made");
+  close(big);
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_str *name = lit(path);
+    sec_arena_at(SEC_PAGE - 8, 8 + (uint64_t)SEC_MAX + 1);
+    _exit(nish_read_file_or_null(name) == NULL ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 42, "RT-1", "readFileSyncOrNull of exactly 2^31 - 1 bytes was refused");
+  unlink(path);
+  munmap(sec_space, 2 * SEC_HALF);
 
   /* RT-3: a NUL inside a path, a name or an argument is refused, never cut
      short at: every one of these names something real before its NUL. */

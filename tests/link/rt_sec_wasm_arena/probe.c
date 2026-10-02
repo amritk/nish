@@ -1,7 +1,9 @@
 /* What runtime/runtime-wasm.c answers when a request cannot fit wasm32's
    address space. Each probe returns 1 when the runtime handed back memory it
    does not have, which on a sound runtime none of them reaches: the call traps
-   first. docs/security/runtime.md, RT-7; docs/security/codegen.md, CG-9. */
+   first. `probe_array_max` is the one that must return: it asks for the
+   longest array there may be. docs/security/runtime.md, RT-7;
+   docs/security/codegen.md, CG-9. */
 #include <stdint.h>
 
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
@@ -29,6 +31,11 @@ int probe_truncate(void) {
 /* 2^61 eight-byte elements is 2^64 bytes, which wrapped to an empty block
    behind a header that claimed all of them. */
 int probe_array(void) { return nish_alloc_array(8, (uint64_t)1 << 61)->len != 0; }
+
+/* Exactly 2^31 - 1 elements is the longest array there may be, and is handed
+   back: 1 here, a trap against a limit one too low. Zero-byte elements, so
+   the length is all the probe asks for and it allocates nothing more. */
+int probe_array_max(void) { return nish_alloc_array(0, 2147483647u)->len == 2147483647u; }
 
 /* A full array of 2^31 - 1 elements grew past them, so an i32-mode `length`
    read back negative (docs/security/codegen.md, K1-6, which runtime.c had and
