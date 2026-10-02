@@ -71,13 +71,6 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
   _exit(1);
 }
 
-/* The bytes of `s` as the C string a system call takes, or "" when `s` holds a
-   NUL (docs/security/runtime.md, RT-3). The kernel reads a path up to its
-   first NUL, so without this `"secret\0.txt"` passes a program's `.txt` check
-   and opens `secret`. "" names nothing, so every caller already answers it the
-   way it answers a missing file: null, false, an exit, or a spawn that fails. */
-static const char *nish_cpath(const nish_str *s) { return strlen(s->data) == s->len ? s->data : ""; }
-
 /* The longest string or array a read hands back: 2^31 - 1, the same limit
    runtime.c's `NISH_ARRAY_MAX` puts on a push. Under --number-mode i32
    `length` is an `i32`, so one byte more reads back negative and bounds-check
@@ -214,10 +207,11 @@ static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, cons
   char **v = nish_alloc_struct((argv->len + 1) * sizeof *v);
   uint64_t i = 0;
   /* An argument holding a NUL is refused rather than cut short at it, which
-     would run a different command line from the one the program built. */
+     would run a different command line from the one the program built: it is
+     the one whose C string is not its own bytes. */
   for (; i < argv->len; i++) {
-    if (strlen(s[i]->data) != s[i]->len) return -1;
-    v[i] = s[i]->data;
+    v[i] = (char *)nish_cpath(s[i]);
+    if (v[i] != s[i]->data) return -1;
   }
   v[i] = 0;
   posix_spawn_file_actions_t fa;

@@ -100,8 +100,7 @@ void nish_random_fill(nish_array *bytes) {
    digits. `stat` follows a symbolic link, as `fs.statSync` does. */
 double nish_stat_mtime(const nish_str *path) {
   struct stat st;
-  /* A path holding a NUL names nothing, as in runtime-os.c (RT-3). */
-  if (strlen(path->data) != path->len || stat(path->data, &st) != 0) return __builtin_nan("");
+  if (stat(nish_cpath(path), &st) != 0) return __builtin_nan("");
 #if defined(__APPLE__)
   struct timespec t = st.st_mtimespec;
 #else
@@ -125,14 +124,14 @@ double nish_stat_mtime(const nish_str *path) {
  * CLI-9). */
 int64_t nish_lstat_owner_mode(const nish_str *path) {
   struct stat st;
-  if (strlen(path->data) != path->len || lstat(path->data, &st) != 0) return -1;
+  if (lstat(nish_cpath(path), &st) != 0) return -1;
   return (int64_t)((uint64_t)(uint32_t)st.st_uid << 32 | (uint32_t)st.st_mode);
 }
 
 int64_t nish_euid(void) { return (int64_t)geteuid(); }
 
 _Bool nish_is_executable(const nish_str *path) {
-  return strlen(path->data) == path->len && access(path->data, X_OK) == 0;
+  return access(nish_cpath(path), X_OK) == 0;
 }
 
 /* ---- Signals: `signalFd()` and `readSignal(fd)`

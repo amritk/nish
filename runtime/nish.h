@@ -63,6 +63,16 @@ typedef struct nish_str {
   char data[];
 } nish_str;
 
+/* The bytes of `s` as the C string a system call takes, or "" when `s` holds
+ * a NUL. The kernel reads a path to its first NUL, so `"secret\0.txt"` would
+ * pass a `.txt` check and open `secret`; "" names nothing, so each caller
+ * answers it as it answers a missing path. The one test every path, name and
+ * argument the runtime hands the OS goes through (docs/security/runtime.md,
+ * RT-3). `__builtin_strlen`, so this header needs no libc header of its own. */
+static inline const char *nish_cpath(const nish_str *s) {
+  return __builtin_strlen(s->data) == s->len ? s->data : "";
+}
+
 /* ---- Arena --------------------------------------------------------------
  * One bump allocator per process, or one per thread under `-DNISH_THREADS`
  * (WP20 T0; the layout and every function below are the same either way).
