@@ -4,15 +4,58 @@
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define internal noundef nonnull align 8 i8* @middle(i32 noundef %k) #0 {
+entry:
+  %word.addr = alloca i8*, align 8
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8** %word.addr, align 8
+  %0 = icmp sge i32 %k, 0
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = icmp sle i32 %k, 4
+  br label %land.end
+
+land.end:
+  %2 = phi i1 [ false, %entry ], [ %1, %land.rhs ]
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = load i8*, i8** %word.addr, align 8
+  %4 = bitcast i8* %3 to i64*
+  %5 = load i64, i64* %4, align 8
+  %6 = sext i32 %k to i64
+  %7 = icmp ule i64 %6, 5
+  %8 = icmp ule i64 5, %5
+  %9 = and i1 %7, %8
+  br i1 %9, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 %6, i64 5, i64 %5)
+  unreachable
+
+slice.ok:
+  %10 = sub i64 5, %6
+  %11 = getelementptr inbounds i8, i8* %3, i64 8
+  %12 = getelementptr inbounds i8, i8* %11, i64 %6
+  %13 = call i8* @nish_str_new(i8* %12, i64 %10)
+  ret i8* %13
+
+if.end:
+  %14 = load i8*, i8** %word.addr, align 8
+  ret i8* %14
+}
 
 define noundef i32 @nish_main() #0 {
 entry:
   %t.addr = alloca i8*, align 8
   %u.addr = alloca i8*, align 8
   %from.addr = alloca i32, align 4
+  %to.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = bitcast i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*) to i64*
   %1 = load i64, i64* %0, align 8
@@ -107,25 +150,55 @@ slice.ok.4:
   %48 = getelementptr inbounds i8, i8* %47, i64 %42
   %49 = call i8* @nish_str_new(i8* %48, i64 %46)
   call void @nish_print(i8* %49)
-  %50 = bitcast i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*) to i64*
-  %51 = load i64, i64* %50, align 8
-  %52 = icmp ule i64 1, 5
-  %53 = icmp ule i64 5, %51
-  %54 = and i1 %52, %53
-  br i1 %54, label %slice.ok.5, label %slice.fail.5
+  store i32 3, i32* %to.addr, align 4
+  %50 = load i8*, i8** %t.addr, align 8
+  %51 = bitcast i8* %50 to i64*
+  %52 = load i64, i64* %51, align 8
+  %53 = load i32, i32* %to.addr, align 4
+  %54 = sext i32 %53 to i64
+  %55 = icmp ule i64 1, %54
+  %56 = icmp ule i64 %54, %52
+  %57 = and i1 %55, %56
+  br i1 %57, label %slice.ok.5, label %slice.fail.5
 
 slice.fail.5:
-  call void @nish_panic_slice(i64 1, i64 5, i64 %51)
+  call void @nish_panic_slice(i64 1, i64 %54, i64 %52)
   unreachable
 
 slice.ok.5:
-  %55 = sub i64 5, 1
-  %56 = getelementptr inbounds i8, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i64 8
-  %57 = getelementptr inbounds i8, i8* %56, i64 1
-  %58 = call i8* @nish_str_new(i8* %57, i64 %55)
-  call void @nish_print(i8* %58)
+  %58 = sub i64 %54, 1
+  %59 = getelementptr inbounds i8, i8* %50, i64 8
+  %60 = getelementptr inbounds i8, i8* %59, i64 1
+  %61 = call i8* @nish_str_new(i8* %60, i64 %58)
+  call void @nish_print(i8* %61)
+  %62 = load i32, i32* %to.addr, align 4
+  %63 = add nsw i32 %62, 1
+  store i32 %63, i32* %to.addr, align 4
+  %64 = call i64 @nish_arena_mark()
+  %65 = call i8* @middle(i32 2)
+  %66 = call i8* @nish_arena_keep(i64 %64, i8* %65)
+  call void @nish_print(i8* %66)
+  %67 = bitcast i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*) to i64*
+  %68 = load i64, i64* %67, align 8
+  %69 = icmp ule i64 1, 5
+  %70 = icmp ule i64 5, %68
+  %71 = and i1 %69, %70
+  br i1 %71, label %slice.ok.6, label %slice.fail.6
+
+slice.fail.6:
+  call void @nish_panic_slice(i64 1, i64 5, i64 %68)
+  unreachable
+
+slice.ok.6:
+  %72 = sub i64 5, 1
+  %73 = getelementptr inbounds i8, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i64 8
+  %74 = getelementptr inbounds i8, i8* %73, i64 1
+  %75 = call i8* @nish_str_new(i8* %74, i64 %72)
+  call void @nish_print(i8* %75)
+  %76 = load i32, i32* %to.addr, align 4
+  %77 = sub nsw i32 %76, 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 0
+  ret i32 %77
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {

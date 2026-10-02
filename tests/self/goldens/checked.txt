@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 828 programs, 58920 dump lines.
+# 828 programs, 58927 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -44316,14 +44316,21 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/port_str_slice_literal_quiet.ts
 module tests/cases/port_str_slice_literal_quiet.ts (entry)
 const GREETING: string = "hello"
+function middle(k: i32): string -> @middle
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+  local 10:9 word: string (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new
+  calls: middle nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new
   stackSites=0 stackLocals=0
-  local 10:9 t: string (const)
-  local 13:9 u: string (const)
-  local 15:9 from: i32 (const)
+  local 19:9 t: string (const)
+  local 22:9 u: string (const)
+  local 24:9 from: i32 (const)
+  local 26:7 to: i32 (let)
+  callee 29:15 middle -> @middle
 program tests/cases/port_str_slice_negative.ts
 module tests/cases/port_str_slice_negative.ts (entry)
 function lastTwo(s: string): string -> @lastTwo
