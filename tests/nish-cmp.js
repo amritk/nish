@@ -1893,6 +1893,8 @@ const DECLARED = [
     file: "exit",
     changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
+  },
+  {
     program: "tests/link/net_quic_packet/main.ts",
     file: "exit",
     changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
