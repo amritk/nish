@@ -61,6 +61,7 @@ import {
   N_ARROW,
   N_BLOCK,
   N_CALL,
+  N_CONDITIONAL,
   N_EXPR_STMT,
   FLAG_CONST,
   N_INDEX,
@@ -97,6 +98,7 @@ import {
   ParallelCall,
   TemplateInfo,
 } from "./program"
+import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringSet } from "./map"
 import { Local } from "./symbols"
@@ -904,7 +906,7 @@ export const scopeFindings = (
     const parents: Node[] = []
     walkScopes(program, body, parents, scopeType, out)
     if (loaded) {
-      checkBody(program, facts, body, out)
+      checkBody(program, table, facts, body, out)
     }
     if (instance !== null) {
       program.leaveInstance()
@@ -1028,6 +1030,37 @@ const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
 }
 
 /**
+ * A task's argument read out of a variable, `ps[0]` or `p.f`, hands that
+ * variable on, although a base use elsewhere does not: the task reads its
+ * argument when the scope joins, and an element of a record array is the
+ * address of its slot, so a store into `ps[0]` before the join changed what
+ * the task saw and raced with it under `--threads` (docs/security/codegen.md,
+ * CG-7). Handed on, the variable is no longer private, and the region refuses
+ * the store. Each arm of a `?:` or a `??` is an argument the task may get.
+ */
+const handOnRoot = (program: CheckedProgram, arg: Node, uses: VariableUses): void => {
+  const top = unwrapParens(arg)
+  if (top.kind === N_CONDITIONAL) {
+    handOnRoot(program, top.children[1], uses)
+    handOnRoot(program, top.children[2], uses)
+    return
+  }
+  if (top.kind === N_BINARY && top.text === "??") {
+    handOnRoot(program, top.children[0], uses)
+    handOnRoot(program, top.children[1], uses)
+    return
+  }
+  let e = top
+  while (e.kind === N_INDEX || e.kind === N_MEMBER) {
+    e = unwrapParens(e.children[0])
+  }
+  const local: Local | null = e !== top ? namedLocal(program, e) : null
+  if (local !== null) {
+    uses.handedOn[uses.add(local)] = true
+  }
+}
+
+/**
  * Record what `node` does with the variables it names. A use of a variable
  * keeps it unhanded only as the base of an index or a member, as the iterable
  * of a `for...of`, or as a `spawn`'s destination, which is recorded as such.
@@ -1069,6 +1102,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
         uses.destination[uses.add(local)] = true
       } else {
         collectUses(program, arg, node.children[1], uses)
+        handOnRoot(program, arg, uses)
       }
       k = k + 1
     }
@@ -1204,6 +1238,7 @@ const sharedWriteBuiltin = (program: CheckedProgram, call: Node, uses: VariableU
  */
 const regionCallMessage = (
   program: CheckedProgram,
+  table: TypeTable,
   facts: FactsTable,
   node: Node,
   state: RegionState,
@@ -1218,6 +1253,13 @@ const regionCallMessage = (
   }
   if (callee.kind === N_MEMBER) {
     const receiver = unwrapParens(callee.children[0])
+    // `r.orReturn()` returns early through its own path, which leaves the
+    // block without the join a `return` or the block's end makes: the task
+    // stayed filed, and the next scope's join ran it through pointers into
+    // memory this function's arena scope had released (CG-6).
+    if (resultMethodName(program, table, node) === "orReturn") {
+      return `\`orReturn\` returns without joining \`${state.name}\`, before the scope joins${REGION_TAIL}`
+    }
     if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
       return regionWriteMessage(state, `\`Arena.${callee.text}\``)
     }
@@ -1255,6 +1297,7 @@ const regionCallMessage = (
 /** Walk `node`, parent code inside `state`'s region, pushing each refusal. */
 const walkRegion = (
   program: CheckedProgram,
+  table: TypeTable,
   facts: FactsTable,
   uses: VariableUses,
   node: Node,
@@ -1275,7 +1318,7 @@ const walkRegion = (
     // The task's argument and destination are the parent's code, evaluated
     // before the task is filed.
     for (const arg of node.children[1].children) {
-      walkRegion(program, facts, uses, arg, state, out)
+      walkRegion(program, table, facts, uses, arg, state, out)
     }
     state.addDestination(spawnDestination(program, node))
     return
@@ -1283,7 +1326,7 @@ const walkRegion = (
   // Until a task can have been filed, nothing can tell when it runs.
   if (!state.live()) {
     for (const child of node.children) {
-      walkRegion(program, facts, uses, child, state, out)
+      walkRegion(program, table, facts, uses, child, state, out)
     }
     return
   }
@@ -1304,14 +1347,14 @@ const walkRegion = (
   } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
   } else if (node.kind === N_CALL) {
-    message = regionCallMessage(program, facts, node, state, uses)
+    message = regionCallMessage(program, table, facts, node, state, uses)
   }
   if (message.length > 0) {
     out.push(new ScopeFinding(node, message))
     return
   }
   for (const child of node.children) {
-    walkRegion(program, facts, uses, child, state, out)
+    walkRegion(program, table, facts, uses, child, state, out)
   }
 }
 
@@ -1343,6 +1386,7 @@ const checkDestinations = (
  */
 const findRegions = (
   program: CheckedProgram,
+  table: TypeTable,
   facts: FactsTable,
   uses: VariableUses,
   node: Node,
@@ -1370,7 +1414,7 @@ const findRegions = (
           const later = node.children[j]
           started = started || holdsSpawnOn(program, later, state)
           if (started) {
-            walkRegion(program, facts, uses, later, state, out)
+            walkRegion(program, table, facts, uses, later, state, out)
           }
           j = j + 1
         }
@@ -1379,14 +1423,20 @@ const findRegions = (
     }
   }
   for (const child of node.children) {
-    findRegions(program, facts, uses, child, out)
+    findRegions(program, table, facts, uses, child, out)
   }
 }
 
 /** The destination rule and every region of one function's body. */
-const checkBody = (program: CheckedProgram, facts: FactsTable, body: Node, out: ScopeFinding[]): void => {
+const checkBody = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  body: Node,
+  out: ScopeFinding[]
+): void => {
   const uses = new VariableUses()
   collectUses(program, body, null, uses)
   checkDestinations(program, body, uses, out)
-  findRegions(program, facts, uses, body, out)
+  findRegions(program, table, facts, uses, body, out)
 }
