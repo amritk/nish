@@ -891,6 +891,12 @@ const removeTree = (path: string): void => {
   spawnSyncTo(["rm", "-rf", "--", path], `${WORK}/rm.out`, `${WORK}/rm.err`);
 };
 
+/** `text` at `path`, made executable: `writeFileSync` creates every file `0644`. */
+const writeExecutable = (path: string, text: string): void => {
+  writeFileSync(path, text);
+  spawnSyncTo(["chmod", "755", path], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
+};
+
 /** The `ls -ld` line for `path`, whose first ten bytes are its type and mode. */
 const modeLine = (path: string): string => {
   spawnSyncTo(["ls", "-ld", path], `${WORK}/ls.out`, `${WORK}/ls.err`);
@@ -958,38 +964,34 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   writeRunFixture(tamper);
   cli.run("sec_tamper", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);
   const entries = readdirSync(`${tamperCache}/nish/run`);
+  const path = getenv("PATH");
   if (entries !== null && t.eqI32("there is one entry to tamper with", toI32(entries.length), 1)) {
     const entry = `${tamperCache}/nish/run/${entries[0]}`;
     writeFileSync(`${entry}/key`, "nish 0.0.0\nrun sec-tamper\nnot this run's key\n");
-    writeFileSync(`${entry}/sec-tamper`, "#!/bin/sh\necho PLANTED\nexit 0\n");
-    spawnSyncTo(["chmod", "755", `${entry}/sec-tamper`], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
+    writeExecutable(`${entry}/sec-tamper`, "#!/bin/sh\necho PLANTED\nexit 0\n");
     const relinked = cli.run("sec_relink", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);
     t.eqI32("an entry whose key is not this run's is relinked, not started", relinked.status, 7);
     t.eqBool("and the binary it held never ran", contains(relinked.stdout, "PLANTED"), false);
-  }
 
-  // CLI-5: a run that dies between moving its binary in and writing its key
-  // must not leave the entry's old key beside the new binary. The entry above
-  // is given a key that is not this run's, standing in for another program
-  // whose key hashed to the same name, and `mv` is a stub that does the real
-  // move and then kills the compiler that started it.
-  const path = getenv("PATH");
-  const stubs = `${abs}/sec-stubs`;
-  removeTree(stubs);
-  mkdirSync(stubs);
-  writeFileSync(`${stubs}/mv`, '#!/bin/sh\n/bin/mv "$@" || exit 1\nkill -9 $PPID\n');
-  spawnSyncTo(["chmod", "755", `${stubs}/mv`], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
-  const after = readdirSync(`${tamperCache}/nish/run`);
-  if (path !== null && after !== null && after.length === 1) {
-    const entry = `${tamperCache}/nish/run/${after[0]}`;
-    const otherKey = "nish 0.0.0\nrun sec-tamper\nanother program's key\n";
-    writeFileSync(`${entry}/key`, otherKey);
-    cli.run("sec_killed", [`XDG_CACHE_HOME=${tamperCache}`, `PATH=${stubs}:${path}`], ["run", tamper]);
-    t.eqBool(
-      "CLI-5: a run killed after its binary is moved in leaves no other program's key beside it",
-      readOrEmpty(`${entry}/key`) === otherKey,
-      false
-    );
+    // CLI-5: a run that dies between moving its binary in and writing its key
+    // must not leave the entry's old key beside the new binary. The entry is
+    // given a key that is not this run's, standing in for another program
+    // whose key hashed to the same name, and `mv` is a stub that does the real
+    // move and then kills the compiler that started it.
+    if (path !== null) {
+      const stubs = `${abs}/sec-stubs`;
+      removeTree(stubs);
+      mkdirSync(stubs);
+      writeExecutable(`${stubs}/mv`, '#!/bin/sh\n/bin/mv "$@" || exit 1\nkill -9 $PPID\n');
+      const otherKey = "nish 0.0.0\nrun sec-tamper\nanother program's key\n";
+      writeFileSync(`${entry}/key`, otherKey);
+      cli.run("sec_killed", [`XDG_CACHE_HOME=${tamperCache}`, `PATH=${stubs}:${path}`], ["run", tamper]);
+      t.eqBool(
+        "CLI-5: a run killed after its binary is moved in leaves no other program's key beside it",
+        readOrEmpty(`${entry}/key`) === otherKey,
+        false
+      );
+    }
   }
 
   const relative = `${WORK}/sec-relative-cache`;
@@ -1018,7 +1020,7 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   const meta = cli.plain("sec_meta", [`${WORK}/${FIXTURE_OK}`, "-o", `${WORK}/sec-meta.ll`, "--link", exe]);
   t.eqI32("a --link path full of shell syntax links", meta.status, 0);
   t.eqBool("and none of it is run", readFileSyncOrNull(marker) !== null, false);
-  removeTree(`${WORK}/sec meta;touch ${abs}`);
+  removeTree(`${WORK}/sec meta;touch `);
 };
 
 /**

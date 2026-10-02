@@ -811,17 +811,17 @@ const packageRootCandidates = (): string[] => {
       if (throughLink !== asInvoked) {
         candidates.push(throughLink)
       }
-    }
-    const here = realpathSync(".")
-    if (real !== null && here !== null && real.startsWith(`${here}/`)) {
-      candidates.push(".")
+      const here = realpathSync(".")
+      if (here !== null && real.startsWith(`${here}/`)) {
+        candidates.push(".")
+      }
     }
   }
   return candidates
 }
 
-const packageRoot = (): string => {
-  const candidates = packageRootCandidates()
+/** The first of `candidates` with `scripts/build.sh` in it, or empty. */
+const packageRootIn = (candidates: string[]): string => {
   let i = 0
   while (i < candidates.length) {
     const root = candidates[i]
@@ -833,6 +833,8 @@ const packageRoot = (): string => {
   return ""
 }
 
+const packageRoot = (): string => packageRootIn(packageRootCandidates())
+
 /**
  * The root `nish/<module>` is read from: the package root when there is one,
  * and otherwise the root the compiler's own path implies, or `/` when it has
@@ -840,11 +842,11 @@ const packageRoot = (): string => {
  * working directory.
  */
 const libraryRoot = (): string => {
-  const root = packageRoot()
+  const candidates = packageRootCandidates()
+  const root = packageRootIn(candidates)
   if (root.length > 0) {
     return root
   }
-  const candidates = packageRootCandidates()
   return candidates.length > 0 ? candidates[0] : "/"
 }
 
@@ -884,7 +886,17 @@ const runProgram = (
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
   if (stored === null || stored !== key) {
-    const status = buildIntoCache(emitted, cacheRoot, cacheEntry, file, profile, debugInfo, threads, json)
+    const status = buildIntoCache(
+      emitted,
+      cacheRoot,
+      cacheEntry,
+      keyFile,
+      file,
+      profile,
+      debugInfo,
+      threads,
+      json
+    )
     if (status !== 0) {
       return status
     }
@@ -933,6 +945,7 @@ const buildIntoCache = (
   emitted: EmittedModule[],
   cacheRoot: string,
   cacheEntry: string,
+  keyFile: string,
   name: string,
   profile: string,
   debugInfo: boolean,
@@ -963,7 +976,7 @@ const buildIntoCache = (
   const built = `${work}/${name}`
   let status = linkProgram(outputs, built, profile, debugInfo, threads, json, true)
   if (status === 0) {
-    writeFileSync(`${cacheEntry}/key`, "")
+    writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
     if (spawnSync(move) !== 0) {
       reportToolchainFailure(`run: could not move the binary into ${cacheEntry}`, json)

@@ -102,9 +102,9 @@ const fileFingerprint = (path: string): string => {
 /**
  * Everything a link's result depends on, as one text: a header line per
  * input to the recipe, then each module's name and IR. `name` is the file the
- * binary is kept in, which is part of what a hit hands back: two scripts that
- * compile to the same IR under different names would otherwise share an entry
- * whose binary only one of them has. `root` is the package
+ * binary is kept in (`runBinaryName`), which is part of what a hit hands
+ * back, so the key names everything the entry holds rather than relying on
+ * the entry module's stem to imply it. `root` is the package
  * root `scripts/build.sh` and `runtime/` are read from; `cc` is the C compiler
  * the script will run (`CC`, or `clang`), since a different compiler is a
  * different binary.
