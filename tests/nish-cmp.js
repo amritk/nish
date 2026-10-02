@@ -1804,6 +1804,18 @@ const DECLARED = [
     changelog: "A surrogate-pair escape is the code point it spells",
     why: "`\\u{10000D800}` is refused as above 0x10FFFF, where the reference wraps it in i32 to a lone high surrogate",
   },
+  {
+    program: "tests/link/net_quic_packet/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
+    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+  },
+  {
+    program: "tests/link/net_quic_packet_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
+    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
