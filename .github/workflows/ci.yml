@@ -154,9 +154,9 @@ jobs:
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the six checks above
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -274,11 +274,13 @@ jobs:
       # `--require-coverage` and `--strict-refusals`.
 
       - name: Size report
+        env:
+          MATRIX_OS: ${{ matrix.os }}
         run: |
           build/nish examples/add.ts -o build/add.ll
           bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
           {
-            echo "### Binary size (${{ matrix.os }}, LLVM 18)"
+            echo "### Binary size ($MATRIX_OS, LLVM 18)"
             echo
             echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime-os.c`'
             echo
@@ -381,7 +383,7 @@ jobs:
       rows: ${{ steps.pick.outputs.rows }}
       cmp: ${{ steps.pick.outputs.cmp }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The lookup is a job of its own, before any toolchain and before
       # `npm ci`, for two reasons. It is the gate, so it should answer in
@@ -416,9 +418,9 @@ jobs:
       matrix:
         seed: ${{ fromJSON(needs.seeds.outputs.rows) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -451,25 +453,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The tarball name is .github/seed-targets.json's, resolved against the
+      # The tarball is .github/seed-targets.json's, resolved against the
       # release by `seeds`. This row exists *because* that asset is on the
       # release, so a download that fails here is a network or permissions
-      # fault rather than the absence the gate is about.
+      # fault rather than the absence the gate is about -- or a tarball whose
+      # SHA-256 is neither pinned in install.sh nor in the release's
+      # SHA256SUMS, which is refused before it is unpacked or run.
+      # scripts/fetch-seed.sh is that one verified path; it used to be a bare
+      # `gh release download` and `tar`, and then the seed ran.
       #
       # The matrix reaches bash through `env:` rather than through ${{ }}
       # spliced into the script. A maintainer-created tag is not a plausible
       # attacker, but the value came out of a release and the rule costs
       # nothing -- it is the one pr-title.yml already states.
+      #
+      # `--expect-tarball` is this row's architecture guard. install.sh picks
+      # the asset from the runner's own `uname`, and a runner label can move to
+      # other hardware (macos-13 and macos-latest both have), so without it a
+      # drifted row would bootstrap with another platform's seed and go green
+      # under this row's name. install.sh refuses, before downloading, unless
+      # the tarball it resolves is the row's -- release.yml's `binaries` job
+      # holds its rows to `host` the same way.
       - name: Download the seed
         id: download
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
-          gh release download "$TAG" --pattern "$TARBALL" --dir "$RUNNER_TEMP"
-          tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP"
-          echo "path=$RUNNER_TEMP/${TARBALL%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+          bash scripts/fetch-seed.sh "${TAG#v}" --expect-tarball "$TARBALL"
+          echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       - name: Build src/ with the seed
         env:
@@ -546,9 +558,9 @@ jobs:
       matrix:
         seed: ${{ fromJSON(needs.seeds.outputs.cmp) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -571,19 +583,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The same download `bootstrap` makes, and the same rule about the
-      # matrix reaching bash through `env:` rather than spliced into the
-      # script.
+      # The same verified download `bootstrap` makes, and the same rule about
+      # the matrix reaching bash through `env:` rather than spliced into the
+      # script, and the same refusal of a seed that is not this row's.
       - name: Download the seed
         id: download
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ matrix.seed.tag }}
           TARBALL: ${{ matrix.seed.tarball }}
         run: |
-          gh release download "$TAG" --pattern "$TARBALL" --dir "$RUNNER_TEMP"
-          tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP"
-          echo "path=$RUNNER_TEMP/${TARBALL%.tar.gz}/bin/nish" >> "$GITHUB_OUTPUT"
+          bash scripts/fetch-seed.sh "${TAG#v}" --expect-tarball "$TARBALL"
+          echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       # `NISH_BOOTSTRAP` rather than `--reference`, so the spelling is the one
       # scripts/bootstrap.sh and the harness already read and there is one name
@@ -627,9 +637,9 @@ jobs:
     name: the golden cases, in Nish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -682,9 +692,9 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm

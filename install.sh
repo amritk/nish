@@ -11,6 +11,13 @@
 # the binary was built, --verify'd and smoke-tested on hardware of its own
 # architecture by .github/workflows/release.yml before the release existed.
 #
+# Nothing downloaded runs, or is even unpacked, before its SHA-256 matches. A
+# release up to 0.15.0 is checked against the digest pinned below, in this
+# script -- a different place from the release it describes, so an asset
+# replaced on GitHub after the fact does not match. A later release is checked
+# against the SHA256SUMS file release.yml attaches beside it. A release that
+# has neither is refused rather than trusted (docs/security/supply-chain.md).
+#
 # The other way in is npm -- `npm install -g @amritk/nish` -- which gets the
 # same binary through per-platform packages. It covers the same platforms and no
 # more: since 0.6.0 there is no compiler inside that package to fall back to, so
@@ -37,11 +44,18 @@ Arguments:
 Options:
   --dir <path>         where to install. Default: $NISH_INSTALL, or ~/.nish
   --force              reinstall even when that version is already there
+  --expect-tarball <name>
+                       refuse, before downloading anything, unless the release
+                       asset this machine resolves is <name>, e.g.
+                       nish-0.15.0-x86_64-linux.tar.gz
   --uninstall          remove the install directory and stop
   -h, --help           this text
 
 Environment:
   NISH_INSTALL         same as --dir
+
+Every download is checked against a SHA-256 before it is unpacked or run, and
+one that does not match -- or that has no published digest -- is refused.
 
 Upgrading is running this again: it installs over an existing install, and
 says nothing needs doing when the version already matches.
@@ -70,6 +84,126 @@ nish_asset() {
     *) return 1 ;;
   esac
   printf '%s-%s\n' "$_arch" "$_os"
+}
+
+# One shell word that means exactly `$1`, for a path baked into the wrapper.
+#
+# Single quotes, because nothing is special inside them -- not `$`, not a
+# backtick, not a space -- so the only character to handle is a single quote
+# itself, which closes the string, gets a backslash, and opens it again.
+# Splicing the path between two quotes unescaped, which is what this replaced,
+# turned `--dir "/tmp/o'neil"` into a wrapper that ran whatever followed the
+# quote. scripts/postinstall.mjs quotes its own `exec` the same way.
+nish_shell_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# Whether a version is one this script will put in a URL: dotted, starting
+# with a digit, nothing but letters, digits, `.`, `-` and `+`. That is every
+# release this project has made, and what it rules out is a version that
+# reaches past `/releases/download/<tag>/` -- a `/`, a `..`, a `?` -- or the
+# whole URL the latest-release redirect answers with when there is no tag to
+# land on.
+nish_valid_version() {
+  case "$1" in
+    "" | [!0-9]* | *..* | *[!0-9A-Za-z.+-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# The SHA-256 of a file, in lower-case hex, or failure when this machine has
+# no tool to compute one. `sha256sum` is coreutils, `shasum` ships with macOS,
+# and `openssl` covers what has neither.
+nish_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    set -- sha256sum "$1"
+  elif command -v shasum >/dev/null 2>&1; then
+    set -- shasum -a 256 "$1"
+  elif command -v openssl >/dev/null 2>&1; then
+    set -- openssl dgst -sha256 -r "$1"
+  else
+    return 1
+  fi
+  "$@" | awk '{ print tolower($1) }'
+}
+
+# The digest of every release tarball published before release.yml attached
+# SHA256SUMS, keyed by `<version>-<asset>`, or nothing for one not listed.
+#
+# Each was read from the asset GitHub serves and checked against the file
+# itself on 2026-10-02. They live here rather than being fetched because a
+# digest fetched from the release it describes only proves the two agree with
+# each other: whoever can replace an asset can replace the sums beside it. A
+# release is not immutable on GitHub, and this list is -- an edit to it is a
+# reviewed change to this repository. A pinned digest wins over SHA256SUMS
+# when both exist.
+nish_pinned_sha256() {
+  case "$1-$2" in
+    0.1.1-x86_64-linux) echo 0ab19cb8878d740208cd76ed44490ccdf568ce8167b7d183d402208d973b3dc7 ;;
+    0.2.0-x86_64-linux) echo 85b65dda36989712add80d0742d7958194685be62ff8e0f7c7e429b869c9909b ;;
+    0.3.0-x86_64-linux) echo 521d52e100ed18c07e886f09b28ab4123e01fa13c765efdc9a6b54746a19128a ;;
+    0.4.0-aarch64-darwin) echo 28fd4aa18c2e8f4cf2f04215097ca60293a173cd26fe13cf12947687c2ef32c5 ;;
+    0.4.0-aarch64-linux) echo 2583ef4ca627caa7ce85404d50b92f94bd5983b4aed3311ffb31604a0e13b18d ;;
+    0.4.0-x86_64-darwin) echo e65141346a28e23a1709674085425a7376f7032ba275eda64d188ff5ba7a3c03 ;;
+    0.4.0-x86_64-linux) echo 5754803068301334be546dae6ec65709d583ef5c1df34e88d1f07a2e3d2971ad ;;
+    0.5.0-aarch64-darwin) echo ade1cc82d21e452667ff3eb4f64f17154c2c4180ed75de24a769b2216b2a7376 ;;
+    0.5.0-aarch64-linux) echo 62a33b4758d2413b9792d99f471698cd174f98206ca9f6aa9a2b9fa652fdae53 ;;
+    0.5.0-x86_64-darwin) echo e34d249ea92742ab8abe8baa27d21e6ef792f0f8fe0ca5d752783d9120927fc9 ;;
+    0.5.0-x86_64-linux) echo 01d499097a74c1d513674f13a9085e243b5bfda9243ea12c2a59a9276e45ccc8 ;;
+    0.6.0-aarch64-darwin) echo a181a50f3ff13ff89445680aacf06f09d25d63718015ecdb7391daa1b0d7d991 ;;
+    0.6.0-aarch64-linux) echo 1b558a8479c8b13b72425e550226c8d5da00b0f385acb7447d7388199696c8a8 ;;
+    0.6.0-x86_64-darwin) echo 2979c576982790d24ef7b5454b194dbbe5966e8d9433380819a911669c2b8aa6 ;;
+    0.6.0-x86_64-linux) echo e5106a136e5d8d4c26f055fdab597f6e32a7564d598f21bb9c3bc026f41ab06e ;;
+    0.8.0-aarch64-darwin) echo dd7dd86db14cf685369bfe62185d186c24121515a413e4dbc466905e73bc6a6e ;;
+    0.8.0-aarch64-linux) echo df70d344429607fc9c18a6e8e804f994bad36b1b8a9c62e9f8ffa9f7108f4c5a ;;
+    0.8.0-x86_64-darwin) echo 584b2e13f6c01a5e3f4bf4e65f703a01e1ac14c87674c26a90e59e164b39ff5b ;;
+    0.8.0-x86_64-linux) echo 7e51df4574180cc54ff2bb6782abd69e6f5e21d94971670b11d3b31b417fb0db ;;
+    0.9.0-aarch64-darwin) echo a95176ce59d0f8c2afd7d0bfe9bd3b5dd115a6b3caf9fd8cd5719eaa07fa9c9b ;;
+    0.9.0-aarch64-linux) echo ee333ed22ed6b5d7f76455c3a2b71be38ff1f79e45fff52e1a5b15b8a2ebe2ba ;;
+    0.9.0-x86_64-darwin) echo 3faa89a51a2e13c61aeb902541cfa6108e66b839e18cbd612e5304d77111d3c5 ;;
+    0.9.0-x86_64-linux) echo 394d76c0eb280575a27a1f8b3310e32939d4fa51a5fdbb58abe73709f2dd4f72 ;;
+    0.10.0-aarch64-darwin) echo e21eb2e0c9b9d8d0d892c0a7cfc41d5e0d84f531ab0ef1f4595d1279cabc5db8 ;;
+    0.10.0-aarch64-linux) echo f246454c92dea3f5ea63d476b84cc44bc4bf4ffe6dfc92e9fc5858217e906897 ;;
+    0.10.0-x86_64-darwin) echo a3eb219689f9ceb1237080dc65ab537b3e09b801250cc024c0c5d3ed4fe8ed3c ;;
+    0.10.0-x86_64-linux) echo ece843f89d1b3482b98f793016802a8c4f269bc6627a147587d287b2c96a4622 ;;
+    0.11.0-aarch64-darwin) echo 9e185aa991c03ce08fcdc1b8de5fd4ad1ce9970804e8ce48b5d109ad2f322b73 ;;
+    0.11.0-aarch64-linux) echo 18cbac5148032188b430a33ffe443211185b318a3ddbdef0746ba4db7ed78152 ;;
+    0.11.0-x86_64-darwin) echo 6310e21f708cd7d4f5b80236bfe763c1951e7c11430b0798281da086ade3cf0d ;;
+    0.11.0-x86_64-linux) echo f5de9858e4ccb771f063be45ca5ebf1d41825177cbb04ef82e7dd410a09736f7 ;;
+    0.12.0-aarch64-darwin) echo ae528fecc9eb1fcea9be65993acf98306c3ab1d6a776b1f1c5abd9ed3993cf0c ;;
+    0.12.0-aarch64-linux) echo a2a51376ecf2b7ce21a3b109fd5cc95a00d744f707640d2bb82807540614b05c ;;
+    0.12.0-x86_64-darwin) echo 904a45b4499c7cb52b7779d481df8685b806da4f0b46bcf84ac65116c257b15f ;;
+    0.12.0-x86_64-linux) echo 24c1f0ae0b165d94c4516d40b963c12c6397400f189502395c2218c41162649a ;;
+    0.13.0-aarch64-darwin) echo ef4975c0422f46f6869f1b826dd474af71517e93b98b635819d5a333498c6630 ;;
+    0.13.0-aarch64-linux) echo 040fb7818d2c2d018e428e264dc6fb43ab371d44516bd306715f4136a5afee9a ;;
+    0.13.0-x86_64-darwin) echo 264c9219412244ee001818b2d29b345b558b82b4794ff6994bdce89de82a33c7 ;;
+    0.13.0-x86_64-linux) echo a0d26a168dd2080a70bfcb2ce4fe85e2dd398074a84249ecb94fe735be021b2e ;;
+    0.14.0-aarch64-darwin) echo 861adbdbc3df6df4b134852ff16d3d97943d6241839533f74925252297b62132 ;;
+    0.14.0-aarch64-linux) echo 5051142dfcf0eb02eb5889ca9b4d7676e217dde02d05bfa1ee3cf7674907de4c ;;
+    0.14.0-x86_64-darwin) echo 7c1f14c528de80c831bcd5829954e23ca360478da8dcf277e22919c5f5326228 ;;
+    0.14.0-x86_64-linux) echo 2258aeeb895377fc9b40a7aea3c34e045ce03151cb0865825cc1ed3f3da8b93f ;;
+    0.15.0-aarch64-darwin) echo b217299039380ff2747d46abc6b2672fa9976b62cb23d05b20f39af0ed390369 ;;
+    0.15.0-aarch64-linux) echo 4b5749832e7c96878c8dd8f8a807ecea47e425e943b7604946819ee47c9fb819 ;;
+    0.15.0-x86_64-darwin) echo f720cf231cf299c9c160fe097a33647bd49b8e1d1c96f1338f9876d494df983a ;;
+    0.15.0-x86_64-linux) echo eb1b7bdf391c20a5c6d5e088ce074b81fac4c7a32854ca3916a8d179cb5be86c ;;
+  esac
+}
+
+# The release SHA256SUMS line for one file name: the digest, or nothing. Both
+# `sha256sum` spellings of the name are accepted -- `name` and the binary-mode
+# `*name` -- and a digest that is not 64 hex digits is no digest at all.
+nish_sums_lookup() {
+  awk -v n="$2" '$2 == n || $2 == ("*" n) { print tolower($1); exit }' "$1" |
+    grep -E '^[0-9a-f]{64}$' || true
+}
+
+# Whether a directory holds an install this script may replace or remove: one
+# with a `bin/nish` in it. Anything else that already exists and is not empty
+# is somebody's directory, and the swap below would move it aside and the exit
+# trap would delete it -- so `--dir ~/projects` would have emptied a project
+# folder. It is refused instead.
+nish_is_install() {
+  [ -e "$1/bin/nish" ] || [ -L "$1/bin/nish" ]
 }
 
 # Move the binary to libexec/ and leave a one-line `exec` of it at bin/nish.
@@ -104,9 +238,10 @@ nish_write_wrapper() {
   {
     printf '#!/bin/sh\n'
     printf '# Written by install.sh. Execs the compiler by absolute path, so that it\n'
+    # shellcheck disable=SC2016 # the wrapper's comment names $PWD, unexpanded
     printf '# resolves its runtime from this install rather than from $PWD -- which\n'
     printf '# every release up to 0.5.0 needs, because it resolves no symlink.\n'
-    printf "exec '%s' \"\$@\"\n" "$_dir/libexec/nish"
+    printf 'exec %s "$@"\n' "$(nish_shell_quote "$_dir/libexec/nish")"
   } > "$_dir/bin/nish"
   chmod +x "$_dir/bin/nish"
 }
@@ -151,12 +286,19 @@ version=""
 install_dir="${NISH_INSTALL:-$HOME/.nish}"
 force=""
 uninstall=""
+expect_tarball=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) usage; exit 0 ;;
     --dir) [ $# -ge 2 ] || die "--dir needs a path"; install_dir="$2"; shift 2 ;;
     --force) force=1; shift ;;
+    --expect-tarball)
+      # An empty name is refused here rather than read as "no expectation":
+      # the guard below would skip on it, and a caller that passed the flag
+      # asked for the check.
+      { [ $# -ge 2 ] && [ -n "$2" ]; } || die "--expect-tarball needs a file name"
+      expect_tarball="$2"; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     -*) die "unknown option $1 (try --help)" ;;
     *) [ -z "$version" ] || die "two versions given: $version and $1"; version="$1"; shift ;;
@@ -167,6 +309,8 @@ install_dir="$(nish_abspath "$install_dir")"
 
 if [ -n "$uninstall" ]; then
   [ -d "$install_dir" ] || die "nothing installed in $install_dir"
+  nish_is_install "$install_dir" ||
+    die "$install_dir has no bin/nish, so it is not an install of this script's; not removing it"
   rm -rf "$install_dir"
   say "removed $install_dir"
   say "If you added it to your PATH, take that line out of your shell profile."
@@ -183,6 +327,51 @@ if [ -z "$asset" ]; then
   released nish that runs here, in a checkout of the repository."
 fi
 
+# The tarball the caller says this machine should get, when it says one. CI's
+# seed rows name theirs from .github/seed-targets.json and run on whatever a
+# runner label provides today, and a label can move to other hardware -- two
+# macOS ones have. Without this a drifted row installs the asset `uname`
+# resolves instead, bootstraps with it, and reports success under the row's
+# name. Everything but the version is known before any request -- the asset
+# half comes from `uname` -- so the name is taken apart here, before the
+# latest-release lookup and the already-installed short cut: it has to be
+# exactly `nish-`, a release version, `-$asset.tar.gz`, or it is refused with
+# nothing requested and what is installed left alone.
+#
+# The version between them has to be dotted integers -- `^[0-9]+(\.[0-9]+)*$`,
+# no empty component, nothing else. That is the scheme .github/seed-due.sh
+# holds every release to and the only one seed-matrix.sh can emit, so it is an
+# allow-list of what a row can name rather than a deny-list of what it should
+# not. nish_valid_version is wider -- it allows letters and `-` -- and read
+# `nish-9.9.9-AARCH64-DARWIN-x86_64-linux.tar.gz` as version
+# `9.9.9-AARCH64-DARWIN`; a list of platform words to refuse missed every
+# spelling it did not list. Letters and `-` cannot appear here at all now.
+nish_expect_refuse() {
+  die "this machine ($(uname -s)-$(uname -m)) resolves $1, but the caller expects $expect_tarball.
+  The runner and the row it was meant to check disagree about the platform: fix
+  the row's runner or its host in .github/seed-targets.json. Nothing was installed."
+}
+nish_expect_version() {
+  _want="${1#nish-}"
+  [ "$_want" != "$1" ] || return 1
+  _rest="${_want%-"$2".tar.gz}"
+  [ "$_rest" != "$_want" ] || return 1
+  case "$_rest" in
+    "" | .* | *. | *..* | *[!0-9.]*) return 1 ;;
+  esac
+  return 0
+}
+if [ -n "$expect_tarball" ]; then
+  nish_expect_version "$expect_tarball" "$asset" || nish_expect_refuse "nish-<version>-$asset.tar.gz"
+fi
+
+if [ -e "$install_dir" ] && ! nish_is_install "$install_dir" &&
+  { [ ! -d "$install_dir" ] || [ -n "$(ls -A "$install_dir")" ]; }; then
+  die "$install_dir already exists, is not empty and is not a nish install.
+  Installing would replace it and delete what is in it. Pick an empty or new
+  directory with --dir, or remove this one yourself."
+fi
+
 command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v tar >/dev/null 2>&1 || die "tar is required"
 
@@ -197,6 +386,17 @@ if [ -z "$version" ]; then
 fi
 case "$version" in v*) ;; *) version="v$version" ;; esac
 plain="${version#v}"
+nish_valid_version "$plain" || die "$version is not a release version (one looks like 0.15.0 or v0.15.0)"
+
+name="nish-$plain-$asset"
+
+# The whole name is compared once the version is known. With a version given
+# that is before any request; with none, it is after the one request that
+# finds the latest release and before anything is downloaded -- everything but
+# the version was already compared, before that request, above.
+if [ -n "$expect_tarball" ] && [ "$expect_tarball" != "$name.tar.gz" ]; then
+  nish_expect_refuse "$name.tar.gz"
+fi
 
 have="$(nish_installed_version "$install_dir")"
 if [ "$have" = "$plain" ] && [ -z "$force" ]; then
@@ -205,7 +405,6 @@ if [ "$have" = "$plain" ] && [ -z "$force" ]; then
   exit 0
 fi
 
-name="nish-$plain-$asset"
 url="https://github.com/$REPO/releases/download/$version/$name.tar.gz"
 
 if [ "$have" = "$plain" ]; then
@@ -225,11 +424,34 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 stage="$tmp/stage"
 mkdir -p "$stage"
 
+# The digest the tarball has to match, settled before the tarball is fetched:
+# pinned here, or the line for it in the release's SHA256SUMS. A release with
+# neither is refused now, without downloading anything it would refuse.
+expected="$(nish_pinned_sha256 "$plain" "$asset")"
+if [ -z "$expected" ]; then
+  sums_url="https://github.com/$REPO/releases/download/$version/SHA256SUMS"
+  curl -fsSL "$sums_url" -o "$tmp/SHA256SUMS" ||
+    die "$version publishes no SHA256SUMS ($sums_url), and this script pins no digest for it,
+  so there is nothing to check $name.tar.gz against. It is not installed: an
+  unverified download is never run."
+  expected="$(nish_sums_lookup "$tmp/SHA256SUMS" "$name.tar.gz")"
+  [ -n "$expected" ] || die "$version's SHA256SUMS has no entry for $name.tar.gz; not installing it"
+fi
+
 curl -fSL --progress-bar "$url" -o "$tmp/nish.tar.gz" ||
   die "could not download $url
   Check https://github.com/$REPO/releases for what $version actually carries:
   not every release attaches every platform, and one already published cannot
   grow an asset."
+
+# Checked before tar or the binary sees a byte of it. `tar` has had path
+# traversal bugs of its own, and the version check below runs the download, so
+# both come after this and neither is the check.
+actual="$(nish_sha256 "$tmp/nish.tar.gz")" ||
+  die "no sha256sum, shasum or openssl on PATH, so the download cannot be verified; not installing it"
+[ "$actual" = "$expected" ] || die "$name.tar.gz does not match its published SHA-256, so it is not installed.
+  expected $expected
+  got      $actual"
 
 # --strip-components=1 because the tarball holds one directory, `$name/`, whose
 # layout is already the one the compiler needs: bin/nish beside runtime/ and
