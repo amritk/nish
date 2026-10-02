@@ -330,7 +330,9 @@ const hpackSameAsText = (bytes: u8[], text: string): boolean => {
   if (n !== toI32(text.length)) {
     return false
   }
-  for (let i: i32 = 0; i < n; i += 1) {
+  // Bounded by both lengths, which are equal here, so the prover drops both
+  // bounds checks rather than trusting the comparison above.
+  for (let i: i32 = 0; i < n && i < toI32(text.length); i += 1) {
     if (toI32(bytes[i]) !== toI32(text.charCodeAt(i))) {
       return false
     }
@@ -344,7 +346,7 @@ const hpackSameBytes = (a: u8[], b: u8[]): boolean => {
   if (n !== toI32(b.length)) {
     return false
   }
-  for (let i: i32 = 0; i < n; i += 1) {
+  for (let i: i32 = 0; i < n && i < toI32(b.length); i += 1) {
     if (a[i] !== b[i]) {
       return false
     }
@@ -425,7 +427,11 @@ export class HpackHuffman {
 export const hpackHuffmanLength = (h: HpackHuffman, src: u8[], off: i32, len: i32): i32 => {
   hpackCheckWindow("hpackHuffmanLength", src, off, len)
   let bits: i64 = 0
-  for (let i: i32 = off; i < off + len; i += 1) {
+  const end: i32 = off + len
+  // The window check has already proved `0 <= i < src.length` for every `i`
+  // below `end`; the loop condition says so again, which is what lets the
+  // prover drop the bounds check on each read. The two loops below do the same.
+  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
     bits += toI64(h.lengths[toI32(src[i])])
   }
   const bytes: i64 = (bits + toI64(7)) >> toI64(3)
@@ -446,7 +452,8 @@ export const hpackHuffmanEncode = (h: HpackHuffman, src: u8[], off: i32, len: i3
   hpackCheckWindow("hpackHuffmanEncode", src, off, len)
   let acc: i64 = 0
   let bits: i32 = 0
-  for (let i: i32 = off; i < off + len; i += 1) {
+  const end: i32 = off + len
+  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
     const sym: i32 = toI32(src[i])
     const n: i32 = h.lengths[sym]
     acc = (acc << toI64(n)) | toI64(h.codes[sym])
@@ -477,7 +484,8 @@ export const hpackHuffmanDecode = (h: HpackHuffman, src: u8[], off: i32, len: i3
   hpackCheckWindow("hpackHuffmanDecode", src, off, len)
   let code: i32 = 0
   let bits: i32 = 0
-  for (let i: i32 = off; i < off + len; i += 1) {
+  const end: i32 = off + len
+  for (let i: i32 = off; i >= 0 && i < end && i < toI32(src.length); i += 1) {
     const byte: i32 = toI32(src[i])
     for (let k: i32 = 7; k >= 0; k -= 1) {
       code = (code << 1) | ((byte >> k) & 1)
@@ -813,19 +821,33 @@ export class HpackDecoder {
     return this.table.name(index - HPACK_STATIC_LENGTH)
   }
 
-  /** The value of static or dynamic index `index`, shared as `nameAt`'s is. */
-  valueAt(index: i32): u8[] {
+  /**
+   * A fresh copy of the name at `index`, for the caller: built straight from
+   * the static table, or copied once from the dynamic one, so that nothing
+   * else is allocated on the way.
+   */
+  copyNameAt(index: i32): u8[] {
+    if (index <= HPACK_STATIC_LENGTH) {
+      return hpackBytesOf(hpackStaticName(index))
+    }
+    return hpackCopy(this.table.name(index - HPACK_STATIC_LENGTH))
+  }
+
+  /** A fresh copy of the value at `index`, as `copyNameAt` makes the name. */
+  copyValueAt(index: i32): u8[] {
     if (index <= HPACK_STATIC_LENGTH) {
       return hpackBytesOf(hpackStaticValue(index))
     }
-    return this.table.value(index - HPACK_STATIC_LENGTH)
+    return hpackCopy(this.table.value(index - HPACK_STATIC_LENGTH))
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
   sizeAt(index: i32): i64 {
     if (index <= HPACK_STATIC_LENGTH) {
       return (
-        toI64(hpackStaticName(index).length) + toI64(hpackStaticValue(index).length) + toI64(HPACK_ENTRY_OVERHEAD)
+        toI64(hpackStaticName(index).length) +
+        toI64(hpackStaticValue(index).length) +
+        toI64(HPACK_ENTRY_OVERHEAD)
       )
     }
     const i: i32 = index - HPACK_STATIC_LENGTH
@@ -909,8 +931,8 @@ export class HpackDecoder {
           listSize += this.sizeAt(index)
           tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
           if (!tooLarge) {
-            this.names.push(hpackCopy(this.nameAt(index)))
-            this.values.push(hpackCopy(this.valueAt(index)))
+            this.names.push(this.copyNameAt(index))
+            this.values.push(this.copyValueAt(index))
             this.neverIndexed.push(false)
           }
           break
