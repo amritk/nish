@@ -300,7 +300,7 @@ export const http1Checks = (): i32 => {
     t,
     "a chunked POST with an extension and a trailer, then a GET",
     "POST /up HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n" +
-      "5;name=value\r\nhello\r\n1A \t\r\n abcdefghijklmnopqrstuvwxy\r\n0\r\nExpires: never\r\n\r\n" +
+      "5;name=value\r\nhello\r\n1A \t;x\r\n abcdefghijklmnopqrstuvwxy\r\n0\r\nExpires: never\r\n\r\n" +
       "GET / HTTP/1.1\r\nHost: a\r\n\r\n",
     "POST /up 1.1 keep chunked up= [host=a; transfer-encoding=chunked]\n" +
       'body "hello abcdefghijklmnopqrstuvwxy"\n' +
@@ -473,6 +473,8 @@ export const http1Checks = (): i32 => {
   const chunkedHead: string = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n";
   refused(t, "a chunk size with a sign", `${chunkedHead}-1\r\n`, 400);
   refused(t, "a chunk size after a space", `${chunkedHead} 5\r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk size with a trailing space and no extension", `${chunkedHead}5 \r\nhello\r\n0\r\n\r\n`, 400);
+  refused(t, "a chunk size with trailing whitespace and no extension, after a good chunk", `${chunkedHead}5\r\nhello\r\n1A \t\r\n`, 400);
   refused(t, "a chunk size of two numbers", `${chunkedHead}5 5\r\nhello\r\n0\r\n\r\n`, 400);
   refused(t, "an empty chunk size", `${chunkedHead}\r\n`, 400);
   refused(t, "a chunk size that is not hex", `${chunkedHead}g\r\n`, 400);

@@ -66,6 +66,8 @@ PASS  refused with 400: chunked twice, across two fields
 PASS  refused with 400: an empty Transfer-Encoding
 PASS  refused with 400: a chunk size with a sign
 PASS  refused with 400: a chunk size after a space
+PASS  refused with 400: a chunk size with a trailing space and no extension
+PASS  refused with 400: a chunk size with trailing whitespace and no extension, after a good chunk
 PASS  refused with 400: a chunk size of two numbers
 PASS  refused with 400: an empty chunk size
 PASS  refused with 400: a chunk size that is not hex
@@ -157,4 +159,4 @@ PASS  5000 bytes round-trip in 256-byte chunks
 PASS  5000 bytes round-trip in 4096-byte chunks
 PASS  5000 bytes round-trip in 5000-byte chunks
 PASS  an empty chunked body round-trips
-http1: 159 passed, 0 failed, 0 skipped
+http1: 161 passed, 0 failed, 0 skipped

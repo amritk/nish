@@ -374,7 +374,7 @@ const websocketReadClose = (d: WsDecoder, len: i32): i32 => {
     d.state = WS_S_CLOSED
     return WS_CLOSE
   }
-  if (len === 1 || toI32(payload.length) < 2) {
+  if (len === 1) {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a close frame with a one-byte payload")
   }
   const code: i32 = (toI32(payload[0]) << 8) | toI32(payload[1])

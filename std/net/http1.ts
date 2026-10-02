@@ -756,8 +756,14 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   if (i === a) {
     return http1Fail(p, 400, "a chunk size with no hex digits")
   }
+  // Whitespace may follow the size only as the BWS before a chunk extension's
+  // `;` (§7.1), so whitespace that runs to the end of the line is refused.
+  const digitsEnd: i32 = i
   while (i >= 0 && i < b && i < toI32(buf.length) && http1IsOws(toI32(buf[i]))) {
     i += 1
+  }
+  if (i >= b && i > digitsEnd) {
+    return http1Fail(p, 400, "a malformed chunk size")
   }
   if (i >= 0 && i < b) {
     if (buf[i] !== 59) {
