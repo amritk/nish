@@ -76,7 +76,7 @@ import {
   vec8,
 } from "../net_tls_common/client";
 import { fromHex, toHex } from "../net_tls_common/hex";
-import { leafPublic, newServer, serverPrivate, serverRandom, signWithLeaf, tcpConfig } from "../net_tls_common/server";
+import { leafPublic, newServer, quicConfig, serverPrivate, serverRandom, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 const SUITE: i32 = TLS_AES_128_GCM_SHA256;
 
@@ -164,6 +164,39 @@ export const refusalChecks = (): i32 => {
     serverPrivate()
   );
   t.eqI32("an empty certificate chain is internal_error", noCertificate.alert, TLS_ALERT_INTERNAL_ERROR);
+  const longName: string[] = [];
+  for (let k: i32 = 0; k < 256; k++) {
+    longName.push("a");
+  }
+  t.eqI32(
+    "an ALPN protocol of 256 bytes is internal_error",
+    newServer(tcpConfig([longName.join("")])).alert,
+    TLS_ALERT_INTERNAL_ERROR
+  );
+  t.eqI32("so is an empty one", newServer(tcpConfig([""])).alert, TLS_ALERT_INTERNAL_ERROR);
+  t.eqI32(
+    "transport parameters too long for EncryptedExtensions are internal_error",
+    newServer(quicConfig(["h3"], new Array<u8>(65536))).alert,
+    TLS_ALERT_INTERNAL_ERROR
+  );
+  const emptyCertificate: u8[][] = [empty];
+  t.eqI32(
+    "an empty certificate is internal_error",
+    new TlsServer(
+      {
+        certificateChain: emptyCertificate,
+        alpn: none,
+        quicTransportParameters: empty,
+        extraExtensions: empty,
+        signatureScheme: TLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
+        quic: false,
+      },
+      serverRandom(),
+      serverPrivate()
+    ).alert,
+    TLS_ALERT_INTERNAL_ERROR
+  );
+  t.eqI32("a configuration that fits is not refused", newServer(tcpConfig(["h2"])).alert, zero);
 
   // --- The carrier ------------------------------------------------------------
   const window: TlsServer = fresh();

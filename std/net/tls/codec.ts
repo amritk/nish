@@ -354,9 +354,10 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
       tlsReadSkipTo(r, end)
       break
   }
-  // Every reader above stops where its own vectors end, and a vector cannot
-  // pass the extension's end; an extension body with bytes left after them is
-  // malformed (RFC 8446 §4.2), so this is where trailing bytes are refused.
+  // Every reader above stops where its own vectors end, and none can pass
+  // the extension's end, which is the reader's while it runs; an extension
+  // body with bytes left after them is malformed (RFC 8446 §4.2), so this is
+  // where trailing bytes are refused.
   if (r.at !== end) {
     r.failed = true
   }
@@ -402,7 +403,12 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
         tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
       }
       hello.extensionTypes.push(type)
+      // The extension's own end bounds every read inside it, so a vector in
+      // one extension cannot run on into the next.
+      const outerEnd: i32 = r.end
+      r.end = bodyEnd
       tlsReadExtension(r, type, bodyEnd, hello)
+      r.end = outerEnd
     }
   }
   if (r.failed || r.at !== end) {

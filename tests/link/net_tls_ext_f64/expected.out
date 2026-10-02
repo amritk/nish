@@ -72,6 +72,11 @@ PASS  with internal_error
 PASS  and every receive answers it
 PASS  a 31-byte x25519 key is internal_error
 PASS  an empty certificate chain is internal_error
+PASS  an ALPN protocol of 256 bytes is internal_error
+PASS  so is an empty one
+PASS  transport parameters too long for EncryptedExtensions are internal_error
+PASS  an empty certificate is internal_error
+PASS  a configuration that fits is not refused
 PASS  a window past the end of the buffer is internal_error, not a panic
 PASS  so is a negative offset
 PASS  zero bytes are no message and no refusal
@@ -129,4 +134,4 @@ PASS  an unknown suite has no hash
 PASS  and no key
 PASS  TLS_AES_256_GCM_SHA384 has a 32-byte key
 PASS  tlsExpandLabel answers the length asked
-tls refusals: 62 passed, 0 failed, 0 skipped
+tls refusals: 67 passed, 0 failed, 0 skipped

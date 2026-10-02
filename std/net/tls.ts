@@ -159,6 +159,45 @@ export interface TlsServerConfig {
   quic: boolean
 }
 
+/** The most a 24-bit length can say: the bound on a handshake message's body (RFC 8446 §4). */
+const TLS_MAX_U24: i32 = 16777215
+
+/**
+ * Whether `config` can be written at all: at least one certificate, every
+ * certificate and the whole Certificate message within their 24-bit lengths,
+ * every ALPN protocol 1 to 255 bytes, and EncryptedExtensions' extensions
+ * within their 16-bit length. A configuration that breaks one would make the
+ * server write a message whose length field is wrong, so the constructor
+ * refuses it instead.
+ */
+const tlsConfigFits = (config: TlsServerConfig): boolean => {
+  if (toI32(config.certificateChain.length) === 0) {
+    return false
+  }
+  // The request context (1) and the list's length (3), then per certificate
+  // its length (3), its bytes and its empty extensions (2).
+  let certificate: i32 = 4
+  for (const der of config.certificateChain) {
+    const n: i32 = toI32(der.length)
+    if (n < 1 || n > TLS_MAX_U24 - certificate - 5) {
+      return false
+    }
+    certificate = certificate + 5 + n
+  }
+  // ALPN's type, lengths and the one name (at most 4 + 2 + 1 + 255), the
+  // server_name acknowledgement (4), and the transport parameters' type and
+  // length (4), beside what the caller passes through.
+  const extensions: i32 =
+    266 + toI32(config.extraExtensions.length) + toI32(config.quicTransportParameters.length)
+  for (const protocol of config.alpn) {
+    const n: i32 = toI32(protocol.length)
+    if (n < 1 || n > 255) {
+      return false
+    }
+  }
+  return extensions <= 65535
+}
+
 /**
  * Whether the bytes of `name` spell `protocol`, ALPN's byte-wise comparison
  * (RFC 7301 §3.2).
@@ -330,7 +369,7 @@ export class TlsServer {
     if (
       toI32(serverRandom.length) !== TLS_RANDOM_SIZE ||
       toI32(ephemeralPrivate.length) !== X25519_SIZE ||
-      toI32(config.certificateChain.length) === 0
+      !tlsConfigFits(config)
     ) {
       this.state = TLS_STATE_FAILED
       this.alert = TLS_ALERT_INTERNAL_ERROR
@@ -366,7 +405,9 @@ export class TlsServer {
    * three messages a client sends here (two ClientHellos and a Finished) is
    * the last of its flight, and RFC 8446 §5.1 forbids a message to straddle a
    * key change. A window outside `data` is `internal_error`, the caller's
-   * fault and not the peer's.
+   * fault and not the peer's. Once the handshake is done, any further bytes
+   * are `unexpected_message` too: the post-handshake messages a client may
+   * send (KeyUpdate) belong to the record layer, which handles them itself.
    */
   receive(level: i32, data: u8[], off: i32, len: i32): i32 {
     if (this.state === TLS_STATE_FAILED) {
