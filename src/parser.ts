@@ -2580,7 +2580,11 @@ export class Parser {
     // `[k]: i32` and `[Symbol.iterator]() { }`, a computed name, for Phase 0
     // to refuse (NL1041): read before the method-or-field question, which
     // is then asked of the token after the `]`.
+    const beforeName = this.diagnostics.length
     const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+    if (computed !== null && this.computedNameFailed(beforeName)) {
+      return this.abandonedMember(start)
+    }
     if (computed === null && !this.atMemberName()) {
       return this.fail(
         `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
@@ -2651,14 +2655,37 @@ export class Parser {
    * between the brackets, where the member's name would be, and the member
    * carries FLAG_COMPUTED for Phase 0 to refuse (NL1041). `in` is an
    * operator here, as it is inside any bracket.
+   *
+   * A name that is itself a syntax error reports that one error alone (the
+   * `formStart` rule), and its caller asks `computedNameFailed` and stops
+   * reading the member there, so `{ [` costs no more than it did when the
+   * parser refused the `[` outright.
    */
   parseComputedName(): Node {
+    const previous = this.beginForm()
     this.advance() // `[`
     const outerNoIn = this.allowIn()
     const key = this.parseExpression()
     this.noIn = outerNoIn
     this.expect(TOK_RBRACKET)
+    this.formStart = previous
     return key
+  }
+
+  /**
+   * Whether a computed name read since `before` (the diagnostics' length when
+   * it began) reported a syntax error, so that the member it opened is
+   * abandoned rather than parsed on into a cascade.
+   */
+  computedNameFailed(before: i32): boolean {
+    return this.diagnostics.length > before
+  }
+
+  /** The `N_ERROR` a member becomes when its computed name already reported its syntax error. */
+  abandonedMember(start: i32): Node {
+    const node = this.node(N_ERROR, start, this.previousEnd)
+    node.text = this.diagnostics[this.diagnostics.length - 1].text
+    return node
   }
 
   /**
@@ -2832,7 +2859,11 @@ export class Parser {
     }
     // `[k]: T` and `[k](): T`, a computed name, for Phase 0 to refuse
     // (NL1041), as a class member's is (`parseMember`).
+    const beforeName = this.diagnostics.length
     const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+    if (computed !== null && this.computedNameFailed(beforeName)) {
+      return this.abandonedMember(start)
+    }
     if (computed !== null) {
       modifiers = modifiers | FLAG_COMPUTED
     } else if (!this.atMemberName()) {
@@ -4389,11 +4420,20 @@ export class Parser {
       // `[k]`, a computed key, for Phase 0 to refuse (NL1041): read first,
       // because whether a method follows is a question about the token
       // after its `]`.
+      const beforeKey = this.diagnostics.length
       const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+      // A computed key that is a syntax error ends the literal: the `}` it
+      // then wants is the one further error, as when the `[` was refused.
+      if (computed !== null && this.computedNameFailed(beforeKey)) {
+        break
+      }
       // `{ m() { } }`, a method (or an accessor), for the checker to refuse
       // (NL2258): the property's value is the N_METHOD.
       if (computed === null ? this.objectMethodAhead() : this.methodAfterComputedName()) {
         const method = this.parseObjectMethod(propertyStart, computed)
+        if (method.kind === N_ERROR) {
+          break
+        }
         property.text = (method.flags & FLAG_COMPUTED) === 0 ? method.children[0].text : ""
         property.children.push(method)
         property.end = this.previousEnd
@@ -4491,7 +4531,11 @@ export class Parser {
         this.advance()
         method.flags = method.flags | FLAG_ACCESSOR
       }
+      const beforeName = this.diagnostics.length
       name = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+      if (name !== null && this.computedNameFailed(beforeName)) {
+        return this.abandonedMember(start)
+      }
     }
     if (name !== null) {
       method.flags = method.flags | FLAG_COMPUTED
