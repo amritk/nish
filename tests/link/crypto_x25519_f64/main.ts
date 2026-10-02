@@ -1,11 +1,13 @@
 // `nish/crypto/x25519` in a program compiled with `--number-mode f64`, where
 // every bare `number` and every unannotated literal is an `f64`. The module
 // spells its widths, so its answers must not move: RFC 7748 §5.2's first
-// vector and §6.1's exchange, and a refusal. `crypto_x25519` has the rest,
-// and the hex helper both programs share.
+// vector and §6.1's exchange, a refusal, and every case of Wycheproof's
+// x25519_test.json. `crypto_x25519` has the rest, and the hex helper and the
+// Wycheproof runner both programs share.
 import { Suite } from "nish/testing";
 import { x25519, x25519Base } from "nish/crypto/x25519";
 import { fromHex, toHex } from "../crypto_x25519/hex";
+import { wycheproofX25519 } from "../crypto_x25519/wycheproof";
 
 export const main = (): i32 => {
   const t = new Suite("x25519 (f64 mode)");
@@ -37,6 +39,8 @@ export const main = (): i32 => {
   }
 
   t.eqStr("a 31-byte scalar answers null", toHex(x25519Base(fromHex("00000000000000000000000000000000000000000000000000000000000000"))), "null");
+
+  t.eqI32("wycheproof: every case answers the file's shared secret", wycheproofX25519(t), toI32(0));
 
   return t.done();
 };
