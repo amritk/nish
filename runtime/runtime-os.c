@@ -52,6 +52,14 @@ extern char **environ;
 
 #include "nish.h"
 
+/* Darwin's <fcntl.h> declares `O_NOFOLLOW` only at its full C level, and the
+   strict level the two macros above select is the one that binds the right
+   `realpath`, so the flag is spelled here with Darwin's own value
+   (<sys/fcntl.h>: 0x00000100). Linux and WASI declare it at POSIX 2008. */
+#if defined(__APPLE__) && !defined(O_NOFOLLOW)
+#define O_NOFOLLOW 0x00000100
+#endif
+
 /* The same spelling runtime.c uses for its own cold paths: a function that
    reports and exits is never on a path worth optimising for. */
 #define NISH_COLD __attribute__((noreturn, cold, noinline))

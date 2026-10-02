@@ -116,7 +116,7 @@ A finding is any of these, reachable through a runtime entry point:
 | No wasm allocation can claim memory the module does not have | RT-7 | `tests/link/rt_sec_wasm_arena` |
 | A parallel range is divided without overflow and every chunk runs, however many threads could be made | RT-8; the chunks a failed `pthread_create` left run on the caller | RT-8 and `test_parallel_*` in `tests/runtime-test.c` |
 | `waitpid` is not interrupted into leaving a child behind | the only handler the runtime installs is `SA_RESTART` | by reading; nothing automated |
-| Every runtime unit stays inside its `.text*` ceiling | measured: `runtime.c` 3,562 / 3,584 (3,687 / 3,840 threaded), `runtime-os.c` 1,528 / 1,536, `runtime-host.c` 723 / 768, `runtime-net.c` 2,087 / 2,304, `runtime-parallel.c` 286 / 320 (905 / 1,024 threaded) | the budget checks in `tests/run.js` |
+| Every runtime unit stays inside its `.text*` ceiling | measured: `runtime.c` 3,562 / 3,584 (3,687 / 3,840 threaded), `runtime-os.c` 1,519 / 1,536, `runtime-host.c` 723 / 768, `runtime-net.c` 2,087 / 2,304, `runtime-parallel.c` 286 / 320 (905 / 1,024 threaded) | the budget checks in `tests/run.js` |
 
 ## Doc corrections for the security-policy stage
 
