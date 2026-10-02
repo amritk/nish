@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 826 programs, 58897 dump lines.
+# 828 programs, 58920 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -44299,6 +44299,31 @@ function main(): i32 -> @nish_main [exported entry]
   callee 34:15 countSpaces -> @countSpaces
   callee 35:15 hasArrow -> @hasArrow
   callee 36:15 tail -> @tail
+program tests/cases/port_str_slice_literal_past.ts
+module tests/cases/port_str_slice_literal_past.ts (entry)
+function never(): boolean -> @never
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: never nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new
+  stackSites=0 stackLocals=0
+  local 10:9 t: string (const)
+  local 11:7 v: string (let)
+  callee 12:7 never -> @never
+  local 14:11 far: i32 (const)
+program tests/cases/port_str_slice_literal_quiet.ts
+module tests/cases/port_str_slice_literal_quiet.ts (entry)
+const GREETING: string = "hello"
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new
+  stackSites=0 stackLocals=0
+  local 10:9 t: string (const)
+  local 13:9 u: string (const)
+  local 15:9 from: i32 (const)
 program tests/cases/port_str_slice_negative.ts
 module tests/cases/port_str_slice_negative.ts (entry)
 function lastTwo(s: string): string -> @lastTwo

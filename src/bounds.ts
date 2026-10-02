@@ -21,7 +21,10 @@
 // get the same verdict in the same table, but only from `proveSliceBounds`,
 // which the WP33 portability pass calls under `--warn-portability`: `slice`
 // checks rather than clamps, so nothing emitted reads them, and a compile
-// without the flag never judges one.
+// without the flag never judges one. A `slice` bound has one proof more than a
+// `substring` bound, the length of a receiver whose ASCII text the program
+// spells out (`provesLiteralSlice`), and it stays on that side so that the
+// clamps the emitter folds are exactly what they were.
 //
 // A third question is a range entry (WP31 §8, docs/wp31-ranged-integers.md).
 // A value entering an `integer<Lo, Hi>` is compared once where it enters, and
@@ -158,6 +161,7 @@ import {
   N_NUMBER,
   N_PAREN,
   N_RETURN,
+  N_STRING,
   N_SWITCH,
   N_THIS,
   N_THROW,
@@ -169,6 +173,7 @@ import {
 import { StringMap } from "./map"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementStruct } from "./program"
 import { Options } from "./options"
+import { isAsciiText } from "./strings"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { DeclaredRange, T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
 
@@ -1642,6 +1647,16 @@ export class BoundsWalk {
    * `slice` at all.
    */
   sliceClamps: Node[] | null
+  /**
+   * The `const` string locals this body binds to an ASCII literal, beside the
+   * literal's length (`literalStrings` / `literalLengths`, one entry each).
+   * Filled only while `sliceClamps` is set, and read by nothing but
+   * `judgeSliceBound`: a `const` is never rebound, so the length holds at
+   * every use and nothing has to forget it, and keeping it out of `State`
+   * keeps it away from the `substring` clamps the emitter folds.
+   */
+  literalStrings: Local[]
+  literalLengths: i32[]
   /** Every call to a function taking entry facts, with what this site proves for it. */
   sites: RangeSite[]
   /** This body's program's callee table (`RangeTables.calleesOf`), or empty in pass 2. */
@@ -1668,6 +1683,8 @@ export class BoundsWalk {
     this.proved = []
     this.clamps = []
     this.sliceClamps = null
+    this.literalStrings = []
+    this.literalLengths = []
     this.sites = []
     this.callees = []
     this.stopAfter = -1
@@ -1890,14 +1907,85 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
 /**
  * `judgeClampBound` for a `slice` bound: the same proof in the same state,
  * since `emitSlice` also reads the receiver's length first and each bound in
- * order. The verdict goes to `sliceClamps` and nowhere else, whatever the
- * walk's `record` says.
+ * order, with the literal receiver's length (`provesLiteralSlice`) added. The
+ * verdict goes to `sliceClamps` and nowhere else, whatever the walk's
+ * `record` says.
  */
-const judgeSliceBound = (walk: BoundsWalk, state: State, holder: Local | null, bound: Node): void => {
+const judgeSliceBound = (
+  walk: BoundsWalk,
+  state: State,
+  receiver: Node,
+  holder: Local | null,
+  bound: Node
+): void => {
   const proved = walk.sliceClamps
-  if (proved !== null && provesClamp(walk.ctx, state, holder, bound)) {
+  if (proved === null) {
+    return
+  }
+  if (provesClamp(walk.ctx, state, holder, bound) || provesLiteralSlice(walk, state, receiver, bound)) {
     proved.push(bound)
   }
+}
+
+/**
+ * A `slice` bound placed inside `[0, length]` by the receiver's own text
+ * (#326): `"abcdef".slice(1, 3)`, or the same on a `const` bound to that
+ * literal or a module constant folded to one. The length is the literal's,
+ * and the bound is a decimal literal or a local known to lie between 0 and
+ * that length, so neither the native check nor TypeScript's clamp can move it.
+ *
+ * The receiver must be ASCII, so that its byte length and its UTF-16 length
+ * are the one number. A non-ASCII literal is longer here than in TypeScript,
+ * and a bound between the two lengths would be cut differently.
+ *
+ * This is deliberately not a `State` fact. `provesClamp` is shared with the
+ * `substring` fold the emitter reads, and teaching it literal lengths would
+ * drop clamps from emitted IR, which this change does not set out to do.
+ */
+const provesLiteralSlice = (walk: BoundsWalk, state: State, receiver: Node, bound: Node): boolean => {
+  const length = asciiLiteralLength(walk, receiver)
+  if (length < 0) {
+    return false
+  }
+  const constant = literalValue(bound)
+  if (constant >= 0) {
+    return constant <= length
+  }
+  const i = indexLocal(walk.ctx, bound)
+  if (i === null || !knownNonNegative(state, i)) {
+    return false
+  }
+  // `maxIndexOf` answers the smallest `n` with `i < n`, so `i <= n - 1`.
+  const above = maxIndexOf(state, i)
+  return above >= 0 && above - 1 <= length
+}
+
+/** The length of the ASCII string `expr` spells out, through a `const` or a module constant, or -1. */
+const asciiLiteralLength = (walk: BoundsWalk, expr: Node): i32 => {
+  const e = unwrapBoundsParens(expr)
+  if (e.kind === N_STRING) {
+    return isAsciiText(e.text) ? e.text.length : -1
+  }
+  if (e.kind !== N_IDENT) {
+    return -1
+  }
+  const constant = walk.ctx.program.nodeConstants[e.id]
+  if (constant !== null) {
+    const folded = constant.type === T_STRING && constant.folded && isAsciiText(constant.textValue)
+    return folded ? constant.textValue.length : -1
+  }
+  const v = walk.ctx.program.nodeLocals[e.id]
+  if (v === null) {
+    return -1
+  }
+  let k = 0
+  while (k < walk.literalStrings.length) {
+    if (walk.literalStrings[k] === v) {
+      return walk.literalLengths[k]
+    }
+    k = k + 1
+  }
+  return -1
 }
 
 /**
@@ -2098,7 +2186,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
           holder = null
         }
         if (slice) {
-          judgeSliceBound(walk, state, holder, arg)
+          judgeSliceBound(walk, state, callee.children[0], holder, arg)
         } else {
           judgeClampBound(walk, state, holder, arg)
         }
@@ -3040,6 +3128,15 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
   }
   forgetLocal(walk, state, v)
   addFacts(state, facts)
+  // `const t = "abcdef"`: what `asciiLiteralLength` reads `t.slice(1, 3)` against.
+  if (walk.sliceClamps === null || v.mutable || v.type !== T_STRING) {
+    return
+  }
+  const length = asciiLiteralLength(walk, init)
+  if (length >= 0) {
+    walk.literalStrings.push(v)
+    walk.literalLengths.push(length)
+  }
 }
 
 /**
@@ -3836,9 +3933,10 @@ export const commitProofs = (program: CheckedProgram, walk: BoundsWalk): void =>
 
 /**
  * WP33 NL8002: record in `nodeProvenClamp` each `slice` bound of `body` that
- * the `substring` proof places inside `[0, s.length]`, and nothing else. The
- * portability pass calls it once per body it walks, before it reads a `slice`
- * verdict, so a compile without `--warn-portability` never does this work.
+ * the `substring` proof, or the length of an ASCII literal receiver, places
+ * inside `[0, s.length]`, and nothing else. The portability pass calls it once
+ * per body it walks, before it reads a `slice` verdict, so a compile without
+ * `--warn-portability` never does this work.
  *
  * It is the pass-2 walk — the facts the body proves by itself, with no entry
  * facts from its callers, which `src/ranges.ts` adds to `substring` verdicts —
