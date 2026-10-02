@@ -1912,16 +1912,16 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
  * `record` says.
  *
  * `start` is what this answered for the call's first bound: that bound's
- * largest value when it is proven on a known-length receiver, and -1
- * otherwise.
+ * largest value when it is proven and known, and -1 otherwise.
  *
- * The second bound of a known-length receiver records both bounds or neither
- * (#326). The two bounds are proven one at a time, but `emitSlice` also panics
- * on `start > end`. Before the literal proof, such a receiver never had both
- * ends proven, so `"abcdef".slice(5, 2)` warned. It has to keep warning, so a
- * pair is recorded only when `start <= end` is known as well
- * (`boundsOrdered`). The general proof does not relate a parameter's two
- * bounds, which `src/portability-strings.ts` states.
+ * On a known-length receiver the second bound is recorded only when
+ * `start <= end` is known as well (`boundsOrdered`, #326). The two bounds are
+ * proven one at a time, but `emitSlice` also panics on `start > end`. Before
+ * the literal proof, such a receiver never had both ends proven, so
+ * `"abcdef".slice(5, 2)` warned, and it has to keep warning. The first bound
+ * is recorded as it always was, so the warning names the bound that fails. The
+ * general proof does not relate a parameter's two bounds, which
+ * `src/portability-strings.ts` states.
  */
 const judgeSliceBound = (
   walk: BoundsWalk,
@@ -1938,19 +1938,16 @@ const judgeSliceBound = (
   const receiver = unwrapBoundsParens(call.children[0]).children[0]
   const proven =
     provesClamp(walk.ctx, state, holder, bound) || provesLiteralSlice(walk, state, receiver, bound)
-  const bounds = call.children[1].children
-  const paired = bounds.length === 2 && asciiLiteralLength(walk, receiver) >= 0
-  if (!paired) {
-    if (proven) {
-      proved.push(bound)
-    }
+  if (!proven) {
     return -1
   }
+  const bounds = call.children[1].children
   if (bound === bounds[0]) {
-    return proven ? boundCeiling(walk, state, bound) : -1
+    proved.push(bound)
+    return boundCeiling(walk, state, bound)
   }
-  if (proven && start >= 0 && boundsOrdered(start, boundFloor(walk, state, bound))) {
-    proved.push(bounds[0])
+  const known = asciiLiteralLength(walk, receiver) >= 0
+  if (!known || (start >= 0 && boundsOrdered(start, boundFloor(walk, state, bound)))) {
     proved.push(bound)
   }
   return -1
