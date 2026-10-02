@@ -58,9 +58,12 @@
  *     run of this tool can compare rather than a difference it may forgive:
  *     each side's own root is removed before the bytes are compared, which
  *     leaves the module's path *relative to its own package* on both sides, and
- *     the summary says how many files needed it. `packageRootOf` derives each
- *     root the way the compilers do, `withoutOwnRoot` removes it, and
- *     `selfCheckRoots` drives both over fabricated inputs on every run, because
+ *     the summary says how many files needed it. The same goes for a file's
+ *     *name*: a module whose basename another shares is written under its
+ *     path, and that path starts with the compiler's own root.
+ *     `packageRootOf` derives each root the way the compilers do,
+ *     `withoutOwnRoot` and `withoutOwnRootNames` remove it, and
+ *     `selfCheckRoots` drives them over fabricated inputs on every run, because
  *     a comparison whose own logic nothing exercises is the gap
  *     `docs/wp19-stage0-retirement.md` §5a records about every other oracle
  *     here. What is *not* set aside is anything else on those lines: a path
@@ -1773,27 +1776,6 @@ const DECLARED = [
     changelog: "A passed bounds check proves the same index on the same array",
     why: "a new program, the Are We Fast Yet ports: `Permute.swap` keeps two of its four checks",
   },
-  {
-    changelog: "Keep a field array's header live across element stores",
-    why: "every load and store of an array element slot that holds a value now carries a `!tbaa` tag in an element subtree of its own, so any module that reads or writes an element moves its metadata",
-  },
-  {
-    changelog: "Reclaim a loop iteration's temporaries when nothing outlives the pass",
-    why: "a loop whose pass drops everything it allocates reads the arena's position at the top of the body and rewinds on every edge out of it, and an inline element kept past its array is followed as the array, so a module with such a loop, or such an element, moves its IR",
-  },
-  {
-    changelog: "Give array header loads and stores their own TBAA subtree",
-    why: "every load and store of an array header's length, capacity or data pointer now carries a `!tbaa` tag in an `array header` subtree of its own, so any module that builds, reads or resizes an array moves its metadata",
-  },
-  // WP15 §2.4: a call whose callee resizes nothing keeps the caller's length
-  // facts, a function every caller of which is visible is entered with what
-  // they prove, and a count-down loop keeps its upper bound. Any program with
-  // an access past a call, or in a function called with a proven index, loses
-  // checks and the attributes a dropped panic frees, in any module of it.
-  {
-    changelog: "Prove an index in range from what every call site guarantees",
-    why: "call-site ranges and callee summaries prove accesses the reference compiler checks, across the corpus, so those modules drop `nish_panic_index` calls and the attributes they cost",
-  },
   // Issue #246: a high-surrogate escape before a low one is now the one code
   // point it spells, four UTF-8 bytes, where the reference encodes each half
   // on its own. Only the three cases that spell a surrogate escape move.
@@ -1887,6 +1869,44 @@ const withoutOwnRoot = (text, ownRoot) => {
 }
 
 /**
+ * The files one compiler wrote, keyed by name with its own package root removed
+ * from the front of each name, and the names that needed it.
+ *
+ * A module's `.ll` is named by its basename unless two modules of the program
+ * share one; then it is named by its path from the entry's directory, each
+ * segment joined with `_` (`outputStems` in `src/compilation.ts`). A module of
+ * a compiler's own `std/` lives under that compiler's own root, so the
+ * reference, unpacked somewhere else, writes `home_user_nish_build_seed_std_crypto_x25519.ll`
+ * where the candidate writes `std_crypto_x25519.ll`: the same module, named by
+ * each install, which is `withoutOwnRoot`'s case in a file name rather than in
+ * a file. The root is removed only as a whole run of segments at the front and
+ * only up to an `_`, and a name it would make collide with another is left as
+ * it was, so the difference is still reported.
+ */
+const withoutOwnRootNames = (files, ownRoot) => {
+  const renamed = new Set()
+  if (ownRoot === undefined || ownRoot === null || ownRoot.length === 0) {
+    return { files, renamed }
+  }
+  const segments = ownRoot.split(path.sep).filter((segment) => segment.length > 0)
+  if (segments.length === 0) {
+    return { files, renamed }
+  }
+  const prefix = `${segments.join("_")}_`
+  const out = new Map()
+  for (const [name, bytes] of files) {
+    const bare = name.startsWith(prefix) ? name.slice(prefix.length) : name
+    if (bare !== name && !files.has(bare) && !out.has(bare)) {
+      out.set(bare, bytes)
+      renamed.add(bare)
+    } else {
+      out.set(name, bytes)
+    }
+  }
+  return { files: out, renamed }
+}
+
+/**
  * `withoutOwnRoot` over inputs a corpus cannot produce, on every run.
  *
  * It is four lines of string handling standing between a real difference and a
@@ -1921,6 +1941,28 @@ const selfCheckRoots = () => {
     const got = withoutOwnRoot(text, ownRoot)
     if (got !== want) {
       return `withoutOwnRoot(${JSON.stringify(text)}, ${JSON.stringify(ownRoot)}) is ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
+    }
+  }
+  const nishRoot = `${sep}opt${sep}nish`
+  const names = [
+    // The seed's own module, named by its path: the root goes, the rest stays.
+    [["opt_nish_std_crypto_x25519.ll"], nishRoot, ["std_crypto_x25519.ll"]],
+    // A neighbour whose name starts with the root's is not under it.
+    [["opt_nish-old_std_a.ll"], nishRoot, ["opt_nish-old_std_a.ll"]],
+    // The root is removed from the front only, never from the middle.
+    [["tests_opt_nish_a.ll"], nishRoot, ["tests_opt_nish_a.ll"]],
+    // A name the removal would make collide with another is left alone.
+    [["opt_nish_a.ll", "a.ll"], nishRoot, ["opt_nish_a.ll", "a.ll"]],
+    // No root at all changes nothing, and nor does the filesystem's root.
+    [["opt_nish_a.ll"], null, ["opt_nish_a.ll"]],
+    [["_a.ll"], sep, ["_a.ll"]],
+  ]
+  for (const [given, ownRoot, want] of names) {
+    const got = [
+      ...withoutOwnRootNames(new Map(given.map((n) => [n, Buffer.alloc(0)])), ownRoot).files.keys(),
+    ]
+    if (got.join(",") !== want.join(",")) {
+      return `withoutOwnRootNames(${JSON.stringify(given)}, ${JSON.stringify(ownRoot)}) names ${JSON.stringify(got)}, not ${JSON.stringify(want)}`
     }
   }
   return null
@@ -2300,8 +2342,10 @@ const compare = (pair, work, file, options = {}) => {
     }
   }
 
-  const want = tree(referenceDir)
-  const got = tree(candidateDir)
+  const wantNames = withoutOwnRootNames(tree(referenceDir), pair.reference.packageRoot)
+  const gotNames = withoutOwnRootNames(tree(candidateDir), pair.candidate.packageRoot)
+  const want = wantNames.files
+  const got = gotNames.files
   if (want.size === 0) {
     return { refused: "the reference wrote no files" }
   }
@@ -2321,6 +2365,9 @@ const compare = (pair, work, file, options = {}) => {
       continue
     }
     if (a.equals(b)) {
+      if (wantNames.renamed.has(name) || gotNames.renamed.has(name)) {
+        rooted++
+      }
       if (name.endsWith(".ll")) {
         lines += a.toString("utf8").split("\n").length
       }
