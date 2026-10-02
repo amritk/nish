@@ -121,6 +121,19 @@ Three rules hold across the modules:
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
 
+## `nish/net` — the protocol stack above the sockets
+
+The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, built on
+`nish/crypto` and, for the lanes that carry bytes, on the `nish:net` builtin
+module. Each is sans-IO where it can be — bytes in, bytes out, randomness
+passed in as an argument — so that its specification's published vectors
+can be reproduced byte for byte in its `tests/link/net_*` programs, which
+also run under `--number-mode f64` (`net_*_f64`).
+
+| Module | What it is | Reproduces |
+| --- | --- | --- |
+| [`net/quic-packet.ts`](./net/quic-packet.ts) | QUIC version 1's packets (WP34 Q1). The variable-length integer (`quicVarintPush`, `quicVarintPushSized`, `quicVarintRead`, `quicVarintLength`, `quicVarintSize`); packet-number length choice and recovery (`quicPacketNumberLength`, `quicPacketNumberDecode`); the long and short headers (`quicLongHeader`, `quicShortHeader`, and `quicParseHeader` into a `QuicHeader`, whose `end` is where the next coalesced packet starts); the Initial secrets from the client's first DCID (`quicInitialSecrets`); the packet keys from a traffic secret (`quicKeys` into a `QuicKeys`, for AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305) and the key-update secret (`quicKeyUpdateSecret`); packet and header protection (`quicSealPacket`, and `quicOpenPacket` or its two halves `quicRemoveHeaderProtection` and `quicDecryptPacket` into a `QuicPacket`); and the Retry integrity tag (`quicRetryIntegrityTag`, `quicRetryPacket`, `quicRetryVerify`). Every parse is bounds-checked against the datagram and answers a `QUIC_ERR_*` code rather than panicking: a truncated header, a clear fixed bit, another version (with its connection IDs read, for Version Negotiation), a connection ID over 20 bytes, a Length past the datagram, a packet too short to sample, a payload that does not authenticate, and reserved bits set in one that does. The builders answer `null` for an argument out of range. Keys are not wiped, as in `nish/crypto` | RFC 9000 §16, §17 and Appendix A.1–A.3; RFC 9001 §5 and Appendix A.1–A.5 (client and server Initial, Retry, ChaCha20 short header) |
+
 ## How a program imports it
 
 By its package specifier:
