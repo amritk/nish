@@ -231,6 +231,29 @@ for (const [name, args, words] of [
   )
 }
 
+// --expect-tarball reaches the installer as two words, and a seed that is
+// already there does not short-circuit past the check it asks for.
+{
+  const dir = fresh()
+  seedIn(dir, 'echo "nish 0.5.0"')
+  const r = run(dir, ["0.5.0", "--expect-tarball", "nish-0.5.0-x86_64-linux.tar.gz"])
+  check(
+    "--expect-tarball is passed to the installer as one option and its one value",
+    r.status === 0 &&
+      calls(dir).join("|") === "0.5.0 --expect-tarball nish-0.5.0-x86_64-linux.tar.gz --dir build/seed",
+    `${both(r)}\ncalls: ${calls(dir)}`
+  )
+  const bare = fresh()
+  seedIn(bare, 'echo "nish 0.5.0"')
+  const b = run(bare, ["--expect-tarball", "nish-0.5.0-x86_64-linux.tar.gz"])
+  check(
+    "--expect-tarball with no version still asks the installer, over a seed that runs",
+    b.status === 0 &&
+      calls(bare).join("|") === "--expect-tarball nish-0.5.0-x86_64-linux.tar.gz --dir build/seed",
+    `${both(b)}\ncalls: ${calls(bare)}`
+  )
+}
+
 // ---- install.sh: nothing downloaded runs before its digest matches -------------------
 //
 // A sandbox with a stand-in `curl` first on PATH that serves files out of a
@@ -418,6 +441,29 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
     "install.sh refuses a version that is not one, before it requests anything",
     refused(box, r) && r.stderr.includes("is not a release version") && curled(box) === "",
     told(box, r)
+  )
+}
+
+// A caller that says which tarball it expects -- CI's seed rows, which name
+// theirs in .github/seed-targets.json -- gets that one or nothing. A runner
+// whose hardware has drifted from its row resolves another asset, and used to
+// bootstrap with that seed under the row's name. It is refused before anything
+// is requested, and the one this machine does resolve still installs.
+{
+  const other = hostAsset === "x86_64-linux" ? "aarch64-darwin" : "x86_64-linux"
+  const box = installSandbox("9.9.9")
+  fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+  const r = install(box, ["9.9.9", "--expect-tarball", `nish-9.9.9-${other}.tar.gz`, "--dir", box.home])
+  check(
+    "install.sh --expect-tarball refuses when this machine resolves another asset, before requesting anything",
+    refused(box, r) && r.stderr.includes(`nish-9.9.9-${other}.tar.gz`) && curled(box) === "",
+    told(box, r)
+  )
+  const ok = install(box, ["9.9.9", "--expect-tarball", `${box.name}.tar.gz`, "--dir", box.home])
+  check(
+    "install.sh --expect-tarball installs the tarball this machine resolves when it is the one expected",
+    ok.status === 0 && fs.existsSync(path.join(box.home, "bin", "nish")),
+    told(box, ok)
   )
 }
 
@@ -643,6 +689,26 @@ const runScripts = (text) => {
       .split("\n")
       .filter((l) => /fetch-seed|release download|curl|wget/.test(l))
       .join("\n")
+  )
+}
+
+// Every seed row names the tarball it is for, and refuses any other: a runner
+// label that moved to other hardware fails the row rather than checking the
+// freeze with another platform's seed under this row's name. release.yml's
+// `binaries` job guards its own rows the same way, against `host`.
+{
+  const ci = fs.readFileSync(path.join(workflowDir, "ci.yml"), "utf8")
+  const unguarded = ["bootstrap", "nish-cmp"].filter((name) => {
+    const job = jobOf(ci, name)
+    return !(
+      /TARBALL: \$\{\{ matrix\.seed\.tarball \}\}/.test(job) &&
+      /bash scripts\/fetch-seed\.sh "\$\{TAG#v\}" --expect-tarball "\$TARBALL"/.test(job)
+    )
+  })
+  check(
+    "ci.yml's bootstrap and nish-cmp rows refuse a seed that is not their matrix.seed.tarball",
+    unguarded.length === 0,
+    `unguarded: ${unguarded.join(", ")}`
   )
 }
 

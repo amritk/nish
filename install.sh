@@ -44,6 +44,10 @@ Arguments:
 Options:
   --dir <path>         where to install. Default: $NISH_INSTALL, or ~/.nish
   --force              reinstall even when that version is already there
+  --expect-tarball <name>
+                       refuse, before downloading anything, unless the release
+                       asset this machine resolves is <name>, e.g.
+                       nish-0.15.0-x86_64-linux.tar.gz
   --uninstall          remove the install directory and stop
   -h, --help           this text
 
@@ -234,6 +238,7 @@ nish_write_wrapper() {
   {
     printf '#!/bin/sh\n'
     printf '# Written by install.sh. Execs the compiler by absolute path, so that it\n'
+    # shellcheck disable=SC2016 # the wrapper's comment names $PWD, unexpanded
     printf '# resolves its runtime from this install rather than from $PWD -- which\n'
     printf '# every release up to 0.5.0 needs, because it resolves no symlink.\n'
     printf 'exec %s "$@"\n' "$(nish_shell_quote "$_dir/libexec/nish")"
@@ -281,12 +286,14 @@ version=""
 install_dir="${NISH_INSTALL:-$HOME/.nish}"
 force=""
 uninstall=""
+expect_tarball=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) usage; exit 0 ;;
     --dir) [ $# -ge 2 ] || die "--dir needs a path"; install_dir="$2"; shift 2 ;;
     --force) force=1; shift ;;
+    --expect-tarball) [ $# -ge 2 ] || die "--expect-tarball needs a file name"; expect_tarball="$2"; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     -*) die "unknown option $1 (try --help)" ;;
     *) [ -z "$version" ] || die "two versions given: $version and $1"; version="$1"; shift ;;
@@ -338,6 +345,21 @@ case "$version" in v*) ;; *) version="v$version" ;; esac
 plain="${version#v}"
 nish_valid_version "$plain" || die "$version is not a release version (one looks like 0.15.0 or v0.15.0)"
 
+name="nish-$plain-$asset"
+
+# The tarball the caller says this machine should get, when it says one. CI's
+# seed rows name theirs from .github/seed-targets.json and run on whatever a
+# runner label provides today, and a label can move to other hardware -- two
+# macOS ones have. Without this a drifted row installs the asset `uname`
+# resolves instead, bootstraps with it, and reports success under the row's
+# name. It is checked before the already-installed short cut and before any
+# request, so a mismatch installs nothing and leaves what is there alone.
+if [ -n "$expect_tarball" ] && [ "$expect_tarball" != "$name.tar.gz" ]; then
+  die "this machine ($(uname -s)-$(uname -m)) resolves $name.tar.gz, but the caller expects $expect_tarball.
+  The runner and the row it was meant to check disagree about the platform: fix
+  the row's runner or its host in .github/seed-targets.json. Nothing was installed."
+fi
+
 have="$(nish_installed_version "$install_dir")"
 if [ "$have" = "$plain" ] && [ -z "$force" ]; then
   say "nish $plain is already installed in $install_dir"
@@ -345,7 +367,6 @@ if [ "$have" = "$plain" ] && [ -z "$force" ]; then
   exit 0
 fi
 
-name="nish-$plain-$asset"
 url="https://github.com/$REPO/releases/download/$version/$name.tar.gz"
 
 if [ "$have" = "$plain" ]; then

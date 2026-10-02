@@ -130,6 +130,9 @@ while [ "$i" -lt "$count" ]; do
   row="$(jq -c ".targets[$i]" "$targets")"
   asset="$(printf '%s' "$row" | jq -r '.asset')"
   since="$(printf '%s' "$row" | jq -r '.attachedSince')"
+  # `tarball` is the row's architecture guard as well as its name: ci.yml's
+  # seed rows pass it to scripts/fetch-seed.sh --expect-tarball, which refuses
+  # a runner whose `uname` resolves any other asset.
   tarball="nish-$version-$asset.tar.gz"
   if printf '%s\n' "$assets" | grep -qxF "$tarball"; then
     rows="$(printf '%s' "$rows" |

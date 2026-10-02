@@ -466,12 +466,21 @@ jobs:
       # spliced into the script. A maintainer-created tag is not a plausible
       # attacker, but the value came out of a release and the rule costs
       # nothing -- it is the one pr-title.yml already states.
+      #
+      # `--expect-tarball` is this row's architecture guard. install.sh picks
+      # the asset from the runner's own `uname`, and a runner label can move to
+      # other hardware (macos-13 and macos-latest both have), so without it a
+      # drifted row would bootstrap with another platform's seed and go green
+      # under this row's name. install.sh refuses, before downloading, unless
+      # the tarball it resolves is the row's -- release.yml's `binaries` job
+      # holds its rows to `host` the same way.
       - name: Download the seed
         id: download
         env:
           TAG: ${{ matrix.seed.tag }}
+          TARBALL: ${{ matrix.seed.tarball }}
         run: |
-          bash scripts/fetch-seed.sh "${TAG#v}"
+          bash scripts/fetch-seed.sh "${TAG#v}" --expect-tarball "$TARBALL"
           echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       - name: Build src/ with the seed
@@ -576,13 +585,14 @@ jobs:
 
       # The same verified download `bootstrap` makes, and the same rule about
       # the matrix reaching bash through `env:` rather than spliced into the
-      # script.
+      # script, and the same refusal of a seed that is not this row's.
       - name: Download the seed
         id: download
         env:
           TAG: ${{ matrix.seed.tag }}
+          TARBALL: ${{ matrix.seed.tarball }}
         run: |
-          bash scripts/fetch-seed.sh "${TAG#v}"
+          bash scripts/fetch-seed.sh "${TAG#v}" --expect-tarball "$TARBALL"
           echo "path=$PWD/build/seed/bin/nish" >> "$GITHUB_OUTPUT"
 
       # `NISH_BOOTSTRAP` rather than `--reference`, so the spelling is the one
