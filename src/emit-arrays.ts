@@ -70,6 +70,8 @@ const HEADER_BYTES: i32 = 24
 const MEMSET: string = "llvm.memset.p0i8.i64"
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64"
 const MEMMOVE: string = "llvm.memmove.p0i8.p0i8.i64"
+/** The longest array `length` can count under `--number-mode i32`. */
+const I32_MAX: i32 = 2147483647
 
 /**
  * WP15 section 2a: the record stored inline in this array's slots, or `null`
@@ -1030,7 +1032,7 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  */
 export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32): boolean => {
   const literal = unwrapParens(length)
-  if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= 2147483647.0) {
+  if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
     return false
   }
   return isFloat(type) || intBits(type) === 64 || (type === T_U32 && numberMode === NUMBER_MODE_I32)
@@ -1044,7 +1046,7 @@ export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32):
  * anything that size goes to `nish_arena_grow`, which fails it.
  */
 const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
-  const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(2147483647) : toI64(1) << toI64(53)
+  const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(I32_MAX) : toI64(1) << toI64(53)
   const fits: i64 = (toI64(1) << toI64(62)) / toI64(size)
   return fits < most ? fits : most
 }

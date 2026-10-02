@@ -126,15 +126,18 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "realpathSync"
 
 /**
- * Whether `expr` is a `readdirSync` call. Its answer is the one allocation
- * whose elements are fresh too: the runtime bumps every name and stores it into
- * the array it bumps, which is the store into memory that the scope rules
- * below assume nothing made (docs/security/codegen.md, CG-5). So an element of
- * a listing is followed as the listing itself, wherever it is read.
+ * Whether the builtin `name` answers an array whose elements were allocated by
+ * the same call: `readdirSync` bumps every name and stores it into the array it
+ * bumps, which is the store into memory the scope rules below assume nothing
+ * made (docs/security/codegen.md, CG-5). A builtin like it goes here beside its
+ * entry in `isAllocatingBuiltin`.
  */
+const answersFreshElements = (name: string): boolean => name === "readdirSync"
+
+/** Whether `expr` is a call of such a builtin: a listing, whose elements are followed as the listing itself. */
 const isListingCall = (program: CheckedProgram, expr: Node): boolean => {
   const e = unwrapParens(expr)
-  return e.kind === N_CALL && builtinNameOf(program, e) === "readdirSync"
+  return e.kind === N_CALL && answersFreshElements(builtinNameOf(program, e))
 }
 
 export class EscapeResult {
@@ -271,16 +274,16 @@ class EscapeAnalysis {
   logsNumbers: boolean
   /** WP17: this function hands its `Result` back in a register, not as a pointer. */
   returnsByValueResult: boolean
-  /** Memoised outcomes, keyed by local identity. */
-  outcomeLocals: Local[]
-  outcomeValues: Outcome[]
   /**
    * The site being decided is a `readdirSync` listing (`isListingCall`), so an
    * element read out of it, `xs[i]` or a `for...of` variable, flows as the
-   * site does. Outcomes memoised under it are dropped afterwards, because the
-   * same local read without it answers differently.
+   * site does. Its outcomes are memoised apart, because the same local read
+   * without it answers differently.
    */
   listing: boolean
+  /** Memoised outcomes, keyed by local identity. */
+  outcomeLocals: Local[]
+  outcomeValues: Outcome[]
   /** The signature being analysed; WP17 reads its parameter list. */
   sig: FunctionSig
 
@@ -727,17 +730,19 @@ class EscapeAnalysis {
   decide(): void {
     for (const site of this.sites) {
       const fresh: Local[] = []
+      // A listing's outcomes are kept apart from every other site's: the
+      // ordinary memo is set aside while it is decided, and comes back after.
+      const memoLocals = this.outcomeLocals
+      const memoValues = this.outcomeValues
       this.listing = isListingCall(this.unit.program, site.node)
       if (this.listing) {
         this.outcomeLocals = []
         this.outcomeValues = []
       }
       const outcome = this.valueOutcome(site.node, fresh)
-      if (this.listing) {
-        this.listing = false
-        this.outcomeLocals = []
-        this.outcomeValues = []
-      }
+      this.listing = false
+      this.outcomeLocals = memoLocals
+      this.outcomeValues = memoValues
       let flow = outcome.flow
       let escapes = outcome.escapes
       // A `new` object is also handed to its constructor as `this`; a
@@ -1152,6 +1157,16 @@ export const analyzeEscapes = (
 // itself (`arenaNodes`) or call something that leaves memory behind
 // (`netAllocates`), or the bracket would be two runtime calls around nothing.
 
+/** Whether `list` holds `local`, by identity. */
+const holdsLocal = (list: Local[], local: Local): boolean => {
+  for (const candidate of list) {
+    if (candidate === local) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Why a loop's passes are not scoped, for the arena-loop diagnostic. */
 const LOOP_NOTHING: i32 = 0
 /** An allocation of the pass is stored into memory (`at`). */
@@ -1204,15 +1219,7 @@ class PassWalk {
       return true
     }
     const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
-    if (local === null) {
-      return false
-    }
-    for (const candidate of this.listingLocals) {
-      if (candidate === local) {
-        return true
-      }
-    }
-    return false
+    return local !== null && holdsLocal(this.listingLocals, local)
   }
 
   /** Record the first reason, in the order the body is read. */
@@ -1225,12 +1232,7 @@ class PassWalk {
   }
 
   declaredInPass(local: Local): boolean {
-    for (const candidate of this.locals) {
-      if (candidate === local) {
-        return true
-      }
-    }
-    return false
+    return holdsLocal(this.locals, local)
   }
 
   /**
