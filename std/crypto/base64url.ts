@@ -9,9 +9,10 @@
  * **Decoding is strict, so that each byte string has exactly one spelling.**
  * `base64urlDecode` answers `null` for a `=` anywhere, for any character outside
  * the alphabet (whitespace included), for a length of 1 mod 4 — six bits, not a
- * byte — and for a final character whose unused low bits are not zero (RFC 4648
- * §3.5). A lenient decoder would let `AB` and `AA` both mean `00`, and a token
- * compared or cached by its text would then have two identities.
+ * byte — for a final character whose unused low bits are not zero (RFC 4648
+ * §3.5), and for a text longer than 2^31 - 1 bytes. A lenient decoder would let
+ * `AB` and `AA` both mean `00`, and a token compared or cached by its text
+ * would then have two identities.
  *
  * **Neither direction indexes or branches on the data.** What is encoded here
  * is usually a key, a nonce or a MAC, and a lookup table indexed by a secret
@@ -69,9 +70,15 @@ const base64urlSextetOf = (c: i32): i32 => {
  *
  * Bytes go into a bit accumulator eight at a time and come out six at a time,
  * so one index walks the input and the only branches are on how many bits are
- * waiting — which depends on the position, never on the bytes.
+ * waiting — which depends on the position, never on the bytes. An array longer
+ * than 2^31 - 1 bytes panics.
  */
 export const base64urlEncode = (data: u8[]): string => {
+  // Refused before `toI32`, which saturates a longer length under
+  // `--number-mode f64` and would end the loop at a prefix.
+  if (data.length > 2147483647) {
+    panic("base64urlEncode: more than 2^31 - 1 bytes")
+  }
   const parts: string[] = []
   let acc: i32 = 0
   let bits: i32 = 0
@@ -96,12 +103,18 @@ export const base64urlEncode = (data: u8[]): string => {
 /**
  * The bytes `text` spells in unpadded base64url, or `null` when it is not the
  * one canonical spelling of any byte string — see the module comment for the
- * four refusals.
+ * five refusals.
  *
  * The same accumulator as `base64urlEncode`, run the other way: six bits in per
  * character, eight out per byte.
  */
 export const base64urlDecode = (text: string): u8[] | null => {
+  // A text past 2^31 - 1 bytes is refused before `toI32`, which would
+  // saturate it under `--number-mode f64` and decode only a prefix: a second
+  // spelling of that prefix's bytes, which strictness exists to refuse.
+  if (text.length > 2147483647) {
+    return null
+  }
   const n: i32 = toI32(text.length)
   const tail: i32 = n & 3
   // Six bits cannot finish a byte, so a single character after the last full

@@ -127,15 +127,31 @@ export class HmacSha384 {
   }
 }
 
-/** The HMAC-SHA-256 of all of `data` under `key`, as a fresh 32-byte array. */
+/**
+ * The HMAC-SHA-256 of all of `data` under `key`, as a fresh 32-byte array.
+ *
+ * `data` longer than 2^31 - 1 bytes panics, as `sha256` does and for its
+ * reason: under `--number-mode f64` the tag would be of a prefix, and a tag
+ * that verifies every message sharing that prefix is a forgery. A key that
+ * long reaches `sha256` in the constructor and panics there.
+ */
 export const hmacSha256 = (key: u8[], data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("hmacSha256: a message longer than 2^31 - 1 bytes")
+  }
   const mac = new HmacSha256(key)
   mac.update(data, HMAC_FROM, toI32(data.length))
   return mac.digest()
 }
 
-/** The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array. */
+/**
+ * The HMAC-SHA-384 of all of `data` under `key`, as a fresh 48-byte array.
+ * `data` longer than 2^31 - 1 bytes panics, as in `hmacSha256`.
+ */
 export const hmacSha384 = (key: u8[], data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("hmacSha384: a message longer than 2^31 - 1 bytes")
+  }
   const mac = new HmacSha384(key)
   mac.update(data, HMAC_FROM, toI32(data.length))
   return mac.digest()

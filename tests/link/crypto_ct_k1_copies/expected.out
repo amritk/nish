@@ -1,0 +1,4 @@
+PASS  timingSafeEqual32 agrees with timingSafeEqual on 32-byte tags and every bit flip
+PASS  timingSafeEqual48 agrees with timingSafeEqual on 48-byte tags and every bit flip
+PASS  timingSafeEqualAt16 agrees with timingSafeEqualAt on 16-byte windows
+ct k1 copies: 3 passed, 0 failed, 0 skipped
