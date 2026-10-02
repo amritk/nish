@@ -87,7 +87,7 @@ process. The goals considered are:
 | K1-3 | Low | `std/crypto/base64url.ts:110`, `:75` | Under `--number-mode f64` `base64urlDecode` of a text longer than 2^31 − 1 bytes decoded its first 2^31 − 1 characters and, when they were valid, answered their bytes. That is a second spelling of those bytes, which the strict decoder exists to refuse. `base64urlEncode` of a longer array would stop at the same prefix. On base it cannot finish on an ordinary machine: under an 8 GB limit it ends with `nish: out of memory` (exit 1) long before answering. | Fixed: decode answers `null` and encode panics past 2^31 − 1. Tests: `crypto_base64url_long_f64` (fails on base) and `crypto_base64url_encode_long_f64`. The encode test pins the refusal: on base its stdout and exit code happen to match, because the out-of-memory panic also exits 1. |
 | K1-4 | Low | `std/crypto/hkdf.ts:74`, `:108` | `hkdfExpandSha256/384` MACed `toI32(info.length)` bytes of `info`. Under `--number-mode f64` two `info`s longer than 2^31 − 1 bytes that shared their first 2^31 − 1 derived one key. | Fixed: such an `info` answers `null`, like an out-of-range L. Test: `crypto_hkdf_long_f64` |
 | K1-5 | Low | `std/crypto/hkdf.ts:74`, `:108` | RFC 5869 §2.3 asks for a PRK of at least HashLen bytes. `hkdfExpand*` accepted any length, an empty PRK included, which keys HMAC with nothing a caller had to know. Misuse resistance rather than a break: every caller in the tree passes an `hkdfExtract*` result. | Fixed: a PRK shorter than 32 (SHA-256) or 48 (SHA-384) bytes answers `null`. Test: `crypto_hkdf_k1_bounds` (and `_f64`) |
-| K1-6 | High | `src/emit-arrays.ts:1098` (`emitArrayLength`, through `emitNumberFromI64`); `runtime/runtime.c:1164` (`nish_array_grow`) | **Open.** Under `--number-mode i32`, `a.length` is the array's `i64` length truncated to `i32`. Nothing stops an array from growing past 2^31 − 1 elements (`push` doubles the capacity without a bound). A `u8[]` of 2^32 + 5 bytes therefore has `length` 5 everywhere in the program, and every std function sees a 5-byte array. Measured on base and on this branch: `sha256` of 2^32 + 5 bytes equals `sha256` of its first 5, `hmacSha256Verify` accepts the 5-byte message's tag for the 4 GiB message, and `timingSafeEqual` of it against a 5-byte array answers `true`. std cannot see the true length in this mode, so nothing inside this stage's files can fix it. | Open: needs `src/emit-arrays.ts` (the codegen stage) or `runtime/runtime.c` (the runtime stage). A fix is to refuse (panic) growth or allocation past 2^31 − 1 elements under `--number-mode i32`, or to make `.length` panic rather than truncate. Once that lands, the K1-1/K1-2 guards cover i32 mode as well. |
+| K1-6 | High | `src/emit-arrays.ts:1098` (`emitArrayLength`, through `emitNumberFromI64`); `runtime/runtime.c:1164` (`nish_array_grow`) | Under `--number-mode i32`, `a.length` is the array's `i64` length truncated to `i32`. Nothing stops an array from growing past 2^31 − 1 elements (`push` doubles the capacity without a bound). A `u8[]` of 2^32 + 5 bytes therefore has `length` 5 everywhere in the program, and every std function sees a 5-byte array. Measured on base and on this branch: `sha256` of 2^32 + 5 bytes equals `sha256` of its first 5, `hmacSha256Verify` accepts the 5-byte message's tag for the 4 GiB message, and `timingSafeEqual` of it against a 5-byte array answers `true`. std cannot see the true length in this mode, so nothing inside this stage's files can fix it. | **Fixed, except for `join`**, by the two stages after this one. As this stage left it: needs `src/emit-arrays.ts` (the codegen stage) or `runtime/runtime.c` (the runtime stage). A fix is to refuse (panic) growth or allocation past 2^31 − 1 elements under `--number-mode i32`, or to make `.length` panic rather than truncate. Once that lands, the K1-1/K1-2 guards cover i32 mode as well. *Since fixed: the codegen stage bounded `push` and `new Array` at 2^31 − 1 elements ([codegen.md](codegen.md), K1-6 and CG-1), and the runtime stage closed the file reads, concatenation and `nish_alloc_array` ([runtime.md](runtime.md), RT-1, RT-2, RT-7). The one source left, a string `join` builds (`src/emit-arrays.ts`), is counted under CG-3 and tracked in [#382](https://github.com/amritk/nish/issues/382)* |
 
 No finding was made in the length counters, the padding, HMAC's key handling,
 the digest-ends-computation rule, the window checks, HKDF's L bound, or the
@@ -147,3 +147,30 @@ stage that is:
 - Worth a sentence near the top: until K1-6 is fixed, a program built under
   `--number-mode i32` must not hand these functions an array of 2^31 bytes or
   more. `length` wraps there, and nothing in std can tell.
+
+## Addendum: HKDF-Expand-Label
+
+Added after this audit, for WP34's TLS 1.3 and QUIC stages (#395), and not
+covered by the reading above: `hkdfExpandLabelSha256/384` and the private
+`hkdfLabel` in `std/crypto/hkdf.ts`. They build RFC 8446
+§7.1's `HkdfLabel` and hand it to `hkdfExpandSha256/384` as `info`, so every
+property above that holds for `expand` holds for them.
+
+Their arguments sit outside this record's threat model: a label is a literal,
+a length a key or hash size, a context a transcript hash, and the secret one
+the key schedule derived. So an argument out of range is a bug in the caller,
+and it panics rather than answering `null` as `expand` does for a length taken
+from a protocol field. Each refusal has a program that reaches it:
+
+| Refused | Why | Pinned by |
+| --- | --- | --- |
+| a length above 255, or below 0 | no TLS 1.3 or QUIC output is longer than 48 bytes; `HkdfLabel.length` is unsigned | `tests/link/crypto_hkdf_expand_label_long_length`, `_negative_length` |
+| a label longer than 249 bytes, or empty | `"tls13 " + label` must fit `opaque label<7..255>`; past 249 its length byte would wrap, and the bytes would no longer be one well-formed `HkdfLabel` | `_long_label`, `_empty_label` |
+| a context longer than 255 bytes | `opaque context<0..255>`, the same wrap | `_long_context`, and `_long_context_f64`, where the length is compared as an `f64` |
+| a secret shorter than HashLen | K1-5 above: `expand` answers `null` for it, which the label functions turn into a panic | `_short_secret`, `_short_secret_sha384` |
+
+The answers are pinned against every HKDF-Expand-Label step RFC 8448 §3
+prints and all of RFC 9001 A.1, in both number modes
+(`tests/link/crypto_hkdf_expand_label`, `_f64`); the SHA-384 vectors and the
+largest accepted label, context and length were checked against OpenSSL's
+TLS13-KDF. The secrets they derive are not wiped, as nothing here is (ECC-2).

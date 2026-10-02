@@ -61,8 +61,9 @@ The `wasi` profile links the runtime against wasi-libc so that whole programs
 needs a WASI sysroot and compiler-rt's wasm32 builtins next to your clang:
 
 ```bash
-# Ubuntu / Debian: the packaged sysroot lands in /usr/lib/wasi-sysroot
+# Ubuntu / Debian: the packaged sysroot lands in /usr (/usr/include/wasm32-wasi, /usr/lib/wasm32-wasi)
 sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+export WASI_SYSROOT=/usr                      # add to your shell profile
 
 # Any platform: wasi-sdk's sysroot and builtins tarballs (versions that match your clang)
 curl -L -o - https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sysroot-24.0.tar.gz | tar -xz -C /opt
@@ -74,7 +75,11 @@ export WASI_SYSROOT=/opt/wasi-sysroot-24.0    # add to your shell profile
 `/usr/lib/wasi-sysroot`, `/opt/wasi-sdk/share/wasi-sysroot` and
 `/usr/share/wasi-sysroot`, and for `libclang_rt.builtins-wasm32.a` in clang's
 resource directory, next to the sysroot (as the tarball above unpacks it),
-in `<sysroot>/lib/wasm32-wasi/`, or at `WASI_BUILTINS=<file>`. Then:
+in `<sysroot>/lib/wasm32-wasi/`, or at `WASI_BUILTINS=<file>`.
+
+The packaged wasi-libc predates wasi-libc's `realpath`, so a module linked
+against it answers `realpathSync` with `null` for every path. Use wasi-sdk's
+sysroot (22 or later) when a program needs `realpathSync` to resolve. Then:
 
 ```bash
 nish examples/argv.ts --link build/argv.wasm --profile wasi

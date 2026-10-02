@@ -81,9 +81,9 @@ a pass nobody earned, so the model is held to err towards refusing.
 | CT-10 | Low | `tests/ct-asm.js:835` | aarch64 `fccmpe` was not a compare: it was read as writing its first operand and left the flags clean, so a `csetm` after a secret float compare was public. | Fixed; corner. |
 | CT-11 | Low | `tests/ct-asm.js:142` | A `ct-check` whose `secret=contents` names a function with no array argument taints nothing and passes whatever the function does. | Fixed: refused as a spec problem, checked at load. |
 | CT-12 | Low | `tests/ct-timing.js:69`, `:291` | The timing harness had no positive control: every `expect=` function was left out, so a harness that timed nothing (a call the optimiser dropped, a timer that does not tick) would print "none above". | Fixed: the `expect=branch` functions are timed as the control and must differ, or the run fails with exit 2; a filtered run still times them. Measured: `naiveEqual` |t| = 162 at `--quick`, 1114–1301 at 300,000 samples. |
-| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts:148` (`ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measures |t| = 35–42 at 300,000 samples, every run, on this machine when the driver holds all seven x25519 functions — and 1.4–2.9 when it is linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict follows the link layout of the driver, not only the function. It may be a microarchitectural effect of out-of-domain inputs (the harness hands it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact; it is not established either way. | Open: for the x25519 stage to decide with the module's real input domain; this stage does not own the fixture and does not widen its scope. The weekly run on CI hardware is the other reading. |
-| CT-14 | Low | `tests/run.js:3418` | The check's name says "refused for a conditional branch" for every `expect=` other than `load`, so the new `call` and `latency` seeds are named as branches in the output (the assertion itself is right). | Open: `tests/run.js` is outside this stage. |
-| CT-15 | Low | `tests/run.js:3376` | A clang without the aarch64 target turns that half of the check into counted skips; `npm test` then exits 0 with a "Note", not the DEGRADED banner, since every tool is present. CI's clang has both targets today, but nothing requires it. | Open: `tests/run.js` is outside this stage. |
+| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts:148` (`ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measures |t| = 35–42 at 300,000 samples, every run, on this machine when the driver holds all seven x25519 functions — and 1.4–2.9 when it is linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict follows the link layout of the driver, not only the function. It may be a microarchitectural effect of out-of-domain inputs (the harness hands it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact; it is not established either way. | Open: for the x25519 stage to decide with the module's real input domain; this stage does not own the fixture and does not widen its scope. The weekly run on CI hardware is the other reading. Tracked in [#378](https://github.com/amritk/nish/issues/378). |
+| CT-14 | Low | `tests/run.js:3418` | The check's name says "refused for a conditional branch" for every `expect=` other than `load`, so the new `call` and `latency` seeds are named as branches in the output (the assertion itself is right). | Fixed after this stage: each check is named by the `promise` `ctSpecs` gives its spec in `tests/ct-asm.js`: the kind it expects, and the `via=` callee where there is one, both from the `EXPECT_KINDS` table `ctSpecs` also reads its kinds from, so a kind it accepts always has a name. |
+| CT-15 | Low | `tests/run.js:3376` | A clang without the aarch64 target turns that half of the check into counted skips; `npm test` then exits 0 with a "Note", not the DEGRADED banner, since every tool is present. CI's clang has both targets today, but nothing requires it. | Fixed after this stage: `ct_asm: clang targets <target>` is a check for each of the two targets, and fails with clang's answer when one is missing; the target's fixtures are not tried again. Shown with a `clang` that refuses `--target=aarch64*`: 9 skips and exit 0 before, one failure and exit 1 after. The wasm32 compile, which reads no branches, is still a counted skip. |
 | CT-16 | Low | `tests/run.js:3369` | The checker reads `clang -O2` for the baseline CPU only. A program built with another profile or `-march` is not what was read, and the ISA extensions behind CT-5 and CT-6 never reach it. | Open, documented here. |
 
 No fixture failed the stricter checker: every function in every
@@ -124,8 +124,15 @@ against the module's own vectors); the module functions themselves are not
 read. What follows is every secret-handling function in `std/crypto` that no
 fixture reads, as a copy or otherwise. Their constant time rests on review.
 
-- **`std/crypto/ct.ts`**: `timingSafeEqual`, `timingSafeEqualAt`
-  (`ct_asm_mac.macEqual` is the same loop shape, not a copy).
+- **`std/crypto/ct.ts`**: `timingSafeEqual`, `timingSafeEqualAt`, whose
+  loops run for a length. (`ct_asm_k1_ct` reads copies of their cores:
+  `timingSafeEqual`'s loop unrolled at 32 and 48 bytes, and
+  `timingSafeEqualAt`'s at a 16-byte window.)
+- **`std/crypto/base64url.ts`**: `base64urlEncode`, `base64urlDecode`: their
+  length-driven loops, the decoder's store guard and the encoder's string
+  building. (`ct_asm_k1_base64url` reads `base64urlCharOf` and
+  `base64urlSextetOf` verbatim, and one encode group and one decode group, as
+  copies.)
 - **`std/crypto/hmac.ts`**: `hmacPadBlock`, `hmacSha256`, `hmacSha384`,
   `hmacSha256Verify`, `hmacSha384Verify`.
 - **`std/crypto/hkdf.ts`**: `hkdfSalt`, `hkdfAppend`, `hkdfExtractSha256`,
@@ -160,8 +167,7 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
   addition, the table move and select, and one window step are read as copies
   or reshaped copies.) `p256Verify` handles only public data.
 
-`std/crypto/x509.ts` and `std/crypto/base64url.ts` handle public data and are
-not constant-time code.
+`std/crypto/x509.ts` handles public data and is not constant-time code.
 
 ## Properties verified
 
@@ -173,7 +179,9 @@ not constant-time code.
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
 | Each gap in CT-2 to CT-10 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (19 rows), checked when the module loads |
 | A spec that makes nothing secret is refused | `seedMisses` in `tests/ct-asm.js` |
-| No existing fixture leaks by the stricter rules | every `ct_asm: … no branch, call or secret-indexed access` check |
+| No existing fixture leaks by the stricter rules | every `ct_asm: … no branch, call, secret-indexed access or secret-dependent latency` check |
+| Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
+| Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
 
 ## Doc corrections for the security-policy stage
@@ -185,4 +193,4 @@ not constant-time code.
   reads `clang -O2` for the baseline CPU only (CT-16).
 - `tests/run.js:3418` (CT-14) and `:3376` (CT-15) want a fix by whoever owns
   the harness: name the kind each `expect=` checks, and fail rather than skip
-  when clang cannot target aarch64.
+  when clang cannot target aarch64. *Since made: see CT-14 and CT-15 above.*
