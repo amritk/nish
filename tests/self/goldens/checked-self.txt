@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1228607 dump lines live, 76 distinct modules.
+# 76 programs, 1228883 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -29600,6 +29600,7 @@ struct Parser (class) size=96 align=8 exported
   method accessorAhead -> @Parser.accessorAhead
   method parseComputedName -> @Parser.parseComputedName
   method computedNameFailed -> @Parser.computedNameFailed
+  method skipBrokenProperty -> @Parser.skipBrokenProperty
   method abandonedMember -> @Parser.abandonedMember
   method methodAfterComputedName -> @Parser.methodAfterComputedName
   method atMemberName -> @Parser.atMemberName
@@ -31074,1173 +31075,1193 @@ function Parser.computedNameFailed(this: Parser, before: i32): boolean -> @Parse
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function Parser.skipBrokenProperty(this: Parser): boolean -> @Parser.skipBrokenProperty [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Parser.advance
+  calls: Parser.advance Parser.at Parser.newlineBefore
+  pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.newlineBefore#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0
+  stackSites=0 stackLocals=0
+  local 2693:9 depth: i32 (let)
+  callee 2694:13 Parser.at -> @Parser.at
+  callee 2696:13 Parser.at -> @Parser.at
+  callee 2697:11 Parser.advance -> @Parser.advance
+  callee 2700:13 Parser.at -> @Parser.at
+  callee 2700:36 Parser.at -> @Parser.at
+  callee 2703:13 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 2707:11 Parser.at -> @Parser.at
+  callee 2707:34 Parser.at -> @Parser.at
+  callee 2707:59 Parser.at -> @Parser.at
+  callee 2709:19 Parser.at -> @Parser.at
+  callee 2709:42 Parser.at -> @Parser.at
+  callee 2709:67 Parser.at -> @Parser.at
+  callee 2712:7 Parser.advance -> @Parser.advance
 function Parser.abandonedMember(this: Parser, start: i32): Node -> @Parser.abandonedMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2687:5
+  sharedWrite: 2720:5
   escaping: start
   calls: Parser.node nish_panic_index
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0
   stackSites=0 stackLocals=0
-  local 2686:11 node: Node (const)
-  callee 2686:18 Parser.node -> @Parser.node
+  local 2719:11 node: Node (const)
+  callee 2719:18 Parser.node -> @Parser.node
 function Parser.methodAfterComputedName(this: Parser): boolean -> @Parser.methodAfterComputedName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.at Parser.peek
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.peek#0 Parser.peek#0 Parser.at#0 Parser.at#0
   stackSites=0 stackLocals=0
-  callee 2696:9 Parser.at -> @Parser.at
-  callee 2697:14 Parser.peek -> @Parser.peek
-  callee 2697:44 Parser.peek -> @Parser.peek
-  callee 2699:12 Parser.at -> @Parser.at
-  callee 2699:35 Parser.at -> @Parser.at
+  callee 2729:9 Parser.at -> @Parser.at
+  callee 2730:14 Parser.peek -> @Parser.peek
+  callee 2730:44 Parser.peek -> @Parser.peek
+  callee 2732:12 Parser.at -> @Parser.at
+  callee 2732:35 Parser.at -> @Parser.at
 function Parser.atMemberName(this: Parser): boolean -> @Parser.atMemberName [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Parser.at
   pointer this: size=96 writesThrough=false captured=false passedTo=Parser.at#0 Parser.at#0 Parser.at#0
   stackSites=0 stackLocals=0
-  callee 2704:12 Parser.at -> @Parser.at
-  callee 2704:34 Parser.at -> @Parser.at
-  callee 2704:57 Parser.at -> @Parser.at
+  callee 2737:12 Parser.at -> @Parser.at
+  callee 2737:34 Parser.at -> @Parser.at
+  callee 2737:57 Parser.at -> @Parser.at
 function Parser.parseMemberNameNode(this: Parser): Node -> @Parser.parseMemberNameNode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2714:7
+  sharedWrite: 2747:7
   calls: Parser.advance Parser.at Parser.node Parser.parseIdentifier withoutSeparators
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.node#0 Parser.advance#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.parseIdentifier#0
   stackSites=0 stackLocals=0
-  callee 2712:9 Parser.at -> @Parser.at
-  local 2713:13 name: Node (const)
-  callee 2713:20 Parser.node -> @Parser.node
-  callee 2715:7 Parser.advance -> @Parser.advance
-  callee 2718:9 Parser.at -> @Parser.at
-  local 2719:13 name: Node (const)
-  callee 2719:20 Parser.node -> @Parser.node
-  callee 2720:19 withoutSeparators -> @withoutSeparators
-  callee 2721:7 Parser.advance -> @Parser.advance
-  callee 2724:12 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 2745:9 Parser.at -> @Parser.at
+  local 2746:13 name: Node (const)
+  callee 2746:20 Parser.node -> @Parser.node
+  callee 2748:7 Parser.advance -> @Parser.advance
+  callee 2751:9 Parser.at -> @Parser.at
+  local 2752:13 name: Node (const)
+  callee 2752:20 Parser.node -> @Parser.node
+  callee 2753:19 withoutSeparators -> @withoutSeparators
+  callee 2754:7 Parser.advance -> @Parser.advance
+  callee 2757:12 Parser.parseIdentifier -> @Parser.parseIdentifier
 function Parser.parseBody(this: Parser): Node -> @Parser.parseBody [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via Parser.eat
   calls: Parser.at Parser.eat Parser.empty Parser.newlineBefore Parser.parseBlock
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.at#0 Parser.newlineBefore#0 Parser.eat#0 Parser.empty#0 Parser.parseBlock#0
   stackSites=0 stackLocals=0
-  callee 2733:10 Parser.at -> @Parser.at
-  callee 2733:34 Parser.at -> @Parser.at
-  callee 2733:60 Parser.at -> @Parser.at
-  callee 2733:83 Parser.newlineBefore -> @Parser.newlineBefore
-  callee 2734:7 Parser.eat -> @Parser.eat
-  callee 2735:14 Parser.empty -> @Parser.empty
-  callee 2737:12 Parser.parseBlock -> @Parser.parseBlock
+  callee 2766:10 Parser.at -> @Parser.at
+  callee 2766:34 Parser.at -> @Parser.at
+  callee 2766:60 Parser.at -> @Parser.at
+  callee 2766:83 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 2767:7 Parser.eat -> @Parser.eat
+  callee 2768:14 Parser.empty -> @Parser.empty
+  callee 2770:12 Parser.parseBlock -> @Parser.parseBlock
 function Parser.indexSignatureAhead(this: Parser): boolean -> @Parser.indexSignatureAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.peek Parser.scanAfterAhead
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.scanAfterAhead#0
   stackSites=0 stackLocals=0
-  callee 2745:12 Parser.peek -> @Parser.peek
-  callee 2745:41 Parser.scanAfterAhead -> @Parser.scanAfterAhead
+  callee 2778:12 Parser.peek -> @Parser.peek
+  callee 2778:41 Parser.scanAfterAhead -> @Parser.scanAfterAhead
 function Parser.eatMemberSeparator(this: Parser): void -> @Parser.eatMemberSeparator [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.eat
   calls: Parser.eat
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.eat#0 Parser.eat#0
   stackSites=0 stackLocals=0
-  callee 2750:10 Parser.eat -> @Parser.eat
-  callee 2751:7 Parser.eat -> @Parser.eat
+  callee 2783:10 Parser.eat -> @Parser.eat
+  callee 2784:7 Parser.eat -> @Parser.eat
 function Parser.parseIndexSignature(this: Parser, start: i32, modifiers: i32): Node -> @Parser.parseIndexSignature [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2761:5
+  sharedWrite: 2794:5
   escaping: modifiers start
   calls: Parser.advance Parser.eatMemberSeparator Parser.expect Parser.node Parser.parseIdentifier Parser.parseTypeAnnotation nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.advance#0 Parser.node#0 Parser.parseIdentifier#0 Parser.parseTypeAnnotation#0 Parser.expect#0 Parser.parseTypeAnnotation#0 Parser.eatMemberSeparator#0
   stackSites=0 stackLocals=0
-  local 2760:11 node: Node (const)
-  callee 2760:18 Parser.node -> @Parser.node
-  callee 2762:5 Parser.advance -> @Parser.advance
-  local 2763:11 key: Node (const)
-  callee 2763:17 Parser.node -> @Parser.node
-  callee 2764:23 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee 2765:23 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee 2768:5 Parser.expect -> @Parser.expect
-  callee 2769:24 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee 2770:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
+  local 2793:11 node: Node (const)
+  callee 2793:18 Parser.node -> @Parser.node
+  callee 2795:5 Parser.advance -> @Parser.advance
+  local 2796:11 key: Node (const)
+  callee 2796:17 Parser.node -> @Parser.node
+  callee 2797:23 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 2798:23 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee 2801:5 Parser.expect -> @Parser.expect
+  callee 2802:24 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee 2803:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
 function Parser.parseInterface(this: Parser, start: i32): Node -> @Parser.parseInterface [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2778:5
+  sharedWrite: 2811:5
   escaping: start
   calls: Parser.advance Parser.at Parser.closeList Parser.eat Parser.expect Parser.list Parser.node Parser.parseIdentifier Parser.parseInterfaceMember Parser.parseType Parser.parseTypeParameters nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseIdentifier#0 Parser.parseTypeParameters#0 Parser.at#0 Parser.advance#0 Parser.list#0 Parser.parseType#0 Parser.eat#0 Parser.closeList#0 Parser.list#0 Parser.expect#0 Parser.at#0 Parser.at#0 Parser.parseInterfaceMember#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.expect#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  callee 2776:5 Parser.advance -> @Parser.advance
-  local 2777:11 node: Node (const)
-  callee 2777:18 Parser.node -> @Parser.node
-  callee 2778:24 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local 2781:11 typeParams: Node (const)
-  callee 2781:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  local 2784:9 heritage: Node | null (let)
-  callee 2785:9 Parser.at -> @Parser.at
-  local 2786:13 clauseStart: i32 (const)
-  callee 2787:7 Parser.advance -> @Parser.advance
-  local 2788:13 clause: Node (const)
-  callee 2788:22 Parser.list -> @Parser.list
-  callee 2790:30 Parser.parseType -> @Parser.parseType
-  callee 2791:14 Parser.eat -> @Parser.eat
-  callee 2795:7 Parser.closeList -> @Parser.closeList
-  local 2799:11 fields: Node (const)
-  callee 2799:20 Parser.list -> @Parser.list
-  callee 2800:9 Parser.expect -> @Parser.expect
-  callee 2801:15 Parser.at -> @Parser.at
-  callee 2801:39 Parser.at -> @Parser.at
-  local 2802:15 before: i32 (const)
-  callee 2803:30 Parser.parseInterfaceMember -> @Parser.parseInterfaceMember
-  callee 2804:39 Parser.at -> @Parser.at
-  callee 2804:63 Parser.at -> @Parser.at
-  callee 2805:11 Parser.advance -> @Parser.advance
-  callee 2808:7 Parser.expect -> @Parser.expect
-  callee 2810:24 Parser.closeList -> @Parser.closeList
+  callee 2809:5 Parser.advance -> @Parser.advance
+  local 2810:11 node: Node (const)
+  callee 2810:18 Parser.node -> @Parser.node
+  callee 2811:24 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local 2814:11 typeParams: Node (const)
+  callee 2814:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  local 2817:9 heritage: Node | null (let)
+  callee 2818:9 Parser.at -> @Parser.at
+  local 2819:13 clauseStart: i32 (const)
+  callee 2820:7 Parser.advance -> @Parser.advance
+  local 2821:13 clause: Node (const)
+  callee 2821:22 Parser.list -> @Parser.list
+  callee 2823:30 Parser.parseType -> @Parser.parseType
+  callee 2824:14 Parser.eat -> @Parser.eat
+  callee 2828:7 Parser.closeList -> @Parser.closeList
+  local 2832:11 fields: Node (const)
+  callee 2832:20 Parser.list -> @Parser.list
+  callee 2833:9 Parser.expect -> @Parser.expect
+  callee 2834:15 Parser.at -> @Parser.at
+  callee 2834:39 Parser.at -> @Parser.at
+  local 2835:15 before: i32 (const)
+  callee 2836:30 Parser.parseInterfaceMember -> @Parser.parseInterfaceMember
+  callee 2837:39 Parser.at -> @Parser.at
+  callee 2837:63 Parser.at -> @Parser.at
+  callee 2838:11 Parser.advance -> @Parser.advance
+  callee 2841:7 Parser.expect -> @Parser.expect
+  callee 2843:24 Parser.closeList -> @Parser.closeList
 function Parser.parseInterfaceMember(this: Parser): Node -> @Parser.parseInterfaceMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2883:5
+  sharedWrite: 2916:5
   calls: Parser.abandonedMember Parser.accessorAhead Parser.advance Parser.at Parser.atMemberName Parser.computedNameFailed Parser.eat Parser.eatMemberSeparator Parser.empty Parser.fail Parser.indexSignatureAhead Parser.markedMethodAhead Parser.methodAfterComputedName Parser.node Parser.parseComputedName Parser.parseIndexSignature Parser.parseMemberModifiers Parser.parseMemberNameNode Parser.parseMethodSignature Parser.parseTypeAnnotation Parser.peek nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.peek#0 Parser.peek#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.parseMethodSignature#0 Parser.at#0 Parser.indexSignatureAhead#0 Parser.parseIndexSignature#0 Parser.atMemberName#0 Parser.at#0 Parser.fail#0 Parser.parseMemberModifiers#0 Parser.at#0 Parser.indexSignatureAhead#0 Parser.parseIndexSignature#0 Parser.accessorAhead#0 Parser.advance#0 Parser.at#0 Parser.parseComputedName#0 Parser.computedNameFailed#0 Parser.abandonedMember#0 Parser.atMemberName#0 Parser.fail#0 Parser.peek#0 Parser.peek#0 Parser.markedMethodAhead#0 Parser.methodAfterComputedName#0 Parser.parseMethodSignature#0 Parser.node#0 Parser.parseMemberNameNode#0 Parser.eat#0 Parser.parseTypeAnnotation#0 Parser.empty#0 Parser.eatMemberSeparator#0
   stackSites=0 stackLocals=0
-  local 2827:11 start: i32 (const)
-  local 2830:11 construct: boolean (const)
-  callee 2830:23 Parser.at -> @Parser.at
-  callee 2830:44 Parser.peek -> @Parser.peek
-  callee 2830:74 Parser.peek -> @Parser.peek
-  callee 2831:22 Parser.at -> @Parser.at
-  callee 2831:45 Parser.at -> @Parser.at
-  callee 2833:9 Parser.advance -> @Parser.advance
-  callee 2835:14 Parser.parseMethodSignature -> @Parser.parseMethodSignature
-  callee 2837:9 Parser.at -> @Parser.at
-  callee 2837:34 Parser.indexSignatureAhead -> @Parser.indexSignatureAhead
-  callee 2838:14 Parser.parseIndexSignature -> @Parser.parseIndexSignature
-  callee 2840:10 Parser.atMemberName -> @Parser.atMemberName
-  callee 2840:34 Parser.at -> @Parser.at
-  callee 2841:14 Parser.fail -> @Parser.fail
-  local 2848:9 modifiers: i32 (let)
-  callee 2848:21 Parser.parseMemberModifiers -> @Parser.parseMemberModifiers
-  callee 2849:9 Parser.at -> @Parser.at
-  callee 2849:34 Parser.indexSignatureAhead -> @Parser.indexSignatureAhead
-  callee 2850:14 Parser.parseIndexSignature -> @Parser.parseIndexSignature
-  local 2855:11 accessor: boolean (const)
-  callee 2855:22 Parser.accessorAhead -> @Parser.accessorAhead
-  callee 2857:7 Parser.advance -> @Parser.advance
-  local 2862:11 beforeName: i32 (const)
-  local 2863:11 computed: Node | null (const)
-  callee 2863:35 Parser.at -> @Parser.at
-  callee 2863:59 Parser.parseComputedName -> @Parser.parseComputedName
-  callee 2864:30 Parser.computedNameFailed -> @Parser.computedNameFailed
-  callee 2865:14 Parser.abandonedMember -> @Parser.abandonedMember
-  callee 2869:17 Parser.atMemberName -> @Parser.atMemberName
-  callee 2870:14 Parser.fail -> @Parser.fail
-  callee 2877:11 Parser.peek -> @Parser.peek
-  callee 2877:41 Parser.peek -> @Parser.peek
-  callee 2877:67 Parser.markedMethodAhead -> @Parser.markedMethodAhead
-  callee 2878:11 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
-  callee 2880:14 Parser.parseMethodSignature -> @Parser.parseMethodSignature
-  local 2882:11 field: Node (const)
-  callee 2882:19 Parser.node -> @Parser.node
-  callee 2883:45 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
-  callee 2889:9 Parser.eat -> @Parser.eat
-  callee 2892:25 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee 2893:25 Parser.empty -> @Parser.empty
-  callee 2894:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
+  local 2860:11 start: i32 (const)
+  local 2863:11 construct: boolean (const)
+  callee 2863:23 Parser.at -> @Parser.at
+  callee 2863:44 Parser.peek -> @Parser.peek
+  callee 2863:74 Parser.peek -> @Parser.peek
+  callee 2864:22 Parser.at -> @Parser.at
+  callee 2864:45 Parser.at -> @Parser.at
+  callee 2866:9 Parser.advance -> @Parser.advance
+  callee 2868:14 Parser.parseMethodSignature -> @Parser.parseMethodSignature
+  callee 2870:9 Parser.at -> @Parser.at
+  callee 2870:34 Parser.indexSignatureAhead -> @Parser.indexSignatureAhead
+  callee 2871:14 Parser.parseIndexSignature -> @Parser.parseIndexSignature
+  callee 2873:10 Parser.atMemberName -> @Parser.atMemberName
+  callee 2873:34 Parser.at -> @Parser.at
+  callee 2874:14 Parser.fail -> @Parser.fail
+  local 2881:9 modifiers: i32 (let)
+  callee 2881:21 Parser.parseMemberModifiers -> @Parser.parseMemberModifiers
+  callee 2882:9 Parser.at -> @Parser.at
+  callee 2882:34 Parser.indexSignatureAhead -> @Parser.indexSignatureAhead
+  callee 2883:14 Parser.parseIndexSignature -> @Parser.parseIndexSignature
+  local 2888:11 accessor: boolean (const)
+  callee 2888:22 Parser.accessorAhead -> @Parser.accessorAhead
+  callee 2890:7 Parser.advance -> @Parser.advance
+  local 2895:11 beforeName: i32 (const)
+  local 2896:11 computed: Node | null (const)
+  callee 2896:35 Parser.at -> @Parser.at
+  callee 2896:59 Parser.parseComputedName -> @Parser.parseComputedName
+  callee 2897:30 Parser.computedNameFailed -> @Parser.computedNameFailed
+  callee 2898:14 Parser.abandonedMember -> @Parser.abandonedMember
+  callee 2902:17 Parser.atMemberName -> @Parser.atMemberName
+  callee 2903:14 Parser.fail -> @Parser.fail
+  callee 2910:11 Parser.peek -> @Parser.peek
+  callee 2910:41 Parser.peek -> @Parser.peek
+  callee 2910:67 Parser.markedMethodAhead -> @Parser.markedMethodAhead
+  callee 2911:11 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
+  callee 2913:14 Parser.parseMethodSignature -> @Parser.parseMethodSignature
+  local 2915:11 field: Node (const)
+  callee 2915:19 Parser.node -> @Parser.node
+  callee 2916:45 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
+  callee 2922:9 Parser.eat -> @Parser.eat
+  callee 2925:25 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee 2926:25 Parser.empty -> @Parser.empty
+  callee 2927:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
 function Parser.parseMethodSignature(this: Parser, start: i32, modifiers: i32, named: boolean, computed: Node | null): Node -> @Parser.parseMethodSignature [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2910:7
+  sharedWrite: 2943:7
   escaping: computed modifiers start
   calls: Parser.eatMemberSeparator Parser.empty Parser.node Parser.parseMemberMarker Parser.parseMemberNameNode Parser.parseParameters Parser.parseReturnType Parser.parseTypeParameters nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.parseMemberNameNode#0 Parser.empty#0 Parser.parseMemberMarker#0 Parser.parseTypeParameters#0 Parser.parseParameters#0 Parser.parseReturnType#0 Parser.empty#0 Parser.eatMemberSeparator#0
   pointer computed: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 2908:11 method: Node (const)
-  callee 2908:20 Parser.node -> @Parser.node
-  callee 2912:36 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
-  callee 2912:65 Parser.empty -> @Parser.empty
-  callee 2914:40 Parser.parseMemberMarker -> @Parser.parseMemberMarker
-  local 2915:11 typeParams: Node (const)
-  callee 2915:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  callee 2916:26 Parser.parseParameters -> @Parser.parseParameters
-  callee 2917:26 Parser.parseReturnType -> @Parser.parseReturnType
-  callee 2918:26 Parser.empty -> @Parser.empty
-  callee 2922:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
+  local 2941:11 method: Node (const)
+  callee 2941:20 Parser.node -> @Parser.node
+  callee 2945:36 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
+  callee 2945:65 Parser.empty -> @Parser.empty
+  callee 2947:40 Parser.parseMemberMarker -> @Parser.parseMemberMarker
+  local 2948:11 typeParams: Node (const)
+  callee 2948:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  callee 2949:26 Parser.parseParameters -> @Parser.parseParameters
+  callee 2950:26 Parser.parseReturnType -> @Parser.parseReturnType
+  callee 2951:26 Parser.empty -> @Parser.empty
+  callee 2955:5 Parser.eatMemberSeparator -> @Parser.eatMemberSeparator
 function Parser.parseTypeAlias(this: Parser, start: i32): Node -> @Parser.parseTypeAlias [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2936:5
+  sharedWrite: 2969:5
   escaping: start
   calls: Parser.advance Parser.expect Parser.expectSemicolon Parser.node Parser.parseIdentifier Parser.parseType Parser.parseTypeParameters nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseIdentifier#0 Parser.parseTypeParameters#0 Parser.expect#0 Parser.parseType#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  callee 2934:5 Parser.advance -> @Parser.advance
-  local 2935:11 node: Node (const)
-  callee 2935:18 Parser.node -> @Parser.node
-  callee 2936:24 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local 2937:11 typeParams: Node (const)
-  callee 2937:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  callee 2938:5 Parser.expect -> @Parser.expect
-  callee 2939:24 Parser.parseType -> @Parser.parseType
-  callee 2940:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee 2967:5 Parser.advance -> @Parser.advance
+  local 2968:11 node: Node (const)
+  callee 2968:18 Parser.node -> @Parser.node
+  callee 2969:24 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local 2970:11 typeParams: Node (const)
+  callee 2970:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  callee 2971:5 Parser.expect -> @Parser.expect
+  callee 2972:24 Parser.parseType -> @Parser.parseType
+  callee 2973:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.startsConstEnum(this: Parser): boolean -> @Parser.startsConstEnum [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.constructor
   calls: Lexer.constructor Lexer.next nish_str_eq
   pointer this: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 2954:11 scan: Lexer (const)
-  callee 2954:18 new Lexer -> @Lexer.constructor
-  callee 2956:5 Lexer.next -> @Lexer.next
-  callee 2957:5 Lexer.next -> @Lexer.next
+  local 2987:11 scan: Lexer (const)
+  callee 2987:18 new Lexer -> @Lexer.constructor
+  callee 2989:5 Lexer.next -> @Lexer.next
+  callee 2990:5 Lexer.next -> @Lexer.next
 function Parser.parseEnum(this: Parser, start: i32): Node -> @Parser.parseEnum [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2970:5
+  sharedWrite: 3003:5
   escaping: start
   calls: Parser.advance Parser.at Parser.closeList Parser.eat Parser.expect Parser.list Parser.node Parser.parseEnumMember Parser.parseIdentifier nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseIdentifier#0 Parser.list#0 Parser.expect#0 Parser.at#0 Parser.at#0 Parser.parseEnumMember#0 Parser.eat#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.expect#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  callee 2968:5 Parser.advance -> @Parser.advance
-  local 2969:11 node: Node (const)
-  callee 2969:18 Parser.node -> @Parser.node
-  callee 2970:24 Parser.parseIdentifier -> @Parser.parseIdentifier
-  local 2971:11 members: Node (const)
-  callee 2971:21 Parser.list -> @Parser.list
-  callee 2972:9 Parser.expect -> @Parser.expect
-  callee 2973:15 Parser.at -> @Parser.at
-  callee 2973:39 Parser.at -> @Parser.at
-  local 2974:15 before: i32 (const)
-  callee 2975:31 Parser.parseEnumMember -> @Parser.parseEnumMember
-  callee 2976:14 Parser.eat -> @Parser.eat
-  callee 2979:39 Parser.at -> @Parser.at
-  callee 2979:63 Parser.at -> @Parser.at
-  callee 2980:11 Parser.advance -> @Parser.advance
-  callee 2983:7 Parser.expect -> @Parser.expect
-  callee 2985:24 Parser.closeList -> @Parser.closeList
+  callee 3001:5 Parser.advance -> @Parser.advance
+  local 3002:11 node: Node (const)
+  callee 3002:18 Parser.node -> @Parser.node
+  callee 3003:24 Parser.parseIdentifier -> @Parser.parseIdentifier
+  local 3004:11 members: Node (const)
+  callee 3004:21 Parser.list -> @Parser.list
+  callee 3005:9 Parser.expect -> @Parser.expect
+  callee 3006:15 Parser.at -> @Parser.at
+  callee 3006:39 Parser.at -> @Parser.at
+  local 3007:15 before: i32 (const)
+  callee 3008:31 Parser.parseEnumMember -> @Parser.parseEnumMember
+  callee 3009:14 Parser.eat -> @Parser.eat
+  callee 3012:39 Parser.at -> @Parser.at
+  callee 3012:63 Parser.at -> @Parser.at
+  callee 3013:11 Parser.advance -> @Parser.advance
+  callee 3016:7 Parser.expect -> @Parser.expect
+  callee 3018:24 Parser.closeList -> @Parser.closeList
 function Parser.parseEnumMember(this: Parser): Node -> @Parser.parseEnumMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 2994:5
+  sharedWrite: 3027:5
   calls: Parser.eat Parser.empty Parser.node Parser.parseExpression Parser.parseIdentifier nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.parseIdentifier#0 Parser.eat#0 Parser.parseExpression#0 Parser.empty#0
   stackSites=0 stackLocals=0
-  local 2992:11 start: i32 (const)
-  local 2993:11 member: Node (const)
-  callee 2993:20 Parser.node -> @Parser.node
-  callee 2994:26 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee 2995:26 Parser.eat -> @Parser.eat
-  callee 2995:49 Parser.parseExpression -> @Parser.parseExpression
-  callee 2995:74 Parser.empty -> @Parser.empty
+  local 3025:11 start: i32 (const)
+  local 3026:11 member: Node (const)
+  callee 3026:20 Parser.node -> @Parser.node
+  callee 3027:26 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 3028:26 Parser.eat -> @Parser.eat
+  callee 3028:49 Parser.parseExpression -> @Parser.parseExpression
+  callee 3028:74 Parser.empty -> @Parser.empty
 function Parser.parseModuleConst(this: Parser, start: i32): Node -> @Parser.parseModuleConst [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3003:7
+  sharedWrite: 3036:7
   escaping: start
   calls: Parser.advance Parser.at Parser.expectSemicolon Parser.node Parser.parseVariableDeclarations nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  local 3001:11 node: Node (const)
-  callee 3001:18 Parser.node -> @Parser.node
-  callee 3002:9 Parser.at -> @Parser.at
-  callee 3004:16 Parser.at -> @Parser.at
-  callee 3009:5 Parser.advance -> @Parser.advance
-  callee 3010:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
-  callee 3011:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  local 3034:11 node: Node (const)
+  callee 3034:18 Parser.node -> @Parser.node
+  callee 3035:9 Parser.at -> @Parser.at
+  callee 3037:16 Parser.at -> @Parser.at
+  callee 3042:5 Parser.advance -> @Parser.advance
+  callee 3043:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
+  callee 3044:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseVariableDeclarations(this: Parser): Node -> @Parser.parseVariableDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3022:7
+  sharedWrite: 3055:7
   calls: Parser.at Parser.closeList Parser.eat Parser.empty Parser.list Parser.node Parser.parseBindingName Parser.parseExpression Parser.parseTypeAnnotation nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.list#0 Parser.node#0 Parser.parseBindingName#0 Parser.at#0 Parser.parseTypeAnnotation#0 Parser.empty#0 Parser.eat#0 Parser.parseExpression#0 Parser.empty#0 Parser.eat#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  local 3018:11 list: Node (const)
-  callee 3018:18 Parser.list -> @Parser.list
-  local 3020:13 start: i32 (const)
-  local 3021:13 declaration: Node (const)
-  callee 3021:27 Parser.node -> @Parser.node
-  callee 3022:33 Parser.parseBindingName -> @Parser.parseBindingName
-  callee 3023:33 Parser.at -> @Parser.at
-  callee 3023:54 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee 3023:83 Parser.empty -> @Parser.empty
-  callee 3024:33 Parser.eat -> @Parser.eat
-  callee 3024:56 Parser.parseExpression -> @Parser.parseExpression
-  callee 3024:81 Parser.empty -> @Parser.empty
-  callee 3027:12 Parser.eat -> @Parser.eat
-  callee 3031:12 Parser.closeList -> @Parser.closeList
+  local 3051:11 list: Node (const)
+  callee 3051:18 Parser.list -> @Parser.list
+  local 3053:13 start: i32 (const)
+  local 3054:13 declaration: Node (const)
+  callee 3054:27 Parser.node -> @Parser.node
+  callee 3055:33 Parser.parseBindingName -> @Parser.parseBindingName
+  callee 3056:33 Parser.at -> @Parser.at
+  callee 3056:54 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee 3056:83 Parser.empty -> @Parser.empty
+  callee 3057:33 Parser.eat -> @Parser.eat
+  callee 3057:56 Parser.parseExpression -> @Parser.parseExpression
+  callee 3057:81 Parser.empty -> @Parser.empty
+  callee 3060:12 Parser.eat -> @Parser.eat
+  callee 3064:12 Parser.closeList -> @Parser.closeList
 function Parser.parseType(this: Parser): Node -> @Parser.parseType [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3044:5
+  sharedWrite: 3077:5
   calls: Parser.at Parser.eat Parser.node Parser.parsePostfixType nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parsePostfixType#0 Parser.at#0 Parser.node#0 Parser.eat#0 Parser.parsePostfixType#0
   stackSites=0 stackLocals=0
-  local 3038:11 start: i32 (const)
-  local 3039:11 type: Node (const)
-  callee 3039:18 Parser.parsePostfixType -> @Parser.parsePostfixType
-  callee 3040:10 Parser.at -> @Parser.at
-  local 3043:11 union: Node (const)
-  callee 3043:19 Parser.node -> @Parser.node
-  callee 3045:12 Parser.eat -> @Parser.eat
-  callee 3046:27 Parser.parsePostfixType -> @Parser.parsePostfixType
+  local 3071:11 start: i32 (const)
+  local 3072:11 type: Node (const)
+  callee 3072:18 Parser.parsePostfixType -> @Parser.parsePostfixType
+  callee 3073:10 Parser.at -> @Parser.at
+  local 3076:11 union: Node (const)
+  callee 3076:19 Parser.node -> @Parser.node
+  callee 3078:12 Parser.eat -> @Parser.eat
+  callee 3079:27 Parser.parsePostfixType -> @Parser.parsePostfixType
 function Parser.parsePostfixType(this: Parser): Node -> @Parser.parsePostfixType [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3063:7
+  sharedWrite: 3096:7
   calls: Parser.advance Parser.at Parser.keyofAhead Parser.node Parser.parsePostfixType Parser.parsePrimaryType Parser.peek nish_array_grow nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parsePostfixType#0 Parser.keyofAhead#0 Parser.node#0 Parser.advance#0 Parser.parsePostfixType#0 Parser.parsePrimaryType#0 Parser.at#0 Parser.peek#0 Parser.advance#0 Parser.advance#0 Parser.node#0
   stackSites=0 stackLocals=0
-  local 3053:11 start: i32 (const)
-  callee 3060:9 Parser.at -> @Parser.at
-  callee 3061:7 Parser.advance -> @Parser.advance
-  local 3062:13 node: Node (const)
-  callee 3062:20 Parser.node -> @Parser.node
-  callee 3063:26 Parser.parsePostfixType -> @Parser.parsePostfixType
-  callee 3069:9 Parser.keyofAhead -> @Parser.keyofAhead
-  local 3070:13 operator: Node (const)
-  callee 3070:24 Parser.node -> @Parser.node
-  callee 3072:7 Parser.advance -> @Parser.advance
-  callee 3073:30 Parser.parsePostfixType -> @Parser.parsePostfixType
-  local 3077:9 type: Node (let)
-  callee 3077:16 Parser.parsePrimaryType -> @Parser.parsePrimaryType
-  callee 3078:12 Parser.at -> @Parser.at
-  callee 3078:37 Parser.peek -> @Parser.peek
-  callee 3079:7 Parser.advance -> @Parser.advance
-  callee 3080:7 Parser.advance -> @Parser.advance
-  local 3081:13 array: Node (const)
-  callee 3081:21 Parser.node -> @Parser.node
+  local 3086:11 start: i32 (const)
+  callee 3093:9 Parser.at -> @Parser.at
+  callee 3094:7 Parser.advance -> @Parser.advance
+  local 3095:13 node: Node (const)
+  callee 3095:20 Parser.node -> @Parser.node
+  callee 3096:26 Parser.parsePostfixType -> @Parser.parsePostfixType
+  callee 3102:9 Parser.keyofAhead -> @Parser.keyofAhead
+  local 3103:13 operator: Node (const)
+  callee 3103:24 Parser.node -> @Parser.node
+  callee 3105:7 Parser.advance -> @Parser.advance
+  callee 3106:30 Parser.parsePostfixType -> @Parser.parsePostfixType
+  local 3110:9 type: Node (let)
+  callee 3110:16 Parser.parsePrimaryType -> @Parser.parsePrimaryType
+  callee 3111:12 Parser.at -> @Parser.at
+  callee 3111:37 Parser.peek -> @Parser.peek
+  callee 3112:7 Parser.advance -> @Parser.advance
+  callee 3113:7 Parser.advance -> @Parser.advance
+  local 3114:13 array: Node (const)
+  callee 3114:21 Parser.node -> @Parser.node
 function Parser.keyofAhead(this: Parser): boolean -> @Parser.keyofAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.aheadOnSameLine Parser.at Parser.peek Parser.scanAfterAhead isOperatorWord nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.scanAfterAhead#0
   stackSites=0 stackLocals=0
-  callee 3098:10 Parser.at -> @Parser.at
-  local 3101:11 next: i32 (const)
-  callee 3101:18 Parser.peek -> @Parser.peek
-  callee 3102:10 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee 3106:15 isOperatorWord -> @isOperatorWord
-  callee 3109:14 Parser.scanAfterAhead -> @Parser.scanAfterAhead
+  callee 3131:10 Parser.at -> @Parser.at
+  local 3134:11 next: i32 (const)
+  callee 3134:18 Parser.peek -> @Parser.peek
+  callee 3135:10 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee 3139:15 isOperatorWord -> @isOperatorWord
+  callee 3142:14 Parser.scanAfterAhead -> @Parser.scanAfterAhead
 function Parser.parsePrimaryType(this: Parser): Node -> @Parser.parsePrimaryType [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3126:7
+  sharedWrite: 3159:7
   calls: Parser.advance Parser.at Parser.closeList Parser.eat Parser.expect Parser.expectTypeArgumentEnd Parser.fail Parser.list Parser.node Parser.parseFunctionType Parser.parseType Parser.peek Parser.startsFunctionType nish_array_grow nish_str_concat tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.startsFunctionType#0 Parser.parseFunctionType#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseType#0 Parser.expect#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.at#0 Parser.at#0 Parser.peek#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.at#0 Parser.fail#0 Parser.node#0 Parser.advance#0 Parser.list#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.parseType#0 Parser.eat#0 Parser.expectTypeArgumentEnd#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  local 3115:11 start: i32 (const)
-  callee 3116:9 Parser.at -> @Parser.at
-  callee 3116:32 Parser.startsFunctionType -> @Parser.startsFunctionType
-  callee 3117:14 Parser.parseFunctionType -> @Parser.parseFunctionType
-  callee 3119:9 Parser.at -> @Parser.at
-  callee 3124:7 Parser.advance -> @Parser.advance
-  local 3125:13 node: Node (const)
-  callee 3125:20 Parser.node -> @Parser.node
-  callee 3126:26 Parser.parseType -> @Parser.parseType
-  callee 3127:7 Parser.expect -> @Parser.expect
-  callee 3131:9 Parser.at -> @Parser.at
-  callee 3132:7 Parser.advance -> @Parser.advance
-  callee 3133:14 Parser.node -> @Parser.node
-  callee 3138:9 Parser.at -> @Parser.at
-  callee 3138:33 Parser.at -> @Parser.at
-  callee 3138:55 Parser.peek -> @Parser.peek
-  local 3139:13 negative: boolean (const)
-  callee 3139:24 Parser.at -> @Parser.at
-  callee 3141:9 Parser.advance -> @Parser.advance
-  local 3143:13 literal: Node (const)
-  callee 3143:23 Parser.node -> @Parser.node
-  callee 3145:7 Parser.advance -> @Parser.advance
-  callee 3149:10 Parser.at -> @Parser.at
-  callee 3150:14 Parser.fail -> @Parser.fail
-  callee 3150:57 tokenName -> @tokenName
-  local 3152:11 node: Node (const)
-  callee 3152:18 Parser.node -> @Parser.node
-  callee 3154:5 Parser.advance -> @Parser.advance
-  local 3155:11 args: Node (const)
-  callee 3155:18 Parser.list -> @Parser.list
-  callee 3156:9 Parser.at -> @Parser.at
+  local 3148:11 start: i32 (const)
+  callee 3149:9 Parser.at -> @Parser.at
+  callee 3149:32 Parser.startsFunctionType -> @Parser.startsFunctionType
+  callee 3150:14 Parser.parseFunctionType -> @Parser.parseFunctionType
+  callee 3152:9 Parser.at -> @Parser.at
   callee 3157:7 Parser.advance -> @Parser.advance
-  callee 3158:15 Parser.at -> @Parser.at
-  callee 3158:35 Parser.at -> @Parser.at
-  callee 3159:28 Parser.parseType -> @Parser.parseType
-  callee 3160:14 Parser.eat -> @Parser.eat
-  callee 3167:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
-  callee 3169:24 Parser.closeList -> @Parser.closeList
+  local 3158:13 node: Node (const)
+  callee 3158:20 Parser.node -> @Parser.node
+  callee 3159:26 Parser.parseType -> @Parser.parseType
+  callee 3160:7 Parser.expect -> @Parser.expect
+  callee 3164:9 Parser.at -> @Parser.at
+  callee 3165:7 Parser.advance -> @Parser.advance
+  callee 3166:14 Parser.node -> @Parser.node
+  callee 3171:9 Parser.at -> @Parser.at
+  callee 3171:33 Parser.at -> @Parser.at
+  callee 3171:55 Parser.peek -> @Parser.peek
+  local 3172:13 negative: boolean (const)
+  callee 3172:24 Parser.at -> @Parser.at
+  callee 3174:9 Parser.advance -> @Parser.advance
+  local 3176:13 literal: Node (const)
+  callee 3176:23 Parser.node -> @Parser.node
+  callee 3178:7 Parser.advance -> @Parser.advance
+  callee 3182:10 Parser.at -> @Parser.at
+  callee 3183:14 Parser.fail -> @Parser.fail
+  callee 3183:57 tokenName -> @tokenName
+  local 3185:11 node: Node (const)
+  callee 3185:18 Parser.node -> @Parser.node
+  callee 3187:5 Parser.advance -> @Parser.advance
+  local 3188:11 args: Node (const)
+  callee 3188:18 Parser.list -> @Parser.list
+  callee 3189:9 Parser.at -> @Parser.at
+  callee 3190:7 Parser.advance -> @Parser.advance
+  callee 3191:15 Parser.at -> @Parser.at
+  callee 3191:35 Parser.at -> @Parser.at
+  callee 3192:28 Parser.parseType -> @Parser.parseType
+  callee 3193:14 Parser.eat -> @Parser.eat
+  callee 3200:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
+  callee 3202:24 Parser.closeList -> @Parser.closeList
 function Parser.startsFunctionType(this: Parser): boolean -> @Parser.startsFunctionType [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.constructor
   calls: Lexer.constructor Lexer.next
   pointer this: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 3185:11 scan: Lexer (const)
-  callee 3185:18 new Lexer -> @Lexer.constructor
-  callee 3187:5 Lexer.next -> @Lexer.next
-  callee 3188:5 Lexer.next -> @Lexer.next
-  local 3196:11 depth: i32 (let)
-  callee 3198:9 Lexer.next -> @Lexer.next
-  callee 3208:7 Lexer.next -> @Lexer.next
-  callee 3214:5 Lexer.next -> @Lexer.next
-  callee 3226:5 Lexer.next -> @Lexer.next
+  local 3218:11 scan: Lexer (const)
+  callee 3218:18 new Lexer -> @Lexer.constructor
+  callee 3220:5 Lexer.next -> @Lexer.next
+  callee 3221:5 Lexer.next -> @Lexer.next
+  local 3229:11 depth: i32 (let)
+  callee 3231:9 Lexer.next -> @Lexer.next
+  callee 3241:7 Lexer.next -> @Lexer.next
+  callee 3247:5 Lexer.next -> @Lexer.next
+  callee 3259:5 Lexer.next -> @Lexer.next
 function Parser.parseFunctionType(this: Parser, start: i32): Node -> @Parser.parseFunctionType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3240:5
+  sharedWrite: 3273:5
   escaping: start
   calls: Parser.expect Parser.node Parser.parseParameters Parser.parseType nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.parseParameters#0 Parser.expect#0 Parser.parseType#0
   stackSites=0 stackLocals=0
-  local 3239:11 node: Node (const)
-  callee 3239:18 Parser.node -> @Parser.node
-  callee 3240:24 Parser.parseParameters -> @Parser.parseParameters
-  callee 3241:5 Parser.expect -> @Parser.expect
-  callee 3242:24 Parser.parseType -> @Parser.parseType
+  local 3272:11 node: Node (const)
+  callee 3272:18 Parser.node -> @Parser.node
+  callee 3273:24 Parser.parseParameters -> @Parser.parseParameters
+  callee 3274:5 Parser.expect -> @Parser.expect
+  callee 3275:24 Parser.parseType -> @Parser.parseType
 function Parser.expectTypeArgumentEnd(this: Parser): void -> @Parser.expectTypeArgumentEnd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3257:7
+  sharedWrite: 3290:7
   calls: Parser.at Parser.eat Parser.expect
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.eat#0 Parser.at#0 Parser.at#0 Parser.expect#0
   stackSites=0 stackLocals=0
-  callee 3253:9 Parser.eat -> @Parser.eat
-  callee 3256:9 Parser.at -> @Parser.at
-  callee 3262:9 Parser.at -> @Parser.at
-  callee 3268:5 Parser.expect -> @Parser.expect
+  callee 3286:9 Parser.eat -> @Parser.eat
+  callee 3289:9 Parser.at -> @Parser.at
+  callee 3295:9 Parser.at -> @Parser.at
+  callee 3301:5 Parser.expect -> @Parser.expect
 function Parser.parseBlock(this: Parser): Node -> @Parser.parseBlock [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3277:7
+  sharedWrite: 3310:7
   calls: Parser.advance Parser.allowIn Parser.at Parser.expect Parser.node Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.expect#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.parseStatement#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.expect#0
   stackSites=0 stackLocals=0
-  local 3274:11 start: i32 (const)
-  local 3275:11 block: Node (const)
-  callee 3275:19 Parser.node -> @Parser.node
-  callee 3276:10 Parser.expect -> @Parser.expect
-  local 3280:11 outerNoIn: boolean (const)
-  callee 3280:23 Parser.allowIn -> @Parser.allowIn
-  callee 3281:13 Parser.at -> @Parser.at
-  callee 3281:37 Parser.at -> @Parser.at
-  local 3282:13 before: i32 (const)
-  callee 3283:27 Parser.parseStatement -> @Parser.parseStatement
-  callee 3284:37 Parser.at -> @Parser.at
-  callee 3284:61 Parser.at -> @Parser.at
-  callee 3285:9 Parser.advance -> @Parser.advance
-  callee 3289:5 Parser.expect -> @Parser.expect
+  local 3307:11 start: i32 (const)
+  local 3308:11 block: Node (const)
+  callee 3308:19 Parser.node -> @Parser.node
+  callee 3309:10 Parser.expect -> @Parser.expect
+  local 3313:11 outerNoIn: boolean (const)
+  callee 3313:23 Parser.allowIn -> @Parser.allowIn
+  callee 3314:13 Parser.at -> @Parser.at
+  callee 3314:37 Parser.at -> @Parser.at
+  local 3315:13 before: i32 (const)
+  callee 3316:27 Parser.parseStatement -> @Parser.parseStatement
+  callee 3317:37 Parser.at -> @Parser.at
+  callee 3317:61 Parser.at -> @Parser.at
+  callee 3318:9 Parser.advance -> @Parser.advance
+  callee 3322:5 Parser.expect -> @Parser.expect
 function Parser.parseStatement(this: Parser): Node -> @Parser.parseStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3360:9
+  sharedWrite: 3393:9
   calls: Parser.advance Parser.aheadOnSameLine Parser.beginForm Parser.endForm Parser.expectSemicolon Parser.fail Parser.flagged Parser.importDeclarationAhead Parser.node Parser.parseBlock Parser.parseDo Parser.parseExpressionStatement Parser.parseFor Parser.parseFunction Parser.parseIf Parser.parseImport Parser.parseJump Parser.parseLabeled Parser.parseReturn Parser.parseSwitch Parser.parseThrow Parser.parseTry Parser.parseVariableStatement Parser.parseWhile Parser.parseWith Parser.peek Parser.tryStatementAhead Parser.usingAhead Parser.varAhead Parser.withStatementAhead nish_array_grow nish_str_concat nish_str_eq tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseBlock#0 Parser.parseVariableStatement#0 Parser.usingAhead#0 Parser.varAhead#0 Parser.parseVariableStatement#0 Parser.peek#0 Parser.aheadOnSameLine#0 Parser.advance#0 Parser.flagged#0 Parser.parseFunction#0 Parser.tryStatementAhead#0 Parser.parseTry#0 Parser.withStatementAhead#0 Parser.parseWith#0 Parser.peek#0 Parser.parseLabeled#0 Parser.parseExpressionStatement#0 Parser.parseIf#0 Parser.parseWhile#0 Parser.parseDo#0 Parser.parseFor#0 Parser.parseSwitch#0 Parser.parseReturn#0 Parser.parseThrow#0 Parser.parseJump#0 Parser.parseJump#0 Parser.advance#0 Parser.node#0 Parser.parseFunction#0 Parser.importDeclarationAhead#0 Parser.beginForm#0 Parser.endForm#0 Parser.parseImport#0 Parser.parseExpressionStatement#0 Parser.node#0 Parser.fail#0 Parser.expectSemicolon#0 Parser.parseExpressionStatement#0
   stackSites=0 stackLocals=0
-  local 3295:11 start: i32 (const)
-  callee 3298:16 Parser.parseBlock -> @Parser.parseBlock
-  callee 3301:16 Parser.parseVariableStatement -> @Parser.parseVariableStatement
-  callee 3303:13 Parser.usingAhead -> @Parser.usingAhead
-  callee 3303:34 Parser.varAhead -> @Parser.varAhead
-  callee 3304:18 Parser.parseVariableStatement -> @Parser.parseVariableStatement
-  callee 3308:39 Parser.peek -> @Parser.peek
-  callee 3308:71 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee 3309:11 Parser.advance -> @Parser.advance
-  callee 3310:18 Parser.flagged -> @Parser.flagged
-  callee 3310:31 Parser.parseFunction -> @Parser.parseFunction
-  callee 3312:13 Parser.tryStatementAhead -> @Parser.tryStatementAhead
-  callee 3313:18 Parser.parseTry -> @Parser.parseTry
-  callee 3315:13 Parser.withStatementAhead -> @Parser.withStatementAhead
-  callee 3316:18 Parser.parseWith -> @Parser.parseWith
-  callee 3318:13 Parser.peek -> @Parser.peek
-  callee 3319:18 Parser.parseLabeled -> @Parser.parseLabeled
-  callee 3321:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
-  callee 3323:16 Parser.parseIf -> @Parser.parseIf
-  callee 3325:16 Parser.parseWhile -> @Parser.parseWhile
-  callee 3327:16 Parser.parseDo -> @Parser.parseDo
-  callee 3329:16 Parser.parseFor -> @Parser.parseFor
-  callee 3331:16 Parser.parseSwitch -> @Parser.parseSwitch
-  callee 3333:16 Parser.parseReturn -> @Parser.parseReturn
-  callee 3335:16 Parser.parseThrow -> @Parser.parseThrow
-  callee 3337:16 Parser.parseJump -> @Parser.parseJump
-  callee 3339:16 Parser.parseJump -> @Parser.parseJump
-  callee 3341:9 Parser.advance -> @Parser.advance
-  callee 3342:16 Parser.node -> @Parser.node
-  callee 3348:16 Parser.parseFunction -> @Parser.parseFunction
-  callee 3350:13 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
-  local 3351:17 previous: i32 (const)
-  callee 3351:28 Parser.beginForm -> @Parser.beginForm
-  callee 3352:18 Parser.endForm -> @Parser.endForm
-  callee 3352:31 Parser.parseImport -> @Parser.parseImport
+  local 3328:11 start: i32 (const)
+  callee 3331:16 Parser.parseBlock -> @Parser.parseBlock
+  callee 3334:16 Parser.parseVariableStatement -> @Parser.parseVariableStatement
+  callee 3336:13 Parser.usingAhead -> @Parser.usingAhead
+  callee 3336:34 Parser.varAhead -> @Parser.varAhead
+  callee 3337:18 Parser.parseVariableStatement -> @Parser.parseVariableStatement
+  callee 3341:39 Parser.peek -> @Parser.peek
+  callee 3341:71 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee 3342:11 Parser.advance -> @Parser.advance
+  callee 3343:18 Parser.flagged -> @Parser.flagged
+  callee 3343:31 Parser.parseFunction -> @Parser.parseFunction
+  callee 3345:13 Parser.tryStatementAhead -> @Parser.tryStatementAhead
+  callee 3346:18 Parser.parseTry -> @Parser.parseTry
+  callee 3348:13 Parser.withStatementAhead -> @Parser.withStatementAhead
+  callee 3349:18 Parser.parseWith -> @Parser.parseWith
+  callee 3351:13 Parser.peek -> @Parser.peek
+  callee 3352:18 Parser.parseLabeled -> @Parser.parseLabeled
   callee 3354:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
-  local 3359:15 node: Node (const)
-  callee 3359:22 Parser.node -> @Parser.node
-  callee 3360:28 Parser.fail -> @Parser.fail
-  callee 3360:73 tokenName -> @tokenName
-  callee 3361:9 Parser.expectSemicolon -> @Parser.expectSemicolon
-  callee 3366:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
+  callee 3356:16 Parser.parseIf -> @Parser.parseIf
+  callee 3358:16 Parser.parseWhile -> @Parser.parseWhile
+  callee 3360:16 Parser.parseDo -> @Parser.parseDo
+  callee 3362:16 Parser.parseFor -> @Parser.parseFor
+  callee 3364:16 Parser.parseSwitch -> @Parser.parseSwitch
+  callee 3366:16 Parser.parseReturn -> @Parser.parseReturn
+  callee 3368:16 Parser.parseThrow -> @Parser.parseThrow
+  callee 3370:16 Parser.parseJump -> @Parser.parseJump
+  callee 3372:16 Parser.parseJump -> @Parser.parseJump
+  callee 3374:9 Parser.advance -> @Parser.advance
+  callee 3375:16 Parser.node -> @Parser.node
+  callee 3381:16 Parser.parseFunction -> @Parser.parseFunction
+  callee 3383:13 Parser.importDeclarationAhead -> @Parser.importDeclarationAhead
+  local 3384:17 previous: i32 (const)
+  callee 3384:28 Parser.beginForm -> @Parser.beginForm
+  callee 3385:18 Parser.endForm -> @Parser.endForm
+  callee 3385:31 Parser.parseImport -> @Parser.parseImport
+  callee 3387:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
+  local 3392:15 node: Node (const)
+  callee 3392:22 Parser.node -> @Parser.node
+  callee 3393:28 Parser.fail -> @Parser.fail
+  callee 3393:73 tokenName -> @tokenName
+  callee 3394:9 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee 3399:16 Parser.parseExpressionStatement -> @Parser.parseExpressionStatement
 function Parser.usingAhead(this: Parser): boolean -> @Parser.usingAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.aheadOnSameLine Parser.at Parser.peek nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.peek#0 Parser.aheadOnSameLine#0
   stackSites=0 stackLocals=0
-  callee 3377:12 Parser.at -> @Parser.at
-  callee 3377:60 Parser.peek -> @Parser.peek
-  callee 3377:89 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee 3410:12 Parser.at -> @Parser.at
+  callee 3410:60 Parser.peek -> @Parser.peek
+  callee 3410:89 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
 function Parser.parseVariableStatement(this: Parser, start: i32): Node -> @Parser.parseVariableStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3385:7
+  sharedWrite: 3418:7
   escaping: start
   calls: Parser.advance Parser.at Parser.expectSemicolon Parser.node Parser.parseVariableDeclarations Parser.varAhead nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.varAhead#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  local 3381:11 node: Node (const)
-  callee 3381:18 Parser.node -> @Parser.node
-  callee 3384:9 Parser.varAhead -> @Parser.varAhead
-  callee 3386:16 Parser.at -> @Parser.at
-  callee 3386:38 Parser.at -> @Parser.at
-  callee 3388:11 Parser.at -> @Parser.at
-  callee 3392:5 Parser.advance -> @Parser.advance
-  callee 3393:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
-  callee 3394:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  local 3414:11 node: Node (const)
+  callee 3414:18 Parser.node -> @Parser.node
+  callee 3417:9 Parser.varAhead -> @Parser.varAhead
+  callee 3419:16 Parser.at -> @Parser.at
+  callee 3419:38 Parser.at -> @Parser.at
+  callee 3421:11 Parser.at -> @Parser.at
+  callee 3425:5 Parser.advance -> @Parser.advance
+  callee 3426:24 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
+  callee 3427:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseTry(this: Parser, start: i32): Node -> @Parser.parseTry [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3409:5
+  sharedWrite: 3442:5
   escaping: start
   calls: Parser.advance Parser.at Parser.eat Parser.empty Parser.expect Parser.node Parser.parseBlock Parser.parseIdentifier Parser.parseTypeAnnotation Parser.report Parser.skipBindingPattern nish_array_grow nish_str_concat nish_str_eq tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseBlock#0 Parser.empty#0 Parser.empty#0 Parser.empty#0 Parser.at#0 Parser.advance#0 Parser.eat#0 Parser.at#0 Parser.at#0 Parser.skipBindingPattern#0 Parser.parseIdentifier#0 Parser.at#0 Parser.parseTypeAnnotation#0 Parser.expect#0 Parser.parseBlock#0 Parser.at#0 Parser.advance#0 Parser.parseBlock#0 Parser.report#0
   stackSites=0 stackLocals=0
-  callee 3407:5 Parser.advance -> @Parser.advance
-  local 3408:11 node: Node (const)
-  callee 3408:18 Parser.node -> @Parser.node
-  callee 3409:24 Parser.parseBlock -> @Parser.parseBlock
-  local 3410:9 binding: Node (let)
-  callee 3410:19 Parser.empty -> @Parser.empty
-  local 3411:9 handler: Node (let)
-  callee 3411:19 Parser.empty -> @Parser.empty
-  local 3412:9 finalizer: Node (let)
-  callee 3412:21 Parser.empty -> @Parser.empty
-  callee 3413:9 Parser.at -> @Parser.at
-  callee 3414:7 Parser.advance -> @Parser.advance
-  callee 3415:11 Parser.eat -> @Parser.eat
-  callee 3416:13 Parser.at -> @Parser.at
-  callee 3416:36 Parser.at -> @Parser.at
-  callee 3417:11 Parser.skipBindingPattern -> @Parser.skipBindingPattern
-  callee 3419:21 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee 3421:13 Parser.at -> @Parser.at
-  callee 3422:11 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
-  callee 3424:9 Parser.expect -> @Parser.expect
-  callee 3426:17 Parser.parseBlock -> @Parser.parseBlock
-  callee 3428:9 Parser.at -> @Parser.at
-  callee 3429:7 Parser.advance -> @Parser.advance
-  callee 3430:19 Parser.parseBlock -> @Parser.parseBlock
-  callee 3433:7 Parser.report -> @Parser.report
-  callee 3434:55 tokenName -> @tokenName
+  callee 3440:5 Parser.advance -> @Parser.advance
+  local 3441:11 node: Node (const)
+  callee 3441:18 Parser.node -> @Parser.node
+  callee 3442:24 Parser.parseBlock -> @Parser.parseBlock
+  local 3443:9 binding: Node (let)
+  callee 3443:19 Parser.empty -> @Parser.empty
+  local 3444:9 handler: Node (let)
+  callee 3444:19 Parser.empty -> @Parser.empty
+  local 3445:9 finalizer: Node (let)
+  callee 3445:21 Parser.empty -> @Parser.empty
+  callee 3446:9 Parser.at -> @Parser.at
+  callee 3447:7 Parser.advance -> @Parser.advance
+  callee 3448:11 Parser.eat -> @Parser.eat
+  callee 3449:13 Parser.at -> @Parser.at
+  callee 3449:36 Parser.at -> @Parser.at
+  callee 3450:11 Parser.skipBindingPattern -> @Parser.skipBindingPattern
+  callee 3452:21 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 3454:13 Parser.at -> @Parser.at
+  callee 3455:11 Parser.parseTypeAnnotation -> @Parser.parseTypeAnnotation
+  callee 3457:9 Parser.expect -> @Parser.expect
+  callee 3459:17 Parser.parseBlock -> @Parser.parseBlock
+  callee 3461:9 Parser.at -> @Parser.at
+  callee 3462:7 Parser.advance -> @Parser.advance
+  callee 3463:19 Parser.parseBlock -> @Parser.parseBlock
+  callee 3466:7 Parser.report -> @Parser.report
+  callee 3467:55 tokenName -> @tokenName
 function Parser.skipBindingPattern(this: Parser): void -> @Parser.skipBindingPattern [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.advance
   calls: Parser.advance Parser.at
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0
   stackSites=0 stackLocals=0
-  local 3452:9 depth: i32 (let)
-  callee 3453:13 Parser.at -> @Parser.at
-  callee 3454:11 Parser.at -> @Parser.at
-  callee 3454:34 Parser.at -> @Parser.at
-  callee 3456:18 Parser.at -> @Parser.at
-  callee 3456:41 Parser.at -> @Parser.at
-  callee 3459:7 Parser.advance -> @Parser.advance
+  local 3485:9 depth: i32 (let)
+  callee 3486:13 Parser.at -> @Parser.at
+  callee 3487:11 Parser.at -> @Parser.at
+  callee 3487:34 Parser.at -> @Parser.at
+  callee 3489:18 Parser.at -> @Parser.at
+  callee 3489:41 Parser.at -> @Parser.at
+  callee 3492:7 Parser.advance -> @Parser.advance
 function Parser.parseWith(this: Parser, start: i32): Node -> @Parser.parseWith [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3471:5
+  sharedWrite: 3504:5
   escaping: start
   calls: Parser.advance Parser.expect Parser.node Parser.parseExpression Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.expect#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseStatement#0
   stackSites=0 stackLocals=0
-  callee 3468:5 Parser.advance -> @Parser.advance
-  local 3469:11 node: Node (const)
-  callee 3469:18 Parser.node -> @Parser.node
-  callee 3470:5 Parser.expect -> @Parser.expect
-  callee 3471:24 Parser.parseExpression -> @Parser.parseExpression
-  callee 3472:5 Parser.expect -> @Parser.expect
-  callee 3473:24 Parser.parseStatement -> @Parser.parseStatement
+  callee 3501:5 Parser.advance -> @Parser.advance
+  local 3502:11 node: Node (const)
+  callee 3502:18 Parser.node -> @Parser.node
+  callee 3503:5 Parser.expect -> @Parser.expect
+  callee 3504:24 Parser.parseExpression -> @Parser.parseExpression
+  callee 3505:5 Parser.expect -> @Parser.expect
+  callee 3506:24 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseLabeled(this: Parser, start: i32): Node -> @Parser.parseLabeled [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3481:5
+  sharedWrite: 3514:5
   escaping: start
   calls: Parser.advance Parser.node Parser.parseStatement nish_array_grow nish_panic_index
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.advance#0 Parser.advance#0 Parser.parseStatement#0
   stackSites=0 stackLocals=0
-  local 3480:11 node: Node (const)
-  callee 3480:18 Parser.node -> @Parser.node
-  callee 3482:5 Parser.advance -> @Parser.advance
-  callee 3483:5 Parser.advance -> @Parser.advance
-  callee 3485:24 Parser.parseStatement -> @Parser.parseStatement
+  local 3513:11 node: Node (const)
+  callee 3513:18 Parser.node -> @Parser.node
+  callee 3515:5 Parser.advance -> @Parser.advance
+  callee 3516:5 Parser.advance -> @Parser.advance
+  callee 3518:24 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseIf(this: Parser, start: i32): Node -> @Parser.parseIf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3495:5
+  sharedWrite: 3528:5
   escaping: start
   calls: Parser.advance Parser.eat Parser.empty Parser.expect Parser.node Parser.parseSequence Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.expect#0 Parser.parseSequence#0 Parser.expect#0 Parser.parseStatement#0 Parser.eat#0 Parser.parseStatement#0 Parser.empty#0
   stackSites=0 stackLocals=0
-  callee 3492:5 Parser.advance -> @Parser.advance
-  local 3493:11 node: Node (const)
-  callee 3493:18 Parser.node -> @Parser.node
-  callee 3494:5 Parser.expect -> @Parser.expect
-  callee 3495:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3496:5 Parser.expect -> @Parser.expect
-  callee 3497:24 Parser.parseStatement -> @Parser.parseStatement
-  callee 3498:24 Parser.eat -> @Parser.eat
-  callee 3498:45 Parser.parseStatement -> @Parser.parseStatement
-  callee 3498:69 Parser.empty -> @Parser.empty
+  callee 3525:5 Parser.advance -> @Parser.advance
+  local 3526:11 node: Node (const)
+  callee 3526:18 Parser.node -> @Parser.node
+  callee 3527:5 Parser.expect -> @Parser.expect
+  callee 3528:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3529:5 Parser.expect -> @Parser.expect
+  callee 3530:24 Parser.parseStatement -> @Parser.parseStatement
+  callee 3531:24 Parser.eat -> @Parser.eat
+  callee 3531:45 Parser.parseStatement -> @Parser.parseStatement
+  callee 3531:69 Parser.empty -> @Parser.empty
 function Parser.parseWhile(this: Parser, start: i32): Node -> @Parser.parseWhile [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3507:5
+  sharedWrite: 3540:5
   escaping: start
   calls: Parser.advance Parser.expect Parser.node Parser.parseSequence Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.expect#0 Parser.parseSequence#0 Parser.expect#0 Parser.parseStatement#0
   stackSites=0 stackLocals=0
-  callee 3504:5 Parser.advance -> @Parser.advance
-  local 3505:11 node: Node (const)
-  callee 3505:18 Parser.node -> @Parser.node
-  callee 3506:5 Parser.expect -> @Parser.expect
-  callee 3507:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3508:5 Parser.expect -> @Parser.expect
-  callee 3509:24 Parser.parseStatement -> @Parser.parseStatement
+  callee 3537:5 Parser.advance -> @Parser.advance
+  local 3538:11 node: Node (const)
+  callee 3538:18 Parser.node -> @Parser.node
+  callee 3539:5 Parser.expect -> @Parser.expect
+  callee 3540:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3541:5 Parser.expect -> @Parser.expect
+  callee 3542:24 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseDo(this: Parser, start: i32): Node -> @Parser.parseDo [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3517:5
+  sharedWrite: 3550:5
   escaping: start
   calls: Parser.advance Parser.eat Parser.expect Parser.node Parser.parseSequence Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseStatement#0 Parser.expect#0 Parser.expect#0 Parser.parseSequence#0 Parser.expect#0 Parser.eat#0
   stackSites=0 stackLocals=0
-  callee 3515:5 Parser.advance -> @Parser.advance
-  local 3516:11 node: Node (const)
-  callee 3516:18 Parser.node -> @Parser.node
-  callee 3517:24 Parser.parseStatement -> @Parser.parseStatement
-  callee 3518:5 Parser.expect -> @Parser.expect
-  callee 3519:5 Parser.expect -> @Parser.expect
-  callee 3520:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3521:5 Parser.expect -> @Parser.expect
-  callee 3522:5 Parser.eat -> @Parser.eat
+  callee 3548:5 Parser.advance -> @Parser.advance
+  local 3549:11 node: Node (const)
+  callee 3549:18 Parser.node -> @Parser.node
+  callee 3550:24 Parser.parseStatement -> @Parser.parseStatement
+  callee 3551:5 Parser.expect -> @Parser.expect
+  callee 3552:5 Parser.expect -> @Parser.expect
+  callee 3553:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3554:5 Parser.expect -> @Parser.expect
+  callee 3555:5 Parser.eat -> @Parser.eat
 function Parser.parseFor(this: Parser, start: i32): Node -> @Parser.parseFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3542:5
+  sharedWrite: 3575:5
   escaping: start
   calls: Parser.advance Parser.at Parser.atForOfKeyword Parser.bindingAhead Parser.empty Parser.expect Parser.node Parser.parseForOfRest Parser.parseForRest Parser.parseSequence Parser.parseVariableDeclarations Parser.varAhead nish_array_grow nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.advance#0 Parser.expect#0 Parser.at#0 Parser.at#0 Parser.bindingAhead#0 Parser.varAhead#0 Parser.node#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.parseVariableDeclarations#0 Parser.atForOfKeyword#0 Parser.parseForOfRest#0 Parser.parseForRest#0 Parser.at#0 Parser.empty#0 Parser.parseSequence#0 Parser.atForOfKeyword#0 Parser.parseForOfRest#0 Parser.parseForRest#0
   stackSites=0 stackLocals=0
-  callee 3534:5 Parser.advance -> @Parser.advance
-  local 3535:9 flags: i32 (let)
-  callee 3536:9 Parser.at -> @Parser.at
-  callee 3538:7 Parser.advance -> @Parser.advance
-  callee 3540:5 Parser.expect -> @Parser.expect
-  local 3541:11 outerNoIn: boolean (const)
-  callee 3543:11 Parser.at -> @Parser.at
-  callee 3543:33 Parser.at -> @Parser.at
-  callee 3543:54 Parser.bindingAhead -> @Parser.bindingAhead
-  callee 3543:78 Parser.varAhead -> @Parser.varAhead
-  local 3544:13 declStart: i32 (const)
-  local 3545:13 declaration: Node (const)
-  callee 3545:27 Parser.node -> @Parser.node
-  callee 3546:11 Parser.at -> @Parser.at
-  callee 3548:18 Parser.at -> @Parser.at
-  callee 3551:7 Parser.advance -> @Parser.advance
-  callee 3552:33 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
-  callee 3555:11 Parser.atForOfKeyword -> @Parser.atForOfKeyword
-  callee 3556:16 Parser.parseForOfRest -> @Parser.parseForOfRest
-  callee 3558:14 Parser.parseForRest -> @Parser.parseForRest
-  local 3560:11 initializer: Node (const)
-  callee 3560:25 Parser.at -> @Parser.at
-  callee 3560:50 Parser.empty -> @Parser.empty
-  callee 3560:65 Parser.parseSequence -> @Parser.parseSequence
-  callee 3562:41 Parser.atForOfKeyword -> @Parser.atForOfKeyword
-  callee 3563:14 Parser.parseForOfRest -> @Parser.parseForOfRest
-  callee 3565:12 Parser.parseForRest -> @Parser.parseForRest
+  callee 3567:5 Parser.advance -> @Parser.advance
+  local 3568:9 flags: i32 (let)
+  callee 3569:9 Parser.at -> @Parser.at
+  callee 3571:7 Parser.advance -> @Parser.advance
+  callee 3573:5 Parser.expect -> @Parser.expect
+  local 3574:11 outerNoIn: boolean (const)
+  callee 3576:11 Parser.at -> @Parser.at
+  callee 3576:33 Parser.at -> @Parser.at
+  callee 3576:54 Parser.bindingAhead -> @Parser.bindingAhead
+  callee 3576:78 Parser.varAhead -> @Parser.varAhead
+  local 3577:13 declStart: i32 (const)
+  local 3578:13 declaration: Node (const)
+  callee 3578:27 Parser.node -> @Parser.node
+  callee 3579:11 Parser.at -> @Parser.at
+  callee 3581:18 Parser.at -> @Parser.at
+  callee 3584:7 Parser.advance -> @Parser.advance
+  callee 3585:33 Parser.parseVariableDeclarations -> @Parser.parseVariableDeclarations
+  callee 3588:11 Parser.atForOfKeyword -> @Parser.atForOfKeyword
+  callee 3589:16 Parser.parseForOfRest -> @Parser.parseForOfRest
+  callee 3591:14 Parser.parseForRest -> @Parser.parseForRest
+  local 3593:11 initializer: Node (const)
+  callee 3593:25 Parser.at -> @Parser.at
+  callee 3593:50 Parser.empty -> @Parser.empty
+  callee 3593:65 Parser.parseSequence -> @Parser.parseSequence
+  callee 3595:41 Parser.atForOfKeyword -> @Parser.atForOfKeyword
+  callee 3596:14 Parser.parseForOfRest -> @Parser.parseForOfRest
+  callee 3598:12 Parser.parseForRest -> @Parser.parseForRest
 function Parser.bindingAhead(this: Parser): boolean -> @Parser.bindingAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.peek
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0
   stackSites=0 stackLocals=0
-  local 3574:11 next: i32 (const)
-  callee 3574:18 Parser.peek -> @Parser.peek
+  local 3607:11 next: i32 (const)
+  callee 3607:18 Parser.peek -> @Parser.peek
 function Parser.atForOfKeyword(this: Parser): boolean -> @Parser.atForOfKeyword [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Parser.at nish_str_eq
   pointer this: size=96 writesThrough=false captured=false passedTo=Parser.at#0
   stackSites=0 stackLocals=0
-  callee 3580:12 Parser.at -> @Parser.at
+  callee 3613:12 Parser.at -> @Parser.at
 function Parser.parseForOfRest(this: Parser, start: i32, head: Node, flags: i32): Node -> @Parser.parseForOfRest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3586:5
+  sharedWrite: 3619:5
   escaping: flags head start
   calls: Parser.advance Parser.expect Parser.node Parser.parseExpression Parser.parseStatement nish_array_grow nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseStatement#0
   pointer head: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 3585:11 forOf: Node (const)
-  callee 3585:19 Parser.node -> @Parser.node
-  callee 3587:5 Parser.advance -> @Parser.advance
-  callee 3589:25 Parser.parseExpression -> @Parser.parseExpression
-  callee 3590:5 Parser.expect -> @Parser.expect
-  callee 3591:25 Parser.parseStatement -> @Parser.parseStatement
+  local 3618:11 forOf: Node (const)
+  callee 3618:19 Parser.node -> @Parser.node
+  callee 3620:5 Parser.advance -> @Parser.advance
+  callee 3622:25 Parser.parseExpression -> @Parser.parseExpression
+  callee 3623:5 Parser.expect -> @Parser.expect
+  callee 3624:25 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseForRest(this: Parser, start: i32, initializer: Node, flags: i32): Node -> @Parser.parseForRest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3606:5
+  sharedWrite: 3639:5
   escaping: initializer start
   calls: Parser.at Parser.empty Parser.expect Parser.node Parser.parseSequence Parser.parseStatement Parser.report nish_array_grow nish_str_concat tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.report#0 Parser.node#0 Parser.expect#0 Parser.at#0 Parser.empty#0 Parser.parseSequence#0 Parser.expect#0 Parser.at#0 Parser.empty#0 Parser.parseSequence#0 Parser.expect#0 Parser.parseStatement#0
   pointer initializer: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 3603:7 Parser.report -> @Parser.report
-  callee 3603:47 tokenName -> @tokenName
-  local 3605:11 node: Node (const)
-  callee 3605:18 Parser.node -> @Parser.node
-  callee 3607:5 Parser.expect -> @Parser.expect
-  callee 3608:24 Parser.at -> @Parser.at
-  callee 3608:49 Parser.empty -> @Parser.empty
-  callee 3608:64 Parser.parseSequence -> @Parser.parseSequence
-  callee 3609:5 Parser.expect -> @Parser.expect
-  callee 3610:24 Parser.at -> @Parser.at
-  callee 3610:46 Parser.empty -> @Parser.empty
-  callee 3610:61 Parser.parseSequence -> @Parser.parseSequence
-  callee 3611:5 Parser.expect -> @Parser.expect
-  callee 3612:24 Parser.parseStatement -> @Parser.parseStatement
+  callee 3636:7 Parser.report -> @Parser.report
+  callee 3636:47 tokenName -> @tokenName
+  local 3638:11 node: Node (const)
+  callee 3638:18 Parser.node -> @Parser.node
+  callee 3640:5 Parser.expect -> @Parser.expect
+  callee 3641:24 Parser.at -> @Parser.at
+  callee 3641:49 Parser.empty -> @Parser.empty
+  callee 3641:64 Parser.parseSequence -> @Parser.parseSequence
+  callee 3642:5 Parser.expect -> @Parser.expect
+  callee 3643:24 Parser.at -> @Parser.at
+  callee 3643:46 Parser.empty -> @Parser.empty
+  callee 3643:61 Parser.parseSequence -> @Parser.parseSequence
+  callee 3644:5 Parser.expect -> @Parser.expect
+  callee 3645:24 Parser.parseStatement -> @Parser.parseStatement
 function Parser.parseSwitch(this: Parser, start: i32): Node -> @Parser.parseSwitch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3621:5
+  sharedWrite: 3654:5
   escaping: start
   calls: Parser.advance Parser.at Parser.closeList Parser.expect Parser.list Parser.node Parser.parseClause Parser.parseSequence nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.expect#0 Parser.parseSequence#0 Parser.expect#0 Parser.list#0 Parser.expect#0 Parser.at#0 Parser.at#0 Parser.parseClause#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.expect#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  callee 3618:5 Parser.advance -> @Parser.advance
-  local 3619:11 node: Node (const)
-  callee 3619:18 Parser.node -> @Parser.node
-  callee 3620:5 Parser.expect -> @Parser.expect
-  callee 3621:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3622:5 Parser.expect -> @Parser.expect
-  local 3623:11 clauses: Node (const)
-  callee 3623:21 Parser.list -> @Parser.list
-  callee 3624:9 Parser.expect -> @Parser.expect
-  callee 3625:15 Parser.at -> @Parser.at
-  callee 3625:39 Parser.at -> @Parser.at
-  local 3626:15 before: i32 (const)
-  callee 3627:31 Parser.parseClause -> @Parser.parseClause
-  callee 3628:39 Parser.at -> @Parser.at
-  callee 3628:63 Parser.at -> @Parser.at
-  callee 3629:11 Parser.advance -> @Parser.advance
-  callee 3632:7 Parser.expect -> @Parser.expect
-  callee 3634:24 Parser.closeList -> @Parser.closeList
+  callee 3651:5 Parser.advance -> @Parser.advance
+  local 3652:11 node: Node (const)
+  callee 3652:18 Parser.node -> @Parser.node
+  callee 3653:5 Parser.expect -> @Parser.expect
+  callee 3654:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3655:5 Parser.expect -> @Parser.expect
+  local 3656:11 clauses: Node (const)
+  callee 3656:21 Parser.list -> @Parser.list
+  callee 3657:9 Parser.expect -> @Parser.expect
+  callee 3658:15 Parser.at -> @Parser.at
+  callee 3658:39 Parser.at -> @Parser.at
+  local 3659:15 before: i32 (const)
+  callee 3660:31 Parser.parseClause -> @Parser.parseClause
+  callee 3661:39 Parser.at -> @Parser.at
+  callee 3661:63 Parser.at -> @Parser.at
+  callee 3662:11 Parser.advance -> @Parser.advance
+  callee 3665:7 Parser.expect -> @Parser.expect
+  callee 3667:24 Parser.closeList -> @Parser.closeList
 function Parser.parseClause(this: Parser): Node -> @Parser.parseClause [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3648:7
+  sharedWrite: 3681:7
   calls: Parser.advance Parser.at Parser.closeList Parser.expect Parser.fail Parser.list Parser.node Parser.parseExpression Parser.parseStatement nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.at#0 Parser.fail#0 Parser.advance#0 Parser.node#0 Parser.parseExpression#0 Parser.expect#0 Parser.list#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.parseStatement#0 Parser.advance#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  local 3640:11 start: i32 (const)
-  local 3641:11 isCase: boolean (const)
-  callee 3641:20 Parser.at -> @Parser.at
-  callee 3642:21 Parser.at -> @Parser.at
-  callee 3643:14 Parser.fail -> @Parser.fail
-  callee 3645:5 Parser.advance -> @Parser.advance
-  local 3646:11 clause: Node (const)
-  callee 3646:20 Parser.node -> @Parser.node
-  callee 3648:28 Parser.parseExpression -> @Parser.parseExpression
-  callee 3650:5 Parser.expect -> @Parser.expect
-  local 3651:11 body: Node (const)
-  callee 3651:18 Parser.list -> @Parser.list
-  callee 3652:13 Parser.at -> @Parser.at
-  callee 3652:35 Parser.at -> @Parser.at
-  callee 3652:60 Parser.at -> @Parser.at
-  callee 3652:84 Parser.at -> @Parser.at
-  local 3653:13 before: i32 (const)
-  callee 3654:26 Parser.parseStatement -> @Parser.parseStatement
-  callee 3656:9 Parser.advance -> @Parser.advance
-  callee 3659:26 Parser.closeList -> @Parser.closeList
+  local 3673:11 start: i32 (const)
+  local 3674:11 isCase: boolean (const)
+  callee 3674:20 Parser.at -> @Parser.at
+  callee 3675:21 Parser.at -> @Parser.at
+  callee 3676:14 Parser.fail -> @Parser.fail
+  callee 3678:5 Parser.advance -> @Parser.advance
+  local 3679:11 clause: Node (const)
+  callee 3679:20 Parser.node -> @Parser.node
+  callee 3681:28 Parser.parseExpression -> @Parser.parseExpression
+  callee 3683:5 Parser.expect -> @Parser.expect
+  local 3684:11 body: Node (const)
+  callee 3684:18 Parser.list -> @Parser.list
+  callee 3685:13 Parser.at -> @Parser.at
+  callee 3685:35 Parser.at -> @Parser.at
+  callee 3685:60 Parser.at -> @Parser.at
+  callee 3685:84 Parser.at -> @Parser.at
+  local 3686:13 before: i32 (const)
+  callee 3687:26 Parser.parseStatement -> @Parser.parseStatement
+  callee 3689:9 Parser.advance -> @Parser.advance
+  callee 3692:26 Parser.closeList -> @Parser.closeList
 function Parser.parseReturn(this: Parser, start: i32): Node -> @Parser.parseReturn [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3670:5
+  sharedWrite: 3703:5
   escaping: start
   calls: Parser.advance Parser.at Parser.empty Parser.expectSemicolon Parser.newlineBefore Parser.node Parser.parseSequence nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.newlineBefore#0 Parser.empty#0 Parser.parseSequence#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  callee 3665:5 Parser.advance -> @Parser.advance
-  local 3666:11 node: Node (const)
-  callee 3666:18 Parser.node -> @Parser.node
-  local 3669:11 bare: boolean (const)
-  callee 3669:18 Parser.at -> @Parser.at
-  callee 3669:44 Parser.at -> @Parser.at
-  callee 3669:67 Parser.at -> @Parser.at
-  callee 3669:87 Parser.newlineBefore -> @Parser.newlineBefore
-  callee 3670:31 Parser.empty -> @Parser.empty
-  callee 3670:46 Parser.parseSequence -> @Parser.parseSequence
-  callee 3671:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee 3698:5 Parser.advance -> @Parser.advance
+  local 3699:11 node: Node (const)
+  callee 3699:18 Parser.node -> @Parser.node
+  local 3702:11 bare: boolean (const)
+  callee 3702:18 Parser.at -> @Parser.at
+  callee 3702:44 Parser.at -> @Parser.at
+  callee 3702:67 Parser.at -> @Parser.at
+  callee 3702:87 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 3703:31 Parser.empty -> @Parser.empty
+  callee 3703:46 Parser.parseSequence -> @Parser.parseSequence
+  callee 3704:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseThrow(this: Parser, start: i32): Node -> @Parser.parseThrow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3679:5
+  sharedWrite: 3712:5
   escaping: start
   calls: Parser.advance Parser.expectSemicolon Parser.node Parser.parseSequence nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.parseSequence#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  callee 3677:5 Parser.advance -> @Parser.advance
-  local 3678:11 node: Node (const)
-  callee 3678:18 Parser.node -> @Parser.node
-  callee 3679:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3680:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  callee 3710:5 Parser.advance -> @Parser.advance
+  local 3711:11 node: Node (const)
+  callee 3711:18 Parser.node -> @Parser.node
+  callee 3712:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3713:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseJump(this: Parser, start: i32, kind: i32): Node -> @Parser.parseJump [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3698:5
+  sharedWrite: 3731:5
   escaping: kind start
   calls: Parser.advance Parser.at Parser.expectSemicolon Parser.newlineBefore Parser.node Parser.report nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.at#0 Parser.newlineBefore#0 Parser.report#0 Parser.advance#0 Parser.expectSemicolon#0 Parser.node#0
   stackSites=0 stackLocals=0
-  callee 3686:5 Parser.advance -> @Parser.advance
-  local 3687:9 label: string (let)
-  callee 3688:9 Parser.at -> @Parser.at
-  callee 3688:32 Parser.newlineBefore -> @Parser.newlineBefore
-  callee 3692:9 Parser.report -> @Parser.report
-  callee 3694:7 Parser.advance -> @Parser.advance
-  callee 3696:5 Parser.expectSemicolon -> @Parser.expectSemicolon
-  local 3697:11 node: Node (const)
-  callee 3697:18 Parser.node -> @Parser.node
+  callee 3719:5 Parser.advance -> @Parser.advance
+  local 3720:9 label: string (let)
+  callee 3721:9 Parser.at -> @Parser.at
+  callee 3721:32 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 3725:9 Parser.report -> @Parser.report
+  callee 3727:7 Parser.advance -> @Parser.advance
+  callee 3729:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  local 3730:11 node: Node (const)
+  callee 3730:18 Parser.node -> @Parser.node
 function Parser.parseExpressionStatement(this: Parser, start: i32): Node -> @Parser.parseExpressionStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3704:5
+  sharedWrite: 3737:5
   escaping: start
   calls: Parser.expectSemicolon Parser.node Parser.parseSequence nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.parseSequence#0 Parser.expectSemicolon#0
   stackSites=0 stackLocals=0
-  local 3703:11 node: Node (const)
-  callee 3703:18 Parser.node -> @Parser.node
-  callee 3704:24 Parser.parseSequence -> @Parser.parseSequence
-  callee 3705:5 Parser.expectSemicolon -> @Parser.expectSemicolon
+  local 3736:11 node: Node (const)
+  callee 3736:18 Parser.node -> @Parser.node
+  callee 3737:24 Parser.parseSequence -> @Parser.parseSequence
+  callee 3738:5 Parser.expectSemicolon -> @Parser.expectSemicolon
 function Parser.parseSequence(this: Parser): Node -> @Parser.parseSequence [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3726:7
+  sharedWrite: 3759:7
   calls: Parser.advance Parser.at Parser.node Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseExpression#0 Parser.at#0 Parser.advance#0 Parser.parseExpression#0 Parser.node#0
   stackSites=0 stackLocals=0
-  local 3720:11 start: i32 (const)
-  local 3721:9 left: Node (let)
-  callee 3721:16 Parser.parseExpression -> @Parser.parseExpression
-  callee 3722:12 Parser.at -> @Parser.at
-  callee 3723:7 Parser.advance -> @Parser.advance
-  local 3724:13 right: Node (const)
-  callee 3724:21 Parser.parseExpression -> @Parser.parseExpression
-  local 3725:13 node: Node (const)
-  callee 3725:20 Parser.node -> @Parser.node
+  local 3753:11 start: i32 (const)
+  local 3754:9 left: Node (let)
+  callee 3754:16 Parser.parseExpression -> @Parser.parseExpression
+  callee 3755:12 Parser.at -> @Parser.at
+  callee 3756:7 Parser.advance -> @Parser.advance
+  local 3757:13 right: Node (const)
+  callee 3757:21 Parser.parseExpression -> @Parser.parseExpression
+  local 3758:13 node: Node (const)
+  callee 3758:20 Parser.node -> @Parser.node
 function Parser.allowIn(this: Parser): boolean -> @Parser.allowIn [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3740:5
+  sharedWrite: 3773:5
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 3739:11 outer: boolean (const)
+  local 3772:11 outer: boolean (const)
 function Parser.parseExpression(this: Parser): Node -> @Parser.parseExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3754:5
+  sharedWrite: 3787:5
   calls: Parser.advance Parser.node Parser.parseConditional Parser.parseExpression isAssignment nish_array_grow tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseConditional#0 Parser.advance#0 Parser.node#0 Parser.parseExpression#0
   stackSites=0 stackLocals=0
-  local 3746:11 start: i32 (const)
-  local 3747:11 left: Node (const)
-  callee 3747:18 Parser.parseConditional -> @Parser.parseConditional
-  callee 3748:10 isAssignment -> @isAssignment
-  local 3751:11 operator: string (const)
-  callee 3751:22 tokenName -> @tokenName
-  callee 3752:5 Parser.advance -> @Parser.advance
-  local 3753:11 node: Node (const)
-  callee 3753:18 Parser.node -> @Parser.node
-  callee 3756:24 Parser.parseExpression -> @Parser.parseExpression
+  local 3779:11 start: i32 (const)
+  local 3780:11 left: Node (const)
+  callee 3780:18 Parser.parseConditional -> @Parser.parseConditional
+  callee 3781:10 isAssignment -> @isAssignment
+  local 3784:11 operator: string (const)
+  callee 3784:22 tokenName -> @tokenName
+  callee 3785:5 Parser.advance -> @Parser.advance
+  local 3786:11 node: Node (const)
+  callee 3786:18 Parser.node -> @Parser.node
+  callee 3789:24 Parser.parseExpression -> @Parser.parseExpression
 function Parser.parseConditional(this: Parser): Node -> @Parser.parseConditional [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3769:5
+  sharedWrite: 3802:5
   calls: Parser.advance Parser.allowIn Parser.at Parser.expect Parser.node Parser.parseCoalesce Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseCoalesce#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.parseExpression#0 Parser.expect#0 Parser.parseExpression#0
   stackSites=0 stackLocals=0
-  local 3762:11 start: i32 (const)
-  local 3763:11 condition: Node (const)
-  callee 3763:23 Parser.parseCoalesce -> @Parser.parseCoalesce
-  callee 3764:10 Parser.at -> @Parser.at
-  callee 3767:5 Parser.advance -> @Parser.advance
-  local 3768:11 node: Node (const)
-  callee 3768:18 Parser.node -> @Parser.node
-  local 3772:11 outerNoIn: boolean (const)
-  callee 3772:23 Parser.allowIn -> @Parser.allowIn
-  callee 3773:24 Parser.parseExpression -> @Parser.parseExpression
-  callee 3775:5 Parser.expect -> @Parser.expect
-  callee 3776:24 Parser.parseExpression -> @Parser.parseExpression
+  local 3795:11 start: i32 (const)
+  local 3796:11 condition: Node (const)
+  callee 3796:23 Parser.parseCoalesce -> @Parser.parseCoalesce
+  callee 3797:10 Parser.at -> @Parser.at
+  callee 3800:5 Parser.advance -> @Parser.advance
+  local 3801:11 node: Node (const)
+  callee 3801:18 Parser.node -> @Parser.node
+  local 3805:11 outerNoIn: boolean (const)
+  callee 3805:23 Parser.allowIn -> @Parser.allowIn
+  callee 3806:24 Parser.parseExpression -> @Parser.parseExpression
+  callee 3808:5 Parser.expect -> @Parser.expect
+  callee 3809:24 Parser.parseExpression -> @Parser.parseExpression
 function Parser.parseCoalesce(this: Parser): Node -> @Parser.parseCoalesce [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3810:7
+  sharedWrite: 3843:7
   calls: Parser.advance Parser.at Parser.node Parser.parseBinary Parser.reportMixedCoalesce binaryPrecedence nish_array_grow nish_str_eq tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseBinary#0 Parser.at#0 Parser.reportMixedCoalesce#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.reportMixedCoalesce#0 Parser.advance#0 Parser.parseBinary#0 Parser.node#0
   stackSites=0 stackLocals=0
-  local 3790:11 start: i32 (const)
-  local 3791:9 left: Node (let)
-  callee 3791:16 Parser.parseBinary -> @Parser.parseBinary
-  callee 3792:10 Parser.at -> @Parser.at
-  local 3797:9 mixed: boolean (let)
-  callee 3799:7 Parser.reportMixedCoalesce -> @Parser.reportMixedCoalesce
-  callee 3801:12 Parser.at -> @Parser.at
-  callee 3801:46 Parser.at -> @Parser.at
-  callee 3801:68 Parser.at -> @Parser.at
-  local 3802:13 operator: string (const)
-  callee 3802:24 tokenName -> @tokenName
-  callee 3804:9 Parser.reportMixedCoalesce -> @Parser.reportMixedCoalesce
-  callee 3807:7 Parser.advance -> @Parser.advance
-  local 3808:13 right: Node (const)
-  callee 3808:21 Parser.parseBinary -> @Parser.parseBinary
-  callee 3808:38 binaryPrecedence -> @binaryPrecedence
-  local 3809:13 node: Node (const)
-  callee 3809:20 Parser.node -> @Parser.node
+  local 3823:11 start: i32 (const)
+  local 3824:9 left: Node (let)
+  callee 3824:16 Parser.parseBinary -> @Parser.parseBinary
+  callee 3825:10 Parser.at -> @Parser.at
+  local 3830:9 mixed: boolean (let)
+  callee 3832:7 Parser.reportMixedCoalesce -> @Parser.reportMixedCoalesce
+  callee 3834:12 Parser.at -> @Parser.at
+  callee 3834:46 Parser.at -> @Parser.at
+  callee 3834:68 Parser.at -> @Parser.at
+  local 3835:13 operator: string (const)
+  callee 3835:24 tokenName -> @tokenName
+  callee 3837:9 Parser.reportMixedCoalesce -> @Parser.reportMixedCoalesce
+  callee 3840:7 Parser.advance -> @Parser.advance
+  local 3841:13 right: Node (const)
+  callee 3841:21 Parser.parseBinary -> @Parser.parseBinary
+  callee 3841:38 binaryPrecedence -> @binaryPrecedence
+  local 3842:13 node: Node (const)
+  callee 3842:20 Parser.node -> @Parser.node
 function Parser.reportMixedCoalesce(this: Parser, operator: string): void -> @Parser.reportMixedCoalesce [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.report
   calls: Parser.report nish_str_concat
   pointer this: size=96 writesThrough=false captured=false passedTo=Parser.report#0
   stackSites=0 stackLocals=0
-  callee 3819:5 Parser.report -> @Parser.report
+  callee 3852:5 Parser.report -> @Parser.report
 function Parser.parseBinary(this: Parser, minimum: i32): Node -> @Parser.parseBinary [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3845:11
+  sharedWrite: 3878:11
   calls: Parser.advance Parser.at Parser.node Parser.operatorPrecedence Parser.parseBinary Parser.parseType Parser.parseUnary nish_array_grow nish_str_eq tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseUnary#0 Parser.operatorPrecedence#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseType#0 Parser.parseBinary#0 Parser.node#0
   stackSites=0 stackLocals=0
-  local 3832:11 start: i32 (const)
-  local 3833:9 left: Node (let)
-  callee 3833:16 Parser.parseUnary -> @Parser.parseUnary
-  local 3835:13 precedence: i32 (const)
-  callee 3835:26 Parser.operatorPrecedence -> @Parser.operatorPrecedence
-  local 3839:13 word: boolean (const)
-  callee 3839:20 Parser.at -> @Parser.at
-  local 3840:13 operator: string (const)
-  callee 3840:44 tokenName -> @tokenName
-  callee 3841:7 Parser.advance -> @Parser.advance
-  local 3843:15 assertion: Node (const)
-  callee 3843:27 Parser.node -> @Parser.node
-  callee 3848:33 Parser.parseType -> @Parser.parseType
-  local 3853:13 right: Node (const)
-  callee 3853:21 Parser.parseBinary -> @Parser.parseBinary
-  local 3854:13 node: Node (const)
-  callee 3854:20 Parser.node -> @Parser.node
+  local 3865:11 start: i32 (const)
+  local 3866:9 left: Node (let)
+  callee 3866:16 Parser.parseUnary -> @Parser.parseUnary
+  local 3868:13 precedence: i32 (const)
+  callee 3868:26 Parser.operatorPrecedence -> @Parser.operatorPrecedence
+  local 3872:13 word: boolean (const)
+  callee 3872:20 Parser.at -> @Parser.at
+  local 3873:13 operator: string (const)
+  callee 3873:44 tokenName -> @tokenName
+  callee 3874:7 Parser.advance -> @Parser.advance
+  local 3876:15 assertion: Node (const)
+  callee 3876:27 Parser.node -> @Parser.node
+  callee 3881:33 Parser.parseType -> @Parser.parseType
+  local 3886:13 right: Node (const)
+  callee 3886:21 Parser.parseBinary -> @Parser.parseBinary
+  local 3887:13 node: Node (const)
+  callee 3887:20 Parser.node -> @Parser.node
 function Parser.operatorPrecedence(this: Parser): i32 -> @Parser.operatorPrecedence [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.operandAhead
   calls: Parser.at Parser.newlineBefore Parser.operandAhead binaryPrecedence nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.newlineBefore#0 Parser.newlineBefore#0 Parser.operandAhead#0
   stackSites=0 stackLocals=0
-  callee 3874:10 Parser.at -> @Parser.at
-  callee 3875:14 binaryPrecedence -> @binaryPrecedence
-  local 3877:11 word: string (const)
-  callee 3879:14 Parser.newlineBefore -> @Parser.newlineBefore
-  callee 3882:15 Parser.newlineBefore -> @Parser.newlineBefore
-  callee 3882:39 Parser.operandAhead -> @Parser.operandAhead
+  callee 3907:10 Parser.at -> @Parser.at
+  callee 3908:14 binaryPrecedence -> @binaryPrecedence
+  local 3910:11 word: string (const)
+  callee 3912:14 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 3915:15 Parser.newlineBefore -> @Parser.newlineBefore
+  callee 3915:39 Parser.operandAhead -> @Parser.operandAhead
 function Parser.operandAhead(this: Parser): boolean -> @Parser.operandAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.aheadOnSameLine Parser.peek isOperatorWord
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.aheadOnSameLine#0
   stackSites=0 stackLocals=0
-  local 3899:11 next: i32 (const)
-  callee 3899:18 Parser.peek -> @Parser.peek
-  callee 3900:10 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  callee 3905:17 isOperatorWord -> @isOperatorWord
+  local 3932:11 next: i32 (const)
+  callee 3932:18 Parser.peek -> @Parser.peek
+  callee 3933:10 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  callee 3938:17 isOperatorWord -> @isOperatorWord
 function Parser.parseUnary(this: Parser): Node -> @Parser.parseUnary [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3934:7
+  sharedWrite: 3967:7
   calls: Parser.advance Parser.at Parser.expectTypeArgumentEnd Parser.node Parser.operandAhead Parser.parsePostfix Parser.parseType Parser.parseUnary isPrefixWord nish_array_grow tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.operandAhead#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseType#0 Parser.expectTypeArgumentEnd#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.at#0 Parser.at#0 Parser.advance#0 Parser.node#0 Parser.parseUnary#0 Parser.parsePostfix#0
   stackSites=0 stackLocals=0
-  local 3926:11 start: i32 (const)
-  callee 3930:9 Parser.at -> @Parser.at
-  callee 3930:31 isPrefixWord -> @isPrefixWord
-  callee 3930:59 Parser.operandAhead -> @Parser.operandAhead
-  local 3931:13 operator: string (const)
-  callee 3932:7 Parser.advance -> @Parser.advance
-  local 3933:13 node: Node (const)
-  callee 3933:20 Parser.node -> @Parser.node
-  callee 3936:26 Parser.parseUnary -> @Parser.parseUnary
-  callee 3941:9 Parser.at -> @Parser.at
-  callee 3942:7 Parser.advance -> @Parser.advance
-  local 3943:13 assertion: Node (const)
-  callee 3943:25 Parser.node -> @Parser.node
-  local 3945:13 type: Node (const)
-  callee 3945:20 Parser.parseType -> @Parser.parseType
-  callee 3946:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
-  callee 3947:31 Parser.parseUnary -> @Parser.parseUnary
-  callee 3952:9 Parser.at -> @Parser.at
-  callee 3952:30 Parser.at -> @Parser.at
-  callee 3952:52 Parser.at -> @Parser.at
-  callee 3952:73 Parser.at -> @Parser.at
-  local 3953:13 operator: string (const)
-  callee 3953:24 tokenName -> @tokenName
-  callee 3954:7 Parser.advance -> @Parser.advance
-  local 3955:13 node: Node (const)
-  callee 3955:20 Parser.node -> @Parser.node
-  callee 3958:26 Parser.parseUnary -> @Parser.parseUnary
-  callee 3962:9 Parser.at -> @Parser.at
-  callee 3962:35 Parser.at -> @Parser.at
-  local 3963:13 operator: string (const)
-  callee 3963:24 tokenName -> @tokenName
-  callee 3964:7 Parser.advance -> @Parser.advance
-  local 3965:13 node: Node (const)
-  callee 3965:20 Parser.node -> @Parser.node
-  callee 3968:26 Parser.parseUnary -> @Parser.parseUnary
-  callee 3972:12 Parser.parsePostfix -> @Parser.parsePostfix
+  local 3959:11 start: i32 (const)
+  callee 3963:9 Parser.at -> @Parser.at
+  callee 3963:31 isPrefixWord -> @isPrefixWord
+  callee 3963:59 Parser.operandAhead -> @Parser.operandAhead
+  local 3964:13 operator: string (const)
+  callee 3965:7 Parser.advance -> @Parser.advance
+  local 3966:13 node: Node (const)
+  callee 3966:20 Parser.node -> @Parser.node
+  callee 3969:26 Parser.parseUnary -> @Parser.parseUnary
+  callee 3974:9 Parser.at -> @Parser.at
+  callee 3975:7 Parser.advance -> @Parser.advance
+  local 3976:13 assertion: Node (const)
+  callee 3976:25 Parser.node -> @Parser.node
+  local 3978:13 type: Node (const)
+  callee 3978:20 Parser.parseType -> @Parser.parseType
+  callee 3979:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
+  callee 3980:31 Parser.parseUnary -> @Parser.parseUnary
+  callee 3985:9 Parser.at -> @Parser.at
+  callee 3985:30 Parser.at -> @Parser.at
+  callee 3985:52 Parser.at -> @Parser.at
+  callee 3985:73 Parser.at -> @Parser.at
+  local 3986:13 operator: string (const)
+  callee 3986:24 tokenName -> @tokenName
+  callee 3987:7 Parser.advance -> @Parser.advance
+  local 3988:13 node: Node (const)
+  callee 3988:20 Parser.node -> @Parser.node
+  callee 3991:26 Parser.parseUnary -> @Parser.parseUnary
+  callee 3995:9 Parser.at -> @Parser.at
+  callee 3995:35 Parser.at -> @Parser.at
+  local 3996:13 operator: string (const)
+  callee 3996:24 tokenName -> @tokenName
+  callee 3997:7 Parser.advance -> @Parser.advance
+  local 3998:13 node: Node (const)
+  callee 3998:20 Parser.node -> @Parser.node
+  callee 4001:26 Parser.parseUnary -> @Parser.parseUnary
+  callee 4005:12 Parser.parsePostfix -> @Parser.parsePostfix
 function Parser.parsePostfix(this: Parser): Node -> @Parser.parsePostfix [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 3983:7
+  sharedWrite: 4016:7
   calls: Parser.advance Parser.at Parser.newlineBefore Parser.node Parser.parseCallOrMember Parser.parsePrimary nish_array_grow tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.parseCallOrMember#0 Parser.parsePrimary#0 Parser.at#0 Parser.at#0 Parser.newlineBefore#0 Parser.advance#0 Parser.node#0
   stackSites=0 stackLocals=0
-  local 3976:11 start: i32 (const)
-  local 3977:11 operand: Node (const)
-  callee 3977:21 Parser.parseCallOrMember -> @Parser.parseCallOrMember
-  callee 3977:44 Parser.parsePrimary -> @Parser.parsePrimary
-  callee 3979:10 Parser.at -> @Parser.at
-  callee 3979:36 Parser.at -> @Parser.at
-  callee 3979:66 Parser.newlineBefore -> @Parser.newlineBefore
-  local 3980:13 operator: string (const)
-  callee 3980:24 tokenName -> @tokenName
-  callee 3981:7 Parser.advance -> @Parser.advance
-  local 3982:13 node: Node (const)
-  callee 3982:20 Parser.node -> @Parser.node
+  local 4009:11 start: i32 (const)
+  local 4010:11 operand: Node (const)
+  callee 4010:21 Parser.parseCallOrMember -> @Parser.parseCallOrMember
+  callee 4010:44 Parser.parsePrimary -> @Parser.parsePrimary
+  callee 4012:10 Parser.at -> @Parser.at
+  callee 4012:36 Parser.at -> @Parser.at
+  callee 4012:66 Parser.newlineBefore -> @Parser.newlineBefore
+  local 4013:13 operator: string (const)
+  callee 4013:24 tokenName -> @tokenName
+  callee 4014:7 Parser.advance -> @Parser.advance
+  local 4015:13 node: Node (const)
+  callee 4015:20 Parser.node -> @Parser.node
 function Parser.parseCallOrMember(this: Parser, target: Node, start: i32): Node -> @Parser.parseCallOrMember [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4005:11
+  sharedWrite: 4038:11
   escaping: start target
   calls: Parser.advance Parser.at Parser.node Parser.parseArguments Parser.parseElement Parser.parseMemberName nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.parseMemberName#0 Parser.at#0 Parser.advance#0 Parser.parseMemberName#0 Parser.at#0 Parser.parseElement#0 Parser.at#0 Parser.node#0 Parser.parseArguments#0
   pointer target: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 3997:9 node: Node (let)
-  local 3999:11 flags: i32 (let)
-  callee 4000:11 Parser.at -> @Parser.at
-  callee 4002:9 Parser.advance -> @Parser.advance
-  callee 4003:14 Parser.at -> @Parser.at
-  callee 4003:40 Parser.at -> @Parser.at
-  callee 4004:18 Parser.parseMemberName -> @Parser.parseMemberName
-  callee 4009:11 Parser.at -> @Parser.at
-  callee 4010:9 Parser.advance -> @Parser.advance
-  callee 4011:16 Parser.parseMemberName -> @Parser.parseMemberName
-  callee 4012:18 Parser.at -> @Parser.at
-  callee 4013:16 Parser.parseElement -> @Parser.parseElement
-  callee 4015:18 Parser.at -> @Parser.at
-  local 4016:15 call: Node (const)
-  callee 4016:22 Parser.node -> @Parser.node
-  callee 4019:28 Parser.parseArguments -> @Parser.parseArguments
+  local 4030:9 node: Node (let)
+  local 4032:11 flags: i32 (let)
+  callee 4033:11 Parser.at -> @Parser.at
+  callee 4035:9 Parser.advance -> @Parser.advance
+  callee 4036:14 Parser.at -> @Parser.at
+  callee 4036:40 Parser.at -> @Parser.at
+  callee 4037:18 Parser.parseMemberName -> @Parser.parseMemberName
+  callee 4042:11 Parser.at -> @Parser.at
+  callee 4043:9 Parser.advance -> @Parser.advance
+  callee 4044:16 Parser.parseMemberName -> @Parser.parseMemberName
+  callee 4045:18 Parser.at -> @Parser.at
+  callee 4046:16 Parser.parseElement -> @Parser.parseElement
+  callee 4048:18 Parser.at -> @Parser.at
+  local 4049:15 call: Node (const)
+  callee 4049:22 Parser.node -> @Parser.node
+  callee 4052:28 Parser.parseArguments -> @Parser.parseArguments
 function Parser.parseMemberName(this: Parser, receiver: Node, start: i32): Node -> @Parser.parseMemberName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4032:7
+  sharedWrite: 4065:7
   escaping: receiver start
   calls: Parser.advance Parser.at Parser.node nish_array_grow tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.at#0 Parser.at#0 Parser.advance#0
   pointer receiver: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 4030:11 member: Node (const)
-  callee 4030:20 Parser.node -> @Parser.node
-  callee 4031:9 Parser.at -> @Parser.at
-  callee 4032:21 Parser.at -> @Parser.at
-  callee 4032:55 tokenName -> @tokenName
-  callee 4033:7 Parser.advance -> @Parser.advance
+  local 4063:11 member: Node (const)
+  callee 4063:20 Parser.node -> @Parser.node
+  callee 4064:9 Parser.at -> @Parser.at
+  callee 4065:21 Parser.at -> @Parser.at
+  callee 4065:55 tokenName -> @tokenName
+  callee 4066:7 Parser.advance -> @Parser.advance
 function Parser.parseElement(this: Parser, receiver: Node, start: i32): Node -> @Parser.parseElement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4044:5
+  sharedWrite: 4077:5
   escaping: receiver start
   calls: Parser.advance Parser.allowIn Parser.expect Parser.node Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.parseExpression#0 Parser.expect#0
   pointer receiver: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 4042:5 Parser.advance -> @Parser.advance
-  local 4043:11 index: Node (const)
-  callee 4043:19 Parser.node -> @Parser.node
-  local 4045:11 outerNoIn: boolean (const)
-  callee 4045:23 Parser.allowIn -> @Parser.allowIn
-  callee 4046:25 Parser.parseExpression -> @Parser.parseExpression
-  callee 4048:5 Parser.expect -> @Parser.expect
+  callee 4075:5 Parser.advance -> @Parser.advance
+  local 4076:11 index: Node (const)
+  callee 4076:19 Parser.node -> @Parser.node
+  local 4078:11 outerNoIn: boolean (const)
+  callee 4078:23 Parser.allowIn -> @Parser.allowIn
+  callee 4079:25 Parser.parseExpression -> @Parser.parseExpression
+  callee 4081:5 Parser.expect -> @Parser.expect
 function Parser.parseArguments(this: Parser): Node -> @Parser.parseArguments [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4060:7
+  sharedWrite: 4093:7
   calls: Parser.allowIn Parser.at Parser.closeList Parser.eat Parser.expect Parser.list Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.list#0 Parser.expect#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.parseExpression#0 Parser.eat#0 Parser.expect#0 Parser.closeList#0
   stackSites=0 stackLocals=0
-  local 4054:11 list: Node (const)
-  callee 4054:18 Parser.list -> @Parser.list
-  callee 4055:10 Parser.expect -> @Parser.expect
-  local 4058:11 outerNoIn: boolean (const)
-  callee 4058:23 Parser.allowIn -> @Parser.allowIn
-  callee 4059:13 Parser.at -> @Parser.at
-  callee 4059:37 Parser.at -> @Parser.at
-  callee 4060:26 Parser.parseExpression -> @Parser.parseExpression
-  callee 4061:12 Parser.eat -> @Parser.eat
-  callee 4066:5 Parser.expect -> @Parser.expect
-  callee 4067:12 Parser.closeList -> @Parser.closeList
+  local 4087:11 list: Node (const)
+  callee 4087:18 Parser.list -> @Parser.list
+  callee 4088:10 Parser.expect -> @Parser.expect
+  local 4091:11 outerNoIn: boolean (const)
+  callee 4091:23 Parser.allowIn -> @Parser.allowIn
+  callee 4092:13 Parser.at -> @Parser.at
+  callee 4092:37 Parser.at -> @Parser.at
+  callee 4093:26 Parser.parseExpression -> @Parser.parseExpression
+  callee 4094:12 Parser.eat -> @Parser.eat
+  callee 4099:5 Parser.expect -> @Parser.expect
+  callee 4100:12 Parser.closeList -> @Parser.closeList
 function Parser.parsePrimary(this: Parser): Node -> @Parser.parsePrimary [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4082:11
+  sharedWrite: 4115:11
   calls: Parser.advance Parser.allowIn Parser.asyncArrowAhead Parser.expect Parser.fail Parser.importMetaAhead Parser.node Parser.parseArrayLiteral Parser.parseArrowExpression Parser.parseClass Parser.parseNew Parser.parseObjectLiteral Parser.parseRegex Parser.parseSequence Parser.parseTemplate Parser.peek Parser.startsArrowExpression nish_array_grow nish_str_concat tokenName withoutSeparators
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.parseArrowExpression#0 Parser.asyncArrowAhead#0 Parser.advance#0 Parser.parseArrowExpression#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.parseTemplate#0 Parser.parseArrayLiteral#0 Parser.parseObjectLiteral#0 Parser.startsArrowExpression#0 Parser.parseArrowExpression#0 Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.parseSequence#0 Parser.expect#0 Parser.parseNew#0 Parser.parseClass#0 Parser.parseRegex#0 Parser.peek#0 Parser.importMetaAhead#0 Parser.fail#0 Parser.node#0 Parser.advance#0 Parser.fail#0
   stackSites=0 stackLocals=0
-  local 4071:11 start: i32 (const)
-  callee 4075:13 Parser.peek -> @Parser.peek
-  callee 4076:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  callee 4079:13 Parser.asyncArrowAhead -> @Parser.asyncArrowAhead
-  callee 4080:11 Parser.advance -> @Parser.advance
-  local 4081:17 arrow: Node (const)
-  callee 4081:25 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  local 4085:15 node: Node (const)
-  callee 4085:22 Parser.node -> @Parser.node
-  callee 4087:9 Parser.advance -> @Parser.advance
-  local 4091:15 node: Node (const)
-  callee 4091:22 Parser.node -> @Parser.node
-  callee 4092:21 withoutSeparators -> @withoutSeparators
-  callee 4093:9 Parser.advance -> @Parser.advance
-  local 4097:15 node: Node (const)
-  callee 4097:22 Parser.node -> @Parser.node
-  callee 4099:9 Parser.advance -> @Parser.advance
-  local 4103:15 node: Node (const)
-  callee 4103:22 Parser.node -> @Parser.node
-  callee 4105:9 Parser.advance -> @Parser.advance
-  callee 4109:9 Parser.advance -> @Parser.advance
-  callee 4110:16 Parser.node -> @Parser.node
-  callee 4112:9 Parser.advance -> @Parser.advance
-  callee 4113:16 Parser.node -> @Parser.node
-  callee 4115:9 Parser.advance -> @Parser.advance
-  callee 4116:16 Parser.node -> @Parser.node
-  callee 4118:9 Parser.advance -> @Parser.advance
-  callee 4119:16 Parser.node -> @Parser.node
-  callee 4121:9 Parser.advance -> @Parser.advance
-  callee 4122:16 Parser.node -> @Parser.node
-  callee 4125:16 Parser.parseTemplate -> @Parser.parseTemplate
-  callee 4127:16 Parser.parseArrayLiteral -> @Parser.parseArrayLiteral
-  callee 4129:16 Parser.parseObjectLiteral -> @Parser.parseObjectLiteral
-  callee 4131:13 Parser.startsArrowExpression -> @Parser.startsArrowExpression
-  callee 4132:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
-  callee 4134:9 Parser.advance -> @Parser.advance
-  local 4135:15 node: Node (const)
-  callee 4135:22 Parser.node -> @Parser.node
-  local 4136:15 outerNoIn: boolean (const)
-  callee 4136:27 Parser.allowIn -> @Parser.allowIn
-  callee 4137:28 Parser.parseSequence -> @Parser.parseSequence
-  callee 4139:9 Parser.expect -> @Parser.expect
-  callee 4144:16 Parser.parseNew -> @Parser.parseNew
-  callee 4148:16 Parser.parseClass -> @Parser.parseClass
-  callee 4151:16 Parser.parseRegex -> @Parser.parseRegex
-  callee 4156:13 Parser.peek -> @Parser.peek
-  callee 4156:44 Parser.importMetaAhead -> @Parser.importMetaAhead
-  callee 4157:18 Parser.fail -> @Parser.fail
-  callee 4157:63 tokenName -> @tokenName
-  local 4159:15 node: Node (const)
-  callee 4159:22 Parser.node -> @Parser.node
-  callee 4161:9 Parser.advance -> @Parser.advance
-  callee 4165:16 Parser.fail -> @Parser.fail
-  callee 4165:61 tokenName -> @tokenName
+  local 4104:11 start: i32 (const)
+  callee 4108:13 Parser.peek -> @Parser.peek
+  callee 4109:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  callee 4112:13 Parser.asyncArrowAhead -> @Parser.asyncArrowAhead
+  callee 4113:11 Parser.advance -> @Parser.advance
+  local 4114:17 arrow: Node (const)
+  callee 4114:25 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  local 4118:15 node: Node (const)
+  callee 4118:22 Parser.node -> @Parser.node
+  callee 4120:9 Parser.advance -> @Parser.advance
+  local 4124:15 node: Node (const)
+  callee 4124:22 Parser.node -> @Parser.node
+  callee 4125:21 withoutSeparators -> @withoutSeparators
+  callee 4126:9 Parser.advance -> @Parser.advance
+  local 4130:15 node: Node (const)
+  callee 4130:22 Parser.node -> @Parser.node
+  callee 4132:9 Parser.advance -> @Parser.advance
+  local 4136:15 node: Node (const)
+  callee 4136:22 Parser.node -> @Parser.node
+  callee 4138:9 Parser.advance -> @Parser.advance
+  callee 4142:9 Parser.advance -> @Parser.advance
+  callee 4143:16 Parser.node -> @Parser.node
+  callee 4145:9 Parser.advance -> @Parser.advance
+  callee 4146:16 Parser.node -> @Parser.node
+  callee 4148:9 Parser.advance -> @Parser.advance
+  callee 4149:16 Parser.node -> @Parser.node
+  callee 4151:9 Parser.advance -> @Parser.advance
+  callee 4152:16 Parser.node -> @Parser.node
+  callee 4154:9 Parser.advance -> @Parser.advance
+  callee 4155:16 Parser.node -> @Parser.node
+  callee 4158:16 Parser.parseTemplate -> @Parser.parseTemplate
+  callee 4160:16 Parser.parseArrayLiteral -> @Parser.parseArrayLiteral
+  callee 4162:16 Parser.parseObjectLiteral -> @Parser.parseObjectLiteral
+  callee 4164:13 Parser.startsArrowExpression -> @Parser.startsArrowExpression
+  callee 4165:18 Parser.parseArrowExpression -> @Parser.parseArrowExpression
+  callee 4167:9 Parser.advance -> @Parser.advance
+  local 4168:15 node: Node (const)
+  callee 4168:22 Parser.node -> @Parser.node
+  local 4169:15 outerNoIn: boolean (const)
+  callee 4169:27 Parser.allowIn -> @Parser.allowIn
+  callee 4170:28 Parser.parseSequence -> @Parser.parseSequence
+  callee 4172:9 Parser.expect -> @Parser.expect
+  callee 4177:16 Parser.parseNew -> @Parser.parseNew
+  callee 4181:16 Parser.parseClass -> @Parser.parseClass
+  callee 4184:16 Parser.parseRegex -> @Parser.parseRegex
+  callee 4189:13 Parser.peek -> @Parser.peek
+  callee 4189:44 Parser.importMetaAhead -> @Parser.importMetaAhead
+  callee 4190:18 Parser.fail -> @Parser.fail
+  callee 4190:63 tokenName -> @tokenName
+  local 4192:15 node: Node (const)
+  callee 4192:22 Parser.node -> @Parser.node
+  callee 4194:9 Parser.advance -> @Parser.advance
+  callee 4198:16 Parser.fail -> @Parser.fail
+  callee 4198:61 tokenName -> @tokenName
 function Parser.startsArrowExpression(this: Parser): boolean -> @Parser.startsArrowExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.arrowParametersAt Parser.peek
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.arrowParametersAt#0
   stackSites=0 stackLocals=0
-  local 4186:11 next: i32 (const)
-  callee 4186:18 Parser.peek -> @Parser.peek
-  callee 4196:12 Parser.arrowParametersAt -> @Parser.arrowParametersAt
+  local 4219:11 next: i32 (const)
+  callee 4219:18 Parser.peek -> @Parser.peek
+  callee 4229:12 Parser.arrowParametersAt -> @Parser.arrowParametersAt
 function Parser.asyncArrowAhead(this: Parser): boolean -> @Parser.asyncArrowAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.aheadOnSameLine Parser.arrowParametersAt Parser.peek Parser.scanAfterAhead nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.peek#0 Parser.aheadOnSameLine#0 Parser.scanAfterAhead#0 Parser.arrowParametersAt#0
   stackSites=0 stackLocals=0
-  local 4211:11 next: i32 (const)
-  callee 4211:18 Parser.peek -> @Parser.peek
-  callee 4212:57 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
-  local 4215:11 scan: Lexer (const)
-  callee 4215:18 Parser.scanAfterAhead -> @Parser.scanAfterAhead
-  callee 4222:12 Parser.arrowParametersAt -> @Parser.arrowParametersAt
+  local 4244:11 next: i32 (const)
+  callee 4244:18 Parser.peek -> @Parser.peek
+  callee 4245:57 Parser.aheadOnSameLine -> @Parser.aheadOnSameLine
+  local 4248:11 scan: Lexer (const)
+  callee 4248:18 Parser.scanAfterAhead -> @Parser.scanAfterAhead
+  callee 4255:12 Parser.arrowParametersAt -> @Parser.arrowParametersAt
 function Parser.arrowParametersAt(this: Parser, open: i32): boolean -> @Parser.arrowParametersAt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Lexer.constructor
@@ -32248,242 +32269,244 @@ function Parser.arrowParametersAt(this: Parser, open: i32): boolean -> @Parser.a
   calls: Lexer.constructor Lexer.next
   pointer this: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 4227:11 scan: Lexer (const)
-  callee 4227:18 new Lexer -> @Lexer.constructor
-  callee 4229:5 Lexer.next -> @Lexer.next
-  local 4230:9 depth: i32 (let)
-  callee 4232:7 Lexer.next -> @Lexer.next
-  callee 4242:5 Lexer.next -> @Lexer.next
-  local 4249:9 nesting: i32 (let)
-  callee 4251:7 Lexer.next -> @Lexer.next
-  local 4252:13 kind: i32 (const)
+  local 4260:11 scan: Lexer (const)
+  callee 4260:18 new Lexer -> @Lexer.constructor
+  callee 4262:5 Lexer.next -> @Lexer.next
+  local 4263:9 depth: i32 (let)
+  callee 4265:7 Lexer.next -> @Lexer.next
+  callee 4275:5 Lexer.next -> @Lexer.next
+  local 4282:9 nesting: i32 (let)
+  callee 4284:7 Lexer.next -> @Lexer.next
+  local 4285:13 kind: i32 (const)
 function Parser.parseArrowExpression(this: Parser, start: i32): Node -> @Parser.parseArrowExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4287:5
+  sharedWrite: 4320:5
   escaping: start
   calls: Parser.at Parser.closeList Parser.eat Parser.empty Parser.expect Parser.list Parser.node Parser.parseBlock Parser.parseExpression Parser.parseIdentifier Parser.parseParameters Parser.parseType nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.empty#0 Parser.list#0 Parser.at#0 Parser.node#0 Parser.parseIdentifier#0 Parser.empty#0 Parser.closeList#0 Parser.parseParameters#0 Parser.eat#0 Parser.parseType#0 Parser.empty#0 Parser.expect#0 Parser.at#0 Parser.parseBlock#0 Parser.parseExpression#0 Parser.list#0
   stackSites=0 stackLocals=0
-  local 4286:11 node: Node (const)
-  callee 4286:18 Parser.node -> @Parser.node
-  callee 4287:24 Parser.empty -> @Parser.empty
-  local 4288:11 params: Node (const)
-  callee 4288:20 Parser.list -> @Parser.list
-  callee 4289:9 Parser.at -> @Parser.at
-  local 4290:13 param: Node (const)
-  callee 4290:21 Parser.node -> @Parser.node
-  callee 4291:27 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee 4292:27 Parser.empty -> @Parser.empty
-  callee 4295:26 Parser.closeList -> @Parser.closeList
-  callee 4297:26 Parser.parseParameters -> @Parser.parseParameters
-  callee 4299:24 Parser.eat -> @Parser.eat
-  callee 4299:46 Parser.parseType -> @Parser.parseType
-  callee 4299:65 Parser.empty -> @Parser.empty
-  callee 4300:5 Parser.expect -> @Parser.expect
-  callee 4301:24 Parser.at -> @Parser.at
-  callee 4301:46 Parser.parseBlock -> @Parser.parseBlock
-  callee 4301:66 Parser.parseExpression -> @Parser.parseExpression
-  callee 4302:24 Parser.list -> @Parser.list
+  local 4319:11 node: Node (const)
+  callee 4319:18 Parser.node -> @Parser.node
+  callee 4320:24 Parser.empty -> @Parser.empty
+  local 4321:11 params: Node (const)
+  callee 4321:20 Parser.list -> @Parser.list
+  callee 4322:9 Parser.at -> @Parser.at
+  local 4323:13 param: Node (const)
+  callee 4323:21 Parser.node -> @Parser.node
+  callee 4324:27 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 4325:27 Parser.empty -> @Parser.empty
+  callee 4328:26 Parser.closeList -> @Parser.closeList
+  callee 4330:26 Parser.parseParameters -> @Parser.parseParameters
+  callee 4332:24 Parser.eat -> @Parser.eat
+  callee 4332:46 Parser.parseType -> @Parser.parseType
+  callee 4332:65 Parser.empty -> @Parser.empty
+  callee 4333:5 Parser.expect -> @Parser.expect
+  callee 4334:24 Parser.at -> @Parser.at
+  callee 4334:46 Parser.parseBlock -> @Parser.parseBlock
+  callee 4334:66 Parser.parseExpression -> @Parser.parseExpression
+  callee 4335:24 Parser.list -> @Parser.list
 function Parser.parseTemplate(this: Parser, start: i32): Node -> @Parser.parseTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4315:5
+  sharedWrite: 4348:5
   escaping: start
   calls: Parser.advance Parser.allowIn Parser.at Parser.fail Parser.node Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.node#0 Parser.at#0 Parser.advance#0 Parser.allowIn#0 Parser.parseExpression#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.at#0 Parser.advance#0 Parser.fail#0
   stackSites=0 stackLocals=0
-  local 4313:11 node: Node (const)
-  callee 4313:18 Parser.node -> @Parser.node
-  local 4314:11 head: Node (const)
-  callee 4314:18 Parser.node -> @Parser.node
-  local 4317:11 whole: boolean (const)
-  callee 4317:19 Parser.at -> @Parser.at
-  callee 4318:5 Parser.advance -> @Parser.advance
-  local 4323:11 outerNoIn: boolean (const)
-  callee 4323:23 Parser.allowIn -> @Parser.allowIn
-  callee 4325:26 Parser.parseExpression -> @Parser.parseExpression
-  callee 4326:11 Parser.at -> @Parser.at
-  callee 4326:43 Parser.at -> @Parser.at
-  local 4327:15 part: Node (const)
-  callee 4327:22 Parser.node -> @Parser.node
-  local 4330:15 last: boolean (const)
-  callee 4330:22 Parser.at -> @Parser.at
-  callee 4331:9 Parser.advance -> @Parser.advance
-  callee 4336:28 Parser.fail -> @Parser.fail
+  local 4346:11 node: Node (const)
+  callee 4346:18 Parser.node -> @Parser.node
+  local 4347:11 head: Node (const)
+  callee 4347:18 Parser.node -> @Parser.node
+  local 4350:11 whole: boolean (const)
+  callee 4350:19 Parser.at -> @Parser.at
+  callee 4351:5 Parser.advance -> @Parser.advance
+  local 4356:11 outerNoIn: boolean (const)
+  callee 4356:23 Parser.allowIn -> @Parser.allowIn
+  callee 4358:26 Parser.parseExpression -> @Parser.parseExpression
+  callee 4359:11 Parser.at -> @Parser.at
+  callee 4359:43 Parser.at -> @Parser.at
+  local 4360:15 part: Node (const)
+  callee 4360:22 Parser.node -> @Parser.node
+  local 4363:15 last: boolean (const)
+  callee 4363:22 Parser.at -> @Parser.at
+  callee 4364:9 Parser.advance -> @Parser.advance
+  callee 4369:28 Parser.fail -> @Parser.fail
 function Parser.parseRegex(this: Parser, start: i32): Node -> @Parser.parseRegex [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4353:5
+  sharedWrite: 4386:5
   escaping: start
   calls: Lexer.scanRegex Parser.advance Parser.node Parser.report nish_str_new
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.report#0 Parser.node#0 Parser.advance#0 Parser.node#0 Parser.advance#0
   stackSites=0 stackLocals=0
-  local 4350:11 end: i32 (const)
-  callee 4350:17 Lexer.scanRegex -> @Lexer.scanRegex
-  callee 4356:7 Parser.report -> @Parser.report
-  local 4357:13 unterminated: Node (const)
-  callee 4357:28 Parser.node -> @Parser.node
-  callee 4359:7 Parser.advance -> @Parser.advance
-  local 4362:11 node: Node (const)
-  callee 4362:18 Parser.node -> @Parser.node
-  callee 4364:5 Parser.advance -> @Parser.advance
+  local 4383:11 end: i32 (const)
+  callee 4383:17 Lexer.scanRegex -> @Lexer.scanRegex
+  callee 4389:7 Parser.report -> @Parser.report
+  local 4390:13 unterminated: Node (const)
+  callee 4390:28 Parser.node -> @Parser.node
+  callee 4392:7 Parser.advance -> @Parser.advance
+  local 4395:11 node: Node (const)
+  callee 4395:18 Parser.node -> @Parser.node
+  callee 4397:5 Parser.advance -> @Parser.advance
 function Parser.parseArrayLiteral(this: Parser, start: i32): Node -> @Parser.parseArrayLiteral [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4378:9
+  sharedWrite: 4411:9
   escaping: start
   calls: Parser.advance Parser.allowIn Parser.at Parser.eat Parser.empty Parser.expect Parser.node Parser.parseExpression nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.eat#0 Parser.empty#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.parseExpression#0 Parser.eat#0 Parser.expect#0
   stackSites=0 stackLocals=0
-  callee 4373:5 Parser.advance -> @Parser.advance
-  local 4374:11 node: Node (const)
-  callee 4374:18 Parser.node -> @Parser.node
-  local 4375:11 outerNoIn: boolean (const)
-  callee 4375:23 Parser.allowIn -> @Parser.allowIn
-  callee 4376:13 Parser.at -> @Parser.at
-  callee 4376:39 Parser.at -> @Parser.at
-  callee 4377:11 Parser.eat -> @Parser.eat
-  callee 4378:28 Parser.empty -> @Parser.empty
-  callee 4381:11 Parser.at -> @Parser.at
-  local 4382:15 spread: Node (const)
-  callee 4382:24 Parser.node -> @Parser.node
-  callee 4383:9 Parser.advance -> @Parser.advance
-  callee 4384:30 Parser.parseExpression -> @Parser.parseExpression
-  callee 4388:28 Parser.parseExpression -> @Parser.parseExpression
-  callee 4390:12 Parser.eat -> @Parser.eat
-  callee 4395:5 Parser.expect -> @Parser.expect
+  callee 4406:5 Parser.advance -> @Parser.advance
+  local 4407:11 node: Node (const)
+  callee 4407:18 Parser.node -> @Parser.node
+  local 4408:11 outerNoIn: boolean (const)
+  callee 4408:23 Parser.allowIn -> @Parser.allowIn
+  callee 4409:13 Parser.at -> @Parser.at
+  callee 4409:39 Parser.at -> @Parser.at
+  callee 4410:11 Parser.eat -> @Parser.eat
+  callee 4411:28 Parser.empty -> @Parser.empty
+  callee 4414:11 Parser.at -> @Parser.at
+  local 4415:15 spread: Node (const)
+  callee 4415:24 Parser.node -> @Parser.node
+  callee 4416:9 Parser.advance -> @Parser.advance
+  callee 4417:30 Parser.parseExpression -> @Parser.parseExpression
+  callee 4421:28 Parser.parseExpression -> @Parser.parseExpression
+  callee 4423:12 Parser.eat -> @Parser.eat
+  callee 4428:5 Parser.expect -> @Parser.expect
 function Parser.parseObjectLiteral(this: Parser, start: i32): Node -> @Parser.parseObjectLiteral [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4411:9
+  sharedWrite: 4444:9
   escaping: start
-  calls: Parser.advance Parser.allowIn Parser.at Parser.computedNameFailed Parser.eat Parser.expect Parser.methodAfterComputedName Parser.node Parser.objectMethodAhead Parser.parseComputedName Parser.parseExpression Parser.parseMemberNameNode Parser.parseObjectMethod Parser.peek Parser.report nish_array_grow nish_panic_index
-  pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.eat#0 Parser.node#0 Parser.at#0 Parser.parseComputedName#0 Parser.computedNameFailed#0 Parser.objectMethodAhead#0 Parser.methodAfterComputedName#0 Parser.parseObjectMethod#0 Parser.eat#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.peek#0 Parser.parseMemberNameNode#0 Parser.report#0 Parser.advance#0 Parser.expect#0 Parser.parseExpression#0 Parser.eat#0 Parser.parseExpression#0 Parser.node#0 Parser.eat#0 Parser.expect#0
+  calls: Parser.advance Parser.allowIn Parser.at Parser.computedNameFailed Parser.eat Parser.expect Parser.methodAfterComputedName Parser.node Parser.objectMethodAhead Parser.parseComputedName Parser.parseExpression Parser.parseMemberNameNode Parser.parseObjectMethod Parser.peek Parser.report Parser.skipBrokenProperty nish_array_grow nish_panic_index
+  pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.allowIn#0 Parser.at#0 Parser.at#0 Parser.at#0 Parser.node#0 Parser.advance#0 Parser.parseExpression#0 Parser.eat#0 Parser.node#0 Parser.at#0 Parser.parseComputedName#0 Parser.computedNameFailed#0 Parser.skipBrokenProperty#0 Parser.objectMethodAhead#0 Parser.methodAfterComputedName#0 Parser.parseObjectMethod#0 Parser.skipBrokenProperty#0 Parser.eat#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.peek#0 Parser.parseMemberNameNode#0 Parser.report#0 Parser.advance#0 Parser.expect#0 Parser.parseExpression#0 Parser.eat#0 Parser.parseExpression#0 Parser.node#0 Parser.eat#0 Parser.expect#0
   stackSites=0 stackLocals=0
-  callee 4401:5 Parser.advance -> @Parser.advance
-  local 4402:11 node: Node (const)
-  callee 4402:18 Parser.node -> @Parser.node
-  local 4403:11 outerNoIn: boolean (const)
-  callee 4403:23 Parser.allowIn -> @Parser.allowIn
-  callee 4404:13 Parser.at -> @Parser.at
-  callee 4404:37 Parser.at -> @Parser.at
-  local 4405:13 propertyStart: i32 (const)
-  callee 4408:11 Parser.at -> @Parser.at
-  local 4409:15 spread: Node (const)
-  callee 4409:24 Parser.node -> @Parser.node
-  callee 4410:9 Parser.advance -> @Parser.advance
-  callee 4411:30 Parser.parseExpression -> @Parser.parseExpression
-  callee 4414:14 Parser.eat -> @Parser.eat
-  local 4419:13 property: Node (const)
-  callee 4419:24 Parser.node -> @Parser.node
-  local 4423:13 beforeKey: i32 (const)
-  local 4424:13 computed: Node | null (const)
-  callee 4424:37 Parser.at -> @Parser.at
-  callee 4424:61 Parser.parseComputedName -> @Parser.parseComputedName
-  callee 4427:32 Parser.computedNameFailed -> @Parser.computedNameFailed
-  callee 4432:31 Parser.objectMethodAhead -> @Parser.objectMethodAhead
-  callee 4432:58 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
-  local 4433:15 method: Node (const)
-  callee 4433:24 Parser.parseObjectMethod -> @Parser.parseObjectMethod
-  callee 4441:14 Parser.eat -> @Parser.eat
-  local 4450:11 key: Node | null (let)
-  callee 4454:18 Parser.at -> @Parser.at
-  callee 4456:9 Parser.advance -> @Parser.advance
-  callee 4457:19 Parser.at -> @Parser.at
-  callee 4457:42 Parser.at -> @Parser.at
-  callee 4457:66 Parser.peek -> @Parser.peek
-  callee 4458:15 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
-  callee 4460:9 Parser.report -> @Parser.report
-  callee 4461:9 Parser.advance -> @Parser.advance
-  callee 4465:9 Parser.expect -> @Parser.expect
-  callee 4466:32 Parser.parseExpression -> @Parser.parseExpression
-  callee 4467:18 Parser.eat -> @Parser.eat
-  callee 4468:32 Parser.parseExpression -> @Parser.parseExpression
-  local 4471:15 shorthand: Node (const)
-  callee 4471:27 Parser.node -> @Parser.node
-  callee 4480:12 Parser.eat -> @Parser.eat
-  callee 4485:5 Parser.expect -> @Parser.expect
+  callee 4434:5 Parser.advance -> @Parser.advance
+  local 4435:11 node: Node (const)
+  callee 4435:18 Parser.node -> @Parser.node
+  local 4436:11 outerNoIn: boolean (const)
+  callee 4436:23 Parser.allowIn -> @Parser.allowIn
+  callee 4437:13 Parser.at -> @Parser.at
+  callee 4437:37 Parser.at -> @Parser.at
+  local 4438:13 propertyStart: i32 (const)
+  callee 4441:11 Parser.at -> @Parser.at
+  local 4442:15 spread: Node (const)
+  callee 4442:24 Parser.node -> @Parser.node
+  callee 4443:9 Parser.advance -> @Parser.advance
+  callee 4444:30 Parser.parseExpression -> @Parser.parseExpression
+  callee 4447:14 Parser.eat -> @Parser.eat
+  local 4452:13 property: Node (const)
+  callee 4452:24 Parser.node -> @Parser.node
+  local 4456:13 beforeKey: i32 (const)
+  local 4457:13 computed: Node | null (const)
+  callee 4457:37 Parser.at -> @Parser.at
+  callee 4457:61 Parser.parseComputedName -> @Parser.parseComputedName
+  callee 4461:32 Parser.computedNameFailed -> @Parser.computedNameFailed
+  callee 4462:13 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
+  callee 4469:31 Parser.objectMethodAhead -> @Parser.objectMethodAhead
+  callee 4469:58 Parser.methodAfterComputedName -> @Parser.methodAfterComputedName
+  local 4470:15 method: Node (const)
+  callee 4470:24 Parser.parseObjectMethod -> @Parser.parseObjectMethod
+  callee 4472:15 Parser.skipBrokenProperty -> @Parser.skipBrokenProperty
+  callee 4481:14 Parser.eat -> @Parser.eat
+  local 4490:11 key: Node | null (let)
+  callee 4494:18 Parser.at -> @Parser.at
+  callee 4496:9 Parser.advance -> @Parser.advance
+  callee 4497:19 Parser.at -> @Parser.at
+  callee 4497:42 Parser.at -> @Parser.at
+  callee 4497:66 Parser.peek -> @Parser.peek
+  callee 4498:15 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
+  callee 4500:9 Parser.report -> @Parser.report
+  callee 4501:9 Parser.advance -> @Parser.advance
+  callee 4505:9 Parser.expect -> @Parser.expect
+  callee 4506:32 Parser.parseExpression -> @Parser.parseExpression
+  callee 4507:18 Parser.eat -> @Parser.eat
+  callee 4508:32 Parser.parseExpression -> @Parser.parseExpression
+  local 4511:15 shorthand: Node (const)
+  callee 4511:27 Parser.node -> @Parser.node
+  callee 4520:12 Parser.eat -> @Parser.eat
+  callee 4525:5 Parser.expect -> @Parser.expect
 function Parser.objectMethodAhead(this: Parser): boolean -> @Parser.objectMethodAhead [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Parser.peek
   calls: Parser.accessorAhead Parser.asyncModifierAhead Parser.at Parser.atMemberName Parser.peek nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.atMemberName#0 Parser.peek#0 Parser.accessorAhead#0 Parser.at#0 Parser.asyncModifierAhead#0
   stackSites=0 stackLocals=0
-  callee 4497:9 Parser.at -> @Parser.at
-  callee 4500:10 Parser.atMemberName -> @Parser.atMemberName
-  local 4503:11 next: i32 (const)
-  callee 4503:18 Parser.peek -> @Parser.peek
-  callee 4507:9 Parser.accessorAhead -> @Parser.accessorAhead
-  callee 4510:12 Parser.at -> @Parser.at
-  callee 4510:60 Parser.asyncModifierAhead -> @Parser.asyncModifierAhead
+  callee 4537:9 Parser.at -> @Parser.at
+  callee 4540:10 Parser.atMemberName -> @Parser.atMemberName
+  local 4543:11 next: i32 (const)
+  callee 4543:18 Parser.peek -> @Parser.peek
+  callee 4547:9 Parser.accessorAhead -> @Parser.accessorAhead
+  callee 4550:12 Parser.at -> @Parser.at
+  callee 4550:60 Parser.asyncModifierAhead -> @Parser.asyncModifierAhead
 function Parser.parseObjectMethod(this: Parser, start: i32, computed: Node | null): Node -> @Parser.parseObjectMethod [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4525:9
+  sharedWrite: 4565:9
   escaping: computed start
   calls: Parser.abandonedMember Parser.accessorAhead Parser.advance Parser.asyncModifierAhead Parser.at Parser.computedNameFailed Parser.eat Parser.node Parser.parseBlock Parser.parseComputedName Parser.parseMemberNameNode Parser.parseParameters Parser.parseReturnType Parser.parseTypeParameters nish_array_grow nish_str_eq
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.node#0 Parser.at#0 Parser.asyncModifierAhead#0 Parser.advance#0 Parser.eat#0 Parser.accessorAhead#0 Parser.advance#0 Parser.at#0 Parser.parseComputedName#0 Parser.computedNameFailed#0 Parser.abandonedMember#0 Parser.parseMemberNameNode#0 Parser.parseTypeParameters#0 Parser.parseParameters#0 Parser.parseReturnType#0 Parser.parseBlock#0
   pointer computed: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 4520:11 method: Node (const)
-  callee 4520:20 Parser.node -> @Parser.node
-  local 4521:9 name: Node | null (let)
-  callee 4523:11 Parser.at -> @Parser.at
-  callee 4523:59 Parser.asyncModifierAhead -> @Parser.asyncModifierAhead
-  callee 4524:9 Parser.advance -> @Parser.advance
-  callee 4527:11 Parser.eat -> @Parser.eat
-  callee 4530:11 Parser.accessorAhead -> @Parser.accessorAhead
-  callee 4531:9 Parser.advance -> @Parser.advance
-  local 4534:13 beforeName: i32 (const)
-  callee 4535:14 Parser.at -> @Parser.at
-  callee 4535:38 Parser.parseComputedName -> @Parser.parseComputedName
-  callee 4536:28 Parser.computedNameFailed -> @Parser.computedNameFailed
-  callee 4537:16 Parser.abandonedMember -> @Parser.abandonedMember
-  callee 4544:28 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
-  local 4546:11 typeParams: Node (const)
-  callee 4546:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
-  callee 4547:26 Parser.parseParameters -> @Parser.parseParameters
-  callee 4548:26 Parser.parseReturnType -> @Parser.parseReturnType
-  callee 4549:26 Parser.parseBlock -> @Parser.parseBlock
+  local 4560:11 method: Node (const)
+  callee 4560:20 Parser.node -> @Parser.node
+  local 4561:9 name: Node | null (let)
+  callee 4563:11 Parser.at -> @Parser.at
+  callee 4563:59 Parser.asyncModifierAhead -> @Parser.asyncModifierAhead
+  callee 4564:9 Parser.advance -> @Parser.advance
+  callee 4567:11 Parser.eat -> @Parser.eat
+  callee 4570:11 Parser.accessorAhead -> @Parser.accessorAhead
+  callee 4571:9 Parser.advance -> @Parser.advance
+  local 4574:13 beforeName: i32 (const)
+  callee 4575:14 Parser.at -> @Parser.at
+  callee 4575:38 Parser.parseComputedName -> @Parser.parseComputedName
+  callee 4576:28 Parser.computedNameFailed -> @Parser.computedNameFailed
+  callee 4577:16 Parser.abandonedMember -> @Parser.abandonedMember
+  callee 4584:28 Parser.parseMemberNameNode -> @Parser.parseMemberNameNode
+  local 4586:11 typeParams: Node (const)
+  callee 4586:24 Parser.parseTypeParameters -> @Parser.parseTypeParameters
+  callee 4587:26 Parser.parseParameters -> @Parser.parseParameters
+  callee 4588:26 Parser.parseReturnType -> @Parser.parseReturnType
+  callee 4589:26 Parser.parseBlock -> @Parser.parseBlock
 function Parser.parseNew(this: Parser, start: i32): Node -> @Parser.parseNew [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4574:5
+  sharedWrite: 4614:5
   escaping: start
   calls: Parser.advance Parser.at Parser.closeList Parser.eat Parser.expectTypeArgumentEnd Parser.list Parser.node Parser.parseArguments Parser.parseElement Parser.parseIdentifier Parser.parseMemberName Parser.parsePrimary Parser.parseType nish_array_grow
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.advance#0 Parser.node#0 Parser.at#0 Parser.parseIdentifier#0 Parser.parsePrimary#0 Parser.at#0 Parser.at#0 Parser.eat#0 Parser.parseMemberName#0 Parser.parseElement#0 Parser.list#0 Parser.at#0 Parser.advance#0 Parser.at#0 Parser.at#0 Parser.parseType#0 Parser.eat#0 Parser.expectTypeArgumentEnd#0 Parser.closeList#0 Parser.parseArguments#0
   stackSites=0 stackLocals=0
-  callee 4563:5 Parser.advance -> @Parser.advance
-  local 4564:11 node: Node (const)
-  callee 4564:18 Parser.node -> @Parser.node
-  local 4565:11 calleeStart: i32 (const)
-  local 4566:9 callee: Node (let)
-  callee 4566:18 Parser.at -> @Parser.at
-  callee 4566:39 Parser.parseIdentifier -> @Parser.parseIdentifier
-  callee 4566:64 Parser.parsePrimary -> @Parser.parsePrimary
-  callee 4567:12 Parser.at -> @Parser.at
-  callee 4567:32 Parser.at -> @Parser.at
-  callee 4568:11 Parser.eat -> @Parser.eat
-  callee 4569:18 Parser.parseMemberName -> @Parser.parseMemberName
-  callee 4571:18 Parser.parseElement -> @Parser.parseElement
-  local 4575:11 typeArguments: Node (const)
-  callee 4575:27 Parser.list -> @Parser.list
-  callee 4576:9 Parser.at -> @Parser.at
-  callee 4577:7 Parser.advance -> @Parser.advance
-  callee 4578:15 Parser.at -> @Parser.at
-  callee 4578:35 Parser.at -> @Parser.at
-  callee 4579:37 Parser.parseType -> @Parser.parseType
-  callee 4580:14 Parser.eat -> @Parser.eat
-  callee 4584:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
-  callee 4586:24 Parser.closeList -> @Parser.closeList
-  callee 4587:24 Parser.parseArguments -> @Parser.parseArguments
+  callee 4603:5 Parser.advance -> @Parser.advance
+  local 4604:11 node: Node (const)
+  callee 4604:18 Parser.node -> @Parser.node
+  local 4605:11 calleeStart: i32 (const)
+  local 4606:9 callee: Node (let)
+  callee 4606:18 Parser.at -> @Parser.at
+  callee 4606:39 Parser.parseIdentifier -> @Parser.parseIdentifier
+  callee 4606:64 Parser.parsePrimary -> @Parser.parsePrimary
+  callee 4607:12 Parser.at -> @Parser.at
+  callee 4607:32 Parser.at -> @Parser.at
+  callee 4608:11 Parser.eat -> @Parser.eat
+  callee 4609:18 Parser.parseMemberName -> @Parser.parseMemberName
+  callee 4611:18 Parser.parseElement -> @Parser.parseElement
+  local 4615:11 typeArguments: Node (const)
+  callee 4615:27 Parser.list -> @Parser.list
+  callee 4616:9 Parser.at -> @Parser.at
+  callee 4617:7 Parser.advance -> @Parser.advance
+  callee 4618:15 Parser.at -> @Parser.at
+  callee 4618:35 Parser.at -> @Parser.at
+  callee 4619:37 Parser.parseType -> @Parser.parseType
+  callee 4620:14 Parser.eat -> @Parser.eat
+  callee 4624:7 Parser.expectTypeArgumentEnd -> @Parser.expectTypeArgumentEnd
+  callee 4626:24 Parser.closeList -> @Parser.closeList
+  callee 4627:24 Parser.parseArguments -> @Parser.parseArguments
 function Parser.parseIdentifier(this: Parser): Node -> @Parser.parseIdentifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 4598:5
+  sharedWrite: 4638:5
   calls: Parser.advance Parser.at Parser.fail Parser.node nish_str_concat tokenName
   pointer this: size=96 writesThrough=true captured=false passedTo=Parser.at#0 Parser.fail#0 Parser.node#0 Parser.advance#0
   stackSites=0 stackLocals=0
-  local 4593:11 start: i32 (const)
-  callee 4594:10 Parser.at -> @Parser.at
-  callee 4595:14 Parser.fail -> @Parser.fail
-  callee 4595:52 tokenName -> @tokenName
-  local 4597:11 node: Node (const)
-  callee 4597:18 Parser.node -> @Parser.node
-  callee 4599:5 Parser.advance -> @Parser.advance
+  local 4633:11 start: i32 (const)
+  callee 4634:10 Parser.at -> @Parser.at
+  callee 4635:14 Parser.fail -> @Parser.fail
+  callee 4635:52 tokenName -> @tokenName
+  local 4637:11 node: Node (const)
+  callee 4637:18 Parser.node -> @Parser.node
+  callee 4639:5 Parser.advance -> @Parser.advance
 module src/manifest.ts
 import isDigit from "./lexer" -> function @isDigit
 import splitByte from "./strings" -> function @splitByte

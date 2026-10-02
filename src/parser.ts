@@ -2681,6 +2681,39 @@ export class Parser {
     return this.diagnostics.length > before
   }
 
+  /**
+   * After an object-literal property whose computed key was a syntax error:
+   * pass over the rest of the property, brackets balanced, to the `,` that
+   * ends it, which is consumed and answers true (the literal reads on), or
+   * to the `}` or `;` that ends the literal, the end of the file, or a keyword
+   * on a new line, which answers false. That is what refusing the `[` used to
+   * cost: one error, and the properties after it read as they are.
+   */
+  skipBrokenProperty(): boolean {
+    let depth = 0
+    while (!this.at(TOK_END)) {
+      if (depth === 0) {
+        if (this.at(TOK_COMMA)) {
+          this.advance()
+          return true
+        }
+        if (this.at(TOK_RBRACE) || this.at(TOK_SEMICOLON)) {
+          return false
+        }
+        if (this.newlineBefore() && this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER) {
+          return false
+        }
+      }
+      if (this.at(TOK_LPAREN) || this.at(TOK_LBRACKET) || this.at(TOK_LBRACE)) {
+        depth = depth + 1
+      } else if ((this.at(TOK_RPAREN) || this.at(TOK_RBRACKET) || this.at(TOK_RBRACE)) && depth > 0) {
+        depth = depth - 1
+      }
+      this.advance()
+    }
+    return false
+  }
+
   /** The `N_ERROR` a member becomes when its computed name already reported its syntax error. */
   abandonedMember(start: i32): Node {
     const node = this.node(N_ERROR, start, this.previousEnd)
@@ -4422,9 +4455,13 @@ export class Parser {
       // after its `]`.
       const beforeKey = this.diagnostics.length
       const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
-      // A computed key that is a syntax error ends the literal: the `}` it
-      // then wants is the one further error, as when the `[` was refused.
+      // A computed key that is a syntax error costs that one error: the rest
+      // of the property is passed over, and the literal reads on from the
+      // next one, as when the `[` was refused.
       if (computed !== null && this.computedNameFailed(beforeKey)) {
+        if (this.skipBrokenProperty()) {
+          continue
+        }
         break
       }
       // `{ m() { } }`, a method (or an accessor), for the checker to refuse
@@ -4432,6 +4469,9 @@ export class Parser {
       if (computed === null ? this.objectMethodAhead() : this.methodAfterComputedName()) {
         const method = this.parseObjectMethod(propertyStart, computed)
         if (method.kind === N_ERROR) {
+          if (this.skipBrokenProperty()) {
+            continue
+          }
           break
         }
         property.text = (method.flags & FLAG_COMPUTED) === 0 ? method.children[0].text : ""

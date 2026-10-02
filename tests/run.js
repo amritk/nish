@@ -1487,6 +1487,26 @@ for (const name of [
   )
 }
 
+// ---- A computed key cut short is one syntax error (#348) -------------------------------
+// The same blind spot for the parser: the literal skips the broken property to
+// its `,` and parses the next one, where abandoning the literal would report
+// every token after it.
+if (!only || "reject_computed_skip".includes(only)) {
+  const at = selectedCases.indexOf("reject_computed_skip")
+  const r = at < 0 ? null : caseResults[at]
+  const errors =
+    r === null
+      ? []
+      : String(r.stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: (syntax )?error: /.test(l))
+  check(
+    "reject_computed_skip: the broken key is the only diagnostic, and the property after it parses",
+    r !== null && r.status === 1 && errors.length === 1,
+    r === null ? "(no such case)" : String(r.stderr)
+  )
+}
+
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
