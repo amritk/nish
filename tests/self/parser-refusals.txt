@@ -16,9 +16,9 @@
 #     with `&&` or `||` without parentheses, and a missing `;` where automatic
 #     semicolon insertion does not apply;
 #   - a few forms no stage of R1 was given, whose parser sentence already
-#     names the rule — a class field without a type, a computed or spread
-#     object key, type parameters on a constructor — each to come off, when
-#     it does, with the change that moves its rule.
+#     names the rule — a class field without a type, type parameters on a
+#     constructor — each to come off, when it does, with the change that
+#     moves its rule, as the computed and spread object keys did.
 #
 # One entry per line, two fields:
 #
@@ -94,11 +94,13 @@
 reject_asi_for_header	expected `;`, found `IDENT`
 reject_asi_same_line	expected `;`, found `const`
 reject_asi_template	expected `;`, found `TEMPLATE`
+reject_cls_computed_malformed	expected an expression, found `export`
 reject_cls_field_declare	a type annotation is required
 reject_cls_field_no_type	a type annotation is required
 reject_cls_field_optional_untyped	a type annotation is required
 reject_cls_static_field_untyped	a type annotation is required
-reject_computed_property	an object literal key must be a plain identifier
+reject_computed_malformed	expected an expression, found `export`
+reject_computed_skip	expected an expression, found `,`
 reject_generic_method_constructor	a constructor cannot have type parameters: it takes its class's, which are written after `new` (`new Box<i32>(v)`)
 reject_import_equals_malformed	expected a name, found `NUMBER`
 reject_import_malformed	expected `{`, found `;`
@@ -108,7 +110,6 @@ reject_nullish_mixed_and	`&&` and `??` cannot be mixed without parentheses: pare
 reject_nullish_mixed_chain_and	`&&` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_chain_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
 reject_nullish_mixed_or	`||` and `??` cannot be mixed without parentheses: parenthesise the one that is to run first
-reject_object_spread	an object literal key must be a plain identifier
 reject_separator_after_dot	Numeric separators are not allowed here
 reject_separator_after_prefix	Numeric separators are not allowed here
 reject_separator_before_bigint_suffix	Numeric separators are not allowed here
