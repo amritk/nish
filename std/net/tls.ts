@@ -406,22 +406,18 @@ export class TlsServer {
     return 0
   }
 
-  /** Dispatches one whole message, `message[0 .. 4 + length)`, on the state. */
+  /**
+   * Dispatches one whole message, `message[0 .. 4 + length)`. `receive`
+   * admits bytes only in the two states that expect them, so the state is
+   * one of those two here.
+   */
   handleMessage(type: i32, message: u8[], length: i32): i32 {
-    switch (this.state) {
-      case TLS_STATE_WAIT_CLIENT_HELLO:
-        if (type !== TLS_HANDSHAKE_CLIENT_HELLO) {
-          return TLS_ALERT_UNEXPECTED_MESSAGE
-        }
-        return this.handleClientHello(message, length)
-      case TLS_STATE_WAIT_FINISHED:
-        if (type !== TLS_HANDSHAKE_FINISHED) {
-          return TLS_ALERT_UNEXPECTED_MESSAGE
-        }
-        return this.handleFinished(message, length)
-      default:
-        return TLS_ALERT_UNEXPECTED_MESSAGE
+    if (this.state === TLS_STATE_WAIT_CLIENT_HELLO) {
+      return type === TLS_HANDSHAKE_CLIENT_HELLO
+        ? this.handleClientHello(message, length)
+        : TLS_ALERT_UNEXPECTED_MESSAGE
     }
+    return type === TLS_HANDSHAKE_FINISHED ? this.handleFinished(message, length) : TLS_ALERT_UNEXPECTED_MESSAGE
   }
 
   /**

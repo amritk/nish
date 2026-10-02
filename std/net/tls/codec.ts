@@ -258,7 +258,7 @@ export const tlsListHas = (list: i32[], value: i32): boolean => list.indexOf(val
  * here is ASCII (an internationalised one in its A-label form) and the server
  * exposes it as a string.
  */
-const tlsReadServerName = (r: TlsReader, end: i32, hello: TlsClientHello): void => {
+const tlsReadServerName = (r: TlsReader, hello: TlsClientHello): void => {
   const listEnd: i32 = tlsReadVector(r, 2, 1, 65535)
   while (!r.failed && r.at < listEnd) {
     const nameType: i32 = tlsReadU8(r)
@@ -280,7 +280,6 @@ const tlsReadServerName = (r: TlsReader, end: i32, hello: TlsClientHello): void 
     }
     tlsReadSkipTo(r, nameEnd)
   }
-  tlsReadSkipTo(r, end)
 }
 
 /**
@@ -289,7 +288,7 @@ const tlsReadServerName = (r: TlsReader, end: i32, hello: TlsClientHello): void 
  * (§4.2.8, "Clients MUST NOT offer multiple KeyShareEntry values for the same
  * group").
  */
-const tlsReadKeyShare = (r: TlsReader, end: i32, hello: TlsClientHello): void => {
+const tlsReadKeyShare = (r: TlsReader, hello: TlsClientHello): void => {
   hello.hasKeyShare = true
   const listEnd: i32 = tlsReadVector(r, 2, 0, 65535)
   while (!r.failed && r.at < listEnd) {
@@ -305,52 +304,47 @@ const tlsReadKeyShare = (r: TlsReader, end: i32, hello: TlsClientHello): void =>
     }
     tlsReadSkipTo(r, shareEnd)
   }
-  tlsReadSkipTo(r, end)
 }
 
 /** `application_layer_protocol_negotiation` (RFC 7301 §3.1): ProtocolName<1..2^8-1> names in a list<2..2^16-1>. */
-const tlsReadAlpn = (r: TlsReader, end: i32, hello: TlsClientHello): void => {
+const tlsReadAlpn = (r: TlsReader, hello: TlsClientHello): void => {
   hello.hasAlpn = true
   const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
   while (!r.failed && r.at < listEnd) {
     const nameEnd: i32 = tlsReadVector(r, 1, 1, 255)
     hello.alpn.push(tlsReadBytes(r, nameEnd - r.at))
   }
-  tlsReadSkipTo(r, end)
 }
 
 /** Reads one extension body, `r.at .. end`, of type `type`; an unknown type is skipped. */
 const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHello): void => {
   switch (type) {
     case TLS_EXT_SERVER_NAME:
-      tlsReadServerName(r, end, hello)
+      tlsReadServerName(r, hello)
       break
     case TLS_EXT_SUPPORTED_GROUPS: {
       hello.hasSupportedGroups = true
       const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
       tlsReadU16List(r, listEnd, hello.groups)
-      tlsReadSkipTo(r, end)
       break
     }
     case TLS_EXT_SIGNATURE_ALGORITHMS: {
       hello.hasSignatureAlgorithms = true
       const listEnd: i32 = tlsReadVector(r, 2, 2, 65534)
       tlsReadU16List(r, listEnd, hello.signatureSchemes)
-      tlsReadSkipTo(r, end)
       break
     }
     case TLS_EXT_ALPN:
-      tlsReadAlpn(r, end, hello)
+      tlsReadAlpn(r, hello)
       break
     case TLS_EXT_SUPPORTED_VERSIONS: {
       hello.hasSupportedVersions = true
       const listEnd: i32 = tlsReadVector(r, 1, 2, 254)
       tlsReadU16List(r, listEnd, hello.versions)
-      tlsReadSkipTo(r, end)
       break
     }
     case TLS_EXT_KEY_SHARE:
-      tlsReadKeyShare(r, end, hello)
+      tlsReadKeyShare(r, hello)
       break
     case TLS_EXT_QUIC_TRANSPORT_PARAMETERS:
       hello.hasQuicTransportParameters = true
@@ -360,8 +354,9 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
       tlsReadSkipTo(r, end)
       break
   }
-  // Every reader above stops where its own vectors end; an extension body
-  // with bytes left after them is malformed.
+  // Every reader above stops where its own vectors end, and a vector cannot
+  // pass the extension's end; an extension body with bytes left after them is
+  // malformed (RFC 8446 §4.2), so this is where trailing bytes are refused.
   if (r.at !== end) {
     r.failed = true
   }

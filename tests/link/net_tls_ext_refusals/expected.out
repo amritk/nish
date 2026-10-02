@@ -1,0 +1,63 @@
+PASS  a 31-byte server random fails the server at once
+PASS  with internal_error
+PASS  and every receive answers it
+PASS  a 31-byte x25519 key is internal_error
+PASS  an empty certificate chain is internal_error
+PASS  a window past the end of the buffer is internal_error, not a panic
+PASS  so is a negative offset
+PASS  zero bytes are no message and no refusal
+PASS  and change nothing
+PASS  a ClientHello at the Handshake level is unexpected_message
+PASS  so is one at the Application level
+PASS  a Finished where the ClientHello belongs is unexpected_message
+PASS  a byte after the ClientHello, in the same flight, is unexpected_message
+PASS  a header announcing more than TLS_MAX_HANDSHAKE_MESSAGE bytes is decode_error before they arrive
+PASS  the cap is 64 KiB
+PASS  bytes while the server waits for its own signature are unexpected_message
+PASS  a body cut short, so a vector runs past its end, is decode_error
+PASS  a session id of 33 bytes is decode_error
+PASS  an odd-length cipher_suites is decode_error
+PASS  an empty cipher_suites is decode_error
+PASS  an empty supported_versions list is decode_error
+PASS  an extension with a byte after its contents is decode_error
+PASS  a key_share with a byte after its list is decode_error
+PASS  an ALPN extension with a byte after its list is decode_error
+PASS  an empty ALPN protocol name is decode_error
+PASS  a server_name with a byte after its list is decode_error
+PASS  a key share whose length runs past the extension is decode_error
+PASS  a byte after the extensions block is decode_error
+PASS  an extension sent twice is illegal_parameter
+PASS  two shares for x25519 are illegal_parameter
+PASS  tlsParseClientHello refuses a window past its buffer with decode_error
+PASS  and parses the body of a good one
+PASS  whose groups hold x25519
+PASS  a ClientHello with no extensions offers no TLS 1.3: protocol_version
+PASS  a legacy_version of TLS 1.0 is protocol_version
+PASS  supported_versions without TLS 1.3 is protocol_version
+PASS  a legacy_version above 0x0303 is illegal_parameter
+PASS  a compression method other than null is illegal_parameter
+PASS  no suite in common is handshake_failure
+PASS  no signature_algorithms is missing_extension
+PASS  no supported_groups is missing_extension
+PASS  no key_share is missing_extension
+PASS  supported_groups without x25519 is handshake_failure
+PASS  a client that cannot verify ecdsa_secp256r1_sha256 is handshake_failure
+PASS  a 31-byte x25519 share is illegal_parameter
+PASS  a low-order share, whose shared secret is all zeros, is illegal_parameter (RFC 8446 §7.4.2)
+PASS  and no ServerHello is written for it
+PASS  sign before any ClientHello is internal_error
+PASS  an empty signature is internal_error
+PASS  a signature longer than 65535 bytes is internal_error
+PASS  a failed server answers sign with its alert
+PASS  and has no signature input
+PASS  a Finished of 31 bytes is decode_error
+PASS  a Finished with one bit flipped is decrypt_error
+PASS  and the server has failed
+PASS  a ClientHello where the Finished belongs is unexpected_message
+PASS  the honest Finished connects
+PASS  and a handshake message after it is unexpected_message
+PASS  an unknown suite has no hash
+PASS  and no key
+PASS  TLS_AES_256_GCM_SHA384 has a 32-byte key
+PASS  tlsExpandLabel answers the length asked
+tls refusals: 62 passed, 0 failed, 0 skipped

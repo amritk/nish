@@ -204,7 +204,7 @@ export const splitMessages = (bytes: u8[]): u8[][] => {
 /** `message[from .. message.length)`. */
 export const bytesFrom = (message: u8[], from: i32): u8[] => {
   const out: u8[] = [];
-  for (let k: i32 = from; k < toI32(message.length); k++) {
+  for (let k: i32 = from; k >= 0 && k < toI32(message.length); k++) {
     out.push(message[k]);
   }
   return out;

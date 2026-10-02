@@ -1,0 +1,132 @@
+PASS  a client offering http/1.1 then h2 is accepted
+PASS  and gets h2, the server's first choice
+PASS  EncryptedExtensions carries ALPN with the one protocol: 0010 0005 0003 02 'h2'
+PASS  a client without h2 gets the server's next choice it offers
+PASS  no protocol in common is no_application_protocol
+PASS  and the server has failed
+PASS  with the alert recorded
+PASS  a name that only starts with the server's is not a match
+PASS  over TCP a client without ALPN is accepted
+PASS  and negotiates none
+PASS  and EncryptedExtensions is empty
+PASS  a server configured with no ALPN accepts a client offering some
+PASS  and negotiates none
+PASS  the handshake goes on
+tls alpn: 14 passed, 0 failed, 0 skipped
+PASS  a ClientHello naming example.com is accepted
+PASS  serverName is the host name
+PASS  EncryptedExtensions acknowledges it with an empty server_name
+PASS  without server_name, serverName is empty
+PASS  and nothing is acknowledged
+PASS  a name of another type before the host name is skipped
+PASS  and the host name is still read
+PASS  two host names are illegal_parameter
+PASS  a space in the host name is illegal_parameter
+PASS  an empty host name is decode_error
+PASS  an empty server_name list is decode_error
+tls sni: 11 passed, 0 failed, 0 skipped
+PASS  over QUIC a client with parameters and h3 is accepted
+PASS  its parameters are exposed as they were sent
+PASS  h3 is chosen
+PASS  the handshake is signed
+PASS  EncryptedExtensions carries ALPN h3, then the server's parameters: 0039 0003 010203
+PASS  the client verifies the flight
+PASS  and the server its Finished
+PASS  a QUIC handshake completes
+PASS  over QUIC a client without transport parameters is missing_extension
+PASS  over QUIC a client without ALPN is no_application_protocol
+PASS  a QUIC server configured with no ALPN refuses even a client offering some
+PASS  over TCP a client sending transport parameters is accepted
+PASS  but they are not exposed
+PASS  and none are sent
+tls quic transport parameters: 14 passed, 0 failed, 0 skipped
+PASS  RFC 8448 §5: message_hash(CH1), HRR, CH2, SH hash to the trace's value
+PASS  RFC 8448 §5: extract secret "handshake"
+PASS  RFC 8448 §5: derive secret "tls13 c hs traffic" over that transcript
+PASS  RFC 8448 §5: derive secret "tls13 s hs traffic" over that transcript
+PASS  a SHA-384 transcript restarts as message_hash with a length of 48
+PASS  a ClientHello with no x25519 share is answered, not refused
+PASS  the server waits for a second ClientHello
+PASS  and remembers that it retried
+PASS  the HelloRetryRequest: the fixed random, the suite, key_share naming x25519, TLS 1.3 (checked against Python)
+PASS  tlsEncodeHelloRetryRequest writes the same bytes
+PASS  nothing at the Handshake level yet
+PASS  and no secrets
+PASS  the second ClientHello, with the share, is accepted
+PASS  and signed
+PASS  the ServerHello (checked against Python)
+PASS  client_handshake_traffic_secret over message_hash, HRR, CH2, SH (checked against Python)
+PASS  server_handshake_traffic_secret likewise (checked against Python)
+PASS  the client verifies the signature over the retried transcript
+PASS  and the server's Finished
+PASS  the server takes the client's Finished
+PASS  connected after one retry
+PASS  a second ClientHello still without the x25519 share is illegal_parameter
+PASS  and the server has failed
+PASS  without writing a second HelloRetryRequest
+PASS  a second ClientHello whose suites no longer allow the chosen one is illegal_parameter
+PASS  the HelloRetryRequest's random is SHA-256 of "HelloRetryRequest"
+tls hello retry: 26 passed, 0 failed, 0 skipped
+PASS  a 31-byte server random fails the server at once
+PASS  with internal_error
+PASS  and every receive answers it
+PASS  a 31-byte x25519 key is internal_error
+PASS  an empty certificate chain is internal_error
+PASS  a window past the end of the buffer is internal_error, not a panic
+PASS  so is a negative offset
+PASS  zero bytes are no message and no refusal
+PASS  and change nothing
+PASS  a ClientHello at the Handshake level is unexpected_message
+PASS  so is one at the Application level
+PASS  a Finished where the ClientHello belongs is unexpected_message
+PASS  a byte after the ClientHello, in the same flight, is unexpected_message
+PASS  a header announcing more than TLS_MAX_HANDSHAKE_MESSAGE bytes is decode_error before they arrive
+PASS  the cap is 64 KiB
+PASS  bytes while the server waits for its own signature are unexpected_message
+PASS  a body cut short, so a vector runs past its end, is decode_error
+PASS  a session id of 33 bytes is decode_error
+PASS  an odd-length cipher_suites is decode_error
+PASS  an empty cipher_suites is decode_error
+PASS  an empty supported_versions list is decode_error
+PASS  an extension with a byte after its contents is decode_error
+PASS  a key_share with a byte after its list is decode_error
+PASS  an ALPN extension with a byte after its list is decode_error
+PASS  an empty ALPN protocol name is decode_error
+PASS  a server_name with a byte after its list is decode_error
+PASS  a key share whose length runs past the extension is decode_error
+PASS  a byte after the extensions block is decode_error
+PASS  an extension sent twice is illegal_parameter
+PASS  two shares for x25519 are illegal_parameter
+PASS  tlsParseClientHello refuses a window past its buffer with decode_error
+PASS  and parses the body of a good one
+PASS  whose groups hold x25519
+PASS  a ClientHello with no extensions offers no TLS 1.3: protocol_version
+PASS  a legacy_version of TLS 1.0 is protocol_version
+PASS  supported_versions without TLS 1.3 is protocol_version
+PASS  a legacy_version above 0x0303 is illegal_parameter
+PASS  a compression method other than null is illegal_parameter
+PASS  no suite in common is handshake_failure
+PASS  no signature_algorithms is missing_extension
+PASS  no supported_groups is missing_extension
+PASS  no key_share is missing_extension
+PASS  supported_groups without x25519 is handshake_failure
+PASS  a client that cannot verify ecdsa_secp256r1_sha256 is handshake_failure
+PASS  a 31-byte x25519 share is illegal_parameter
+PASS  a low-order share, whose shared secret is all zeros, is illegal_parameter (RFC 8446 §7.4.2)
+PASS  and no ServerHello is written for it
+PASS  sign before any ClientHello is internal_error
+PASS  an empty signature is internal_error
+PASS  a signature longer than 65535 bytes is internal_error
+PASS  a failed server answers sign with its alert
+PASS  and has no signature input
+PASS  a Finished of 31 bytes is decode_error
+PASS  a Finished with one bit flipped is decrypt_error
+PASS  and the server has failed
+PASS  a ClientHello where the Finished belongs is unexpected_message
+PASS  the honest Finished connects
+PASS  and a handshake message after it is unexpected_message
+PASS  an unknown suite has no hash
+PASS  and no key
+PASS  TLS_AES_256_GCM_SHA384 has a 32-byte key
+PASS  tlsExpandLabel answers the length asked
+tls refusals: 62 passed, 0 failed, 0 skipped
