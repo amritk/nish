@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 820 programs, 58703 dump lines.
+# 820 programs, 58745 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -10048,11 +10048,53 @@ function naiveEqual(a: u8[], b: u8[]): u32 -> @naiveEqual [exported]
   pointer a: size=0 writesThrough=false captured=false
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 10:12 i: i32 (let)
+  local 17:12 i: i32 (let)
 function indexedLookup(table: u32[], secret: u32): u32 -> @indexedLookup [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function indexedStore(table: u32[], secret: u32): void -> @indexedStore [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 30:3
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function unreadCall(secret: u32): u32 -> @unreadCall [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_from_u64
+  stackSites=0 stackLocals=0
+  local 36:9 text: string (const)
+function secretText(secret: u32): string -> @secretText [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_from_u64
+  stackSites=0 stackLocals=0
+function leakyRow(table: u32[], secret: u32): u32 -> @leakyRow [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: secret
+  calls: nish_panic_index
+  pointer table: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 50:7 acc: u32 (let)
+function callsLeak(table: u32[], secret: u32): u32 -> @callsLeak [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: secret
+  calls: leakyRow
+  pointer table: size=0 writesThrough=false captured=false passedTo=leakyRow#0 leakyRow#0 leakyRow#0 leakyRow#0
+  stackSites=0 stackLocals=0
+  callee 68:3 leakyRow -> @leakyRow
+  callee 68:29 leakyRow -> @leakyRow
+  callee 68:59 leakyRow -> @leakyRow
+  callee 68:89 leakyRow -> @leakyRow
+function tailLeak(table: u32[], secret: u32): u32 -> @tailLeak [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: leakyRow
+  pointer table: size=0 writesThrough=false captured=false passedTo=leakyRow#0
+  stackSites=0 stackLocals=0
+  callee 71:61 leakyRow -> @leakyRow
+function secretDivide(a: u32, secret: u32): u32 -> @secretDivide [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div
   stackSites=0 stackLocals=0
 program tests/cases/ct_asm_x25519.ts
 module tests/cases/ct_asm_x25519.ts (entry)
