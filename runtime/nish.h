@@ -63,6 +63,17 @@ typedef struct nish_str {
   char data[];
 } nish_str;
 
+/* The bytes of `s` as the C string a system call takes, or "" when `s` holds
+ * a NUL. The kernel reads a path to its first NUL, so `"secret\0.txt"` would
+ * pass a `.txt` check and open `secret`; "" names nothing, so each caller
+ * answers it as it answers a missing path. The one test every path, name and
+ * argument the runtime hands the OS goes through (docs/security/runtime.md,
+ * RT-3). `__builtin_strlen`, so this header needs no libc header of its own,
+ * and `unused` because a host that includes it may never call it. */
+static inline __attribute__((unused)) const char *nish_cpath(const nish_str *s) {
+  return __builtin_strlen(s->data) == s->len ? s->data : "";
+}
+
 /* ---- Arena --------------------------------------------------------------
  * One bump allocator per process, or one per thread under `-DNISH_THREADS`
  * (WP20 T0; the layout and every function below are the same either way).
@@ -139,7 +150,16 @@ nish_str *nish_str_from_i64(int64_t v);
 nish_str *nish_str_from_u64(uint64_t v);
 
 /* Process and file I/O (WP7). `nish_exit` never returns; the file functions
- * print a message to stderr and exit(1) on a fatal error. Everything from here
+ * print a message to stderr and exit(1) on a fatal error.
+ *
+ * Every function here that takes a path, a name or an argument vector refuses
+ * one holding a NUL, answering as it answers a path that does not exist: the
+ * kernel would read only the bytes before the NUL, which is a different path
+ * from the one the program checked (docs/security/runtime.md, RT-3). A file
+ * longer than 2^31 - 1 bytes is unreadable, as it is to `nish_read_file_or_null`
+ * and `nish_read_file_bytes` too, because no string or array may be longer
+ * (RT-1). The two writers refuse a symbolic link as the last component of the
+ * path rather than follow it (RT-4). Everything from here
  * to the end of the clock section below is implemented in runtime-os.c, with
  * `nish_random` and `nish_argv_init` the exceptions: neither asks the operating
  * system anything (the clock only seeds the first, and the entry point hands the
@@ -194,6 +214,11 @@ typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array
  * `elem_size` is `sizeof` one element, so for a record element type it is
  * `sizeof(struct Point)` and the block is a C array of them. */
 nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
+/* No array grows past 2^31 - 1 elements and no string past 2^31 - 1 bytes:
+ * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
+ * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than
+ * make one, because under --number-mode i32 its `length` would read back
+ * negative (docs/security/codegen.md K1-6, docs/security/runtime.md RT-2). */
 /* The cold paths compiled code calls: `push` when len == cap, a failed bounds
  * check. `nish_array_grow` moves `cap * elem_size` bytes into a fresh arena
  * block and writes `data`/`cap`, so for a record element type it relocates the
@@ -254,12 +279,12 @@ nish_array *nish_read_file_bytes(const nish_str *path);
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
  * child cannot be started or waited for, and always under WASI, which has no
  * processes. The elements are `nish_str *`; the child receives their bytes,
- * so an argument containing a NUL is truncated at it. */
+ * and an argument containing a NUL is refused (-1) rather than truncated. */
 int32_t nish_spawn(const nish_array *argv);
 /* `spawnSyncTo(argv, stdoutPath, stderrPath)`: exactly `nish_spawn` — the same
  * `PATH` search, the same wait, the same status, `128 + n` and -1 — except that
  * each non-empty path receives that stream, created or truncated at 0644 as
- * `nish_write_file` would leave it. An **empty** string leaves that stream
+ * `nish_write_file` would leave it, a symbolic link at the path refused. An **empty** string leaves that stream
  * inherited, so one call can capture stdout and let stderr through to the
  * terminal. The child opens the files, so a failed open is a child that could
  * not start and answers -1 rather than leaving this process redirected. The two
@@ -275,8 +300,8 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
  * arena (so a later `setenv` cannot change a string the program still holds),
  * or NULL when it is unset — the language's `string | null`. An empty value
  * is a set variable and answers a zero-length string, not NULL. `name` is
- * read and never retained; a NUL inside it truncates the lookup, as it does
- * for every other path-like argument here. */
+ * read and never retained; a name holding a NUL is unset, as it is for every
+ * other path-like argument here. */
 nish_str *nish_getenv(const nish_str *name);
 
 /* ---- Symlinks (WP19 §5a item 4) -----------------------------------------
@@ -336,6 +361,15 @@ double nish_stat_mtime(const nish_str *path);
  * or a read that fails. */
 int32_t nish_signal_fd(void);
 int32_t nish_read_signal(int32_t fd);
+/* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; no
+ * builtin reaches these yet). `nish_lstat_owner_mode(path)`: `lstat`, so a
+ * symbolic link answers for itself, as the owner's uid in the high 32 bits
+ * and `st_mode` in the low 32, or exactly -1 when the path does not resolve.
+ * `nish_euid()`: the effective uid. `nish_is_executable(path)`:
+ * `access(path, X_OK)`, for the real uid. */
+int64_t nish_lstat_owner_mode(const nish_str *path);
+int64_t nish_euid(void);
+bool nish_is_executable(const nish_str *path);
 
 /* ---- The network (WP34 N5), runtime/runtime-net.c, `nish:net` ------------
  * Every call answers an `int32_t`: `>= 0` on success (a descriptor, a byte
