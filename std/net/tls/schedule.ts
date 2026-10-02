@@ -25,7 +25,12 @@
  *
  * Written from RFC 8446, not ported from another implementation.
  */
-import { hkdfExpandSha256, hkdfExpandSha384, hkdfExtractSha256, hkdfExtractSha384 } from "nish/crypto/hkdf"
+import {
+  hkdfExpandLabelSha256,
+  hkdfExpandLabelSha384,
+  hkdfExtractSha256,
+  hkdfExtractSha384,
+} from "nish/crypto/hkdf"
 import { hmacSha256, hmacSha384 } from "nish/crypto/hmac"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
@@ -75,54 +80,6 @@ export const tlsSuiteKeyLength = (suite: i32): i32 => {
   }
 }
 
-// TEMPORARY(WP34 expand-label): `hkdfExpandLabelSha256` and
-// `hkdfExpandLabelSha384` are being added to `nish/crypto/hkdf` by the
-// expand-label stage, with exactly this signature. Until that merges this
-// module carries the two copies below, under names of their own so that the
-// two cannot collide once both are in a program. When it lands, delete these
-// two functions and `tlsTemporaryHkdfLabel`, and import the real ones in
-// `tlsExpandLabel`. This pull request must not ship them.
-
-/** RFC 8446 §7.1's HkdfLabel: the length, `"tls13 " + label` and the context, each length-prefixed. */
-const tlsTemporaryHkdfLabel = (label: string, context: u8[], length: i32): u8[] => {
-  const prefix: string = "tls13 "
-  const info: u8[] = []
-  info.push(toU8(length >> 8))
-  info.push(toU8(length & 255))
-  const prefixLength: i32 = toI32(prefix.length)
-  const labelLength: i32 = toI32(label.length)
-  info.push(toU8(prefixLength + labelLength))
-  for (let i: i32 = 0; i < prefixLength; i++) {
-    info.push(toU8(prefix.charCodeAt(i)))
-  }
-  for (let i: i32 = 0; i < labelLength; i++) {
-    info.push(toU8(label.charCodeAt(i)))
-  }
-  info.push(toU8(toI32(context.length)))
-  for (const b of context) {
-    info.push(b)
-  }
-  return info
-}
-
-/** TEMPORARY(WP34 expand-label): HKDF-Expand-Label over SHA-256 (RFC 8446 §7.1). */
-const tlsTemporaryExpandLabelSha256 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
-  const out: u8[] | null = hkdfExpandSha256(secret, tlsTemporaryHkdfLabel(label, context, length), length)
-  if (out === null) {
-    panic("hkdfExpandLabelSha256: a length or secret out of range")
-  }
-  return out
-}
-
-/** TEMPORARY(WP34 expand-label): HKDF-Expand-Label over SHA-384 (RFC 8446 §7.1). */
-const tlsTemporaryExpandLabelSha384 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
-  const out: u8[] | null = hkdfExpandSha384(secret, tlsTemporaryHkdfLabel(label, context, length), length)
-  if (out === null) {
-    panic("hkdfExpandLabelSha384: a length or secret out of range")
-  }
-  return out
-}
-
 /**
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
  * bytes from `secret`, the label (without its `"tls13 "` prefix, which is
@@ -136,8 +93,8 @@ export const tlsExpandLabel = (
   length: i32
 ): u8[] =>
   hashLength === SHA384_SIZE
-    ? tlsTemporaryExpandLabelSha384(secret, label, context, length)
-    : tlsTemporaryExpandLabelSha256(secret, label, context, length)
+    ? hkdfExpandLabelSha384(secret, label, context, length)
+    : hkdfExpandLabelSha256(secret, label, context, length)
 
 /** HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names; an empty salt is HashLen zeros. */
 export const tlsExtract = (hashLength: i32, salt: u8[], ikm: u8[]): u8[] =>
