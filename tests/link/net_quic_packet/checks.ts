@@ -146,6 +146,31 @@ const packetNumberChecks = (t: Suite): void => {
     quicPacketNumberDecode(QUIC_MAX_VARINT - 1, 0x00, 1),
     QUIC_MAX_VARINT - 255
   );
+  t.eqI64(
+    "at the top of the space, 0x00 after 2^62 - 1 is 2^62 - 256, not 2^62",
+    quicPacketNumberDecode(QUIC_MAX_VARINT, 0x00, 1),
+    QUIC_MAX_VARINT - 255
+  );
+  t.eqI64(
+    "0xff after 2^62 - 1 is 2^62 - 1 itself",
+    quicPacketNumberDecode(QUIC_MAX_VARINT, 0xff, 1),
+    QUIC_MAX_VARINT
+  );
+  t.eqI64(
+    "0x80 after 2^62 - 1 is 2^62 - 128",
+    quicPacketNumberDecode(QUIC_MAX_VARINT, 0x80, 1),
+    QUIC_MAX_VARINT - 127
+  );
+  t.eqI64(
+    "0xff after 2^62 - 2 is 2^62 - 1",
+    quicPacketNumberDecode(QUIC_MAX_VARINT - 1, 0xff, 1),
+    QUIC_MAX_VARINT
+  );
+  t.eqI64(
+    "a four-byte 0 after 2^62 - 1 is 2^62 - 2^32",
+    quicPacketNumberDecode(QUIC_MAX_VARINT, 0, 4),
+    QUIC_MAX_VARINT - 4294967295
+  );
   t.eqI64("and near 0 it does not go down below zero", quicPacketNumberDecode(0, 0xff, 1), toI64(0xff));
 }
 

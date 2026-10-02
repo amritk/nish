@@ -32,8 +32,9 @@ the record that found it. The notes below the table name each such finding.
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 3 / 1 / 1 ³ | 0 / 1 / 2 / 2 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 4 ⁴ | 0 / 0 / 0 / 4 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 4 ⁵ | 0 / 0 / 0 / 3 |
+| QUIC packets | [quic.md](quic.md) | `std/net/quic-packet.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
-| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 14** |
+| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 15** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -69,6 +70,7 @@ only.
 | ECC-2 | Low | `std/crypto/p256.ts`, `std/crypto/x25519.ts` | Secret intermediates are not wiped. Needs a `secureZero`-style primitive in `runtime/` and `src/` | — |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | X509-7 | Low | `std/crypto/x509.ts` (`x509ParseP256PrivateKey`) | Private-key material is not wiped. Same primitive as ECC-2 | — |
+| QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | Handshake and 1-RTT traffic secrets and the keys derived from them are not wiped. Same primitive as ECC-2; the Initial keys are public by construction | #385 |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | RT-10 | Low | `runtime/runtime-host.c` (`nish_signal_fd`) | Two threads whose first `signalFd()` calls overlap each make a pipe, and one never hears a signal | — |
 | RT-11 | Low | `runtime/runtime.c` (`nish_write`) | A short `write(2)` is ignored | — |

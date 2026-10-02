@@ -27,6 +27,11 @@ PASS  decoding wraps up a window: 0x01 after 0xff is 0x101
 PASS  and down a window: 0xff after 0x101 is 0xff
 PASS  the first packet of a space: 0 with nothing processed
 PASS  near 2^62 the window does not go up past the largest packet number
+PASS  at the top of the space, 0x00 after 2^62 - 1 is 2^62 - 256, not 2^62
+PASS  0xff after 2^62 - 1 is 2^62 - 1 itself
+PASS  0x80 after 2^62 - 1 is 2^62 - 128
+PASS  0xff after 2^62 - 2 is 2^62 - 1
+PASS  a four-byte 0 after 2^62 - 1 is 2^62 - 2^32
 PASS  and near 0 it does not go down below zero
 PASS  A.1 client_initial_secret
 PASS  A.1 server_initial_secret
@@ -216,4 +221,4 @@ PASS  nor against a 21-byte original DCID
 PASS  an Initial is not a Retry
 PASS  nor is a header that did not parse
 PASS  a Retry with an empty token still parses (the client discards it)
-quic-packet: 218 passed, 0 failed, 0 skipped
+quic-packet: 223 passed, 0 failed, 0 skipped

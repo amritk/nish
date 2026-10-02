@@ -45,8 +45,7 @@
  * memory is reused, as every `nish/crypto` module does (ECC-2, X509-7). The
  * Initial keys are not secret, because anyone who reads the client's first
  * DCID can derive them (RFC 9001 §5.2); the Handshake and 1-RTT keys are,
- * and their record is kept with the connection's, in the `docs/security/`
- * record WP34 Q2 writes.
+ * and `docs/security/quic.md` records them as QUIC-1.
  *
  * **Constant time.** The AEADs and the header-protection masks are
  * `nish/crypto/aes` and `nish/crypto/chacha20poly1305`, with their guarantees.
@@ -433,11 +432,15 @@ export const quicPacketNumberDecode = (largestPn: i64, truncatedPn: i64, pnLengt
   const candidate: i64 = (expected & ~(window - 1)) | truncatedPn
   // The candidate shares `expected`'s high bits; one window up or down is
   // nearer when it falls outside (expected - half, expected + half]. The
-  // bound checks keep the answer inside [0, 2^62).
+  // bound checks keep the answer inside [0, 2^62). One case is left that
+  // RFC 9000 §A.3's pseudocode does not catch: with `largestPn` at 2^62 - 1,
+  // `expected` is 2^62 itself, and a candidate equal to it falls through
+  // both tests. Every packet number below 2^62 with these low bytes is a
+  // window down, and the nearest of them is the answer.
   if (candidate <= expected - halfWindow && candidate < QUIC_MAX_VARINT + 1 - window) {
     return candidate + window
   }
-  if (candidate > expected + halfWindow && candidate >= window) {
+  if ((candidate > expected + halfWindow || candidate > QUIC_MAX_VARINT) && candidate >= window) {
     return candidate - window
   }
   return candidate
