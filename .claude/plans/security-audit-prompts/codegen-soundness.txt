@@ -1,6 +1,6 @@
 You are implementing one stage of an accepted plan. Work only this stage.
 
-Repo: amritk/nish          Base: main at 882857d9dbda905a086befef788880badcdca7de
+Repo: amritk/nish          Base: main at fc12bf9bd18cd0d15299d4f3a96b79a4191b7b5f
 Branch: feature/security-audit/codegen-soundness   (already assigned — commit and push here, nothing else)
 Tracking issue: #363
 
@@ -13,7 +13,7 @@ properties you verified — "found nothing" must be evidence, not silence.
 ## Your stage
 fix(codegen): audit bounds-check elimination and emitted attributes
 Goal: No check the compiler removes and no LLVM attribute it emits can let a well-typed program read or write out of bounds or hit UB
-Owns (do not create or edit files outside these globs): `src/bounds.ts`, `src/escape.ts`, `src/attributes.ts`, `src/parallel.ts`, `src/emit-arrays.ts`, `tests/cases/cg_sec_*`, `tests/link/cg_sec_*/**`, `docs/security/codegen.md`
+Owns (do not create or edit files outside these globs): `src/bounds.ts`, `src/escape.ts`, `src/attributes.ts`, `src/parallel.ts`, `src/emit-arrays.ts`, `runtime/runtime.c`, `runtime/nish.h`, `tests/runtime-test.c`, `tests/cases/cg_sec_*`, `tests/link/cg_sec_*/**`, `docs/security/codegen.md` — plus, ONLY if your K1-6 fix changes emitted IR, the existing `tests/cases/*.ll` goldens it changes, regenerated with `UPDATE_GOLDENS=1 node tests/run.js <case>` and never hand-edited
 Verification: npm run check && npm run lint && npm test (0 skipped, no DEGRADED banner)
 
 Todos:
@@ -28,7 +28,10 @@ For each elimination rule in bounds.ts, try to write a well-typed program that r
 `tests/self/goldens/checked.txt` is a generated golden every positive `tests/cases/*.ts` is dumped into: if you add a tests/cases fixture you may regenerate it (`node tests/self/goldens.js checked --update --seed build/seed/bin/nish`) and nothing else in it; on a merge conflict regenerate it, never hand-edit.
 An undegraded `npm test` needs WASI_SYSROOT pointed at a wasi-sdk sysroot and NISH_BOOTSTRAP at the last release's seed (build/seed/bin/nish); set them rather than accepting skips.
 
-**Routed finding K1-6 (High, from the crypto-k1 stage, PR #375) — fix it in this stage.** Under `--number-mode i32`, `a.length` truncates an array's i64 length to i32 (`src/emit-arrays.ts:1098`, `emitArrayLength` -> `emitNumberFromI64`), and nothing stops an array growing past 2^31 - 1 elements (`runtime/runtime.c:1164`, `nish_array_grow`). For a 2^32 + 5 byte `u8[]`, `length` reads 5, `sha256` of it equals `sha256` of its first 5 bytes, `hmacSha256Verify` accepts the 5-byte message's tag, and `timingSafeEqual` against a 5-byte array answers true. Suggested fix: make `.length` panic instead of truncating under i32 mode (this stage owns src/emit-arrays.ts), with a failing-first link test. The runtime-c stage owns runtime/runtime.c; do not edit it — if an allocation-side refusal is also needed, record it as open for that stage.
+**Routed finding K1-6 (High, from the crypto-k1 stage, PR #375) — fix it in this stage.** Under `--number-mode i32`, `a.length` truncates an array's i64 length to i32 (`src/emit-arrays.ts:1098`, `emitArrayLength` -> `emitNumberFromI64`), and nothing stops an array growing past 2^31 - 1 elements (`runtime/runtime.c:1164`, `nish_array_grow`). For a 2^32 + 5 byte `u8[]`, `length` reads 5, `sha256` of it equals `sha256` of its first 5 bytes, `hmacSha256Verify` accepts the 5-byte message's tag, and `timingSafeEqual` against a 5-byte array answers true. The lead has transferred `runtime/runtime.c`, `runtime/nish.h` and `tests/runtime-test.c` to this stage for K1-6 (the runtime-c stage will start only after this one merges), so you may fix it on either side. Choose the fix with the smallest blast radius that closes it:
+- (a) refusing, in the runtime, any allocation or growth of an array past 2^31 - 1 elements in a program compiled under `--number-mode i32`. Check how the runtime knows the number mode; it may need a flag from codegen. This leaves emitted IR unchanged; or
+- (b) making `.length` panic rather than truncate in i32 mode. This changes the IR of every program that reads `.length`, so it touches many `tests/cases/*.ll` goldens, the self goldens and CI's `nish-cmp` byte-comparison against the last release. Read docs/wp19-stage0-retirement.md and tests/nish-cmp.js for how an intended codegen change is admitted there before choosing it.
+Remember orientation rule 4: a layout change is two-sided with `src/runtime.ts`, which this stage does not own; do not change a struct layout. Pin the fix with a failing-first link test (an i32-mode program growing a `u8[]` past 2^31 - 1 must be refused, not truncated). Keep the change to runtime/ minimal; the broader runtime audit is the runtime-c stage's.
 
 Rules that apply to every stage (from the plan's Approach):
 - **Audit, then fix in the same PR.** A stage that finds nothing still ships its record and the regression tests that pin the properties it checked. A stage that finds something fixes it, with a test that fails on the base SHA and passes on the branch.
@@ -63,7 +66,7 @@ security-policy stage" — do not make them yourself.
    hook (.claude/hooks/session-start.sh) installs it — re-run it rather than accepting skips.
 3. Coverage: this repo has no coverage tool; the agreed bar instead is that every fix carries a
    regression test (golden, link program, or runtime test) that you have SHOWN failing on base
-   882857d and passing on your branch. Put the before/after output in the PR body. Do NOT relax,
+   fc12bf9 and passing on your branch. Put the before/after output in the PR body. Do NOT relax,
    skip or delete any existing test or check, and do not edit CI or test-harness configuration
    outside your Owns.
 4. `npm run lint` passes.
