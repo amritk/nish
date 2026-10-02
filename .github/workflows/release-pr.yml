@@ -193,13 +193,13 @@ jobs:
           # the fallback, and the step below degrades rather than fails when it
           # turns out to be refused.
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
-          next: ${{ steps.next.outputs.next }}
+          NEXT: ${{ steps.next.outputs.next }}
         run: |
           branch="release/next"
           # The title is the squash-merge subject, so it is a conventional
           # commit: pr-title.yml checks it like any other, and the merge lands
           # under "Internal" in the next release instead of being skipped.
-          title="chore(release): $next"
+          title="chore(release): $NEXT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
@@ -216,15 +216,15 @@ jobs:
           # that ends in a rule is what once rendered `---### Fixed` as one
           # line of literal text. So the notes are an argument to a single
           # printf, which is the only thing here that puts the blank lines in.
-          notes="$(node scripts/changelog-gen.mjs --from-json "changelog/$next.json" | head -c 50000)"
-          body="$(printf '> [!WARNING]\n> **A human merges this one.** Merging it publishes to npm, so an automated agent must never merge it, however green its checks are (see AGENTS.md, "Shipping a change").\n\nMerging this pull request releases **%s**: it creates the `v%s` tag, which builds the artifacts and publishes the release.\n\nThe notes below are the release notes — one line per change, linking the pull request it landed in. They are generated from the commits since the last tag and stored in `changelog/%s.json`, which is the file the website reads, bodies and all. Edit that file in this pull request to fix a wording; do not edit `CHANGELOG.md` by hand, it is rendered from the JSON.\n\n---\n\n%s\n' "$next" "$next" "$next" "$notes")"
+          notes="$(node scripts/changelog-gen.mjs --from-json "changelog/$NEXT.json" | head -c 50000)"
+          body="$(printf '> [!WARNING]\n> **A human merges this one.** Merging it publishes to npm, so an automated agent must never merge it, however green its checks are (see AGENTS.md, "Shipping a change").\n\nMerging this pull request releases **%s**: it creates the `v%s` tag, which builds the artifacts and publishes the release.\n\nThe notes below are the release notes — one line per change, linking the pull request it landed in. They are generated from the commits since the last tag and stored in `changelog/%s.json`, which is the file the website reads, bodies and all. Edit that file in this pull request to fix a wording; do not edit `CHANGELOG.md` by hand, it is rendered from the JSON.\n\n---\n\n%s\n' "$NEXT" "$NEXT" "$NEXT" "$notes")"
 
           if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
             gh pr edit "$existing" --title "$title" --body "$body"
-            echo "::notice::refreshed release PR #$existing for $next"
+            echo "::notice::refreshed release PR #$existing for $NEXT"
           elif out="$(gh pr create --head "$branch" --base main --title "$title" --body "$body" 2>&1)"; then
             echo "$out"
-            echo "::notice::opened the release PR for $next"
+            echo "::notice::opened the release PR for $NEXT"
           elif printf '%s' "$out" | grep -qF 'not permitted to create or approve pull requests'; then
             # The branch is pushed and the notes are on it; the only thing
             # missing is the pull request, and the reason is a repository
@@ -233,7 +233,7 @@ jobs:
             # as a warning and hand over the link that opens it in one click.
             echo "$out"
             url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
-            echo "::warning title=Release pull request not opened::Pushed $branch for $next, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
+            echo "::warning title=Release pull request not opened::Pushed $branch for $NEXT, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
           else
             echo "$out" >&2
             exit 1
