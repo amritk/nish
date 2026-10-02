@@ -52,7 +52,6 @@ import {
 } from "nish/net/tls";
 import {
   ClientView,
-  ascii,
   bytesFrom,
   cat,
   clientRandom,
@@ -75,7 +74,7 @@ import {
   vec24,
   vec8,
 } from "../net_tls_common/client";
-import { fromHex, toHex } from "../net_tls_common/hex";
+import { bytesOf, fromHex, toHex } from "../crypto_x509/hex";
 import { leafPublic, newServer, quicConfig, serverPrivate, serverRandom, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 const SUITE: i32 = TLS_AES_128_GCM_SHA256;
@@ -311,7 +310,7 @@ export const refusalChecks = (): i32 => {
   );
   t.eqI32(
     "an ALPN extension with a byte after its list is decode_error",
-    refusal(hello(standardWith([extension(TLS_EXT_ALPN, cat([vec16(vec8(ascii("h2"))), [toU8(0)]]))]))),
+    refusal(hello(standardWith([extension(TLS_EXT_ALPN, cat([vec16(vec8(bytesOf("h2"))), [toU8(0)]]))]))),
     TLS_ALERT_DECODE_ERROR
   );
   t.eqI32(
@@ -321,7 +320,7 @@ export const refusalChecks = (): i32 => {
   );
   t.eqI32(
     "a server_name with a byte after its list is decode_error",
-    refusal(hello(standardWith([extension(TLS_EXT_SERVER_NAME, cat([vec16(cat([[toU8(0)], vec16(ascii("a.test"))])), [toU8(0)]]))]))),
+    refusal(hello(standardWith([extension(TLS_EXT_SERVER_NAME, cat([vec16(cat([[toU8(0)], vec16(bytesOf("a.test"))])), [toU8(0)]]))]))),
     TLS_ALERT_DECODE_ERROR
   );
   t.eqI32(

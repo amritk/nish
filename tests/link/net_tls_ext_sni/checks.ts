@@ -8,7 +8,8 @@ import { Suite } from "nish/testing";
 import { TLS_ALERT_DECODE_ERROR, TLS_ALERT_ILLEGAL_PARAMETER, TLS_EXT_SERVER_NAME } from "nish/net/tls/codec";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { TlsServer } from "nish/net/tls";
-import { ascii, cat, clientHello, extServerName, extension, sendHello, standardExtensions, standardWith, vec16 } from "../net_tls_common/client";
+import { cat, clientHello, extServerName, extension, sendHello, standardExtensions, standardWith, vec16 } from "../net_tls_common/client";
+import { bytesOf } from "../crypto_x509/hex";
 import { newServer, tcpConfig } from "../net_tls_common/server";
 import { encryptedExtensionsOf } from "../net_tls_ext_alpn/checks";
 
@@ -16,7 +17,7 @@ import { encryptedExtensionsOf } from "../net_tls_ext_alpn/checks";
 const serverNames = (types: i32[], names: string[]): u8[] => {
   const entries: u8[][] = [];
   for (let k: i32 = 0; k < toI32(types.length) && k < toI32(names.length); k++) {
-    entries.push(cat([[toU8(types[k])], vec16(ascii(names[k]))]));
+    entries.push(cat([[toU8(types[k])], vec16(bytesOf(names[k]))]));
   }
   return extension(TLS_EXT_SERVER_NAME, vec16(cat(entries)));
 };

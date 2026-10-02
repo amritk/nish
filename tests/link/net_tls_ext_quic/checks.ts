@@ -10,7 +10,7 @@ import { TLS_ALERT_MISSING_EXTENSION, TLS_ALERT_NO_APPLICATION_PROTOCOL } from "
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TLS_STATE_CONNECTED, TlsServer } from "nish/net/tls";
 import { ClientView, clientFinish, clientHello, extAlpn, extQuic, sendHandshake, sendHello, standardWith } from "../net_tls_common/client";
-import { fromHex, toHex } from "../net_tls_common/hex";
+import { fromHex, toHex } from "../crypto_x509/hex";
 import { leafPublic, newServer, quicConfig, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 import { encryptedExtensionsOf } from "../net_tls_ext_alpn/checks";
 

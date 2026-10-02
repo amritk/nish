@@ -37,7 +37,7 @@ import {
   TlsServer,
   TlsServerConfig,
 } from "nish/net/tls";
-import { toHex } from "../net_tls_common/hex";
+import { toHex } from "../crypto_x509/hex";
 import {
   rfc8448Certificate,
   rfc8448CertificateDer,

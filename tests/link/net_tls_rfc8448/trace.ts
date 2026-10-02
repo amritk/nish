@@ -2,7 +2,7 @@
 // function answers one value, cited by the trace's own wording, so a failing
 // check names what it compared. `tests/link/net_tls_rfc8448` and its f64 twin
 // replay the trace against `nish/net/tls`.
-import { fromHex } from "../net_tls_common/hex";
+import { fromHex } from "../crypto_x509/hex";
 
 /** The client's ephemeral x25519 private key. */
 export const rfc8448ClientPrivate = (): u8[] => fromHex("49af42ba7f7994852d713ef2784bcbcaa7911de26adc5642cb634540e7ea5005");

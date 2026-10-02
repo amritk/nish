@@ -28,7 +28,7 @@ import {
 } from "nish/net/tls/codec";
 import { tlsDeriveSecret, tlsEarlySecret, tlsFinishedVerifyData, tlsHandshakeSecret } from "nish/net/tls/schedule";
 import { TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsServer } from "nish/net/tls";
-import { fromHex } from "./hex";
+import { bytesOf, fromHex, sameBytes } from "../crypto_x509/hex";
 
 /** secp256r1, a group the server does not take, for a share it must look past. */
 export const GROUP_SECP256R1: i32 = 0x0017;
@@ -69,14 +69,6 @@ export const u16List = (values: i32[]): u8[] => {
   return out;
 };
 
-/** The bytes of an ASCII string. */
-export const ascii = (text: string): u8[] => {
-  const out: u8[] = [];
-  for (let k: i32 = 0; k < toI32(text.length); k++) {
-    out.push(toU8(text.charCodeAt(k)));
-  }
-  return out;
-};
 
 /** One extension: its type, then its body behind a two-byte length (RFC 8446 §4.2). */
 export const extension = (type: i32, body: u8[]): u8[] => cat([u16(type), vec16(body)]);
@@ -100,13 +92,13 @@ export const extKeyShare = (groups: i32[], keys: u8[][]): u8[] => {
 
 /** `server_name` with one `host_name`. */
 export const extServerName = (host: string): u8[] =>
-  extension(TLS_EXT_SERVER_NAME, vec16(cat([[toU8(0)], vec16(ascii(host))])));
+  extension(TLS_EXT_SERVER_NAME, vec16(cat([[toU8(0)], vec16(bytesOf(host))])));
 
 /** `application_layer_protocol_negotiation` offering `names`, in order. */
 export const extAlpn = (names: string[]): u8[] => {
   const list: u8[][] = [];
   for (const name of names) {
-    list.push(vec8(ascii(name)));
+    list.push(vec8(bytesOf(name)));
   }
   return extension(TLS_EXT_ALPN, vec16(cat(list)));
 };
@@ -306,7 +298,7 @@ export const clientFinish = (
     view.serverHandshakeSecret,
     transcriptHash(hashLength, cat([before, serverHello, encryptedExtensions, certificate, certificateVerify]))
   );
-  view.serverFinishedVerifies = bytesEqual(bytesFrom(finished, 4), expected);
+  view.serverFinishedVerifies = sameBytes(bytesFrom(finished, 4), expected);
   const verifyData: u8[] = tlsFinishedVerifyData(
     hashLength,
     view.clientHandshakeSecret,
@@ -319,18 +311,6 @@ export const clientFinish = (
   return view;
 };
 
-/** Whether two byte arrays are equal (public test data, so an early exit is fine). */
-export const bytesEqual = (a: u8[], b: u8[]): boolean => {
-  if (toI32(a.length) !== toI32(b.length)) {
-    return false;
-  }
-  for (let k: i32 = 0; k < toI32(a.length) && k < toI32(b.length); k++) {
-    if (a[k] !== b[k]) {
-      return false;
-    }
-  }
-  return true;
-};
 
 /** Feeds a whole ClientHello to `server` at the Initial level and answers the alert. */
 export const sendHello = (server: TlsServer, hello: u8[]): i32 => {

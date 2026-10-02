@@ -237,8 +237,12 @@ const tlsHelloRefuse = (hello: TlsClientHello, alert: i32): void => {
   }
 }
 
-/** Reads a list of 16-bit values up to `end` into `out`; an odd byte count fails the reader. */
-const tlsReadU16List = (r: TlsReader, end: i32, out: i32[]): void => {
+/**
+ * Reads a vector of 16-bit values (a `width`-byte length within `[min, max]`)
+ * into `out`; an odd byte count fails the reader.
+ */
+const tlsReadU16Vector = (r: TlsReader, width: i32, min: i32, max: i32, out: i32[]): void => {
+  const end: i32 = tlsReadVector(r, width, min, max)
   if ((end - r.at) % 2 !== 0) {
     r.failed = true
     return
@@ -322,27 +326,21 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
     case TLS_EXT_SERVER_NAME:
       tlsReadServerName(r, hello)
       break
-    case TLS_EXT_SUPPORTED_GROUPS: {
+    case TLS_EXT_SUPPORTED_GROUPS:
       hello.hasSupportedGroups = true
-      const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
-      tlsReadU16List(r, listEnd, hello.groups)
+      tlsReadU16Vector(r, 2, 2, 65535, hello.groups)
       break
-    }
-    case TLS_EXT_SIGNATURE_ALGORITHMS: {
+    case TLS_EXT_SIGNATURE_ALGORITHMS:
       hello.hasSignatureAlgorithms = true
-      const listEnd: i32 = tlsReadVector(r, 2, 2, 65534)
-      tlsReadU16List(r, listEnd, hello.signatureSchemes)
+      tlsReadU16Vector(r, 2, 2, 65534, hello.signatureSchemes)
       break
-    }
     case TLS_EXT_ALPN:
       tlsReadAlpn(r, hello)
       break
-    case TLS_EXT_SUPPORTED_VERSIONS: {
+    case TLS_EXT_SUPPORTED_VERSIONS:
       hello.hasSupportedVersions = true
-      const listEnd: i32 = tlsReadVector(r, 1, 2, 254)
-      tlsReadU16List(r, listEnd, hello.versions)
+      tlsReadU16Vector(r, 1, 2, 254, hello.versions)
       break
-    }
     case TLS_EXT_KEY_SHARE:
       tlsReadKeyShare(r, hello)
       break
@@ -384,8 +382,7 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   hello.random = tlsReadBytes(r, TLS_RANDOM_SIZE)
   const sessionEnd: i32 = tlsReadVector(r, 1, 0, 32)
   hello.sessionId = tlsReadBytes(r, sessionEnd - r.at)
-  const suitesEnd: i32 = tlsReadVector(r, 2, 2, 65534)
-  tlsReadU16List(r, suitesEnd, hello.cipherSuites)
+  tlsReadU16Vector(r, 2, 2, 65534, hello.cipherSuites)
   const compressionEnd: i32 = tlsReadVector(r, 1, 1, 255)
   hello.nullCompressionOnly = compressionEnd - r.at === 1 && tlsReadU8(r) === 0
   tlsReadSkipTo(r, compressionEnd)
@@ -464,13 +461,17 @@ const tlsPutClose = (w: TlsWriter, start: i32, width: i32): void => {
   }
 }
 
-/** A handshake message of `type` with `body` (§4): the type, a 24-bit length, the body. */
-const tlsWrapMessage = (type: i32, body: TlsWriter): u8[] => {
+/** Starts a handshake message of `type` (§4): the type, then a 24-bit length `tlsFinishMessage` fills in. */
+const tlsStartMessage = (type: i32): TlsWriter => {
   const w = new TlsWriter()
   tlsPutU8(w, type)
-  const start: i32 = tlsPutOpen(w, 3)
-  tlsPutBytes(w, body.out)
-  tlsPutClose(w, start, 3)
+  tlsPutOpen(w, 3)
+  return w
+}
+
+/** Writes the length of the message `tlsStartMessage` began, and answers its bytes. */
+const tlsFinishMessage = (w: TlsWriter): u8[] => {
+  tlsPutClose(w, 4, 3)
   return w.out
 }
 
@@ -518,12 +519,10 @@ const tlsWriteSelectedVersion = (w: TlsWriter): void => {
 }
 
 /**
- * A ServerHello (§4.1.3) choosing `suite` and TLS 1.3, echoing the client's
- * `sessionId`, and carrying the server's x25519 share. The extensions are
- * `key_share` then `supported_versions`, the order RFC 8448 §3 shows.
+ * What a ServerHello and a HelloRetryRequest open with (§4.1.3): the legacy
+ * version, `random`, the echoed session id, the suite and null compression.
  */
-export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] => {
-  const w = new TlsWriter()
+const tlsWriteHelloHead = (w: TlsWriter, random: u8[], sessionId: u8[], suite: i32): void => {
   tlsPutU16(w, TLS_LEGACY_VERSION)
   tlsPutBytes(w, random)
   const session: i32 = tlsPutOpen(w, 1)
@@ -531,6 +530,16 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
   tlsPutClose(w, session, 1)
   tlsPutU16(w, suite)
   tlsPutU8(w, 0)
+}
+
+/**
+ * A ServerHello (§4.1.3) choosing `suite` and TLS 1.3, echoing the client's
+ * `sessionId`, and carrying the server's x25519 share. The extensions are
+ * `key_share` then `supported_versions`, the order RFC 8448 §3 shows.
+ */
+export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, x25519Public: u8[]): u8[] => {
+  const w = tlsStartMessage(TLS_HANDSHAKE_SERVER_HELLO)
+  tlsWriteHelloHead(w, random, sessionId, suite)
   const extensions: i32 = tlsPutOpen(w, 2)
   tlsPutU16(w, TLS_EXT_KEY_SHARE)
   const share: i32 = tlsPutOpen(w, 2)
@@ -541,7 +550,7 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
   tlsPutClose(w, share, 2)
   tlsWriteSelectedVersion(w)
   tlsPutClose(w, extensions, 2)
-  return tlsWrapMessage(TLS_HANDSHAKE_SERVER_HELLO, w)
+  return tlsFinishMessage(w)
 }
 
 /**
@@ -550,21 +559,15 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
  * for a share of `group` in `key_share`. No cookie is sent.
  */
 export const tlsEncodeHelloRetryRequest = (sessionId: u8[], suite: i32, group: i32): u8[] => {
-  const w = new TlsWriter()
-  tlsPutU16(w, TLS_LEGACY_VERSION)
-  tlsPutBytes(w, tlsHelloRetryRandom())
-  const session: i32 = tlsPutOpen(w, 1)
-  tlsPutBytes(w, sessionId)
-  tlsPutClose(w, session, 1)
-  tlsPutU16(w, suite)
-  tlsPutU8(w, 0)
+  const w = tlsStartMessage(TLS_HANDSHAKE_SERVER_HELLO)
+  tlsWriteHelloHead(w, tlsHelloRetryRandom(), sessionId, suite)
   const extensions: i32 = tlsPutOpen(w, 2)
   tlsPutU16(w, TLS_EXT_KEY_SHARE)
   tlsPutU16(w, 2)
   tlsPutU16(w, group)
   tlsWriteSelectedVersion(w)
   tlsPutClose(w, extensions, 2)
-  return tlsWrapMessage(TLS_HANDSHAKE_SERVER_HELLO, w)
+  return tlsFinishMessage(w)
 }
 
 /**
@@ -581,7 +584,7 @@ export const tlsEncodeEncryptedExtensions = (
   acknowledgeServerName: boolean,
   quicTransportParameters: u8[] | null
 ): u8[] => {
-  const w = new TlsWriter()
+  const w = tlsStartMessage(TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS)
   const extensions: i32 = tlsPutOpen(w, 2)
   tlsPutBytes(w, extra)
   if (toI32(alpn.length) > 0) {
@@ -605,7 +608,7 @@ export const tlsEncodeEncryptedExtensions = (
     tlsPutClose(w, body, 2)
   }
   tlsPutClose(w, extensions, 2)
-  return tlsWrapMessage(TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, w)
+  return tlsFinishMessage(w)
 }
 
 /**
@@ -613,7 +616,7 @@ export const tlsEncodeEncryptedExtensions = (
  * certificate of `chain`, leaf first, with no extensions of its own.
  */
 export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
-  const w = new TlsWriter()
+  const w = tlsStartMessage(TLS_HANDSHAKE_CERTIFICATE)
   tlsPutU8(w, 0)
   const list: i32 = tlsPutOpen(w, 3)
   for (const certificate of chain) {
@@ -623,24 +626,24 @@ export const tlsEncodeCertificate = (chain: u8[][]): u8[] => {
     tlsPutU16(w, 0)
   }
   tlsPutClose(w, list, 3)
-  return tlsWrapMessage(TLS_HANDSHAKE_CERTIFICATE, w)
+  return tlsFinishMessage(w)
 }
 
 /** A CertificateVerify (§4.4.3): the signature scheme and the signature as it goes on the wire. */
 export const tlsEncodeCertificateVerify = (scheme: i32, signature: u8[]): u8[] => {
-  const w = new TlsWriter()
+  const w = tlsStartMessage(TLS_HANDSHAKE_CERTIFICATE_VERIFY)
   tlsPutU16(w, scheme)
   const body: i32 = tlsPutOpen(w, 2)
   tlsPutBytes(w, signature)
   tlsPutClose(w, body, 2)
-  return tlsWrapMessage(TLS_HANDSHAKE_CERTIFICATE_VERIFY, w)
+  return tlsFinishMessage(w)
 }
 
 /** A Finished (§4.4.4) carrying `verifyData`. */
 export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
-  const w = new TlsWriter()
+  const w = tlsStartMessage(TLS_HANDSHAKE_FINISHED)
   tlsPutBytes(w, verifyData)
-  return tlsWrapMessage(TLS_HANDSHAKE_FINISHED, w)
+  return tlsFinishMessage(w)
 }
 
 /**

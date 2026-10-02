@@ -23,8 +23,8 @@ import {
   tlsEcdsaDerSignature,
   tlsSignEcdsaP256,
 } from "nish/net/tls";
-import { ClientView, bytesEqual, clientFinish, clientHello, sendHandshake, sendHello, standardExtensions } from "../net_tls_common/client";
-import { fromHex, toHex } from "../net_tls_common/hex";
+import { ClientView, clientFinish, clientHello, sendHandshake, sendHello, standardExtensions } from "../net_tls_common/client";
+import { fromHex, sameBytes, toHex } from "../crypto_x509/hex";
 import { leafCertificate, leafPrivate, leafPublic, newServer, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 /** One whole handshake under `suite`, checked from the client's side. */
@@ -63,7 +63,7 @@ const handshakeWith = (t: Suite, suite: i32, name: string): void => {
   const readSecret: u8[] | null = server.readSecret(TLS_LEVEL_HANDSHAKE);
   t.ok(
     `${name}: the client and server agree on the handshake secrets`,
-    readSecret !== null && bytesEqual(readSecret, view.clientHandshakeSecret)
+    readSecret !== null && sameBytes(readSecret, view.clientHandshakeSecret)
   );
   t.eqI32(`${name}: the client's Finished verifies`, sendHandshake(server, view.clientFinished), zero);
   t.eqI32(`${name}: connected`, server.state, TLS_STATE_CONNECTED);

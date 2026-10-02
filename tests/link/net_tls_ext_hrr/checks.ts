@@ -44,7 +44,6 @@ import {
 import {
   ClientView,
   GROUP_SECP256R1,
-  ascii,
   cat,
   clientFinish,
   clientHello,
@@ -57,7 +56,7 @@ import {
   sendHello,
   transcriptHash,
 } from "../net_tls_common/client";
-import { toHex } from "../net_tls_common/hex";
+import { bytesOf, toHex } from "../crypto_x509/hex";
 import { leafPublic, newServer, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 import {
   rfc8448RetryClientHandshakeTraffic,
@@ -219,7 +218,7 @@ export const retryChecks = (): i32 => {
   t.eqStr(
     "the HelloRetryRequest's random is SHA-256 of \"HelloRetryRequest\"",
     toHex(random),
-    toHex(transcriptHash(h, ascii("HelloRetryRequest")))
+    toHex(transcriptHash(h, bytesOf("HelloRetryRequest")))
   );
   return t.done();
 };

@@ -2,7 +2,7 @@
 // exchange is over secp256r1, which has no ECDH in the stack, so the handshake
 // cannot be replayed; what can is the transcript's \`message_hash\` rule and the
 // schedule over it, which is what \`checks.ts\` takes these for.
-import { fromHex } from "../net_tls_common/hex";
+import { fromHex } from "../crypto_x509/hex";
 
 /** The first ClientHello, with an x25519 share. */
 export const rfc8448RetryClientHello1 = (): u8[] =>

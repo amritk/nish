@@ -294,6 +294,15 @@ export const tlsSignEcdsaP256 = (priv: u8[], content: u8[]): u8[] | null => {
   return tlsEcdsaDerSignature(rs)
 }
 
+/** The secret of `level` from one side's pair, or `null` for any other level or one not derived yet (still empty). */
+const tlsSecretAt = (level: i32, handshake: u8[], application: u8[]): u8[] | null => {
+  const secret: u8[] = level === TLS_LEVEL_APPLICATION ? application : handshake
+  if ((level !== TLS_LEVEL_HANDSHAKE && level !== TLS_LEVEL_APPLICATION) || toI32(secret.length) === 0) {
+    return null
+  }
+  return secret
+}
+
 /**
  * One TLS 1.3 server handshake. Make one per connection, feed it what the
  * client sends with `receive`, send what `takeOutput` answers, and sign when
@@ -423,24 +432,27 @@ export class TlsServer {
     for (let k: i32 = off; k < off + len && k < toI32(data.length); k++) {
       this.input.push(data[k])
     }
-    while (toI32(this.input.length) >= 4) {
-      const length: i32 = (toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])
-      if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
-        return this.fail(TLS_ALERT_DECODE_ERROR)
-      }
-      const whole: i32 = 4 + length
-      if (toI32(this.input.length) < whole) {
-        return 0
-      }
-      if (toI32(this.input.length) > whole) {
-        return this.fail(TLS_ALERT_UNEXPECTED_MESSAGE)
-      }
-      const message: u8[] = this.input
-      this.input = []
-      const alert: i32 = this.handleMessage(toI32(message[0]), message, length)
-      if (alert !== 0) {
-        return this.fail(alert)
-      }
+    // Every message a client sends here ends its flight, so the buffer holds
+    // at most one: a byte past its end is refused below.
+    if (toI32(this.input.length) < 4) {
+      return 0
+    }
+    const length: i32 = (toI32(this.input[1]) << 16) | (toI32(this.input[2]) << 8) | toI32(this.input[3])
+    if (length > TLS_MAX_HANDSHAKE_MESSAGE) {
+      return this.fail(TLS_ALERT_DECODE_ERROR)
+    }
+    const whole: i32 = 4 + length
+    if (toI32(this.input.length) < whole) {
+      return 0
+    }
+    if (toI32(this.input.length) > whole) {
+      return this.fail(TLS_ALERT_UNEXPECTED_MESSAGE)
+    }
+    const message: u8[] = this.input
+    this.input = []
+    const alert: i32 = this.handleMessage(message, length)
+    if (alert !== 0) {
+      return this.fail(alert)
     }
     return 0
   }
@@ -450,7 +462,8 @@ export class TlsServer {
    * admits bytes only in the two states that expect them, so the state is
    * one of those two here.
    */
-  handleMessage(type: i32, message: u8[], length: i32): i32 {
+  handleMessage(message: u8[], length: i32): i32 {
+    const type: i32 = toI32(message[0])
     if (this.state === TLS_STATE_WAIT_CLIENT_HELLO) {
       return type === TLS_HANDSHAKE_CLIENT_HELLO
         ? this.handleClientHello(message, length)
@@ -485,19 +498,15 @@ export class TlsServer {
     if (hello.hasAlpn && toI32(this.config.alpn.length) > 0) {
       for (const protocol of this.config.alpn) {
         for (const name of hello.alpn) {
-          if (this.alpn === "" && tlsAlpnMatches(name, protocol)) {
+          if (tlsAlpnMatches(name, protocol)) {
             this.alpn = protocol
+            return 0
           }
         }
       }
-      if (this.alpn === "") {
-        return TLS_ALERT_NO_APPLICATION_PROTOCOL
-      }
-    }
-    if (this.config.quic && this.alpn === "") {
       return TLS_ALERT_NO_APPLICATION_PROTOCOL
     }
-    return 0
+    return this.config.quic ? TLS_ALERT_NO_APPLICATION_PROTOCOL : 0
   }
 
   /**
@@ -562,8 +571,7 @@ export class TlsServer {
       this.retried = true
       this.transcript.restartWithMessageHash()
       const retry: u8[] = tlsEncodeHelloRetryRequest(hello.sessionId, this.suite, TLS_GROUP_X25519)
-      this.transcript.update(retry, TLS_FROM, toI32(retry.length))
-      this.emit(TLS_LEVEL_INITIAL, retry)
+      this.send(TLS_LEVEL_INITIAL, retry)
       return 0
     }
     if (toI32(hello.x25519Share.length) !== TLS_X25519_SHARE_SIZE) {
@@ -596,8 +604,7 @@ export class TlsServer {
       this.suite,
       serverPublic
     )
-    this.transcript.update(serverHello, TLS_FROM, toI32(serverHello.length))
-    this.emit(TLS_LEVEL_INITIAL, serverHello)
+    this.send(TLS_LEVEL_INITIAL, serverHello)
 
     const h: i32 = this.hashLength
     this.handshakeSecret = tlsHandshakeSecret(h, tlsEarlySecret(h), shared)
@@ -611,11 +618,9 @@ export class TlsServer {
       hello.hasServerName,
       this.config.quic ? this.config.quicTransportParameters : null
     )
-    this.transcript.update(extensions, TLS_FROM, toI32(extensions.length))
-    this.emit(TLS_LEVEL_HANDSHAKE, extensions)
+    this.send(TLS_LEVEL_HANDSHAKE, extensions)
     const certificate: u8[] = tlsEncodeCertificate(this.config.certificateChain)
-    this.transcript.update(certificate, TLS_FROM, toI32(certificate.length))
-    this.emit(TLS_LEVEL_HANDSHAKE, certificate)
+    this.send(TLS_LEVEL_HANDSHAKE, certificate)
 
     this.toBeSigned = tlsCertificateVerifyContent(this.transcript.hash())
     this.state = TLS_STATE_WAIT_SIGNATURE
@@ -651,13 +656,11 @@ export class TlsServer {
     }
     const h: i32 = this.hashLength
     const verify: u8[] = tlsEncodeCertificateVerify(this.config.signatureScheme, signature)
-    this.transcript.update(verify, TLS_FROM, toI32(verify.length))
-    this.emit(TLS_LEVEL_HANDSHAKE, verify)
+    this.send(TLS_LEVEL_HANDSHAKE, verify)
     const finished: u8[] = tlsEncodeFinished(
       tlsFinishedVerifyData(h, this.serverHandshakeSecret, this.transcript.hash())
     )
-    this.transcript.update(finished, TLS_FROM, toI32(finished.length))
-    this.emit(TLS_LEVEL_HANDSHAKE, finished)
+    this.send(TLS_LEVEL_HANDSHAKE, finished)
 
     const serverFlightHash: u8[] = this.transcript.hash()
     const master: u8[] = tlsMasterSecret(h, this.handshakeSecret)
@@ -690,8 +693,9 @@ export class TlsServer {
     return 0
   }
 
-  /** Appends a message to the output of `level`. */
-  emit(level: i32, message: u8[]): void {
+  /** Sends a message the server wrote: into the transcript, then onto the output of `level`. */
+  send(level: i32, message: u8[]): void {
+    this.transcript.update(message, TLS_FROM, toI32(message.length))
     const out: u8[] = level === TLS_LEVEL_INITIAL ? this.outputInitial : this.outputHandshake
     for (const b of message) {
       out.push(b)
@@ -729,23 +733,11 @@ export class TlsServer {
    * cleartext in TLS, and QUIC derives its own from the connection id.
    */
   readSecret(level: i32): u8[] | null {
-    if (level === TLS_LEVEL_HANDSHAKE && toI32(this.clientHandshakeSecret.length) > 0) {
-      return this.clientHandshakeSecret
-    }
-    if (level === TLS_LEVEL_APPLICATION && toI32(this.clientApplicationSecret.length) > 0) {
-      return this.clientApplicationSecret
-    }
-    return null
+    return tlsSecretAt(level, this.clientHandshakeSecret, this.clientApplicationSecret)
   }
 
   /** The secret the server *writes* `level` under — its own traffic secret — or `null` while it is not known yet. */
   writeSecret(level: i32): u8[] | null {
-    if (level === TLS_LEVEL_HANDSHAKE && toI32(this.serverHandshakeSecret.length) > 0) {
-      return this.serverHandshakeSecret
-    }
-    if (level === TLS_LEVEL_APPLICATION && toI32(this.serverApplicationSecret.length) > 0) {
-      return this.serverApplicationSecret
-    }
-    return null
+    return tlsSecretAt(level, this.serverHandshakeSecret, this.serverApplicationSecret)
   }
 }

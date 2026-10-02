@@ -9,7 +9,7 @@ import { TLS_ALERT_NO_APPLICATION_PROTOCOL } from "nish/net/tls/codec";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { TLS_LEVEL_HANDSHAKE, TLS_STATE_FAILED, TLS_STATE_WAIT_SIGNATURE, TlsServer } from "nish/net/tls";
 import { clientHello, extAlpn, sendHello, splitMessages, standardExtensions, standardWith } from "../net_tls_common/client";
-import { toHex } from "../net_tls_common/hex";
+import { toHex } from "../crypto_x509/hex";
 import { newServer, tcpConfig } from "../net_tls_common/server";
 
 /** The EncryptedExtensions a server wrote, or "none". */
