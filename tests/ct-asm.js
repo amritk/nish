@@ -90,6 +90,20 @@
 import fs from "node:fs"
 import path from "node:path"
 
+/**
+ * What each `expect=` kind refuses, in the words the suite's check names use.
+ * `ctSpecs` reads the kinds from these keys, so a kind it accepts always has a
+ * name, and a `call` or `latency` seed is never reported as a branch (CT-14).
+ */
+const EXPECT_KINDS = {
+  branch: "a conditional branch",
+  call: "a call to code the check does not read",
+  load: "a load or store at a secret address",
+  latency: "an instruction whose latency depends on a secret",
+}
+
+const KINDS = Object.keys(EXPECT_KINDS).join("|")
+
 /** Parameter types a fixture may give a function: each arrives in one general register. */
 const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
 
@@ -105,12 +119,12 @@ export const ctSpecs = (source) => {
   const specs = []
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
     const m = line.match(
-      /^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|call|load|latency)(?: via=(\w+))?)?\s*$/
+      new RegExp(`^// ct-check: (\\w+) secret=([\\w,]+)(?: expect=(${KINDS})(?: via=(\\w+))?)?\\s*$`)
     )
     if (m === null) {
       specs.push({
         name: line,
-        problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|call|load|latency [via=<callee>]]`"],
+        problems: [`not \`// ct-check: <fn> secret=<names> [expect=${KINDS} [via=<callee>]]\``],
       })
       continue
     }
@@ -151,6 +165,11 @@ export const ctSpecs = (source) => {
       returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
       expect: expect ?? null,
       via: via ?? null,
+      // What the suite names the check by: clean, or refused for its kind and where.
+      promise:
+        expect === undefined
+          ? "no branch, call, secret-indexed access or secret-dependent latency"
+          : `refused for ${EXPECT_KINDS[expect]}${via === undefined ? "" : ` inside ${via}`}`,
     })
   }
   return specs

@@ -1,0 +1,37 @@
+PASS  RFC 8448 §3 derive secret for handshake "tls13 derived"
+PASS  RFC 8448 §3 derive secret "tls13 c hs traffic"
+PASS  RFC 8448 §3 derive secret "tls13 s hs traffic"
+PASS  RFC 8448 §3 derive secret for master "tls13 derived"
+PASS  RFC 8448 §3 server handshake write key
+PASS  RFC 8448 §3 server handshake write iv
+PASS  RFC 8448 §3 server calculate finished "tls13 finished"
+PASS  RFC 8448 §3 derive secret "tls13 c ap traffic"
+PASS  RFC 8448 §3 derive secret "tls13 s ap traffic"
+PASS  RFC 8448 §3 derive secret "tls13 exp master"
+PASS  RFC 8448 §3 server application write key
+PASS  RFC 8448 §3 server application write iv
+PASS  RFC 8448 §3 server handshake read key
+PASS  RFC 8448 §3 server handshake read iv
+PASS  RFC 8448 §3 client calculate finished "tls13 finished"
+PASS  RFC 8448 §3 client application write key
+PASS  RFC 8448 §3 client application write iv
+PASS  RFC 9001 A.1 initial_secret
+PASS  RFC 9001 A.1 client_initial_secret
+PASS  RFC 9001 A.1 client key
+PASS  RFC 9001 A.1 client iv
+PASS  RFC 9001 A.1 client hp
+PASS  RFC 9001 A.1 server_initial_secret
+PASS  RFC 9001 A.1 server key
+PASS  RFC 9001 A.1 server iv
+PASS  RFC 9001 A.1 server hp
+PASS  TLS_AES_256_GCM_SHA384 early secret
+PASS  SHA-384 "tls13 derived" over the empty transcript hash
+PASS  SHA-384 key (32 bytes)
+PASS  SHA-384 iv
+PASS  SHA-384 finished (48 bytes)
+PASS  SHA-256: a 249-byte label, a 255-byte context and 255 bytes out
+PASS  SHA-384: a 249-byte label, a 255-byte context and 255 bytes out
+PASS  SHA-256: a length of zero is an empty array
+PASS  SHA-384: a length of zero is an empty array
+PASS  SHA-256: a secret longer than HashLen is accepted
+hkdf expand label: 36 passed, 0 failed, 0 skipped
