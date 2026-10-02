@@ -129,6 +129,9 @@ PASS  the fields within the limit are kept
 PASS  the table still took its entry
 PASS  the next block decodes
 PASS  against the same table
+PASS  a literal then four indexes
+PASS  a list of repeated indexes over the limit
+PASS  keeps the fields within it
 PASS  an index cut short
 PASS  an index cut short, and no fields
 PASS  an integer cut short after a continuation byte
@@ -178,4 +181,4 @@ PASS  an update to the smallest, then to the final
 PASS  a string cut short, read directly
 PASS  a string from an empty block
 PASS  an integer from an empty block
-hpack: 180 passed, 0 failed, 0 skipped
+hpack: 183 passed, 0 failed, 0 skipped
