@@ -54,7 +54,7 @@ const counting = (n: i32): u8[] => {
 };
 
 /** `n` copies of the letter `a`. */
-const letters = (n: i32): string => {
+export const letters = (n: i32): string => {
   const parts: string[] = [];
   for (let i: i32 = 0; i < n; i += 1) {
     parts.push("a");

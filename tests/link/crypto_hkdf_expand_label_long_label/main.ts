@@ -9,15 +9,12 @@
 // value. The link harness compares stdout and the exit code only, so the
 // message is named here rather than pinned.
 import { hkdfExpandLabelSha256 } from "nish/crypto/hkdf";
+import { letters } from "../crypto_hkdf_expand_label/checks";
 
 export const main = (): i32 => {
   const secret: u8[] = new Array<u8>(32);
   const len: i32 = 16;
-  const parts: string[] = [];
-  for (let i: i32 = 0; i < 249; i += 1) {
-    parts.push("a");
-  }
-  const longest: string = parts.join("");
+  const longest: string = letters(249);
   const over: string = `${longest}a`;
   console.log(`249-byte label: ${toI32(hkdfExpandLabelSha256(secret, longest, [], len).length)} bytes`);
   const refused: u8[] = hkdfExpandLabelSha256(secret, over, [], len);

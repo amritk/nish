@@ -152,7 +152,7 @@ stage that is:
 
 Added after this audit, for WP34's TLS 1.3 and QUIC stages (#395), and not
 covered by the reading above: `hkdfExpandLabelSha256/384` and the private
-`hkdfLabel` and `hkdfPushText` in `std/crypto/hkdf.ts`. They build RFC 8446
+`hkdfLabel` in `std/crypto/hkdf.ts`. They build RFC 8446
 §7.1's `HkdfLabel` and hand it to `hkdfExpandSha256/384` as `info`, so every
 property above that holds for `expand` holds for them.
 
