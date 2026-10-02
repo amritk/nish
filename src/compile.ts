@@ -957,8 +957,12 @@ const buildIntoCache = (
     reportToolchainFailure(problem, json)
     return 3
   }
+  if (!makeDirectory(cacheRoot)) {
+    reportToolchainFailure(`run: cannot create ${cacheRoot}`, json)
+    return 3
+  }
   const privateRoot: string[] = ["chmod", "700", cacheRoot]
-  if (!makeDirectory(cacheRoot) || spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+  if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
     reportToolchainFailure(`run: cannot make ${cacheRoot} private to this user (chmod 700 failed)`, json)
     return 3
   }

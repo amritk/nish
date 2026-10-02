@@ -954,6 +954,17 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
     "drwx------"
   );
 
+  // CLI-10: a cache root that cannot be made is reported as that, not as the
+  // chmod that never ran. A regular file where a directory should be makes
+  // mkdir fail with ENOTDIR.
+  const blocked = `${abs}/sec-blocked`;
+  removeTree(blocked);
+  writeFileSync(blocked, "not a directory\n");
+  const unmade = cli.run("sec_mkdir", [`XDG_CACHE_HOME=${blocked}`], ["run", script]);
+  t.eqI32("CLI-10: a cache root that cannot be made is refused with the toolchain band", unmade.status, 3);
+  t.contains("CLI-10: and says it could not be created", unmade.stderr, `run: cannot create ${blocked}/nish/run`);
+  t.eqBool("CLI-10: not that chmod failed", contains(unmade.stderr, "chmod 700 failed"), false);
+
   // An entry whose key is replaced by one that is not this run's, and whose
   // binary by a script that would print PLANTED: a run that trusted the
   // entry's name rather than comparing the key would start it. A cache and a

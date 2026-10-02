@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1228917 dump lines live, 76 distinct modules.
+# 76 programs, 1228918 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -33092,52 +33092,53 @@ function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry:
   local 955:9 problem: string (const)
   callee 955:19 missingToolchain -> @missingToolchain
   callee 957:5 reportToolchainFailure -> @reportToolchainFailure
-  local 960:9 privateRoot: string[] (const)
-  callee 961:8 makeDirectory -> @makeDirectory
-  callee 962:5 reportToolchainFailure -> @reportToolchainFailure
-  local 965:9 work: string (const)
-  callee 965:37 hexOfI64 -> @hexOfI64
-  callee 966:8 makeDirectory -> @makeDirectory
-  local 970:9 outputs: string[] (const)
-  local 971:14 module: EmittedModule (const)
-  local 972:11 file: string (const)
-  local 976:9 built: string (const)
-  local 977:7 status: i32 (let)
-  callee 977:16 linkProgram -> @linkProgram
-  local 980:11 move: string[] (const)
-  callee 982:7 reportToolchainFailure -> @reportToolchainFailure
-  local 986:9 clean: string[] (const)
+  callee 960:8 makeDirectory -> @makeDirectory
+  callee 961:5 reportToolchainFailure -> @reportToolchainFailure
+  local 964:9 privateRoot: string[] (const)
+  callee 966:5 reportToolchainFailure -> @reportToolchainFailure
+  local 969:9 work: string (const)
+  callee 969:37 hexOfI64 -> @hexOfI64
+  callee 970:8 makeDirectory -> @makeDirectory
+  local 974:9 outputs: string[] (const)
+  local 975:14 module: EmittedModule (const)
+  local 976:11 file: string (const)
+  local 980:9 built: string (const)
+  local 981:7 status: i32 (let)
+  callee 981:16 linkProgram -> @linkProgram
+  local 984:11 move: string[] (const)
+  callee 986:7 reportToolchainFailure -> @reportToolchainFailure
+  local 990:9 clean: string[] (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1030:3
+  sharedWrite: 1034:3
   escaping: json link profile
   calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1014:9 root: string (const)
-  callee 1014:16 packageRoot -> @packageRoot
-  callee 1016:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1017:58 packageRootCandidates -> @packageRootCandidates
-  callee 1022:8 makeDirectoryFor -> @makeDirectoryFor
-  local 1025:9 script: string (const)
-  local 1029:9 argv: string[] (const)
-  local 1036:14 file: string (const)
-  local 1056:9 status: i32 (const)
-  local 1058:11 why: string (const)
-  callee 1059:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1065:9 binary: string | null (const)
+  local 1018:9 root: string (const)
+  callee 1018:16 packageRoot -> @packageRoot
+  callee 1020:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1021:58 packageRootCandidates -> @packageRootCandidates
+  callee 1026:8 makeDirectoryFor -> @makeDirectoryFor
+  local 1029:9 script: string (const)
+  local 1033:9 argv: string[] (const)
+  local 1040:14 file: string (const)
+  local 1060:9 status: i32 (const)
+  local 1062:11 why: string (const)
+  callee 1063:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1069:9 binary: string | null (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1088:7
+  sharedWrite: 1092:7
   escaping: fns
   calls: napiBridges nish_array_grow
   pointer compilation: size=112 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1078:9 opts: Options (const)
-  local 1085:9 out: ExternalFunction[] (const)
-  local 1086:14 fn: ExternalFunction (const)
-  callee 1087:9 napiBridges -> @napiBridges
+  local 1082:9 opts: Options (const)
+  local 1089:9 out: ExternalFunction[] (const)
+  local 1090:14 fn: ExternalFunction (const)
+  callee 1091:9 napiBridges -> @napiBridges
 function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
@@ -33145,18 +33146,18 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   pointer compilation: size=112 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
-  local 1107:9 opts: Options (const)
-  callee 1109:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1112:36 generateHeader -> @generateHeader
-  callee 1116:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1119:33 generateDts -> @generateDts
-  local 1121:11 loader: string (const)
-  callee 1121:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 1122:27 generateWasmLoader -> @generateWasmLoader
-  callee 1126:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1129:34 generateNapiShim -> @generateNapiShim
-  callee 1133:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1136:39 generateNapiShim -> @generateNapiShim
+  local 1111:9 opts: Options (const)
+  callee 1113:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1116:36 generateHeader -> @generateHeader
+  callee 1120:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1123:33 generateDts -> @generateDts
+  local 1125:11 loader: string (const)
+  callee 1125:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 1126:27 generateWasmLoader -> @generateWasmLoader
+  callee 1130:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1133:34 generateNapiShim -> @generateNapiShim
+  callee 1137:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1140:39 generateNapiShim -> @generateNapiShim
 module src/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
