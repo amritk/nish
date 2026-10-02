@@ -1,0 +1,12 @@
+PASS  sha256: L = 2^31 - 1 answers null
+PASS  sha256: L = -2^31 answers null
+PASS  sha384: L = 2^31 - 1 answers null
+PASS  sha384: L = -2^31 answers null
+PASS  sha256: a 32-byte PRK is accepted
+PASS  sha256: a 31-byte PRK answers null
+PASS  sha256: an empty PRK answers null
+PASS  sha384: a 48-byte PRK is accepted
+PASS  sha384: a 47-byte PRK answers null
+PASS  sha384: an empty PRK answers null
+PASS  sha256: a 200-byte PRK is accepted
+hkdf k1 bounds: 11 passed, 0 failed, 0 skipped

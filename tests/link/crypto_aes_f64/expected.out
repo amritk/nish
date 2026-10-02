@@ -47,5 +47,19 @@ PASS  a flipped ciphertext bit answers null
 PASS  a flipped AAD bit answers null
 PASS  a different IV answers null
 PASS  the AES-256 key for an AES-128 message answers null
+PASS  a tag cut to 96 bits answers null: only the full tag is accepted
+PASS  the tag alone, with the ciphertext left out, answers null
+PASS  a 16-byte IV spelling J0 = IV || 1 is hashed (SP 800-38D §7.1), not used as J0
+PASS  a hand-built AesKey with H = 0 opens no forged ciphertext
+PASS  a hand-built AesKey with H = 0 opens no forged AAD
+PASS  an AesKey whose H is set to 0 opens no forgery
+PASS  an AesKey whose H is not set to 0 still opens
+PASS  seal under an AesKey with 14 rounds and 11 round keys answers null
+PASS  open under it answers null
+PASS  aesEncryptBlock under it answers null
+PASS  aesHeaderMask under it answers null
+PASS  an AesKey with 12 rounds, AES-192's count, answers null
 PASS  Wycheproof aes_gcm_test.json: 213 of 316 cases ran (155 valid, 58 invalid), 0 failed; filtered out: 103 with a 192-bit key, 0 with a tag shorter than 128 bits
-aes: 50 passed, 0 failed, 0 skipped
+PASS  Wycheproof: 24 of 24 cases built for a chosen J0, the 32-bit counter wrapping in several, hold
+PASS  Wycheproof aes_gcm_test.json: aesKey refuses the key of all 103 of 103 cases with a 192-bit key
+aes: 64 passed, 0 failed, 0 skipped

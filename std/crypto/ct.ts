@@ -23,12 +23,18 @@
  *
  * Arrays of different lengths answer `false` at once, because a length is
  * public; arrays of one length are compared in full, with no early exit.
+ *
+ * The lengths are compared as the `number`s they are, before any `toI32`:
+ * under `--number-mode f64` `toI32` saturates at 2^31 - 1, so two arrays past
+ * it would have looked the same length and been compared only that far. An
+ * array longer than that answers `false` too — no `i32` index reaches its end,
+ * and a compare that cannot read every byte must not say "equal".
  */
 export const timingSafeEqual = (a: u8[], b: u8[]): boolean => {
-  const n: i32 = toI32(a.length)
-  if (n !== toI32(b.length)) {
+  if (a.length !== b.length || a.length > 2147483647) {
     return false
   }
+  const n: i32 = toI32(a.length)
   let diff: i32 = 0
   // Bounded by both lengths, which are equal here, so the prover drops both
   // bounds checks rather than trusting the comparison above.

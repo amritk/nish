@@ -1,0 +1,4 @@
+PASS  base64urlCharOf spells every sextet as base64urlEncode does
+PASS  base64urlSextetOf reads every byte as base64urlDecode does
+PASS  the group copies agree with the module on 4,000 generated groups
+base64url k1 copies: 3 passed, 0 failed, 0 skipped

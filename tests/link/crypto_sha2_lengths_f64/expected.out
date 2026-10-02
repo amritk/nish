@@ -1,0 +1,19 @@
+PASS  sha256: 2^29 + 2 bytes, the bit count past 2^32
+PASS  sha256: exactly 2^29 bytes, the length in the second block
+PASS  sha256: 2^31 + 1 bytes, the byte count past an i32
+PASS  sha256: 2^32 + 2 bytes, the byte count past a u32
+PASS  sha256: 2^32 + 59 bytes, the length in the second block
+PASS  sha256: 2^61 - 1 bytes, the longest message whose bit count fits 64 bits
+PASS  sha512: 2^29 + 2 bytes, the bit count past 2^32
+PASS  sha512: 2^32 + 2 bytes, the byte count past a u32
+PASS  sha512: 2^32 + 119 bytes, the length in the second block
+PASS  sha512: 2^61 + 1 bytes, the first length with a high word of bits
+PASS  sha512: 2^64 - 1 bytes, the longest a u64 counts
+PASS  sha512: 2^64 - 1 bytes, the length in the second block
+PASS  sha384: 2^29 + 2 bytes, the bit count past 2^32
+PASS  sha384: 2^32 + 2 bytes, the byte count past a u32
+PASS  sha384: 2^32 + 119 bytes, the length in the second block
+PASS  sha384: 2^61 + 1 bytes, the first length with a high word of bits
+PASS  sha384: 2^64 - 1 bytes, the longest a u64 counts
+PASS  sha384: 2^64 - 1 bytes, the length in the second block
+sha2 lengths: 18 passed, 0 failed, 0 skipped
