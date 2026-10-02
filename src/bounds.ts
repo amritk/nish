@@ -1910,21 +1910,78 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
  * order, with the literal receiver's length (`provesLiteralSlice`) added. The
  * verdict goes to `sliceClamps` and nowhere else, whatever the walk's
  * `record` says.
+ *
+ * `start` is what this answered for the call's first bound: that bound's
+ * largest value when it is proven on a known-length receiver, and -1
+ * otherwise.
+ *
+ * The second bound of a known-length receiver records both bounds or neither
+ * (#326). The two bounds are proven one at a time, but `emitSlice` also panics
+ * on `start > end`. Before the literal proof, such a receiver never had both
+ * ends proven, so `"abcdef".slice(5, 2)` warned. It has to keep warning, so a
+ * pair is recorded only when `start <= end` is known as well
+ * (`boundsOrdered`). The general proof does not relate a parameter's two
+ * bounds, which `src/portability-strings.ts` states.
  */
 const judgeSliceBound = (
   walk: BoundsWalk,
   state: State,
-  receiver: Node,
+  call: Node,
   holder: Local | null,
-  bound: Node
-): void => {
+  bound: Node,
+  start: i32
+): i32 => {
   const proved = walk.sliceClamps
   if (proved === null) {
-    return
+    return -1
   }
-  if (provesClamp(walk.ctx, state, holder, bound) || provesLiteralSlice(walk, state, receiver, bound)) {
+  const receiver = unwrapBoundsParens(call.children[0]).children[0]
+  const proven =
+    provesClamp(walk.ctx, state, holder, bound) || provesLiteralSlice(walk, state, receiver, bound)
+  const bounds = call.children[1].children
+  const paired = bounds.length === 2 && asciiLiteralLength(walk, receiver) >= 0
+  if (!paired) {
+    if (proven) {
+      proved.push(bound)
+    }
+    return -1
+  }
+  if (bound === bounds[0]) {
+    return proven ? boundCeiling(walk, state, bound) : -1
+  }
+  if (proven && start >= 0 && boundsOrdered(start, boundFloor(walk, state, bound))) {
+    proved.push(bounds[0])
     proved.push(bound)
   }
+  return -1
+}
+
+/** `start <= end`, from the largest `start` can be and the smallest `end` can be. */
+const boundsOrdered = (startCeiling: i32, endFloor: i32): boolean =>
+  startCeiling === 0 || (endFloor >= 0 && startCeiling <= endFloor)
+
+/** The largest value a non-negative literal or a bounded local `bound` can have, or -1. */
+const boundCeiling = (walk: BoundsWalk, state: State, bound: Node): i32 => {
+  const constant = literalValue(bound)
+  if (constant >= 0) {
+    return constant
+  }
+  const i = indexLocal(walk.ctx, bound)
+  if (i === null || !knownNonNegative(state, i)) {
+    return -1
+  }
+  const above = maxIndexOf(state, i)
+  return above > 0 ? above - 1 : -1
+}
+
+/** The smallest value a non-negative literal or a local with a known floor `bound` can have, or -1. */
+const boundFloor = (walk: BoundsWalk, state: State, bound: Node): i32 => {
+  const constant = literalValue(bound)
+  if (constant >= 0) {
+    return constant
+  }
+  const i = indexLocal(walk.ctx, bound)
+  return i === null ? -1 : minValueOf(state, i)
 }
 
 /**
@@ -1944,20 +2001,8 @@ const judgeSliceBound = (
  */
 const provesLiteralSlice = (walk: BoundsWalk, state: State, receiver: Node, bound: Node): boolean => {
   const length = asciiLiteralLength(walk, receiver)
-  if (length < 0) {
-    return false
-  }
-  const constant = literalValue(bound)
-  if (constant >= 0) {
-    return constant <= length
-  }
-  const i = indexLocal(walk.ctx, bound)
-  if (i === null || !knownNonNegative(state, i)) {
-    return false
-  }
-  // `maxIndexOf` answers the smallest `n` with `i < n`, so `i <= n - 1`.
-  const above = maxIndexOf(state, i)
-  return above >= 0 && above - 1 <= length
+  const ceiling = boundCeiling(walk, state, bound)
+  return length >= 0 && ceiling >= 0 && ceiling <= length
 }
 
 /** The length of the ASCII string `expr` spells out, through a `const` or a module constant, or -1. */
@@ -2173,6 +2218,8 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     const slice = walk.sliceClamps !== null && isSliceCall(ctx, e)
     const clamped = slice || isSubstringCall(ctx, e)
     let holder: Local | null = null
+    // The first `slice` bound's ceiling, for the second to be ordered against (`judgeSliceBound`).
+    let start = -1
     if (clamped) {
       holder = lengthHolder(ctx, callee.children[0])
     }
@@ -2186,7 +2233,7 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
           holder = null
         }
         if (slice) {
-          judgeSliceBound(walk, state, callee.children[0], holder, arg)
+          start = judgeSliceBound(walk, state, e, holder, arg, start)
         } else {
           judgeClampBound(walk, state, holder, arg)
         }

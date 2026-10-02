@@ -1,10 +1,11 @@
 @.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"abcdef\00" }, align 8
-@.str.1 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"\C3\A9\00" }, align 8
-@.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"\C3\A9\00" }, align 8
 
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
@@ -12,6 +13,43 @@ declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
 define internal noundef zeroext i1 @never() #0 {
 entry:
   ret i1 false
+}
+
+define internal noundef nonnull align 8 i8* @upTo(i32 noundef %k) #1 {
+entry:
+  %0 = icmp sge i32 %k, 0
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = icmp sle i32 %k, 4
+  br label %land.end
+
+land.end:
+  %2 = phi i1 [ false, %entry ], [ %1, %land.rhs ]
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = bitcast i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*) to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = sext i32 %k to i64
+  %6 = icmp ule i64 3, %5
+  %7 = icmp ule i64 %5, %4
+  %8 = and i1 %6, %7
+  br i1 %8, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 3, i64 %5, i64 %4)
+  unreachable
+
+slice.ok:
+  %9 = sub i64 %5, 3
+  %10 = getelementptr inbounds i8, i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i64 8
+  %11 = getelementptr inbounds i8, i8* %10, i64 3
+  %12 = call i8* @nish_str_new(i8* %11, i64 %9)
+  ret i8* %12
+
+if.end:
+  ret i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*)
 }
 
 define noundef i32 @nish_main() #1 {
@@ -63,45 +101,84 @@ slice.ok.1:
   %19 = getelementptr inbounds i8, i8* %18, i64 %15
   %20 = call i8* @nish_str_new(i8* %19, i64 %17)
   call void @nish_print(i8* %20)
-  %21 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*) to i64*
+  %21 = bitcast i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*) to i64*
   %22 = load i64, i64* %21, align 8
-  %23 = icmp ule i64 0, 2
+  %23 = icmp ule i64 5, 2
   %24 = icmp ule i64 2, %22
   %25 = and i1 %23, %24
   br i1 %25, label %slice.ok.2, label %slice.fail.2
 
 slice.fail.2:
-  call void @nish_panic_slice(i64 0, i64 2, i64 %22)
+  call void @nish_panic_slice(i64 5, i64 2, i64 %22)
   unreachable
 
 slice.ok.2:
-  %26 = sub i64 2, 0
-  %27 = getelementptr inbounds i8, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*), i64 8
-  %28 = getelementptr inbounds i8, i8* %27, i64 0
+  %26 = sub i64 2, 5
+  %27 = getelementptr inbounds i8, i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i64 8
+  %28 = getelementptr inbounds i8, i8* %27, i64 5
   %29 = call i8* @nish_str_new(i8* %28, i64 %26)
   call void @nish_print(i8* %29)
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*), i8** %v.addr, align 8
-  br label %if.end
-
-if.end:
-  %30 = load i8*, i8** %v.addr, align 8
+  %30 = load i8*, i8** %t.addr, align 8
   %31 = bitcast i8* %30 to i64*
   %32 = load i64, i64* %31, align 8
-  %33 = icmp ule i64 1, 3
-  %34 = icmp ule i64 3, %32
+  %33 = icmp ule i64 5, 2
+  %34 = icmp ule i64 2, %32
   %35 = and i1 %33, %34
   br i1 %35, label %slice.ok.3, label %slice.fail.3
 
 slice.fail.3:
-  call void @nish_panic_slice(i64 1, i64 3, i64 %32)
+  call void @nish_panic_slice(i64 5, i64 2, i64 %32)
   unreachable
 
 slice.ok.3:
-  %36 = sub i64 3, 1
+  %36 = sub i64 2, 5
   %37 = getelementptr inbounds i8, i8* %30, i64 8
-  %38 = getelementptr inbounds i8, i8* %37, i64 1
+  %38 = getelementptr inbounds i8, i8* %37, i64 5
   %39 = call i8* @nish_str_new(i8* %38, i64 %36)
   call void @nish_print(i8* %39)
+  %40 = call i64 @nish_arena_mark()
+  %41 = call i8* @upTo(i32 4)
+  %42 = call i8* @nish_arena_keep(i64 %40, i8* %41)
+  call void @nish_print(i8* %42)
+  %43 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*) to i64*
+  %44 = load i64, i64* %43, align 8
+  %45 = icmp ule i64 0, 2
+  %46 = icmp ule i64 2, %44
+  %47 = and i1 %45, %46
+  br i1 %47, label %slice.ok.4, label %slice.fail.4
+
+slice.fail.4:
+  call void @nish_panic_slice(i64 0, i64 2, i64 %44)
+  unreachable
+
+slice.ok.4:
+  %48 = sub i64 2, 0
+  %49 = getelementptr inbounds i8, i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*), i64 8
+  %50 = getelementptr inbounds i8, i8* %49, i64 0
+  %51 = call i8* @nish_str_new(i8* %50, i64 %48)
+  call void @nish_print(i8* %51)
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %v.addr, align 8
+  br label %if.end
+
+if.end:
+  %52 = load i8*, i8** %v.addr, align 8
+  %53 = bitcast i8* %52 to i64*
+  %54 = load i64, i64* %53, align 8
+  %55 = icmp ule i64 1, 3
+  %56 = icmp ule i64 3, %54
+  %57 = and i1 %55, %56
+  br i1 %57, label %slice.ok.5, label %slice.fail.5
+
+slice.fail.5:
+  call void @nish_panic_slice(i64 1, i64 3, i64 %54)
+  unreachable
+
+slice.ok.5:
+  %58 = sub i64 3, 1
+  %59 = getelementptr inbounds i8, i8* %52, i64 8
+  %60 = getelementptr inbounds i8, i8* %59, i64 1
+  %61 = call i8* @nish_str_new(i8* %60, i64 %58)
+  call void @nish_print(i8* %61)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
