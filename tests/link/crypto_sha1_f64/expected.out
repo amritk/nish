@@ -1,0 +1,18 @@
+PASS  SHA1_SIZE is 20 bytes (FIPS 180-4 §1)
+PASS  SHA1_BLOCK is 64 bytes (FIPS 180-4 §1)
+PASS  empty message
+PASS  "abc" (FIPS 180-4 example, one block)
+PASS  the 448-bit message (FIPS 180-4 example, two blocks)
+PASS  the 896-bit message (FIPS 180-4 additional example)
+PASS  one million "a" (FIPS 180-4 additional example)
+PASS  55 bytes, the longest one-block padding
+PASS  56 bytes, the shortest two-block padding
+PASS  63 bytes, one byte short of a block
+PASS  64 bytes, exactly one block
+PASS  65 bytes, one byte into a second block
+PASS  119 bytes, a block and the longest one-block padding
+PASS  120 bytes, a block and a two-block padding
+PASS  128 bytes, exactly two blocks
+PASS  each digest is a fresh array
+PASS  a digest is SHA1_SIZE bytes long
+sha1: 17 passed, 0 failed, 0 skipped

@@ -30,7 +30,8 @@ specification's published vectors in its `tests/link/crypto_*` programs. The
 performance gate compiles every module with no diagnostics under both
 `--number-mode i32` and `f64`, and the hashes, HMAC, HKDF, X25519,
 ChaCha20-Poly1305, AES-GCM, P-256 and X.509 also run their vectors in `f64`
-(`crypto_*_f64`).
+(`crypto_*_f64`). SHA-1 is here too, for one non-security use (its row says
+which), and does both.
 
 Every module here was security-audited (#363); the records are in
 [`docs/security/`](../docs/security/README.md), and how to report a
@@ -54,6 +55,7 @@ barred from removing (ECC-2, X509-7, open).
 | [`crypto/hkdf.ts`](./crypto/hkdf.ts) | `hkdfExtractSha256` / `hkdfExtractSha384` (an empty salt is HashLen zeros) and `hkdfExpandSha256` / `hkdfExpandSha384`, which answer `null` for a length below zero or above 255 × HashLen, for an `info` longer than 2^31 − 1 bytes, and for a PRK shorter than HashLen. TLS 1.3's HKDF-Expand-Label is not here; it belongs with TLS | RFC 5869 §2, Appendix A |
 | [`crypto/ct.ts`](./crypto/ct.ts) | `timingSafeEqual(a, b)`, which reads every byte whatever it holds, and `timingSafeEqualAt(a, aOff, b, bOff, len)` over two windows, which answers `false` for a window outside its array. Two lengths that differ answer `false` at once, because a length is public, and so does an array longer than 2^31 − 1 bytes | — |
 | [`crypto/base64url.ts`](./crypto/base64url.ts) | `base64urlEncode(data)` and `base64urlDecode(text)`, unpadded. Decoding is strict, so every byte string has one spelling: a `=`, a character outside the alphabet, a length of 1 mod 4 or nonzero unused low bits answer `null`, as does a text longer than 2^31 − 1 bytes; `base64urlEncode` panics on such an array | RFC 4648 §5, §10 |
+| [`crypto/sha1.ts`](./crypto/sha1.ts) | `sha1(data)`, a fresh 20-byte digest, and `SHA1_SIZE` and `SHA1_BLOCK`. **Not for security**: SHA-1 is broken for collisions, and it is here only because RFC 6455 §4.2.2's `Sec-WebSocket-Accept` is defined on it (`nish/net/websocket` is its importer). One-shot only; it panics on an array longer than 2^31 − 1 bytes. It came after the #363 audit and has no record in `docs/security/` | FIPS 180-4 §6.1 |
 | [`crypto/x25519.ts`](./crypto/x25519.ts) | `x25519(scalar, u)` and `x25519Base(scalar)`, on ten 25.5-bit limbs in `i64`. Either answers `null` unless its arguments are `X25519_SIZE` (32) bytes; the scalar is clamped on a copy | RFC 7748 §5.2, §6.1, Wycheproof `x25519_test` |
 | [`crypto/chacha20poly1305.ts`](./crypto/chacha20poly1305.ts) | `chacha20Poly1305Seal(key, nonce, aad, plaintext)`, which answers the ciphertext followed by the 16-byte tag, and `chacha20Poly1305Open`, which checks the whole tag before it decrypts anything and answers `null` for a message that does not authenticate. Beneath them `chacha20Block`, `chacha20`, `chacha20QuarterRound`, `poly1305` and `poly1305KeyGen`, and `chacha20HeaderMask`, QUIC's 5-byte header-protection mask. Every input of the wrong length answers `null` | RFC 8439 §2, RFC 9001 §5.4.4, Wycheproof `chacha20_poly1305` (all 325 cases) |
 | [`crypto/aes.ts`](./crypto/aes.ts) | AES-128 and AES-256, bitsliced four blocks at a time with the Boyar–Peralta S-box circuit, so no table is read: `aesKey(key)` expands a 16- or 32-byte key into an `AesKey`, then `aesEncryptBlock`, `aesGcmSeal` / `aesGcmOpen` (tag last, checked in full before anything is decrypted; any non-empty IV) and `aesHeaderMask`. AES-192 is out of scope, and a wrong length answers `null`, as does an `AesKey` not made by `aesKey`; one whose H is zero opens nothing | FIPS 197, SP 800-38D, RFC 9001 §5.4.3, Wycheproof `aes_gcm` (all 316 cases; the 103 AES-192 ones check that the key is refused) |
@@ -120,6 +122,24 @@ Three rules hold across the modules:
   only on lengths, and are not in a fixture either; nor is `crypto/x509.ts`,
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
+
+## `nish/net` — the protocols over `nish:net`
+
+The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, as modules a
+server imports. Each is **sans-IO**: it takes the bytes a socket gave it and
+answers events and the bytes to send, and never touches a socket itself, so a
+test feeds it the specification's own examples and the server that drives it
+over `nish:net` is a separate lane. State is a class and a `switch`, with no
+function values, and every limit is a number the caller passes.
+
+| Module | What it is | Reproduces |
+| --- | --- | --- |
+| [`net/http1.ts`](./net/http1.ts) | `Http1Parser`, an incremental HTTP/1.1 request parser: `feed(buf, off, len)` any slice, then `next()` answers `HTTP1_NEED_MORE`, `HTTP1_HEAD` (`method`, `target`, `minor`, lowercased `names` beside `values`, `header(name)`, `contentLength` or `chunked`, `keepAlive`, `upgrade`), `HTTP1_BODY` (a window onto its buffer, de-chunked), `HTTP1_END`, or one of three final events: `HTTP1_UPGRADE` (`upgradeBytes()` and `declineUpgrade()`), `HTTP1_CLOSED` and `HTTP1_ERROR` with the `status` to answer. It refuses with 400 every request-smuggling shape — `Content-Length` with `Transfer-Encoding`, a repeated or non-digit `Content-Length`, an obs-fold, a bare LF, whitespace before a colon, a malformed chunk size or terminator — and with 413, 414, 431, 501 and 505 what those mean. The writer is `http1ResponseHead(status, reason, names, values, bodyLength)`, which adds the framing field itself and refuses (`null`) a CR, LF or other control character anywhere a caller's string lands, and `http1Chunk` and `http1LastChunk` for a chunked body | RFC 9112 §2–§7 and §9.3, RFC 9110 §5, §6.2, §7.2 and §7.8; a corpus fed at every split point (`tests/link/net_http1`) |
+| [`net/websocket.ts`](./net/websocket.ts) | `WsDecoder(expectMasked, maxMessage)`, the same `feed` and `next()` over WebSocket frames: `WS_MESSAGE` (fragments joined, text checked as UTF-8 fragment by fragment), `WS_PING`, `WS_PONG`, and the final `WS_CLOSE` and `WS_ERROR`, whose `closeCode` is the 1002, 1007 or 1009 to close with. `websocketFrame` encodes a frame with the mask key the caller supplies, `websocketClosePayload` a close frame's code and reason, and `websocketIsUtf8` checks a window. The handshake is `websocketRequestKey(parser)` over an `Http1Parser`'s head, `websocketAcceptKey`, `websocketKeyIsValid` and `websocketUpgradeResponse`, the 101 | RFC 6455 §1.3's accept key, the §5.7 example frames byte for byte, §5.5's control-frame rules, §7.4's close codes |
+
+Both run their checks again under `--number-mode f64` (`net_*_f64`). Neither
+module handles a secret, so neither is in the constant-time check, and
+neither has been through a security audit yet.
 
 ## How a program imports it
 
