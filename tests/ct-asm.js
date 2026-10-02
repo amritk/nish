@@ -17,9 +17,14 @@
  *     the function too: a `jmp` or `b` to a symbol is a tail call, and `br` or
  *     an indirect `jmp` goes who knows where. A call to a function whose body
  *     is in the same listing is not refused but followed (below);
- *   - **any load or store whose address depends on a secret**.
+ *   - **any load or store whose address depends on a secret**;
+ *   - **any instruction whose latency depends on its operands, given a
+ *     secret** — an integer divide (`div`, `idiv`; `udiv`, `sdiv`) or a
+ *     floating-point divide or square root — because a divide takes as long
+ *     as its operands say on every processor this targets, and so says what
+ *     they were without a branch.
  *
- * The last is a taint analysis over registers, and it is only as good as what
+ * The last two are a taint analysis over registers, and it is only as good as what
  * it models, so here is what that is. A register is *secret* when it holds a
  * secret argument the fixture names, a byte loaded out of an array whose
  * contents the fixture calls secret, or any value computed from one — the
@@ -73,9 +78,17 @@
  * ```
  *
  * `secret=` names parameters, or `contents` for the elements of every array
- * argument. `expect=branch` or `expect=load` marks a function written to fail,
- * which is how the suite proves the check can: it must find that violation.
+ * argument. `expect=<kind>` marks a function written to fail, which is how the
+ * suite proves the check can: it must find a violation of that kind (`branch`,
+ * `call`, `load` for a load or a store, `latency`). `via=<callee>` adds that the
+ * violation must be found inside that callee, reached by following a call, so
+ * a fixture can show the following happens rather than that LLVM inlined it.
+ * `tests/cases/ct_asm_refused` holds one such function for every rule, and
+ * `SEEDED` at the foot of this file is the list it must keep.
  */
+
+import fs from "node:fs"
+import path from "node:path"
 
 /** Parameter types a fixture may give a function: each arrives in one general register. */
 const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
@@ -91,15 +104,17 @@ const REGISTER_PARAM = /^(?:[iu](?:8|16|32|64)|boolean|[\w<>, ]+\[\])$/
 export const ctSpecs = (source) => {
   const specs = []
   for (const line of source.split("\n").filter((l) => l.startsWith("// ct-check"))) {
-    const m = line.match(/^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|load))?\s*$/)
+    const m = line.match(
+      /^\/\/ ct-check: (\w+) secret=([\w,]+)(?: expect=(branch|call|load|latency)(?: via=(\w+))?)?\s*$/
+    )
     if (m === null) {
       specs.push({
         name: line,
-        problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|load]`"],
+        problems: ["not `// ct-check: <fn> secret=<names> [expect=branch|call|load|latency [via=<callee>]]`"],
       })
       continue
     }
-    const [, name, secret, expect] = m
+    const [, name, secret, expect, via] = m
     const signature = source.match(new RegExp(`export const ${name} = \\(([^)]*)\\)(?::\\s*([^=]+?))?\\s*=>`))
     const params = signature === null || signature[1].trim().length === 0 ? [] : signature[1].split(",")
     const names = params.map((p) => p.split(":")[0].trim())
@@ -120,6 +135,13 @@ export const ctSpecs = (source) => {
     for (const unknown of secrets.filter((n) => !names.includes(n))) {
       problems.push(`secret=${unknown} names no parameter`)
     }
+    // `contents` of a function with no array argument taints nothing, and a
+    // check with nothing secret passes whatever the function does.
+    if (secrets.length === 0 && !types.some((type) => type.endsWith("[]"))) {
+      problems.push(
+        "secret=contents, and no parameter is an array: nothing is secret, so the check proves nothing"
+      )
+    }
     specs.push({
       name,
       problems,
@@ -128,6 +150,7 @@ export const ctSpecs = (source) => {
       types,
       returns: signature === null || signature[2] === undefined ? "void" : signature[2].trim(),
       expect: expect ?? null,
+      via: via ?? null,
     })
   }
   return specs
@@ -622,15 +645,29 @@ const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
  * other way a missed leak.
  */
 const X86_THREE_OVERWRITE =
-  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m))/
+  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m|pternlog|perm[it]2|pdp|pmadd52|psh[lr]dv))/
 /** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
 const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
 const X86_READS_FLAGS = /^(set|cmov|sbb|adc|adox|rcl|rcr)/
 const X86_ZERO_IDIOM = /^(v?p?xor|sub|v?xorp[sd]|v?psub[bwdq])/
 const X86_WIDE = /^(i?mul|i?div)[bwlq]?$/
+/** A divide or square root, whose latency follows its operands. */
+const X86_LATENCY = /^(i?div[bwlq]?|v?(div|sqrt)[ps][sd])$/
+/**
+ * Prefixes the assembler prints before the instruction they modify, on its
+ * line (`notrack jmpq *%rax`, `lock xaddl`) or alone on the line before. `rep`
+ * is not among them: a string instruction is refused whole.
+ */
+const X86_PREFIX = /^(lock|notrack|bnd|data16|data32|addr32|rex64|[c-gs]s)$/
+/** An AVX-512 write under a mask that keeps the lanes it does not write (`{%k1}` without `{z}`). */
+const X86_MERGE_MASK = /\{%k\d\}(?!\s*\{z\})/
 
 /** One x86-64 (AT&T) instruction: the violation it is, if any, and its effect on `t`. */
 const stepX86 = (t, mnemonic, operands) => {
+  if (X86_PREFIX.test(mnemonic)) {
+    // What follows is the instruction itself, read as though the prefix were not there.
+    return operands.length === 0 ? null : stepX86(t, ...parseInstruction(operands.join(", ")))
+  }
   if (!X86_JUMP.test(mnemonic) && X86_BRANCH.test(mnemonic)) {
     return "branch"
   }
@@ -687,6 +724,21 @@ const stepX86 = (t, mnemonic, operands) => {
     t.setValue(ops[1].registers[0], a)
     return null
   }
+  // An exchange with memory writes the register with what memory held, which
+  // the read-then-write below does not model, so it is refused rather than
+  // read as leaving the register as it was.
+  if (/^(xchg|xadd|cmpxchg\w*)[bwlq]?$/.test(mnemonic)) {
+    return "unmodelled"
+  }
+  // `mulx` multiplies by %rdx, which it does not name, and writes both of the
+  // registers it does: the high half to the last, the low to the one before.
+  if (/^mulx[lq]$/.test(mnemonic) && ops.length === 3) {
+    const by = ops[0].memory ? t.loadFrom(ops[0], mnemonic.endsWith("q") ? 8 : 4) : t.valueOf(ops[0])
+    const secret = by.secret || t.anySecret(["d"])
+    t.set(ops[1].registers[0], secret, false)
+    t.set(ops[2].registers[0], secret, false)
+    return null
+  }
   const readsFlags = X86_READS_FLAGS.test(mnemonic)
   const sources = ops.length > 1 ? ops.slice(0, -1) : ops
   const dest = ops.length > 0 ? ops[ops.length - 1] : null
@@ -722,7 +774,7 @@ const stepX86 = (t, mnemonic, operands) => {
     t.set("a", all, false)
     t.set("d", all, false)
     t.taintFlags(all)
-    return null
+    return all && X86_LATENCY.test(mnemonic) ? "latency" : null
   }
   if (dest === null) {
     return null
@@ -730,7 +782,7 @@ const stepX86 = (t, mnemonic, operands) => {
   const zeroIdiom =
     ops.length === 2 && !dest.memory && ops[0].text === ops[1].text && X86_ZERO_IDIOM.test(mnemonic)
   const partial = !dest.memory && X86_PARTIAL.test(dest.text)
-  const merge = partial || X86_MERGE.test(mnemonic)
+  const merge = partial || X86_MERGE.test(mnemonic) || X86_MERGE_MASK.test(dest.text)
   const overwrite =
     !merge &&
     (zeroIdiom || X86_OVERWRITE.test(mnemonic) || (ops.length >= 3 && X86_THREE_OVERWRITE.test(mnemonic)))
@@ -760,21 +812,30 @@ const stepX86 = (t, mnemonic, operands) => {
   // Whether this one writes the flags is not asked: they only gain taint, so
   // a `mov` that leaves them alone costs at most a false alarm.
   t.taintFlags(result.secret)
+  const latency = result.secret && X86_LATENCY.test(mnemonic) ? "latency" : null
   if (dest.memory) {
-    return t.storeTo(dest, width, exact && !merge, result)
+    return t.storeTo(dest, width, exact && !merge, result) ?? latency
   }
   if (dest.registers.length > 0) {
     t.setValue(dest.registers[0], result)
   }
-  return null
+  return latency
 }
 
-const ARM_BRANCH = /^(b\.\w+|cbn?z|tbn?z)$/
-const ARM_CALL = /^(bl|blr)$/
+/** The conditional branches, `bc.<cond>` (FEAT_HBC) among them. */
+const ARM_BRANCH = /^(bc?\.\w+|cbn?z|tbn?z)$/
+/** A call through a register, pointer-authenticated (`blraa`, `blrabz`) or not. */
+const ARM_CALL = /^blr(a[ab]z?)?$/
+/** A jump through a register, likewise. */
+const ARM_JUMP = /^br(a[ab]z?)?$/
 const ARM_STORE = /^(st[rpu]\w*|st[1-4]|stlr\w*|stnp)$/
-const ARM_LOAD = /^(ld[rpu]\w*|ld[1-4]\w*|ldar\w*|ldnp|ldx\w*)$/
-const ARM_COMPARE = /^(cmp|cmn|tst|f?ccmp|f?ccmn|fcmpe?)$/
-const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp|f?ccmn|fcsel)$/
+const ARM_LOAD = /^(ld[rpu]\w*|ld[1-4]\w*|ldar\w*|ldax\w*|ldapu?r\w*|ldnp|ldx\w*)$/
+/** A prefetch reads no register's worth of memory; only its address is checked. */
+const ARM_PREFETCH = /^prfu?m$/
+const ARM_COMPARE = /^(cmp|cmn|tst|f?ccmpe?|f?ccmn|fcmpe?)$/
+const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmpe?|f?ccmn|fcsel)$/
+/** A divide or square root, whose latency follows its operands. */
+const ARM_LATENCY = /^([us]div|fdiv|fsqrt)$/
 const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
 const ARM_READ_MODIFY_WRITE = /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx)$/
 
@@ -804,7 +865,7 @@ const stepArm = (t, mnemonic, operands) => {
   if (mnemonic === "b") {
     return operands.length === 1 && operands[0].startsWith(".L") ? null : t.call(operands, true)
   }
-  if (mnemonic === "br") {
+  if (ARM_JUMP.test(mnemonic)) {
     return "call"
   }
   const ops = operands.map(armOperand)
@@ -858,6 +919,12 @@ const stepArm = (t, mnemonic, operands) => {
     }
     return violation
   }
+  // Anything else that touches memory (an exclusive or atomic access: `stxr`,
+  // `ldadd`, `swp`, `cas`) writes registers or memory in a way the generic
+  // reading below would get wrong, so it is refused rather than guessed at.
+  if (memoryAt >= 0 && !ARM_PREFETCH.test(mnemonic)) {
+    return "unmodelled"
+  }
   const readsFlags = ARM_READS_FLAGS.test(mnemonic)
   const flagSecret = readsFlags && t.secret.has("flags")
   if (ARM_COMPARE.test(mnemonic)) {
@@ -898,7 +965,7 @@ const stepArm = (t, mnemonic, operands) => {
   if (ARM_SETS_FLAGS.test(mnemonic)) {
     t.taintFlags(secret)
   }
-  return null
+  return secret && ARM_LATENCY.test(mnemonic) ? "latency" : null
 }
 
 /**
@@ -926,13 +993,16 @@ export const CT_TARGETS = [
   },
 ]
 
+/** One instruction line as `[mnemonic, operands]`. */
+const parseInstruction = (line) => {
+  const space = line.search(/\s/)
+  return space < 0 ? [line, []] : [line.slice(0, space), splitOperands(line.slice(space + 1))]
+}
+
 /** Runs `body` on `t`, adding every violation to `t.found`. */
 const walk = (t, body) => {
   for (const line of body) {
-    const space = line.search(/\s/)
-    const mnemonic = space < 0 ? line : line.slice(0, space)
-    const operands = space < 0 ? [] : splitOperands(line.slice(space + 1))
-    const kind = t.target.step(t, mnemonic, operands)
+    const kind = t.target.step(t, ...parseInstruction(line))
     if (kind !== null) {
       t.found.push({ kind, line })
     }
@@ -941,14 +1011,23 @@ const walk = (t, body) => {
 
 /**
  * Every violation in one function body: `{ kind, line }`, where `kind` is
- * `branch`, `call`, `load`, `escape` (a stack address stored off the stack) or
- * `unmodelled` (an instruction this does not follow). An empty list is a pass.
+ * `branch`, `call`, `load` (a load or store at a secret address), `latency` (a
+ * divide or square root of a secret), `escape` (a stack address stored off the
+ * stack) or `unmodelled` (an instruction this does not follow). An empty list
+ * is a pass. Under a spec's `via=`, a violation found anywhere but inside that
+ * callee is reported as `<kind> outside <callee>`, so that `expect=` is met
+ * only by what following the call found.
  */
 export const ctViolations = (body, spec, target) => {
   const t = new Taint(spec, target)
   t.listing = LISTINGS.get(body) ?? null
   walk(t, body)
-  return t.found
+  if (spec.via === null || spec.via === undefined) {
+    return t.found
+  }
+  return t.found.map((v) =>
+    v.line.startsWith(`${spec.via}: `) ? v : { ...v, kind: `${v.kind} outside ${spec.via}` }
+  )
 }
 
 /**
@@ -1012,6 +1091,59 @@ const STACK_CORNERS = [
   ],
   // The first slot of the same pair is the secret, and still refused.
   ["aarch64", "a", "load", ["sub sp, sp, #32", "stp x0, x1, [sp, #16]", "ldr x2, [sp, #16]", "ldr w3, [x2]"]],
+]
+
+/**
+ * The corners the security audit of this model found it misread
+ * (docs/security/ct-verification.md), each a shape that passed before and must
+ * not: a prefix or a spelling the step tables did not know, a register an
+ * instruction writes without naming it, or an instruction whose latency is
+ * the leak. Beside them, the shapes the fixes must still pass.
+ */
+const AUDIT_CORNERS = [
+  // A `notrack` or `lock` prefix hid the instruction behind it.
+  ["x86-64", "a", "call", ["notrack jmpq *%rax"]],
+  ["x86-64", "contents", "unmodelled", ["movq 16(%rdi), %rax", "lock xaddl %ecx, (%rax)"]],
+  // An exchange with memory writes its register with what memory held.
+  ["x86-64", "contents", "unmodelled", ["movq 16(%rdi), %rax", "xchgq %rcx, (%rax)"]],
+  // `mulx` reads %rdx and writes both registers it names.
+  ["x86-64", "a", "load", ["movq %rdi, %rdx", "mulxq %rsi, %rax, %rcx", "movl (%r8,%rax,4), %eax"]],
+  ["x86-64", "a", "load", ["movq %rdi, %rdx", "mulxq %rsi, %rax, %rcx", "movl (%r8,%rcx,4), %eax"]],
+  // A merge-masked write and `vpternlog` keep what the destination held.
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["vmovd %edi, %xmm1", "vmovdqu32 %zmm0, %zmm1 {%k1}", "vmovd %xmm1, %eax", "movl (%rsi,%rax,4), %eax"],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "vmovd %edi, %xmm2",
+      "vpternlogd $150, %xmm0, %xmm1, %xmm2",
+      "vmovd %xmm2, %eax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  // A divide or square root of a secret; a divide of public values is not one.
+  ["x86-64", "b", "latency", ["movl %edi, %eax", "xorl %edx, %edx", "divl %esi"]],
+  ["x86-64", "a", "latency", ["movq %rdi, %xmm0", "sqrtsd %xmm0, %xmm0"]],
+  ["x86-64", "a", null, ["movl %esi, %eax", "xorl %edx, %edx", "divl %esi"]],
+  // Pointer-authenticated calls and jumps through a register, and `bc.<cond>`.
+  ["aarch64", "a", "call", ["blraaz x8"]],
+  ["aarch64", "a", "call", ["braa x8, x9"]],
+  ["aarch64", "a,b", "branch", ["cmp w0, w1", "bc.eq .LBB0_2"]],
+  // An acquire-exclusive load reads an element like any other load.
+  ["aarch64", "contents", "load", ["ldr x8, [x0, #16]", "ldaxr w9, [x8]", "ldr w10, [x1, x9]"]],
+  // An atomic is refused rather than guessed at; a prefetch is only an address.
+  ["aarch64", "contents", "unmodelled", ["ldr x8, [x0, #16]", "ldadd w2, w9, [x8]"]],
+  ["aarch64", "a", null, ["prfm pldl1keep, [x1]"]],
+  // `fccmpe` is a compare: it sets the flags and writes no register.
+  ["aarch64", "a", "load", ["fmov s0, w0", "fccmpe s0, s1, #0, eq", "csetm x2, gt", "ldr w3, [x4, x2]"]],
+  ["aarch64", "b", "latency", ["udiv w0, w0, w1"]],
+  ["aarch64", "a", null, ["udiv w0, w1, w1"]],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */
@@ -1084,6 +1216,19 @@ spill:
 	addq	$8, %rsp
 	retq
 .Lfunc_end8:
+deep:
+	callq	deep@PLT
+	retq
+.Lfunc_end9:
+leakVia:
+	callq	get@PLT
+	retq
+.Lfunc_end10:
+leakElsewhere:
+	movq	16(%rdi), %rax
+	movl	(%rax,%rsi,4), %eax
+	jmp	put@PLT
+.Lfunc_end11:
 `
 
 const CALL_SOURCE = `// ct-check: get secret=contents
@@ -1095,6 +1240,9 @@ const CALL_SOURCE = `// ct-check: get secret=contents
 // ct-check: under secret=contents
 // ct-check: above secret=contents
 // ct-check: spill secret=s
+// ct-check: deep secret=contents
+// ct-check: leakVia secret=i,contents expect=load via=get
+// ct-check: leakElsewhere secret=i,contents expect=load via=put
 export const get = (a: i64[], i: i32): i64 => a[i]
 export const put = (a: i64[], v: i64): void => {}
 export const below = (a: i64[]): void => {}
@@ -1104,6 +1252,9 @@ export const heap = (a: i64[], bit: i64, table: i64[]): i64 => 0
 export const under = (a: i64[], table: i64[]): i64 => 0
 export const above = (a: i64[]): i64 => 0
 export const spill = (a: i64[], s: i64): i64 => 0
+export const deep = (a: i64[]): i64 => 0
+export const leakVia = (a: i64[], i: i32): i64 => get(a, i)
+export const leakElsewhere = (a: i32[], i: i32, v: i64): void => {}
 `
 
 const CALL_CORNERS = [
@@ -1119,11 +1270,17 @@ const CALL_CORNERS = [
   // The callee's stack starts below the return address the call pushed, so
   // its first stack slot above that is the caller's own.
   ["spill", "load"],
+  // A chain of calls deeper than CALL_DEPTH is refused, not followed for ever.
+  ["deep", "call"],
+  // Under `via=`, a leak inside the named callee keeps its kind, and one
+  // anywhere else is renamed, so `expect=` cannot be met by inlined code.
+  ["leakVia", "load"],
+  ["leakElsewhere", "load outside put"],
 ]
 
 const cornerMisses = () => {
   const missed = []
-  for (const [name, secret, kind, body] of STACK_CORNERS) {
+  for (const [name, secret, kind, body] of [...STACK_CORNERS, ...AUDIT_CORNERS]) {
     const target = CT_TARGETS.find((t) => t.name === name)
     const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
     const found = ctViolations(body, spec, target)
@@ -1151,4 +1308,51 @@ const cornerMisses = () => {
 const missedCorners = cornerMisses()
 if (missedCorners.length > 0) {
   throw new Error(`tests/ct-asm.js misreads the corners of its own model:\n${missedCorners.join("\n")}`)
+}
+
+/**
+ * One function written to fail each rule, in `tests/cases/ct_asm_refused`, as
+ * `[name, expect, via, what it seeds]`. `tests/run.js` compiles the fixture for
+ * both targets and requires every one refused for its kind, on each; this list
+ * is what stops a seed being deleted, or its `expect=` loosened, without a
+ * failure. `escape` and `unmodelled` have no seed there, because no Nish source
+ * reliably compiles to either: they are held by the corners above.
+ */
+const SEEDED = [
+  ["naiveEqual", "branch", null, "a conditional branch"],
+  ["indexedLookup", "load", null, "a load at a secret address"],
+  ["indexedStore", "load", null, "a store at a secret address"],
+  ["unreadCall", "call", null, "a call to code the check does not read"],
+  ["secretText", "call", null, "a tail call to code the check does not read"],
+  ["callsLeak", "load", "leakyRow", "a secret load inside a followed call"],
+  ["tailLeak", "load", "leakyRow", "a secret load inside a followed tail call"],
+  ["secretDivide", "latency", null, "a divide of a secret"],
+]
+
+const seedMisses = () => {
+  const refused = ctSpecs(
+    fs.readFileSync(path.join(import.meta.dirname, "cases", "ct_asm_refused.ts"), "utf8")
+  )
+  const missed = SEEDED.filter(
+    ([name, expect, via]) =>
+      !refused.some(
+        (sp) => sp.name === name && sp.expect === expect && sp.via === via && sp.problems.length === 0
+      )
+  ).map(
+    ([name, expect, via, what]) =>
+      `${what}: no \`// ct-check: ${name} ... expect=${expect}${via ? ` via=${via}` : ""}\``
+  )
+  // A spec that taints nothing would pass whatever its function does.
+  const [vacuous] = ctSpecs("// ct-check: f secret=contents\nexport const f = (a: u32): u32 => a\n")
+  if (vacuous.problems.length === 0) {
+    missed.push("a `secret=contents` with no array parameter reads as a spec, though nothing in it is secret")
+  }
+  return missed
+}
+
+const missedSeeds = seedMisses()
+if (missedSeeds.length > 0) {
+  throw new Error(
+    `tests/cases/ct_asm_refused no longer seeds every rule tests/ct-asm.js enforces:\n${missedSeeds.join("\n")}`
+  )
 }
