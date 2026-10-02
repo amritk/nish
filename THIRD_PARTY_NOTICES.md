@@ -96,6 +96,22 @@ test imports the file it needs.
 Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof/LICENSE-wycheproof.
 ```
 
+### `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof`
+
+More of [Project Wycheproof](https://github.com/C2SP/wycheproof)'s test
+vectors, under the same Apache License, Version 2.0, with its own copy of the
+licence text beside them. Each file in
+[`tests/link/crypto_wycheproof_aead/`](tests/link/crypto_wycheproof_aead/)
+holds cases for the AEADs, rewritten from upstream's JSON as Nish source; it
+names the upstream file and commit it was taken from and says what was
+changed, as the licence's section 4 asks of a modified file. The directory has
+no `main.ts`: `tests/link/crypto_chacha20poly1305` and `tests/link/crypto_aes`
+import the files, in both number modes.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_aead/LICENSE-wycheproof.
+```
+
 ### `std/crypto/LICENSE-bearssl`
 
 [BearSSL](https://www.bearssl.org/), Copyright (c) 2016 Thomas Pornin, under
@@ -138,6 +154,8 @@ Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p25
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/ecdsa_secp256r1_sha256_test.json` at `3fa63dd`: all 484 cases and the 113 group keys, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof_aead/chacha20_poly1305.ts` | Wycheproof `testvectors_v1/chacha20_poly1305_test.json` at `3fa63dd`: all 325 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof_aead/aes_gcm_192.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 103 cases with a 192-bit key, which `tests/link/crypto_wycheproof/aes_gcm.ts` leaves out, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
 
 ## Public-domain algorithms
 
