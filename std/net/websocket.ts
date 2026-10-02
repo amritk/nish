@@ -116,6 +116,24 @@ class WsUtf8 {
   hi: i32 = 0xbf
 }
 
+/** Puts `state` back where a check starts: no sequence open. */
+const websocketUtf8Reset = (state: WsUtf8): void => {
+  state.need = 0
+  state.lo = 0x80
+  state.hi = 0xbf
+}
+
+/** Whether RFC 6455 §5.2 defines `opcode`: 0 to 2 for data, 8 to 10 for control. */
+const websocketIsKnownOpcode = (opcode: i32): boolean =>
+  (opcode >= 0 && opcode <= 2) || (opcode >= 8 && opcode <= 10)
+
+/**
+ * `websocketFrameEvent`'s answer for a fragment that does not end its
+ * message: its frame is consumed, and the loop reads the next one. Never an
+ * event.
+ */
+const WS_CONTINUE: i32 = -1
+
 /**
  * Runs `buf[off .. off + len)` through the check `state` holds. Answers false
  * at the first byte that cannot continue well-formed UTF-8 (RFC 3629 §4: no
@@ -211,8 +229,6 @@ export class WsDecoder {
   messageLen: i32 = 0
 
   expectMasked: boolean = false
-  /** The last `WS_MESSAGE` handed out `message`; the next data frame starts a new one. */
-  messageDone: boolean = false
 
   constructor(expectMasked: boolean, maxMessage: i32) {
     this.expectMasked = expectMasked
@@ -243,6 +259,12 @@ export class WsDecoder {
     websocketReserve(this, len)
     const buf: u8[] = this.buf
     const at: i32 = this.end
+    // A whole array is one `set`; `set` takes no window of its source.
+    if (off === 0 && len === size) {
+      buf.set(data, at)
+      this.end = at + len
+      return
+    }
     for (let k: i32 = 0; k < len; k += 1) {
       const to: i32 = at + k
       if (to >= 0 && to < toI32(buf.length)) {
@@ -306,21 +328,19 @@ const websocketUnmaskInto = (
   to: u8[],
   at: i32
 ): void => {
-  const m0: u8 = masked ? buf[maskAt] : 0
-  const m1: u8 = masked ? buf[maskAt + 1] : 0
-  const m2: u8 = masked ? buf[maskAt + 2] : 0
-  const m3: u8 = masked ? buf[maskAt + 3] : 0
+  // The four key bytes in one word, high byte first, rotated a byte left
+  // after each payload byte, so its top byte is always key byte k mod 4.
+  let key: u32 = 0
+  if (masked) {
+    key =
+      (toU32(buf[maskAt]) << 24) |
+      (toU32(buf[maskAt + 1]) << 16) |
+      (toU32(buf[maskAt + 2]) << 8) |
+      toU32(buf[maskAt + 3])
+  }
   for (let k: i32 = 0; k < len; k += 1) {
-    const r: i32 = k & 3
-    let key: u8 = m3
-    if (r === 0) {
-      key = m0
-    } else if (r === 1) {
-      key = m1
-    } else if (r === 2) {
-      key = m2
-    }
-    to[at + k] = buf[from + k] ^ key
+    to[at + k] = buf[from + k] ^ toU8(key >>> 24)
+    key = (key << 8) | (key >>> 24)
   }
 }
 
@@ -409,14 +429,7 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a reserved bit set with no extension negotiated")
   }
   const control: boolean = opcode >= 8
-  if (
-    opcode !== WS_OP_CONTINUATION &&
-    opcode !== WS_OP_TEXT &&
-    opcode !== WS_OP_BINARY &&
-    opcode !== WS_OP_CLOSE &&
-    opcode !== WS_OP_PING &&
-    opcode !== WS_OP_PONG
-  ) {
+  if (!websocketIsKnownOpcode(opcode)) {
     return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a reserved opcode")
   }
   if (masked !== d.expectMasked) {
@@ -460,10 +473,6 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
       return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a control frame longer than 125 bytes")
     }
   } else {
-    if (d.messageDone) {
-      d.messageDone = false
-      d.messageLen = 0
-    }
     if (opcode === WS_OP_CONTINUATION && d.messageOpcode === 0) {
       return websocketFail(d, WS_CLOSE_PROTOCOL_ERROR, "a continuation with no message to continue")
     }
@@ -495,10 +504,7 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     d.messageOpcode = opcode
     // A new message starts its UTF-8 check afresh, in place: nothing is
     // allocated per message.
-    const check: WsUtf8 = d.utf8
-    check.need = 0
-    check.lo = 0x80
-    check.hi = 0xbf
+    websocketUtf8Reset(d.utf8)
   }
   const from: i32 = d.messageLen
   websocketMessageRoom(d, from + length)
@@ -508,27 +514,26 @@ const websocketFrameEvent = (d: WsDecoder): i32 => {
     return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that is not UTF-8")
   }
   if (!fin) {
-    return WS_NEED_MORE
+    return WS_CONTINUE
   }
   if (d.messageOpcode === WS_OP_TEXT && d.utf8.need !== 0) {
     return websocketFail(d, WS_CLOSE_INVALID_DATA, "a text message that ends inside a character")
   }
+  // The message is handed out whole, and the next data frame starts a new one
+  // at the front of the same buffer, so `data` holds until the next call.
   d.opcode = d.messageOpcode
   d.messageOpcode = 0
-  d.messageDone = true
   d.data = d.message
   d.dataLen = d.messageLen
+  d.messageLen = 0
   return WS_MESSAGE
 }
 
 /** The loop behind `next()`: frames until one has an event or the input runs out. */
 const websocketNext = (d: WsDecoder): i32 => {
   while (d.state === WS_S_FRAMES) {
-    const before: i32 = d.start
     const event: i32 = websocketFrameEvent(d)
-    // A fragment that does not end its message consumes its frame and says
-    // `WS_NEED_MORE`; only when nothing was consumed is that the answer.
-    if (event !== WS_NEED_MORE || d.start === before) {
+    if (event !== WS_CONTINUE) {
       return event
     }
   }
@@ -561,10 +566,10 @@ export const websocketFrame = (
   if (off < 0 || len < 0 || off > size || len > size - off) {
     panic("websocketFrame: the window is outside the buffer")
   }
-  const control: boolean = opcode === WS_OP_CLOSE || opcode === WS_OP_PING || opcode === WS_OP_PONG
-  if (!control && opcode !== WS_OP_CONTINUATION && opcode !== WS_OP_TEXT && opcode !== WS_OP_BINARY) {
+  if (!websocketIsKnownOpcode(opcode)) {
     return null
   }
+  const control: boolean = opcode >= 8
   if (control && (!fin || len > WS_MAX_CONTROL)) {
     return null
   }
@@ -601,21 +606,17 @@ export const websocketFrame = (
     out[8] = toU8(len >> 8)
     out[9] = toU8(len)
   }
+  for (let k: i32 = 0; k < len && headerLength + k < outLength; k += 1) {
+    out[headerLength + k] = payload[off + k]
+  }
   if (mask !== null) {
     const keyAt: i32 = 2 + extended
     for (let k: i32 = 0; k < 4 && k < toI32(mask.length); k += 1) {
       out[keyAt + k] = mask[k]
     }
-    // Masking and unmasking are the same XOR, so the payload is copied and
-    // then goes through the decoder's own loop, reading the key just written.
-    for (let k: i32 = 0; k < len && headerLength + k < outLength; k += 1) {
-      out[headerLength + k] = payload[off + k]
-    }
+    // Masking and unmasking are the same XOR, so the copied payload goes
+    // through the decoder's own loop, reading the key just written.
     websocketUnmaskInto(out, headerLength, len, true, keyAt, out, headerLength)
-  } else {
-    for (let k: i32 = 0; k < len && headerLength + k < outLength; k += 1) {
-      out[headerLength + k] = payload[off + k]
-    }
   }
   return out
 }

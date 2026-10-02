@@ -214,6 +214,13 @@ export class Http1Parser {
     http1Reserve(this, len)
     const buf: u8[] = this.buf
     const at: i32 = this.end
+    // A whole array is one `set`, a memmove; a window is copied byte by byte,
+    // because `set` takes no window of its source.
+    if (off === 0 && len === size) {
+      buf.set(data, at)
+      this.end = at + len
+      return
+    }
     for (let k: i32 = 0; k < len; k += 1) {
       const to: i32 = at + k
       if (to >= 0 && to < toI32(buf.length)) {
@@ -233,11 +240,13 @@ export class Http1Parser {
    * that may repeat is read through `names` and `values`.
    */
   header(name: string): string | null {
-    const want: string = http1Lower(name)
+    // Stored names are lowercase already, so `name` is folded as it is
+    // compared, and nothing is allocated.
+    const nameLength: i32 = toI32(name.length)
     const names: string[] = this.names
     const count: i32 = toI32(names.length)
     for (let i: i32 = 0; i < count; i += 1) {
-      if (names[i] === want) {
+      if (http1SameWord(name, 0, nameLength, names[i])) {
         return this.values[i]
       }
     }
@@ -328,9 +337,12 @@ const http1StartRequest = (p: Http1Parser): void => {
   p.fieldCount = 0
 }
 
+/** `http1TakeLine`'s answer when a whole line is ready; never an event. */
+const HTTP1_LINE: i32 = -1
+
 /**
- * Finds the next line: answers 1 with it in `lineStart .. lineEnd`, 0 when no
- * LF has arrived yet, or `HTTP1_ERROR`'s refusal. A line ends in CRLF and in
+ * Finds the next line: answers `HTTP1_LINE` with it in `lineStart ..
+ * lineEnd`, `HTTP1_NEED_MORE` when no LF has arrived yet, or the refusal. A line ends in CRLF and in
  * nothing else; a LF without its CR is a 400. A line that has not ended by
  * `limit` bytes is refused with `overStatus`.
  */
@@ -341,27 +353,24 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
   while (i >= 0 && i < end && i < toI32(buf.length)) {
     if (buf[i] === 10) {
       if (i === p.start || buf[i - 1] !== 13) {
-        http1Fail(p, 400, "a line ended in a bare LF")
-        return -1
+        return http1Fail(p, 400, "a line ended in a bare LF")
       }
       if (i - 1 - p.start > limit) {
-        http1Fail(p, overStatus, "a line over its limit")
-        return -1
+        return http1Fail(p, overStatus, "a line over its limit")
       }
       p.lineStart = p.start
       p.lineEnd = i - 1
       p.start = i + 1
       p.scan = i + 1
-      return 1
+      return HTTP1_LINE
     }
     i += 1
   }
   p.scan = end
   if (end - p.start > limit + 1) {
-    http1Fail(p, overStatus, "a line over its limit")
-    return -1
+    return http1Fail(p, overStatus, "a line over its limit")
   }
-  return 0
+  return HTTP1_NEED_MORE
 }
 
 /** Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of. */
@@ -390,20 +399,6 @@ const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string => {
   for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
     let c: i32 = toI32(buf[k])
     if (lower && c >= 65 && c <= 90) {
-      c += 32
-    }
-    parts.push(String.fromCharCode(c))
-  }
-  return parts.join("")
-}
-
-/** `text` with its ASCII letters in lowercase. */
-const http1Lower = (text: string): string => {
-  const parts: string[] = []
-  const n: i32 = toI32(text.length)
-  for (let k: i32 = 0; k < n; k += 1) {
-    let c: i32 = toI32(text.charCodeAt(k))
-    if (c >= 65 && c <= 90) {
       c += 32
     }
     parts.push(String.fromCharCode(c))
@@ -480,6 +475,11 @@ const http1ListTally = (text: string, word: string): Http1ListTally => {
  * `HTTP1_MAX_METHOD` bytes before its first space (or line end).
  */
 const http1MethodOverrun = (p: Http1Parser): boolean => {
+  // Bytes up to `scan` were seen by an earlier call, which found a space
+  // in time if there were more than `HTTP1_MAX_METHOD` of them.
+  if (p.scan - p.start > HTTP1_MAX_METHOD) {
+    return false
+  }
   const buf: u8[] = p.buf
   const n: i32 = toI32(buf.length)
   const stop: i32 = p.start + HTTP1_MAX_METHOD
@@ -739,8 +739,11 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   let size: i32 = 0
   let over: boolean = false
   let i: i32 = a
-  while (i >= 0 && i < b && i < toI32(buf.length) && http1HexValue(toI32(buf[i])) >= 0) {
+  while (i >= 0 && i < b && i < toI32(buf.length)) {
     const digit: i32 = http1HexValue(toI32(buf[i]))
+    if (digit < 0) {
+      break
+    }
     if (!over) {
       if (digit > room || size > (room - digit) / 16) {
         over = true
@@ -775,8 +778,11 @@ const http1ChunkSize = (p: Http1Parser): i32 => {
   return HTTP1_NEED_MORE
 }
 
-/** Hands the caller up to `p.left` of the buffered body bytes. */
-const http1BodyWindow = (p: Http1Parser): i32 => {
+/**
+ * Hands the caller up to `p.left` of the buffered body bytes, and moves to
+ * `after` once the last of them is handed out.
+ */
+const http1BodyWindow = (p: Http1Parser, after: i32): i32 => {
   const ready: i32 = p.end - p.start
   if (ready <= 0) {
     return HTTP1_NEED_MORE
@@ -789,6 +795,9 @@ const http1BodyWindow = (p: Http1Parser): i32 => {
   p.scan = p.start
   p.left -= take
   p.bodyTotal += take
+  if (p.left === 0) {
+    p.state = after
+  }
   return HTTP1_BODY
 }
 
@@ -805,8 +814,8 @@ const http1Next = (p: Http1Parser): i32 => {
         // The longest well-formed request line: the method, the target, two
         // spaces and "HTTP/1.1".
         const got: i32 = http1TakeLine(p, HTTP1_MAX_METHOD + p.maxTarget + 10, 414)
-        if (got <= 0) {
-          return got < 0 ? HTTP1_ERROR : HTTP1_NEED_MORE
+        if (got !== HTTP1_LINE) {
+          return got
         }
         // RFC 9112 §2.2: an empty line before a request line is ignored.
         if (p.lineEnd > p.lineStart && http1RequestLine(p) === HTTP1_ERROR) {
@@ -817,8 +826,8 @@ const http1Next = (p: Http1Parser): i32 => {
       case HTTP1_S_FIELDS:
       case HTTP1_S_TRAILERS: {
         const got: i32 = http1TakeLine(p, p.maxHeaderBytes - p.sectionBytes, 431)
-        if (got <= 0) {
-          return got < 0 ? HTTP1_ERROR : HTTP1_NEED_MORE
+        if (got !== HTTP1_LINE) {
+          return got
         }
         p.sectionBytes += p.lineEnd - p.lineStart + 2
         if (p.sectionBytes > p.maxHeaderBytes) {
@@ -837,45 +846,27 @@ const http1Next = (p: Http1Parser): i32 => {
         }
         break
       }
-      case HTTP1_S_LENGTH_BODY: {
-        const event: i32 = http1BodyWindow(p)
-        if (p.left === 0) {
-          p.state = HTTP1_S_MESSAGE_END
-        }
-        return event
-      }
+      case HTTP1_S_LENGTH_BODY:
+        return http1BodyWindow(p, HTTP1_S_MESSAGE_END)
       case HTTP1_S_CHUNK_SIZE: {
         const got: i32 = http1TakeLine(p, p.maxHeaderBytes, 400)
-        if (got <= 0) {
-          return got < 0 ? HTTP1_ERROR : HTTP1_NEED_MORE
+        if (got !== HTTP1_LINE) {
+          return got
         }
         if (http1ChunkSize(p) === HTTP1_ERROR) {
           return HTTP1_ERROR
         }
         break
       }
-      case HTTP1_S_CHUNK_DATA: {
-        const event: i32 = http1BodyWindow(p)
-        if (p.left === 0) {
-          p.state = HTTP1_S_CHUNK_CRLF
-        }
-        return event
-      }
+      case HTTP1_S_CHUNK_DATA:
+        return http1BodyWindow(p, HTTP1_S_CHUNK_CRLF)
       case HTTP1_S_CHUNK_CRLF: {
-        if (p.end - p.start < 2) {
-          return HTTP1_NEED_MORE
+        // The CRLF after chunk data is an empty line, so a limit of zero
+        // refuses anything else in its place with 400.
+        const got: i32 = http1TakeLine(p, 0, 400)
+        if (got !== HTTP1_LINE) {
+          return got
         }
-        const buf: u8[] = p.buf
-        const at: i32 = p.start
-        let crlf: boolean = false
-        if (at >= 0 && at < toI32(buf.length) && at + 1 < toI32(buf.length)) {
-          crlf = buf[at] === 13 && buf[at + 1] === 10
-        }
-        if (!crlf) {
-          return http1Fail(p, 400, "chunk data not followed by CRLF")
-        }
-        p.start = at + 2
-        p.scan = p.start
         p.state = HTTP1_S_CHUNK_SIZE
         break
       }
@@ -935,27 +926,6 @@ const http1IsFieldText = (text: string): boolean => {
     }
   }
   return true
-}
-
-const HTTP1_HEX_DIGITS: string = "0123456789abcdef"
-
-/** `n` (at least 0) in lowercase hex, without leading zeros. */
-const http1Hex = (n: i32): string => {
-  if (n === 0) {
-    return "0"
-  }
-  const digits: string[] = []
-  let v: i32 = n
-  while (v > 0) {
-    const d: i32 = v & 15
-    digits.push(HTTP1_HEX_DIGITS.substring(d, d + 1))
-    v = v >> 4
-  }
-  const parts: string[] = []
-  for (let k: i32 = toI32(digits.length) - 1; k >= 0 && k < toI32(digits.length); k -= 1) {
-    parts.push(digits[k])
-  }
-  return parts.join("")
 }
 
 /**
@@ -1032,11 +1002,23 @@ export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
   if (len === 0) {
     return []
   }
-  const head: u8[] = http1BytesOf(`${http1Hex(len)}\r\n`)
-  const headLength: i32 = toI32(head.length)
+  // The size in lowercase hex without leading zeros, written straight into
+  // the one array the chunk needs: count its digits, then fill from the last.
+  let digits: i32 = 1
+  while (digits < 8 && len >> (4 * digits) !== 0) {
+    digits += 1
+  }
+  const headLength: i32 = digits + 2
   const out: u8[] = new Array<u8>(headLength + len + 2)
   const outLength: i32 = toI32(out.length)
-  out.set(head)
+  let v: i32 = len
+  for (let k: i32 = digits - 1; k >= 0 && k < outLength; k -= 1) {
+    const d: i32 = v & 15
+    out[k] = toU8(d < 10 ? 48 + d : 87 + d)
+    v = v >> 4
+  }
+  out[digits] = 13
+  out[digits + 1] = 10
   for (let k: i32 = 0; k < len && headLength + k < outLength; k += 1) {
     out[headLength + k] = data[off + k]
   }
@@ -1046,4 +1028,4 @@ export const http1Chunk = (data: u8[], off: i32, len: i32): u8[] => {
 }
 
 /** The last chunk and the empty trailer section that end a chunked body: `0\r\n\r\n`. */
-export const http1LastChunk = (): u8[] => http1BytesOf("0\r\n\r\n")
+export const http1LastChunk = (): u8[] => [48, 13, 10, 13, 10]
