@@ -1,7 +1,8 @@
 /* Nish runtime, the host half: the wall clock, entropy, a file's modification
  * time and a descriptor that becomes readable when SIGTERM or SIGINT arrives
  * (WP34 N3) — the four facts a program that runs for days asks of the machine
- * it runs on.
+ * it runs on — and who owns a path and whether it runs, which a driver asks
+ * before it trusts one.
  *
  * A translation unit of its own for the reason runtime-os.c is one: each file
  * carries its own measured `.text*` ceiling in tests/run.js. runtime-os.c had
@@ -33,6 +34,7 @@ typedef int nish_host_unused;
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -98,13 +100,38 @@ void nish_random_fill(nish_array *bytes) {
    digits. `stat` follows a symbolic link, as `fs.statSync` does. */
 double nish_stat_mtime(const nish_str *path) {
   struct stat st;
-  if (stat(path->data, &st) != 0) return __builtin_nan("");
+  if (stat(nish_cpath(path), &st) != 0) return __builtin_nan("");
 #if defined(__APPLE__)
   struct timespec t = st.st_mtimespec;
 #else
   struct timespec t = st.st_mtim;
 #endif
   return (double)t.tv_sec * 1e3 + (double)t.tv_nsec / 1e6;
+}
+
+/* ---- Who owns a path, and whether it runs (docs/security/runtime.md, RT-9)
+ *
+ * The primitives a driver needs before it trusts a directory or a program it
+ * found on its own. `nish_lstat_owner_mode` answers for the path itself, a
+ * symbolic link included, rather than for what it names: the owner's uid in
+ * the high 32 bits and `st_mode` in the low 32, or exactly -1 when the path
+ * does not resolve or holds a NUL. `nish_euid` is the user to compare the
+ * owner with, and `nish_is_executable` is `access(X_OK)`: whether the real
+ * user may run the file, which is what tells an executable `PATH` entry from
+ * one that is only readable. Nothing in the language reaches them yet: `src/` may call
+ * a runtime function only once the last release declares it, so they are here
+ * for the change after the next release (docs/security/cli.md, CLI-7 and
+ * CLI-9). */
+int64_t nish_lstat_owner_mode(const nish_str *path) {
+  struct stat st;
+  if (lstat(nish_cpath(path), &st) != 0) return -1;
+  return (int64_t)((uint64_t)(uint32_t)st.st_uid << 32 | (uint32_t)st.st_mode);
+}
+
+int64_t nish_euid(void) { return (int64_t)geteuid(); }
+
+_Bool nish_is_executable(const nish_str *path) {
+  return access(nish_cpath(path), X_OK) == 0;
 }
 
 /* ---- Signals: `signalFd()` and `readSignal(fd)`

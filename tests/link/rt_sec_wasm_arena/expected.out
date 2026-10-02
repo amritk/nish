@@ -1,0 +1,5 @@
+probe_wrap: trap
+probe_truncate: trap
+probe_array: trap
+probe_array_max: returned 1
+probe_grow: trap

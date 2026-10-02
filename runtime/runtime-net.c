@@ -229,18 +229,24 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
   return nish_net_bound(host, port, SOCK_STREAM, backlog);
 }
 
-/* A socket address into the caller's 18-byte form. An IPv4 peer is written
-   mapped, and the port is already in network order, which is the form's
-   big-endian. */
-static void nish_net_put(nish_array *out, const nish_sockaddr *s) {
+/* A socket address of `n` bytes into the caller's 18-byte form. An IPv4 peer
+   is written mapped, and the port is already in network order, which is the
+   form's big-endian. Anything else -- no address at all, which is what
+   `recvmsg` reports on a connected or Unix socket, or a family that is not
+   IP -- is eighteen zeros: those bytes of `s` were never written, and copying
+   them handed the caller whatever the stack held (docs/security/runtime.md,
+   RT-6). */
+static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
   unsigned char *p = (unsigned char *)out->data;
-  uint16_t port = s->v6.sin6_port;
-  if (s->sa.sa_family == AF_INET) {
+  uint16_t port = 0;
+  memset(p, 0, NISH_ADDR_BYTES);
+  if (n >= sizeof s->v4 && s->sa.sa_family == AF_INET) {
     memcpy(p, nish_mapped_prefix, 12);
     memcpy(p + 12, &s->v4.sin_addr, 4);
     port = s->v4.sin_port;
-  } else {
+  } else if (n >= sizeof s->v6 && s->sa.sa_family == AF_INET6) {
     memcpy(p, &s->v6.sin6_addr, 16);
+    port = s->v6.sin6_port;
   }
   memcpy(p + 16, &port, 2);
 }
@@ -259,7 +265,7 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   int c = nish_net_setup(accept(fd, &s.sa, &n));
 #endif
   if (c < 0) return nish_net_fail();
-  nish_net_put(peer, &s);
+  nish_net_put(peer, &s, n);
   return c;
 }
 
@@ -399,7 +405,7 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
   }
 #endif
   memcpy(meta->data, info, sizeof info);
-  nish_net_put(from, &s);
+  nish_net_put(from, &s, m.msg_namelen);
   return (int32_t)got;
 }
 
