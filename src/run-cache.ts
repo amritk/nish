@@ -22,22 +22,42 @@ import { hexDigitLower, StringBuilder } from "./strings"
 
 /**
  * The directory every entry lives under: `$XDG_CACHE_HOME/nish/run`, or
- * `$HOME/.cache/nish/run` when that is unset or empty, as the XDG base
- * directory rules say. Empty when neither is set, and the caller refuses the
- * run rather than falling back to `/tmp`: a directory other users can write to
- * is a directory someone else can put a binary in for this one to execute.
+ * `$HOME/.cache/nish/run` when that is unset, empty or relative, as the XDG
+ * base directory rules say. Empty when neither gives an absolute path, and the
+ * caller refuses the run rather than falling back to `/tmp`: a directory other
+ * users can write to is a directory someone else can put a binary in for this
+ * one to execute.
+ *
+ * A relative value is ignored rather than resolved because it would resolve
+ * against the working directory, and a run started in a checkout someone else
+ * wrote would then look up its binary in a cache that checkout supplied
+ * (docs/security/cli.md, CLI-3). An absolute root also means every path built
+ * from it starts with `/`, so none of them can be read as an option by the
+ * `mv` and `rm` the miss spawns.
  */
 export const runCacheRoot = (): string => {
   const xdg = getenv("XDG_CACHE_HOME")
-  if (xdg !== null && xdg.length > 0) {
+  if (xdg !== null && xdg.startsWith("/")) {
     return `${xdg}/${CLI}/run`
   }
   const home = getenv("HOME")
-  if (home !== null && home.length > 0) {
+  if (home !== null && home.startsWith("/")) {
     return `${home}/.cache/${CLI}/run`
   }
   return ""
 }
+
+/**
+ * The file an entry keeps the binary in: the script's own name, unless that
+ * name is one the entry already uses for itself. A script called `key.ts` would
+ * otherwise be linked to `<entry>/key`, and then overwritten by the key and
+ * started as text (docs/security/cli.md, CLI-1). `.bin` makes the name differ
+ * from `key` and from every scratch directory, which is `tmp-` and sixteen hex
+ * digits with no dot; and since the key carries the name, one entry only ever
+ * holds one script's binary, so no other script's name can meet the result.
+ */
+export const runBinaryName = (name: string): string =>
+  name === "key" || name.startsWith("tmp-") ? `${name}.bin` : name
 
 /**
  * FNV-1a, 64-bit, over the bytes of `text`, as sixteen lowercase hex digits.
@@ -81,13 +101,17 @@ const fileFingerprint = (path: string): string => {
 
 /**
  * Everything a link's result depends on, as one text: a header line per
- * input to the recipe, then each module's name and IR. `root` is the package
+ * input to the recipe, then each module's name and IR. `name` is the file the
+ * binary is kept in (`runBinaryName`), which is part of what a hit hands
+ * back, so the key names everything the entry holds rather than relying on
+ * the entry module's stem to imply it. `root` is the package
  * root `scripts/build.sh` and `runtime/` are read from; `cc` is the C compiler
  * the script will run (`CC`, or `clang`), since a different compiler is a
  * different binary.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
+  name: string,
   root: string,
   profile: string,
   debugInfo: boolean,
@@ -96,6 +120,7 @@ export const runCacheKey = (
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
+  key.add(`run ${name}\n`)
   key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
   key.add(`cc ${cc}\n`)
   key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
