@@ -79,10 +79,14 @@ test is **data, not code**: a source file next to the output it must produce.
 - **Minimize mocking.** There is nothing to mock: the compiler is a pure
   function from source to IR, and the runtime is exercised by running real
   binaries. Prefer a smaller golden to a stub.
-- **The golden cases are compiled one process per case, many at a time.**
+- **The golden cases run one process per case, many cases at a time.**
   `build/nish-test` is a native binary with no start-up worth batching, so
-  section A spawns it per case through `tests/pool.js`, one job per core. The
-  input path is handed over exactly as written: `source_filename` records it
+  section A spawns it per case through `tests/pool.js`, one job per core, and
+  each job carries its case the whole way: compile, golden, `llvm-as`, link and
+  run. What a case finds is kept and printed in corpus order, so the output is
+  the same at any width. The native programs are the exception and run one at
+  a time, because they share the files they write (`io_nish_import` and
+  `io_nish_import_global` write the same one). The input path is handed over exactly as written: `source_filename` records it
   and `-g` puts it in a `DIFile`, so resolving or relativising it would move
   every golden (`docs/wp19-stage0-retirement.md` §A3). The binary has to live
   under the repository (`build/`), because `src/compile.ts` finds
