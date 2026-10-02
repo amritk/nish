@@ -70,9 +70,9 @@ Three rules hold across the modules:
   copy *before* `digest` when the computation has to go on.
 - **An all-zero X25519 result is returned, not refused.** It is what a
   low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol.
-  Nothing in this tree makes that check yet (TLS 1.3, WP34 T1, is planned to),
-  so every caller doing a key exchange must refuse an all-zero answer itself,
-  with `timingSafeEqual` against 32 zero bytes, since the answer is a secret.
+  `nish/net/tls` makes that check (below); every other caller doing a key
+  exchange must refuse an all-zero answer itself, with `timingSafeEqual`
+  against 32 zero bytes, since the answer is a secret.
 - **Constant time by construction, and verified where the check reaches.** No
   module branches on, or indexes by, a secret: comparisons OR the differences
   into one word and test it once, the ladder swaps with a mask and always runs
@@ -120,6 +120,45 @@ Three rules hold across the modules:
   only on lengths, and are not in a fixture either; nor is `crypto/x509.ts`,
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
+
+## `nish/net` — the protocol stack
+
+The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, written on
+`nish/crypto` (decision S2). Each module takes bytes and answers bytes:
+randomness is an argument and nothing reads a socket or a clock, so a test
+injects an RFC trace's values and replays it byte for byte. The carriers that
+put them on sockets come after.
+
+| Module | What it is | Reproduces |
+| --- | --- | --- |
+| [`net/tls.ts`](./net/tls.ts) | The server side of a TLS 1.3 handshake, ClientHello through the client's Finished. `new TlsServer(config, serverRandom, x25519Private)`, then `receive(level, buf, off, len)` with what the client sent, `takeOutput(level)` for what to send, and `signatureInput()` / `sign(signature)` for the CertificateVerify hand-off (`tlsSignEcdsaP256` signs for a P-256 key, DER-encoded). A `TlsServerConfig` names the certificate chain, the signature scheme, the ALPN protocols, whether the carrier is QUIC, the server's transport parameters, and extensions to pass through in EncryptedExtensions. The suites are `TLS_AES_128_GCM_SHA256`, `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384` (in the client's order), the group x25519 (one HelloRetryRequest when the client offers it without a share), and `server_name`, ALPN and `quic_transport_parameters` are read; PSKs, 0-RTT, NewSessionTicket and client authentication are not. Every refusal is the alert to send — `receive` and `sign` answer 0 or a `TLS_ALERT_*` — never a panic, and a low-order x25519 share is refused | RFC 8446 §4, §7; RFC 8448 §3 byte for byte, and §5's transcript |
+| [`net/tls/codec.ts`](./net/tls/codec.ts) | The handshake messages as bytes: `tlsParseClientHello` into a `TlsClientHello` (structure checked, an alert on a malformed or duplicated field), and `tlsEncodeServerHello`, `tlsEncodeHelloRetryRequest`, `tlsEncodeEncryptedExtensions`, `tlsEncodeCertificate`, `tlsEncodeCertificateVerify`, `tlsEncodeFinished` and `tlsCertificateVerifyContent`. The wire's constants: handshake and extension types, versions, the x25519 group, the two signature schemes, and the `TLS_ALERT_*` descriptions | RFC 8446 §4, RFC 6066 §3, RFC 7301 §3.1, RFC 9001 §8.2 |
+| [`net/tls/schedule.ts`](./net/tls/schedule.ts) | The key schedule over SHA-256 or SHA-384: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsFinishedVerifyData`, and `tlsTrafficKey` / `tlsTrafficIv` for a record layer. `TlsTranscript` is the running transcript hash, with HelloRetryRequest's `message_hash` rule. The suite constants and `tlsSuiteHashLength` / `tlsSuiteKeyLength` | RFC 8446 §4.4.1, §7.1, §7.3 |
+
+**How a carrier drives `TlsServer`.** The server speaks in handshake
+*messages*, tagged by level: `TLS_LEVEL_INITIAL` (cleartext — ClientHello,
+HelloRetryRequest, ServerHello), `TLS_LEVEL_HANDSHAKE` (EncryptedExtensions
+through both Finished messages) and `TLS_LEVEL_APPLICATION`. A carrier hands
+`receive` the bytes it got at a level, in any split, and sends what
+`takeOutput(level)` answers under that level's keys: TLS over TCP (T2) in
+records, QUIC (Q2) in CRYPTO frames of the matching packet number space.
+`writeSecret(level)` and `readSecret(level)` answer the server's and the
+client's traffic secret for the Handshake and Application levels as soon as
+it is known (`null` before; the Initial level has none), `tlsTrafficKey` and
+`tlsTrafficIv` turn one into a record key, and `exporterSecret` is there for
+exporters. The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
+first flight is written, `TLS_STATE_WAIT_FINISHED` once it is signed,
+`TLS_STATE_CONNECTED` when the client's Finished verified, and
+`TLS_STATE_FAILED` with `alert` set after a refusal. Over QUIC, set `quic` in
+the configuration: ALPN becomes mandatory and the transport parameters go both
+ways (`clientTransportParameters` holds the client's).
+
+**Secrets are not wiped** here either: the ephemeral key, the ECDHE and
+handshake secrets and every traffic secret stay in arena memory until it is
+reused (TLS-1 in [`docs/security/tls.md`](../docs/security/tls.md), the record
+that also lists what each refusal is and the test that pins it).
+`tests/link/net_tls_*` are the module's programs, each also run under
+`--number-mode f64`.
 
 ## How a program imports it
 

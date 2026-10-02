@@ -417,7 +417,9 @@ export class TlsServer {
         ? this.handleClientHello(message, length)
         : TLS_ALERT_UNEXPECTED_MESSAGE
     }
-    return type === TLS_HANDSHAKE_FINISHED ? this.handleFinished(message, length) : TLS_ALERT_UNEXPECTED_MESSAGE
+    return type === TLS_HANDSHAKE_FINISHED
+      ? this.handleFinished(message, length)
+      : TLS_ALERT_UNEXPECTED_MESSAGE
   }
 
   /**
