@@ -68,8 +68,9 @@ typedef struct nish_str {
  * pass a `.txt` check and open `secret`; "" names nothing, so each caller
  * answers it as it answers a missing path. The one test every path, name and
  * argument the runtime hands the OS goes through (docs/security/runtime.md,
- * RT-3). `__builtin_strlen`, so this header needs no libc header of its own. */
-static inline const char *nish_cpath(const nish_str *s) {
+ * RT-3). `__builtin_strlen`, so this header needs no libc header of its own,
+ * and `unused` because a host that includes it may never call it. */
+static inline __attribute__((unused)) const char *nish_cpath(const nish_str *s) {
   return __builtin_strlen(s->data) == s->len ? s->data : "";
 }
 
