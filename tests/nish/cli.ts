@@ -873,6 +873,220 @@ const checkIdentity198 = (t: Suite, cli: Cli): void => {
   t.contains("and the root it shares a stem with is written beside it", readOrEmpty(`${out}/types_2.ll`), "@eleven(");
 };
 
+/**
+ * `argv` started in `dir` rather than here, through `sh`, since a spawn has no
+ * working directory of its own to set. The directory and every argument are
+ * positional parameters, so none of them is ever read as shell syntax.
+ */
+const inDirectory = (dir: string, argv: string[]): string[] => {
+  const out: string[] = ["sh", "-c", 'cd "$1" && shift && exec "$@"', "sh", dir];
+  for (const arg of argv) {
+    out.push(arg);
+  }
+  return out;
+};
+
+/** `rm -rf`, so a check starts from nothing an earlier run left behind. */
+const removeTree = (path: string): void => {
+  spawnSyncTo(["rm", "-rf", "--", path], `${WORK}/rm.out`, `${WORK}/rm.err`);
+};
+
+/** The `ls -ld` line for `path`, whose first ten bytes are its type and mode. */
+const modeLine = (path: string): string => {
+  spawnSyncTo(["ls", "-ld", path], `${WORK}/ls.out`, `${WORK}/ls.err`);
+  return readOrEmpty(`${WORK}/ls.out`);
+};
+
+/** A program that says it ran and answers 7, so a run of the wrong binary cannot pass for it. */
+const writeRunFixture = (path: string): void => {
+  writeFileSync(
+    path,
+    ["export const main = (): number => {", '  console.log("cli-sec ran");', "  return 7;", "};", ""].join("\n")
+  );
+};
+
+/**
+ * `nish run`'s cache, as another user or a stale entry would meet it
+ * (docs/security/cli.md). Each check names the finding it pins: CLI-1, a
+ * script called `key.ts`, whose binary was overwritten by the entry's key and
+ * started as text; CLI-3, a relative `XDG_CACHE_HOME`, which put the cache in
+ * whatever directory the run was started in; CLI-4, the cache root, which was
+ * left with the umask's mode and so readable by every user. Then the
+ * properties the record verifies: an entry whose key is not this run's is
+ * relinked rather than started, and a link's paths reach `scripts/build.sh`
+ * as arguments rather than as shell text.
+ *
+ * A run needs a C compiler, so a compiler that cannot link is one counted skip.
+ */
+const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
+  if (!env) {
+    t.skip("nish run's cache", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("nish run's cache", `cannot resolve ${WORK}`);
+    return;
+  }
+  const cache = `${abs}/sec-cache`;
+  removeTree(cache);
+  const script = `${WORK}/key.ts`;
+  writeRunFixture(script);
+  const first = cli.run("sec_key", [`XDG_CACHE_HOME=${cache}`], ["run", script]);
+  if (first.status === 3 && contains(first.stderr, "no usable C compiler")) {
+    t.skip("nish run's cache", "no C compiler, so nothing can be linked into it");
+    return;
+  }
+  t.eqI32("CLI-1: a script called key.ts runs, and answers its own status", first.status, 7);
+  t.contains("CLI-1: and its own output", first.stdout, "cli-sec ran");
+  const hit = cli.run("sec_key_hit", [`XDG_CACHE_HOME=${cache}`], ["run", script]);
+  t.eqI32("CLI-1: and runs again from the cache", hit.status, 7);
+
+  t.eqStr(
+    "CLI-4: the cache root is private to its owner",
+    modeLine(`${cache}/nish/run`).substring(0, 10),
+    "drwx------"
+  );
+
+  // An entry whose key is replaced by one that is not this run's, and whose
+  // binary by a script that would print PLANTED: a run that trusted the
+  // entry's name rather than comparing the key would start it. A cache and a
+  // script of its own, so it says nothing about CLI-1.
+  const tamperCache = `${abs}/sec-tamper-cache`;
+  removeTree(tamperCache);
+  const tamper = `${WORK}/sec-tamper.ts`;
+  writeRunFixture(tamper);
+  cli.run("sec_tamper", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);
+  const entries = readdirSync(`${tamperCache}/nish/run`);
+  if (entries !== null && t.eqI32("there is one entry to tamper with", toI32(entries.length), 1)) {
+    const entry = `${tamperCache}/nish/run/${entries[0]}`;
+    writeFileSync(`${entry}/key`, "nish 0.0.0\nrun sec-tamper\nnot this run's key\n");
+    writeFileSync(`${entry}/sec-tamper`, "#!/bin/sh\necho PLANTED\nexit 0\n");
+    spawnSyncTo(["chmod", "755", `${entry}/sec-tamper`], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
+    const relinked = cli.run("sec_relink", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);
+    t.eqI32("an entry whose key is not this run's is relinked, not started", relinked.status, 7);
+    t.eqBool("and the binary it held never ran", contains(relinked.stdout, "PLANTED"), false);
+  }
+
+  // CLI-5: a run that dies between moving its binary in and writing its key
+  // must not leave the entry's old key beside the new binary. The entry above
+  // is given a key that is not this run's, standing in for another program
+  // whose key hashed to the same name, and `mv` is a stub that does the real
+  // move and then kills the compiler that started it.
+  const path = getenv("PATH");
+  const stubs = `${abs}/sec-stubs`;
+  removeTree(stubs);
+  mkdirSync(stubs);
+  writeFileSync(`${stubs}/mv`, '#!/bin/sh\n/bin/mv "$@" || exit 1\nkill -9 $PPID\n');
+  spawnSyncTo(["chmod", "755", `${stubs}/mv`], `${WORK}/chmod.out`, `${WORK}/chmod.err`);
+  const after = readdirSync(`${tamperCache}/nish/run`);
+  if (path !== null && after !== null && after.length === 1) {
+    const entry = `${tamperCache}/nish/run/${after[0]}`;
+    const otherKey = "nish 0.0.0\nrun sec-tamper\nanother program's key\n";
+    writeFileSync(`${entry}/key`, otherKey);
+    cli.run("sec_killed", [`XDG_CACHE_HOME=${tamperCache}`, `PATH=${stubs}:${path}`], ["run", tamper]);
+    t.eqBool(
+      "CLI-5: a run killed after its binary is moved in leaves no other program's key beside it",
+      readOrEmpty(`${entry}/key`) === otherKey,
+      false
+    );
+  }
+
+  const relative = `${WORK}/sec-relative-cache`;
+  const home = `${abs}/sec-home`;
+  removeTree(relative);
+  removeTree(home);
+  const ok = `${WORK}/sec-ok.ts`;
+  writeRunFixture(ok);
+  const viaRelative = cli.run("sec_relative", [`XDG_CACHE_HOME=${relative}`, `HOME=${home}`], ["run", ok]);
+  t.eqI32("CLI-3: a run with a relative XDG_CACHE_HOME still runs", viaRelative.status, 7);
+  t.eqBool("CLI-3: and keeps nothing under the relative path", isDirectorySync(relative), false);
+  t.eqBool("CLI-3: but under $HOME/.cache, as if it were unset", isDirectorySync(`${home}/.cache/nish/run`), true);
+  const homeless = cli.run(
+    "sec_relative_home",
+    [`XDG_CACHE_HOME=${relative}`, "HOME=relative-home"],
+    ["run", "--json", ok]
+  );
+  t.eqI32("CLI-3: with no absolute HOME either, the run is refused with the toolchain band", homeless.status, 3);
+  t.eqBool("CLI-3: and nothing is kept under the relative HOME", isDirectorySync("relative-home"), false);
+
+  // Every byte that is shell syntax in one place: a link that reached a shell
+  // as text would run the `touch`.
+  const marker = `${abs}/sec-meta-ran`;
+  removeTree(marker);
+  const exe = `${WORK}/sec meta;touch ${marker};$(touch ${marker})\`touch ${marker}\``;
+  const meta = cli.plain("sec_meta", [`${WORK}/${FIXTURE_OK}`, "-o", `${WORK}/sec-meta.ll`, "--link", exe]);
+  t.eqI32("a --link path full of shell syntax links", meta.status, 0);
+  t.eqBool("and none of it is run", readFileSyncOrNull(marker) !== null, false);
+  removeTree(`${WORK}/sec meta;touch ${abs}`);
+};
+
+/**
+ * CLI-2: a compiler with no package beside it does not take one from the
+ * directory it is run in. The compiler under test is copied out of its
+ * package, and run in a directory that holds a `scripts/build.sh` and a
+ * `std/` of someone else's: `--link` must not run the script, and
+ * `nish/<module>` must not compile the library. Both did until the working
+ * directory stopped being a candidate for a compiler outside it.
+ */
+const checkPackageRoot = (t: Suite, cli: Cli): void => {
+  if (cli.head.length !== 1) {
+    t.skip("a compiler outside its package", `${cli.label} is not a binary that can be copied out of its package`);
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("a compiler outside its package", `cannot resolve ${WORK}`);
+    return;
+  }
+  const lone = `${abs}/sec-standalone/bin`;
+  const planted = `${abs}/sec-planted`;
+  removeTree(`${abs}/sec-standalone`);
+  removeTree(planted);
+  mkdirSync(`${abs}/sec-standalone`);
+  mkdirSync(lone);
+  mkdirSync(planted);
+  mkdirSync(`${planted}/scripts`);
+  mkdirSync(`${planted}/std`);
+  if (spawnSyncTo(["cp", cli.head[0], `${lone}/nish`], `${WORK}/cp.out`, `${WORK}/cp.err`) !== 0) {
+    t.fail("a compiler outside its package", `cannot copy ${cli.label}: ${readOrEmpty(`${WORK}/cp.err`)}`);
+    return;
+  }
+  const marker = `${planted}/build-sh-ran`;
+  writeFileSync(`${planted}/scripts/build.sh`, `touch '${marker}'\nexit 0\n`);
+  writeFileSync(`${planted}/std/planted.ts`, "export const plantedOnly = (): number => 1;\n");
+  writeFileSync(`${planted}/main.ts`, ["export const main = (): number => {", "  return 0;", "};", ""].join("\n"));
+  writeFileSync(
+    `${planted}/uses-std.ts`,
+    [
+      'import { plantedOnly } from "nish/planted";',
+      "export const main = (): number => {",
+      "  return plantedOnly();",
+      "};",
+      "",
+    ].join("\n")
+  );
+
+  const link = spawnSyncTo(
+    inDirectory(planted, [`${lone}/nish`, "main.ts", "-o", "out/", "--link", "out/main"]),
+    `${WORK}/sec_planted_link.out`,
+    `${WORK}/sec_planted_link.err`
+  );
+  t.eqBool(
+    "CLI-2: --link does not run the working directory's scripts/build.sh",
+    readFileSyncOrNull(marker) !== null,
+    false
+  );
+  t.eqI32("CLI-2: and is refused with the toolchain band, since there is no package", link, 3);
+
+  const std = spawnSyncTo(
+    inDirectory(planted, [`${lone}/nish`, "uses-std.ts", "-o", "out/"]),
+    `${WORK}/sec_planted_std.out`,
+    `${WORK}/sec_planted_std.err`
+  );
+  t.eqI32("CLI-2: nish/<module> is not read from the working directory's std/", std, 1);
+};
+
 export const main = (): number => {
   const spec = process.argv.length > 1 ? process.argv[1] : DEFAULT_CLI;
   mkdirSync("build");
@@ -903,6 +1117,8 @@ export const main = (): number => {
   checkEnginesBoundary(t, cli);
   checkSymbolClashes(t, cli);
   checkIdentity198(t, cli);
+  checkRunCache(t, cli, env);
+  checkPackageRoot(t, cli);
 
   return t.done();
 };

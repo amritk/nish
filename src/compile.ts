@@ -68,7 +68,7 @@ import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
 import { internalErrorFor, simulatedInternalError } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
-import { fnv1a64Hex, runCacheKey, runCacheRoot } from "./run-cache"
+import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
 
 const usageText = (): string =>
   `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
@@ -322,8 +322,12 @@ export const main = (): number => {
   }
   const opts = new Options()
   // Where `nish/<module>` is resolved from, worked out once here because this
-  // is the only place `process.argv` is legal (`packageRoot`).
-  opts.packageRoot = packageRoot()
+  // is the only place `process.argv` is legal (`packageRoot`). A compiler with
+  // no package beside it is still handed a root, the one it would have had, so
+  // that `Compilation` does not fall back to the working directory and compile
+  // a `std/` the checkout it was run in supplied (docs/security/cli.md, CLI-2).
+  // The import then fails naming where the library should have been.
+  opts.packageRoot = libraryRoot()
   // `nish run [flags] <file.ts> [args ...]`: the flags before the file are the
   // compiler's and everything after it is the program's, so a script is run by
   // the same line a shebang writes. The debug recipe is the default because a
@@ -774,10 +778,17 @@ const programOnPath = (program: string): string => {
  * so a compiler that is *not* reached through a link answers exactly the root it
  * answered before — spelled the way it was invoked rather than absolutely, which
  * is what keeps every `std/` path and every diagnostic where it was — and a link
- * is the only thing that adds a candidate at all. `.` is last and is the
- * fallback for a compiler beside no package whatsoever, which is the checkout a
- * developer is standing in; a symlinked install that *is* a package now wins
- * over that cwd, exactly as a directly-invoked one always did.
+ * is the only thing that adds a candidate at all.
+ *
+ * `.` is last, and is the fallback for a compiler beside no package
+ * whatsoever, which is the checkout a developer is standing in: the bootstrap's
+ * intermediate stages live two levels down, in `build/selfhost/`. **It is a
+ * candidate only when the compiler's own real path is inside it.** It used to
+ * be one unconditionally, and that made `--link` run whatever
+ * `scripts/build.sh` the directory it was started in held: compiling a checkout
+ * someone else wrote, with a binary copied out of its package, executed their
+ * script (docs/security/cli.md, CLI-2). A compiler inside the tree it is run
+ * in is that tree's own, so the tree is no less trusted than the binary.
  *
  * It lives in the driver rather than beside the path helpers because
  * `process.argv` is legal only in a program with an entry `main`, and every
@@ -801,8 +812,11 @@ const packageRootCandidates = (): string[] => {
         candidates.push(throughLink)
       }
     }
+    const here = realpathSync(".")
+    if (real !== null && here !== null && real.startsWith(`${here}/`)) {
+      candidates.push(".")
+    }
   }
-  candidates.push(".")
   return candidates
 }
 
@@ -817,6 +831,21 @@ const packageRoot = (): string => {
     i = i + 1
   }
   return ""
+}
+
+/**
+ * The root `nish/<module>` is read from: the package root when there is one,
+ * and otherwise the root the compiler's own path implies, or `/` when it has
+ * none either — never empty, because `Compilation` reads an empty root as the
+ * working directory.
+ */
+const libraryRoot = (): string => {
+  const root = packageRoot()
+  if (root.length > 0) {
+    return root
+  }
+  const candidates = packageRootCandidates()
+  return candidates.length > 0 ? candidates[0] : "/"
 }
 
 /**
@@ -842,16 +871,20 @@ const runProgram = (
 ): number => {
   const cacheRoot = runCacheRoot()
   if (cacheRoot.length === 0) {
-    reportToolchainFailure("run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME", json)
+    reportToolchainFailure(
+      "run: no directory to keep the binary in: set HOME or XDG_CACHE_HOME to an absolute path",
+      json
+    )
     return 3
   }
-  const key = runCacheKey(emitted, packageRoot(), profile, debugInfo, threads, cCompiler())
+  const file = runBinaryName(name)
+  const key = runCacheKey(emitted, file, packageRoot(), profile, debugInfo, threads, cCompiler())
   const cacheEntry = `${cacheRoot}/${fnv1a64Hex(key)}`
-  const binary = `${cacheEntry}/${name}`
+  const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
   if (stored === null || stored !== key) {
-    const status = buildIntoCache(emitted, cacheEntry, name, profile, debugInfo, threads, json)
+    const status = buildIntoCache(emitted, cacheRoot, cacheEntry, file, profile, debugInfo, threads, json)
     if (status !== 0) {
       return status
     }
@@ -881,9 +914,24 @@ const runProgram = (
  * whichever renames last leaves the same bytes behind. The scratch directory
  * goes either way, and a failed link is reported by `linkProgram` in its own
  * words, since that is the failure it is.
+ *
+ * The cache root is made `0700` first, by `chmod` since the language has no
+ * call for it: `mkdirSync` makes it with the umask's mode, which commonly lets
+ * every user on the machine read each key — the program's whole IR, string
+ * literals included — and its binary. A root `chmod` cannot change is one this
+ * user does not own, and a binary is never kept in it (docs/security/cli.md,
+ * CLI-4). It is done on a miss and not on every run, because a hit has to
+ * stay a read and a spawn, and every entry is made on a miss.
+ *
+ * Whatever key the entry holds is emptied before the new binary is moved in.
+ * The entry's name is a 64-bit hash, so another key can name it, and a run
+ * that stopped between the `mv` and the caller's write of the new key would
+ * otherwise leave the old key beside a binary that is not its program. An empty
+ * key never equals one, because every key starts with the compiler's name.
  */
 const buildIntoCache = (
   emitted: EmittedModule[],
+  cacheRoot: string,
   cacheEntry: string,
   name: string,
   profile: string,
@@ -894,6 +942,11 @@ const buildIntoCache = (
   const problem = missingToolchain("run")
   if (problem.length > 0) {
     reportToolchainFailure(problem, json)
+    return 3
+  }
+  const privateRoot: string[] = ["chmod", "700", cacheRoot]
+  if (!makeDirectory(cacheRoot) || spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
+    reportToolchainFailure(`run: cannot make ${cacheRoot} private to this user (chmod 700 failed)`, json)
     return 3
   }
   const work = `${cacheEntry}/tmp-${hexOfI64(monotonicNanos(), 16)}`
@@ -910,13 +963,14 @@ const buildIntoCache = (
   const built = `${work}/${name}`
   let status = linkProgram(outputs, built, profile, debugInfo, threads, json, true)
   if (status === 0) {
-    const move: string[] = ["mv", "-f", built, `${cacheEntry}/${name}`]
+    writeFileSync(`${cacheEntry}/key`, "")
+    const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
     if (spawnSync(move) !== 0) {
       reportToolchainFailure(`run: could not move the binary into ${cacheEntry}`, json)
       status = 3
     }
   }
-  const clean: string[] = ["rm", "-rf", work]
+  const clean: string[] = ["rm", "-rf", "--", work]
   spawnSync(clean)
   return status
 }
