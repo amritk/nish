@@ -2577,10 +2577,21 @@ export class Parser {
       this.advance()
       modifiers = modifiers | FLAG_ACCESSOR
     }
-    if (!this.atMemberName()) {
+    // `[k]: i32` and `[Symbol.iterator]() { }`, a computed name, for Phase 0
+    // to refuse (NL1041): read before the method-or-field question, which
+    // is then asked of the token after the `]`.
+    const beforeName = this.diagnostics.length
+    const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+    if (computed !== null && this.computedNameFailed(beforeName)) {
+      return this.abandonedMember(start)
+    }
+    if (computed === null && !this.atMemberName()) {
       return this.fail(
         `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
       )
+    }
+    if (computed !== null) {
+      modifiers = modifiers | FLAG_COMPUTED
     }
     // `m?(): void` is a method with a marker, not a field: the `?` sits
     // between the name and the parameter list, so the one token of lookahead
@@ -2591,12 +2602,12 @@ export class Parser {
     // type parameter list.
     if (
       (modifiers & (FLAG_GENERATOR | FLAG_ACCESSOR)) !== 0 ||
-      this.peek() === TOK_LPAREN ||
-      this.peek() === TOK_LT ||
-      this.markedMethodAhead()
+      (computed === null
+        ? this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()
+        : this.methodAfterComputedName())
     ) {
       const method = this.node(N_METHOD, start, this.end)
-      method.children.push(this.parseMemberNameNode())
+      method.children.push(computed === null ? this.parseMemberNameNode() : computed)
       // `m?<T>()`: the marker is written before the type parameters. An
       // accessor is refused whole, so its parameter needs no annotation to
       // reach the refusal, as `set x(v)` needs none in TypeScript.
@@ -2615,7 +2626,7 @@ export class Parser {
       return method
     }
     const field = this.node(N_FIELD, start, this.end)
-    field.children.push(this.parseMemberNameNode())
+    field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     field.flags = modifiers | this.parseMemberMarker()
     field.children.push(this.parseTypeAnnotation())
     field.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty())
@@ -2626,17 +2637,99 @@ export class Parser {
 
   /**
    * Whether `get` or `set` is in hand before a member's name — an identifier,
-   * a string or a number — which makes it an accessor's word (NL2209). A
-   * member called `get` is followed by what follows a name, never by another
-   * name, so the word is the accessor's wherever one follows it, a line break
-   * between them included, as TypeScript reads it.
+   * a string, a number or a computed `[k]` — which makes it an accessor's word
+   * (NL2209). A member called `get` is followed by what follows a name, never
+   * by another name, so the word is the accessor's wherever one follows it, a
+   * line break between them included, as TypeScript reads it.
    */
   accessorAhead(): boolean {
     if (!this.at(TOK_IDENT) || (this.value !== "get" && this.value !== "set")) {
       return false
     }
     const next = this.peek()
-    return next === TOK_IDENT || next === TOK_STRING || next === TOK_NUMBER
+    return next === TOK_IDENT || next === TOK_STRING || next === TOK_NUMBER || next === TOK_LBRACKET
+  }
+
+  /**
+   * `[expr]`, a computed member name or object-literal key: the expression
+   * between the brackets, where the member's name would be, and the member
+   * carries FLAG_COMPUTED for Phase 0 to refuse (NL1041). `in` is an
+   * operator here, as it is inside any bracket.
+   *
+   * A name that is itself a syntax error reports that one error alone (the
+   * `formStart` rule), and its caller asks `computedNameFailed` and stops
+   * reading the member there, so `{ [` costs no more than it did when the
+   * parser refused the `[` outright.
+   */
+  parseComputedName(): Node {
+    const previous = this.beginForm()
+    this.advance() // `[`
+    const outerNoIn = this.allowIn()
+    const key = this.parseExpression()
+    this.noIn = outerNoIn
+    this.expect(TOK_RBRACKET)
+    this.formStart = previous
+    return key
+  }
+
+  /**
+   * Whether a computed name read since `before` (the diagnostics' length when
+   * it began) reported a syntax error, so that the member it opened is
+   * abandoned rather than parsed on into a cascade.
+   */
+  computedNameFailed(before: i32): boolean {
+    return this.diagnostics.length > before
+  }
+
+  /**
+   * After an object-literal property whose computed key was a syntax error:
+   * pass over the rest of the property, brackets balanced, to the `,` that
+   * ends it, which is consumed and answers true (the literal reads on), or
+   * to the `}` or `;` that ends the literal, the end of the file, or a keyword
+   * on a new line, which answers false. That is what refusing the `[` used to
+   * cost: one error, and the properties after it read as they are.
+   */
+  skipBrokenProperty(): boolean {
+    let depth = 0
+    while (!this.at(TOK_END)) {
+      if (depth === 0) {
+        if (this.at(TOK_COMMA)) {
+          this.advance()
+          return true
+        }
+        if (this.at(TOK_RBRACE) || this.at(TOK_SEMICOLON)) {
+          return false
+        }
+        if (this.newlineBefore() && this.kind >= TOK_FUNCTION && this.kind <= TOK_SUPER) {
+          return false
+        }
+      }
+      if (this.at(TOK_LPAREN) || this.at(TOK_LBRACKET) || this.at(TOK_LBRACE)) {
+        depth = depth + 1
+      } else if ((this.at(TOK_RPAREN) || this.at(TOK_RBRACKET) || this.at(TOK_RBRACE)) && depth > 0) {
+        depth = depth - 1
+      }
+      this.advance()
+    }
+    return false
+  }
+
+  /** The `N_ERROR` a member becomes when its computed name already reported its syntax error. */
+  abandonedMember(start: i32): Node {
+    const node = this.node(N_ERROR, start, this.previousEnd)
+    node.text = this.diagnostics[this.diagnostics.length - 1].text
+    return node
+  }
+
+  /**
+   * After a computed name: whether a method follows rather than a field — a
+   * `(` or a `<`, or the `?` of `[k]?()` before one.
+   */
+  methodAfterComputedName(): boolean {
+    if (this.at(TOK_QUESTION)) {
+      return this.peek() === TOK_LPAREN || this.peek() === TOK_LT
+    }
+    return this.at(TOK_LPAREN) || this.at(TOK_LT)
   }
 
   /** Whether a member's name is in hand: an identifier, or a string or a number (NL2092). */
@@ -2760,7 +2853,8 @@ export class Parser {
    * One member of an interface. A field is what the language has; a method or
    * an accessor signature (NL2048), an index signature (NL2214), a call or
    * construct signature (NL2257) and a member named by a string or a number
-   * (NL2092) are read for the checker to refuse.
+   * (NL2092) are read for the checker to refuse, and a computed name (NL1041)
+   * for Phase 0.
    */
   parseInterfaceMember(): Node {
     const start = this.start
@@ -2771,12 +2865,12 @@ export class Parser {
       if (construct) {
         this.advance() // `new`
       }
-      return this.parseMethodSignature(start, construct ? FLAG_CONSTRUCT : 0, false)
+      return this.parseMethodSignature(start, construct ? FLAG_CONSTRUCT : 0, false, null)
     }
     if (this.at(TOK_LBRACKET) && this.indexSignatureAhead()) {
       return this.parseIndexSignature(start, 0)
     }
-    if (!this.atMemberName()) {
+    if (!this.atMemberName() && !this.at(TOK_LBRACKET)) {
       return this.fail("an interface holds only annotated fields")
     }
     // The same modifiers a class member takes, because `collectField` is
@@ -2796,17 +2890,30 @@ export class Parser {
       this.advance()
       modifiers = modifiers | FLAG_ACCESSOR
     }
+    // `[k]: T` and `[k](): T`, a computed name, for Phase 0 to refuse
+    // (NL1041), as a class member's is (`parseMember`).
+    const beforeName = this.diagnostics.length
+    const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+    if (computed !== null && this.computedNameFailed(beforeName)) {
+      return this.abandonedMember(start)
+    }
+    if (computed !== null) {
+      modifiers = modifiers | FLAG_COMPUTED
+    } else if (!this.atMemberName()) {
+      return this.fail("an interface holds only annotated fields")
+    }
     // `m(): T;`, a method signature, for the checker to refuse (NL2048):
     // a method with no body, among the fields. An accessor is one too.
     if (
       accessor ||
-      (this.atMemberName() &&
-        (this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()))
+      (computed === null
+        ? this.peek() === TOK_LPAREN || this.peek() === TOK_LT || this.markedMethodAhead()
+        : this.methodAfterComputedName())
     ) {
-      return this.parseMethodSignature(start, modifiers, true)
+      return this.parseMethodSignature(start, modifiers, true, computed)
     }
     const field = this.node(N_FIELD, start, this.end)
-    field.children.push(this.parseMemberNameNode())
+    field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     // `?` only, and not `!`: a definite-assignment assertion is not a
     // spelling TypeScript allows on a property signature at all, so
     // there is no stage0 sentence to agree with and the syntax error
@@ -2827,11 +2934,16 @@ export class Parser {
    * EMPTY body: the checker refuses it before anything reads it (NL2048), so
    * a parameter needs no annotation to get there. A call signature
    * `(x: i32): T` is the same with an EMPTY name (`named` false), and a
-   * construct signature `new (): T` that with FLAG_CONSTRUCT (NL2257).
+   * construct signature `new (): T` that with FLAG_CONSTRUCT (NL2257). A
+   * computed name the caller has read already is `computed`.
    */
-  parseMethodSignature(start: i32, modifiers: i32, named: boolean): Node {
+  parseMethodSignature(start: i32, modifiers: i32, named: boolean, computed: Node | null): Node {
     const method = this.node(N_METHOD, start, this.end)
-    method.children.push(named ? this.parseMemberNameNode() : this.empty())
+    if (computed !== null) {
+      method.children.push(computed)
+    } else {
+      method.children.push(named ? this.parseMemberNameNode() : this.empty())
+    }
     method.flags = named ? modifiers | this.parseMemberMarker() : modifiers
     const typeParams = this.parseTypeParameters()
     method.children.push(this.parseParameters(false))
@@ -4324,12 +4436,45 @@ export class Parser {
     const outerNoIn = this.allowIn()
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const propertyStart = this.start
+      // `{ ...a }`, object spread, for Phase 0 to refuse (NL1061): the
+      // N_SPREAD an array literal's `...a` is, among the properties.
+      if (this.at(TOK_DOT_DOT_DOT)) {
+        const spread = this.node(N_SPREAD, propertyStart, this.end)
+        this.advance()
+        spread.children.push(this.parseExpression())
+        spread.end = this.previousEnd
+        node.children.push(spread)
+        if (!this.eat(TOK_COMMA)) {
+          break
+        }
+        continue
+      }
       const property = this.node(N_PROPERTY, propertyStart, this.end)
+      // `[k]`, a computed key, for Phase 0 to refuse (NL1041): read first,
+      // because whether a method follows is a question about the token
+      // after its `]`.
+      const beforeKey = this.diagnostics.length
+      const computed: Node | null = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+      // A computed key that is a syntax error costs that one error: the rest
+      // of the property is passed over, and the literal reads on from the
+      // next one, as when the `[` was refused.
+      if (computed !== null && this.computedNameFailed(beforeKey)) {
+        if (this.skipBrokenProperty()) {
+          continue
+        }
+        break
+      }
       // `{ m() { } }`, a method (or an accessor), for the checker to refuse
       // (NL2258): the property's value is the N_METHOD.
-      if (this.objectMethodAhead()) {
-        const method = this.parseObjectMethod(propertyStart)
-        property.text = method.children[0].text
+      if (computed === null ? this.objectMethodAhead() : this.methodAfterComputedName()) {
+        const method = this.parseObjectMethod(propertyStart, computed)
+        if (method.kind === N_ERROR) {
+          if (this.skipBrokenProperty()) {
+            continue
+          }
+          break
+        }
+        property.text = (method.flags & FLAG_COMPUTED) === 0 ? method.children[0].text : ""
         property.children.push(method)
         property.end = this.previousEnd
         node.children.push(property)
@@ -4339,10 +4484,14 @@ export class Parser {
         continue
       }
       // `{ "a": 1 }` and `{ 0: 1 }`: the key is a second child, for the
-      // checker to refuse (NL2223). Read only when written, so an ordinary
-      // property allocates no node it would drop.
+      // checker to refuse (NL2223), and so is a computed key, with
+      // FLAG_COMPUTED. Read only when written, so an ordinary property
+      // allocates no node it would drop.
       let key: Node | null = null
-      if (this.at(TOK_IDENT)) {
+      if (computed !== null) {
+        key = computed
+        property.flags = FLAG_COMPUTED
+      } else if (this.at(TOK_IDENT)) {
         property.text = this.value
         this.advance()
       } else if ((this.at(TOK_STRING) || this.at(TOK_NUMBER)) && this.peek() === TOK_COLON) {
@@ -4351,7 +4500,11 @@ export class Parser {
         this.report("an object literal key must be a plain identifier", this.start, this.end)
         this.advance()
       }
-      if (this.eat(TOK_COLON)) {
+      if (computed !== null) {
+        // A computed key has no shorthand: `{ [k] }` is not a property.
+        this.expect(TOK_COLON)
+        property.children.push(this.parseExpression())
+      } else if (this.eat(TOK_COLON)) {
         property.children.push(this.parseExpression())
       } else {
         // Shorthand `{ x }`: the value is the identifier the key names.
@@ -4377,8 +4530,8 @@ export class Parser {
   /**
    * Whether an object literal's member in hand is a method: a key followed by
    * `(` or `<`, `get` or `set` before a key, `async` before a key or a `*` on
-   * its line, or a `*`. `{ get: 1 }`, `{ get }` and `{ async }` stay the
-   * properties they are.
+   * its line, or a `*`, where a key may be a computed `[k]`. `{ get: 1 }`,
+   * `{ get }` and `{ async }` stay the properties they are.
    */
   objectMethodAhead(): boolean {
     if (this.at(TOK_STAR)) {
@@ -4394,28 +4547,42 @@ export class Parser {
     if (this.accessorAhead()) {
       return true
     }
-    return this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead() && next !== TOK_LBRACKET
+    return this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead()
   }
 
   /**
    * `m(): T { }` in an object literal, with `async`, `*`, `get` or `set` in
    * front of it: an N_METHOD shaped as a class's is. It is refused whole, so a
-   * parameter needs no annotation to get there.
+   * parameter needs no annotation to get there. A computed name, `computed`
+   * when the caller has read it already, carries FLAG_COMPUTED (NL1041).
    */
-  parseObjectMethod(start: i32): Node {
+  parseObjectMethod(start: i32, computed: Node | null): Node {
     const method = this.node(N_METHOD, start, this.end)
-    if (this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead()) {
-      this.advance()
-      method.flags = FLAG_ASYNC
+    let name: Node | null = computed
+    if (name === null) {
+      if (this.at(TOK_IDENT) && this.value === "async" && this.asyncModifierAhead()) {
+        this.advance()
+        method.flags = FLAG_ASYNC
+      }
+      if (this.eat(TOK_STAR)) {
+        method.flags = method.flags | FLAG_GENERATOR
+      }
+      if (this.accessorAhead()) {
+        this.advance()
+        method.flags = method.flags | FLAG_ACCESSOR
+      }
+      const beforeName = this.diagnostics.length
+      name = this.at(TOK_LBRACKET) ? this.parseComputedName() : null
+      if (name !== null && this.computedNameFailed(beforeName)) {
+        return this.abandonedMember(start)
+      }
     }
-    if (this.eat(TOK_STAR)) {
-      method.flags = method.flags | FLAG_GENERATOR
+    if (name !== null) {
+      method.flags = method.flags | FLAG_COMPUTED
+      method.children.push(name)
+    } else {
+      method.children.push(this.parseMemberNameNode())
     }
-    if (this.accessorAhead()) {
-      this.advance()
-      method.flags = method.flags | FLAG_ACCESSOR
-    }
-    method.children.push(this.parseMemberNameNode())
     const typeParams = this.parseTypeParameters()
     method.children.push(this.parseParameters(false))
     method.children.push(this.parseReturnType())

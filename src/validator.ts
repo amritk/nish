@@ -20,9 +20,11 @@
 // declarations: `async`, a generator, a decorator, a `namespace` or `module`
 // block, `declare global` and type parameters on an alias — and the import
 // forms nothing could make mean anything: `import defer`, a module export
-// name written as a string, and import attributes. What the parser still
-// turns down itself is syntax TypeScript refuses as syntax too, listed case
-// by case in `tests/self/parser-refusals.txt`.
+// name written as a string, and import attributes — and the shapes a fixed
+// layout rules out: a computed name in an object literal, a class or an
+// interface, and object spread. What the parser still turns down itself is
+// syntax TypeScript refuses as syntax too, listed case by case in
+// `tests/self/parser-refusals.txt`.
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
@@ -30,6 +32,7 @@ import { unwrapParens } from "./emit-util"
 import {
   FLAG_ASYNC,
   FLAG_ATTRIBUTES,
+  FLAG_COMPUTED,
   FLAG_DEFER,
   FLAG_FOR_IN,
   FLAG_GENERATOR,
@@ -60,9 +63,11 @@ import {
   N_NAMESPACE,
   N_NEW,
   N_NUMBER,
+  N_OBJECT,
   N_PAREN,
   N_PROPERTY,
   N_REGEX,
+  N_SPREAD,
   N_STRING,
   N_TEMPLATE,
   N_THROW,
@@ -84,6 +89,13 @@ import {
  */
 export const undefinedForbidden = (): string =>
   "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type"
+
+/**
+ * A computed name — `{ [k]: 1 }`, `[k]: i32` in a class or an interface, and
+ * `[Symbol.iterator]() { }` — in every container that can hold one.
+ */
+const computedNameForbidden = (): string =>
+  "Computed property names are forbidden in " + LANGUAGE + " (member names are fixed at compile time)"
 
 /** The message for an identifier that may never appear as a value, or "". */
 const forbiddenValue = (name: string): string => {
@@ -280,9 +292,39 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
       // the offending member on its own — `T | undefined` is a union first.
       checkNullUnion(ctx, node)
       break
+    case N_OBJECT:
+      // `{ ...a }` is an N_SPREAD among the properties (`src/nodes.ts`),
+      // refused in its turn so that the first form in the literal is the one
+      // reported.
+      for (const member of node.children) {
+        if (member.kind === N_SPREAD) {
+          ctx.error(member, "Object spread is forbidden in " + LANGUAGE + " (set each field by name)")
+        }
+        visit(ctx, member, inTypePosition)
+      }
+      return
     case N_PROPERTY:
+      // A computed key is the property's second child, where a string key
+      // would be. Its expression is not swept: `[Symbol.iterator]` is one
+      // refusal, not two.
+      if ((node.flags & FLAG_COMPUTED) !== 0) {
+        ctx.error(node.children[1], computedNameForbidden())
+        visit(ctx, node.children[0], inTypePosition)
+        return
+      }
       if (node.text === "__proto__") {
         ctx.errorAtKey(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)")
+      }
+      break
+    case N_FIELD:
+    case N_METHOD:
+      // A computed name is the member's first child, where its IDENT would be.
+      if ((node.flags & FLAG_COMPUTED) !== 0) {
+        ctx.error(node.children[0], computedNameForbidden())
+        for (let i: i32 = 1; i < node.children.length; i++) {
+          visit(ctx, node.children[i], inTypePosition)
+        }
+        return
       }
       break
     case N_NEW:
