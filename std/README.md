@@ -121,6 +121,17 @@ Three rules hold across the modules:
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
 
+## `nish/net` — the protocols above the sockets
+
+WP34 §5's protocol lanes, in pure Nish and sans-IO: each module takes bytes and
+answers bytes, and the sockets are `nish:net`'s, one layer down. Each is written
+from its RFC and reproduces that RFC's published examples in its
+`tests/link/net_*` programs, in both number modes.
+
+| Module | What it is | Reproduces |
+| --- | --- | --- |
+| [`net/hpack.ts`](./net/hpack.ts) | HPACK, HTTP/2's header compression: `HpackEncoder` and `HpackDecoder`, one per direction of a connection, each with its `HpackTable`; and beneath them the §5.1 integer (`hpackEncodeInteger` / `hpackDecodeInteger`), the §5.2 string (`hpackEncodeString` / `hpackDecodeString`) and Appendix B's Huffman code (`HpackHuffman`, `hpackHuffmanEncode`, `hpackHuffmanDecode`, `hpackHuffmanLength`). Names and values are `u8[]`. The encoder takes the representation and the Huffman choice per field, and sends a never-indexed field as a literal even when a table holds it. The decoder answers a negative `HPACK_ERR_*` code, and stays spent, for a truncated block, an integer past 2^31 - 1, an index of zero or out of range, bad Huffman padding, EOS, a size update above the SETTINGS limit, after a field or missing when a lowered limit requires one; a header list past the caller's limit is decoded to the end, its excess dropped, and answered with `HPACK_LIST_TOO_LARGE`, which is not fatal. A window outside its buffer, a negative size or limit, and an integer prefix outside 1 to 8 bits are the program's mistakes and panic | RFC 7541 Appendix C (C.1–C.6, with the dynamic table after every step) and every code of Appendix B |
+
 ## How a program imports it
 
 By its package specifier:

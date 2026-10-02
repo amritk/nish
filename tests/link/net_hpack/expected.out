@@ -1,0 +1,181 @@
+PASS  RFC 7541 C.1.1 10 in a 5-bit prefix encoded
+PASS  RFC 7541 C.1.1 10 in a 5-bit prefix decoded
+PASS  RFC 7541 C.1.1 10 in a 5-bit prefix read every byte
+PASS  RFC 7541 C.1.2 1337 in a 5-bit prefix encoded
+PASS  RFC 7541 C.1.2 1337 in a 5-bit prefix decoded
+PASS  RFC 7541 C.1.2 1337 in a 5-bit prefix read every byte
+PASS  RFC 7541 C.1.3 42 at an octet boundary encoded
+PASS  RFC 7541 C.1.3 42 at an octet boundary decoded
+PASS  RFC 7541 C.1.3 42 at an octet boundary read every byte
+PASS  RFC 7541 C.3.1 string literal
+PASS  RFC 7541 C.4.1 Huffman string literal
+PASS  RFC 7541 C.4.1 Huffman string decodes
+PASS  RFC 7541 C.4.1 Huffman string decoded
+PASS  RFC 7541 C.2.1 encoded
+PASS  RFC 7541 C.2.1 encoder's table
+PASS  RFC 7541 C.2.1 decodes
+PASS  RFC 7541 C.2.1 decoded
+PASS  RFC 7541 C.2.1 decoder's table
+PASS  RFC 7541 C.2.1 not never indexed
+PASS  RFC 7541 C.2.2 encoded
+PASS  RFC 7541 C.2.2 encoder's table
+PASS  RFC 7541 C.2.2 decodes
+PASS  RFC 7541 C.2.2 decoded
+PASS  RFC 7541 C.2.2 decoder's table
+PASS  RFC 7541 C.2.2 not never indexed
+PASS  RFC 7541 C.2.3 encoded
+PASS  RFC 7541 C.2.3 encoder's table
+PASS  RFC 7541 C.2.3 decodes
+PASS  RFC 7541 C.2.3 decoded
+PASS  RFC 7541 C.2.3 decoder's table
+PASS  RFC 7541 C.2.3 never indexed
+PASS  RFC 7541 C.2.4 encoded
+PASS  RFC 7541 C.2.4 encoder's table
+PASS  RFC 7541 C.2.4 decodes
+PASS  RFC 7541 C.2.4 decoded
+PASS  RFC 7541 C.2.4 decoder's table
+PASS  RFC 7541 C.2.4 not never indexed
+PASS  RFC 7541 C.3.1 encoded
+PASS  RFC 7541 C.3.1 encoder's table
+PASS  RFC 7541 C.3.1 decodes
+PASS  RFC 7541 C.3.1 decoded
+PASS  RFC 7541 C.3.1 decoder's table
+PASS  RFC 7541 C.3.2 encoded
+PASS  RFC 7541 C.3.2 encoder's table
+PASS  RFC 7541 C.3.2 decodes
+PASS  RFC 7541 C.3.2 decoded
+PASS  RFC 7541 C.3.2 decoder's table
+PASS  RFC 7541 C.3.3 encoded
+PASS  RFC 7541 C.3.3 encoder's table
+PASS  RFC 7541 C.3.3 decodes
+PASS  RFC 7541 C.3.3 decoded
+PASS  RFC 7541 C.3.3 decoder's table
+PASS  RFC 7541 C.4.1 encoded
+PASS  RFC 7541 C.4.1 encoder's table
+PASS  RFC 7541 C.4.1 decodes
+PASS  RFC 7541 C.4.1 decoded
+PASS  RFC 7541 C.4.1 decoder's table
+PASS  RFC 7541 C.4.2 encoded
+PASS  RFC 7541 C.4.2 encoder's table
+PASS  RFC 7541 C.4.2 decodes
+PASS  RFC 7541 C.4.2 decoded
+PASS  RFC 7541 C.4.2 decoder's table
+PASS  RFC 7541 C.4.3 encoded
+PASS  RFC 7541 C.4.3 encoder's table
+PASS  RFC 7541 C.4.3 decodes
+PASS  RFC 7541 C.4.3 decoded
+PASS  RFC 7541 C.4.3 decoder's table
+PASS  RFC 7541 C.5.1 encoded
+PASS  RFC 7541 C.5.1 encoder's table
+PASS  RFC 7541 C.5.1 decodes
+PASS  RFC 7541 C.5.1 decoded
+PASS  RFC 7541 C.5.1 decoder's table
+PASS  RFC 7541 C.5.2 encoded
+PASS  RFC 7541 C.5.2 encoder's table
+PASS  RFC 7541 C.5.2 decodes
+PASS  RFC 7541 C.5.2 decoded
+PASS  RFC 7541 C.5.2 decoder's table
+PASS  RFC 7541 C.5.3 encoded
+PASS  RFC 7541 C.5.3 encoder's table
+PASS  RFC 7541 C.5.3 decodes
+PASS  RFC 7541 C.5.3 decoded
+PASS  RFC 7541 C.5.3 decoder's table
+PASS  RFC 7541 C.6.1 encoded
+PASS  RFC 7541 C.6.1 encoder's table
+PASS  RFC 7541 C.6.1 decodes
+PASS  RFC 7541 C.6.1 decoded
+PASS  RFC 7541 C.6.1 decoder's table
+PASS  RFC 7541 C.6.2 encoded
+PASS  RFC 7541 C.6.2 encoder's table
+PASS  RFC 7541 C.6.2 decodes
+PASS  RFC 7541 C.6.2 decoded
+PASS  RFC 7541 C.6.2 decoder's table
+PASS  RFC 7541 C.6.3 encoded
+PASS  RFC 7541 C.6.3 encoder's table
+PASS  RFC 7541 C.6.3 decodes
+PASS  RFC 7541 C.6.3 decoded
+PASS  RFC 7541 C.6.3 decoder's table
+PASS  Appendix B EOS is refused inside a string
+PASS  Appendix B every byte encodes to its code
+PASS  Appendix B every code decodes to its byte
+PASS  Huffman length matches the coding
+PASS  every byte value decodes
+PASS  every byte value round-trips
+PASS  the empty string codes to nothing
+PASS  a window decodes alone
+PASS  a window's symbols
+PASS  a 34-byte entry fits a 60-byte table
+PASS  a 61-byte entry empties a 60-byte table
+PASS  two newest of forty survive eviction
+PASS  a smaller maximum evicts the oldest
+PASS  a maximum of zero empties the table
+PASS  never indexed stays a literal even for a static match
+PASS  a full match by index, and a name from the dynamic table
+PASS  that block decodes
+PASS  its fields
+PASS  the first is never indexed
+PASS  the second is not
+PASS  a lowered then raised size sends both updates
+PASS  the decoder takes both
+PASS  and the table emptied
+PASS  the decoder's maximum follows
+PASS  one update when the size only went down
+PASS  decodes
+PASS  an update to the lowered limit is accepted
+PASS  the next block owes nothing
+PASS  a limit above the table's maximum owes nothing
+PASS  a list over the limit is not fatal
+PASS  the fields within the limit are kept
+PASS  the table still took its entry
+PASS  the next block decodes
+PASS  against the same table
+PASS  an index cut short
+PASS  an index cut short, and no fields
+PASS  an integer cut short after a continuation byte
+PASS  an integer cut short after a continuation byte, and no fields
+PASS  a literal with no value
+PASS  a literal with no value, and no fields
+PASS  a literal with no name
+PASS  a literal with no name, and no fields
+PASS  a string longer than the block
+PASS  a string longer than the block, and no fields
+PASS  a name string longer than the block
+PASS  a name string longer than the block, and no fields
+PASS  an index past 2^31 - 1
+PASS  an index past 2^31 - 1, and no fields
+PASS  an index padded past five continuation bytes
+PASS  an index padded past five continuation bytes, and no fields
+PASS  a string length past 2^31 - 1
+PASS  a string length past 2^31 - 1, and no fields
+PASS  index 0
+PASS  index 0, and no fields
+PASS  an index past the static table, with no dynamic entries
+PASS  an index past the static table, with no dynamic entries, and no fields
+PASS  a literal's name index past the tables
+PASS  a literal's name index past the tables, and no fields
+PASS  a never-indexed name index past the tables
+PASS  a never-indexed name index past the tables, and no fields
+PASS  Huffman padding of eleven bits
+PASS  Huffman padding of eleven bits, and no fields
+PASS  Huffman padding that is not all ones
+PASS  Huffman padding that is not all ones, and no fields
+PASS  a Huffman name with bad padding
+PASS  a Huffman name with bad padding, and no fields
+PASS  EOS inside a Huffman string
+PASS  EOS inside a Huffman string, and no fields
+PASS  a size update above the SETTINGS limit
+PASS  a size update above the SETTINGS limit, and no fields
+PASS  a size update after a field
+PASS  a size update after a field, and no fields
+PASS  a size update cut short
+PASS  a size update cut short, and no fields
+PASS  a size update to the SETTINGS limit is accepted
+PASS  a block without the owed update
+PASS  is fatal: the next block answers the same
+PASS  an empty block without the owed update
+PASS  an update above the smallest limit since
+PASS  an update to the smallest, then to the final
+PASS  a string cut short, read directly
+PASS  a string from an empty block
+PASS  an integer from an empty block
+hpack: 180 passed, 0 failed, 0 skipped
