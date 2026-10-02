@@ -293,7 +293,12 @@ while [ $# -gt 0 ]; do
     -h | --help) usage; exit 0 ;;
     --dir) [ $# -ge 2 ] || die "--dir needs a path"; install_dir="$2"; shift 2 ;;
     --force) force=1; shift ;;
-    --expect-tarball) [ $# -ge 2 ] || die "--expect-tarball needs a file name"; expect_tarball="$2"; shift 2 ;;
+    --expect-tarball)
+      # An empty name is refused here rather than read as "no expectation":
+      # the guard below would skip on it, and a caller that passed the flag
+      # asked for the check.
+      { [ $# -ge 2 ] && [ -n "$2" ]; } || die "--expect-tarball needs a file name"
+      expect_tarball="$2"; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     -*) die "unknown option $1 (try --help)" ;;
     *) [ -z "$version" ] || die "two versions given: $version and $1"; version="$1"; shift ;;
@@ -322,6 +327,26 @@ if [ -z "$asset" ]; then
   released nish that runs here, in a checkout of the repository."
 fi
 
+# The tarball the caller says this machine should get, when it says one. CI's
+# seed rows name theirs from .github/seed-targets.json and run on whatever a
+# runner label provides today, and a label can move to other hardware -- two
+# macOS ones have. Without this a drifted row installs the asset `uname`
+# resolves instead, bootstraps with it, and reports success under the row's
+# name. The asset half comes from `uname`, so it is compared here, before any
+# request and before the already-installed short cut; a mismatch installs
+# nothing and leaves what is there alone.
+nish_expect_refuse() {
+  die "this machine ($(uname -s)-$(uname -m)) resolves $1, but the caller expects $expect_tarball.
+  The runner and the row it was meant to check disagree about the platform: fix
+  the row's runner or its host in .github/seed-targets.json. Nothing was installed."
+}
+if [ -n "$expect_tarball" ]; then
+  case "$expect_tarball" in
+    nish-*-"$asset".tar.gz) ;;
+    *) nish_expect_refuse "nish-<version>-$asset.tar.gz" ;;
+  esac
+fi
+
 if [ -e "$install_dir" ] && ! nish_is_install "$install_dir" &&
   { [ ! -d "$install_dir" ] || [ -n "$(ls -A "$install_dir")" ]; }; then
   die "$install_dir already exists, is not empty and is not a nish install.
@@ -347,17 +372,12 @@ nish_valid_version "$plain" || die "$version is not a release version (one looks
 
 name="nish-$plain-$asset"
 
-# The tarball the caller says this machine should get, when it says one. CI's
-# seed rows name theirs from .github/seed-targets.json and run on whatever a
-# runner label provides today, and a label can move to other hardware -- two
-# macOS ones have. Without this a drifted row installs the asset `uname`
-# resolves instead, bootstraps with it, and reports success under the row's
-# name. It is checked before the already-installed short cut and before any
-# request, so a mismatch installs nothing and leaves what is there alone.
+# The whole name is compared once the version is known. With a version given
+# that is before any request; with none, it is after the one request that
+# finds the latest release and before anything is downloaded -- the asset half
+# was already compared, before that request, above.
 if [ -n "$expect_tarball" ] && [ "$expect_tarball" != "$name.tar.gz" ]; then
-  die "this machine ($(uname -s)-$(uname -m)) resolves $name.tar.gz, but the caller expects $expect_tarball.
-  The runner and the row it was meant to check disagree about the platform: fix
-  the row's runner or its host in .github/seed-targets.json. Nothing was installed."
+  nish_expect_refuse "$name.tar.gz"
 fi
 
 have="$(nish_installed_version "$install_dir")"

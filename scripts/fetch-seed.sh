@@ -40,7 +40,9 @@ while [ $# -gt 0 ]; do
     -h | --help) sed -n '2,/^set -eu$/{/^set -eu$/d;s/^# \{0,1\}//;p}' "$0"; exit 0 ;;
     --force) force=--force; shift ;;
     --expect-tarball)
-      [ $# -ge 2 ] || { printf 'fetch-seed: --expect-tarball needs a file name\n' >&2; exit 2; }
+      # An empty name is refused, not dropped: the call below passes the
+      # option only when it has a value, so "" would skip the check it asks for.
+      { [ $# -ge 2 ] && [ -n "$2" ]; } || { printf 'fetch-seed: --expect-tarball needs a file name\n' >&2; exit 2; }
       expect="$2"; shift 2 ;;
     -*) printf 'fetch-seed: unknown option %s (try --help)\n' "$1" >&2; exit 2 ;;
     *) [ -z "$version" ] || { printf 'fetch-seed: two versions given: %s and %s\n' "$version" "$1" >&2; exit 2; }

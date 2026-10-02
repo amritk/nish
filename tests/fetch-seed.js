@@ -254,6 +254,21 @@ for (const [name, args, words] of [
   )
 }
 
+// --expect-tarball with no name, or an empty one, is refused rather than read
+// as "no expectation": the call into install.sh passes the option only when
+// it has a value, so an empty one used to be dropped and the check skipped.
+for (const args of [
+  ["0.5.0", "--expect-tarball", ""],
+  ["0.5.0", "--expect-tarball"],
+]) {
+  const dir = fresh()
+  const r = run(dir, args)
+  check(
+    `fetch-seed refuses ${JSON.stringify(args.slice(1))} without calling the installer`,
+    r.status === 2 && r.stderr.includes("--expect-tarball needs a file name") && calls(dir).length === 0,
+    `${both(r)}\ncalls: ${calls(dir)}`
+  )
+}
 // ---- install.sh: nothing downloaded runs before its digest matches -------------------
 //
 // A sandbox with a stand-in `curl` first on PATH that serves files out of a
@@ -467,6 +482,52 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
   )
 }
 
+// The same guard with no version: the version comes from the latest-release
+// lookup, which is a request, so the asset half -- from `uname` -- is compared
+// before it and refuses with nothing requested; the whole name is compared
+// after it and before anything is downloaded.
+{
+  const other = hostAsset === "x86_64-linux" ? "aarch64-darwin" : "x86_64-linux"
+  const box = installSandbox("9.9.9")
+  fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+  const r = install(box, ["--expect-tarball", `nish-9.9.9-${other}.tar.gz`, "--dir", box.home])
+  check(
+    "install.sh --expect-tarball with no version refuses another asset before the latest-release lookup",
+    refused(box, r) && r.stderr.includes(`nish-9.9.9-${other}.tar.gz`) && curled(box) === "",
+    told(box, r)
+  )
+  const later = installSandbox("9.9.9")
+  const stale = install(later, ["--expect-tarball", `nish-1.0.0-${hostAsset}.tar.gz`, "--dir", later.home])
+  check(
+    "install.sh --expect-tarball with no version refuses another version after the lookup, downloading nothing",
+    refused(later, stale) &&
+      stale.stderr.includes(`${later.name}.tar.gz`) &&
+      curled(later) === "https://github.com/amritk/nish/releases/latest\n",
+    told(later, stale)
+  )
+  const ok = install(box, ["--expect-tarball", `${box.name}.tar.gz`, "--dir", box.home])
+  check(
+    "install.sh --expect-tarball with no version installs the latest when it is the tarball expected",
+    ok.status === 0 && fs.existsSync(path.join(box.home, "bin", "nish")),
+    told(box, ok)
+  )
+}
+
+// An empty --expect-tarball, or none after the flag, is a usage error, not a
+// guard that skips itself.
+for (const args of [
+  ["9.9.9", "--expect-tarball", ""],
+  ["9.9.9", "--expect-tarball"],
+]) {
+  const box = installSandbox("9.9.9")
+  fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+  const r = install(box, [...args.slice(0, 1), "--dir", box.home, ...args.slice(1)])
+  check(
+    `install.sh refuses ${JSON.stringify(args.slice(1))} before requesting anything`,
+    refused(box, r) && r.stderr.includes("--expect-tarball needs a file name") && curled(box) === "",
+    told(box, r)
+  )
+}
 // Installing into a directory that is not an install refuses rather than moving
 // it aside, where the exit trap would delete it.
 {
@@ -606,6 +667,43 @@ const runScripts = (text) => {
     `no workflow splices a \${{ }} expression into a run: script (${workflows.length} files)`,
     spliced.length === 0,
     spliced.join("\n")
+  )
+}
+
+// What goes through env: is named in upper case, as the shell's own environment
+// is, so a script's $NAME reads as something the step was given and a
+// lower-case $name as one of its own variables. A key spelt like a local
+// (release-pr.yml's `next`) is one the script can shadow or reassign unseen.
+{
+  const lower = workflows.flatMap(({ file, text }) => {
+    const lines = text.split("\n")
+    const out = []
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^(\s*)env:\s*$/)
+      if (m === null) {
+        continue
+      }
+      for (let j = i + 1; j < lines.length; j++) {
+        const line = lines[j]
+        if (/^\s*(#.*)?$/.test(line)) {
+          continue
+        }
+        const indent = line.match(/^\s*/)[0].length
+        if (indent <= m[1].length) {
+          break
+        }
+        const key = line.match(/^\s*([^\s:#][^:]*):/)
+        if (key !== null && !/^[A-Z][A-Z0-9_]*$/.test(key[1])) {
+          out.push(`${file}:${j + 1}: ${key[1]}`)
+        }
+      }
+    }
+    return out
+  })
+  check(
+    `every env: key a workflow sets is upper case (${workflows.length} files)`,
+    lower.length === 0,
+    lower.join("\n")
   )
 }
 
