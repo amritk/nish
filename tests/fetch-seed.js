@@ -513,6 +513,31 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
   )
 }
 
+// Everything in the expected name but the version is known before that
+// lookup, and is held to exactly `nish-<release version>-<asset>.tar.gz`. A
+// glob over the middle let a second platform, a `/` or an empty version through
+// to the lookup before the whole-name check refused them.
+{
+  const other = hostAsset === "x86_64-linux" ? "aarch64-darwin" : "x86_64-linux"
+  for (const [what, name] of [
+    ["an extra platform segment", `nish-9.9.9-${other}-${hostAsset}.tar.gz`],
+    ["a / in the version", `nish-9.9/9-${hostAsset}.tar.gz`],
+    ["an empty version", `nish--${hostAsset}.tar.gz`],
+    ["a .. in the version", `nish-9..9-${hostAsset}.tar.gz`],
+    ["no nish- prefix", `9.9.9-${hostAsset}.tar.gz`],
+    ["a version of latest", `nish-latest-${hostAsset}.tar.gz`],
+  ]) {
+    const box = installSandbox("9.9.9")
+    fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+    const r = install(box, ["--expect-tarball", name, "--dir", box.home])
+    check(
+      `install.sh --expect-tarball with no version refuses ${what} before the latest-release lookup`,
+      refused(box, r) && r.stderr.includes(name) && curled(box) === "",
+      told(box, r)
+    )
+  }
+}
+
 // An empty --expect-tarball, or none after the flag, is a usage error, not a
 // guard that skips itself.
 for (const args of [

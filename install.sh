@@ -332,19 +332,35 @@ fi
 # runner label provides today, and a label can move to other hardware -- two
 # macOS ones have. Without this a drifted row installs the asset `uname`
 # resolves instead, bootstraps with it, and reports success under the row's
-# name. The asset half comes from `uname`, so it is compared here, before any
-# request and before the already-installed short cut; a mismatch installs
-# nothing and leaves what is there alone.
+# name. Everything but the version is known before any request -- the asset
+# half comes from `uname` -- so the name is taken apart here, before the
+# latest-release lookup and the already-installed short cut: it has to be
+# exactly `nish-`, a release version, `-$asset.tar.gz`, or it is refused with
+# nothing requested and what is installed left alone.
+#
+# The version between them is held to nish_valid_version and may not name a
+# platform. That rule allows `-` for a pre-release, so on its own it would read
+# `nish-9.9.9-aarch64-darwin-x86_64-linux.tar.gz` as version
+# `9.9.9-aarch64-darwin`; no release is spelled that way, and a name carrying
+# two platforms is the drifted row this guard is for.
 nish_expect_refuse() {
   die "this machine ($(uname -s)-$(uname -m)) resolves $1, but the caller expects $expect_tarball.
   The runner and the row it was meant to check disagree about the platform: fix
   the row's runner or its host in .github/seed-targets.json. Nothing was installed."
 }
-if [ -n "$expect_tarball" ]; then
-  case "$expect_tarball" in
-    nish-*-"$asset".tar.gz) ;;
-    *) nish_expect_refuse "nish-<version>-$asset.tar.gz" ;;
+nish_expect_version() {
+  _want="${1#nish-}"
+  [ "$_want" != "$1" ] || return 1
+  _rest="${_want%-"$2".tar.gz}"
+  [ "$_rest" != "$_want" ] || return 1
+  nish_valid_version "$_rest" || return 1
+  case "$_rest" in
+    *x86_64* | *aarch64* | *linux* | *darwin*) return 1 ;;
   esac
+  return 0
+}
+if [ -n "$expect_tarball" ]; then
+  nish_expect_version "$expect_tarball" "$asset" || nish_expect_refuse "nish-<version>-$asset.tar.gz"
 fi
 
 if [ -e "$install_dir" ] && ! nish_is_install "$install_dir" &&
@@ -374,8 +390,8 @@ name="nish-$plain-$asset"
 
 # The whole name is compared once the version is known. With a version given
 # that is before any request; with none, it is after the one request that
-# finds the latest release and before anything is downloaded -- the asset half
-# was already compared, before that request, above.
+# finds the latest release and before anything is downloaded -- everything but
+# the version was already compared, before that request, above.
 if [ -n "$expect_tarball" ] && [ "$expect_tarball" != "$name.tar.gz" ]; then
   nish_expect_refuse "$name.tar.gz"
 fi
