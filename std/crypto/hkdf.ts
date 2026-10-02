@@ -22,8 +22,30 @@
  * shorter than HashLen, which §2.3 does not allow: an empty one is a key
  * anybody can compute with.
  *
- * HKDF-Expand-Label, TLS 1.3's wrapper around `expand`, belongs with TLS and is
- * not here. Written from RFC 5869, not ported from another implementation.
+ * HKDF-Expand-Label is TLS 1.3's wrapper around `expand` (RFC 8446 §7.1), and
+ * QUIC derives its packet keys with it too (RFC 9001 §5.1), so it is here once
+ * for both rather than in each:
+ *
+ *     HKDF-Expand-Label(Secret, Label, Context, Length) =
+ *         HKDF-Expand(Secret, HkdfLabel, Length)
+ *     struct {
+ *         uint16 length = Length;
+ *         opaque label<7..255> = "tls13 " + Label;
+ *         opaque context<0..255> = Context;
+ *     } HkdfLabel;
+ *
+ *     const key: u8[] = hkdfExpandLabelSha256(secret, "quic key", [], 16);
+ *
+ * `label` is given without the `"tls13 "` prefix, which the function adds. Its
+ * arguments come from the program rather than from the peer — a label is a
+ * literal, a length a key or hash size, a context a transcript hash — so one
+ * out of range is a bug in the caller, and it panics rather than answering
+ * `null`: a length below 0 or above 255, a label empty or longer than 249
+ * bytes (the struct's 7 to 255 less the prefix), a context longer than 255
+ * bytes, and a secret shorter than HashLen.
+ *
+ * Written from RFC 5869 and RFC 8446 §7.1, not ported from another
+ * implementation.
  */
 import { HmacSha256, HmacSha384, hmacSha256, hmacSha384 } from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
@@ -34,6 +56,9 @@ const HKDF_MAX_BLOCKS: i32 = 255
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const HKDF_FROM: i32 = 0
+
+/** What HKDF-Expand-Label puts before every label (RFC 8446 §7.1). */
+const HKDF_LABEL_PREFIX: string = "tls13 "
 
 /**
  * The salt `extract` keys HMAC with: `salt` itself, or HashLen zero bytes when
@@ -131,4 +156,80 @@ export const hkdfExpandSha384 = (prk: u8[], info: u8[], length: i32): u8[] | nul
     i += 1
   }
   return out
+}
+
+/** Appends every byte of `text` to `out`. */
+const hkdfPushText = (out: u8[], text: string): void => {
+  const n: i32 = toI32(text.length)
+  for (let k: i32 = 0; k < n; k += 1) {
+    out.push(toU8(toI32(text.charCodeAt(k))))
+  }
+}
+
+/**
+ * The `HkdfLabel` struct of RFC 8446 §7.1, the `info` HKDF-Expand-Label hands
+ * to `expand`, or a panic naming `caller` when `length`, `label` or `context`
+ * is outside the range the module docs give: 249 is `label<7..255>`'s 255 less
+ * the prefix's 6 bytes. The lengths of `label` and `context` are compared as
+ * the `number`s they are, before any `toI32`, which would saturate them under
+ * `--number-mode f64`; so the bounds are literals rather than `i32` constants.
+ */
+const hkdfLabel = (caller: string, label: string, context: u8[], length: i32): u8[] => {
+  if (length < 0 || length > 255) {
+    panic(`${caller}: a length of ${length} bytes, outside 0 to 255`)
+  }
+  if (label.length === 0 || label.length > 249) {
+    panic(`${caller}: a label of ${toI32(label.length)} bytes, outside 1 to 249`)
+  }
+  if (context.length > 255) {
+    panic(`${caller}: a context of more than 255 bytes`)
+  }
+  const prefixed: i32 = toI32(HKDF_LABEL_PREFIX.length) + toI32(label.length)
+  const out: u8[] = []
+  out.push(toU8(length >> 8))
+  out.push(toU8(length & 0xff))
+  out.push(toU8(prefixed))
+  hkdfPushText(out, HKDF_LABEL_PREFIX)
+  hkdfPushText(out, label)
+  out.push(toU8(toI32(context.length)))
+  for (const b of context) {
+    out.push(b)
+  }
+  return out
+}
+
+/**
+ * HKDF-Expand-Label with HMAC-SHA-256 (RFC 8446 §7.1): `length` bytes from
+ * `secret`, `"tls13 " + label` and `context`. Panics, as the module docs say,
+ * on a length outside 0 to 255, a label outside 1 to 249 bytes, a context past
+ * 255 bytes or a secret shorter than 32 bytes.
+ */
+export const hkdfExpandLabelSha256 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
+  const okm: u8[] | null = hkdfExpandSha256(
+    secret,
+    hkdfLabel("hkdfExpandLabelSha256", label, context, length),
+    length
+  )
+  if (okm === null) {
+    panic("hkdfExpandLabelSha256: a secret shorter than 32 bytes")
+  }
+  return okm
+}
+
+/**
+ * HKDF-Expand-Label with HMAC-SHA-384 (RFC 8446 §7.1): `length` bytes from
+ * `secret`, `"tls13 " + label` and `context`. Panics, as the module docs say,
+ * on a length outside 0 to 255, a label outside 1 to 249 bytes, a context past
+ * 255 bytes or a secret shorter than 48 bytes.
+ */
+export const hkdfExpandLabelSha384 = (secret: u8[], label: string, context: u8[], length: i32): u8[] => {
+  const okm: u8[] | null = hkdfExpandSha384(
+    secret,
+    hkdfLabel("hkdfExpandLabelSha384", label, context, length),
+    length
+  )
+  if (okm === null) {
+    panic("hkdfExpandLabelSha384: a secret shorter than 48 bytes")
+  }
+  return okm
 }

@@ -147,3 +147,30 @@ stage that is:
 - Worth a sentence near the top: until K1-6 is fixed, a program built under
   `--number-mode i32` must not hand these functions an array of 2^31 bytes or
   more. `length` wraps there, and nothing in std can tell.
+
+## Addendum: HKDF-Expand-Label
+
+Added after this audit, for WP34's TLS 1.3 and QUIC stages (#395), and not
+covered by the reading above: `hkdfExpandLabelSha256/384` and the private
+`hkdfLabel` and `hkdfPushText` in `std/crypto/hkdf.ts`. They build RFC 8446
+§7.1's `HkdfLabel` and hand it to `hkdfExpandSha256/384` as `info`, so every
+property above that holds for `expand` holds for them.
+
+Their arguments sit outside this record's threat model: a label is a literal,
+a length a key or hash size, a context a transcript hash, and the secret one
+the key schedule derived. So an argument out of range is a bug in the caller,
+and it panics rather than answering `null` as `expand` does for a length taken
+from a protocol field. Each refusal has a program that reaches it:
+
+| Refused | Why | Pinned by |
+| --- | --- | --- |
+| a length above 255, or below 0 | no TLS 1.3 or QUIC output is longer than 48 bytes; `HkdfLabel.length` is unsigned | `tests/link/crypto_hkdf_expand_label_long_length`, `_negative_length` |
+| a label longer than 249 bytes, or empty | `"tls13 " + label` must fit `opaque label<7..255>`; past 249 its length byte would wrap, and the bytes would no longer be one well-formed `HkdfLabel` | `_long_label`, `_empty_label` |
+| a context longer than 255 bytes | `opaque context<0..255>`, the same wrap | `_long_context`, and `_long_context_f64`, where the length is compared as an `f64` |
+| a secret shorter than HashLen | K1-5 above: `expand` answers `null` for it, which the label functions turn into a panic | `_short_secret`, `_short_secret_sha384` |
+
+The answers are pinned against every HKDF-Expand-Label step RFC 8448 §3
+prints and all of RFC 9001 A.1, in both number modes
+(`tests/link/crypto_hkdf_expand_label`, `_f64`); the SHA-384 vectors and the
+largest accepted label, context and length were checked against OpenSSL's
+TLS13-KDF. The secrets they derive are not wiped, as nothing here is (ECC-2).
