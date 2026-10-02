@@ -30,7 +30,7 @@ import { HoistedHeader, isResizeCall } from "./attributes"
 import { NO_RECORD, recordReaches, recordStoreType } from "./bounds"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { Emitter, LoopTarget } from "./emit"
-import { emitRangedStore } from "./emit-builtins"
+import { emitPanicTail, emitRangedStore } from "./emit-builtins"
 import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
@@ -41,6 +41,7 @@ import {
 import { isAssignmentOperator, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitSliceCheck } from "./emit-strings"
+import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import {
   N_ARRAY,
@@ -61,7 +62,7 @@ import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructI
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
-import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types"
+import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32 } from "./types"
 
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"
@@ -1010,14 +1011,94 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
 }
 
 /**
- * `new Array<T>(n)`: `n` zeroed elements. A negative `n` becomes a huge
- * allocation and aborts in the arena. `new Int32Array(n)` and friends are the
- * same lowering with `T` fixed by the checker.
+ * Whether `new Array<T>(n)` checks `n` before it allocates. The header takes
+ * `n` as it stands and the block is `n * sizeof(T)` bytes, so an `n` whose type
+ * reaches past what that product and the `length` read can hold must be
+ * refused first (docs/security/codegen.md, CG-1 and K1-6):
+ *
+ *   - an `i64` or `u64`, in either mode: `n * sizeof(T)` wraps, and 2^61
+ *     `f64`s became a header claiming 2^61 elements over a zero-byte block,
+ *     which every bounds check then passed;
+ *   - a float: `fptosi` of a NaN or of anything past 2^63 is poison;
+ *   - a `u32` under `--number-mode i32`: above 2^31 - 1 it makes an array
+ *     whose `length`, an `i32` there, reads back negative.
+ *
+ * A `number` in i32 mode, a narrower unsigned and a ranged integer cannot
+ * reach any of those. A literal is in range when it is at most 2^31 - 1.
+ * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
+ * the check is a call to a `noreturn` panic.
+ */
+export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32): boolean => {
+  const literal = unwrapParens(length)
+  if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= 2147483647.0) {
+    return false
+  }
+  return isFloat(type) || intBits(type) === 64 || (type === T_U32 && numberMode === NUMBER_MODE_I32)
+}
+
+/**
+ * The longest array `new Array` makes: 2^31 - 1 elements under
+ * `--number-mode i32`, where `length` is an `i32`, and 2^53 under f64, where
+ * it is exact up to there. A block of more than 2^62 bytes is refused too,
+ * so `n * size` cannot wrap and the allocator's rounding cannot overflow:
+ * anything that size goes to `nish_arena_grow`, which fails it.
+ */
+const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
+  const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(2147483647) : toI64(1) << toI64(53)
+  const fits: i64 = (toI64(1) << toI64(62)) / toI64(size)
+  return fits < most ? fits : most
+}
+
+/** Branch to a panic unless `ok`; the message is the one every refused length prints. */
+const emitLengthCheck = (emitter: Emitter, ok: string): void => {
+  const fn = emitter.fn
+  const failBlock = fn.newBlock("len.fail")
+  const okBlock = fn.newBlock("len.ok")
+  fn.emit(`br i1 ${ok}, label %${okBlock.label}, label %${failBlock.label}`)
+  fn.placeBlock(failBlock)
+  emitPanicTail(emitter, emitter.stringConstant("array length out of range"))
+  fn.placeBlock(okBlock)
+}
+
+/** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
+const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
+  const type = emitter.typeOf(length)
+  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode)) {
+    return emitIndex(emitter, length)
+  }
+  const fn = emitter.fn
+  const limit = newArrayLimit(emitter, size)
+  if (!isFloat(type)) {
+    const n = emitIndex(emitter, length)
+    emitLengthCheck(emitter, fn.emitValue(`icmp ule i64 ${n}, ${limit}`))
+    return n
+  }
+  // The range is asked of the float itself, before `fptosi` can make poison
+  // of it; `oge` is false for a NaN. Every limit is an integer below 2^53, so
+  // the bound is exact as a `double`.
+  let value = emitter.emitExpression(length)
+  if (emitter.llvm(type) !== "double") {
+    value = fn.emitValue(`fpext ${emitter.llvm(type)} ${value} to double`)
+  }
+  const atLeast = fn.emitValue(`fcmp oge double ${value}, 0.0`)
+  const atMost = fn.emitValue(`fcmp ole double ${value}, ${limit}.0`)
+  emitLengthCheck(emitter, fn.emitValue(`and i1 ${atLeast}, ${atMost}`))
+  return fn.emitValue(`fptosi double ${value} to i64`)
+}
+
+/**
+ * `new Array<T>(n)`: `n` zeroed elements, after the check
+ * `newArrayLengthChecked` asks for. A negative `i32` `n` is not checked here:
+ * it becomes a byte count past 2^63, and the inline allocator's rounding wraps
+ * on it, so the memset faults rather than the arena refusing it
+ * (docs/security/codegen.md, CG-2, open in `src/runtime.ts`).
+ * `new Int32Array(n)` and friends are the same lowering with `T` fixed by the
+ * checker.
  */
 export const emitNewArray = (emitter: Emitter, expr: Node): string => {
   const elem = emitter.table.refOf(emitter.typeOf(expr))
   const size = elementSize(emitter, elem)
-  const n = emitIndex(emitter, expr.children[2].children[0])
+  const n = emitNewArrayLength(emitter, expr.children[2].children[0], size)
   const arr = emitHeader(emitter, n, expr)
   const bytes = size === 1 ? n : emitter.fn.emitValue(`mul i64 ${n}, ${size}`)
   // The slot's type spells the length out, so it has to come from the literal

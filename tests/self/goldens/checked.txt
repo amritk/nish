@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 822 programs, 58786 dump lines.
+# 825 programs, 58829 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3930,6 +3930,52 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 22:10 countDigits -> @countDigits
   callee 22:38 firstPowerOver -> @firstPowerOver
+program tests/cases/cg_sec_new_array_guard.ts
+module tests/cases/cg_sec_new_array_guard.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_write
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_exit nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_write
+  stackSites=1 stackLocals=1
+  local 7:9 wide: i64 (const)
+  local 8:9 a: f64[] (const)
+  local 9:9 unsigned: u32 (const)
+  local 10:9 b: u8[] (const)
+  local 11:9 float: f64 (const)
+  local 12:9 c: i32[] (const)
+  local 13:9 plain: i32[] (const)
+  local 14:9 literal: u8[] (const)
+program tests/cases/cg_sec_readdir_pass.ts
+module tests/cases/cg_sec_readdir_pass.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_mkdir
+  calls: nish_arena_mark nish_arena_release nish_mkdir nish_panic_index nish_print nish_readdir nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
+  stackSites=0 stackLocals=0
+  local 7:9 dir: string (const)
+  local 10:7 keep: string (let)
+  local 11:12 i: i32 (let)
+  local 12:11 pad: string (const)
+  local 13:11 junk: string (const)
+  local 14:11 names: string[] | null (const)
+program tests/cases/cg_sec_readdir_return.ts
+module tests/cases/cg_sec_readdir_return.ts (entry)
+function first(d: string): string -> @first
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_readdir
+  calls: nish_panic_index nish_readdir
+  stackSites=0 stackLocals=0
+  local 7:9 names: string[] | null (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_mkdir
+  calls: first nish_arena_mark nish_arena_release nish_mkdir nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
+  stackSites=0 stackLocals=0
+  local 16:9 dir: string (const)
+  local 20:9 a: string (const)
+  callee 20:13 first -> @first
+  local 21:9 q: string (const)
+  local 22:9 junk: string (const)
 program tests/cases/cls_compound_field.ts
 module tests/cases/cls_compound_field.ts (entry)
 struct Stats (class) size=12 align=4

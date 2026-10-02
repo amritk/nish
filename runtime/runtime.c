@@ -1160,9 +1160,18 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * `sizeof` one element, which for a record element type (WP15 section 2a) is
  * the whole struct, so this relocates the elements themselves rather than a
  * block of pointers to them. Compiled code may therefore hold no pointer into
- * `data` across a push, and the checker refuses the programs that would. */
+ * `data` across a push, and the checker refuses the programs that would.
+ *
+ * A push never takes an array past 2^31 - 1 elements (docs/security/codegen.md,
+ * K1-6). Under --number-mode i32 `length` is an `i32`, and one element more
+ * read back as a negative or a short length everywhere, a hash or a tag
+ * compare included. This file cannot tell which mode compiled its caller, so
+ * the limit holds in both; `new Array(n)` checks its own `n` in the IR. */
+#define NISH_ARRAY_MAX 2147483647u
 void nish_array_grow(nish_array *a, uint64_t elem_size) {
+  if (a->len >= NISH_ARRAY_MAX) nish_die("array length out of range\n");
   uint64_t cap = a->cap ? a->cap * 2 : 4;
+  if (cap > NISH_ARRAY_MAX) cap = NISH_ARRAY_MAX;
   char *data = nish_alloc_struct(cap * elem_size);
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;

@@ -1028,6 +1028,26 @@ const namedLocal = (program: CheckedProgram, node: Node): Local | null => {
 }
 
 /**
+ * A task's argument read out of a variable, `ps[0]` or `p.f`, hands that
+ * variable on, although a base use elsewhere does not: the task reads its
+ * argument when the scope joins, and an element of a record array is the
+ * address of its slot, so a store into `ps[0]` before the join changed what
+ * the task saw and raced with it under `--threads` (docs/security/codegen.md,
+ * CG-7). Handed on, the variable is no longer private, and the region refuses
+ * the store.
+ */
+const handOnRoot = (program: CheckedProgram, arg: Node, uses: VariableUses): void => {
+  let e = unwrapParens(arg)
+  while (e.kind === N_INDEX || e.kind === N_MEMBER) {
+    e = unwrapParens(e.children[0])
+  }
+  const local: Local | null = e.kind === N_IDENT && e !== unwrapParens(arg) ? program.nodeLocals[e.id] : null
+  if (local !== null) {
+    uses.handedOn[uses.add(local)] = true
+  }
+}
+
+/**
  * Record what `node` does with the variables it names. A use of a variable
  * keeps it unhanded only as the base of an index or a member, as the iterable
  * of a `for...of`, or as a `spawn`'s destination, which is recorded as such.
@@ -1069,6 +1089,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
         uses.destination[uses.add(local)] = true
       } else {
         collectUses(program, arg, node.children[1], uses)
+        handOnRoot(program, arg, uses)
       }
       k = k + 1
     }
@@ -1218,6 +1239,13 @@ const regionCallMessage = (
   }
   if (callee.kind === N_MEMBER) {
     const receiver = unwrapParens(callee.children[0])
+    // `r.orReturn()` returns early through its own path, which leaves the
+    // block without the join a `return` or the block's end makes: the task
+    // stayed filed, and the next scope's join ran it through pointers into
+    // memory this function's arena scope had released (CG-6).
+    if (callee.text === "orReturn" && program.nodeCallees[node.id] === null) {
+      return `\`orReturn\` returns without joining \`${state.name}\`, before the scope joins${REGION_TAIL}`
+    }
     if (receiver.kind === N_IDENT && receiver.text === "Arena" && program.nodeLocals[receiver.id] === null) {
       return regionWriteMessage(state, `\`Arena.${callee.text}\``)
     }

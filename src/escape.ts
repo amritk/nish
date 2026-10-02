@@ -125,6 +125,18 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "readdirSync" ||
   name === "realpathSync"
 
+/**
+ * Whether `expr` is a `readdirSync` call. Its answer is the one allocation
+ * whose elements are fresh too: the runtime bumps every name and stores it into
+ * the array it bumps, which is the store into memory that the scope rules
+ * below assume nothing made (docs/security/codegen.md, CG-5). So an element of
+ * a listing is followed as the listing itself, wherever it is read.
+ */
+const isListingCall = (program: CheckedProgram, expr: Node): boolean => {
+  const e = unwrapParens(expr)
+  return e.kind === N_CALL && builtinNameOf(program, e) === "readdirSync"
+}
+
 export class EscapeResult {
   /** Node id -> the allocation there is lowered to an entry-block alloca. */
   stackSites: boolean[]
@@ -262,6 +274,13 @@ class EscapeAnalysis {
   /** Memoised outcomes, keyed by local identity. */
   outcomeLocals: Local[]
   outcomeValues: Outcome[]
+  /**
+   * The site being decided is a `readdirSync` listing (`isListingCall`), so an
+   * element read out of it, `xs[i]` or a `for...of` variable, flows as the
+   * site does. Outcomes memoised under it are dropped afterwards, because the
+   * same local read without it answers differently.
+   */
+  listing: boolean
   /** The signature being analysed; WP17 reads its parameter list. */
   sig: FunctionSig
 
@@ -289,6 +308,7 @@ class EscapeAnalysis {
     this.logsNumbers = false
     this.outcomeLocals = []
     this.outcomeValues = []
+    this.listing = false
   }
 
   // ---- Collection -------------------------------------------------------------------
@@ -524,7 +544,7 @@ class EscapeAnalysis {
       if (
         parent.kind === N_INDEX &&
         parent.children[0] === node &&
-        yieldsInteriorPointer(this.unit, this.table, parent)
+        (this.listing || yieldsInteriorPointer(this.unit, this.table, parent))
       ) {
         node = parent
         continue
@@ -532,7 +552,7 @@ class EscapeAnalysis {
       if (
         parent.kind === N_FOR_OF &&
         parent.children[1] === node &&
-        storesInlineElements(this.unit.program, this.table, node)
+        (this.listing || storesInlineElements(this.unit.program, this.table, node))
       ) {
         return new FlowTarget(
           this.unit.program.nodeLocals[parent.children[0].children[0].children[0].id],
@@ -589,7 +609,7 @@ class EscapeAnalysis {
         (parent.kind === N_BINARY && parent.text === "??") ||
         (parent.kind === N_INDEX &&
           parent.children[0] === node &&
-          yieldsInteriorPointer(this.unit, this.table, parent))
+          (this.listing || yieldsInteriorPointer(this.unit, this.table, parent)))
       ) {
         node = parent
         continue
@@ -707,7 +727,17 @@ class EscapeAnalysis {
   decide(): void {
     for (const site of this.sites) {
       const fresh: Local[] = []
+      this.listing = isListingCall(this.unit.program, site.node)
+      if (this.listing) {
+        this.outcomeLocals = []
+        this.outcomeValues = []
+      }
       const outcome = this.valueOutcome(site.node, fresh)
+      if (this.listing) {
+        this.listing = false
+        this.outcomeLocals = []
+        this.outcomeValues = []
+      }
       let flow = outcome.flow
       let escapes = outcome.escapes
       // A `new` object is also handed to its constructor as `this`; a
@@ -1152,6 +1182,8 @@ class PassWalk {
   elementSources: Node[]
   /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
   allocates: boolean
+  /** The body's own locals it binds to a `readdirSync` listing, whose elements are as new as it (CG-5). */
+  listingLocals: Local[]
 
   constructor(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, scope: LoopScope) {
     this.unit = unit
@@ -1162,6 +1194,25 @@ class PassWalk {
     this.elementLocals = []
     this.elementSources = []
     this.allocates = false
+    this.listingLocals = []
+  }
+
+  /** `receiver` is a listing this pass made: the call itself, or one of the body's locals bound to one. */
+  isPassListing(receiver: Node): boolean {
+    const e = unwrapParens(receiver)
+    if (isListingCall(this.unit.program, e)) {
+      return true
+    }
+    const local: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    if (local === null) {
+      return false
+    }
+    for (const candidate of this.listingLocals) {
+      if (candidate === local) {
+        return true
+      }
+    }
+    return false
   }
 
   /** Record the first reason, in the order the body is read. */
@@ -1215,6 +1266,9 @@ class PassWalk {
       return true
     }
     if (e.kind === N_INDEX) {
+      if (this.isPassListing(e.children[0])) {
+        return false
+      }
       return !storesInlineElements(program, this.table, e.children[0]) || this.isOld(e.children[0])
     }
     if (e.kind === N_CONDITIONAL) {
@@ -1291,6 +1345,9 @@ class PassWalk {
       const local = program.nodeLocals[node.id]
       if (local !== null) {
         this.locals.push(local)
+        if (this.isPassListing(node.children[2])) {
+          this.listingLocals.push(local)
+        }
       }
     } else if (node.kind === N_FOR_OF) {
       const variable = program.nodeLocals[node.children[0].children[0].children[0].id]
@@ -1324,6 +1381,9 @@ class PassWalk {
         (node.text !== "=" || !this.isOld(node.children[1]))
       ) {
         this.refuse(LOOP_OUTER_LOCAL, node, local.name)
+      }
+      if (local !== null && this.declaredInPass(local) && this.isPassListing(node.children[1])) {
+        this.listingLocals.push(local)
       }
     } else if (node.kind === N_RETURN) {
       const value = node.children[0]
