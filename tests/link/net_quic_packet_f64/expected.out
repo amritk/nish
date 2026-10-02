@@ -77,6 +77,12 @@ PASS  A.5 opens
 PASS  packet number 654360564
 PASS  the payload is one PING
 PASS  key phase 0
+PASS  the next key (checked against Python)
+PASS  the next iv (checked against Python)
+PASS  and the header-protection key is kept
+PASS  the old generation's hp reads the new phase
+PASS  the new generation decrypts it
+PASS  and the old one does not
 PASS  the first packet is A.3's Initial, ending at 135
 PASS  the second starts there and is A.5's short header, to the datagram's end
 PASS  the Initial opens where it lies
@@ -145,15 +151,17 @@ PASS  a Handshake cut before its Length
 PASS  a Handshake whose Length passes the datagram
 PASS  A.2 one byte short of its Length
 PASS  a Retry carries nothing to open
-PASS  nor does a header that did not parse
+PASS  a header that did not parse keeps its own error
 PASS  a packet one byte short of a sample
 PASS  a Handshake whose Length leaves no room for the sample
 PASS  a header built by hand, with no packet number after its start
 PASS  a header read from a longer datagram
 PASS  a flipped ciphertext byte
 PASS  A.2 under the server's Initial keys
-PASS  keys quicKeys did not make
+PASS  keys quicKeys did not make are the caller's error, not a forgery
 PASS  AES keys with no packet key expanded
+PASS  keys that fail only at decryption are refused there
+PASS  as the caller's error
 PASS  a packet already in error is not decrypted
 PASS  and keeps its error
 PASS  a long header's reserved bit, once the packet authenticates
@@ -168,6 +176,8 @@ PASS  nor a 5-byte one
 PASS  nor a negative packet number
 PASS  nor one past 2^62 - 1
 PASS  nor a negative payload length
+PASS  a Length of 16383, the most two bytes hold, is built
+PASS  one more is refused
 PASS  no short header with a 21-byte DCID
 PASS  nor a 0-byte packet number
 PASS  nor a 5-byte one
@@ -180,11 +190,16 @@ PASS  nor for AES-256-GCM from a 32-byte one
 PASS  nor for ChaCha20-Poly1305 from 31 bytes
 PASS  no key update for an unknown AEAD
 PASS  nor from a secret of the wrong length
+PASS  no next generation from a secret of the wrong length
+PASS  nor from keys quicKeys did not make
 PASS  no seal of a one-byte header
 PASS  nor of a header shorter than its packet number
 PASS  nor of a payload too short to sample
 PASS  but three bytes with a one-byte number is enough
 PASS  nor of a negative packet number
+PASS  nor of a number whose low bytes are not the header's
+PASS  a long header sealed with the payload its Length counts
+PASS  but not with one byte more
 PASS  nor of one past 2^62 - 1
 PASS  nor under keys quicKeys did not make
 PASS  nor under AES keys with no header-protection key expanded
@@ -201,4 +216,4 @@ PASS  nor against a 21-byte original DCID
 PASS  an Initial is not a Retry
 PASS  nor is a header that did not parse
 PASS  a Retry with an empty token still parses (the client discards it)
-quic-packet: 203 passed, 0 failed, 0 skipped
+quic-packet: 218 passed, 0 failed, 0 skipped

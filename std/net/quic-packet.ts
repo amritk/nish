@@ -88,7 +88,7 @@ export const QUIC_RETRY_TAG_SIZE: i32 = 16
 
 /** A long-header Initial packet (RFC 9000 §17.2.2). */
 export const QUIC_PACKET_INITIAL: i32 = 0
-/** A long-header 0-RTT packet (RFC 9000 §17.2.3): parsed, since a server may be sent one, and never built here. */
+/** A long-header 0-RTT packet (RFC 9000 §17.2.3): parsed, since a server may be sent one; `quicLongHeader` builds one for a client. */
 export const QUIC_PACKET_ZERO_RTT: i32 = 1
 /** A long-header Handshake packet (RFC 9000 §17.2.4). */
 export const QUIC_PACKET_HANDSHAKE: i32 = 2
@@ -122,8 +122,10 @@ export const QUIC_ERR_SAMPLE: i32 = 6
 export const QUIC_ERR_DECRYPT: i32 = 7
 /** The payload authenticated but a reserved bit is set, a PROTOCOL_VIOLATION (RFC 9000 §17.2, §17.3.1). */
 export const QUIC_ERR_RESERVED_BITS: i32 = 8
-/** The packet carries no protected payload: a Retry, or a header that did not parse. */
+/** The packet carries no protected payload: a Retry (RFC 9000 §17.2.5). */
 export const QUIC_ERR_NOT_PROTECTED: i32 = 9
+/** Keys `quicKeys` or `quicKeysUpdate` did not make: a caller's own mistake, never a peer's. */
+export const QUIC_ERR_KEYS: i32 = 10
 
 /** RFC 9001 §5.2's `initial_salt` for version 1. A function, because a module constant cannot be an array. */
 const quicPacketInitialSalt = (): u8[] => [
@@ -140,6 +142,9 @@ const quicPacketRetryKey = (): u8[] => [
 const quicPacketRetryNonce = (): u8[] => [
   0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb,
 ]
+
+/** The largest Length a long header carries, the most a two-byte varint holds. */
+const QUIC_MAX_LENGTH: i32 = 16383
 
 /** The AEAD nonce, and so every packet IV, in bytes (RFC 9001 §5.3). */
 const QUIC_IV_SIZE: i32 = 12
@@ -295,15 +300,21 @@ const quicPacketExpandLabel = (
 }
 // END TEMPORARY(WP34 expand-label)
 
-/** The bytes `bytes[from .. to)` as a fresh array; the caller has checked the window. */
+/**
+ * The bytes `bytes[from .. to)` as a fresh array of exactly that size, so a
+ * packet-sized copy is one allocation rather than a push-grown one; the
+ * window is clamped to `bytes`, though every caller has checked it.
+ */
 const quicPacketSlice = (bytes: u8[], from: i32, to: i32): u8[] => {
   const length: i32 = toI32(bytes.length)
-  const out: u8[] = []
-  for (let k: i32 = from; k < to && k < length; k += 1) {
-    // `out` may be `bytes` as far as the prover knows, so the push could move
-    // its length; the guard is what keeps the read checked once.
-    if (k >= 0 && k < toI32(bytes.length)) {
-      out.push(bytes[k])
+  const start: i32 = from < 0 ? 0 : from
+  const stop: i32 = to > length ? length : to
+  const size: i32 = stop > start ? stop - start : 0
+  const out: u8[] = new Array<u8>(size)
+  const outLength: i32 = toI32(out.length)
+  for (let k: i32 = 0; k < outLength; k += 1) {
+    if (start + k < toI32(bytes.length)) {
+      out[k] = bytes[start + k]
     }
   }
   return out
@@ -345,17 +356,19 @@ export const quicVarintSize = (value: i64): i32 => {
  */
 export const quicVarintPushSized = (out: u8[], value: i64, size: i32): boolean => {
   const needed: i32 = quicVarintSize(value)
-  if (needed === 0 || (size !== 1 && size !== 2 && size !== 4 && size !== 8) || size < needed) {
+  if (needed === 0 || size < needed) {
     return false
   }
   // The two-bit prefix is log2 of the size: 0, 1, 2 or 3 for 1, 2, 4 or 8 bytes.
-  let prefix: i32 = 3
-  if (size === 1) {
-    prefix = 0
-  } else if (size === 2) {
+  let prefix: i32 = 0
+  if (size === 2) {
     prefix = 1
   } else if (size === 4) {
     prefix = 2
+  } else if (size === 8) {
+    prefix = 3
+  } else if (size !== 1) {
+    return false
   }
   for (let k: i32 = size - 1; k >= 0; k -= 1) {
     const shift: i64 = toI64(k) * 8
@@ -490,12 +503,16 @@ const quicPacketPushNumber = (out: u8[], packetNumber: i64, pnLength: i32): void
  * The unprotected long header of an Initial, 0-RTT or Handshake packet
  * (RFC 9000 §17.2), ending with the packet number in `pnLength` bytes, for a
  * payload of `payloadLength` bytes that `quicSealPacket` will protect. The
- * Length field counts the packet number, the payload and the AEAD tag, in the
- * fewest bytes. `token` goes in an Initial and must be empty otherwise.
+ * Length field counts the packet number, the payload and the AEAD tag, and is
+ * always written in two bytes (RFC 9000 §16 allows the longer form), so the
+ * header's size does not move with the payload's and a caller padding a
+ * packet to a size knows the header first. `token` goes in an Initial and
+ * must be empty otherwise.
  *
  * Answers `null` for another `type`, a connection ID over 20 bytes, a token
  * on a non-Initial packet, a `pnLength` outside 1 to 4, a packet number that
- * is not one, or a negative `payloadLength`.
+ * is not one, a negative `payloadLength`, or a Length past 16383, the most two
+ * bytes hold and far more than a datagram carries.
  */
 export const quicLongHeader = (
   type: i32,
@@ -516,7 +533,8 @@ export const quicLongHeader = (
     pnLength > 4 ||
     packetNumber < 0 ||
     packetNumber > QUIC_MAX_VARINT ||
-    payloadLength < 0
+    payloadLength < 0 ||
+    payloadLength > QUIC_MAX_LENGTH - pnLength - QUIC_AEAD_TAG_SIZE
   ) {
     return null
   }
@@ -526,7 +544,7 @@ export const quicLongHeader = (
     quicVarintPush(out, toI64(tokenLength))
     quicPacketAppend(out, token)
   }
-  quicVarintPush(out, toI64(pnLength) + toI64(payloadLength) + toI64(QUIC_AEAD_TAG_SIZE))
+  quicVarintPushSized(out, toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE), 2)
   quicPacketPushNumber(out, packetNumber, pnLength)
   return out
 }
@@ -718,6 +736,50 @@ const quicPacketKeyLength = (aead: i32): i32 => {
 /** The length of `aead`'s hash, which is its traffic secret's length: 48 for SHA-384, else 32. */
 const quicPacketSecretLength = (aead: i32): i32 => (aead === QUIC_AEAD_AES_256_GCM ? 48 : 32)
 
+/** Whether `secret` is a traffic secret for `aead`: an AEAD this module knows, and its hash's length. */
+const quicPacketSecretFits = (aead: i32, secret: u8[]): boolean =>
+  quicPacketKeyLength(aead) !== 0 && toI32(secret.length) === quicPacketSecretLength(aead)
+
+/**
+ * Whether `keys` has the shape `quicKeys` gives: a known AEAD, key and
+ * header-protection key of its length, a 12-byte IV, and for the AES suites
+ * both keys expanded. The constructor is public only because the language
+ * has no private one, so keys made by hand are checked here, once, rather
+ * than failing deep inside an AEAD as though a peer had forged the packet.
+ */
+const quicPacketKeysUsable = (keys: QuicKeys): boolean => {
+  const keyLength: i32 = quicPacketKeyLength(keys.aead)
+  if (
+    keyLength === 0 ||
+    toI32(keys.key.length) !== keyLength ||
+    toI32(keys.hp.length) !== keyLength ||
+    toI32(keys.iv.length) !== QUIC_IV_SIZE
+  ) {
+    return false
+  }
+  return keys.aead === QUIC_AEAD_CHACHA20_POLY1305 || (keys.packetAes !== null && keys.hpAes !== null)
+}
+
+/**
+ * Keys for `aead` with the packet key and IV derived from `secret` (RFC 9001
+ * §5.1) and the header-protection key given, which a key update keeps
+ * (§6). The caller has checked `secret` with `quicPacketSecretFits`.
+ */
+const quicPacketDerive = (aead: i32, secret: u8[], hp: u8[], hpAes: AesKey | null): QuicKeys => {
+  const sha384: boolean = aead === QUIC_AEAD_AES_256_GCM
+  const keys: QuicKeys = new QuicKeys(
+    aead,
+    quicPacketExpandLabel(sha384, secret, "quic key", [], quicPacketKeyLength(aead)),
+    quicPacketExpandLabel(sha384, secret, "quic iv", [], QUIC_IV_SIZE),
+    hp
+  )
+  keys.hpAes = hpAes
+  if (aead !== QUIC_AEAD_CHACHA20_POLY1305) {
+    keys.packetAes = aesKey(keys.key)
+  }
+  return keys
+}
+
 /**
  * The packet-protection keys of RFC 9001 §5.1 from a traffic `secret`: the
  * AEAD key (`quic key`), the IV (`quic iv`) and the header-protection key
@@ -726,47 +788,68 @@ const quicPacketSecretLength = (aead: i32): i32 => (aead === QUIC_AEAD_AES_256_G
  * or a secret that is not that hash's length.
  */
 export const quicKeys = (aead: i32, secret: u8[]): QuicKeys | null => {
-  const keyLength: i32 = quicPacketKeyLength(aead)
-  if (keyLength === 0 || toI32(secret.length) !== quicPacketSecretLength(aead)) {
+  if (!quicPacketSecretFits(aead, secret)) {
     return null
   }
-  const sha384: boolean = aead === QUIC_AEAD_AES_256_GCM
-  const keys: QuicKeys = new QuicKeys(
-    aead,
-    quicPacketExpandLabel(sha384, secret, "quic key", [], keyLength),
-    quicPacketExpandLabel(sha384, secret, "quic iv", [], QUIC_IV_SIZE),
-    quicPacketExpandLabel(sha384, secret, "quic hp", [], keyLength)
+  const hp: u8[] = quicPacketExpandLabel(
+    aead === QUIC_AEAD_AES_256_GCM,
+    secret,
+    "quic hp",
+    [],
+    quicPacketKeyLength(aead)
   )
-  if (aead !== QUIC_AEAD_CHACHA20_POLY1305) {
-    keys.packetAes = aesKey(keys.key)
-    keys.hpAes = aesKey(keys.hp)
-  }
-  return keys
+  return quicPacketDerive(aead, secret, hp, aead === QUIC_AEAD_CHACHA20_POLY1305 ? null : aesKey(hp))
 }
 
 /**
  * The next generation's traffic secret for a key update (RFC 9001 §6.1):
  * HKDF-Expand-Label(`secret`, `quic ku`, "", Hash.length). The
  * header-protection key does not change with it (§6), so the new keys are
- * `quicKeys` of this with the old `hp` kept. Answers `null` where `quicKeys`
+ * `quicKeysUpdate` of the old keys and this. Answers `null` where `quicKeys`
  * would.
  */
 export const quicKeyUpdateSecret = (aead: i32, secret: u8[]): u8[] | null => {
-  const secretLength: i32 = quicPacketSecretLength(aead)
-  if (quicPacketKeyLength(aead) === 0 || toI32(secret.length) !== secretLength) {
+  if (!quicPacketSecretFits(aead, secret)) {
     return null
   }
-  return quicPacketExpandLabel(aead === QUIC_AEAD_AES_256_GCM, secret, "quic ku", [], secretLength)
+  return quicPacketExpandLabel(
+    aead === QUIC_AEAD_AES_256_GCM,
+    secret,
+    "quic ku",
+    [],
+    quicPacketSecretLength(aead)
+  )
 }
+
+/**
+ * The next generation's keys in a key update (RFC 9001 §6): the packet key
+ * and IV derived from `nextSecret`, which `quicKeyUpdateSecret` made from the
+ * current secret, and `keys`' header-protection key kept, expanded as it was,
+ * since header protection never changes with the phase. Answers `null` for
+ * keys `quicKeys` did not make or a secret of the wrong length.
+ */
+export const quicKeysUpdate = (keys: QuicKeys, nextSecret: u8[]): QuicKeys | null => {
+  if (!quicPacketKeysUsable(keys) || !quicPacketSecretFits(keys.aead, nextSecret)) {
+    return null
+  }
+  return quicPacketDerive(keys.aead, nextSecret, keys.hp, keys.hpAes)
+}
+
+/** The bits of the first byte header protection covers: four in a long header, five in a short one (RFC 9001 §5.4.1). */
+const quicPacketProtectedBits = (first: i32): i32 => ((first & 0x80) !== 0 ? 0x0f : 0x1f)
+
+/** The first byte's reserved bits: 0x0c in a long header, 0x18 in a short one (RFC 9000 §17.2, §17.3.1). */
+const quicPacketReservedBits = (first: i32): i32 => ((first & 0x80) !== 0 ? 0x0c : 0x18)
 
 /** The AEAD nonce for `packetNumber` (RFC 9001 §5.3): the IV with the number XORed into its low 8 bytes, big-endian. */
 const quicPacketNonce = (keys: QuicKeys, packetNumber: i64): u8[] => {
-  const nonce: u8[] = []
-  for (let k: i32 = 0; k < QUIC_IV_SIZE; k += 1) {
+  const nonce: u8[] = new Array<u8>(QUIC_IV_SIZE)
+  const nonceLength: i32 = toI32(nonce.length)
+  for (let k: i32 = 0; k < nonceLength; k += 1) {
     // Byte `k` of the nonce takes byte `k - 4` of the number's eight.
     const pn: i64 = k < 4 ? 0 : (packetNumber >> (toI64(11 - k) * 8)) & 255
     const iv: i32 = k < toI32(keys.iv.length) ? toI32(keys.iv[k]) : 0
-    nonce.push(toU8(iv ^ toI32(pn)))
+    nonce[k] = toU8(iv ^ toI32(pn))
   }
   return nonce
 }
@@ -809,18 +892,19 @@ const quicPacketOpen = (keys: QuicKeys, nonce: u8[], aad: u8[], sealed: u8[]): u
 
 /**
  * Protects one packet (RFC 9001 §5.3, §5.4.1): `header` is what
- * `quicLongHeader` or `quicShortHeader` built, ending with the packet number
- * (a long header's Length must have been built for this `payload`'s length,
- * which is not checked again here), and `packetNumber` is the full number its
- * last bytes truncate. The answer is
- * the header under header protection followed by the AEAD-sealed payload and
- * its tag, ready to send or to coalesce.
+ * `quicLongHeader` or `quicShortHeader` built, ending with the packet number,
+ * and `packetNumber` is the full number its last bytes truncate. The answer
+ * is the header under header protection followed by the AEAD-sealed payload
+ * and its tag, ready to send or to coalesce.
  *
- * The sample is the 16 bytes from 4 past the packet number's start, so the
- * packet number and payload together must be at least 4 bytes; a shorter
- * payload has to be padded first (RFC 9001 §5.4.2), and is refused here.
- * Answers `null` for that, for a header too short for its packet-number
- * length, and for keys `quicKeys` did not make.
+ * The header and the arguments are held to each other, because a packet that
+ * disagrees with its own header is one the peer silently drops: the header's
+ * packet-number bytes must be `packetNumber`'s low bytes, and a long header's
+ * two-byte Length must count this `payload`. The sample is the 16 bytes from
+ * 4 past the packet number's start, so the packet number and payload together
+ * must be at least 4 bytes; a shorter payload has to be padded first (RFC 9001
+ * §5.4.2). Answers `null` for any of those, for a header too short for its
+ * packet-number length, and for keys `quicKeys` did not make.
  */
 export const quicSealPacket = (
   keys: QuicKeys,
@@ -835,11 +919,25 @@ export const quicSealPacket = (
   const first: i32 = toI32(header[0])
   const pnLength: i32 = (first & 3) + 1
   const pnOffset: i32 = headerLength - pnLength
+  const payloadLength: i32 = toI32(payload.length)
   if (
+    !quicPacketKeysUsable(keys) ||
     pnOffset < 1 ||
-    pnLength + toI32(payload.length) < 4 ||
+    pnLength + payloadLength < 4 ||
     packetNumber < 0 ||
     packetNumber > QUIC_MAX_VARINT
+  ) {
+    return null
+  }
+  for (let k: i32 = 0; k < pnLength; k += 1) {
+    const want: i32 = toI32((packetNumber >> (toI64(pnLength - 1 - k) * 8)) & 255)
+    if (pnOffset + k < headerLength && toI32(header[pnOffset + k]) !== want) {
+      return null
+    }
+  }
+  if (
+    (first & 0x80) !== 0 &&
+    quicVarintRead(header, pnOffset - 2, pnOffset) !== toI64(pnLength + payloadLength + QUIC_AEAD_TAG_SIZE)
   ) {
     return null
   }
@@ -847,9 +945,17 @@ export const quicSealPacket = (
   if (sealed === null) {
     return null
   }
-  const packet: u8[] = []
-  quicPacketAppend(packet, header)
-  quicPacketAppend(packet, sealed)
+  const sealedLength: i32 = toI32(sealed.length)
+  const packet: u8[] = new Array<u8>(headerLength + sealedLength)
+  const packetLength: i32 = toI32(packet.length)
+  for (let k: i32 = 0; k < headerLength && k < packetLength; k += 1) {
+    packet[k] = header[k]
+  }
+  for (let k: i32 = 0; k < sealedLength && headerLength + k < packetLength; k += 1) {
+    if (headerLength + k >= 0) {
+      packet[headerLength + k] = sealed[k]
+    }
+  }
   const sampleAt: i32 = pnOffset + 4
   const mask: u8[] | null = quicPacketMask(
     keys,
@@ -858,8 +964,7 @@ export const quicSealPacket = (
   if (mask === null) {
     return null
   }
-  const lowBits: i32 = (first & 0x80) !== 0 ? 0x0f : 0x1f
-  packet[0] = toU8(first ^ (toI32(mask[0]) & lowBits))
+  packet[0] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
   for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
     packet[pnOffset + k] = packet[pnOffset + k] ^ mask[k + 1]
   }
@@ -876,9 +981,9 @@ export const quicSealPacket = (
  * hands the answer to `quicDecryptPacket` with the generation it names
  * (RFC 9001 §6.3).
  *
- * `error` is `QUIC_ERR_NOT_PROTECTED` for a Retry or a header that did not
- * parse, `QUIC_ERR_SAMPLE` for a packet too short to sample, and
- * `QUIC_ERR_DECRYPT` for keys `quicKeys` did not make.
+ * `error` is the header's own for a header that did not parse,
+ * `QUIC_ERR_NOT_PROTECTED` for a Retry, `QUIC_ERR_KEYS` for keys `quicKeys`
+ * did not make, and `QUIC_ERR_SAMPLE` for a packet too short to sample.
  */
 export const quicRemoveHeaderProtection = (
   keys: QuicKeys,
@@ -888,8 +993,16 @@ export const quicRemoveHeaderProtection = (
 ): QuicPacket => {
   const packet: QuicPacket = new QuicPacket()
   const datagramLength: i32 = toI32(datagram.length)
-  if (header.error !== QUIC_PACKET_OK || header.type === QUIC_PACKET_RETRY) {
+  if (header.error !== QUIC_PACKET_OK) {
+    packet.error = header.error
+    return packet
+  }
+  if (header.type === QUIC_PACKET_RETRY) {
     packet.error = QUIC_ERR_NOT_PROTECTED
+    return packet
+  }
+  if (!quicPacketKeysUsable(keys)) {
+    packet.error = QUIC_ERR_KEYS
     return packet
   }
   const pnOffset: i32 = header.pnOffset
@@ -908,12 +1021,12 @@ export const quicRemoveHeaderProtection = (
     quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
   )
   if (mask === null || toI32(mask.length) < 5) {
-    packet.error = QUIC_ERR_DECRYPT
+    packet.error = QUIC_ERR_KEYS
     return packet
   }
   const protectedFirst: i32 = toI32(datagram[header.start])
   const long: boolean = (protectedFirst & 0x80) !== 0
-  const first: i32 = protectedFirst ^ (toI32(mask[0]) & (long ? 0x0f : 0x1f))
+  const first: i32 = protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
   const pnLength: i32 = (first & 3) + 1
   // The sample check above put 20 bytes after `pnOffset` inside the packet,
   // so the packet number's at most 4 are there too.
@@ -939,8 +1052,9 @@ export const quicRemoveHeaderProtection = (
 /**
  * Decrypts the payload of a packet whose header protection
  * `quicRemoveHeaderProtection` took off (RFC 9001 §5.3), filling in
- * `packet.payload` and setting `packet.error`: `QUIC_ERR_DECRYPT` when it
- * does not authenticate under `keys`, and `QUIC_ERR_RESERVED_BITS` when it
+ * `packet.payload` and setting `packet.error`: `QUIC_ERR_KEYS` for keys
+ * `quicKeys` did not make, `QUIC_ERR_DECRYPT` when it does not authenticate
+ * under `keys`, and `QUIC_ERR_RESERVED_BITS` when it
  * does but the header's reserved bits are not zero (RFC 9000 §17.2, §17.3.1),
  * which the caller is to close the connection over. Answers whether the
  * payload authenticated. A packet already in error is left as it is.
@@ -952,6 +1066,10 @@ export const quicDecryptPacket = (
   packet: QuicPacket
 ): boolean => {
   if (packet.error !== QUIC_PACKET_OK) {
+    return false
+  }
+  if (!quicPacketKeysUsable(keys)) {
+    packet.error = QUIC_ERR_KEYS
     return false
   }
   const payloadStart: i32 = header.start + toI32(packet.header.length)
@@ -967,8 +1085,7 @@ export const quicDecryptPacket = (
     return false
   }
   packet.payload = plain
-  const reserved: i32 = (packet.firstByte & 0x80) !== 0 ? 0x0c : 0x18
-  if ((packet.firstByte & reserved) !== 0) {
+  if ((packet.firstByte & quicPacketReservedBits(packet.firstByte)) !== 0) {
     packet.error = QUIC_ERR_RESERVED_BITS
   }
   return true

@@ -13,6 +13,7 @@ import {
   QUIC_ERR_CID_LENGTH,
   QUIC_ERR_DECRYPT,
   QUIC_ERR_FIXED_BIT,
+  QUIC_ERR_KEYS,
   QUIC_ERR_LENGTH,
   QUIC_ERR_NOT_PROTECTED,
   QUIC_ERR_RESERVED_BITS,
@@ -32,6 +33,7 @@ import {
   quicInitialSecrets,
   quicKeys,
   quicKeyUpdateSecret,
+  quicKeysUpdate,
   quicLongHeader,
   quicOpenPacket,
   quicPacketNumberDecode,
@@ -145,7 +147,7 @@ const openRefusals = (t: Suite): void => {
   const keys: QuicKeys = a5Keys();
   const retry: u8[] = bytesOf(a4Retry());
   t.eqI32("a Retry carries nothing to open", openError(keys, retry, 0), QUIC_ERR_NOT_PROTECTED);
-  t.eqI32("nor does a header that did not parse", openError(keys, bytesOf("00"), 0), QUIC_ERR_NOT_PROTECTED);
+  t.eqI32("a header that did not parse keeps its own error", openError(keys, bytesOf("00"), 0), QUIC_ERR_FIXED_BIT);
   t.eqI32("a packet one byte short of a sample", openError(keys, prefix(a5Packet(), 20), 0), QUIC_ERR_SAMPLE);
   const shortLength: u8[] = joined(bytesOf("e00000000100001300"), zeros(18));
   t.eqI32("a Handshake whose Length leaves no room for the sample", openError(keys, shortLength, 0), QUIC_ERR_SAMPLE);
@@ -159,10 +161,16 @@ const openRefusals = (t: Suite): void => {
   t.eqI32("a flipped ciphertext byte", openError(keys, flipped(a5Packet(), 10, 1), 0), QUIC_ERR_DECRYPT);
   const server: QuicKeys = keysOf(QUIC_AEAD_AES_128_GCM, initialOf(clientDcid()).server);
   t.eqI32("A.2 under the server's Initial keys", openError(server, bytesOf(a2Packet()), 8), QUIC_ERR_DECRYPT);
-  t.eqI32("keys quicKeys did not make", openError(new QuicKeys(0, [], [], []), a5Packet(), 0), QUIC_ERR_DECRYPT);
+  t.eqI32("keys quicKeys did not make are the caller's error, not a forgery", openError(new QuicKeys(0, [], [], []), a5Packet(), 0), QUIC_ERR_KEYS);
   const noPacketKey: QuicKeys = new QuicKeys(QUIC_AEAD_AES_128_GCM, server.key, server.iv, server.hp);
   noPacketKey.hpAes = server.hpAes;
-  t.eqI32("AES keys with no packet key expanded", openError(noPacketKey, bytesOf(a2Packet()), 8), QUIC_ERR_DECRYPT);
+  t.eqI32("AES keys with no packet key expanded", openError(noPacketKey, bytesOf(a2Packet()), 8), QUIC_ERR_KEYS);
+  const unprotected: QuicPacket = quicRemoveHeaderProtection(keys, a5Packet(), quicParseHeader(a5Packet(), 0, 0), -1);
+  t.ok(
+    "keys that fail only at decryption are refused there",
+    !quicDecryptPacket(new QuicKeys(0, [], [], []), a5Packet(), quicParseHeader(a5Packet(), 0, 0), unprotected)
+  );
+  t.eqI32("as the caller's error", unprotected.error, QUIC_ERR_KEYS);
 
   const failed: QuicPacket = quicRemoveHeaderProtection(keys, retry, quicParseHeader(retry, 0, 0), -1);
   t.ok("a packet already in error is not decrypted", !quicDecryptPacket(keys, retry, quicParseHeader(retry, 0, 0), failed));
@@ -198,6 +206,8 @@ const builderRefusals = (t: Suite): void => {
   t.ok("nor a negative packet number", quicLongHeader(QUIC_PACKET_INITIAL, [], [], [], toI64(-1), 1, 4) === null);
   t.ok("nor one past 2^62 - 1", quicLongHeader(QUIC_PACKET_INITIAL, [], [], [], QUIC_MAX_VARINT + 1, 1, 4) === null);
   t.ok("nor a negative payload length", quicLongHeader(QUIC_PACKET_INITIAL, [], [], [], one, 1, -1) === null);
+  t.ok("a Length of 16383, the most two bytes hold, is built", quicLongHeader(QUIC_PACKET_INITIAL, [], [], [], one, 1, 16366) !== null);
+  t.ok("one more is refused", quicLongHeader(QUIC_PACKET_INITIAL, [], [], [], one, 1, 16367) === null);
   t.ok("no short header with a 21-byte DCID", quicShortHeader(longCid(), false, false, one, 1) === null);
   t.ok("nor a 0-byte packet number", quicShortHeader([], false, false, one, 0) === null);
   t.ok("nor a 5-byte one", quicShortHeader([], false, false, one, 5) === null);
@@ -211,6 +221,8 @@ const builderRefusals = (t: Suite): void => {
   t.ok("nor for ChaCha20-Poly1305 from 31 bytes", quicKeys(QUIC_AEAD_CHACHA20_POLY1305, zeros(31)) === null);
   t.ok("no key update for an unknown AEAD", quicKeyUpdateSecret(99, zeros(32)) === null);
   t.ok("nor from a secret of the wrong length", quicKeyUpdateSecret(QUIC_AEAD_AES_128_GCM, zeros(31)) === null);
+  t.ok("no next generation from a secret of the wrong length", quicKeysUpdate(a5Keys(), zeros(48)) === null);
+  t.ok("nor from keys quicKeys did not make", quicKeysUpdate(new QuicKeys(0, [], [], []), zeros(32)) === null);
 
   const keys: QuicKeys = a5Keys();
   const header: u8[] = orEmpty(quicShortHeader([], false, false, one, 1));
@@ -219,6 +231,10 @@ const builderRefusals = (t: Suite): void => {
   t.ok("nor of a payload too short to sample", quicSealPacket(keys, header, one, zeros(2)) === null);
   t.ok("but three bytes with a one-byte number is enough", quicSealPacket(keys, header, one, zeros(3)) !== null);
   t.ok("nor of a negative packet number", quicSealPacket(keys, header, toI64(-1), zeros(4)) === null);
+  t.ok("nor of a number whose low bytes are not the header's", quicSealPacket(keys, header, toI64(2), zeros(4)) === null);
+  const long: u8[] = orEmpty(quicLongHeader(QUIC_PACKET_HANDSHAKE, [], [], [], one, 1, 4));
+  t.ok("a long header sealed with the payload its Length counts", quicSealPacket(keys, long, one, zeros(4)) !== null);
+  t.ok("but not with one byte more", quicSealPacket(keys, long, one, zeros(5)) === null);
   t.ok("nor of one past 2^62 - 1", quicSealPacket(keys, header, QUIC_MAX_VARINT + 1, zeros(4)) === null);
   t.ok("nor under keys quicKeys did not make", quicSealPacket(new QuicKeys(0, [], [], []), header, one, zeros(4)) === null);
   const aes: QuicKeys = keysOf(QUIC_AEAD_AES_128_GCM, initialOf(clientDcid()).client);

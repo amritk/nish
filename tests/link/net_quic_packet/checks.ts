@@ -10,6 +10,7 @@ import {
   QUIC_AEAD_AES_128_GCM,
   QUIC_AEAD_AES_256_GCM,
   QUIC_AEAD_CHACHA20_POLY1305,
+  QUIC_ERR_DECRYPT,
   QUIC_MAX_VARINT,
   QUIC_PACKET_HANDSHAKE,
   QUIC_PACKET_INITIAL,
@@ -26,6 +27,7 @@ import {
   quicInitialSecrets,
   quicKeys,
   quicKeyUpdateSecret,
+  quicKeysUpdate,
   quicLongHeader,
   quicOpenPacket,
   quicPacketNumberDecode,
@@ -269,6 +271,36 @@ const shortHeaderChecks = (t: Suite): void => {
   t.ok("key phase 0", !opened.keyPhase);
 }
 
+/**
+ * RFC 9001 §6: a key update keeps the header-protection key and derives the
+ * packet key and IV from A.5's `ku`. RFC 9001 prints the secret but not the
+ * keys, so those were checked against Python.
+ */
+const keyUpdateChecks = (t: Suite): void => {
+  const current: QuicKeys = keysOf(QUIC_AEAD_CHACHA20_POLY1305, a5Secret());
+  const ku: u8[] = orEmpty(quicKeyUpdateSecret(QUIC_AEAD_CHACHA20_POLY1305, a5Secret()));
+  const updated: QuicKeys | null = quicKeysUpdate(current, ku);
+  if (updated === null) {
+    t.fail("A.5's keys update", "quicKeysUpdate answered null");
+    return;
+  }
+  const next: QuicKeys = updated;
+  t.eqStr(
+    "the next key (checked against Python)",
+    hexOf(next.key),
+    "777ec1a510f50ec05d08d554ea5ef34a42c12200bb0f5a59c95908c9cd9189d2"
+  );
+  t.eqStr("the next iv (checked against Python)", hexOf(next.iv), "4159d18afd0156a1e564d16c");
+  t.eqStr("and the header-protection key is kept", hexOf(next.hp), hexOf(current.hp));
+  const header: u8[] = orEmpty(quicShortHeader([], false, true, 654360565, 3));
+  const datagram: u8[] = orEmpty(quicSealPacket(next, header, 654360565, [toU8(1)]));
+  const parsed: QuicHeader = quicParseHeader(datagram, 0, 0);
+  const packet: QuicPacket = quicRemoveHeaderProtection(current, datagram, parsed, 654360564);
+  t.ok("the old generation's hp reads the new phase", packet.error === QUIC_PACKET_OK && packet.keyPhase);
+  t.ok("the new generation decrypts it", quicDecryptPacket(next, datagram, parsed, packet));
+  t.eqI32("and the old one does not", quicOpenPacket(current, datagram, parsed, 654360564).error, QUIC_ERR_DECRYPT);
+};
+
 /** RFC 9000 §12.2: a datagram of two coalesced packets is walked by each one's end. */
 const coalescedChecks = (t: Suite): void => {
   const datagram: u8[] = joined(bytesOf(a3Packet()), a5Packet());
@@ -293,29 +325,26 @@ const coalescedChecks = (t: Suite): void => {
 }
 
 /** One long-header type through build, seal, parse and open. */
-const roundTripLong = (t: Suite, keys: QuicKeys, type: i32): void => {
-  const frames: u8[] = bytesOf("0100000000");
-  {
-    const token: u8[] = type === QUIC_PACKET_INITIAL ? bytesOf("abcdef") : [];
-    const header: u8[] = orEmpty(quicLongHeader(type, clientDcid(), serverCid(), token, 70000, 3, 5));
-    const datagram: u8[] = orEmpty(quicSealPacket(keys, header, 70000, frames));
-    const parsed: QuicHeader = quicParseHeader(datagram, 0, 8);
-    const opened: QuicPacket = quicOpenPacket(keys, datagram, parsed, 69999);
-    t.eqStr(
-      `type ${type}: built, sealed, parsed and opened`,
-      `${parsed.type} ${hexOf(parsed.token)} ${opened.error} ${opened.packetNumber} ${hexOf(opened.payload)}`,
-      `${type} ${hexOf(token)} ${QUIC_PACKET_OK} 70000 0100000000`
-    );
-  }
+const roundTripLong = (t: Suite, keys: QuicKeys, frames: u8[], type: i32): void => {
+  const token: u8[] = type === QUIC_PACKET_INITIAL ? bytesOf("abcdef") : [];
+  const header: u8[] = orEmpty(quicLongHeader(type, clientDcid(), serverCid(), token, 70000, 3, 5));
+  const datagram: u8[] = orEmpty(quicSealPacket(keys, header, 70000, frames));
+  const parsed: QuicHeader = quicParseHeader(datagram, 0, 8);
+  const opened: QuicPacket = quicOpenPacket(keys, datagram, parsed, 69999);
+  t.eqStr(
+    `type ${type}: built, sealed, parsed and opened`,
+    `${parsed.type} ${hexOf(parsed.token)} ${opened.error} ${opened.packetNumber} ${hexOf(opened.payload)}`,
+    `${type} ${hexOf(token)} ${QUIC_PACKET_OK} 70000 0100000000`
+  );
 };
 
 /** Every type a long header carries, and a short header with both its bits set. */
 const roundTripChecks = (t: Suite): void => {
   const keys: QuicKeys = keysOf(QUIC_AEAD_AES_128_GCM, initialOf(clientDcid()).client);
-  roundTripLong(t, keys, QUIC_PACKET_INITIAL);
-  roundTripLong(t, keys, QUIC_PACKET_ZERO_RTT);
-  roundTripLong(t, keys, QUIC_PACKET_HANDSHAKE);
   const frames: u8[] = bytesOf("0100000000");
+  roundTripLong(t, keys, frames, QUIC_PACKET_INITIAL);
+  roundTripLong(t, keys, frames, QUIC_PACKET_ZERO_RTT);
+  roundTripLong(t, keys, frames, QUIC_PACKET_HANDSHAKE);
   const keyPhase: u8[] = orEmpty(quicShortHeader(serverCid(), true, true, 5, 1));
   t.eqStr("a short header with the spin and key-phase bits", hexOf(keyPhase), "64f067a5502a4262b505");
   const datagram: u8[] = orEmpty(quicSealPacket(keys, keyPhase, 5, frames));
@@ -366,6 +395,7 @@ export const vectorChecks = (t: Suite): void => {
   serverInitialChecks(t);
   retryChecks(t);
   shortHeaderChecks(t);
+  keyUpdateChecks(t);
   coalescedChecks(t);
   roundTripChecks(t);
   aes256Checks(t);
