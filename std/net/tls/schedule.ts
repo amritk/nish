@@ -184,16 +184,24 @@ export const tlsFinishedVerifyData = (hashLength: i32, baseKey: u8[], transcript
     : hmacSha256(finishedKey, transcriptHash)
 }
 
-/** The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446 §7.3). */
+/** The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446 §7.3); empty for a suite this module does not negotiate. */
 export const tlsTrafficKey = (suite: i32, secret: u8[]): u8[] => {
   const none: u8[] = []
-  return tlsExpandLabel(tlsSuiteHashLength(suite), secret, "key", none, tlsSuiteKeyLength(suite))
+  const hashLength: i32 = tlsSuiteHashLength(suite)
+  if (hashLength === 0) {
+    return none
+  }
+  return tlsExpandLabel(hashLength, secret, "key", none, tlsSuiteKeyLength(suite))
 }
 
-/** The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446 §7.3). */
+/** The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446 §7.3); empty for a suite this module does not negotiate. */
 export const tlsTrafficIv = (suite: i32, secret: u8[]): u8[] => {
   const none: u8[] = []
-  return tlsExpandLabel(tlsSuiteHashLength(suite), secret, "iv", none, TLS_IV_SIZE)
+  const hashLength: i32 = tlsSuiteHashLength(suite)
+  if (hashLength === 0) {
+    return none
+  }
+  return tlsExpandLabel(hashLength, secret, "iv", none, TLS_IV_SIZE)
 }
 
 /**

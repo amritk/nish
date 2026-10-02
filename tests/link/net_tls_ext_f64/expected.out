@@ -87,6 +87,7 @@ PASS  a Finished where the ClientHello belongs is unexpected_message
 PASS  a byte after the ClientHello, in the same flight, is unexpected_message
 PASS  a header announcing more than TLS_MAX_HANDSHAKE_MESSAGE bytes is decode_error before they arrive
 PASS  the cap is 64 KiB
+PASS  one call carrying more than a whole maximal message is decode_error before it is copied
 PASS  bytes while the server waits for its own signature are unexpected_message
 PASS  a body cut short, so a vector runs past its end, is decode_error
 PASS  a session id of 33 bytes is decode_error
@@ -106,9 +107,12 @@ PASS  tlsParseClientHello refuses a window past its buffer with decode_error
 PASS  and parses the body of a good one
 PASS  whose groups hold x25519
 PASS  a ClientHello with no extensions offers no TLS 1.3: protocol_version
-PASS  a legacy_version of TLS 1.0 is protocol_version
+PASS  a legacy_version of SSL 3.0 is protocol_version (RFC 8446 §D.5)
+PASS  a legacy_version of TLS 1.0 that offers TLS 1.3 in supported_versions is accepted: §4.2.1 negotiates by that alone
 PASS  supported_versions without TLS 1.3 is protocol_version
-PASS  a legacy_version above 0x0303 is illegal_parameter
+PASS  so is a legacy_version of 0x0304
+PASS  a pre_shared_key that is not the last extension is illegal_parameter (§4.2.11)
+PASS  last, it is ignored and the handshake goes on without the PSK
 PASS  a compression method other than null is illegal_parameter
 PASS  no suite in common is handshake_failure
 PASS  no signature_algorithms is missing_extension
@@ -132,6 +136,8 @@ PASS  the honest Finished connects
 PASS  and a handshake message after it is unexpected_message
 PASS  an unknown suite has no hash
 PASS  and no key
+PASS  and tlsTrafficKey answers an empty key for it rather than panicking
+PASS  as tlsTrafficIv answers an empty IV
 PASS  TLS_AES_256_GCM_SHA384 has a 32-byte key
 PASS  tlsExpandLabel answers the length asked
-tls refusals: 67 passed, 0 failed, 0 skipped
+tls refusals: 73 passed, 0 failed, 0 skipped

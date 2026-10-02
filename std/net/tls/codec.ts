@@ -42,6 +42,8 @@ export const TLS_HANDSHAKE_MESSAGE_HASH: i32 = 254
 // ---- Extension types (RFC 8446 §4.2, RFC 7301, RFC 9001) ------------------
 
 export const TLS_EXT_SERVER_NAME: i32 = 0
+/** `pre_shared_key` (§4.2.11): ignored here, but it must be the last extension. */
+export const TLS_EXT_PRE_SHARED_KEY: i32 = 41
 export const TLS_EXT_SUPPORTED_GROUPS: i32 = 10
 export const TLS_EXT_SIGNATURE_ALGORITHMS: i32 = 13
 export const TLS_EXT_ALPN: i32 = 16
@@ -367,6 +369,7 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
  * is 0 when the body parsed; otherwise the first fault decides it:
  * `decode_error` for a length past its bytes, a vector out of its bounds or
  * bytes left over, and `illegal_parameter` for an extension sent twice (§4.2),
+ * a `pre_shared_key` that is not the last extension (§4.2.11),
  * two shares for one group, or a bad `server_name`. A window outside `data`
  * is `decode_error` too, rather than a panic.
  */
@@ -397,6 +400,11 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
         break
       }
       if (tlsListHas(hello.extensionTypes, type)) {
+        tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
+      }
+      // §4.2.11: `pre_shared_key` must be the last extension, and a server
+      // checks that even though it does not take the PSK.
+      if (type === TLS_EXT_PRE_SHARED_KEY && bodyEnd !== extensionsEnd) {
         tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
       }
       hello.extensionTypes.push(type)

@@ -20,6 +20,7 @@ import {
   TLS_ALERT_UNEXPECTED_MESSAGE,
   TLS_EXT_ALPN,
   TLS_EXT_KEY_SHARE,
+  TLS_EXT_PRE_SHARED_KEY,
   TLS_EXT_SERVER_NAME,
   TLS_EXT_SUPPORTED_VERSIONS,
   TLS_GROUP_X25519,
@@ -38,6 +39,8 @@ import {
   tlsExtract,
   tlsSuiteHashLength,
   tlsSuiteKeyLength,
+  tlsTrafficIv,
+  tlsTrafficKey,
 } from "nish/net/tls/schedule";
 import {
   TLS_LEVEL_APPLICATION,
@@ -238,6 +241,12 @@ export const refusalChecks = (): i32 => {
     TLS_ALERT_DECODE_ERROR
   );
   t.eqI32("the cap is 64 KiB", TLS_MAX_HANDSHAKE_MESSAGE, toI32(65536));
+  const flood: u8[] = cat([fromHex("0100ffff"), new Array<u8>(70000)]);
+  t.eqI32(
+    "one call carrying more than a whole maximal message is decode_error before it is copied",
+    refusal(flood),
+    TLS_ALERT_DECODE_ERROR
+  );
   const signing: TlsServer = fresh();
   sendHello(signing, good);
   t.eqI32(
@@ -375,9 +384,14 @@ export const refusalChecks = (): i32 => {
     TLS_ALERT_PROTOCOL_VERSION
   );
   t.eqI32(
-    "a legacy_version of TLS 1.0 is protocol_version",
-    refusal(clientHelloRaw(toI32(0x0301), empty, [SUITE], [toU8(0)], standardExtensions())),
+    "a legacy_version of SSL 3.0 is protocol_version (RFC 8446 §D.5)",
+    refusal(clientHelloRaw(toI32(0x0300), empty, [SUITE], [toU8(0)], standardExtensions())),
     TLS_ALERT_PROTOCOL_VERSION
+  );
+  t.eqI32(
+    "a legacy_version of TLS 1.0 that offers TLS 1.3 in supported_versions is accepted: §4.2.1 negotiates by that alone",
+    refusal(clientHelloRaw(toI32(0x0301), empty, [SUITE], [toU8(0)], standardExtensions())),
+    zero
   );
   t.eqI32(
     "supported_versions without TLS 1.3 is protocol_version",
@@ -392,9 +406,27 @@ export const refusalChecks = (): i32 => {
     TLS_ALERT_PROTOCOL_VERSION
   );
   t.eqI32(
-    "a legacy_version above 0x0303 is illegal_parameter",
+    "so is a legacy_version of 0x0304",
     refusal(clientHelloRaw(TLS_VERSION_13, empty, [SUITE], [toU8(0)], standardExtensions())),
+    zero
+  );
+  t.eqI32(
+    "a pre_shared_key that is not the last extension is illegal_parameter (§4.2.11)",
+    refusal(
+      hello([
+        extSupportedVersions([TLS_VERSION_13]),
+        extension(TLS_EXT_PRE_SHARED_KEY, fromHex("00")),
+        extSupportedGroups([TLS_GROUP_X25519]),
+        extSignatureAlgorithms([TLS_SIGNATURE_ECDSA_SECP256R1_SHA256]),
+        extKeyShare([TLS_GROUP_X25519], [clientShare()]),
+      ])
+    ),
     TLS_ALERT_ILLEGAL_PARAMETER
+  );
+  t.eqI32(
+    "last, it is ignored and the handshake goes on without the PSK",
+    refusal(hello(standardWith([extension(TLS_EXT_PRE_SHARED_KEY, fromHex("00"))]))),
+    zero
   );
   t.eqI32(
     "a compression method other than null is illegal_parameter",
@@ -535,6 +567,12 @@ export const refusalChecks = (): i32 => {
   // --- The schedule's edges ---------------------------------------------------
   t.eqI32("an unknown suite has no hash", tlsSuiteHashLength(toI32(0x1304)), zero);
   t.eqI32("and no key", tlsSuiteKeyLength(toI32(0x1304)), zero);
+  t.eqI32(
+    "and tlsTrafficKey answers an empty key for it rather than panicking",
+    toI32(tlsTrafficKey(toI32(0x1304), new Array<u8>(32)).length),
+    zero
+  );
+  t.eqI32("as tlsTrafficIv answers an empty IV", toI32(tlsTrafficIv(toI32(0x1304), new Array<u8>(32)).length), zero);
   t.eqI32("TLS_AES_256_GCM_SHA384 has a 32-byte key", tlsSuiteKeyLength(TLS_AES_256_GCM_SHA384), toI32(32));
   t.eqI32(
     "tlsExpandLabel answers the length asked",

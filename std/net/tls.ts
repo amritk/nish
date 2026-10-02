@@ -70,7 +70,6 @@ import {
   TLS_GROUP_X25519,
   TLS_HANDSHAKE_CLIENT_HELLO,
   TLS_HANDSHAKE_FINISHED,
-  TLS_LEGACY_VERSION,
   TLS_RANDOM_SIZE,
   TLS_VERSION_13,
   TLS_X25519_SHARE_SIZE,
@@ -124,6 +123,9 @@ export const TLS_STATE_FAILED: i32 = 4
  * make the server hold.
  */
 export const TLS_MAX_HANDSHAKE_MESSAGE: i32 = 65536
+
+/** SSL 3.0's version number; a ClientHello whose `legacy_version` is this or below is refused (RFC 8446 §D.5). */
+const TLS_SSL3_VERSION: i32 = 0x0300
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_FROM: i32 = 0
@@ -429,6 +431,11 @@ export class TlsServer {
     if (level !== this.expectedLevel()) {
       return this.fail(TLS_ALERT_UNEXPECTED_MESSAGE)
     }
+    // The buffer only ever holds one message, so bytes that would take it
+    // past the largest one allowed are refused before they are copied.
+    if (len > TLS_MAX_HANDSHAKE_MESSAGE + 4 - toI32(this.input.length)) {
+      return this.fail(TLS_ALERT_DECODE_ERROR)
+    }
     for (let k: i32 = off; k < off + len && k < toI32(data.length); k++) {
       this.input.push(data[k])
     }
@@ -522,15 +529,18 @@ export class TlsServer {
     if (hello.alert !== 0) {
       return hello.alert
     }
-    if (hello.legacyVersion < TLS_LEGACY_VERSION) {
+    // §4.2.1: the version is negotiated by `supported_versions` alone, and
+    // `legacy_version` is not consulted for it. The one exception is SSL 3.0
+    // or below, which §D.5 lets a server refuse outright. Without
+    // `supported_versions` the client offers TLS 1.2 or earlier, which this
+    // server does not speak.
+    if (hello.legacyVersion <= TLS_SSL3_VERSION) {
       return TLS_ALERT_PROTOCOL_VERSION
     }
-    // §4.2.1: without `supported_versions` the client offers TLS 1.2 or
-    // earlier, which this server does not speak.
     if (!hello.hasSupportedVersions || !tlsListHas(hello.versions, TLS_VERSION_13)) {
       return TLS_ALERT_PROTOCOL_VERSION
     }
-    if (hello.legacyVersion !== TLS_LEGACY_VERSION || !hello.nullCompressionOnly) {
+    if (!hello.nullCompressionOnly) {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     const suite: i32 = this.chooseSuite(hello)

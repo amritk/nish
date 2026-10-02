@@ -66,8 +66,9 @@ Finished, and is accepted with its own.
 under `f64` in `net_tls_ext_f64`):
 
 - *Malformed input is `decode_error`:* a message announcing more than
-  `TLS_MAX_HANDSHAKE_MESSAGE` (64 KiB) bytes, refused from its header before
-  the bytes are buffered; a body cut short so that a vector runs past it; a
+  `TLS_MAX_HANDSHAKE_MESSAGE` (64 KiB) bytes, refused from its header, and
+  a call carrying more than one maximal message, refused before it is
+  copied; a body cut short so that a vector runs past it; a
   session id over 32 bytes; an empty or odd-length `cipher_suites`; an empty
   `supported_versions`; a key share whose length runs past its extension;
   an empty ALPN name; an empty host name or name list; a byte after the
@@ -80,10 +81,13 @@ under `f64` in `net_tls_ext_f64`):
   not expect, a byte after a message that ends the client's flight (RFC 8446
   §5.1), a message of the wrong type, anything while the server waits for its
   own signature, and anything after the handshake.
-- *A failed negotiation:* no TLS 1.3 offered (`protocol_version`, including a
-  hello with no extensions and a legacy version below 0x0303); a legacy
-  version above 0x0303 or a compression method other than null
-  (`illegal_parameter`); no common suite, no x25519 in `supported_groups`,
+- *A failed negotiation:* no TLS 1.3 in `supported_versions`
+  (`protocol_version`, including a hello with no extensions), or a
+  `legacy_version` of SSL 3.0 or below (§D.5); any other `legacy_version`
+  is not consulted, as §4.2.1 requires, and a hello saying 0x0301 or 0x0304
+  there is accepted. A compression method other than null, or a
+  `pre_shared_key` that is not the last extension (§4.2.11), is
+  `illegal_parameter`; no common suite, no x25519 in `supported_groups`,
   or the server's signature scheme not offered (`handshake_failure`); no
   `signature_algorithms`, `supported_groups` or `key_share`, or no transport
   parameters over QUIC (`missing_extension`); no ALPN protocol in common, or
@@ -113,9 +117,10 @@ the length (public) and then compares all HashLen bytes with
 `timingSafeEqualAt`; a single flipped bit is `decrypt_error`.
 
 **Bounded memory.** The input buffer holds at most one message of at most
-`TLS_MAX_HANDSHAKE_MESSAGE` bytes plus its header, because a message longer
-than that is refused from its header, and a byte past the end of a message is
-refused rather than kept.
+`TLS_MAX_HANDSHAKE_MESSAGE` bytes plus its header: a call that would take it
+past that is refused before its bytes are copied, a message announcing more is
+refused from its header, and a byte past the end of a message is refused
+rather than kept.
 
 ## What is not checked here
 
