@@ -112,14 +112,15 @@ nish_valid_version() {
 # and `openssl` covers what has neither.
 nish_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{ print tolower($1) }'
+    set -- sha256sum "$1"
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{ print tolower($1) }'
+    set -- shasum -a 256 "$1"
   elif command -v openssl >/dev/null 2>&1; then
-    openssl dgst -sha256 -r "$1" | awk '{ print tolower($1) }'
+    set -- openssl dgst -sha256 -r "$1"
   else
     return 1
   fi
+  "$@" | awk '{ print tolower($1) }'
 }
 
 # The digest of every release tarball published before release.yml attached
@@ -314,7 +315,8 @@ if [ -z "$asset" ]; then
   released nish that runs here, in a checkout of the repository."
 fi
 
-if [ -e "$install_dir" ] && ! nish_is_install "$install_dir" && [ -n "$(ls -A "$install_dir" 2>/dev/null || echo file)" ]; then
+if [ -e "$install_dir" ] && ! nish_is_install "$install_dir" &&
+  { [ ! -d "$install_dir" ] || [ -n "$(ls -A "$install_dir")" ]; }; then
   die "$install_dir already exists, is not empty and is not a nish install.
   Installing would replace it and delete what is in it. Pick an empty or new
   directory with --dir, or remove this one yourself."
@@ -363,15 +365,9 @@ trap 'rm -rf "$tmp"' EXIT INT TERM
 stage="$tmp/stage"
 mkdir -p "$stage"
 
-curl -fSL --progress-bar "$url" -o "$tmp/nish.tar.gz" ||
-  die "could not download $url
-  Check https://github.com/$REPO/releases for what $version actually carries:
-  not every release attaches every platform, and one already published cannot
-  grow an asset."
-
-# The digest, before tar or the binary sees a byte of it. `tar` has had path
-# traversal bugs of its own, and the version check below runs the download, so
-# both come after this and neither is the check.
+# The digest the tarball has to match, settled before the tarball is fetched:
+# pinned here, or the line for it in the release's SHA256SUMS. A release with
+# neither is refused now, without downloading anything it would refuse.
 expected="$(nish_pinned_sha256 "$plain" "$asset")"
 if [ -z "$expected" ]; then
   sums_url="https://github.com/$REPO/releases/download/$version/SHA256SUMS"
@@ -382,6 +378,16 @@ if [ -z "$expected" ]; then
   expected="$(nish_sums_lookup "$tmp/SHA256SUMS" "$name.tar.gz")"
   [ -n "$expected" ] || die "$version's SHA256SUMS has no entry for $name.tar.gz; not installing it"
 fi
+
+curl -fSL --progress-bar "$url" -o "$tmp/nish.tar.gz" ||
+  die "could not download $url
+  Check https://github.com/$REPO/releases for what $version actually carries:
+  not every release attaches every platform, and one already published cannot
+  grow an asset."
+
+# Checked before tar or the binary sees a byte of it. `tar` has had path
+# traversal bugs of its own, and the version check below runs the download, so
+# both come after this and neither is the check.
 actual="$(nish_sha256 "$tmp/nish.tar.gz")" ||
   die "no sha256sum, shasum or openssl on PATH, so the download cannot be verified; not installing it"
 [ "$actual" = "$expected" ] || die "$name.tar.gz does not match its published SHA-256, so it is not installed.

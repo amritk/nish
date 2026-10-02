@@ -193,9 +193,8 @@ jobs:
           # the fallback, and the step below degrades rather than fails when it
           # turns out to be refused.
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
-          NEXT: ${{ steps.next.outputs.next }}
+          next: ${{ steps.next.outputs.next }}
         run: |
-          next="$NEXT"
           branch="release/next"
           # The title is the squash-merge subject, so it is a conventional
           # commit: pr-title.yml checks it like any other, and the merge lands

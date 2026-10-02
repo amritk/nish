@@ -96,8 +96,12 @@ const run = (dir, args) =>
 /** The installer's argument lists, one per call, or [] when it was never called. */
 const calls = (dir) => {
   const file = path.join(dir, "install.calls")
-  return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split("\n") : []
+  const text = readOr(file, "")
+  return text === "" ? [] : text.trim().split("\n")
 }
+
+/** A file's text, or `fallback` when it is not there. */
+const readOr = (file, fallback) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : fallback)
 
 const both = (r) => `status ${r.status}\nstdout: ${r.stdout}\nstderr: ${r.stderr}`
 const sandboxes = []
@@ -219,9 +223,7 @@ for (const [name, args, words] of [
 {
   const dir = fresh()
   const r = run(dir, ["0.4.0 --dir /elsewhere"])
-  const argc = fs.existsSync(path.join(dir, "install.argc"))
-    ? fs.readFileSync(path.join(dir, "install.argc"), "utf8").trim()
-    : "never called"
+  const argc = readOr(path.join(dir, "install.argc"), "never called").trim()
   check(
     "a version is passed to the installer as one word, never split into options",
     argc === "3",
@@ -312,8 +314,7 @@ const install = (box, args) =>
     },
   })
 const ran = (box) => fs.existsSync(path.join(box.dir, "ran"))
-const curled = (box) =>
-  fs.existsSync(path.join(box.dir, "curl.log")) ? fs.readFileSync(path.join(box.dir, "curl.log"), "utf8") : ""
+const curled = (box) => readOr(path.join(box.dir, "curl.log"), "")
 const refused = (box, r) => r.status !== 0 && !fs.existsSync(box.home) && !ran(box)
 const told = (box, r) => `${both(r)}\ncompiler ran: ${ran(box)}\ncurl:\n${curled(box)}`
 
@@ -465,7 +466,7 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
       r.status === 0 &&
       r.stdout.trim() === `argv0=${path.join(home, "libexec", "nish")}` &&
       !fs.existsSync(path.join(box, "pwned")),
-    `${both(r)}\nwrapper:\n${fs.existsSync(path.join(home, "bin", "nish")) ? fs.readFileSync(path.join(home, "bin", "nish"), "utf8") : "(none)"}`
+    `${both(r)}\nwrapper:\n${readOr(path.join(home, "bin", "nish"), "(none)")}`
   )
 }
 
@@ -505,6 +506,16 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
 //
 // Read as text, because there is no YAML parser among this repository's
 // dependencies; each check reads for the thing that carries the meaning.
+
+/** One job of a workflow, from its `  name:` line to the next job's, or "". */
+const jobOf = (text, name) => {
+  const start = text.indexOf(`\n  ${name}:\n`)
+  if (start < 0) {
+    return ""
+  }
+  const end = text.slice(start + 1).search(/\n {2}[a-z][\w-]*:\n/)
+  return text.slice(start, end < 0 ? undefined : start + 1 + end)
+}
 
 const workflowDir = path.join(root, ".github", "workflows")
 const workflows = fs
@@ -581,11 +592,7 @@ const runScripts = (text) => {
 // version rather than whatever a range resolves to on the day.
 {
   const release = workflows.find((w) => w.file === "release.yml").text
-  const job = (name) => {
-    const start = release.indexOf(`\n  ${name}:\n`)
-    const end = release.slice(start + 1).search(/\n {2}[a-z][\w-]*:\n/)
-    return start < 0 ? "" : release.slice(start, end < 0 ? undefined : start + 1 + end)
-  }
+  const job = (name) => jobOf(release, name)
   const releaseJob = job("release")
   check(
     "release.yml's release job checks out without persisting its write token",
@@ -604,6 +611,19 @@ const runScripts = (text) => {
     /npm install -g npm@\d+\.\d+\.\d+\n/.test(job("npm")) && !/npm@[\^~]/.test(release),
     job("npm")
   )
+  // The release job hands its sums to the npm job as an output, and the npm job
+  // checks every package it downloads back from the release against them before
+  // the first publish.
+  const npmJob = job("npm")
+  const verify = npmJob.indexOf("needs.release.outputs.sums")
+  check(
+    "release.yml's npm job checks every package against the release job's SHA256SUMS before publishing",
+    /sums: \$\{\{ steps\.create\.outputs\.sums \}\}/.test(releaseJob) &&
+      /echo "sums<<SHA256SUMS_END"/.test(releaseJob) &&
+      verify > 0 &&
+      verify < npmJob.indexOf("npm publish"),
+    npmJob
+  )
 }
 
 // A seed in CI comes through scripts/fetch-seed.sh, which is install.sh, which
@@ -618,7 +638,7 @@ const runScripts = (text) => {
   check(
     "ci.yml takes every seed through scripts/fetch-seed.sh, never a bare download",
     !/gh release download|\bcurl\b|\bwget\b/.test(ci) &&
-      (ci.match(/bash scripts\/fetch-seed\.sh/g) ?? []).length >= 4,
+      ["bootstrap", "nish-cmp"].every((name) => jobOf(ci, name).includes("bash scripts/fetch-seed.sh")),
     ci
       .split("\n")
       .filter((l) => /fetch-seed|release download|curl|wget/.test(l))
