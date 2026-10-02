@@ -2493,7 +2493,14 @@ export const main = (): i32 => {
     a store, `push` or `pop`, `Arena`, a call that writes through its
     argument, a task of another scope, whose join stores
     (`reject_thread_region_write`, `reject_thread_region_alias_write`,
-    `reject_thread_region_call_write`).
+    `reject_thread_region_call_write`). A task argument read out of a
+    variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
+    hands that variable on, so a store into its elements or fields before the
+    join is refused too: a record element is the address of its slot, and the
+    task reads it at the join (`tests/cases/cg_sec_scope_record_arg`). And
+    `r.orReturn()` on a `Result` is refused in the same stretch, between the
+    first `spawn` and the end of the block, because its early return would
+    leave the scope unjoined (NL2394, `tests/cases/cg_sec_scope_or_return`).
 
   The rules are local because memory is reached only through parameters and
   what a function allocates: a module constant is a number, a `boolean` or a
@@ -3091,6 +3098,13 @@ divide with overflow` is simply unreachable on an unsigned type.
   `U | null` (whose zero fill is `null`); type argument and length required
   (`tests/cases/arr_new_zeroed`, `mem_nullable`;
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
+  A length no array can hold panics with `array length out of range` before
+  anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
+  under `f64`, a negative `i64`, or a NaN. An `i32` length, a narrower
+  unsigned one, a ranged integer and a literal are not checked, so a negative
+  `i32` length is not refused yet: it wraps the allocator and the zero fill
+  faults (CG-2, open) (`tests/cases/cg_sec_new_array_guard`,
+  `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
   the same lowering (`tests/cases/arr_typed_views`), and no `push` or `pop`
@@ -3502,6 +3516,12 @@ each hole is converted and the parts are concatenated left to right
 (`tests/cases/str_template`, `i64_basic`). `` `${s}` `` with a single string
 hole is `s` itself (`tests/cases/str_param_passthrough`).
 
+A concatenation or a template whose result would pass 2^31 − 1 bytes fails as
+an allocation does, `nish: out of memory` and exit 1, in both number modes
+([docs/security/runtime.md](security/runtime.md), RT-2). `join` does not check
+yet, so a string it builds can pass that length, and under `--number-mode i32`
+its `length` is then wrong (CG-3 in [docs/security/codegen.md](security/codegen.md)).
+
 ### `this` and object literals
 
 See [Classes](#classes) and [Interfaces](#interfaces-and-object-literals).
@@ -3696,6 +3716,17 @@ choice (WP34 N6).
   `ct_asm_refused` holds an early-exit compare and a secret-indexed table
   lookup that the check must refuse, one for each kind, so a check that read
   nothing fails.
+- **It also refuses an instruction whose latency follows a secret**: an
+  integer divide (`div`/`idiv`, `udiv`/`sdiv`) or a floating divide or square
+  root whose operand a secret reaches (the `latency` kind, seeded by
+  `ct_asm_refused`'s `secretDivide`). It reads what `clang -O2` emits for the
+  baseline CPU of each target and nothing else, so a build with another
+  profile or `-march` is not what was read, and instructions from ISA
+  extensions beyond the baseline never reach it
+  ([docs/security/ct-verification.md](security/ct-verification.md), CT-2, CT-16).
+  It reads only the functions a fixture names, so a module function that is
+  not one — every loop in `std/crypto`, for instance — rests on review; that
+  record lists them.
 - **What it does not promise: anything about the caller's own code.**
   `if (ctEq(a, b) !== 0)` branches on a secret because the program wrote a
   branch; `table[secret]` indexes by one; `===` on a secret is a compare LLVM
@@ -3766,10 +3797,16 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). `null` when the path cannot be read *as a file* — missing, a **directory**, a parent that cannot be searched, a pipe with no length to ask for — which is the same set `readFileSync` prints `nish: cannot read <path>` for. It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `readFileBytesSync(path: string): u8[] \| null` | the file's **bytes**, as they are on disk: nothing assumes UTF-8, so a zero byte, a byte of `0x80` or above and an invalid sequence all come back unchanged, and `length` is the file's size. `null` for exactly the paths `readFileSyncOrNull` answers `null` for — missing, a directory, a parent that cannot be searched — and there is no exiting twin. The array is an ordinary arena `u8[]` with `length === capacity`, narrowed with `if (b !== null)`. A `wasm32` build has no file I/O, and so no `readFileBytesSync`, exactly as it has no `readFileSync`. The TypeScript reading is class A: `runtime/nish.mjs` answers `Array.from(fs.readFileSync(path))` or `null` (WP34 N2) | write | `bytes_read`, `bytes_read_import`, `mem_read_bytes_scope`; `reject_bytes_read_unchecked`, `reject_bytes_read_arity` (NL2061), `reject_bytes_read_type` (NL2268) |
-| `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
-| `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
+| `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position. A symbolic link as the last component of `path` is refused (`nish: cannot write <path>`), where Node follows it | write | `io_files` |
+| `appendFileSync(path: string, data: string): void` | create/append and write; statement position. A symbolic link as the last component is refused, as for `writeFileSync` | write | `io_files` |
 
-Paths are relative to the working directory. These are globals, not
+Paths are relative to the working directory. `readFileSync`,
+`readFileSyncOrNull` and `readFileBytesSync` treat a file longer than
+2^31 − 1 bytes as one they cannot read, in both number modes, which matches
+Node. Every path, name and argument a builtin hands the OS that holds a NUL
+byte is refused as a missing path is — `null`, `false`, `-1` or
+`cannot …`, whichever that builtin answers — where Node refuses it by
+throwing ([docs/security/runtime.md](security/runtime.md), RT-1, RT-3, RT-4). These are globals, not
 `import { readFileSync } from "fs"` (bare imports are rejected), and so are
 `write`, `writeError` and `panic` above. A user function of the same name
 wins, as it does for every identifier builtin.
@@ -3781,7 +3818,7 @@ wins, as it does for every identifier builtin.
 | `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask` — not recursive, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it. `true` when a directory exists at `path` once the call returns, whether this call created it or it was already there; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
 | `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
-| `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file rather than inherited: each path is created or truncated at `0644`, as `writeFileSync` does. An **empty** path leaves that stream inherited, so one call can capture stdout and let stderr through. Every answer `spawnSync` gives, it gives — the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, and a WASI build. The two paths must not name one file: each is opened separately, with its own offset, so the streams would overwrite rather than interleave; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
+| `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file rather than inherited: each path is created or truncated at `0644`, as `writeFileSync` does, and a symbolic link as its last component is refused, which answers `-1`. An **empty** path leaves that stream inherited, so one call can capture stdout and let stderr through. Every answer `spawnSync` gives, it gives — the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, and a WASI build. The two paths must not name one file: each is opened separately, with its own offset, so the streams would overwrite rather than interleave; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
 | `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`; every other dotfile is an entry. `null` when the directory cannot be read at all — a missing path, a plain file, a parent that cannot be searched — which is a *different* answer from the empty array an empty directory gives. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
 | `realpathSync(path: string): string \| null` | `path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an **absolute** path — or `null` when it does not resolve, which a path that does not exist is. Every component but the last must exist for POSIX `realpath` to answer at all, so "does not resolve" is one answer rather than several, and it is the answer the caller asked for rather than an error. The bytes are copied into the arena, so the result is an ordinary string; it is narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
 
@@ -4178,10 +4215,10 @@ returns to it.
 | Member | Semantics | Test |
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
-| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
+| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Unlike a concatenation, its result is not yet held to 2^31 − 1 bytes (CG-3, open) | `arr_join`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |

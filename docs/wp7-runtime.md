@@ -743,6 +743,28 @@ calls none: the `net_` block's check names the five `nish_poll_` symbols among
 the ones a quiet program drops.
 
 
+### 2026-10-02: the security audit, no ceiling moved
+
+The runtime stage of the security audit ([docs/security/runtime.md](security/runtime.md))
+added length limits, NUL refusal through `nish_cpath`, `O_NOFOLLOW` on the
+writes and three ownership primitives in `runtime-host.c` (RT-9). Every unit
+stayed under the ceiling it had, measured with the suite's own check (clang
+18.1.3, linux-x64, `-Oz`, every `.text*` section summed):
+
+| File | Today | Budget |
+| --- | ---: | ---: |
+| `runtime/runtime.c` | 3,562 | 3,584 |
+| `runtime.c -DNISH_THREADS=1` | 3,687 | 3,840 |
+| `runtime/runtime-os.c` | 1,495 | 1,536 |
+| `runtime/runtime-host.c` | 700 | 768 |
+| `runtime/runtime-net.c` | 2,087 | 2,304 |
+| `runtime/runtime-parallel.c` | 286 | 320 |
+| `runtime-parallel.c -DNISH_THREADS=1` | 905 | 1,024 |
+
+Every out-of-memory exit in `runtime.c` goes through one cold function,
+`nish_oom`. The tables above
+this section are the history of each figure and are left as they were measured.
+
 ### What FFI does and does not do to the budget
 
 WP27 lets a program declare and call a C function of its own, and

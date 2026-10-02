@@ -68,7 +68,10 @@ plans `-o <file.ll>`, `-o <dir>/` and `--link <exe>`, validates
 `--profile speed|size|debug|wasi` before compiling anything, makes every
 directory in the way of the IR, a sidecar or the binary with `mkdirSync`, and
 runs `bash scripts/build.sh` through `spawnSync` for the link, found one level
-up from the binary's own path or in the working directory. `-g` goes into the
+up from the binary's own path (as invoked, then through a symbolic link), or in
+the working directory only when the binary itself lies inside it
+(`packageRootCandidates`; `docs/security/cli.md`, CLI-2). An install keeps
+`bin/nish` beside `scripts/`, `runtime/` and `std/`. `-g` goes into the
 `.ll` *and* on to that script. `--json`, `--emit-ast`, `--emit-checked`,
 `--version`, `--target host` and the interop sidecars (`--emit-header`,
 `--emit-dts`, `--emit-napi`, and the loader `--emit-dts` writes beside its
