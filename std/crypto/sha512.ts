@@ -495,15 +495,29 @@ export class Sha384 {
   }
 }
 
-/** The SHA-512 digest of all of `data`, as a fresh 64-byte array. */
+/**
+ * The SHA-512 digest of all of `data`, as a fresh 64-byte array. An array
+ * longer than 2^31 - 1 bytes panics, for the reason `sha256` gives: a longer
+ * length does not survive `toI32` under `--number-mode f64`, and the digest
+ * would be of a prefix.
+ */
 export const sha512 = (data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("sha512: a message longer than 2^31 - 1 bytes")
+  }
   const hasher = new Sha512()
   hasher.update(data, OFFSET_ZERO, toI32(data.length))
   return hasher.digest()
 }
 
-/** The SHA-384 digest of all of `data`, as a fresh 48-byte array. */
+/**
+ * The SHA-384 digest of all of `data`, as a fresh 48-byte array. An array
+ * longer than 2^31 - 1 bytes panics, as in `sha512`.
+ */
 export const sha384 = (data: u8[]): u8[] => {
+  if (data.length > 2147483647) {
+    panic("sha384: a message longer than 2^31 - 1 bytes")
+  }
   const hasher = new Sha384()
   hasher.update(data, OFFSET_ZERO, toI32(data.length))
   return hasher.digest()

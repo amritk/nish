@@ -3,10 +3,13 @@
 // §5 decides — the top bit of `u` ignored, a `u` of p or more taken modulo p,
 // the answer always canonical, and an all-zero answer returned rather than
 // refused. The 1,000,000-iteration vector of §5.2 is not here: it takes too
-// long for the suite, and was run once by hand for the pull request.
+// long for the suite, and was run once by hand for the pull request. Then every
+// case of Wycheproof's x25519_test.json, and the low-order points by name
+// (docs/security/crypto-ecc.md is the audit these checks pin).
 import { Suite } from "nish/testing";
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519";
 import { fromHex, toHex } from "./hex";
+import { wycheproofX25519 } from "./wycheproof";
 
 /** A 32-byte u-coordinate or scalar holding the small number `n`. */
 const small = (n: i32): u8[] => {
@@ -145,6 +148,28 @@ x25519(good, cleared)
   // well are p once masked, so they still decode as 0.
   const pTop: u8[] = fromHex("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
   t.eqStr("u = p with its top bit set still decodes as 0", toHex(x25519(good, pTop)), ALL_ZERO);
+
+  // --- Wycheproof x25519_test.json ---------------------------------------------
+  t.eqI32("wycheproof: every case answers the file's shared secret", wycheproofX25519(t), 0);
+
+  // --- Low-order points: all zeros, whatever the scalar ----------------------
+  // The u-coordinates of small order on curve25519 and its twist: 0, 1, the
+  // two points of order 8, p - 1, and p + 1 (which is 1 spelled above p). A
+  // clamped scalar is a multiple of 8, so each goes to the identity, which
+  // X25519 encodes as u = 0. They are answered, not refused: §6.1 leaves that
+  // check to the protocol, which means to every caller (x25519's doc says how).
+  const lowOrder: string[] = [
+    "0000000000000000000000000000000000000000000000000000000000000000",
+    "0100000000000000000000000000000000000000000000000000000000000000",
+    "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+    "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+    "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  ];
+  const bob: u8[] = fromHex("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb");
+  for (const u of lowOrder) {
+    t.eqStr(`low-order u ${u.substring(0, 8)}… answers all zeros`, toHex(x25519(bob, fromHex(u))), ALL_ZERO);
+  }
 
   return t.done();
 };
