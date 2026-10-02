@@ -30,6 +30,7 @@ export class ExitStatus extends Error {
 const ESUCCESS = 0
 const EBADF = 8
 const EEXIST = 20
+const EFAULT = 21
 const EINVAL = 28
 const EISDIR = 31
 const ENOENT = 44
@@ -45,6 +46,9 @@ const OFLAG_DIRECTORY = 1 << 1
 const OFLAG_EXCL = 1 << 2
 const OFLAG_TRUNC = 1 << 3
 const FDFLAG_APPEND = 1 << 0
+
+/** The most one `crypto.getRandomValues` call fills, per the Web Crypto spec. */
+const RANDOM_CHUNK = 65536
 
 /** The preopened directory every relative path is resolved against. */
 const PREOPEN_FD = 3
@@ -113,7 +117,9 @@ export class MemoryFileSystem {
 
   /** Every file, decoded as UTF-8 — what a worker posts back after a compile. */
   toText() {
-    const out = {}
+    // No prototype, so a file a program names `__proto__` is a key like any
+    // other rather than an assignment to the object's prototype that drops it.
+    const out = Object.create(null)
     for (const [path, bytes] of this.files) {
       out[path] = decoder.decode(bytes)
     }
@@ -198,6 +204,20 @@ export class WasiHost {
 
   get #bytes() {
     return new Uint8Array(this.instance.exports.memory.buffer)
+  }
+
+  /**
+   * `length` bytes of memory at `pointer`, or `null` when any of them is past
+   * the end. `subarray` alone would clamp, and a host call that wrote fewer
+   * bytes than the guest asked for while reporting success is the bug this
+   * exists to rule out.
+   */
+  #range(pointer, length) {
+    const bytes = this.#bytes
+    if (pointer < 0 || length < 0 || pointer + length > bytes.length) {
+      return null
+    }
+    return bytes.subarray(pointer, pointer + length)
   }
 
   #string(pointer, length) {
@@ -494,14 +514,26 @@ export class WasiHost {
         this.#view.setBigUint64(resultPointer, 1000n, true)
         return ESUCCESS
       },
+      // The program's entropy, and so its keys, nonces and serials: std/crypto
+      // reads `crypto.getRandomValues`, which is this call. It fails closed.
+      // With no CSPRNG on the host it answers ENOSYS, which the runtime turns
+      // into a panic, where it used to fill the buffer from `Math.random` and
+      // report success. A range outside memory is EFAULT rather than a
+      // `subarray` that clamps, which filled fewer bytes than asked and still
+      // said ESUCCESS. And the host's `getRandomValues` takes at most 65,536
+      // bytes a call, so a longer request is filled in pieces rather than
+      // thrown out of the import as a QuotaExceededError.
       random_get: (pointer, length) => {
-        const bytes = this.#bytes.subarray(pointer, pointer + length)
-        if (globalThis.crypto?.getRandomValues) {
-          globalThis.crypto.getRandomValues(bytes)
-        } else {
-          for (let i = 0; i < bytes.length; i++) {
-            bytes[i] = (Math.random() * 256) | 0
-          }
+        const random = globalThis.crypto
+        if (typeof random?.getRandomValues !== "function") {
+          return ENOSYS
+        }
+        const bytes = this.#range(pointer, length)
+        if (bytes === null) {
+          return EFAULT
+        }
+        for (let at = 0; at < bytes.length; at += RANDOM_CHUNK) {
+          random.getRandomValues(bytes.subarray(at, at + RANDOM_CHUNK))
         }
         return ESUCCESS
       },

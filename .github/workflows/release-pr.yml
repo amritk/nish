@@ -49,11 +49,11 @@ jobs:
     name: release train
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # the generator walks the log back to the last tag
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -77,8 +77,9 @@ jobs:
         if: steps.path.outputs.mode == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.path.outputs.version }}
         run: |
-          v="v${{ steps.path.outputs.version }}"
+          v="v$VERSION"
           # Never tag or dispatch at a guessed ref. An empty version here would
           # mean the step above changed its output contract, and `v` alone
           # would tag the wrong thing and then aim release.yml at it -- the
@@ -89,7 +90,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$v" -m "nish ${{ steps.path.outputs.version }}"
+          git tag -a "$v" -m "nish $VERSION"
           git push origin "$v"
 
           # Pushing the tag is not enough, and the comment at the top of this
@@ -192,8 +193,9 @@ jobs:
           # the fallback, and the step below degrades rather than fails when it
           # turns out to be refused.
           GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          NEXT: ${{ steps.next.outputs.next }}
         run: |
-          next="${{ steps.next.outputs.next }}"
+          next="$NEXT"
           branch="release/next"
           # The title is the squash-merge subject, so it is a conventional
           # commit: pr-title.yml checks it like any other, and the merge lands
@@ -231,7 +233,7 @@ jobs:
             # paint main red on every merge and say nothing new, so say it once
             # as a warning and hand over the link that opens it in one click.
             echo "$out"
-            url="${{ github.server_url }}/${{ github.repository }}/compare/main...$branch?expand=1"
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
             echo "::warning title=Release pull request not opened::Pushed $branch for $next, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
           else
             echo "$out" >&2

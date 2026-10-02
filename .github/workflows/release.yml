@@ -102,9 +102,9 @@ jobs:
     outputs:
       rows: ${{ steps.rows.outputs.rows }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -172,9 +172,9 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.targets.outputs.rows) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -306,11 +306,14 @@ jobs:
       # notice with it. tests/run.js holds every module in std/, nested or not,
       # to each gate.
       - name: The tarball carries a whole compiler
+        env:
+          TARBALL: ${{ steps.binary.outputs.asset }}
+          NAME: ${{ steps.binary.outputs.name }}
         run: |
-          tar -tzf "${{ steps.binary.outputs.asset }}" |
-            sed 's#^${{ steps.binary.outputs.name }}/##' | sort > "$RUNNER_TEMP/files.txt"
+          tar -tzf "$TARBALL" |
+            sed "s#^$NAME/##" | sort > "$RUNNER_TEMP/files.txt"
           for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts LICENSE INSTALL.md; do
-            grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from ${{ steps.binary.outputs.name }}.tar.gz"; exit 1; }
+            grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from $NAME.tar.gz"; exit 1; }
           done
           echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the twenty-eight that have to be there"
 
@@ -339,12 +342,15 @@ jobs:
       # is the form that goes through the compiler's own package root and so
       # the only form the staging can break.
       - name: Smoke the native compiler
+        env:
+          TARBALL: ${{ steps.binary.outputs.asset }}
+          NAME: ${{ steps.binary.outputs.name }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           unpack="$RUNNER_TEMP/unpack"; work="$RUNNER_TEMP/work"
           mkdir -p "$unpack" "$work"
-          tar -xzf "${{ steps.binary.outputs.asset }}" -C "$unpack"
-          nish="$unpack/${{ steps.binary.outputs.name }}/bin/nish"
+          tar -xzf "$TARBALL" -C "$unpack"
+          nish="$unpack/$NAME/bin/nish"
           test "$("$nish" --version)" = "nish $version"
           cp examples/hello.ts "$work/hello.ts"
           mkdir -p "$work/multi"
@@ -402,7 +408,7 @@ jobs:
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: binary-${{ matrix.target.asset }}
           path: |
@@ -416,9 +422,15 @@ jobs:
     needs: [ci, targets, binaries]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # This job holds `contents: write` and runs `npm ci`, so the token is not
+      # left in .git/config for a dependency's install script to read. Nothing
+      # here pushes with git: the release is created through GH_TOKEN, in the
+      # one step that is given it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -454,7 +466,7 @@ jobs:
       # passed; `if-no-files-found: error` on the upload side and the check
       # below are what stop a silently empty download from publishing a release
       # with no compiler attached.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: binary-*
           merge-multiple: true
@@ -543,9 +555,28 @@ jobs:
           fi
           test -s build/release/notes.md || { echo "::error::release notes are empty"; exit 1; }
 
+      # One SHA256SUMS over every file this release attaches, attached with
+      # them. install.sh (and so scripts/fetch-seed.sh, and every CI job that
+      # takes a seed) refuses a tarball whose digest is not in it, or not
+      # pinned in install.sh for a release older than this file, before it
+      # unpacks or runs a byte. Same-origin sums catch a corrupt or a
+      # singly-swapped asset; the pinned list is the defence against a release
+      # rewritten whole (docs/security/supply-chain.md).
+      - name: Checksums
+        env:
+          PACKED: ${{ steps.pack.outputs.tarball }}
+        run: |
+          names=("$(basename "$PACKED")")
+          while IFS= read -r path; do names+=("$(basename "$path")"); done < build/release/assets.txt
+          while IFS= read -r path; do names+=("$(basename "$path")"); done < build/release/packages.txt
+          (cd build/release && sha256sum -- "${names[@]}") > build/release/SHA256SUMS
+          test "$(wc -l < build/release/SHA256SUMS)" -eq "${#names[@]}" || { echo "::error::SHA256SUMS does not cover every attached file"; exit 1; }
+          cat build/release/SHA256SUMS
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          PACKED: ${{ steps.pack.outputs.tarball }}
         run: |
           # The asset list the step above wrote and checked, so the attach and
           # the check are one list rather than two.
@@ -557,8 +588,9 @@ jobs:
           # the pair for their machine by hand (docs/INSTALL.md, §2).
           while IFS= read -r path; do assets+=("$path"); done < build/release/packages.txt
           gh release create "$GITHUB_REF_NAME" \
-            "${{ steps.pack.outputs.tarball }}" \
+            "$PACKED" \
             "${assets[@]}" \
+            build/release/SHA256SUMS \
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
@@ -586,19 +618,23 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # No `registry-url`: that writes an .npmrc naming NODE_AUTH_TOKEN, and
       # trusted publishing needs no token at all. npm exchanges the job's OIDC
       # token for a publish credential itself, which needs npm 11.5.1 or later;
       # Node 22 ships npm 10.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
       - name: npm new enough for trusted publishing
         run: |
-          npm install -g npm@^11.5.1
+          # An exact version, not a range: this step runs with id-token: write,
+          # so whatever npm the registry serves here can mint a publish
+          # credential. A range would hand that to the newest 11.x on release
+          # day, unreviewed.
+          npm install -g npm@11.21.0
           npm --version
 
       - name: Download the packages the release attached
@@ -716,11 +752,11 @@ jobs:
       contents: write # push the release/lockfile-v<version> branch
       pull-requests: write # open the pull request from it
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -821,7 +857,7 @@ jobs:
             # pushed, only the pull request is missing, and a release that has
             # already published is not a reason to go red here.
             echo "$out"
-            url="${{ github.server_url }}/${{ github.repository }}/compare/main...$branch?expand=1"
+            url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
             echo "::warning title=Lockfile pull request not opened::Pushed $branch for $v, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
           else
             echo "$out" >&2
