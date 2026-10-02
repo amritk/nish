@@ -1,0 +1,50 @@
+PASS  TLS_AES_128_GCM_SHA256: the ClientHello is accepted
+PASS  TLS_AES_128_GCM_SHA256: the server waits for its signature
+PASS  TLS_AES_128_GCM_SHA256: P-256 signs, and the server takes it
+PASS  TLS_AES_128_GCM_SHA256: the suite is the one offered
+PASS  TLS_AES_128_GCM_SHA256: four messages at the Handshake level
+PASS  TLS_AES_128_GCM_SHA256: the Certificate carries the leaf
+PASS  TLS_AES_128_GCM_SHA256: CertificateVerify names ecdsa_secp256r1_sha256
+PASS  TLS_AES_128_GCM_SHA256: the signature verifies with p256VerifySha256
+PASS  TLS_AES_128_GCM_SHA256: the server's Finished verifies
+PASS  TLS_AES_128_GCM_SHA256: the client and server agree on the handshake secrets
+PASS  TLS_AES_128_GCM_SHA256: the client's Finished verifies
+PASS  TLS_AES_128_GCM_SHA256: connected
+PASS  TLS_AES_128_GCM_SHA256: application secrets of HashLen bytes
+PASS  TLS_AES_128_GCM_SHA256: nothing written at the Application level
+PASS  TLS_CHACHA20_POLY1305_SHA256: the ClientHello is accepted
+PASS  TLS_CHACHA20_POLY1305_SHA256: the server waits for its signature
+PASS  TLS_CHACHA20_POLY1305_SHA256: P-256 signs, and the server takes it
+PASS  TLS_CHACHA20_POLY1305_SHA256: the suite is the one offered
+PASS  TLS_CHACHA20_POLY1305_SHA256: four messages at the Handshake level
+PASS  TLS_CHACHA20_POLY1305_SHA256: the Certificate carries the leaf
+PASS  TLS_CHACHA20_POLY1305_SHA256: CertificateVerify names ecdsa_secp256r1_sha256
+PASS  TLS_CHACHA20_POLY1305_SHA256: the signature verifies with p256VerifySha256
+PASS  TLS_CHACHA20_POLY1305_SHA256: the server's Finished verifies
+PASS  TLS_CHACHA20_POLY1305_SHA256: the client and server agree on the handshake secrets
+PASS  TLS_CHACHA20_POLY1305_SHA256: the client's Finished verifies
+PASS  TLS_CHACHA20_POLY1305_SHA256: connected
+PASS  TLS_CHACHA20_POLY1305_SHA256: application secrets of HashLen bytes
+PASS  TLS_CHACHA20_POLY1305_SHA256: nothing written at the Application level
+PASS  TLS_AES_256_GCM_SHA384: the ClientHello is accepted
+PASS  TLS_AES_256_GCM_SHA384: the server waits for its signature
+PASS  TLS_AES_256_GCM_SHA384: P-256 signs, and the server takes it
+PASS  TLS_AES_256_GCM_SHA384: the suite is the one offered
+PASS  TLS_AES_256_GCM_SHA384: four messages at the Handshake level
+PASS  TLS_AES_256_GCM_SHA384: the Certificate carries the leaf
+PASS  TLS_AES_256_GCM_SHA384: CertificateVerify names ecdsa_secp256r1_sha256
+PASS  TLS_AES_256_GCM_SHA384: the signature verifies with p256VerifySha256
+PASS  TLS_AES_256_GCM_SHA384: the server's Finished verifies
+PASS  TLS_AES_256_GCM_SHA384: the client and server agree on the handshake secrets
+PASS  TLS_AES_256_GCM_SHA384: the client's Finished verifies
+PASS  TLS_AES_256_GCM_SHA384: connected
+PASS  TLS_AES_256_GCM_SHA384: application secrets of HashLen bytes
+PASS  TLS_AES_256_GCM_SHA384: nothing written at the Application level
+PASS  tlsSignEcdsaP256 answers a DER signature that x509 reads back
+PASS  a 31-byte key signs nothing
+PASS  r with its top bit set gains a 0x00, and s = 0 is one zero octet
+PASS  leading zero bytes are dropped
+PASS  and x509DerSignatureRS reads the encoding back to r || s
+PASS  a 63-byte r || s is refused
+PASS  the scheme constant is 0x0403
+tls ecdsa: 49 passed, 0 failed, 0 skipped

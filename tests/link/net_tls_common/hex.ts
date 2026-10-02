@@ -1,6 +1,6 @@
-// Hex in and out for the X25519 test programs, which compare 32-byte strings
-// the RFC prints as hex. Lowercase only, and no validation: every string it
-// reads is a literal in these programs.
+// Hex in and out for the `nish/net/tls` test programs, which compare bytes the
+// RFCs print as hex. Lowercase only, and no validation: every string it reads
+// is a literal in these programs. (The same helper as `crypto_x25519/hex.ts`.)
 
 const HEX_DIGITS: string = "0123456789abcdef";
 
