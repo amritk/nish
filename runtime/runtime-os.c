@@ -363,10 +363,25 @@ nish_str *nish_getenv(const nish_str *name) {
    and the stack buffer is gone at the return. NULL when the path does not
    resolve -- a path that does not exist included -- which is the language's
    `string | null` rather than an error, because the caller is asking whether
-   it resolves. Contract: nish.h. */
+   it resolves. Contract: nish.h.
+
+   A wasi-libc from before 2024, which is what Ubuntu and Debian package,
+   neither declares nor defines `realpath`, so there every path is one that
+   does not resolve and the answer is NULL. WebAssembly/wasi-libc#463 declared
+   it and #473 defined it a month later, with no wasi-sdk release between, and
+   #463 also gave `<dirent.h>` its `DT_SOCK`, which the old headers spell only
+   for upstream musl. So a missing `DT_SOCK` is the test: it names the libc
+   without the function, and wasi-sdk 22 and later keep the real `realpath`.
+   It is a preprocessor test rather than a declaration of our own because the
+   old libc.a has no definition to link. */
 nish_str *nish_realpath(const nish_str *path) {
+#if defined(__wasi__) && !defined(DT_SOCK)
+  (void)path;
+  return 0;
+#else
   char buf[PATH_MAX];
   return realpath(nish_cpath(path), buf) ? nish_str_new(buf, strlen(buf)) : 0;
+#endif
 }
 
 /* ---- What machine this is (WP14 §7a): `process.platform` and `process.arch`,

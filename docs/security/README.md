@@ -28,17 +28,16 @@ the record that found it. The notes below the table name each such finding.
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 1 |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 3 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 2 |
-| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 12 | 0 / 1 ² / 0 / 3 |
+| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 14 | 0 / 1 ² / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 3 / 1 / 1 ³ | 0 / 1 / 2 / 2 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 4 ⁴ | 0 / 0 / 0 / 4 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 4 ⁵ | 0 / 0 / 0 / 3 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
-| **Total** | | | **3 / 9 / 8 / 54** | **0 / 2 / 2 / 16** |
+| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 14** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
-   by the runtime stage. Its record still reads "Open". The one source left,
-   `join`, is counted under CG-3.
+   by the runtime stage. The one source left, `join`, is counted under CG-3.
 2. CT-13 is High *if real* and is unconfirmed.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
@@ -46,7 +45,7 @@ the record that found it. The notes below the table name each such finding.
    a fixed Low. The "CG-3 (rest)" row of that record is CG-3 and is counted
    under codegen.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
-   the last release, so `nish` itself picks the fix up with the next release.
+   the last release, so `nish` itself has the fix from 0.16.0.
 6. SC-17 (Low) is accepted rather than open, and is not counted: `curl … | sh`
    runs `install.sh` unverified, and the record says why that stands.
 
@@ -70,14 +69,12 @@ only.
 | ECC-2 | Low | `std/crypto/p256.ts`, `std/crypto/x25519.ts` | Secret intermediates are not wiped. Needs a `secureZero`-style primitive in `runtime/` and `src/` | — |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | X509-7 | Low | `std/crypto/x509.ts` (`x509ParseP256PrivateKey`) | Private-key material is not wiped. Same primitive as ECC-2 | — |
-| CT-14 | Low | `tests/run.js` | The check's name calls every `expect=` other than `load` a branch | — |
-| CT-15 | Low | `tests/run.js` | The aarch64 half is skipped rather than failed when clang cannot target aarch64 | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | RT-10 | Low | `runtime/runtime-host.c` (`nish_signal_fd`) | Two threads whose first `signalFd()` calls overlap each make a pipe, and one never hears a signal | — |
 | RT-11 | Low | `runtime/runtime.c` (`nish_write`) | A short `write(2)` is ignored | — |
 | RT-12 | Low | `runtime/runtime-os.c` | File descriptors are not `O_CLOEXEC` | — |
 | RT-13 | Low | `runtime/runtime-os.c` | The read loop stops at `EINTR` and answers a short file | — |
-| SC-16 | Low | the repository's settings | Releases are mutable. Turning on immutable releases makes every published asset and its `SHA256SUMS` fixed | — |
+| SC-16 | Low | `.github/workflows/release.yml` | Immutable releases are on from v0.16.0 (`immutable: true`), so its assets and `SHA256SUMS` are fixed once published. Build provenance attestations, the stronger answer, are not: they need `id-token` and `attestations: write` on `release.yml` | #389 |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in
@@ -95,8 +92,4 @@ and are still open:
 | --- | --- | --- |
 | `src/runtime.ts` | The CG-8 comment correction: `nish_str_concat` and `nish_alloc_array` can now exit, so their `willreturn` is the same approximation CG-8 records. A follow-up issue is to be filed | [runtime.md](runtime.md) |
 | `runtime/shim.mjs`, `runtime/nish.d.ts` | The Node twin should open `writeFileSync`, `appendFileSync` and `spawnImpl`'s streams with `O_NOFOLLOW`, so the two runtimes agree on RT-4, and the declarations' comments should say so | [runtime.md](runtime.md) |
-| `tests/run.js` | CT-14 and CT-15, above | [ct-verification.md](ct-verification.md) |
-| `tests/nish-cmp.js` | The codegen stage's IR changes (the eight `*_long_f64` crypto programs) are admitted only by a declaration that admits any difference in any file. A declaration of their own would keep the next unrelated difference visible | [codegen.md](codegen.md) |
 | `scripts/bootstrap.sh` | Its intermediate stage at `build/selfhost/stage` still finds the checkout only through the narrowed `.` fallback. Building it one level below the checkout's root, or passing the root explicitly, would let that fallback go | [cli.md](cli.md) |
-| [crypto-k1.md](crypto-k1.md) | K1-6's disposition still reads "Open". It has since been fixed except for `join` (CG-3), as note 1 above says | this index |
-| [ct-verification.md](ct-verification.md) | "Functions still held by discipline only" lists `crypto/ct.ts` and `crypto/base64url.ts`. The module functions themselves are still not read, but `ct_asm_k1_ct` and `ct_asm_k1_base64url` now read copies of their cores (the K1 stage) | this index |

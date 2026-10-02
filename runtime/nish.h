@@ -313,7 +313,12 @@ nish_str *nish_getenv(const nish_str *name);
  * but the last must exist for POSIX `realpath` to answer at all.
  *
  * `path` is read and never retained. The answer is a fresh arena string, so
- * it outlives the call the way every other string here does. */
+ * it outlives the call the way every other string here does.
+ *
+ * Under the wasi profile the answer is the sysroot's `realpath`, which
+ * wasi-sdk 22 and later have. A wasi-libc without one (the one Ubuntu and
+ * Debian package) answers NULL for every path, which a caller already
+ * handles. */
 nish_str *nish_realpath(const nish_str *path);
 
 /* ---- What machine this is (WP14 §7a) ------------------------------------

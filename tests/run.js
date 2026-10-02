@@ -3382,22 +3382,20 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // reading the `.ll` an earlier run wrote.
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
-    /** `clang -O2 -S` of `ll` for `triple`, or `null` (and a counted skip) when clang has no such target. */
-    const clangAsm = (ll, triple, label) => {
-      const cc = spawnSync(
-        "clang",
-        ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ll, "-o", "-"],
-        {
-          encoding: "utf8",
-          maxBuffer: 64 * 1024 * 1024,
-        }
-      )
-      if (cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)) {
-        skip(`ct_asm: ${label}: clang cannot target ${triple} (${cc.stderr.trim()})`)
-        return null
-      }
-      return cc
-    }
+    /** `clang -O2 -S` of `ll` for `triple`. */
+    const clangAsm = (ll, triple) =>
+      spawnSync("clang", ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ll, "-o", "-"], {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      })
+    /** Whether `cc` failed because clang was built without the target it was asked for. */
+    const noTarget = (cc) => cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)
+    // The promise is read on both targets, so a clang that lacks one fails here
+    // rather than skipping that half: every tool is present, and a counted skip
+    // would leave `npm test` green with only a note (CT-15). Keyed by target:
+    // `null` once clang has compiled for it, clang's answer once it could not,
+    // so the failure is said once, not once per fixture.
+    const targeted = new Map()
     const fixtures = fs
       .readdirSync(casesDir)
       .filter((f) => /^ct_asm_\w+\.ts$/.test(f))
@@ -3417,10 +3415,15 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         continue
       }
       for (const target of CT_TARGETS) {
-        const cc = clangAsm(ll, target.triple, `${name} on ${target.name}`)
-        if (cc === null) {
+        if (typeof targeted.get(target.name) === "string") {
           continue
         }
+        const cc = clangAsm(ll, target.triple)
+        if (noTarget(cc)) {
+          targeted.set(target.name, cc.stderr.trim())
+          continue
+        }
+        targeted.set(target.name, null)
         if (cc.status !== 0) {
           check(`ct_asm: ${name} compiles to ${target.name} assembly`, false, cc.stderr)
           continue
@@ -3432,12 +3435,8 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
           const body = functionBody(lines, spec.name, target)
           const found = body === null ? [] : ctViolations(body, spec, target)
           const kinds = [...new Set(found.map((v) => v.kind))]
-          const promise =
-            spec.expect === null
-              ? "no branch, call or secret-indexed access"
-              : `refused for a ${spec.expect === "load" ? "secret-indexed load" : "conditional branch"}`
           check(
-            `ct_asm: ${name} ${spec.name} on ${target.name}: ${promise}`,
+            `ct_asm: ${name} ${spec.name} on ${target.name}: ${spec.promise}`,
             body !== null && (spec.expect === null ? found.length === 0 : kinds.includes(spec.expect)),
             body === null
               ? `no symbol ${spec.name} in ${name}'s ${target.name} assembly: a check that read nothing proves nothing`
@@ -3445,6 +3444,17 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
           )
         }
       }
+    }
+
+    for (const target of CT_TARGETS) {
+      check(
+        `ct_asm: clang targets ${target.name} (${target.triple}), so that half of the check runs`,
+        targeted.get(target.name) === null,
+        targeted.has(target.name)
+          ? `clang -O2 --target=${target.triple}: ${targeted.get(target.name)}\n` +
+              "the constant-time fixtures are read on both targets; a clang without this one is a toolchain to fix, not a check to skip"
+          : "no fixture compiled, so clang was never asked"
+      )
     }
 
     const primitivesLl = path.join(workDir, "ct_asm_primitives.ll")
@@ -3482,8 +3492,11 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       // wasm32 is not read for branches (the engine compiles the module again, so this
       // `.s` is not what runs), but the rule says the builtins compile there with the
       // same barrier, and that sentence needs something that could fail.
-      const wasm = clangAsm(primitivesLl, "wasm32-unknown-wasi", "wasm32")
-      if (wasm !== null) {
+      // It stays a counted skip without the target, unlike the two read above.
+      const wasm = clangAsm(primitivesLl, "wasm32-unknown-wasi")
+      if (noTarget(wasm)) {
+        skip(`ct_asm: wasm32: clang cannot target wasm32-unknown-wasi (${wasm.stderr.trim()})`)
+      } else {
         check(
           "ct_asm: the constant-time fixtures compile for wasm32, barrier and all",
           wasm.status === 0 && /^pickU32:/m.test(wasm.stdout) && /#APP/.test(wasm.stdout),
