@@ -26,6 +26,49 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-02
+
+### Added
+
+- std: Export x509DerSignatureRS, and run P-256's Wycheproof cases through it ([#361](https://github.com/amritk/nish/pull/361))
+- checker: Refuse import.meta by its rule, not NL0001 ([#365](https://github.com/amritk/nish/pull/365))
+- checker: Refuse computed keys and object spread by their rule, not NL0001 ([#371](https://github.com/amritk/nish/pull/371))
+
+### Fixed
+
+- checker: Refuse a duplicate type parameter and name the empty statement's rule ([#364](https://github.com/amritk/nish/pull/364))
+- crypto: Audit and harden ChaCha20-Poly1305 and AES-GCM ([#372](https://github.com/amritk/nish/pull/372))
+- crypto: Audit and harden SHA-2, HMAC, HKDF, ct and base64url ([#375](https://github.com/amritk/nish/pull/375))
+- crypto: Audit and harden P-256 ECDSA and X25519 ([#373](https://github.com/amritk/nish/pull/373))
+- crypto: Audit and harden the DER, PEM and X.509 parsers ([#376](https://github.com/amritk/nish/pull/376))
+- codegen: Audit bounds-check elimination and emitted attributes ([#380](https://github.com/amritk/nish/pull/380))
+- cli: Audit nish run's cache and the compiler's file and process handling ([#379](https://github.com/amritk/nish/pull/379))
+- runtime: Audit the C runtime for memory safety and OS misuse ([#383](https://github.com/amritk/nish/pull/383))
+- build: Audit install, launcher, seed fetch and release workflows ([#381](https://github.com/amritk/nish/pull/381))
+
+### Documentation
+
+- Record the parser run as built, quote NL2038 whole, and make a failed expect stop a parse path ([#359](https://github.com/amritk/nish/pull/359))
+- Record what the WP34 crypto lane taught about goldens, provenance, measurements and PR bodies ([#369](https://github.com/amritk/nish/pull/369))
+- Add SECURITY.md and the audit index ([#384](https://github.com/amritk/nish/pull/384))
+
+### Tests
+
+- Export NISH_BOOTSTRAP from the session-start hook, so a session's npm test runs nish-cmp ([#366](https://github.com/amritk/nish/pull/366))
+- Type-check the interop declarations in one tsc program instead of eight spawns ([#367](https://github.com/amritk/nish/pull/367))
+- Run each golden case's whole pipeline in parallel ([#374](https://github.com/amritk/nish/pull/374))
+- crypto: Prove the constant-time checks catch what they claim ([#377](https://github.com/amritk/nish/pull/377))
+
+### Build
+
+- Regenerate package-lock.json for v0.15.0 ([#360](https://github.com/amritk/nish/pull/360))
+
+### CI
+
+- Keep the compiler npm test built instead of linking it twice ([#368](https://github.com/amritk/nish/pull/368))
+- Delegate the test job's fixed point to the bootstrap row ([#370](https://github.com/amritk/nish/pull/370))
+
+
 ## [0.15.0] - 2026-09-30
 
 ### Breaking changes
@@ -606,3 +649,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.13.0]: https://github.com/amritk/nish/releases/tag/v0.13.0
 [0.14.0]: https://github.com/amritk/nish/releases/tag/v0.14.0
 [0.15.0]: https://github.com/amritk/nish/releases/tag/v0.15.0
+[0.16.0]: https://github.com/amritk/nish/releases/tag/v0.16.0
