@@ -1160,9 +1160,27 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * `sizeof` one element, which for a record element type (WP15 section 2a) is
  * the whole struct, so this relocates the elements themselves rather than a
  * block of pointers to them. Compiled code may therefore hold no pointer into
- * `data` across a push, and the checker refuses the programs that would. */
-void nish_array_grow(nish_array *a, uint64_t elem_size) {
+ * `data` across a push, and the checker refuses the programs that would.
+ *
+ * A push never takes an array past 2^31 - 1 elements (docs/security/codegen.md,
+ * K1-6). Under --number-mode i32 `length` is an `i32`, and one element more
+ * read back as a negative or a short length everywhere, a hash or a tag
+ * compare included. This file cannot tell which mode compiled its caller, so
+ * the limit holds in both, and the push past it fails as an allocation does,
+ * through `nish_oom`. `new Array(n)` checks its own `n` in the IR.
+ *
+ * `noinline`: under LTO the grown body was inlined into every push site, and
+ * the extra compare moved register allocation in the hot loops around them
+ * (+0.2% to +2% instructions over bench/instructions.json's map rows). Out of
+ * line, every one of those rows runs fewer instructions than it did before, and
+ * the call costs nothing on a path that runs once per doubling. */
+#define NISH_ARRAY_MAX 2147483647u
+__attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
+  if (cap > NISH_ARRAY_MAX) {
+    if (a->len >= NISH_ARRAY_MAX) nish_oom();
+    cap = NISH_ARRAY_MAX;
+  }
   char *data = nish_alloc_struct(cap * elem_size);
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;

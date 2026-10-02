@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 /* WP20 T0: the arena's storage class is part of the ABI, so this file spells it
@@ -775,6 +776,21 @@ int main(void) {
   nish_array_grow(&arr, sizeof(int32_t));
   assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
   for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
+  /* K1-6 (docs/security/codegen.md): the capacity stops at 2^31 - 1 elements,
+     and a full array of that length refuses to grow rather than let `length`
+     wrap. Each runs in a child, so the 2 GiB chunk the first one reserves (and
+     never touches) is not left in this process's arena. */
+  for (int full = 0; full < 2; full++) {
+    pid_t child = fork();
+    if (child == 0) {
+      nish_array big = { full ? 2147483647u : 0, full ? 2147483647u : 1u << 30, 0 };
+      nish_array_grow(&big, 1);
+      _exit(big.cap == 2147483647u ? 0 : 2);
+    }
+    int status = 0;
+    waitpid(child, &status, 0);
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == full);
+  }
 
   /* WP8 host entry: len == cap, 8-aligned data, elements writable; a zero length allocates only the header. */
   nish_array *fresh = nish_alloc_array(sizeof(double), 3);
