@@ -3,7 +3,7 @@
 // compare for an `i64` or a `u32`, two float compares before the `fptosi` of an
 // `f64`, and none at all for an `i32` or a literal. Under the default number
 // mode the bound is 2^31 - 1; a block of 2^62 bytes or more is refused too.
-export const main = (): number => {
+export const test = (): number => {
   const wide: i64 = toI64(parseInt("3"));
   const a: f64[] = new Array<f64>(wide);
   const unsigned: u32 = toU32(parseInt("4"));

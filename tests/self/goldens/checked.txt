@@ -3932,7 +3932,7 @@ function test(): i32 -> @test [exported]
   callee 22:38 firstPowerOver -> @firstPowerOver
 program tests/cases/cg_sec_new_array_guard.ts
 module tests/cases/cg_sec_new_array_guard.ts (entry)
-function main(): i32 -> @nish_main [exported entry]
+function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_exit nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_write
@@ -3947,7 +3947,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 14:9 literal: u8[] (const)
 program tests/cases/cg_sec_readdir_pass.ts
 module tests/cases/cg_sec_readdir_pass.ts (entry)
-function main(): i32 -> @nish_main [exported entry]
+function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
   calls: nish_arena_mark nish_arena_release nish_mkdir nish_panic_index nish_print nish_readdir nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
@@ -3966,10 +3966,10 @@ function first(d: string): string -> @first
   calls: nish_panic_index nish_readdir
   stackSites=0 stackLocals=0
   local 7:9 names: string[] | null (const)
-function main(): i32 -> @nish_main [exported entry]
+function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
-  calls: first nish_arena_mark nish_arena_release nish_mkdir nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
+  calls: first llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_mkdir nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
   local 16:9 dir: string (const)
   local 20:9 a: string (const)

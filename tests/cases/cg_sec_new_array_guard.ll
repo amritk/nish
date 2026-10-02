@@ -11,7 +11,6 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
@@ -46,7 +45,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @test() #0 {
 entry:
   %wide.addr = alloca i64, align 8
   %a.addr = alloca %struct.nish_array*, align 8
@@ -199,13 +198,6 @@ len.ok.2:
   call void @nish_print(i8* %84)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
-}
-
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
-entry:
-  %0 = call i32 @nish_main()
-  call void @nish_free_arena()
-  ret i32 %0
 }
 
 attributes #0 = { nounwind }

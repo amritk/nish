@@ -11,7 +11,7 @@ const first = (d: string): string => {
   return names[0];
 };
 
-export const main = (): number => {
+export const test = (): number => {
   mkdirSync("build");
   const dir = "build/cg_sec_readdir_return";
   mkdirSync(dir);
@@ -19,7 +19,7 @@ export const main = (): number => {
   writeFileSync(`${dir}/beta_second_entry`, "b");
   const a = first(dir);
   const q = "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ";
-  const junk = `${q}${q}${q}${q}${q}${q}${process.argv.length}`;
+  const junk = `${q}${q}${q}${q}${q}${q}${parseInt("1")}`;
   console.log(a === "alpha_first_entry" ? "intact" : "corrupted");
   console.log(`${a.length} ${junk.length}`);
   return 0;

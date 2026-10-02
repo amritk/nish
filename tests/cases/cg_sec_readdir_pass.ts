@@ -2,7 +2,7 @@
 // older than the pass. An element of a `readdirSync` listing made in the pass is
 // not: keeping one in an outer local and rewinding the pass let the next pass's
 // strings overwrite it. docs/security/codegen.md, finding CG-5.
-export const main = (): number => {
+export const test = (): number => {
   mkdirSync("build");
   const dir = "build/cg_sec_readdir_pass";
   mkdirSync(dir);

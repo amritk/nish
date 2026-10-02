@@ -8,13 +8,12 @@
 @.str.5 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"/beta_second_entry\00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
 @.str.7 = private unnamed_addr constant { i64, [63 x i8] } { i64 62, [63 x i8] c"QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ\00" }, align 8
-@nish_argv = external global %struct.nish_array*, align 8
-@.str.8 = private unnamed_addr constant { i64, [18 x i8] } { i64 17, [18 x i8] c"alpha_first_entry\00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"intact\00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"corrupted\00" }, align 8
-@.str.11 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"1\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [18 x i8] } { i64 17, [18 x i8] c"alpha_first_entry\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"intact\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"corrupted\00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
-declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
@@ -23,10 +22,11 @@ declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, 
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #1
+declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare i32 @llvm.fptosi.sat.i32.f64(double) #4
 
 define internal noundef nonnull align 8 i8* @first(i8* noundef nonnull noalias readonly align 8 nocapture %d) #0 {
 entry:
@@ -72,7 +72,7 @@ bounds.ok:
   ret i8* %17
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @test() #0 {
 entry:
   %dir.addr = alloca i8*, align 8
   %a.addr = alloca i8*, align 8
@@ -106,16 +106,14 @@ entry:
   %19 = call i8* @nish_str_concat(i8* %17, i8* %18)
   %20 = load i8*, i8** %q.addr, align 8
   %21 = call i8* @nish_str_concat(i8* %19, i8* %20)
-  %22 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %25 = trunc i64 %24 to i32
-  %26 = call i8* @nish_str_from_i32(i32 %25)
-  %27 = call i8* @nish_str_concat(i8* %21, i8* %26)
-  store i8* %27, i8** %junk.addr, align 8
-  %28 = load i8*, i8** %a.addr, align 8
-  %29 = call zeroext i1 @nish_str_eq(i8* %28, i8* bitcast ({ i64, [18 x i8] }* @.str.8 to i8*))
-  br i1 %29, label %cond.true, label %cond.false
+  %22 = call double @nish_parse_number(i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*), i32 2)
+  %23 = call i32 @llvm.fptosi.sat.i32.f64(double %22)
+  %24 = call i8* @nish_str_from_i32(i32 %23)
+  %25 = call i8* @nish_str_concat(i8* %21, i8* %24)
+  store i8* %25, i8** %junk.addr, align 8
+  %26 = load i8*, i8** %a.addr, align 8
+  %27 = call zeroext i1 @nish_str_eq(i8* %26, i8* bitcast ({ i64, [18 x i8] }* @.str.9 to i8*))
+  br i1 %27, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -124,37 +122,30 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %30 = phi i8* [ bitcast ({ i64, [7 x i8] }* @.str.9 to i8*), %cond.true ], [ bitcast ({ i64, [10 x i8] }* @.str.10 to i8*), %cond.false ]
-  call void @nish_print(i8* %30)
-  %31 = load i8*, i8** %a.addr, align 8
-  %32 = bitcast i8* %31 to i64*
-  %33 = load i64, i64* %32, align 8
-  %34 = trunc i64 %33 to i32
-  %35 = call i8* @nish_str_from_i32(i32 %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.11 to i8*))
-  %37 = load i8*, i8** %junk.addr, align 8
-  %38 = bitcast i8* %37 to i64*
-  %39 = load i64, i64* %38, align 8
-  %40 = trunc i64 %39 to i32
-  %41 = call i8* @nish_str_from_i32(i32 %40)
-  %42 = call i8* @nish_str_concat(i8* %36, i8* %41)
-  call void @nish_print(i8* %42)
+  %28 = phi i8* [ bitcast ({ i64, [7 x i8] }* @.str.10 to i8*), %cond.true ], [ bitcast ({ i64, [10 x i8] }* @.str.11 to i8*), %cond.false ]
+  call void @nish_print(i8* %28)
+  %29 = load i8*, i8** %a.addr, align 8
+  %30 = bitcast i8* %29 to i64*
+  %31 = load i64, i64* %30, align 8
+  %32 = trunc i64 %31 to i32
+  %33 = call i8* @nish_str_from_i32(i32 %32)
+  %34 = call i8* @nish_str_concat(i8* %33, i8* bitcast ({ i64, [2 x i8] }* @.str.12 to i8*))
+  %35 = load i8*, i8** %junk.addr, align 8
+  %36 = bitcast i8* %35 to i64*
+  %37 = load i64, i64* %36, align 8
+  %38 = trunc i64 %37 to i32
+  %39 = call i8* @nish_str_from_i32(i32 %38)
+  %40 = call i8* @nish_str_concat(i8* %34, i8* %39)
+  call void @nish_print(i8* %40)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
-}
-
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
-entry:
-  call void @nish_argv_init(i32 %argc, i8** %argv)
-  %0 = call i32 @nish_main()
-  call void @nish_free_arena()
-  ret i32 %0
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn memory(argmem: read) }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
