@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 528
+export const RULE_COUNT: i32 = 529
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -826,6 +826,8 @@ const diagnosticRules = (): string[] => [
   "NL1032",
   "Destructuring is not supported",
   "NL2193",
+  "Object spread is forbidden in ",
+  "NL1061",
   "` is not a declared interface",
   "NL2079",
   "`globalThis` is forbidden in ",

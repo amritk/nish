@@ -87,7 +87,7 @@ export const N_THIS: i32 = 37
 export const N_TEMPLATE: i32 = 38 // children: TEMPLATE_TEXT and expressions, alternating
 export const N_TEMPLATE_TEXT: i32 = 39 // text: the decoded bytes of one span
 export const N_ARRAY: i32 = 40 // children: the elements
-export const N_OBJECT: i32 = 41 // children: the PROPERTYs
+export const N_OBJECT: i32 = 41 // children: the PROPERTYs, and an N_SPREAD for each `...a` (NL1061)
 export const N_PROPERTY: i32 = 42 // text: the key; children: the value
 export const N_BINARY: i32 = 43 // text: the operator; children: left, right
 export const N_UNARY: i32 = 44 // text: the operator; flags: PREFIX or POSTFIX; children: operand
@@ -171,7 +171,8 @@ export const N_REGEX: i32 = 67
 // refuses the assertion to `any` or `unknown` (NL1051, NL1052), and pass 1
 // every other one (NL2256). children: the expression, the type.
 export const N_AS: i32 = 68
-// `...a` in an array literal (NL2237): children: the expression spread.
+// `...a` in an array literal (NL2237), or among an object literal's
+// properties (NL1061): children: the expression spread.
 export const N_SPREAD: i32 = 69
 
 // ---- Refused declarations (WP33 R1) --------------------------------------------------
@@ -237,6 +238,12 @@ export const N_BINDING_PATTERN: i32 = 73
 // an object literal a key written as a string or a number is a second child
 // of the N_PROPERTY, there only when written, and a method `{ m() { } }`
 // (an accessor, FLAG_ACCESSOR) is the N_METHOD that is the property's value.
+// A computed name, `[k]` (NL1041), is the expression between the brackets
+// where the name would be — an N_FIELD's or N_METHOD's first child, in a
+// class, an interface or an object literal, and an N_PROPERTY's second — and
+// the member carries FLAG_COMPUTED, because the expression's own kind is no
+// tell: `[k]` is an IDENT and `["a"]` a STRING. `[Symbol.dispose]()` is not
+// one: it is the method name WP29 reads (`Parser.parseDisposeMethod`).
 
 // `[key: string]: T` in a class or an interface (NL2213, NL2214): flags: the
 // member's modifiers; children: the key's PARAM, the value's type.
@@ -335,9 +342,10 @@ export const FLAG_USING: i32 = 256
 //     (FLAG_DEFAULT, FLAG_OPTIONAL, FLAG_REST) and a getter or setter a
 //     method (FLAG_ACCESSOR); `abstract` is its class or member
 //     (FLAG_ABSTRACT), `declare class`, `declare interface` and `declare enum`
-//     theirs (FLAG_FOREIGN), and a parameter property its PARAM
-//     (FLAG_PROPERTY). An operator is the N_BINARY or N_UNARY whose text it
-//     is.
+//     theirs (FLAG_FOREIGN), a parameter property its PARAM
+//     (FLAG_PROPERTY), and a computed name `[k]` its field, method or
+//     property (FLAG_COMPUTED). An operator is the N_BINARY or N_UNARY whose
+//     text it is.
 //   - When it resembles nothing, it is a kind of its own, with its child
 //     layout written beside it like every other kind's: N_TRY, N_WITH,
 //     N_LABELED, N_REGEX, N_AS, N_SPREAD, N_DECORATOR, N_NAMESPACE,
@@ -405,7 +413,8 @@ export const FLAG_CONSTRUCT: i32 = 2097152
 export const FLAG_TYPE_ONLY: i32 = 4194304
 // `flags` on N_IMPORT: bit 23 is a specifier that is not a string literal,
 // read as the expression it is and dropped (NL2212; on an
-// N_EXPORT_DECLARATION too, which is refused whatever it holds); bit 24 import
+// N_EXPORT_DECLARATION too, which is refused whatever it holds), and on
+// N_FIELD, N_METHOD and N_PROPERTY a computed name, `[k]` (NL1041); bit 24 import
 // attributes after the specifier, `with { ... }` or `assert { ... }`,
 // passed over unread (NL1057); and bit 25 `import defer` (NL1059).
 export const FLAG_COMPUTED: i32 = 8388608
