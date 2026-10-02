@@ -315,7 +315,7 @@ jobs:
           for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/pair.ts std/threads.ts std/collections.ts std/map.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/net/quic-packet.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from $NAME.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the twenty-eight that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the twenty-nine that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
