@@ -757,9 +757,11 @@ export class Compilation {
       //
       // A driver that never looked for its package — the `--emit-checked`
       // dump entries the stage1 oracles build (`src/dump-checked.ts`) — is
-      // answered from the working directory, which is the last place
-      // `compile.ts` looks too. Without it `/std/<name>.ts` was asked for, and
-      // a corpus program importing the library could not be dumped at all.
+      // answered from the working directory. Without it `/std/<name>.ts` was
+      // asked for, and a corpus program importing the library could not be
+      // dumped at all. `compile.ts` always hands over a root, so the command
+      // never reaches this: a `std/` in whatever directory it was started in
+      // is not the library (docs/security/cli.md, CLI-2).
       const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
       const std: ResolvedModule = {
         path: stdModulePath(root, specifier),
