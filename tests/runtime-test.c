@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 /* WP20 T0: the arena's storage class is part of the ABI, so this file spells it
@@ -577,6 +578,471 @@ static void test_poll(void) {
   expect_i64(nish_net_close(loop), 0, "the loop closed");
 }
 
+/* ---- The security audit (docs/security/runtime.md) ---------------------
+ * One check per finding the audit fixed and per property it pinned. Each
+ * names its finding, and a failed one says what it saw rather than stopping
+ * the run, so a run against the old runtime lists every finding at once; the
+ * last line of `test_security` turns any failure into the assertion the rest
+ * of this file uses. Everything a check would do to this process for good --
+ * exit, allocate gigabytes, overwrite a file -- happens in a child. */
+#include <dirent.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+
+/* POSIX, and declared by <unistd.h> only under a feature macro this file does
+   not define: -std=c11 alone is strict ISO C. */
+int ftruncate(int, off_t);
+int symlink(const char *, const char *);
+
+nish_str *nish_read_file_or_null(const nish_str *);
+nish_array *nish_read_file_bytes(const nish_str *);
+nish_array *nish_readdir(const nish_str *);
+_Bool nish_is_dir(const nish_str *);
+_Bool nish_mkdir(const nish_str *);
+nish_str *nish_getenv(const nish_str *);
+nish_str *nish_realpath(const nish_str *);
+int32_t nish_spawn(const nish_array *);
+int32_t nish_spawn_to(const nish_array *, const nish_str *, const nish_str *);
+double nish_stat_mtime(const nish_str *);
+void nish_random_fill(nish_array *);
+int64_t nish_lstat_owner_mode(const nish_str *);
+int64_t nish_euid(void);
+_Bool nish_is_executable(const nish_str *);
+
+#include <sys/mman.h>
+
+/* The longest string or array the runtime may make, and a size every page
+   size divides (4 KiB on Linux x86-64, 16 KiB on Darwin arm64, 64 KiB on some
+   arm64 Linux). */
+#define SEC_MAX 2147483647u
+#define SEC_PAGE 65536u
+
+/* Address space for the checks at exactly SEC_MAX, which must get past each
+   limit without two gigabytes ever being resident. A sparse file is mapped
+   whole with no access, private, so nothing is committed and nothing is
+   written back: 4 GiB of address space in two halves, each of one
+   read-write page followed by pages that fault. The first half's page holds
+   a string header whose bytes start in the faulting pages; the second half
+   is where the check points the arena. A fault in a child that has got past
+   the limit lands in `sec_fault`, which answers 42 if the arena handed out
+   exactly the block that length needs. */
+#define SEC_HALF ((uint64_t)SEC_MAX + 1 + 2 * SEC_PAGE)
+static char *sec_space;
+static uint64_t sec_fault_off;
+
+static void sec_fault(int sig) {
+  (void)sig;
+  _exit(nish_arena.off == sec_fault_off ? 42 : 43);
+}
+
+static int sec_reserve(const char *path) {
+  int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int ok = fd >= 0 && ftruncate(fd, (off_t)(2 * SEC_HALF)) == 0;
+  if (ok) sec_space = mmap(NULL, 2 * SEC_HALF, PROT_NONE, MAP_PRIVATE, fd, 0);
+  if (fd >= 0) close(fd);
+  unlink(path);
+  return ok && sec_space != MAP_FAILED && mprotect(sec_space, SEC_PAGE, PROT_READ | PROT_WRITE) == 0 &&
+         mprotect(sec_space + SEC_HALF, SEC_PAGE, PROT_READ | PROT_WRITE) == 0;
+}
+
+/* In a child: the arena is the second half from `at` bytes in, and a fault is
+   `sec_fault`'s to answer. */
+static void sec_arena_at(uint64_t at, uint64_t fault_off) {
+  nish_arena.buf = sec_space + SEC_HALF + at;
+  nish_arena.off = 0;
+  nish_arena.cap = SEC_HALF - at;
+  nish_arena.chunks = NULL;
+  sec_fault_off = fault_off;
+  signal(SIGSEGV, sec_fault);
+#ifdef SIGBUS
+  signal(SIGBUS, sec_fault);
+#endif
+}
+
+static int sec_failed;
+
+static void sec_check(int ok, const char *finding, const char *what) {
+  if (!ok) {
+    fprintf(stderr, "runtime_test: %s: %s\n", finding, what);
+    sec_failed++;
+  }
+}
+
+/* The status a child left: its exit code, 128 + n for signal n. */
+static int sec_status(pid_t child) {
+  int status = 0;
+  waitpid(child, &status, 0);
+  return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
+}
+
+static int sec_file_is(const char *path, const char *want) {
+  nish_str *got = nish_read_file_or_null(lit(path));
+  return got && got->len == strlen(want) && memcmp(got->data, want, got->len) == 0;
+}
+
+/* `strcmp`, counted while `sec_counting` is set. The definition here is the
+   one the link resolves runtime-os.c's calls to, which is the only way to see
+   how many compares `nish_readdir` makes without a hook in the runtime. */
+static int sec_counting;
+static uint64_t sec_compares;
+int strcmp(const char *a, const char *b) {
+  if (sec_counting) sec_compares++;
+  const unsigned char *p = (const unsigned char *)a, *q = (const unsigned char *)b;
+  while (*p && *p == *q) p++, q++;
+  return *p - *q;
+}
+
+/* A few kilobytes of stack set to 0xA5, so that whatever the next call leaves
+   unwritten in its frame reads back as that and not as a lucky zero. */
+static void sec_dirty_stack(void) {
+  volatile unsigned char junk[8192];
+  for (size_t i = 0; i < sizeof junk; i++) junk[i] = 0xA5;
+}
+
+static int32_t sec_recv_from(int fd, nish_array *from) {
+  static char into[16];
+  nish_array buf = {16, 16, into};
+  int32_t words[2];
+  nish_array meta = {2, 2, (char *)words};
+  return nish_udp_recv_from(fd, &buf, 0, 16, from, &meta);
+}
+
+#ifdef NISH_THREADS
+static int64_t sec_par_calls;
+static void sec_par_body(int64_t lo, int64_t hi, void *ctx) {
+  (void)lo;
+  (void)hi;
+  (void)ctx;
+  PAR_LOCK();
+  sec_par_calls++;
+  PAR_UNLOCK();
+}
+#endif
+
+static void test_security(void) {
+  const char *dir = "build/test/rt_sec";
+  char path[256];
+  mkdir("build", 0777);
+  mkdir("build/test", 0777);
+  mkdir(dir, 0777);
+
+  /* RT-1: a file of 2^31 bytes (sparse, so it costs no disk) is unreadable:
+     null from the two readers that answer null, and an exit from the one
+     that exits. Under i32 mode its length would read back as -2^31. */
+  snprintf(path, sizeof path, "%s/big.bin", dir);
+  int big = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  sec_check(big >= 0 && ftruncate(big, 2147483648LL) == 0, "RT-1", "a sparse 2^31-byte file could not be made");
+  close(big);
+  pid_t child = fork();
+  if (child == 0) _exit(nish_read_file_or_null(lit(path)) == NULL ? 0 : 3);
+  sec_check(sec_status(child) == 0, "RT-1", "readFileSyncOrNull of a 2^31-byte file was not null");
+  child = fork();
+  if (child == 0) _exit(nish_read_file_bytes(lit(path)) == NULL ? 0 : 3);
+  sec_check(sec_status(child) == 0, "RT-1", "readFileBytesSync of a 2^31-byte file was not null");
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_read_file(lit(path));
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 1, "RT-1", "readFileSync of a 2^31-byte file did not exit 1");
+  unlink(path);
+
+  /* RT-2: no string past 2^31 - 1 bytes. The header says 2^31 - 1 and the
+     bytes behind it are eight, so the old concatenation copied two gigabytes
+     out of this file's static data; the check is made before anything is
+     read. A small concatenation is the strings block's, in main. */
+  static struct { uint64_t len; char data[8]; } longest = {2147483647u, ""};
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_str_concat((const nish_str *)&longest, lit("x"));
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 1, "RT-2", "a + b past 2^31 - 1 bytes was not refused");
+
+  /* RT-7 (native half): the host entry refuses a length an array cannot have,
+     before `len * elem_size` can wrap: 2^61 eight-byte elements wrapped to an
+     empty block behind a header claiming 2^61. */
+  uint64_t lengths[2] = {2147483648u, (uint64_t)1 << 61};
+  for (int i = 0; i < 2; i++) {
+    child = fork();
+    if (child == 0) {
+      close(2);
+      nish_alloc_array(8, lengths[i]);
+      _exit(3);
+    }
+    sec_check(sec_status(child) == 1, "RT-7", "nish_alloc_array of a length past 2^31 - 1 was not refused");
+  }
+
+  /* RT-1, RT-2 and RT-7 at exactly 2^31 - 1, which each must still allow:
+     the checks above would pass against a limit one too low. Each child
+     points its arena at `sec_space`, so getting past the limit costs address
+     space and not memory. */
+  snprintf(path, sizeof path, "%s/space.bin", dir);
+  sec_check(sec_reserve(path), "RT-1", "4 GiB of address space could not be reserved");
+
+  /* A u8[] of 2^31 - 1 elements from the host entry: the header in the
+     read-write page, the elements never touched. */
+  child = fork();
+  if (child == 0) {
+    close(2);
+    sec_arena_at(0, 0);
+    nish_array *a = nish_alloc_array(1, SEC_MAX);
+    _exit(a->len == SEC_MAX && a->cap == SEC_MAX && a->data == sec_space + SEC_HALF + 24 ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 0, "RT-7", "nish_alloc_array of exactly 2^31 - 1 elements was refused");
+
+  /* `a + b` of exactly 2^31 - 1 bytes: `a` is 2^31 - 2 bytes that start in
+     the faulting pages of the first half, so the copy faults on its first
+     read, after the limit and with the whole result allocated. */
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_str *x = lit("x");
+    nish_str *a = (nish_str *)(sec_space + SEC_PAGE - 8);
+    a->len = SEC_MAX - 1;
+    sec_arena_at(0, 8 + (uint64_t)SEC_MAX + 1);
+    nish_str_concat(a, x);
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 42, "RT-2", "a + b of exactly 2^31 - 1 bytes was refused");
+
+  /* A file of exactly 2^31 - 1 bytes, sparse. The arena starts eight bytes
+     short of the faulting pages, so the header is written, `pread` answers
+     EFAULT without a byte, and the NUL after the bytes read faults: after
+     the limit, with the whole block allocated. Refused, the reader answers
+     null and the child exits 0. */
+  snprintf(path, sizeof path, "%s/longest.bin", dir);
+  big = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  sec_check(big >= 0 && ftruncate(big, SEC_MAX) == 0, "RT-1", "a sparse (2^31 - 1)-byte file could not be made");
+  close(big);
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_str *name = lit(path);
+    sec_arena_at(SEC_PAGE - 8, 8 + (uint64_t)SEC_MAX + 1);
+    _exit(nish_read_file_or_null(name) == NULL ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 42, "RT-1", "readFileSyncOrNull of exactly 2^31 - 1 bytes was refused");
+  unlink(path);
+  munmap(sec_space, 2 * SEC_HALF);
+
+  /* RT-3: a NUL inside a path, a name or an argument is refused, never cut
+     short at: every one of these names something real before its NUL. */
+  snprintf(path, sizeof path, "%s/real.txt", dir);
+  nish_write_file(lit(path), lit("real"));
+  size_t n = strlen(path);
+  memcpy(path + n, "\0.png", 6);
+  nish_str *nul = nish_str_new(path, n + 5);
+  sec_check(nish_read_file_or_null(nul) == NULL, "RT-3", "readFileSyncOrNull read the file before the NUL");
+  sec_check(nish_read_file_bytes(nul) == NULL, "RT-3", "readFileBytesSync read the file before the NUL");
+  sec_check(isnan(nish_stat_mtime(nul)), "RT-3", "statMtimeSync answered for the file before the NUL");
+  nish_str *nul_dir = nish_str_new("build\0x", 7);
+  sec_check(!nish_is_dir(nul_dir), "RT-3", "isDirectorySync answered for the directory before the NUL");
+  sec_check(!nish_mkdir(nul_dir), "RT-3", "mkdirSync answered for the directory before the NUL");
+  sec_check(nish_readdir(nul_dir) == NULL, "RT-3", "readdirSync listed the directory before the NUL");
+  sec_check(nish_realpath(nul_dir) == NULL, "RT-3", "realpathSync resolved the path before the NUL");
+  sec_check(nish_getenv(nish_str_new("PATH\0X", 6)) == NULL, "RT-3", "getenv read the variable before the NUL");
+  nish_str *true_nul = nish_str_new("true\0x", 6);
+  nish_array argv1 = {1, 1, (char *)&true_nul};
+  sec_check(nish_spawn(&argv1) == -1, "RT-3", "spawnSync ran the command before the NUL");
+  nish_str *args[2] = {lit("true"), nish_str_new("a\0b", 3)};
+  nish_array argv2 = {2, 2, (char *)args};
+  sec_check(nish_spawn(&argv2) == -1, "RT-3", "spawnSync ran an argument cut at its NUL");
+  nish_str *true_only = lit("true");
+  nish_array argv3 = {1, 1, (char *)&true_only};
+  snprintf(path, sizeof path, "%s/captured", dir);
+  unlink(path);
+  n = strlen(path);
+  memcpy(path + n, "\0.log", 6);
+  sec_check(nish_spawn_to(&argv3, nish_str_new(path, n + 5), lit("")) == -1, "RT-3",
+            "spawnSyncTo wrote stdout to the path before the NUL");
+  sec_check(access(path, F_OK) != 0, "RT-3", "spawnSyncTo created the file before the NUL");
+  child = fork();
+  if (child == 0) {
+    close(2);
+    nish_write_file(nish_str_new(path, n + 5), lit("written"));
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 1 && access(path, F_OK) != 0, "RT-3", "writeFileSync wrote the file before the NUL");
+  sec_check(nish_spawn(&argv3) == 0, "RT-3", "spawnSync of a plain `true` stopped working");
+  sec_check(nish_lstat_owner_mode(nul) == -1 && !nish_is_executable(nish_str_new("/bin/sh\0x", 9)), "RT-3",
+            "the RT-9 primitives answered for the path before the NUL");
+
+  /* RT-4: a symbolic link as the last component is refused by both writers and
+     by spawnSyncTo, and the file it names keeps its bytes. A link to a
+     directory on the way is still followed. */
+  char target[256], link_path[256];
+  snprintf(target, sizeof target, "%s/target.txt", dir);
+  snprintf(link_path, sizeof link_path, "%s/planted.ll", dir);
+  nish_write_file(lit(target), lit("keep"));
+  unlink(link_path);
+  sec_check(symlink("target.txt", link_path) == 0, "RT-4", "the symbolic link could not be made");
+  for (int append = 0; append < 2; append++) {
+    child = fork();
+    if (child == 0) {
+      close(2);
+      if (append) {
+        nish_append_file(lit(link_path), lit(" and more"));
+      } else {
+        nish_write_file(lit(link_path), lit("overwritten"));
+      }
+      _exit(3);
+    }
+    sec_check(sec_status(child) == 1, "RT-4",
+              append ? "appendFileSync followed a link" : "writeFileSync followed a link");
+  }
+  sec_check(nish_spawn_to(&argv3, lit(link_path), lit("")) == -1, "RT-4", "spawnSyncTo opened stdout through a link");
+  sec_check(sec_file_is(target, "keep"), "RT-4", "the file behind the link was changed");
+  sec_check(sec_file_is(link_path, "keep"), "RT-4", "reading through a link stopped working");
+  snprintf(link_path, sizeof link_path, "%s/via", dir);
+  unlink(link_path);
+  sec_check(symlink(".", link_path) == 0, "RT-4", "the directory link could not be made");
+  snprintf(path, sizeof path, "%s/via/through.txt", dir);
+  nish_write_file(lit(path), lit("through"));
+  snprintf(path, sizeof path, "%s/through.txt", dir);
+  sec_check(sec_file_is(path, "through"), "RT-4", "a write through a linked directory did not land");
+
+  /* RT-9: `lstat` answers for the link itself, owned by this user. */
+  int64_t om = nish_lstat_owner_mode(lit(link_path));
+  sec_check(om != -1 && S_ISLNK((mode_t)(om & 0xffffffff)) && (om >> 32) == nish_euid(), "RT-9",
+            "nish_lstat_owner_mode did not describe the link");
+  sec_check(nish_lstat_owner_mode(lit("build/test/rt_sec/missing")) == -1, "RT-9", "a missing path was not -1");
+  sec_check(nish_is_executable(lit("/bin/sh")) && !nish_is_executable(lit(target)), "RT-9",
+            "nish_is_executable gave the wrong answer");
+
+  /* Creation modes, pinned: 0644 for a written file and a captured stream,
+     0777 for a directory, both under the umask, as Node's defaults are or
+     tighter. */
+  mode_t old_mask = umask(022);
+  snprintf(path, sizeof path, "%s/mode.txt", dir);
+  unlink(path);
+  nish_write_file(lit(path), lit("m"));
+  struct stat st;
+  sec_check(stat(path, &st) == 0 && (st.st_mode & 0777) == 0644, "modes", "writeFileSync did not create 0644");
+  unlink(path);
+  sec_check(nish_spawn_to(&argv3, lit(path), lit("")) == 0 && stat(path, &st) == 0 && (st.st_mode & 0777) == 0644,
+            "modes", "spawnSyncTo did not create 0644");
+  snprintf(path, sizeof path, "%s/sub", dir);
+  rmdir(path);
+  sec_check(nish_mkdir(lit(path)) && stat(path, &st) == 0 && (st.st_mode & 0777) == 0755, "modes",
+            "mkdirSync did not create 0777 & ~umask");
+  umask(old_mask);
+
+  /* RT-5: listing 3,000 names takes at most 2 n (log2 n + 1) compares, under
+     78,000 (60,266 measured), where the insertion sort took n^2 / 4, 2,229,361
+     measured, for names in no order. The names are made in a scrambled order so that no file system's
+     own order happens to be sorted. */
+  enum { NAMES = 3000 };
+  snprintf(path, sizeof path, "%s/many", dir);
+  mkdir(path, 0777);
+  for (int i = 0; i < NAMES; i++) {
+    snprintf(path, sizeof path, "%s/many/f%05d", dir, (i * 7919) % NAMES);
+    close(open(path, O_WRONLY | O_CREAT, 0644));
+  }
+  snprintf(path, sizeof path, "%s/many", dir);
+  sec_compares = 0;
+  sec_counting = 1;
+  nish_array *names = nish_readdir(lit(path));
+  sec_counting = 0;
+  sec_check(names != NULL && names->len == NAMES, "RT-5", "readdirSync did not list every name");
+  int sorted = names != NULL;
+  for (uint64_t i = 0; sorted && i < names->len; i++) {
+    char want[8];
+    snprintf(want, sizeof want, "f%05d", (int)i);
+    sorted = strcmp(((nish_str **)names->data)[i]->data, want) == 0;
+  }
+  sec_check(sorted, "RT-5", "readdirSync is not sorted by bytes");
+  if (sec_compares > 2 * NAMES * 13) {
+    fprintf(stderr, "runtime_test: RT-5: %llu compares to sort %d names\n", (unsigned long long)sec_compares, NAMES);
+    sec_failed++;
+  }
+  for (int i = 0; i < NAMES; i++) {
+    snprintf(path, sizeof path, "%s/many/f%05d", dir, i);
+    unlink(path);
+  }
+  for (uint64_t k = 0; k < 4; k++) {
+    /* The edges of the heap: no name, one, two and three. */
+    snprintf(path, sizeof path, "%s/few", dir);
+    mkdir(path, 0777);
+    for (uint64_t i = 0; i < k; i++) {
+      snprintf(path, sizeof path, "%s/few/%c", dir, (char)('c' - i));
+      close(open(path, O_WRONLY | O_CREAT, 0644));
+    }
+    snprintf(path, sizeof path, "%s/few", dir);
+    names = nish_readdir(lit(path));
+    int ok = names != NULL && names->len == k;
+    for (uint64_t i = 0; ok && i < k; i++) ok = ((nish_str **)names->data)[i]->data[0] == (char)('c' - k + 1 + i);
+    sec_check(ok, "RT-5", "a listing of three names or fewer is not sorted");
+    for (uint64_t i = 0; i < k; i++) {
+      snprintf(path, sizeof path, "%s/few/%c", dir, (char)('c' - i));
+      unlink(path);
+    }
+  }
+
+  /* RT-6: a receive on a socket that reports no sender (here a Unix datagram
+     pair) writes eighteen zeros, not the stack bytes the address was never
+     given. */
+  int pair[2];
+  sec_check(socketpair(AF_UNIX, SOCK_DGRAM, 0, pair) == 0, "RT-6", "no socket pair");
+  sec_check(write(pair[1], "hi", 2) == 2, "RT-6", "the datagram was not sent");
+  unsigned char who[18];
+  memset(who, 0xEE, sizeof who);
+  nish_array from = {18, 18, (char *)who};
+  sec_dirty_stack();
+  int32_t got = sec_recv_from(pair[0], &from);
+  static const unsigned char zeros[18];
+  sec_check(got == 2, "RT-6", "the datagram was not received");
+  sec_check(memcmp(who, zeros, sizeof who) == 0, "RT-6", "the sender's address is not all zeros");
+  close(pair[0]);
+  close(pair[1]);
+
+  /* `crypto.getRandomValues`, pinned: the limit is 65,536 bytes, and a call
+     at the limit fills every byte (a zero run of 64 bytes from the kernel's
+     CSPRNG is not going to happen). */
+  static unsigned char entropy[65537];
+  nish_array pool = {65536, 65536, (char *)entropy};
+  nish_random_fill(&pool);
+  int zero_run = 0, longest_run = 0;
+  for (int i = 0; i < 65536; i++) {
+    zero_run = entropy[i] ? 0 : zero_run + 1;
+    if (zero_run > longest_run) longest_run = zero_run;
+  }
+  sec_check(longest_run < 64, "entropy", "getRandomValues left a run of zeros");
+  child = fork();
+  if (child == 0) {
+    close(2);
+    pool.len = 65537;
+    nish_random_fill(&pool);
+    _exit(3);
+  }
+  sec_check(sec_status(child) == 1, "entropy", "getRandomValues of 65,537 bytes was not refused");
+
+  /* The number formatters' buffers, pinned at their widest: 25 bytes for a
+     double, 20 digits and a sign for an i64. */
+  expect_f64(-1.7976931348623157e308, "-1.7976931348623157e+308");
+  expect_f64(-2.2250738585072014e-308, "-2.2250738585072014e-308");
+  expect_f64(-0.0000012345678901234567, "-0.0000012345678901234567");
+  expect_f64(-123456789012345680000.0, "-123456789012345680000");
+  expect_f64(-1.2345678901234567e21, "-1.2345678901234568e+21");
+
+#ifdef NISH_THREADS
+  /* RT-8: a range within `grain` of 2^63 is still divided, rather than
+     overflowing the chunk count into a negative and running on one thread. */
+  int64_t cpus = nish_cpu_count();
+  int64_t want = cpus > NISH_PAR_TEST_MAX ? NISH_PAR_TEST_MAX : cpus;
+  sec_par_calls = 0;
+  nish_parallel_range(sec_par_body, NULL, INT64_MAX, 2);
+  sec_check(sec_par_calls == want, "RT-8", "a range near 2^63 was not divided across the threads");
+#endif
+
+  if (sec_failed) {
+    fprintf(stderr, "runtime_test: %d security check(s) failed\n", sec_failed);
+  }
+  assert(sec_failed == 0);
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -775,6 +1241,21 @@ int main(void) {
   nish_array_grow(&arr, sizeof(int32_t));
   assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
   for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
+  /* K1-6 (docs/security/codegen.md): the capacity stops at 2^31 - 1 elements,
+     and a full array of that length refuses to grow rather than let `length`
+     wrap. Each runs in a child, so the 2 GiB chunk the first one reserves (and
+     never touches) is not left in this process's arena. */
+  for (int full = 0; full < 2; full++) {
+    pid_t child = fork();
+    if (child == 0) {
+      nish_array big = { full ? 2147483647u : 0, full ? 2147483647u : 1u << 30, 0 };
+      nish_array_grow(&big, 1);
+      _exit(big.cap == 2147483647u ? 0 : 2);
+    }
+    int status = 0;
+    waitpid(child, &status, 0);
+    assert(WIFEXITED(status) && WEXITSTATUS(status) == full);
+  }
 
   /* WP8 host entry: len == cap, 8-aligned data, elements writable; a zero length allocates only the header. */
   nish_array *fresh = nish_alloc_array(sizeof(double), 3);
@@ -851,6 +1332,8 @@ int main(void) {
   test_net();
   test_udp();
   test_poll();
+  nish_free_arena();
+  test_security();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();

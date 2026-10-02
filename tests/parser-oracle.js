@@ -397,6 +397,15 @@ const printTypeScriptTree = (source, sf) => {
       case ts.SyntaxKind.ImportKeyword:
         emit(depth, "IDENT", s, e, "import")
         return
+      // `import.meta`, which stage1 reads as the member `meta` of that name.
+      // `new.target` is the other meta-property, and stays a syntax error.
+      case ts.SyntaxKind.MetaProperty:
+        if (node.keywordToken !== ts.SyntaxKind.ImportKeyword) {
+          unsupported(node)
+        }
+        emit(depth, "MEMBER", s, e, node.name.text)
+        emit(depth + 1, "IDENT", s, at(node.getStart(sf) + "import".length), "import")
+        return
       // `typeof`, `void`, `delete`, `await` and `yield` are prefix operators
       // there, whose text is the word.
       case ts.SyntaxKind.TypeOfExpression:
@@ -430,8 +439,9 @@ const printTypeScriptTree = (source, sf) => {
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text)
             expression(property.initializer, depth + 2)
           } else if (ts.isPropertyAssignment(property)) {
-            // A key written as a string or a number is a second child (NL2223).
-            emit(depth + 1, "PROPERTY", ps, pe)
+            // A key written as a string or a number is a second child (NL2223),
+            // and so is a computed one, with `+computed` (NL1041).
+            emit(depth + 1, `PROPERTY${ts.isComputedPropertyName(property.name) ? "+computed" : ""}`, ps, pe)
             expression(property.initializer, depth + 2)
             memberName(property.name, depth + 2)
           } else if (
@@ -441,8 +451,14 @@ const printTypeScriptTree = (source, sf) => {
           ) {
             // A method is the METHOD that is the property's value (NL2258).
             const accessor = ts.isMethodDeclaration(property) ? "" : "+accessor"
-            emit(depth + 1, "PROPERTY", ps, pe, propertyText(property.name))
-            emit(depth + 2, `METHOD${functionFlags(property)}${accessor}`, ps, pe)
+            const computed = ts.isComputedPropertyName(property.name)
+            emit(depth + 1, "PROPERTY", ps, pe, computed ? undefined : propertyText(property.name))
+            emit(
+              depth + 2,
+              `METHOD${functionFlags(property)}${accessor}${computed ? "+computed" : ""}`,
+              ps,
+              pe
+            )
             memberName(property.name, depth + 3)
             list(depth + 3, property.parameters, arrowParameter)
             optional(depth + 3, property.type, type)
@@ -453,6 +469,10 @@ const printTypeScriptTree = (source, sf) => {
           } else if (ts.isShorthandPropertyAssignment(property)) {
             emit(depth + 1, "PROPERTY", ps, pe, property.name.text)
             emit(depth + 2, "IDENT", ps, pe, property.name.text)
+          } else if (ts.isSpreadAssignment(property)) {
+            // `...a` is the SPREAD among the properties (NL1061).
+            emit(depth + 1, "SPREAD", ps, pe)
+            expression(property.expression, depth + 2)
           } else {
             unsupported(property)
           }
@@ -1076,9 +1096,12 @@ const printTypeScriptTree = (source, sf) => {
       }
     }
     const accessor = ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ? "+accessor" : ""
-    return `${functionFlags(node)}${accessor}${abstract ? "+abstract" : ""}${isStatic ? "+static" : ""}${
-      readonly ? "+readonly" : ""
-    }`
+    // A computed name (NL1041) is FLAG_COMPUTED on the member, `[Symbol.dispose]` aside.
+    const computed =
+      node.name !== undefined && ts.isComputedPropertyName(node.name) && !isDisposeName(node.name)
+    return `${functionFlags(node)}${accessor}${abstract ? "+abstract" : ""}${computed ? "+computed" : ""}${
+      isStatic ? "+static" : ""
+    }${readonly ? "+readonly" : ""}`
   }
 
   /** `?` and `!` after a member's name, in `kindWithFlags`'s order. */
@@ -1089,9 +1112,14 @@ const printTypeScriptTree = (source, sf) => {
 
   /**
    * A member's name: its IDENT, or the STRING or NUMBER stage1 keeps in its
-   * place for the checker to refuse (NL2092).
+   * place for the checker to refuse (NL2092), or for a computed name the
+   * expression between the brackets, for Phase 0 to refuse (NL1041).
    */
   const memberName = (name, depth) => {
+    if (ts.isComputedPropertyName(name)) {
+      expression(name.expression, depth)
+      return
+    }
     if (!ts.isIdentifier(name) && !ts.isStringLiteral(name) && !ts.isNumericLiteral(name)) {
       unsupported(name)
     }

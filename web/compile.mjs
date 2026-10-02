@@ -34,7 +34,9 @@ if (!wasmPath || !entry) {
 const collectModules = (entryPath) => {
   const fromCwd = path.relative(process.cwd(), path.normalize(entryPath))
   const root = fromCwd.startsWith("..") ? path.dirname(entryPath) : process.cwd()
-  const files = {}
+  // No prototype: a module named `constructor` or `__proto__` is a key, not
+  // something every object already has.
+  const files = Object.create(null)
   const queue = [path.normalize(entryPath)]
   while (queue.length > 0) {
     const file = queue.pop()

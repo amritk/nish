@@ -8,10 +8,17 @@
  * operands. This measures that instead. Each `tests/cases/ct_asm_*.ts` is
  * compiled the way `tests/run.js` compiles it, linked with the runtime and
  * with a small C file written here that calls each function its `// ct-check:`
- * lines name (a fixture's `expect=` functions are written to leak, so they are
- * left out), and `tests/ct-timing/dudect.c` times those calls on a fixed and a
- * random secret and runs Welch's t-test between the two. A new fixture joins by
- * existing.
+ * lines name, and `tests/ct-timing/dudect.c` times those calls on a fixed and
+ * a random secret and runs Welch's t-test between the two. A new fixture joins
+ * by existing.
+ *
+ * A fixture's `expect=` functions are written to leak, and most are left out:
+ * a secret-indexed load into a table that sits in L1 need not show in time.
+ * The `expect=branch` ones are kept, as the **control**. `naiveEqual` returns at
+ * the first differing byte, so the fixed class runs its loop to the end and the
+ * random one stops at once, and a harness that could not tell those two apart
+ * could not tell anything apart: its quiet verdict on the rest would be worth
+ * nothing. A control that does not differ is a failed run, not a pass.
  *
  * The secret inputs are the ones the `ct-check` line names: a `secret=`
  * parameter, and under `contents` every element of every array argument. Class
@@ -25,7 +32,8 @@
  *   node tests/ct-timing.js --samples <n> [--seed <n>] [--nish <compiler>] [<fixture substring>]
  *
  * It prints a Markdown table and exits 1 when any function's largest |t| is
- * above 4.5, 2 when it could not run, and 0 otherwise. It
+ * above 4.5, 2 when it could not run or a control did not differ, and 0
+ * otherwise. It
  * is not part of `npm test`: the numbers are about the machine it runs on, and
  * a shared runner is noisy, so `.github/workflows/ct-timing.yml` runs it weekly
  * and files what it finds as an issue rather than as a red pull request.
@@ -57,6 +65,8 @@ const THRESHOLD = 4.5
 /** Enough measurements a function for a |t| near the threshold to mean something. */
 const SAMPLES = 1000000
 const QUICK_SAMPLES = 4000
+/** The fixture whose `expect=branch` functions are the control (see the header). */
+const CONTROL_FIXTURE = "ct_asm_refused.ts"
 /** Elements in every array argument: more than any fixture indexes. */
 const ELEMENTS = 256
 
@@ -189,9 +199,11 @@ fs.rmSync(workDir, { recursive: true, force: true })
 fs.mkdirSync(workDir, { recursive: true })
 const fixtures = fs
   .readdirSync(casesDir)
-  .filter((f) => /^ct_asm_\w+\.ts$/.test(f) && (only === null || f.includes(only)))
+  // The control's fixture runs whatever the filter, so a filtered run is checked too.
+  .filter((f) => /^ct_asm_\w+\.ts$/.test(f) && (only === null || f.includes(only) || f === CONTROL_FIXTURE))
   .sort()
-if (fixtures.length === 0) {
+// The control alone is not a match: a misspelt filter would otherwise run only it.
+if (only === null ? fixtures.length === 0 : !fixtures.some((f) => f.includes(only))) {
   fail(`no tests/cases/ct_asm_*.ts${only === null ? "" : ` matches ${only}`}`)
 }
 
@@ -203,7 +215,7 @@ for (const file of fixtures) {
   if (broken.length > 0) {
     fail(`${name}: ${broken.map((spec) => `${spec.name}: ${spec.problems.join("; ")}`).join("\n")}`)
   }
-  const specs = all.filter((spec) => spec.expect === null)
+  const specs = all.filter((spec) => spec.expect === null || spec.expect === "branch")
   if (specs.length === 0) {
     continue
   }
@@ -250,9 +262,10 @@ for (const file of fixtures) {
   if (run.status !== 0) {
     fail(`${name} exited ${run.status}:\n${run.stderr}`)
   }
+  const controls = new Set(specs.filter((spec) => spec.expect !== null).map((spec) => spec.name))
   for (const line of run.stdout.trim().split("\n")) {
     const [fn, batch, max, test, used, raw] = line.split("\t")
-    rows.push({ fixture: name, fn, batch, max: Number(max), test, used, raw })
+    rows.push({ fixture: name, fn, batch, max: Number(max), test, used, raw, control: controls.has(fn) })
   }
 }
 
@@ -263,16 +276,30 @@ console.log("")
 console.log("| fixture | function | batch | max \\|t\\| | from test | per class | uncropped t | verdict |")
 console.log("| --- | --- | ---: | ---: | --- | ---: | ---: | --- |")
 for (const r of rows) {
-  const verdict = r.max > THRESHOLD ? "**differs**" : "ok"
+  const differs = r.max > THRESHOLD
+  let verdict = differs ? "**differs**" : "ok"
+  if (r.control) {
+    verdict = differs ? "control: differs, as it must" : "**control did not differ**"
+  }
   console.log(
     `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${verdict} |`
   )
 }
-const over = rows.filter((r) => r.max > THRESHOLD)
+const checked = rows.filter((r) => !r.control)
+const over = checked.filter((r) => r.max > THRESHOLD)
+const quiet = rows.filter((r) => r.control && r.max <= THRESHOLD)
 console.log("")
+if (!rows.some((r) => r.control)) {
+  fail("no `expect=branch` function was timed, so nothing shows this run could see a leak")
+}
+if (quiet.length > 0) {
+  fail(
+    `the control ${quiet.map((r) => r.fn).join(", ")} did not differ (|t| <= ${THRESHOLD}): a run that cannot see a leak written to be seen proves nothing about the others`
+  )
+}
 console.log(
   over.length === 0
-    ? `ct-timing: ${rows.length} functions, none above |t| = ${THRESHOLD}`
-    : `ct-timing: ${over.length} of ${rows.length} functions above |t| = ${THRESHOLD}: ${over.map((r) => r.fn).join(", ")}`
+    ? `ct-timing: ${checked.length} functions, none above |t| = ${THRESHOLD}; the control differed`
+    : `ct-timing: ${over.length} of ${checked.length} functions above |t| = ${THRESHOLD}: ${over.map((r) => r.fn).join(", ")}`
 )
 process.exit(over.length === 0 ? 0 : 1)

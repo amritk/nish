@@ -12,7 +12,7 @@ comment above the `on:` block has the details.
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `build/nish` built with the seed, `npm test`, then the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
+| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test`, which builds its own compiler with the seed, then that compiler kept as `build/nish` rather than built a second time, the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `src/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
@@ -531,6 +531,28 @@ either would have hit: `tests/run.js` has no way to run one section and *say*
 it ran one section, and the substring filter is the trap described above. A
 `--section` mechanism with honest skip counting is the piece of work that
 unlocks splitting `test` at all, if a fresh profile says it is worth splitting.
+
+### A check the workflow was running twice
+
+One check did not need splitting out, because another job already ran it.
+`src/ compiles src/: the bootstrap reaches a fixed point` was the most
+expensive single check in `npm test` on run 36610344594 (`main`, `ff3a7c2`):
+about 80 s of the `test` job's 8 m 40 s `npm test` step, in a job of 9 m 50 s
+that is the workflow's critical path. Its two equalities, `IR(stage1) ==
+IR(stage2)` and `stage3 == stage2`, are what `scripts/bootstrap.sh --verify`
+asserts, and the `bootstrap (x86_64-linux)` row ran that in the same run, on
+the same runner image, with the same release as the seed, in 57 s and in
+parallel.
+
+So the `test` job passes `--delegate-fixed-point`, and `tests/run.js` records
+the check as **delegated** to that row: a third count beside passed and
+skipped, printed with the job's name, so the run neither claims a pass it did
+not make nor reports as unproven something the same run proves. The flag is
+honoured only under GitHub Actions and only on a host that has a seed target,
+and a check reads `ci.yml` and fails if the `test` job asks for it while the
+`bootstrap` job has stopped running `--verify`. A local `npm test` still runs
+the fixed point. The WP14 section of `tests/run.js` has the full argument for
+why the row always exists when the `test` job can be green.
 
 ## Running the same steps locally
 

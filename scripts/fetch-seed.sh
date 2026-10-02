@@ -4,6 +4,9 @@
 #   scripts/fetch-seed.sh               the latest release, unless one is there
 #   scripts/fetch-seed.sh 0.5.0         that release (a no-op when it is there)
 #   scripts/fetch-seed.sh --force       fetch the latest again, whatever is there
+#   scripts/fetch-seed.sh 0.5.0 --expect-tarball nish-0.5.0-x86_64-linux.tar.gz
+#                                       refuse unless this machine's asset is that
+#                                       one (CI's seed rows; install.sh checks it)
 #
 # The seed is the compiler that builds stage1 (docs/wp19-stage0-retirement.md
 # §3): what `NISH_BOOTSTRAP` names for scripts/bootstrap.sh, and the slot
@@ -31,24 +34,33 @@ cd "$(dirname "$0")/.."
 dir=build/seed
 version=""
 force=""
+expect=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) sed -n '2,/^set -eu$/{/^set -eu$/d;s/^# \{0,1\}//;p}' "$0"; exit 0 ;;
     --force) force=--force; shift ;;
+    --expect-tarball)
+      # An empty name is refused, not dropped: the call below passes the
+      # option only when it has a value, so "" would skip the check it asks for.
+      { [ $# -ge 2 ] && [ -n "$2" ]; } || { printf 'fetch-seed: --expect-tarball needs a file name\n' >&2; exit 2; }
+      expect="$2"; shift 2 ;;
     -*) printf 'fetch-seed: unknown option %s (try --help)\n' "$1" >&2; exit 2 ;;
     *) [ -z "$version" ] || { printf 'fetch-seed: two versions given: %s and %s\n' "$version" "$1" >&2; exit 2; }
        version="$1"; shift ;;
   esac
 done
 
-if [ -z "$version" ] && [ -z "$force" ] && have="$("$dir/bin/nish" --version 2>/dev/null)"; then
+if [ -z "$version" ] && [ -z "$force" ] && [ -z "$expect" ] && have="$("$dir/bin/nish" --version 2>/dev/null)"; then
   printf 'fetch-seed: %s in %s (already there)\n' "$have" "$dir"
   exit 0
 fi
 
 # install.sh's closing advice is about a user's PATH and does not apply to a
 # seed in a build directory, so only its failure reaches the caller.
-if ! log="$(sh install.sh $version $force --dir "$dir" 2>&1)"; then
+# Every download is verified there, against a pinned digest or the release's
+# SHA256SUMS, before it is unpacked or run; a seed that fails it is not
+# installed, and the old one stays (docs/security/supply-chain.md).
+if ! log="$(sh install.sh ${version:+"$version"} ${force:+"$force"} ${expect:+--expect-tarball "$expect"} --dir "$dir" 2>&1)"; then
   printf '%s\n' "$log" >&2
   exit 1
 fi

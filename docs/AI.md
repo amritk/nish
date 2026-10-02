@@ -134,7 +134,7 @@ rejects. This table is the highest-value part of the page.
 | `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
 | `namespace N { }`, `declare global { }`, `@decorator` | forbidden | one module per file; a plain function in place of a decorator |
-| `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
+| `keyof T`, `<T = i32>` (a default type argument) | `` Unsupported type `keyof T` (Phase 1 supports …) `` / `a default type argument … is not supported` | name the type; a type argument is always inferred |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, `get x()` / `set x(v)` | `` … `static` members are not supported `` / `` Getters and setters are not supported in class `C` (use a method) `` | module `const`s and plain methods |
 | `const [a, b] = xs`, `({ x }: Point) =>`, `(n = 1)`, `(n?: i32)`, `(...ns: i32[])` | `Destructuring is not supported` / `Destructured parameters are not supported` / `Optional/default parameters are not supported` / `Rest parameters are not supported` | one name per binding, every parameter passed; an array for a variable count |
@@ -142,6 +142,7 @@ rejects. This table is the highest-value part of the page.
 | a method in an `interface` | `` Interface `I` cannot declare methods (interfaces describe layout only) `` | fields only; a top-level function over the interface |
 | `abstract class`, `declare class`, `constructor(public x: i32)`, `interface B extends A`, `[k: string]: T` | `Abstract classes are not supported` / `` `declare class` is not supported `` / `Parameter properties … are not supported; declare the field and assign it` / ``Interface inheritance (`extends`) is not supported; list every field`` / `Index signatures are not supported …` | a plain class with its fields declared and assigned in the constructor; every field listed; a `Map` for a keyed table |
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
+| `{ ...base, x: 1 }`, `{ [k]: v }`, `[k]: i32` in a class or interface | `Object spread is forbidden in Nish (set each field by name)` / `Computed property names are forbidden in Nish (member names are fixed at compile time)` | every field written by name (`{ x: 1, y: base.y }`); a `Map` for a keyed table |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
 | `A \| B` unions | `` Union types other than `T \| null` are forbidden `` | one type, or an `interface` prefix |
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
@@ -518,6 +519,9 @@ const areaOf = <T extends Shape>(s: T): i32 => s.area;   // s.radius would be re
 export const main = (): i32 => areaOf(new Circle(2)) - 12;
 ```
 
+- **Each type parameter is named once**: `<T, T>` is
+  `` Duplicate type parameter `T` ``, on a function, method, class or
+  interface, and in a template nothing calls too.
 - **Not supported yet**: a default type argument (`<T = string>`) and type
   parameters on a **constructor**, each with its own message, and a generic
   **type alias**, which is only the syntax error `` expected `=`, found `<` ``.

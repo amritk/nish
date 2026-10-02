@@ -40,7 +40,14 @@ _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI")
 extern unsigned char __heap_base;
 #define NISH_PAGE ((uint64_t)65536)
 
-/* Slow path of the inlined allocator (`size` is already 8-byte rounded). */
+/* Slow path of the inlined allocator (`size` is already 8-byte rounded).
+ *
+ * `need` has to fit the 32-bit address space, and is checked before anything
+ * is grown (docs/security/runtime.md, RT-7). Without that, an `off + size` that
+ * wrapped 2^64 looked small and moved the offset backwards, and a page count
+ * past 2^32 truncated to the `uintptr_t` `memory.grow` takes: a request of
+ * 2^48 bytes grew nothing, claimed 2^48 bytes of capacity, and the next block
+ * landed at `buf + off` reduced mod 2^32, on top of live data. */
 void *nish_arena_grow(uint64_t size) {
   if (!nish_arena.buf) {
     uintptr_t base = ((uintptr_t)&__heap_base + 7) & ~(uintptr_t)7;
@@ -48,6 +55,7 @@ void *nish_arena_grow(uint64_t size) {
     nish_arena.cap = (uint64_t)__builtin_wasm_memory_size(0) * NISH_PAGE - base;
   }
   uint64_t need = nish_arena.off + size;
+  if (need < size || need > (uintptr_t)-1 - (uintptr_t)nish_arena.buf) __builtin_trap();
   if (need > nish_arena.cap) {
     uint64_t pages = (need - nish_arena.cap + NISH_PAGE - 1) / NISH_PAGE;
     if (__builtin_wasm_memory_grow(0, (uintptr_t)pages) == (uintptr_t)-1) __builtin_trap();
@@ -58,9 +66,12 @@ void *nish_arena_grow(uint64_t size) {
   return p;
 }
 
+/* `size <= cap - off` rather than `off + size <= cap`, which a size near 2^64
+   wraps into a yes; a size that rounding wraps to 0 is trapped the same way. */
 void *nish_alloc_struct(uint64_t size) {
+  if (size > (uint64_t)-8) __builtin_trap();
   size = (size + 7) & ~(uint64_t)7;
-  if (nish_arena.buf && nish_arena.off + size <= nish_arena.cap) {
+  if (nish_arena.buf && size <= nish_arena.cap - nish_arena.off) {
     void *p = nish_arena.buf + nish_arena.off;
     nish_arena.off += size;
     return p;
@@ -77,7 +88,15 @@ void nish_arena_release(uint64_t mark) { nish_arena.off = mark ? mark - (uintptr
 /* ---- Arrays: %struct.nish_array = type { i64, i64, i8* } */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 
+/* The length limit runtime.c's `nish_array_grow` and `nish_alloc_array` keep:
+   2^31 - 1 elements, so an i32-mode `length` is never negative. Past it the
+   wasm runtime traps, as it does for every other failure. */
+#define NISH_ARRAY_MAX 2147483647u
+
 nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
+  /* With `len` in range, `len * elem_size` cannot wrap for any element
+     smaller than 8 GiB, and a product past 4 GiB traps in the grow. */
+  if (len > NISH_ARRAY_MAX) __builtin_trap();
   nish_array *a = (nish_array *)nish_alloc_struct(sizeof *a);
   a->len = a->cap = len;
   a->data = (char *)nish_alloc_struct(len * elem_size);
@@ -86,6 +105,10 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
 
 void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
+  if (cap > NISH_ARRAY_MAX) {
+    if (a->len >= NISH_ARRAY_MAX) __builtin_trap();
+    cap = NISH_ARRAY_MAX;
+  }
   char *data = (char *)nish_alloc_struct(cap * elem_size);
   if (a->len) __builtin_memcpy(data, a->data, (uintptr_t)(a->len * elem_size)); /* memory.copy (-mbulk-memory) */
   a->data = data;

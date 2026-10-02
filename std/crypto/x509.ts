@@ -6,6 +6,9 @@
  *
  *     import { x509MintSelfSigned, x509CertificateHash, derToPem } from "nish/crypto/x509";
  *
+ *     // Both secrets come from the kernel's CSPRNG; a predictable key or serial is the caller's bug.
+ *     const priv: u8[] = new Array<u8>(32);
+ *     crypto.getRandomValues(priv);          // p256PublicKey(priv) === null: draw again (odds 2^-32)
  *     const serial: u8[] = new Array<u8>(16);
  *     crypto.getRandomValues(serial);
  *     serial[0] = serial[0] & toU8(0x7f);   // positive, so it stays 16 octets
@@ -47,9 +50,11 @@
  * hash does no path building for basicConstraints or keyUsage to inform, and
  * every extension would be one more field whose absence is part of the
  * contract a hash pins. OpenSSL verifies it as its own trust anchor all the
- * same (`tests/link/crypto_x509`'s header has the commands). The serial and
- * the time are parameters so the golden certificate is deterministic; a caller
- * passes `Date.now()` and random bytes.
+ * same (`tests/link/crypto_x509`'s header has the commands). The key, the
+ * serial and the time are parameters so the golden certificate is
+ * deterministic; a caller passes `Date.now()` and, for the key and the serial,
+ * bytes from `crypto.getRandomValues`. This module does not draw them itself,
+ * because a call to the operating system would stop it compiling for wasm32.
  *
  * **Constant time.** A private key is the one secret that passes through here:
  * it is base64-decoded from PEM, lifted out of its DER, and handed to
@@ -289,11 +294,28 @@ const x509DerSmallInteger = (der: u8[], e: X509DerElement): i32 => {
 }
 
 /**
+ * Whether `e`'s contents are a DER BIT STRING's, whatever its tag (an IMPLICIT
+ * one keeps the grammar): an unused-bits count of 0 to 7, none without an
+ * octet to hold them, and those bits zero (X.690 §8.6.2 and §11.2.1).
+ */
+const x509DerBitStringSound = (der: u8[], e: X509DerElement): boolean => {
+  const n: i32 = e.end - e.start
+  if (n < 1) {
+    return false
+  }
+  const unused: i32 = toI32(der[e.start])
+  if (unused > 7 || (n === 1 && unused !== 0)) {
+    return false
+  }
+  return (toI32(der[e.end - 1]) & ((1 << unused) - 1)) === 0
+}
+
+/**
  * The octets of a BIT STRING that has no unused bits, or `null`. Keys and
  * signatures are whole octets, so the leading unused-bits count must be 0.
  */
 const x509DerBitStringOctets = (der: u8[], e: X509DerElement): u8[] | null => {
-  if (e.tag !== X509_TAG_BIT_STRING || e.end - e.start < 1 || toI32(der[e.start]) !== 0) {
+  if (e.tag !== X509_TAG_BIT_STRING || !x509DerBitStringSound(der, e) || toI32(der[e.start]) !== 0) {
     return null
   }
   return x509DerSlice(der, e.start + 1, e.end)
@@ -468,9 +490,11 @@ const x509DerUnsignedInto = (der: u8[], e: X509DerElement, out: u8[], off: i32):
 /**
  * `r || s`, 32 octets each, out of an ECDSA-Sig-Value `SEQUENCE { INTEGER r,
  * INTEGER s }` (RFC 5480 §2.2 by way of RFC 3279 §2.2.3), or `null` unless it
- * is exactly one with both integers minimal, positive and below 2^256.
+ * is exactly one with both integers minimal, positive and below 2^256. This is
+ * the form a TLS `CertificateVerify` or an X.509 signature carries, and
+ * `nish/crypto/p256` takes the `r || s` it answers.
  */
-const x509DerSignatureRS = (sig: u8[]): u8[] | null => {
+export const x509DerSignatureRS = (sig: u8[]): u8[] | null => {
   const total: i32 = toI32(sig.length)
   const seq: X509DerElement | null = x509DerExpect(sig, 0, total, X509_TAG_SEQUENCE)
   if (seq === null || seq.end !== total) {
@@ -603,6 +627,48 @@ const x509DerTimeAt = (seconds: i64): u8[] => {
   x509PushDigits(text, rest % 60, 2)
   text.push(90)
   return x509DerTlv(utc ? X509_TAG_UTC_TIME : X509_TAG_GENERALIZED_TIME, text)
+}
+
+/**
+ * Whether `bytes` is well-formed UTF-8 (RFC 3629 §4) with no NUL: no stray
+ * continuation octet, no truncated sequence, no overlong form, no surrogate and
+ * nothing past U+10FFFF. A string in the language is bytes and need not be
+ * UTF-8, and a UTF8String that is not UTF-8 is a malformed certificate; a NUL
+ * is refused because a name that reads differently to C is the old
+ * `localhost\0.example` confusion.
+ */
+const x509IsUtf8Name = (bytes: u8[]): boolean => {
+  // Continuation octets still owed, and the range the next one must fall in:
+  // 80..BF, narrowed after E0, ED, F0 and F4 (Unicode 15 §3.9, Table 3-7).
+  let need: i32 = 0
+  let lo: i32 = 0x80
+  let hi: i32 = 0xbf
+  for (let k: i32 = 0; k < toI32(bytes.length); k++) {
+    const b: i32 = toI32(bytes[k])
+    if (need > 0) {
+      if (b < lo || b > hi) {
+        return false
+      }
+      need = need - 1
+      lo = 0x80
+      hi = 0xbf
+    } else if (b === 0) {
+      return false
+    } else if (b >= 0xc2 && b <= 0xdf) {
+      need = 1
+    } else if (b >= 0xe0 && b <= 0xef) {
+      need = 2
+      lo = b === 0xe0 ? 0xa0 : 0x80
+      hi = b === 0xed ? 0x9f : 0xbf
+    } else if (b >= 0xf0 && b <= 0xf4) {
+      need = 3
+      lo = b === 0xf0 ? 0x90 : 0x80
+      hi = b === 0xf4 ? 0x8f : 0xbf
+    } else if (b >= 0x80) {
+      return false
+    }
+  }
+  return need === 0
 }
 
 /** The bytes of `text`, as the language holds a string. */
@@ -790,11 +856,13 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
       if (line !== `-----END ${inside}-----`) {
         return null
       }
+      // Every block is decoded, whatever its label: a malformed block beside the
+      // one asked for is refused, not skipped (docs/security/crypto-x509.md, X509-1).
+      const der: u8[] | null = x509Base64Decode(body.join(""))
+      if (der === null) {
+        return null
+      }
       if (inside === label) {
-        const der: u8[] | null = x509Base64Decode(body.join(""))
-        if (der === null) {
-          return null
-        }
         out.push(der)
       }
       inside = ""
@@ -882,8 +950,9 @@ const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] 
  * The scalar of a PKCS#8 PrivateKeyInfo (RFC 5208 §5) or OneAsymmetricKey
  * (RFC 5958 §2): version 0 or 1, the algorithm id-ecPublicKey with the
  * prime256v1 curve, and an ECPrivateKey inside the OCTET STRING, followed by
- * the optional `[0]` attributes and — in version 1 — `[1]` public key, which
- * are skipped.
+ * the optional `[0]` attributes, which are skipped, and — in version 1 — the
+ * optional `[1]` public key, which must be a BIT STRING of the key's own point
+ * (X509-8 in docs/security/crypto-x509.md).
  */
 const x509Pkcs8Key = (der: u8[]): u8[] | null => {
   const total: i32 = toI32(der.length)
@@ -915,17 +984,31 @@ const x509Pkcs8Key = (der: u8[]): u8[] | null => {
     }
     at = attributes.end
   }
+  let stored: u8[] | null = null
   if (v === 1 && x509DerPeek(der, at, seq.end) === 0x81) {
-    const pub: X509DerElement | null = x509DerRead(der, at, seq.end)
-    if (pub === null) {
+    const outer: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (outer === null) {
       return null
     }
-    at = pub.end
+    // `[1] IMPLICIT BIT STRING`: the 0x81 replaces the BIT STRING's own tag,
+    // so its contents are the unused-bits octet and then the point.
+    const bits: X509DerElement = new X509DerElement(X509_TAG_BIT_STRING, outer.at, outer.start, outer.end)
+    stored = x509DerBitStringOctets(der, bits)
+    if (stored === null) {
+      return null
+    }
+    at = outer.end
   }
   if (at !== seq.end) {
     return null
   }
-  return x509Sec1Key(der, key.start, key.end, false)
+  const priv: u8[] | null = x509Sec1Key(der, key.start, key.end, false)
+  if (priv === null || stored === null) {
+    return priv
+  }
+  // The same rule as the SEC1 key's own `[1]`: the stored point is the key's.
+  const pub: u8[] | null = p256PublicKey(priv)
+  return pub !== null && x509BytesEqual(stored, pub) ? priv : null
 }
 
 /**
@@ -954,6 +1037,16 @@ export const x509ParseP256PrivateKey = (pem: string): u8[] | null => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether a `[3]` extensions wrapper holds one non-empty SEQUENCE and nothing
+ * after it (RFC 5280 §4.1's `SIZE (1..MAX)`). What an extension says is not
+ * read.
+ */
+const x509DerExtensionsSound = (der: u8[], e: X509DerElement): boolean => {
+  const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
+  return seq !== null && seq.end === e.end && seq.end > seq.start
+}
+
+/**
  * `der` read as one Certificate (RFC 5280 §4.1), or `null` unless it is
  * exactly one in DER: `SEQUENCE { tbsCertificate, signatureAlgorithm,
  * signatureValue }`, where tbsCertificate holds an explicit version of v2 or
@@ -961,8 +1054,16 @@ export const x509ParseP256PrivateKey = (pem: string): u8[] | null => {
  * to the outer one byte for byte (§4.1.1.2), issuer and subject Names, a
  * Validity of two valid times, a SubjectPublicKeyInfo whose key is whole
  * octets, then only the optional `[1]` and `[2]` unique identifiers (v2 and
- * v3) and `[3]` extensions (v3), in that order. Any algorithm and key type is
- * read; `p256` and `ecdsaSha256` say whether they are this module's.
+ * v3) and `[3]` extensions (v3), in that order, each well formed on the
+ * outside. Any algorithm and key type is read; `p256` and `ecdsaSha256` say
+ * whether they are this module's.
+ *
+ * **A parser, not a validator.** It checks that the bytes are one certificate
+ * and nothing else. It does not check the signature (`x509VerifySignature`
+ * does), that `notBefore` is not after `notAfter` or that either is near any
+ * clock, and it does not read extensions — basicConstraints, keyUsage,
+ * subjectAltName and the critical flag RFC 5280 §4.2 obliges a verifier to
+ * honour are neither checked nor exposed.
  */
 export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   const total: i32 = toI32(der.length)
@@ -1051,11 +1152,15 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   at = spki.end
   // [1] issuerUniqueID and [2] subjectUniqueID are IMPLICIT BIT STRINGs (so
   // primitive, 0x81 and 0x82) from v2; [3] extensions is explicit (0xa3), v3.
+  // Each is held to its outer shape; what it says is not read.
   const trailing: i32[] = [0x81, 0x82, 0xa3]
   for (let i: i32 = 0; i < 3; i++) {
     if (x509DerPeek(der, at, tbs.end) === trailing[i]) {
       const e: X509DerElement | null = x509DerRead(der, at, tbs.end)
       if (e === null || version < (i === 2 ? 2 : 1)) {
+        return null
+      }
+      if (i === 2 ? !x509DerExtensionsSound(der, e) : !x509DerBitStringSound(der, e)) {
         return null
       }
       at = e.end
@@ -1086,9 +1191,17 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
 }
 
 /**
- * Every `CERTIFICATE` block in `pem`, in order — a server's chain, leaf first
- * as TLS sends it — or `null` when there is none, or when any block is not
- * PEM `pemToDer` accepts or a certificate `x509ParseCertificate` accepts.
+ * Every `CERTIFICATE` block in `pem`, in the order they appear — for a
+ * server's chain file, leaf first as TLS sends it — or `null` when there is
+ * none, or when any block is not PEM `pemToDer` accepts or a certificate
+ * `x509ParseCertificate` accepts.
+ *
+ * **It reads a chain; it does not validate one.** Nothing relates one
+ * certificate to the next: not the order, not that each is issued by the one
+ * after it (issuer against subject, or signature), not validity against a
+ * clock, basicConstraints, keyUsage, name constraints or a trust anchor. RFC
+ * 5280 §6's path validation is not in this module, and a chain it answers is
+ * no evidence that anyone vouches for the leaf.
  */
 export const x509ParseChain = (pem: string): X509Certificate[] | null => {
   const blocks: u8[][] | null = pemToDer(pem, "CERTIFICATE")
@@ -1110,8 +1223,11 @@ export const x509ParseChain = (pem: string): X509Certificate[] | null => {
  * Whether `cert`'s signature is a valid ecdsa-with-SHA256 signature of its TBS
  * bytes under `issuer`'s P-256 key — a self-signed certificate passes itself
  * as both. `false` for any other algorithm or key, and for a signature that is
- * not a DER ECDSA-Sig-Value. Only the signature: names, times and extensions
- * are the caller's policy.
+ * not a DER ECDSA-Sig-Value. Only the signature: that `cert.issuer` is
+ * `issuer.subject` and that the times hold are fields the caller compares, and
+ * whether `issuer` may issue at all (basicConstraints, keyUsage) is in
+ * extensions this module does not read, so a `true` here is not path
+ * validation.
  */
 export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean => {
   if (!cert.ecdsaSha256 || !issuer.p256) {
@@ -1131,8 +1247,9 @@ export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certifica
  * `serial`, and signed with ecdsa-with-SHA256 — see the module comment for why
  * it has no extensions. `null` when `days` is below 1 or above
  * `X509_MAX_DAYS`, `notBeforeMs` is negative or the validity would end after
- * 9999, `commonName` is empty or longer than 64 bytes, `priv` is not a P-256
- * private key, or `serial` — big-endian, leading zeros ignored — is zero or
+ * 9999, `commonName` is empty, longer than 64 bytes, not UTF-8 or holds a NUL
+ * (it is written as a UTF8String), `priv` is not a P-256 private key, or
+ * `serial` — big-endian, leading zeros ignored — is zero or
  * needs more than `X509_MAX_SERIAL` octets as a positive INTEGER (clear the top
  * bit of 20 random bytes, or use fewer).
  */
@@ -1154,7 +1271,7 @@ export const x509MintSelfSigned = (
   }
   const name: u8[] = x509Bytes(commonName)
   const nameLength: i32 = toI32(name.length)
-  if (nameLength < 1 || nameLength > X509_MAX_COMMON_NAME) {
+  if (nameLength < 1 || nameLength > X509_MAX_COMMON_NAME || !x509IsUtf8Name(name)) {
     return null
   }
   const serialDer: u8[] = x509DerUnsignedInteger(serial)

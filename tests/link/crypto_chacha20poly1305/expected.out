@@ -68,6 +68,7 @@ PASS  a bit of the key flipped answers null
 PASS  the AAD left out answers null
 PASS  a sealed message shorter than a tag answers null
 PASS  sixteen zero bytes are not the tag of nothing
+PASS  the tag cut to 12 bytes answers null: only the full tag is accepted
 PASS  seal with a 31-byte key answers null
 PASS  seal with a 33-byte key answers null
 PASS  seal with an 11-byte nonce answers null
@@ -87,6 +88,7 @@ PASS  a header mask from a 17-byte sample answers null
 PASS  counter 2^32 - 1 encrypts one block
 PASS  a 65th byte at counter 2^32 - 1 would wrap the counter, and answers null
 PASS  nothing to encrypt at counter 2^32 - 1 is an empty answer
+PASS  Wycheproof chacha20_poly1305_test.json: 325 of 325 cases ran (256 valid, 69 invalid), 0 failed
 PASS  the fixture's tag compare matches the §2.8.2 tag in place
 PASS  the fixture's tag compare refuses a flipped bit in each of the sixteen bytes
-chacha20poly1305: 91 passed, 0 failed, 0 skipped
+chacha20poly1305: 93 passed, 0 failed, 0 skipped

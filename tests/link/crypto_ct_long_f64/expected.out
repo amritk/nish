@@ -1,0 +1,5 @@
+PASS  2^31 bytes against 2^31 - 1: unequal lengths
+PASS  2^31 - 1 bytes against 2^31: unequal lengths
+PASS  2^31 bytes against itself: past what a compare can read
+PASS  a window ending at 2^31 - 1, inside a 2^31-byte array
+ct long: 4 passed, 0 failed, 0 skipped

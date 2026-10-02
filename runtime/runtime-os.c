@@ -52,6 +52,14 @@ extern char **environ;
 
 #include "nish.h"
 
+/* Darwin's <fcntl.h> declares `O_NOFOLLOW` only at its full C level, and the
+   strict level the two macros above select is the one that binds the right
+   `realpath`, so the flag is spelled here with Darwin's own value
+   (<sys/fcntl.h>: 0x00000100). Linux and WASI declare it at POSIX 2008. */
+#if defined(__APPLE__) && !defined(O_NOFOLLOW)
+#define O_NOFOLLOW 0x00000100
+#endif
+
 /* The same spelling runtime.c uses for its own cold paths: a function that
    reports and exits is never on a path worth optimising for. */
 #define NISH_COLD __attribute__((noreturn, cold, noinline))
@@ -62,6 +70,12 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
   dprintf(2, "nish: cannot %s%.*s\n", what, (int)path->len, path->data);
   _exit(1);
 }
+
+/* The longest string or array a read hands back: 2^31 - 1, the same limit
+   runtime.c's `NISH_ARRAY_MAX` puts on a push. Under --number-mode i32
+   `length` is an `i32`, so one byte more reads back negative and bounds-check
+   elimination trusts it (docs/security/runtime.md, RT-1). */
+#define NISH_LENGTH_MAX 2147483647
 
 /* `readFileSyncOrNull(path)`: null rather than a message, so a program can
    turn a missing file into its own diagnostic and carry on.
@@ -84,11 +98,16 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
  * rather than `stat` on the path, so the answer is about the file that was
  * opened and not about whatever the name means a moment later. */
 nish_str *nish_read_file_or_null(const nish_str *path) {
-  int fd = open(path->data, O_RDONLY);
+  int fd = open(nish_cpath(path), O_RDONLY);
   if (fd < 0) return 0;
   struct stat st;
   off_t len = fstat(fd, &st) == 0 && !S_ISDIR(st.st_mode) ? lseek(fd, 0, SEEK_END) : -1;
-  if (len < 0) {
+  /* A file longer than a length can say is refused before anything is
+     allocated, as an unreadable one is: null here, null from
+     `readFileBytesSync`, and `cannot read` from `readFileSync`. The bytes read
+     below are never more than `len`, so a file that grows meanwhile cannot
+     pass the limit either. */
+  if (len < 0 || len > NISH_LENGTH_MAX) {
     close(fd);
     return 0;
   }
@@ -123,8 +142,14 @@ nish_str *nish_read_file(const nish_str *path) {
   return s;
 }
 
+/* `O_NOFOLLOW` (docs/security/runtime.md, RT-4): a symbolic link as the last
+   component of the path is refused, as an unwritable file is, rather than
+   followed to whatever file it names. `nish file.ts` writes `file.ll` beside
+   its source, so a link planted at that name in a checkout would otherwise
+   truncate any file the user can write. A link among the directories on the
+   way is still followed. */
 static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
-  int fd = open(path->data, O_WRONLY | O_CREAT | flags, 0644);
+  int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | flags, 0644);
   if (fd < 0) nish_io_fail("write ", path);
   for (uint64_t done = 0; done < data->len;) {
     ssize_t n = write(fd, data->data + done, data->len - done);
@@ -149,14 +174,14 @@ void nish_append_file(const nish_str *path, const nish_str *data) { nish_put_fil
    answer to that question. */
 _Bool nish_is_dir(const nish_str *path) {
   struct stat st;
-  return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
+  return stat(nish_cpath(path), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
 /* One directory, not recursive. The retry is the `stat` above rather than
    `errno == EEXIST` so that a plain file at the path answers false, which is
    what the promise "a directory is there afterwards" means. */
 _Bool nish_mkdir(const nish_str *path) {
-  return mkdir(path->data, 0777) == 0 || nish_is_dir(path);
+  return mkdir(nish_cpath(path), 0777) == 0 || nish_is_dir(path);
 }
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
@@ -168,7 +193,7 @@ _Bool nish_mkdir(const nish_str *path) {
    two arguments answered differently, so the argv vector, the wait and the
    signal convention are written once; it is `static`, so a program that spawns
    nothing still loses all three to `--gc-sections`. */
-static int32_t nish_spawn_impl(const nish_array *argv, const char *out, const char *err) {
+static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
 #ifdef __wasi__
   (void)argv;
   (void)out;
@@ -181,18 +206,27 @@ static int32_t nish_spawn_impl(const nish_array *argv, const char *out, const ch
      path out of here has anything to free. */
   char **v = nish_alloc_struct((argv->len + 1) * sizeof *v);
   uint64_t i = 0;
-  for (; i < argv->len; i++) v[i] = s[i]->data;
+  /* An argument holding a NUL is refused rather than cut short at it, which
+     would run a different command line from the one the program built: it is
+     the one whose C string is not its own bytes. */
+  for (; i < argv->len; i++) {
+    v[i] = (char *)nish_cpath(s[i]);
+    if (v[i] != s[i]->data) return -1;
+  }
   v[i] = 0;
   posix_spawn_file_actions_t fa;
   posix_spawn_file_actions_t *fap = 0;
-  if (out || err) {
-    if (posix_spawn_file_actions_init(&fa)) return -1;
-    fap = &fa;
+  const nish_str *to[2] = { out, err };
+  for (int k = 0; k < 2; k++) {
+    if (!to[k]) continue;
+    if (!fap) {
+      if (posix_spawn_file_actions_init(&fa)) return -1;
+      fap = &fa;
+    }
     /* The child opens the file, not this process: a redirect that this process
        performed would have to be undone afterwards, and a failed open would
        leave its own stdout pointing at the file. */
-    if (out) posix_spawn_file_actions_addopen(fap, 1, out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (err) posix_spawn_file_actions_addopen(fap, 2, err, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    posix_spawn_file_actions_addopen(fap, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
   pid_t pid;
   int status;
@@ -210,14 +244,15 @@ int32_t nish_spawn(const nish_array *argv) { return nish_spawn_impl(argv, 0, 0);
    to a file, which is what comparing a program's output against a golden needs
    — `nish_spawn` answers a status and the output is gone. An **empty** path
    leaves that stream inherited, so one call can capture stdout and let stderr
-   through to the terminal. Each file is created or truncated at 0644, as
-   `writeFileSync` does.
+   through to the terminal. Each file is created or truncated at 0644 and a
+   symbolic link at its name is refused, as `writeFileSync` does; the child
+   then fails to start, and the answer is -1.
 
    Two streams must not name one path: each would be opened separately, with
    its own offset, and the two would overwrite each other rather than
    interleave. Capturing them apart and concatenating is the way to merge. */
 int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err) {
-  return nish_spawn_impl(argv, out->len ? out->data : 0, err->len ? err->data : 0);
+  return nish_spawn_impl(argv, out->len ? out : 0, err->len ? err : 0);
 }
 
 /* `readdirSync(path)`: the listing a driver needs to discover its own inputs.
@@ -240,7 +275,7 @@ nish_array *nish_readdir(const nish_str *path) {
   (void)path;
   return 0;
 #else
-  DIR *d = opendir(path->data);
+  DIR *d = opendir(nish_cpath(path));
   if (!d) return 0;
   nish_array *a = nish_alloc_struct(sizeof *a);
   *a = (nish_array){ 0, 0, 0 };
@@ -252,15 +287,30 @@ nish_array *nish_readdir(const nish_str *path) {
     ((nish_str **)a->data)[a->len++] = nish_str_new(n, strlen(n));
   }
   closedir(d);
-  /* Insertion sort over pointers: a directory is short, and `qsort` would cost
-     a comparator symbol and its unwind entry for a call that is never hot. */
+  /* Heapsort over pointers, in place. It was an insertion sort, on the theory
+     that a directory is short, but whoever fills the directory decides that:
+     100,000 names took 2.5 billion compares and 12.5 s, where this takes 3.0
+     million and 0.07 s (docs/security/runtime.md, RT-5). It needs no scratch
+     memory, and unlike `qsort` costs no comparator symbol or unwind entry. */
   nish_str **v = (nish_str **)a->data;
-  for (uint64_t i = 1; i < a->len; i++) {
-    nish_str *s = v[i];
-    uint64_t j = i;
-    while (j && strcmp(v[j - 1]->data, s->data) > 0) {
-      v[j] = v[j - 1];
-      j--;
+  /* Each pass sifts one name down the max-heap `v[0, end)`: first every
+     parent from the middle up, which builds the heap, then the name the
+     largest is swapped out for, which shrinks the heap by one. */
+  uint64_t i = a->len / 2, end = a->len;
+  while (end > 1) {
+    nish_str *s;
+    if (i) {
+      s = v[--i];
+    } else {
+      s = v[--end];
+      v[end] = v[0];
+    }
+    uint64_t j = i, c;
+    while ((c = 2 * j + 1) < end) {
+      if (c + 1 < end && strcmp(v[c]->data, v[c + 1]->data) < 0) c++;
+      if (strcmp(s->data, v[c]->data) >= 0) break;
+      v[j] = v[c];
+      j = c;
     }
     v[j] = s;
   }
@@ -290,13 +340,8 @@ int64_t nish_monotonic_nanos(void) {
    string with the lifetime every other one has. NULL for an unset variable,
    which is the language's `string | null`. Contract: nish.h. */
 nish_str *nish_getenv(const nish_str *name) {
-  const char *v = getenv(name->data);
-  if (!v) return 0;
-  uint64_t len = strlen(v);
-  nish_str *s = nish_alloc_struct(8 + len + 1);
-  s->len = len;
-  memcpy(s->data, v, len + 1);
-  return s;
+  const char *v = getenv(nish_cpath(name));
+  return v ? nish_str_new(v, strlen(v)) : 0;
 }
 
 /* ---- Symlinks (WP19 §5a item 4): `realpathSync(path)`, the one path
@@ -321,12 +366,7 @@ nish_str *nish_getenv(const nish_str *name) {
    it resolves. Contract: nish.h. */
 nish_str *nish_realpath(const nish_str *path) {
   char buf[PATH_MAX];
-  if (!realpath(path->data, buf)) return 0;
-  uint64_t len = strlen(buf);
-  nish_str *s = nish_alloc_struct(8 + len + 1);
-  s->len = len;
-  memcpy(s->data, buf, len + 1);
-  return s;
+  return realpath(nish_cpath(path), buf) ? nish_str_new(buf, strlen(buf)) : 0;
 }
 
 /* ---- What machine this is (WP14 §7a): `process.platform` and `process.arch`,

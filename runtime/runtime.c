@@ -83,7 +83,13 @@ static NISH_COLD void nish_die(const char *msg) {
   (void)!write(2, msg, strlen(msg));
   _exit(1);
 }
-#define nish_oom() nish_die("nish: out of memory\n")
+/* A function rather than a macro around `nish_die`: seven call sites each
+   loading the message's address cost more than one more symbol does. */
+static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
+
+/* The most elements an array and the most bytes a string may hold: see
+   `nish_array_grow` and `nish_str_concat`. */
+#define NISH_ARRAY_MAX 2147483647u
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
 void *nish_arena_grow(uint64_t size) {
@@ -196,9 +202,16 @@ nish_str *nish_str_new(const char *bytes, uint64_t len) {
   return s;
 }
 
+/* A string never passes 2^31 - 1 bytes, for the reason an array never passes
+   that many elements (`NISH_ARRAY_MAX`, below): under --number-mode i32 a
+   longer one's `length` reads back negative and bounds-check elimination
+   trusts it (docs/security/runtime.md, RT-2). `a + b` past it fails as an
+   allocation does. */
 nish_str *nish_str_concat(const nish_str *a, const nish_str *b) {
-  nish_str *s = nish_alloc_struct(8 + a->len + b->len + 1);
-  s->len = a->len + b->len;
+  uint64_t len = a->len + b->len;
+  if (len > NISH_ARRAY_MAX) nish_oom();
+  nish_str *s = nish_alloc_struct(8 + len + 1);
+  s->len = len;
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);
   s->data[s->len] = 0;
@@ -1106,8 +1119,12 @@ double nish_random(void) {
 /* ---- Arrays: %struct.nish_array = type { i64, i64, i8* }, cold paths */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 
-/* Host entry (WP8): `len` uninitialised elements, len == cap */
+/* Host entry (WP8): `len` uninitialised elements, len == cap. A `len` past
+   `NISH_ARRAY_MAX` fails as an allocation does, which also keeps
+   `len * elem_size` from wrapping into a short block behind a long header
+   (docs/security/runtime.md, RT-7). */
 nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
+  if (len > NISH_ARRAY_MAX) nish_oom();
   nish_array *a = nish_alloc_struct(sizeof *a);
   *a = (nish_array){ len, len, nish_alloc_struct(len * elem_size) };
   return a;
@@ -1160,9 +1177,26 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * `sizeof` one element, which for a record element type (WP15 section 2a) is
  * the whole struct, so this relocates the elements themselves rather than a
  * block of pointers to them. Compiled code may therefore hold no pointer into
- * `data` across a push, and the checker refuses the programs that would. */
-void nish_array_grow(nish_array *a, uint64_t elem_size) {
+ * `data` across a push, and the checker refuses the programs that would.
+ *
+ * A push never takes an array past 2^31 - 1 elements (docs/security/codegen.md,
+ * K1-6). Under --number-mode i32 `length` is an `i32`, and one element more
+ * read back as a negative or a short length everywhere, a hash or a tag
+ * compare included. This file cannot tell which mode compiled its caller, so
+ * the limit holds in both, and the push past it fails as an allocation does,
+ * through `nish_oom`. `new Array(n)` checks its own `n` in the IR.
+ *
+ * `noinline`: under LTO the grown body was inlined into every push site, and
+ * the extra compare moved register allocation in the hot loops around them
+ * (+0.2% to +2% instructions over bench/instructions.json's map rows). Out of
+ * line, every one of those rows runs fewer instructions than it did before, and
+ * the call costs nothing on a path that runs once per doubling. */
+__attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
+  if (cap > NISH_ARRAY_MAX) {
+    if (a->len >= NISH_ARRAY_MAX) nish_oom();
+    cap = NISH_ARRAY_MAX;
+  }
   char *data = nish_alloc_struct(cap * elem_size);
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;

@@ -27,4 +27,12 @@ PASS  an all-ones u (top bit masked, then reduced) answers below p
 PASS  isCanonical itself refuses p
 PASS  isCanonical itself accepts p - 1
 PASS  u = p with its top bit set still decodes as 0
-x25519: 29 passed, 0 failed, 0 skipped
+wycheproof x25519: 518 cases, 264 valid and 254 acceptable answered the file's shared secret, 31 of them all zeros
+PASS  wycheproof: every case answers the file's shared secret
+PASS  low-order u 00000000… answers all zeros
+PASS  low-order u 01000000… answers all zeros
+PASS  low-order u e0eb7a7c… answers all zeros
+PASS  low-order u 5f9c95bc… answers all zeros
+PASS  low-order u ecffffff… answers all zeros
+PASS  low-order u eeffffff… answers all zeros
+x25519: 36 passed, 0 failed, 0 skipped

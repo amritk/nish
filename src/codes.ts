@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 527
+export const RULE_COUNT: i32 = 529
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -368,6 +368,8 @@ const diagnosticRules = (): string[] => [
   "NL2385",
   "Function names starting with `nish_` are reserved for the runtime",
   "NL2202",
+  " (a module has no runtime object; resolve paths at compile time)",
+  "NL1060",
   "; convert the error first: `if (r.isErr()) { return Err(...); }`",
   "NL2023",
   "`; a derived class cannot redeclare or shadow an inherited field",
@@ -824,6 +826,8 @@ const diagnosticRules = (): string[] => [
   "NL1032",
   "Destructuring is not supported",
   "NL2193",
+  "Object spread is forbidden in ",
+  "NL1061",
   "` is not a declared interface",
   "NL2079",
   "`globalThis` is forbidden in ",

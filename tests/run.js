@@ -16,8 +16,10 @@
  *                    per line (WP33: the case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
- *     `build/nish-test` once per run -- one process per case, `defaultJobs()` at
- *     a time (tests/pool.js). The link is against the runtime and the driver as
+ *     `build/nish-test` once per run -- then compared, assembled, linked and
+ *     run, `defaultJobs()` cases at a time (tests/pool.js) and reported in
+ *     corpus order; the native programs alone take turns, because they share
+ *     the files they write. The link is against the runtime and the driver as
  *     object files, built once per run (`runtimeObjects`) rather than
  *     recompiled per case; the `runtime objects:` checks at the end of the run
  *     are what say that is the same link.
@@ -38,6 +40,7 @@ import { createRequire } from "node:module"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
+import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
@@ -159,21 +162,30 @@ const runtimeObjects = (defines) => {
  */
 const linkSpecimens = new Map()
 
+/** Keep `specimen` as the one for `key`, unless a link before it already was. */
+const keepSpecimen = (key, specimen) => {
+  if (!linkSpecimens.has(key)) {
+    linkSpecimens.set(key, specimen)
+  }
+}
+
 /**
- * Link one compiled case into a runnable binary, against the prebuilt runtime.
+ * The `clang` line that links one compiled case against the prebuilt runtime,
+ * without running it: `args` wants only `-o <exe>` after it.
  *
  * `driver` is `DRIVER_C` for the shared driver, a path for a case that brings
  * its own `.c`, and null when the module carries its own `main`. `defines` says
  * how the runtime has to have been built, and is what selects the objects.
+ * `error` is the runtime's own compile failure, and null when there is a line.
  *
- * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
- * way it always did; a runtime that would not compile is reported as a link
- * failure against the case, because that is what it is from here.
+ * The specimen comes back rather than being kept here because section A links
+ * its cases concurrently, and has to keep them in corpus order, not in the
+ * order the links started; {@link linkNative} keeps it straight away.
  */
-const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
+const linkLine = (ll, { driver = null, defines = [], libm = false } = {}) => {
   const rt = runtimeObjects(defines)
   if (rt.error !== null) {
-    return { status: 1, stdout: "", stderr: rt.error }
+    return { error: rt.error, args: null, key: null, specimen: null }
   }
   const tail = libm ? ["-lm"] : []
   const driverObject = driver === DRIVER_C ? rt.driver : driver
@@ -185,25 +197,40 @@ const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {})
     ...rt.objects,
     ...tail,
   ]
-  if (!linkSpecimens.has(defines.join(" "))) {
-    linkSpecimens.set(defines.join(" "), {
+  const specimen = {
+    ll,
+    fromObjects: args,
+    // `-D` sits on the from-source line because it is compiling the runtime
+    // there; on the object line it is already baked in, which is precisely
+    // what the byte comparison of the two is asserting.
+    fromSource: [
+      "-Wno-override-module",
+      "-O2",
+      ...defines,
       ll,
-      fromObjects: args,
-      // `-D` sits on the from-source line because it is compiling the runtime
-      // there; on the object line it is already baked in, which is precisely
-      // what the byte comparison of the two is asserting.
-      fromSource: [
-        "-Wno-override-module",
-        "-O2",
-        ...defines,
-        ll,
-        ...(driver === null ? [] : [driver]),
-        ...RUNTIME_C,
-        ...tail,
-      ],
-    })
+      ...(driver === null ? [] : [driver]),
+      ...RUNTIME_C,
+      ...tail,
+    ],
   }
-  return spawnSync("clang", [...args, "-o", exe], { cwd: root })
+  return { error: null, args, key: defines.join(" "), specimen }
+}
+
+/**
+ * Link one compiled case into a runnable binary, against the prebuilt runtime,
+ * with the options {@link linkLine} takes.
+ *
+ * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
+ * way it always did; a runtime that would not compile is reported as a link
+ * failure against the case, because that is what it is from here.
+ */
+const linkNative = (exe, ll, options = {}) => {
+  const line = linkLine(ll, options)
+  if (line.error !== null) {
+    return { status: 1, stdout: "", stderr: line.error }
+  }
+  keepSpecimen(line.key, line.specimen)
+  return spawnSync("clang", [...line.args, "-o", exe], { cwd: root })
 }
 
 let failures = 0
@@ -219,6 +246,24 @@ const skipped = []
 const skip = (reason) => {
   console.log(`SKIP  ${reason}`)
   skipped.push(reason)
+}
+/**
+ * Checks this run handed to another job of the same CI run, each with the job
+ * that proves it. A third column beside passed and skipped, because it is
+ * neither: nothing here proved it, so it is not a pass, and something else in
+ * the same run did, so it is not the "unproven by this run" a skip is. Counted
+ * and named in the summary so that a reader of this job's log can see the
+ * claim, and whom to hold to it, without opening the workflow.
+ *
+ * Only a check that another job proves *with the same inputs on the same
+ * platform* may be delegated, and only when the workflow asks for it by flag.
+ * There is one today, the bootstrap's fixed point, and the WP14 section below
+ * says when the request is honoured and what makes it true.
+ */
+const delegated = []
+const delegate = (name, provedBy) => {
+  console.log(`DELEGATED  ${name} -- proved by ${provedBy}`)
+  delegated.push({ name, provedBy })
 }
 const check = (name, ok, detail) => {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`)
@@ -313,7 +358,21 @@ const summarise = () => {
   if (skipped.length > 0) {
     summary.push(`${skipped.length} skipped`)
   }
+  if (delegated.length > 0) {
+    summary.push(`${delegated.length} delegated`)
+  }
   console.log(`\n${summary.join(", ")}.`)
+
+  // Before the skip note, and apart from it, because the two say different
+  // things: a skip is unproven, a delegation is proved by the job it names --
+  // which is also why this run is only as green as that job is.
+  if (delegated.length > 0) {
+    console.log(
+      `\nDelegated: ${delegated.length} check(s) are proved by another job of this CI run rather than by this one, ` +
+        "so read this result together with that job's:\n" +
+        delegated.map((d) => `  ${d.name}: ${d.provedBy}`).join("\n")
+    )
+  }
 
   if (skipped.length > 0) {
     const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"]
@@ -456,11 +515,12 @@ if (
 
 // ---- A. Golden cases -------------------------------------------------------------
 //
-// Every case is compiled by the compiler under test, one process per case and
-// `defaultJobs()` of them at a time. The compiles are independent of each other
-// and the checks are not -- a later section reads the `.ll` a case left in
-// `build/test` -- so all of them run first and the checks then walk the results
-// in corpus order, which keeps the output the same at any width.
+// Every case is taken from its compile by the compiler under test to its native
+// run, one case per job and `defaultJobs()` of them at a time (`runCase`). The
+// cases are independent of each other and the sections after this one are not
+// -- a later section reads the `.ll` a case left in `build/test` -- so every
+// case has finished before the next section starts, and the checks are
+// reported in corpus order, which keeps the output the same at any width.
 const only = withoutSeed(process.argv.slice(2)).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
@@ -507,20 +567,58 @@ const caseEnv = (file) => {
 }
 
 const selectedCases = cases.filter((name) => !only || name.includes(only))
-const caseResults = await pool(selectedCases, defaultJobs(), (name) =>
-  spawnAsync(
-    NISH,
-    [path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, `${name}.ll`), ...caseArgs(name)],
-    { cwd: root }
-  )
-)
 
-for (const [at, name] of selectedCases.entries()) {
+/**
+ * The lane a case's native program runs in: one program at a time, whatever
+ * else section A has in flight.
+ *
+ * The compiles, assemblies and links around it are separate processes writing
+ * separate files, but the programs share a world. Each runs from the repository
+ * root, and some write the same file: `io_nish_import` and
+ * `io_nish_import_global` both write and read back
+ * `build/test/io_nish_import.txt`, and have to, because a check below requires
+ * the two to emit the same IR. Side by side, one could read the other's file
+ * half-written. So they take turns, as they did when the whole loop was
+ * sequential; a program is a small part of its case's time, and the links of
+ * the cases around it still overlap it.
+ */
+let nativeLane = Promise.resolve()
+const inNativeLane = (job) => {
+  const turn = nativeLane.then(job)
+  nativeLane = turn
+  return turn
+}
+
+/**
+ * One golden case from its compile to its native run, with what it found kept
+ * as a list of steps rather than printed.
+ *
+ * The cases run `defaultJobs()` at a time and finish in any order, so nothing
+ * here may reach the run's output or its counters directly: the loop below
+ * replays each case's steps in corpus order, and N jobs print what one did. A
+ * step is a check, a line to print, or the link specimen `linkNative` would
+ * have kept at that point -- which case is kept first decides what the
+ * `runtime objects:` check replays, so that is settled in corpus order too
+ * rather than by whichever link happened to start first. A passing check's
+ * detail is dropped on the spot, since `check` prints one only for a failure,
+ * so that a finished case waiting its turn does not hold two copies of its IR.
+ *
+ * Every file a case writes is named after it (`build/test/<name>.ll`, its
+ * `.portability.ll`, its executable), so two cases in flight never share an
+ * output; the one thing they can share is the world their programs run in,
+ * which is what {@link inNativeLane} is for.
+ */
+const runCase = async (name) => {
   const src = path.join(casesDir, `${name}.ts`)
   const side = (ext) => path.join(casesDir, `${name}.${ext}`)
   const args = caseArgs(name)
   const outLl = path.join(buildDir, `${name}.ll`)
-  const r = caseResults[at]
+  const steps = []
+  const expect = (label, ok, detail) => {
+    steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
+  }
+  const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
+  const done = { compiled: r, steps }
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -531,32 +629,32 @@ for (const [at, name] of selectedCases.entries()) {
       .map((l) => l.trim())
       .filter(Boolean)
     const missing = needles.filter((n) => !stderr.includes(n))
-    check(
+    expect(
       `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`,
       r.status === 1 && missing.length === 0,
       stderr || "(compiled successfully)"
     )
-    continue
+    return done
   }
   if (r.status !== 0) {
-    check(`${name}: compiles`, false, stderr)
-    continue
+    expect(`${name}: compiles`, false, stderr)
+    return done
   }
   // A `port_*` case exists for its warnings, and without the golden nothing
   // would compile it with the flag: it would pass while asserting nothing.
   if (name.startsWith("port_") && !fs.existsSync(side("portability"))) {
-    check(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
+    expect(`${name}: has a .portability golden (an empty one for a quiet case)`, false)
   }
   if (fs.existsSync(side("portability"))) {
     // WP33: the warnings are off by default, so the case compiles a second
     // time with the flag, and its portability objects are the golden, one per
     // line and in report order. Paths are taken back to the repository's, as
     // for `.stdout`.
-    const warned = spawnSync(
-      NISH,
-      [src, "-o", path.join(buildDir, `${name}.portability.ll`), ...args, "--warn-portability", "--json"],
-      { cwd: root, encoding: "utf8" }
-    )
+    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
+    const warned = await spawnAsync(NISH, [src, "-o", warnedLl, ...args, "--warn-portability", "--json"], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const want = fs.readFileSync(side("portability"), "utf8").trim()
     const got = warned.stdout
       .split("\n")
@@ -564,14 +662,13 @@ for (const [at, name] of selectedCases.entries()) {
       .join("\n")
       .split(`${root}/`)
       .join("")
-    check(
+    expect(
       `${name}: --warn-portability --json matches .portability`,
       warned.status === 0 && got === want,
       `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
     )
     // Warnings never reach the IR (wp33 §1 rule 6): both compiles wrote the same bytes.
-    const warnedLl = path.join(buildDir, `${name}.portability.ll`)
-    check(
+    expect(
       `${name}: --warn-portability changes no byte of the IR`,
       fs.existsSync(warnedLl) && fs.readFileSync(warnedLl, "utf8") === fs.readFileSync(outLl, "utf8"),
       "the two .ll files differ"
@@ -585,8 +682,8 @@ for (const [at, name] of selectedCases.entries()) {
     // the root would see it.
     const want = fs.readFileSync(side("stdout"), "utf8").trim()
     const got = String(r.stdout).split(`${root}/`).join("").trim()
-    check(`${name}: stdout matches .stdout`, got === want, `--- expected\n${want}\n--- actual\n${got}`)
-    continue
+    expect(`${name}: stdout matches .stdout`, got === want, `--- expected\n${want}\n--- actual\n${got}`)
+    return done
   }
 
   // `-g` names the working directory in `DIFile`; keep the golden machine-independent.
@@ -601,18 +698,22 @@ for (const [at, name] of selectedCases.entries()) {
   if (!fs.existsSync(side("ll"))) {
     if (process.env.UPDATE_GOLDENS) {
       fs.writeFileSync(side("ll"), actual + "\n")
-      console.log(`WROTE ${name}.ll`)
+      steps.push({ kind: "log", text: `WROTE ${name}.ll` })
     } else {
-      check(`${name}: has golden .ll (run with UPDATE_GOLDENS=1 to create)`, false)
-      continue
+      expect(`${name}: has golden .ll (run with UPDATE_GOLDENS=1 to create)`, false)
+      return done
     }
   }
   const expected = normaliseProducer(fs.readFileSync(side("ll"), "utf8").trim())
-  check(`${name}: IR matches golden`, actual === expected, `--- expected\n${expected}\n--- actual\n${actual}`)
+  expect(
+    `${name}: IR matches golden`,
+    actual === expected,
+    `--- expected\n${expected}\n--- actual\n${actual}`
+  )
 
   if (HAS_LLVM_AS) {
-    const as = spawnSync("llvm-as", [outLl, "-o", "/dev/null"])
-    check(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
+    const as = await spawnAsync("llvm-as", [outLl, "-o", "/dev/null"])
+    expect(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
   }
 
   if (fs.existsSync(side("out"))) {
@@ -630,27 +731,67 @@ for (const [at, name] of selectedCases.entries()) {
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
-    const cc = linkNative(exe, outLl, {
+    const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
       defines: threads,
       libm: true,
     })
+    if (line.error !== null) {
+      expect(`${name}: links natively`, false, line.error)
+      return done
+    }
+    steps.push({ kind: "specimen", key: line.key, specimen: line.specimen })
+    const cc = await spawnAsync("clang", [...line.args, "-o", exe], { cwd: root })
     if (cc.status !== 0) {
-      check(`${name}: links natively`, false, String(cc.stderr))
-      continue
+      expect(`${name}: links natively`, false, String(cc.stderr))
+      return done
     }
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : []
-    const run = spawnSync(exe, argv, { env: caseEnv(side("env")) })
+    const run = await inNativeLane(() => spawnAsync(exe, argv, { env: caseEnv(side("env")) }))
     const want = fs.readFileSync(side("out"), "utf8").trim()
-    check(
+    expect(
       `${name}: native output matches .out`,
       run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     )
   }
+  return done
 }
+
+/** Put one finished case's steps on the record, as the sequential loop would have. */
+const reportCase = ({ steps }) => {
+  for (const step of steps) {
+    switch (step.kind) {
+      case "check":
+        check(step.label, step.ok, step.detail)
+        break
+      case "log":
+        console.log(step.text)
+        break
+      case "specimen":
+        keepSpecimen(step.key, step.specimen)
+        break
+      default:
+        throw new Error(`section A: no step of kind ${step.kind}`)
+    }
+  }
+}
+
+// Each case is reported as soon as every case before it has been, so the log
+// moves while the corpus runs and a slow case is still named where it sits.
+const caseRuns = new Array(selectedCases.length).fill(null)
+let reported = 0
+await pool(selectedCases, defaultJobs(), async (name, at) => {
+  caseRuns[at] = await runCase(name)
+  while (reported < caseRuns.length && caseRuns[reported] !== null) {
+    reportCase(caseRuns[reported])
+    reported++
+  }
+})
+/** Each selected case's own compile, in corpus order, for the checks below that read it again. */
+const caseResults = caseRuns.map((run) => run.compiled)
 
 // ---- Programs the world answers, built and run by the blocks below -----------------
 
@@ -1346,6 +1487,26 @@ for (const name of [
   )
 }
 
+// ---- A computed key cut short is one syntax error (#348) -------------------------------
+// The same blind spot for the parser: the literal skips the broken property to
+// its `,` and parses the next one, where abandoning the literal would report
+// every token after it.
+if (!only || "reject_computed_skip".includes(only)) {
+  const at = selectedCases.indexOf("reject_computed_skip")
+  const r = at < 0 ? null : caseResults[at]
+  const errors =
+    r === null
+      ? []
+      : String(r.stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: (syntax )?error: /.test(l))
+  check(
+    "reject_computed_skip: the broken key is the only diagnostic, and the property after it parses",
+    r !== null && r.status === 1 && errors.length === 1,
+    r === null ? "(no such case)" : String(r.stderr)
+  )
+}
+
 // ---- WP10: diagnostics ------------------------------------------------------------
 // Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
 // the offending line and a caret line (`^` at the start column, `~` to the node end).
@@ -1619,18 +1780,18 @@ if (!only || "diagnostics".includes(only)) {
   // ${b} `` was eight of them, and now reads `expects an argument of type
   // ${a}`, a run a code can be derived from.
   //
-  // One, because the tool walks the `tests/link/` negatives as well as
-  // `tests/cases/reject_*`, and stage1 answers the empty statement of
-  // `tests/wordings/nl2260_empty_statement` with ``Unsupported statement `;` ``,
-  // which quotes the statement and has no words of its own. It was five until
-  // #174 gave the duplicate-symbol wordings -- a duplicate export, the same one
-  // reached through an import, and a duplicate internal name -- codes of their
-  // own (NL3024, NL3026), and two until WP32 S5 gave an import of a name a
-  // module does not export (`tests/link/unknown_export`,
-  // `reject_map_extras_unknown_export`) NL2376. The remainder is named on
-  // stdout by the run, so shrinking this backlog means giving that message a
-  // registry entry, or a literal run of its own first.
-  const UNCODED_BACKLOG = 1
+  // None now. The last was the empty statement of
+  // `tests/wordings/nl2260_empty_statement`, which stage1 answered with
+  // ``Unsupported statement `;` ``, quoting the statement with no words of its
+  // own; the statement dispatch's fallback names the syntax kind in NL2260's
+  // sentence since #320. It was five until #174 gave the duplicate-symbol
+  // wordings -- a duplicate export, the same one reached through an import,
+  // and a duplicate internal name -- codes of their own (NL3024, NL3026), and
+  // two until WP32 S5 gave an import of a name a module does not export
+  // (`tests/link/unknown_export`, `reject_map_extras_unknown_export`) NL2376.
+  // A new one is named on stdout by the run, so the answer is a registry
+  // entry, or a literal run of its own first.
+  const UNCODED_BACKLOG = 0
   const wordings = spawnSync(
     "node",
     [
@@ -5959,6 +6120,11 @@ if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
   }
 }
 
+// The `.d.ts` files the two interop sections below write, as `{ stem, file }`.
+// Each section queues its files where it used to spawn tsc on them, and all of
+// them are checked together after the second section (tests/typecheck.js).
+const declarationsForTsc = []
+
 // ---- WP8: interop ------------------------------------------------------------------
 // runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
@@ -5968,7 +6134,8 @@ if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
 //   - generated headers compile under the same flags and link a C driver (including a
 //     function named `double`, bound through NISH_SYMBOL), strings map to nish_str, and
 //     --strict-exports hides internal functions
-//   - the generated .d.ts type-checks with tsc; string functions are commented out
+//   - the generated .d.ts type-checks with tsc (queued, and checked with interop_rng's
+//     after that section); string functions are commented out
 //   - the N-API shim compiles warning-free, builds into a .node addon with the napi
 //     profile, loads in Node, type-checks its arguments, and agrees with the wasm build
 //     of the same module (skipped when the Node headers are not installed)
@@ -6026,13 +6193,6 @@ if (!only || "interop".includes(only)) {
     `-I${runtimeDir}`,
     `-I${interopDir}`,
   ]
-  // Resolve tsc the way `require("typescript")` does, so a worktree without its own node_modules still finds it.
-  let tsc = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tsc = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   /** Compile <src> to build/test/interop/<stem>.ll (or <stem>/ for a multi-module program) plus the requested sidecars. */
   const emit = (src, extra, stem = path.basename(src, ".ts"), multi = false) => {
     const out = multi ? path.join(interopDir, stem) + path.sep : path.join(interopDir, `${stem}.ll`)
@@ -6293,8 +6453,7 @@ if (!only || "interop".includes(only)) {
     if (!fs.existsSync(sidecar(stem, "d.ts"))) {
       continue
     }
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar(stem, "d.ts")], { cwd: root })
-    check(`${stem}.d.ts passes tsc --noEmit --strict`, r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem, file: sidecar(stem, "d.ts") })
   }
 
   // N-API addon.
@@ -6552,14 +6711,7 @@ if (!only || "interop".includes(only)) {
     genFnDts
   )
   if (genFnDts.length > 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_generic_fn", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "interop_generic_fn.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop_generic_fn", file: sidecar("interop_generic_fn", "d.ts") })
   }
   if (genFn.status === 0 && has("wasm-ld")) {
     const genWasm = path.join(interopDir, "interop_generic_fn.wasm")
@@ -6746,14 +6898,7 @@ if (!only || "interop".includes(only)) {
     genMethodDts + genMethodShim
   )
   if (genMethodDts.length > 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("gen_method_export", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "gen_method_export.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "gen_method_export", file: sidecar("gen_method_export", "d.ts") })
   }
   if (genMethod.status === 0 && hasNodeHeaders) {
     const syn = spawnSync("clang", [
@@ -7136,8 +7281,7 @@ if (!only || "interop".includes(only)) {
     resDts
   )
   if (fs.existsSync(sidecar("res_export", "d.ts"))) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("res_export", "d.ts")], { cwd: root })
-    check("res_export.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem: "res_export", file: sidecar("res_export", "d.ts") })
   }
   if (res.status === 0) {
     const syn = spawnSync("clang", [
@@ -7599,14 +7743,7 @@ if (!only || "interop".includes(only)) {
     unsignedMjs
   )
   if (unsigned.status === 0) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop-unsigned", "d.ts")], {
-      cwd: root,
-    })
-    check(
-      "interop-unsigned.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop-unsigned", file: sidecar("interop-unsigned", "d.ts") })
   }
   if (has("wasm-ld")) {
     const wasm = path.join(interopDir, "interop-unsigned.wasm")
@@ -7681,8 +7818,7 @@ if (!only || "interop".includes(only)) {
     arrays.stderr
   )
   if (fs.existsSync(sidecar("arrays", "d.ts"))) {
-    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("arrays", "d.ts")], { cwd: root })
-    check("arrays.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr))
+    declarationsForTsc.push({ stem: "arrays", file: sidecar("arrays", "d.ts") })
   }
   if (arrays.status === 0) {
     const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("arrays", "h")])
@@ -8006,19 +8142,8 @@ if (!only || "interop_rng".includes(only) || only.startsWith("interop_rng")) {
       dts.includes("  // slotDay(s: Slot): number  -- not exported to JS"),
     dts
   )
-  let tscPath = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tscPath = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   if (dts.length > 0) {
-    const r = spawnSync("node", [tscPath, "--noEmit", "--strict", rngFile("d.ts")], { cwd: root })
-    check(
-      "interop_rng.d.ts passes tsc --noEmit --strict",
-      r.status === 0,
-      String(r.stdout) + String(r.stderr)
-    )
+    declarationsForTsc.push({ stem: "interop_rng", file: rngFile("d.ts") })
   }
 
   // One script for both bridges: each call's answer, or the class and message it threw.
@@ -8161,6 +8286,63 @@ if (!only || "interop_rng".includes(only) || only.startsWith("interop_rng")) {
   } else if (emitted.status === 0) {
     skip("wasm-ld not found: interop_rng wasm loader check skipped")
   }
+}
+
+// ---- WP8: the interop declarations under tsc ------------------------------------------
+// Every `.d.ts` the two sections above queued, each held to what
+// `tsc --noEmit --strict <file>` says about it alone, but in one process and one
+// program: a spawn per file checked the default libs and `@types` once per file,
+// about 2.4 s each. tests/typecheck.js says which files may share a program and why
+// the answer cannot change; the two checks after the loop hold it to that.
+if (declarationsForTsc.length > 0) {
+  // Two probes ride in the same program as the real files. If a type error could
+  // leak into another file's answer, or go missing from its own, the clean probe
+  // passing and the broken one failing on its own line is where it would show.
+  const probeDir = path.join(buildDir, "tsc-probe")
+  fs.mkdirSync(probeDir, { recursive: true })
+  const cleanProbe = path.join(probeDir, "clean.d.ts")
+  const brokenProbe = path.join(probeDir, "broken.d.ts")
+  fs.writeFileSync(cleanProbe, "export declare const fine: number;\n")
+  fs.writeFileSync(brokenProbe, "export declare const broken: NoSuchType;\n")
+  const files = [...declarationsForTsc.map((d) => d.file), cleanProbe, brokenProbe]
+  const results = typeCheckDeclarations(files, root)
+  for (const { stem, file } of declarationsForTsc) {
+    const r = results.get(file)
+    check(`${stem}.d.ts passes tsc --noEmit --strict`, r.ok, r.output)
+  }
+  const clean = results.get(cleanProbe)
+  const broken = results.get(brokenProbe)
+  check(
+    "tsc over many declaration files at once: a type error fails the file it is in, and no other",
+    standsAlone(cleanProbe, fs.readFileSync(cleanProbe, "utf8")) &&
+      standsAlone(brokenProbe, fs.readFileSync(brokenProbe, "utf8")) &&
+      clean.ok &&
+      !broken.ok &&
+      broken.output.includes("broken.d.ts(1,30): error TS") &&
+      broken.output.includes("'NoSuchType'"),
+    `clean.d.ts:\n${clean.output}\nbroken.d.ts:\n${broken.output}`
+  )
+  // A file that can reach past its own module could change what the others in
+  // the program see, so each of these has to be checked in a program of its own.
+  const reaching = [
+    ["a script", "declare const x: number;\n"],
+    ["`declare global`", "export {};\ndeclare global {\n  interface Probe {}\n}\n"],
+    ["`declare module`", 'export {};\ndeclare module "probe" {}\n'],
+    ["`export as namespace`", "export declare const x: number;\nexport as namespace Probe;\n"],
+    ["an import", 'import type { Exports } from "./add";\nexport declare const x: Exports;\n'],
+    ["an import type", 'export declare const x: import("./add").Exports;\n'],
+    ["a re-export", 'export * from "./add";\n'],
+    ["a `path` reference", '/// <reference path="./add.d.ts" />\nexport declare const x: number;\n'],
+    ["a `types` reference", '/// <reference types="node" />\nexport declare const x: number;\n'],
+    ["a `lib` reference", '/// <reference lib="es2022" />\nexport declare const x: number;\n'],
+    ["`no-default-lib`", '/// <reference no-default-lib="true" />\nexport declare const x: number;\n'],
+  ]
+  const wouldShare = reaching.filter(([, text]) => standsAlone("probe.d.ts", text)).map(([what]) => what)
+  check(
+    "tsc over many declaration files at once: a file that reaches past its own module gets a program of its own",
+    wouldShare.length === 0 && standsAlone("probe.d.ts", "export declare const x: number;\n"),
+    `would have shared a program: ${wouldShare.join(", ")}`
+  )
 }
 
 // ---- WP14: self-hosting ---------------------------------------------------------------
@@ -8854,20 +9036,107 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // fixed point -- nothing about the seed leaks into the result any more --
   // and stage3 must be byte-identical to stage2 so the binaries are compared
   // as well as the text. Three links, so it is the slowest check here.
-  const bootstrap = spawnSync(
-    "node",
-    [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec],
-    {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
+  //
+  // It is also a check CI was running twice. ci.yml's
+  // `bootstrap` job has a row per seed the last release attaches, and its
+  // x86_64-linux row runs `scripts/bootstrap.sh --verify` on the runner the
+  // `test` job uses, with the seed the `test` job fetches -- `seeds` reads the
+  // newest release and scripts/fetch-seed.sh the latest one, which are the
+  // same tag unless a prerelease heads the list, and .github/seed-matrix.sh
+  // turns red on a newest tag that is not a plain version.
+  // `--verify` asserts these two equalities, byte for byte, with the speed
+  // profile this check uses (the profile changes the link, not the IR). About
+  // eighty seconds of the `test` job, the critical path, bought nothing the
+  // run did not already have in parallel.
+  //
+  // So the `test` job passes `--delegate-fixed-point`, and when the request is
+  // honest the check is delegated to that row rather than run here: counted as
+  // delegated, not as passed, and not as a skip -- a skip says "unproven", and
+  // this is proved, by a job the summary names. What makes the request honest:
+  //
+  //   * It is a GitHub Actions run. The flag is a claim about the workflow this
+  //     run is part of; from a terminal it names a job that is not running, and
+  //     the check runs here as it always has. A local `npm test` pays for the
+  //     fixed point, and is the only place outside CI that proves it.
+  //   * This host has a seed row, which is to say a `bootstrap` row: the job is
+  //     named from .github/seed-targets.json by this host's triple, the way the
+  //     `seeds` job names it. A host with no seed target has no row to hand the
+  //     check to, and it runs here.
+  //   * That row exists whenever this job can go green. x86_64-linux has been
+  //     due since 0.1.1, so a release that does not carry its seed turns
+  //     `seeds` red (.github/seed-matrix.sh); and with no release at all
+  //     scripts/fetch-seed.sh has nothing to fetch and this job is red before
+  //     it gets here. release.yml runs this whole workflow through
+  //     `workflow_call` and its `release` job is `needs: ci`, so a red row
+  //     stops a release as a red check here would.
+  //   * The workflow still says so. The check after this one reads ci.yml and
+  //     fails if the `test` job asks for the delegation while the `bootstrap`
+  //     job has stopped running `scripts/bootstrap.sh --verify`, and the one
+  //     after that holds `--verify` to asserting both equalities.
+  //
+  // Nothing reads what this check builds: tests/self/bootstrap.js deletes its
+  // stages on the way out, and the checks below build their own. And the
+  // equalities are not absent from the `test` job even so -- the perturbed-seed
+  // check below runs `--verify` over three debug-profile stages and requires
+  // both to hold.
+  const fixedPointName = "src/ compiles src/: the bootstrap reaches a fixed point"
+  const hostSeedTarget = JSON.parse(
+    fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
+  ).targets.find((t) => t.triple === HOST_TRIPLE)
+  if (
+    process.argv.includes("--delegate-fixed-point") &&
+    process.env.GITHUB_ACTIONS === "true" &&
+    hostSeedTarget !== undefined
+  ) {
+    delegate(
+      fixedPointName,
+      `ci.yml's \`bootstrap (${hostSeedTarget.asset})\` job, which runs scripts/bootstrap.sh --verify with the same seed`
+    )
+  } else {
+    const bootstrap = spawnSync(
+      "node",
+      [path.join(root, "tests", "self", "bootstrap.js"), "--seed", seedSpec],
+      {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      }
+    )
+    const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? ""
+    check(
+      `${fixedPointName} (${bootstrapSummary})`,
+      bootstrap.status === 0,
+      `${bootstrap.stdout}${bootstrap.stderr}`
+    )
+  }
+
+  // The delegation above is a claim about ci.yml, so ci.yml is read for it on
+  // every run, local ones included: a `test` job that still asks for it while
+  // the `bootstrap` job no longer runs `--verify` would be a green run with
+  // the fixed point proved nowhere. Comment lines are left out, because a
+  // comment that mentions a flag is not a step that passes it.
+  const ciJob = (text, name) => {
+    const lines = text.split("\n")
+    const start = lines.indexOf(`  ${name}:`)
+    if (start < 0) {
+      return ""
     }
-  )
-  const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? ""
+    const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l))
+    return lines
+      .slice(start, end < 0 ? lines.length : end)
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n")
+  }
+  const ciYmlText = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
+  const testJobText = ciJob(ciYmlText, "test")
+  const bootstrapJobText = ciJob(ciYmlText, "bootstrap")
   check(
-    `src/ compiles src/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
-    bootstrap.status === 0,
-    `${bootstrap.stdout}${bootstrap.stderr}`
+    "ci.yml: the `test` job delegates the fixed point only while the `bootstrap` job runs scripts/bootstrap.sh --verify",
+    testJobText !== "" &&
+      (!testJobText.includes("--delegate-fixed-point") ||
+        (/^\s+needs: seeds$/m.test(bootstrapJobText) &&
+          bootstrapJobText.includes("scripts/bootstrap.sh --verify"))),
+    `test job:\n${testJobText}\n\nbootstrap job:\n${bootstrapJobText}`
   )
 
   // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts, and
@@ -9096,6 +9365,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       ["reject_decl_forms_together", ["6:1-8:2 NL1015"]],
       ["reject_decl_sweep_together", ["12:18-12:19 NL2292", "17:8-17:15 NL2038", "20:23-20:24 NL2292"]],
       ["reject_type_keyof_constraint", ["14:32-14:41 NL2038", "16:28-16:37 NL2038", "21:20-21:29 NL2038"]],
+      // A type parameter list that repeats a name: one diagnostic, on the
+      // first repeat, however many there are.
+      ["reject_generic_duplicate_type_parameter_triple", ["5:19-5:20 NL2302"]],
       // The function and binding forms, all the checker's: one per
       // declaration, the first in source order.
       [
@@ -10405,14 +10677,11 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const ambientDir = path.join(buildDir, "ambient")
   fs.mkdirSync(ambientDir, { recursive: true })
-  let tscBin = path.join(root, "node_modules", "typescript", "bin", "tsc")
-  try {
-    tscBin = require.resolve("typescript/bin/tsc")
-  } catch {
-    // Not resolvable from here: keep the node_modules path above.
-  }
   const declarations = path.join(root, "runtime", "nish.d.ts")
-  /** Type-check `files` against the ambient declarations with a project of their own. */
+  /**
+   * Type-check `files` against the ambient declarations with a project of their
+   * own: `tsc -p` on the config written here, in this process (tests/typecheck.js).
+   */
   const typeCheck = (name, files) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`)
     fs.writeFileSync(
@@ -10428,8 +10697,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
         files: [declarations, ...files],
       })
     )
-    const r = spawnSync("node", [tscBin, "-p", config], { cwd: root, encoding: "utf8" })
-    return { ok: r.status === 0, output: `${r.stdout}${r.stderr}` }
+    return typeCheckProject(config, root)
   }
 
   const own = typeCheck("src", [])

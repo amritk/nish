@@ -13,7 +13,8 @@ IR(stage1, src/)  ==  IR(stage2, src/)      byte for byte
 The seed is the last released `nish`. stage1 is `src/` built by the seed,
 stage2 is `src/` built by stage1, stage3 is `src/` built by stage2 and must be
 byte-identical to stage2. `npm test` and CI's `bootstrap` job hold all of that
-on every run.
+on every run; in CI the `test` job delegates its copy to the `bootstrap` row
+for its platform rather than proving it twice (`.claude/testing.md`).
 
 `src/` is the only implementation of Nish. Until WP19 R6 a second one in
 TypeScript, "stage0" (built by `tsc` into `dist/`; it lived in its own `src/`
@@ -67,7 +68,10 @@ plans `-o <file.ll>`, `-o <dir>/` and `--link <exe>`, validates
 `--profile speed|size|debug|wasi` before compiling anything, makes every
 directory in the way of the IR, a sidecar or the binary with `mkdirSync`, and
 runs `bash scripts/build.sh` through `spawnSync` for the link, found one level
-up from the binary's own path or in the working directory. `-g` goes into the
+up from the binary's own path (as invoked, then through a symbolic link), or in
+the working directory only when the binary itself lies inside it
+(`packageRootCandidates`; `docs/security/cli.md`, CLI-2). An install keeps
+`bin/nish` beside `scripts/`, `runtime/` and `std/`. `-g` goes into the
 `.ll` *and* on to that script. `--json`, `--emit-ast`, `--emit-checked`,
 `--version`, `--target host` and the interop sidecars (`--emit-header`,
 `--emit-dts`, `--emit-napi`, and the loader `--emit-dts` writes beside its
@@ -270,7 +274,10 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     a method with `FLAG_ACCESSOR`, `abstract` the class or member with
     `FLAG_ABSTRACT`, `declare class`, `declare interface` and `declare enum`
     theirs with `FLAG_FOREIGN`, a parameter property the parameter with
-    `FLAG_PROPERTY`, `export default function f`, `class C` and
+    `FLAG_PROPERTY`, a computed name `[k]` — in an object literal, a class or
+    an interface — the property, field or method with `FLAG_COMPUTED` and the
+    key's expression where its name would be (an `N_PROPERTY`'s second child,
+    as a string key is), `export default function f`, `class C` and
     `interface I` theirs with `FLAG_DEFAULT`, and `import type` (or `type`
     in front of one name), `import defer`, attributes after the specifier, a
     specifier that is not a string literal and `export import` the
@@ -295,7 +302,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     the child's kind is the tell: `for (x of a)` is an `N_FOR_OF` whose head
     is an expression, a top-level statement is the statement itself in the
     `N_SOURCE_FILE`, a hole is an `N_EMPTY` element of an `N_ARRAY`, and
-    `new a.B()` an `N_NEW` whose callee is the member access, type
+    `new a.B()` an `N_NEW` whose callee is the member access, `import.meta`
+    an `N_MEMBER` whose receiver is the IDENT `import`, as `import(...)` is
+    an `N_CALL` whose callee is, type
     parameters on an alias a third child of the `N_TYPE_ALIAS`, there only
     when written, a missing name, return type or body an EMPTY child of the
     `N_FUNCTION` or `N_METHOD`, a method signature an `N_METHOD` among an
@@ -312,7 +321,9 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
     signature with `FLAG_CONSTRUCT`), `interface I extends A` a fourth child
     of the `N_INTERFACE`, a key written as a string or a number a second
     child of the `N_PROPERTY`, a method in an object literal the
-    `N_METHOD` that is the property's value, a namespace import an
+    `N_METHOD` that is the property's value, object spread `{ ...a }` the
+    `N_SPREAD` an array's `...a` is, among the `N_OBJECT`'s properties, a
+    namespace import an
     `N_IMPORT` whose bindings child is the IDENT after `* as`, a side-effect
     import one whose bindings child is EMPTY, a default import a second
     child, a module export name written as a string the `N_STRING` where
@@ -365,9 +376,17 @@ stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
   seed in every position a name can stand, line breaks included, before it
   goes in. A regex is the one token the lexer cannot decide alone: the parser
   asks it again where an operand is due (`Lexer.scanRegex`). When a case comes off, it leaves both
-  parser-refusal registers and the R6 section of
-  `tests/wordings/unreachable.txt` in the same change, with its `.err`
-  re-pinned to the rule.
+  parser-refusal registers (and its code's line in
+  `tests/wordings/unreachable.txt`, if it has one) in the same change, with
+  its `.err` re-pinned to the rule.
+- **A parse path stops at its first failed `expect`.** `expect` reports and
+  returns `false`; a caller that ignores the `false` and parses on is a
+  cascade, the second and third diagnostics describing the first one's
+  wreckage. A malformed form costs no more diagnostics than it did before the
+  path existed, and usually one. Check a new path by truncating the form at
+  every token, followed by a real declaration, against the last release
+  (`reject_import_malformed`, `reject_import_equals_malformed`; #337 found two
+  such cascades in review).
 - **A disagreement is triaged before the next phase starts.** Three stage0 bugs
   came out of S3 that way and three more out of S4 — all wrong *attributes*
   rather than wrong instructions, which is the class of bug a golden `.ll` is

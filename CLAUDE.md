@@ -49,7 +49,10 @@ release: the rolling freeze, which CI's `bootstrap` job checks by building
 
 NEVER include Claude session links, tracking IDs, model names, or platform
 attributions in commits, code, or PR text. Keep all PR descriptions strictly
-focused on the code changes.
+focused on the code changes. A cloud session can have a footer with a session
+link appended to a pull request's body after you write it, so read the body
+back once the pull request is open and delete any such footer: `pr-body.yml`
+fails the pull request until you do.
 
 **A pull request goes up finished, and you merge it yourself.** Fully tested
 (`npm run check` and an **undegraded** `npm test` — read the skip count, not
@@ -95,6 +98,10 @@ Tests: tests/cases/arr_alias_domains
 - **scope** is the part of the compiler — `checker`, `codegen`, `runtime`,
   `self`, `cli`, `interop` — and is what the website filters on.
 - **`Measured:`** carries a number, because this project's claims are measured.
+  It states the figures themselves: a trailer that points at the pull request
+  body loses them, because the body is not the changelog. Time a loop whose
+  input changes on every iteration and whose output is folded into a printed
+  checksum, or the optimiser may compute the answer once and time nothing.
   `Refs:` and `Tests:` link the rule and the golden that pins it.
 - **`Release-Note:`** replaces the body in public notes, for when the body is
   about the review rather than about the change.

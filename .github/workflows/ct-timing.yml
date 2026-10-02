@@ -41,9 +41,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -85,6 +85,8 @@ jobs:
       # above it, 2 the harness could not run. The `report` job reads it. The
       # step still fails on anything but 0, so the run itself is red.
       - name: Time the constant-time fixtures
+        env:
+          MATRIX_OS: ${{ matrix.os }}
         run: |
           mkdir -p build/ct-timing-report
           set +e
@@ -94,13 +96,13 @@ jobs:
           echo "$code" > build/ct-timing-report/code
           cat build/ct-timing-report/table.md build/ct-timing-report/stderr.txt
           {
-            echo "### ct-timing (${{ matrix.os }})"
+            echo "### ct-timing ($MATRIX_OS)"
             echo
             cat build/ct-timing-report/table.md
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: ct-timing-${{ matrix.os }}
@@ -119,7 +121,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ct-timing-*
           path: reports

@@ -45,6 +45,7 @@ import {
   panicTailCallees,
 } from "./emit-builtins"
 import { numericLiteralValue } from "./constants"
+import { newArrayLengthChecked } from "./emit-arrays"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
 import {
   analyzeEscapes,
@@ -1510,6 +1511,16 @@ class FactCollector {
     if (node.kind === N_ARRAY || (node.kind === N_NEW && this.isArrayValued(node))) {
       if (!this.facts.isStackSite(node)) {
         this.facts.effect = EFFECT_WRITE
+      }
+      // Mirrors `emitNewArray`: a length it checks can panic, which costs the
+      // function `willreturn` exactly where the check is in its IR.
+      if (node.kind === N_NEW) {
+        const length = node.children[2].children[0]
+        if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode)) {
+          const tail: string[] = []
+          panicTailCallees(tail)
+          this.addCallees(tail)
+        }
       }
       return
     }
