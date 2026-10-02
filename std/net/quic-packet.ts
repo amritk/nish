@@ -67,7 +67,7 @@
 import { aesGcmOpen, aesGcmSeal, aesHeaderMask, aesKey, AesKey } from "nish/crypto/aes"
 import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import { timingSafeEqual } from "nish/crypto/ct"
-import { hkdfExpandSha256, hkdfExpandSha384, hkdfExtractSha256 } from "nish/crypto/hkdf"
+import { hkdfExpandLabelSha256, hkdfExpandLabelSha384, hkdfExtractSha256 } from "nish/crypto/hkdf"
 
 /** QUIC version 1 (RFC 9000 §15), the only version this module protects. */
 export const QUIC_VERSION_1: i64 = 1
@@ -260,45 +260,15 @@ export class QuicPacket {
   }
 }
 
-// TEMPORARY(WP34 expand-label): a stand-in for `hkdfExpandLabelSha256` and
-// `hkdfExpandLabelSha384`, which the expand-label stage is adding to
-// `nish/crypto/hkdf` with the signature this one has. It is deleted, and its
-// callers import the real ones, once that stage merges; it must not ship.
 /**
- * HKDF-Expand-Label (RFC 8446 §7.1): HKDF-Expand over the `HkdfLabel` of
- * `length`, `"tls13 " + label` and `context`, with SHA-384 when `sha384` is
- * set and SHA-256 otherwise. An empty array where the expand refuses.
+ * HKDF-Expand-Label (RFC 8446 §7.1, RFC 9001 §5.1) with an empty context,
+ * under the hash `aead` pairs with: SHA-384 for AES-256-GCM, SHA-256 for the
+ * others. Every label and length here is a fixed one the expand accepts.
  */
-const quicPacketExpandLabel = (
-  sha384: boolean,
-  secret: u8[],
-  label: string,
-  context: u8[],
-  length: i32
-): u8[] => {
-  const info: u8[] = []
-  const full: string = `tls13 ${label}`
-  const labelLength: i32 = toI32(full.length)
-  const contextLength: i32 = toI32(context.length)
-  info.push(toU8(length >> 8))
-  info.push(toU8(length & 255))
-  info.push(toU8(labelLength))
-  for (let k: i32 = 0; k < labelLength; k += 1) {
-    info.push(toU8(toI32(full.charCodeAt(k))))
-  }
-  info.push(toU8(contextLength))
-  for (const b of context) {
-    info.push(b)
-  }
-  const out: u8[] | null = sha384
-    ? hkdfExpandSha384(secret, info, length)
-    : hkdfExpandSha256(secret, info, length)
-  if (out !== null) {
-    return out
-  }
-  return []
-}
-// END TEMPORARY(WP34 expand-label)
+const quicPacketExpandLabel = (aead: i32, secret: u8[], label: string, length: i32): u8[] =>
+  aead === QUIC_AEAD_AES_256_GCM
+    ? hkdfExpandLabelSha384(secret, label, [], length)
+    : hkdfExpandLabelSha256(secret, label, [], length)
 
 /**
  * The bytes `bytes[from .. to)` as a fresh array of exactly that size, so a
@@ -717,8 +687,8 @@ export const quicInitialSecrets = (dcid: u8[]): QuicInitialSecrets | null => {
   }
   const initial: u8[] = hkdfExtractSha256(quicPacketInitialSalt(), dcid)
   return new QuicInitialSecrets(
-    quicPacketExpandLabel(false, initial, "client in", [], 32),
-    quicPacketExpandLabel(false, initial, "server in", [], 32)
+    quicPacketExpandLabel(QUIC_AEAD_AES_128_GCM, initial, "client in", 32),
+    quicPacketExpandLabel(QUIC_AEAD_AES_128_GCM, initial, "server in", 32)
   )
 }
 
@@ -766,11 +736,10 @@ const quicPacketKeysUsable = (keys: QuicKeys): boolean => {
  * (§6). The caller has checked `secret` with `quicPacketSecretFits`.
  */
 const quicPacketDerive = (aead: i32, secret: u8[], hp: u8[], hpAes: AesKey | null): QuicKeys => {
-  const sha384: boolean = aead === QUIC_AEAD_AES_256_GCM
   const keys: QuicKeys = new QuicKeys(
     aead,
-    quicPacketExpandLabel(sha384, secret, "quic key", [], quicPacketKeyLength(aead)),
-    quicPacketExpandLabel(sha384, secret, "quic iv", [], QUIC_IV_SIZE),
+    quicPacketExpandLabel(aead, secret, "quic key", quicPacketKeyLength(aead)),
+    quicPacketExpandLabel(aead, secret, "quic iv", QUIC_IV_SIZE),
     hp
   )
   keys.hpAes = hpAes
@@ -791,13 +760,7 @@ export const quicKeys = (aead: i32, secret: u8[]): QuicKeys | null => {
   if (!quicPacketSecretFits(aead, secret)) {
     return null
   }
-  const hp: u8[] = quicPacketExpandLabel(
-    aead === QUIC_AEAD_AES_256_GCM,
-    secret,
-    "quic hp",
-    [],
-    quicPacketKeyLength(aead)
-  )
+  const hp: u8[] = quicPacketExpandLabel(aead, secret, "quic hp", quicPacketKeyLength(aead))
   return quicPacketDerive(aead, secret, hp, aead === QUIC_AEAD_CHACHA20_POLY1305 ? null : aesKey(hp))
 }
 
@@ -812,13 +775,7 @@ export const quicKeyUpdateSecret = (aead: i32, secret: u8[]): u8[] | null => {
   if (!quicPacketSecretFits(aead, secret)) {
     return null
   }
-  return quicPacketExpandLabel(
-    aead === QUIC_AEAD_AES_256_GCM,
-    secret,
-    "quic ku",
-    [],
-    quicPacketSecretLength(aead)
-  )
+  return quicPacketExpandLabel(aead, secret, "quic ku", quicPacketSecretLength(aead))
 }
 
 /**
