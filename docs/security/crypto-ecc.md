@@ -9,8 +9,8 @@ so that the next audit starts from evidence rather than from trust.
 secret-dependent branch was found. Every applicable Wycheproof vector passes
 (2,150 of them, 1,666 new), the fiat-crypto port matches upstream statement for
 statement, and two independent reference implementations agree with both
-modules on 5,000 more inputs. Three Low findings are recorded below: one was
-fixed here, and two lie outside this stage's files and stay open.
+modules on 5,000 more inputs. Three Low findings are recorded below: two were
+fixed here, and one lies outside this stage's files and stays open.
 
 ## Scope
 
@@ -149,10 +149,11 @@ u-coordinates. They are held to the file's exact shared secret, which is RFC
 variants (`std` has neither hash), and `x25519_asn` / `_jwk` / `_pem` (these
 test key encodings, which the module does not parse).
 
-The new vectors are in `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts`,
-the file that already carried Wycheproof's notice and has a row in
-`THIRD_PARTY_NOTICES.md`. A new file carrying the notice needs its own row
-there, and this stage could not edit that file. See the doc corrections below.
+The new ECDSA vectors are in `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts`,
+the file that already carried Wycheproof's notice, and the X25519 ones in
+`tests/link/crypto_wycheproof/x25519.ts`, which carries the same notice. Each
+has a row in `THIRD_PARTY_NOTICES.md` naming the upstream files it derives
+from and their case counts (ECC-3).
 
 **Mutation check of the tests.** A test that has never been seen to fail
 proves little, so five defences were removed one at a time and the suites were
@@ -182,7 +183,7 @@ rerun.
 | --- | --- | --- | --- | --- |
 | ECC-1 | Low | `std/crypto/x25519.ts:481` (`x25519`'s doc) | The doc said RFC 7748 §6.1's all-zero check is made by "TLS 1.3 (WP34 T1)". No TLS module exists in the tree: T1 is planned (`docs/wp34-hosting-cs.md`), and nothing calls `x25519` today. A reader could conclude the check is made for them. | **Fixed in this change.** The doc now says nothing in the tree makes the check yet, and that a caller must refuse an all-zero answer itself, with `timingSafeEqual`. Doc only, so there is no failing-first test. The behaviour it describes is pinned by `crypto_x25519`'s "u = 0 answers all zeros, not null" and the six "low-order u … answers all zeros" checks. `std/README.md` says the same thing; see below. |
 | ECC-2 | Low | `std/crypto/p256.ts` (`p256Sign`, `p256SignScalar`), `std/crypto/x25519.ts` (`x25519`) | Secret intermediates are not wiped: the private-key limbs `dM`, the nonce `v` and its Montgomery form, RFC 6979's HMAC key `k`, the table built from G, and X25519's clamped scalar copy and ladder state all stay in arena memory after the call returns. A later memory disclosure could read them. The language has no store that the optimiser is barred from removing, so a wipe written in Nish could be deleted as a dead store and would give false assurance. | **Open.** It needs a runtime or language primitive, such as a `secureZero` builtin kept by a compiler barrier, which lives in `runtime/` and `src/`, outside this stage. Both modules would call it before returning. |
-| ECC-3 | Low (documentation) | `THIRD_PARTY_NOTICES.md` (the `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` row) | The row says the file holds "all 484 cases and the 113 group keys" of one Wycheproof file. After this change it holds five files' cases, ECDSA and X25519, as its header says. | **Open, out of Owns.** The row wants rewording, and ideally the X25519 cases would move to `tests/link/crypto_wycheproof/x25519.ts` with a row of their own. See the corrections below. |
+| ECC-3 | Low (documentation) | `THIRD_PARTY_NOTICES.md` (the `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` row) | The row says the file holds "all 484 cases and the 113 group keys" of one Wycheproof file. As first written, this change put five files' cases there, ECDSA and X25519, as its header said, so the row no longer said what the file derives from (`.claude/licensing.md`, item 4). `third-party-licence` reads only the file and licence-text columns, so it could not catch this. | **Fixed in this change.** The X25519 cases moved to `tests/link/crypto_wycheproof/x25519.ts`, with the same upstream notice and a row of its own (`x25519_test.json`, 518 cases), and `crypto_x25519/wycheproof.ts` reads them from there. The ECDSA row now names its four files and their case and group-key counts. Layout and documentation only: no value of any vector changed, and `crypto_p256*` and `crypto_x25519*` answer as before. |
 
 ## Properties verified
 
@@ -298,6 +299,3 @@ These lie outside this stage's files, so they are listed here rather than made:
   accepts high `s`, since ECDSA is malleable.
 - `std/README.md`, the `crypto/x25519.ts` row: "Reproduces" should add
   Wycheproof `x25519_test`.
-- `THIRD_PARTY_NOTICES.md`, the `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts`
-  row: should list the five upstream files and their case counts (ECC-3). If
-  the X25519 cases move to a file of their own, that file needs its own row.
