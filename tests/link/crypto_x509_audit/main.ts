@@ -9,10 +9,12 @@
 // `[3]` holding a NULL, or a unique identifier with 8 unused bits, parsed. The
 // X509-5 block pins what the record states `x509ParseChain` and
 // `x509ParseCertificate` do not check, so a change that starts checking one
-// has to say so here.
+// has to say so here. X509-8: a version-1 PKCS#8 key's outer `[1]` public key
+// was stepped over, so arbitrary bytes there parsed.
 import { Suite } from "nish/testing"
 import {
   X509Certificate,
+  derToPem,
   pemToDer,
   x509MintSelfSigned,
   x509ParseCertificate,
@@ -36,6 +38,27 @@ const NOT_BEFORE: i64 = 1767225600000
 // The golden certificate with its two validity times swapped: notBefore 2026-01-15, notAfter 2026-01-01.
 const SWAPPED: string =
   "308201223081caa00302010202100123456789abcdef0123456789abcdef300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303131353030303030305a170d3236303130313030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299300a06082a8648ce3d0403020347003044022041e3cdab220d60d16846a1033a3679f7b0fe54fc74492d8ba72f70817578970302206e840bdbd9eac275a7ca1ca3b39ca8a23e20a06e2d83a076f797bf5a10226506"
+
+// The CA key as a version-1 OneAsymmetricKey (RFC 5958 §2): CA_PKCS8_PEM's DER
+// with the version 1 and an outer `[1] IMPLICIT BIT STRING`, 81 42 00 then the
+// 65-octet point, appended. Built by hand, since OpenSSL writes version 0.
+const V1_PREFIX: string =
+  "020101301306072a8648ce3d020106082a8648ce3d030107046d306b02010104201bca349ed315194d55d7b94609b0c8f186acccff93ab2a3c48dafd40b748fe0da14403420004b5e1f9062ba0e3a0ca966d3e7335d952370dfbad6f90eee8897ac6141e850a0dd864061fd213b52b46c94515f0332e2976466a0cbb2c46054d8a97c30fe33636"
+const CA_POINT: string =
+  "04b5e1f9062ba0e3a0ca966d3e7335d952370dfbad6f90eee8897ac6141e850a0dd864061fd213b52b46c94515f0332e2976466a0cbb2c46054d8a97c30fe33636"
+// RFC 6979 A.2.5's point, which is not the CA key's.
+const A25_POINT: string =
+  "0460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299"
+
+/** What `x509ParseP256PrivateKey` reads from the v1 CA key with `outerHex` as its outer public key, or "null". */
+const v1Key = (outerHex: string): string => {
+  const body: u8[] = fromHex(`${V1_PREFIX}${outerHex}`)
+  const der: u8[] = [0x30, 0x81, toU8(toI32(body.length))]
+  for (let i: i32 = 0; i < toI32(body.length); i++) {
+    der.push(body[i])
+  }
+  return toHex(x509ParseP256PrivateKey(derToPem(der, "PRIVATE KEY")))
+}
 
 /** The golden certificate's DER, out of OpenSSL's PEM of it. */
 const golden = (): u8[] => {
@@ -177,4 +200,16 @@ const scopeSuite = (): i32 => {
   return t.done()
 }
 
-export const main = (): i32 => pemSuite() + nameSuite() + trailingSuite() + scopeSuite()
+const outerKeySuite = (): i32 => {
+  const t = new Suite("X509-8: a PKCS#8 v1 key's outer public key is its own")
+  t.eqStr("v1 with its own point as the outer public key reads", v1Key(`814200${CA_POINT}`), CA_PRIVATE)
+  t.eqStr("v1 with another key's point answers null", v1Key(`814200${A25_POINT}`), "null")
+  t.eqStr("v1 with an empty [1], 81 00, answers null", v1Key("8100"), "null")
+  t.eqStr("v1 with its own point but 8 unused bits answers null", v1Key(`814208${CA_POINT}`), "null")
+  t.eqStr("v1 with its own point but 1 unused bit answers null", v1Key(`814201${CA_POINT}`), "null")
+  t.eqStr("v1 with the point cut to 64 octets answers null", v1Key(`814100${CA_POINT.substring(0, 128)}`), "null")
+  t.eqStr("v1 with no outer public key still reads", v1Key(""), CA_PRIVATE)
+  return t.done()
+}
+
+export const main = (): i32 => pemSuite() + nameSuite() + trailingSuite() + scopeSuite() + outerKeySuite()

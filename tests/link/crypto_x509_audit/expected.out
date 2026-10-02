@@ -43,3 +43,12 @@ PASS  and the leaf does not verify under it
 PASS  notBefore after notAfter still reads
 PASS  a certificate whose fourteen days are long past still reads and verifies
 X509-5: a parser, not a validator: 5 passed, 0 failed, 0 skipped
+PASS  v1 with its own point as the outer public key reads
+PASS  v1 with another key's point answers null
+PASS  v1 with an empty [1], 81 00, answers null
+PASS  v1 with its own point but 8 unused bits answers null
+PASS  v1 with its own point but 1 unused bit answers null
+PASS  v1 with the point cut to 64 octets answers null
+PASS  v1 with no outer public key still reads
+X509-8: a PKCS#8 v1 key's outer public key is its own: 7 passed, 0 failed, 0 skipped
+

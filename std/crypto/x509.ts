@@ -950,8 +950,9 @@ const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] 
  * The scalar of a PKCS#8 PrivateKeyInfo (RFC 5208 §5) or OneAsymmetricKey
  * (RFC 5958 §2): version 0 or 1, the algorithm id-ecPublicKey with the
  * prime256v1 curve, and an ECPrivateKey inside the OCTET STRING, followed by
- * the optional `[0]` attributes and — in version 1 — `[1]` public key, which
- * are skipped.
+ * the optional `[0]` attributes, which are skipped, and — in version 1 — the
+ * optional `[1]` public key, which must be a BIT STRING of the key's own point
+ * (X509-8 in docs/security/crypto-x509.md).
  */
 const x509Pkcs8Key = (der: u8[]): u8[] | null => {
   const total: i32 = toI32(der.length)
@@ -983,17 +984,31 @@ const x509Pkcs8Key = (der: u8[]): u8[] | null => {
     }
     at = attributes.end
   }
+  let stored: u8[] | null = null
   if (v === 1 && x509DerPeek(der, at, seq.end) === 0x81) {
-    const pub: X509DerElement | null = x509DerRead(der, at, seq.end)
-    if (pub === null) {
+    const outer: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (outer === null) {
       return null
     }
-    at = pub.end
+    // `[1] IMPLICIT BIT STRING`: the 0x81 replaces the BIT STRING's own tag,
+    // so its contents are the unused-bits octet and then the point.
+    const bits: X509DerElement = new X509DerElement(X509_TAG_BIT_STRING, outer.at, outer.start, outer.end)
+    stored = x509DerBitStringOctets(der, bits)
+    if (stored === null) {
+      return null
+    }
+    at = outer.end
   }
   if (at !== seq.end) {
     return null
   }
-  return x509Sec1Key(der, key.start, key.end, false)
+  const priv: u8[] | null = x509Sec1Key(der, key.start, key.end, false)
+  if (priv === null || stored === null) {
+    return priv
+  }
+  // The same rule as the SEC1 key's own `[1]`: the stored point is the key's.
+  const pub: u8[] | null = p256PublicKey(priv)
+  return pub !== null && x509BytesEqual(stored, pub) ? priv : null
 }
 
 /**
