@@ -540,10 +540,10 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
         expr,
         `Object literal for \`${ctx.table.typeName(info.type)}\` is missing field \`${field.name}\``
       )
-      return want
+      return target
     }
   }
-  return want
+  return target
 }
 
 /** `recv.f = v` and `recv.f op= v` where `recv` is a struct value. */

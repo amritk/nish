@@ -199,6 +199,11 @@ cases/net_tcp_import added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with
 cases/net_udp_echo added after R6: no rewriter to freeze it with
 cases/net_udp_offload added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_arrow added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_field added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_local added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_return added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_ternary added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with
