@@ -2,15 +2,18 @@
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
+@.str.0 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @nish_exit(i32 noundef) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -37,23 +40,32 @@ slow:
 define internal void @Perm.constructor(%struct.Perm* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
-  %1 = call i8* @nish_alloc_struct(i64 24)
-  %2 = bitcast i8* %1 to %struct.nish_array*
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
-  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %5 = mul i64 %0, 4
-  %6 = call i8* @nish_alloc_struct(i64 %5)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %8 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
-  store %struct.nish_array* %2, %struct.nish_array** %8, align 8, !tbaa !15
+  %1 = icmp ule i64 %0, 2147483647
+  br i1 %1, label %len.ok, label %len.fail
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
+  call void @nish_exit(i32 1)
+  unreachable
+
+len.ok:
+  %2 = call i8* @nish_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.nish_array*
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
+  store i64 %0, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = mul i64 %0, 4
+  %7 = call i8* @nish_alloc_struct(i64 %6)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false), !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
+  store i8* %7, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %9 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
+  store %struct.nish_array* %3, %struct.nish_array** %9, align 8, !tbaa !15
   ret void
 }
 
-define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #0 {
+define internal void @Perm.swap(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i, i32 noundef %j) #1 {
 entry:
   %tmp.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
@@ -93,7 +105,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Perm.double(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #0 {
+define internal noundef i32 @Perm.double(%struct.Perm* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %i) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Perm, %struct.Perm* %this, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
@@ -124,7 +136,7 @@ entry:
   ret i32 %24
 }
 
-define noundef i32 @test() #1 {
+define noundef i32 @test() #0 {
 entry:
   %p.addr = alloca %struct.Perm*, align 8
   %Perm.obj = alloca %struct.Perm, align 8
@@ -184,11 +196,12 @@ bounds.ok.1:
   ret i32 %31
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

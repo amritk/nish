@@ -15,7 +15,7 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
@@ -117,7 +117,7 @@ while.end:
   ret %struct.Node* %10
 }
 
-define internal noundef nonnull align 8 i8* @describe(%struct.Node* noundef readonly align 8 nocapture %n) #0 {
+define internal noundef nonnull align 8 i8* @describe(%struct.Node* noundef readonly align 8 nocapture %n) #2 {
 entry:
   %0 = icmp eq %struct.Node* %n, null
   br i1 %0, label %if.then, label %if.end
@@ -133,7 +133,7 @@ if.end:
   ret i8* %4
 }
 
-define internal noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #2 {
+define internal noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #3 {
 entry:
   %0 = icmp ne %struct.Node* %n, null
   br i1 %0, label %cond.true, label %cond.false
@@ -181,7 +181,7 @@ while.end:
   ret %struct.Node* %9
 }
 
-define noundef i32 @nish_main() #3 {
+define noundef i32 @nish_main() #2 {
 entry:
   %a.addr = alloca %struct.Node*, align 8
   %b.addr = alloca %struct.Node*, align 8
@@ -318,7 +318,7 @@ if.end.1:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -327,8 +327,8 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn readonly }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 

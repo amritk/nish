@@ -4,9 +4,10 @@
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
-@.str.2 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
-@.str.3 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
@@ -387,18 +388,27 @@ if.end:
   %5 = load i32, i32* %n.addr, align 4, !dbg !240
   %6 = mul nsw i32 %5, 2, !dbg !240
   %7 = sext i32 %6 to i64, !dbg !239
-  %8 = call i8* @nish_alloc_struct(i64 24), !dbg !239
-  %9 = bitcast i8* %8 to %struct.nish_array*, !dbg !239
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0, !dbg !239
-  store i64 %7, i64* %10, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !239
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 1, !dbg !239
-  store i64 %7, i64* %11, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !239
-  %12 = mul i64 %7, 4, !dbg !239
-  %13 = call i8* @nish_alloc_struct(i64 %12), !dbg !239
-  call void @llvm.memset.p0i8.i64(i8* align 8 %13, i8 0, i64 %12, i1 false), !alias.scope !148, !noalias !147, !dbg !239
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2, !dbg !239
-  store i8* %13, i8** %14, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !239
-  ret %struct.nish_array* %9, !dbg !238
+  %8 = icmp ule i64 %7, 2147483647, !dbg !239
+  br i1 %8, label %len.ok, label %len.fail, !dbg !239
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !239
+  call void @nish_exit(i32 1), !dbg !239
+  unreachable, !dbg !239
+
+len.ok:
+  %9 = call i8* @nish_alloc_struct(i64 24), !dbg !239
+  %10 = bitcast i8* %9 to %struct.nish_array*, !dbg !239
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0, !dbg !239
+  store i64 %7, i64* %11, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !239
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 1, !dbg !239
+  store i64 %7, i64* %12, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !239
+  %13 = mul i64 %7, 4, !dbg !239
+  %14 = call i8* @nish_alloc_struct(i64 %13), !dbg !239
+  call void @llvm.memset.p0i8.i64(i8* align 8 %14, i8 0, i64 %13, i1 false), !alias.scope !148, !noalias !147, !dbg !239
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2, !dbg !239
+  store i8* %14, i8** %15, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !239
+  ret %struct.nish_array* %10, !dbg !238
 }
 
 define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 !dbg !245 {
@@ -591,7 +601,7 @@ if.end:
   ret void, !dbg !317
 }
 
-define internal void @nish.Map$str$i32.constructor(%struct.Map$str$i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #3 !dbg !345 {
+define internal void @nish.Map$str$i32.constructor(%struct.Map$str$i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #0 !dbg !345 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Map$str$i32* %this, metadata !347, metadata !DIExpression()), !dbg !346
   %0 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 0, !dbg !346
@@ -603,49 +613,58 @@ entry:
   %3 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 7, !dbg !346
   store i32 0, i32* %3, align 4, !tbaa !354, !dbg !346
   %4 = sext i32 8 to i64, !dbg !356
-  %5 = call i8* @nish_alloc_struct(i64 24), !dbg !356
-  %6 = bitcast i8* %5 to %struct.nish_array*, !dbg !356
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 0, !dbg !356
-  store i64 %4, i64* %7, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !356
-  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 1, !dbg !356
-  store i64 %4, i64* %8, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !356
-  %9 = mul i64 %4, 4, !dbg !356
-  %10 = call i8* @nish_alloc_struct(i64 %9), !dbg !356
-  call void @llvm.memset.p0i8.i64(i8* align 8 %10, i8 0, i64 %9, i1 false), !alias.scope !148, !noalias !147, !dbg !356
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %6, i64 0, i32 2, !dbg !356
-  store i8* %10, i8** %11, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !356
-  %12 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !355
-  store %struct.nish_array* %6, %struct.nish_array** %12, align 8, !tbaa !358, !dbg !355
-  %13 = call i8* @nish_alloc_struct(i64 24), !dbg !360
-  %14 = bitcast i8* %13 to %struct.nish_array*, !dbg !360
-  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0, !dbg !360
-  store i64 0, i64* %15, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !360
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 1, !dbg !360
-  store i64 0, i64* %16, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !360
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2, !dbg !360
-  store i8* null, i8** %17, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !360
-  %18 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !359
-  store %struct.nish_array* %14, %struct.nish_array** %18, align 8, !tbaa !361, !dbg !359
-  %19 = call i8* @nish_alloc_struct(i64 24), !dbg !363
-  %20 = bitcast i8* %19 to %struct.nish_array*, !dbg !363
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0, !dbg !363
-  store i64 0, i64* %21, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !363
-  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 1, !dbg !363
-  store i64 0, i64* %22, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !363
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2, !dbg !363
-  store i8* null, i8** %23, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !363
-  %24 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !362
-  store %struct.nish_array* %20, %struct.nish_array** %24, align 8, !tbaa !364, !dbg !362
-  %25 = call i8* @nish_alloc_struct(i64 24), !dbg !366
-  %26 = bitcast i8* %25 to %struct.nish_array*, !dbg !366
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0, !dbg !366
-  store i64 0, i64* %27, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !366
-  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 1, !dbg !366
-  store i64 0, i64* %28, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !366
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2, !dbg !366
-  store i8* null, i8** %29, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !366
-  %30 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !365
-  store %struct.nish_array* %26, %struct.nish_array** %30, align 8, !tbaa !367, !dbg !365
+  %5 = icmp ule i64 %4, 2147483647, !dbg !356
+  br i1 %5, label %len.ok, label %len.fail, !dbg !356
+
+len.fail:
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !356
+  call void @nish_exit(i32 1), !dbg !356
+  unreachable, !dbg !356
+
+len.ok:
+  %6 = call i8* @nish_alloc_struct(i64 24), !dbg !356
+  %7 = bitcast i8* %6 to %struct.nish_array*, !dbg !356
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 0, !dbg !356
+  store i64 %4, i64* %8, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !356
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 1, !dbg !356
+  store i64 %4, i64* %9, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !356
+  %10 = mul i64 %4, 4, !dbg !356
+  %11 = call i8* @nish_alloc_struct(i64 %10), !dbg !356
+  call void @llvm.memset.p0i8.i64(i8* align 8 %11, i8 0, i64 %10, i1 false), !alias.scope !148, !noalias !147, !dbg !356
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2, !dbg !356
+  store i8* %11, i8** %12, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !356
+  %13 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 1, !dbg !355
+  store %struct.nish_array* %7, %struct.nish_array** %13, align 8, !tbaa !358, !dbg !355
+  %14 = call i8* @nish_alloc_struct(i64 24), !dbg !360
+  %15 = bitcast i8* %14 to %struct.nish_array*, !dbg !360
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0, !dbg !360
+  store i64 0, i64* %16, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !360
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 1, !dbg !360
+  store i64 0, i64* %17, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !360
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2, !dbg !360
+  store i8* null, i8** %18, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !360
+  %19 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 4, !dbg !359
+  store %struct.nish_array* %15, %struct.nish_array** %19, align 8, !tbaa !361, !dbg !359
+  %20 = call i8* @nish_alloc_struct(i64 24), !dbg !363
+  %21 = bitcast i8* %20 to %struct.nish_array*, !dbg !363
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 0, !dbg !363
+  store i64 0, i64* %22, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !363
+  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 1, !dbg !363
+  store i64 0, i64* %23, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !363
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2, !dbg !363
+  store i8* null, i8** %24, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !363
+  %25 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 5, !dbg !362
+  store %struct.nish_array* %21, %struct.nish_array** %25, align 8, !tbaa !364, !dbg !362
+  %26 = call i8* @nish_alloc_struct(i64 24), !dbg !366
+  %27 = bitcast i8* %26 to %struct.nish_array*, !dbg !366
+  %28 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 0, !dbg !366
+  store i64 0, i64* %28, align 8, !alias.scope !147, !noalias !148, !tbaa !154, !dbg !366
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 1, !dbg !366
+  store i64 0, i64* %29, align 8, !alias.scope !147, !noalias !148, !tbaa !242, !dbg !366
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %27, i64 0, i32 2, !dbg !366
+  store i8* null, i8** %30, align 8, !alias.scope !147, !noalias !148, !tbaa !155, !dbg !366
+  %31 = getelementptr inbounds %struct.Map$str$i32, %struct.Map$str$i32* %this, i32 0, i32 6, !dbg !365
+  store %struct.nish_array* %27, %struct.nish_array** %31, align 8, !tbaa !367, !dbg !365
   ret void, !dbg !346
 }
 
@@ -746,7 +765,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end, !dbg !435
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !442
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !442
   call void @nish_exit(i32 1), !dbg !442
   unreachable, !dbg !442
 
@@ -793,7 +812,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end, !dbg !453
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !460
+  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !460
   call void @nish_exit(i32 1), !dbg !460
   unreachable, !dbg !460
 
@@ -902,7 +921,7 @@ lor.end:
   br i1 %18, label %if.then.1, label %if.end.1, !dbg !507
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !513
+  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.4 to i8*), i32 2, i1 true), !dbg !513
   call void @nish_exit(i32 1), !dbg !513
   unreachable, !dbg !513
 
@@ -1293,7 +1312,7 @@ if.end.1:
   br label %while.cond, !dbg !613
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.4 to i8*), i32 2, i1 true), !dbg !668
+  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*), i32 2, i1 true), !dbg !668
   call void @nish_exit(i32 1), !dbg !668
   unreachable, !dbg !668
 }
