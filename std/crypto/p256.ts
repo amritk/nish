@@ -4,8 +4,10 @@
  *
  *     import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256";
  *
+ *     const priv: Secret<u8[]> = secret(readKey());              // nish:secret
  *     const pub: u8[] | null = p256PublicKey(priv);             // 65 bytes, 0x04 || X || Y
  *     const sig: u8[] | null = p256SignSha256(priv, message);   // 64 bytes, r || s
+ *     wipe(priv);
  *     const ok: boolean = p256VerifySha256(pub, message, sig);
  *
  * A private key is 32 big-endian bytes holding a scalar in [1, n); a public
@@ -73,12 +75,21 @@
  *
  * Verification multiplies only public values, and uses the same routine.
  *
+ * **The private key is a `Secret`** (`nish:secret`, docs/LANGUAGE.md
+ * "Secrets"). `p256PublicKey` and `p256Sign` read it only inside `expose` /
+ * `exposeWith`, whose function the checker holds to reaching no I/O and no C,
+ * and every intermediate the key or the nonce reaches is wiped before the
+ * signature is returned (ECC-2, docs/security/crypto-ecc.md). That is why RFC
+ * 6979's HMAC is written out over `Sha256` here (`p256Mac`) rather than taken
+ * from `nish/crypto/hmac`: its key blocks and hasher state have to be this
+ * module's to wipe.
+ *
  * Private names carry the `p256` prefix because a `std/` module's private
  * functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
-import { HmacSha256, hmacSha256 } from "nish/crypto/hmac"
-import { sha256 } from "nish/crypto/sha256"
+import { Secret, expose, exposeWith, wipe } from "nish:secret"
+import { Sha256, sha256 } from "nish/crypto/sha256"
 import { timingSafeEqual } from "nish/crypto/ct"
 
 /** The length in bytes of a private key: one scalar, big-endian. */
@@ -3784,6 +3795,23 @@ class P256PointScratch {
   }
 }
 
+/** Zero `p`'s three coordinates, with the store `nish:secret` keeps from the optimiser (ECC-2). */
+const p256WipePoint = (p: P256ProjectivePoint): void => {
+  wipe(p.x)
+  wipe(p.y)
+  wipe(p.z)
+}
+
+/** Zero every temporary a point operation left in `s`; `b` is the curve's public constant. */
+const p256WipeScratch = (s: P256PointScratch): void => {
+  wipe(s.t0)
+  wipe(s.t1)
+  wipe(s.t2)
+  wipe(s.t3)
+  wipe(s.t4)
+  p256WipePoint(s.sum)
+}
+
 /** `out = p`, coordinate by coordinate. */
 const p256PointCopy = (out: P256ProjectivePoint, p: P256ProjectivePoint): void => {
   p256Copy(out.x, p.x)
@@ -4014,6 +4042,11 @@ const p256ScalarMult = (
     p256PointAdd(acc, acc, entry, s)
   }
   p256PointCopy(out, acc)
+  // The accumulator and the selected entry follow the scalar's digits, and a
+  // signature's scalar is its nonce: both are wiped, and the table with them.
+  wipe(table)
+  p256WipePoint(acc)
+  p256WipePoint(entry)
 }
 
 /** The base point G (SEC 2 §2.4.2), in the Montgomery domain with Z = 1. */
@@ -4133,6 +4166,7 @@ const p256ScalarInRange = (bytes: u8[]): boolean => {
   p256LimbsFromBytes(a, bytes, 0)
   const below: u32 = p256Below(a, p256Order())
   const zero: u32 = ctEq(p256FiatNonzero(a), 0) & 1
+  wipe(a) // a private key's limbs, when `bytes` is one
   return (below & (zero ^ 1)) === 1
 }
 
@@ -4155,19 +4189,72 @@ const p256DigestScalar = (out: u32[], digest: u8[]): void => {
   p256ReduceOnce(out, a, p256Order())
 }
 
+/** RFC 2104's key block for SHA-256: `k` zero-extended to 64 bytes, each byte XOR `pad`. */
+const p256PadBlock = (k: u8[], pad: u8): u8[] => {
+  const out: u8[] = new Array<u8>(64)
+  const outLength: i32 = toI32(out.length)
+  const keyLength: i32 = toI32(k.length)
+  for (let i: i32 = 0; i < outLength; i++) {
+    if (i < keyLength) {
+      out[i] = k[i] ^ pad
+    } else {
+      out[i] = pad
+    }
+  }
+  return out
+}
+
+/** Zero what a SHA-256 in progress holds: its chaining value, its pending block and its schedule. */
+const p256WipeHash = (h: Sha256): void => {
+  wipe(h.state)
+  wipe(h.block)
+  wipe(h.schedule)
+}
+
+/**
+ * HMAC-SHA-256 keyed by `k` over `a || b || c || d` (RFC 2104), the one MAC
+ * RFC 6979 runs. It is written out over `Sha256` here rather than taken from
+ * `nish/crypto/hmac` so that every buffer the key reaches — the two key
+ * blocks, both hashers' state, block and schedule, and the inner digest — is
+ * this function's to wipe before it returns (ECC-2). `k` is always 32 bytes,
+ * under SHA-256's 64-byte block, so it is never hashed first.
+ */
+const p256Mac = (k: u8[], a: u8[], b: u8[], c: u8[], d: u8[]): u8[] => {
+  const ipad: u8[] = p256PadBlock(k, 0x36)
+  const opad: u8[] = p256PadBlock(k, 0x5c)
+  const inner = new Sha256()
+  inner.update(ipad, P256_FROM, toI32(ipad.length))
+  inner.update(a, P256_FROM, toI32(a.length))
+  inner.update(b, P256_FROM, toI32(b.length))
+  inner.update(c, P256_FROM, toI32(c.length))
+  inner.update(d, P256_FROM, toI32(d.length))
+  const innerDigest: u8[] = inner.digest()
+  const outer = new Sha256()
+  outer.update(opad, P256_FROM, toI32(opad.length))
+  outer.update(innerDigest, P256_FROM, toI32(innerDigest.length))
+  const tag: u8[] = outer.digest()
+  wipe(ipad)
+  wipe(opad)
+  wipe(innerDigest)
+  p256WipeHash(inner)
+  p256WipeHash(outer)
+  return tag
+}
+
 /**
  * HMAC_K(V || sep || x || h), the key update of RFC 6979 §3.2 steps d and f
  * (with `sep` 0 and then 1) and, with `x` and `h` empty, step h.3.
  */
 const p256NonceKey = (k: u8[], v: u8[], sep: u8, x: u8[], h: u8[]): u8[] => {
-  const mac = new HmacSha256(k)
   const separator: u8[] = new Array<u8>(1)
   separator[0] = sep
-  mac.update(v, P256_FROM, toI32(v.length))
-  mac.update(separator, P256_FROM, toI32(separator.length))
-  mac.update(x, P256_FROM, toI32(x.length))
-  mac.update(h, P256_FROM, toI32(h.length))
-  return mac.digest()
+  return p256Mac(k, v, separator, x, h)
+}
+
+/** HMAC_K(V), RFC 6979 §3.2 steps e, g and h.2. */
+const p256NonceValue = (k: u8[], v: u8[]): u8[] => {
+  const empty: u8[] = new Array<u8>(0)
+  return p256Mac(k, v, empty, empty, empty)
 }
 
 /**
@@ -4192,10 +4279,20 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
   for (let i: i32 = 0; i < 32; i++) {
     v[i] = 1
   }
-  k = p256NonceKey(k, v, 0, priv, h1) // step d
-  v = hmacSha256(k, v) // step e
-  k = p256NonceKey(k, v, 1, priv, h1) // step f
-  v = hmacSha256(k, v) // step g
+  // Each K and V is wiped as the next replaces it (ECC-2): both are derived
+  // from the private key, and the last V is the nonce.
+  let next: u8[] = p256NonceKey(k, v, 0, priv, h1) // step d
+  wipe(k)
+  k = next
+  next = p256NonceValue(k, v) // step e
+  wipe(v)
+  v = next
+  next = p256NonceKey(k, v, 1, priv, h1) // step f
+  wipe(k)
+  k = next
+  next = p256NonceValue(k, v) // step g
+  wipe(v)
+  v = next
 
   const dM: u32[] = p256Limbs()
   p256LimbsFromBytes(dM, priv, 0)
@@ -4208,7 +4305,9 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
   const kM: u32[] = p256Limbs()
   const s: u32[] = p256Limbs()
   while (true) {
-    v = hmacSha256(k, v) // step h.2
+    next = p256NonceValue(k, v) // step h.2
+    wipe(v)
+    v = next
     if (p256ScalarInRange(v)) {
       p256ScalarMult(point, v, g, scratch)
       p256AffineX(x, point)
@@ -4226,11 +4325,23 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
         const sig: u8[] = new Array<u8>(64)
         p256LimbsToBytes(sig, 0, r)
         p256LimbsToBytes(sig, 32, s)
+        // ECC-2: the private key's limbs, the nonce and its inverse, RFC
+        // 6979's K and V, the nonce point and the scratch it was built in.
+        wipe(k)
+        wipe(v)
+        wipe(dM)
+        wipe(kM)
+        p256WipePoint(point)
+        p256WipeScratch(scratch)
         return sig
       }
     }
-    k = p256NonceKey(k, v, 0, empty, empty) // step h.3
-    v = hmacSha256(k, v)
+    next = p256NonceKey(k, v, 0, empty, empty) // step h.3
+    wipe(k)
+    k = next
+    next = p256NonceValue(k, v)
+    wipe(v)
+    v = next
   }
 }
 
@@ -4239,12 +4350,17 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
  * encoding. Answers `null` unless `priv` is `P256_SCALAR_SIZE` bytes holding a
  * scalar in [1, n) — 0 and n and everything above are not private keys.
  */
-export const p256PublicKey = (priv: u8[]): u8[] | null => {
+export const p256PublicKey = (priv: Secret<u8[]>): u8[] | null => expose(priv, p256PublicKeyExposed)
+
+/** `p256PublicKey` on the plain key, for `expose` to run: the scratch the key's digits steered is wiped. */
+const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
   if (!p256ScalarInRange(priv)) {
     return null
   }
   const point = new P256ProjectivePoint()
-  p256ScalarMult(point, priv, p256Generator(), new P256PointScratch())
+  const scratch = new P256PointScratch()
+  p256ScalarMult(point, priv, p256Generator(), scratch)
+  p256WipeScratch(scratch)
   return p256EncodePoint(point)
 }
 
@@ -4256,7 +4372,11 @@ export const p256PublicKey = (priv: u8[]): u8[] | null => {
  * not normalised to the lower half. Answers `null` for a private key
  * `p256PublicKey` would refuse.
  */
-export const p256Sign = (priv: u8[], digest: u8[]): u8[] | null => {
+export const p256Sign = (priv: Secret<u8[]>, digest: u8[]): u8[] | null =>
+  exposeWith(priv, digest, p256SignExposed)
+
+/** `p256Sign` on the plain key, for `exposeWith` to run. */
+const p256SignExposed = (priv: u8[], digest: u8[]): u8[] | null => {
   if (!p256ScalarInRange(priv)) {
     return null
   }
@@ -4335,7 +4455,7 @@ export const p256Verify = (pub: u8[], digest: u8[], sig: u8[]): boolean => {
 }
 
 /** `p256Sign` of the SHA-256 of `msg`: ECDSA with SHA-256 over the whole message. */
-export const p256SignSha256 = (priv: u8[], msg: u8[]): u8[] | null => p256Sign(priv, sha256(msg))
+export const p256SignSha256 = (priv: Secret<u8[]>, msg: u8[]): u8[] | null => p256Sign(priv, sha256(msg))
 
 /** `p256Verify` of the SHA-256 of `msg`. */
 export const p256VerifySha256 = (pub: u8[], msg: u8[], sig: u8[]): boolean =>

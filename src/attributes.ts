@@ -35,6 +35,8 @@
 //   - **Parent links come from a side table** (`src/parents.ts`), since the
 //     tree has none. The walks are otherwise the same walks.
 
+import { WIPE_MEMSET } from "./emit-secret"
+import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
 import {
   builtinCalleesNamed,
   checksRangesInPrologue,
@@ -103,6 +105,7 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
+  N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_THIS,
@@ -323,6 +326,17 @@ export class FunctionFacts {
    * carries `sharedWrite`; `""` when `writeSite` is set.
    */
   writeVia: string
+  /**
+   * `nish:secret`: the first thing this body *itself* does that reaches the
+   * world — a builtin that reads or writes a file, a process, the
+   * environment, a socket, the clock, entropy or a stream, or a `panic`,
+   * `process.exit` or `expect` whose message or status is computed — named as
+   * the program spells it, or "". A `panic("...")` or `process.exit(1)` with a
+   * literal is left out: what leaves then is a constant the program wrote. Not
+   * a fixpoint: `exposeMessages` walks the callees itself, so it can name the
+   * path.
+   */
+  worldVia: string
   effect: i32
   willReturn: boolean
   /** Can reach a `noreturn` runtime call, directly or through a callee. */
@@ -469,6 +483,7 @@ export class FunctionFacts {
     this.sharedWrite = false
     this.writeSite = null
     this.writeVia = ""
+    this.worldVia = ""
     this.effect = EFFECT_NONE
     this.willReturn = true
     this.callsNoReturn = false
@@ -1430,6 +1445,29 @@ class FactCollector {
   }
 
   /**
+   * `nish:secret`: whether the builtin call `node`, spelled `name`, which
+   * lowers to `symbols`, reaches the world (`FunctionFacts.worldVia`). A
+   * `panic` or an exit given a literal is the one call that ends the process
+   * without saying anything computed, and it is let through.
+   */
+  noteWorld(node: Node, symbols: string[], name: string): void {
+    if (this.facts.worldVia.length > 0) {
+      return
+    }
+    const args = node.children[1].children
+    const constant = args.length === 1 && (args[0].kind === N_STRING || isNumericLiteral(args[0]))
+    if (constant && (name === "panic" || name === "process.exit")) {
+      return
+    }
+    for (const symbol of symbols) {
+      if (!isPureRuntime(symbol)) {
+        this.facts.worldVia = `\`${name}\``
+        return
+      }
+    }
+  }
+
+  /**
    * What a string construct does to memory: the runtime symbols it calls and
    * the header reads `.length` and the byte methods perform. Mirrors
    * `src/emit-strings.ts` exactly; an omission here is a wrong attribute.
@@ -1443,7 +1481,9 @@ class FactCollector {
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       const name = dottedName(node.children[0])
-      this.addCallees(builtinCalleesNamed(program, table, node, name))
+      const dotted = builtinCalleesNamed(program, table, node, name)
+      this.addCallees(dotted)
+      this.noteWorld(node, dotted, name)
       if (this.known !== null) {
         this.noteBuiltin(name, node, true)
       }
@@ -1589,6 +1629,10 @@ class FactCollector {
           const tail: string[] = []
           panicTailCallees(tail)
           this.addCallees(tail)
+          const args = node.children[1].children
+          if (this.facts.worldVia.length === 0 && (args.length === 0 || args[0].kind !== N_STRING)) {
+            this.facts.worldVia = "`expect` with a computed message"
+          }
         }
         return
       }
@@ -1825,13 +1869,16 @@ class FactCollector {
       this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
     }
     if (imported.length > 0) {
-      this.addCallees(
+      const named =
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
-      )
+      this.addCallees(named)
+      this.noteWorld(node, named, imported)
     } else {
-      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node, unchecked))
+      const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
+      this.addCallees(plain)
+      this.noteWorld(node, plain, node.children[0].text)
     }
     if (isArenaCall(this.unit.program, node)) {
       this.facts.opensArena = true
@@ -1912,6 +1959,7 @@ const collectFacts = (
   if (sig.foreign()) {
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true // no site and no callee to name: the body is C
+    facts.worldVia = `the C function \`${sig.sourceName}\`` // `nish:secret`: nothing about C is proved
     facts.willReturn = false
     facts.readsMemory = true
     // S1's boundary is scalars only, so a C body cannot reach an array header
@@ -1957,6 +2005,9 @@ const collectFacts = (
         collector.addUserCallee(callee.name, sig.decl)
       }
     }
+  }
+  if (secretRoleOf(sig) === SECRET_WIPE) {
+    markWipe(facts)
   }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
@@ -2032,6 +2083,28 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
       receiver.passedToCallees.push(callee.name)
       receiver.passedToIndices.push(0)
     }
+  }
+}
+
+/**
+ * `nish:secret`'s `wipe`: the source body is empty and the emitter writes the
+ * real one, a volatile `llvm.memset` over the target's storage
+ * (`src/emit-secret.ts`). Facts read off the empty body would call the
+ * instance `readnone` and its parameter `readonly`, and a caller's buffer
+ * `readonly` through it — a store into memory LLVM was told is never written,
+ * which is undefined behaviour and the licence to drop the wipe. So the
+ * instance says what its emitted body does: it reads the header or the field
+ * that leads to the bytes, writes through its parameter, and the write is one
+ * its caller can see, because the caller's key is what it zeroes. It keeps
+ * nothing, so the parameter stays uncaptured.
+ */
+const markWipe = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.sharedWrite = true
+  facts.callees.add(WIPE_MEMSET)
+  if (facts.pointerParams.length > 0) {
+    facts.pointerParams[0].writesThrough = true
   }
 }
 
@@ -3024,3 +3097,7 @@ export const returnAttributes = (
   }
   return attrs
 }
+
+/** A numeric literal, negated or not: `process.exit(1)`, `process.exit(-1)`. */
+const isNumericLiteral = (node: Node): boolean =>
+  node.kind === N_NUMBER || (node.kind === N_UNARY && node.text === "-" && node.children[0].kind === N_NUMBER)

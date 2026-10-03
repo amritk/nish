@@ -5,7 +5,7 @@
 // x25519_test.json. `crypto_x25519` has the rest, and the hex helper and the
 // Wycheproof runner both programs share.
 import { Suite } from "nish/testing";
-import { x25519, x25519Base } from "nish/crypto/x25519";
+import { x25519Plain as x25519, x25519BasePlain as x25519Base } from "../crypto_x25519/plain";
 import { fromHex, toHex } from "../crypto_x25519/hex";
 import { wycheproofX25519 } from "../crypto_x25519/wycheproof";
 

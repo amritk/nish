@@ -173,4 +173,6 @@ The answers are pinned against every HKDF-Expand-Label step RFC 8448 §3
 prints and all of RFC 9001 A.1, in both number modes
 (`tests/link/crypto_hkdf_expand_label`, `_f64`); the SHA-384 vectors and the
 largest accepted label, context and length were checked against OpenSSL's
-TLS13-KDF. The secrets they derive are not wiped, as nothing here is (ECC-2).
+TLS13-KDF. The secrets they derive are plain arrays and are not wiped: `nish:secret`
+now has the primitive (ECC-2, closed), and moving HKDF's secrets onto it is not
+yet done.

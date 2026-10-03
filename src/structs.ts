@@ -15,6 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
+import { secretFieldMessage } from "./secret"
 import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
@@ -487,6 +488,11 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   // WP27 S2: a field would put a foreign address inside a value the arena owns
   // and the escape analysis walks. `src/annotations.ts` has the reasoning.
   if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
+    return
+  }
+  // `nish:secret`: a field outlives the function that made the secret.
+  if (ctx.table.holdsSecret(type)) {
+    ctx.error(decl.children[1], secretFieldMessage(name))
     return
   }
 

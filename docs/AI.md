@@ -1167,6 +1167,44 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
 
+**Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
+array or a record of integer fields). It is opaque: no printing, interpolating,
+comparing with a value, branching, indexing, `.value`, field, array element or
+`Result` payload, and no builtin takes one. Read it only with `expose(s, f)` or
+`exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
+declares its return type, reaches no I/O and no C, keeps nothing of the value
+and returns no `Secret` — that return is what leaves. A `Secret` your function
+makes must be `wipe`d or returned **on every path** (each `return`, `break`,
+`orReturn()`), is moved by `const j = k`, and is never read after `wipe`;
+`secret(local)` moves the local too. `std/crypto`'s `p256`, `x25519` and
+`x509ParseP256PrivateKey` take and give keys this way.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  const n: i32 = expose(k, width);
+  wipe(k);
+  return n === 3 ? 0 : 1;
+};
+```
+
+```ts nish:err NL2440
+import { Secret, expose, secret } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  return expose(k, width); // NL2440: `k` leaves unwiped
+};
+```
+
 **Arrays.** `a.length` (read-only), `a.push(v)`, `a.pop()` (panics when empty —
 there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` is
 `string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`

@@ -214,9 +214,18 @@ provide("arena", shim.arena);
 // Node, relative to this file rather than to the program, so the same
 // specifier works from any directory. Only the `nish/` package is answered
 // here, and every other specifier goes to Node as it was written.
+//
+// `nish:secret` is the one builtin module answered here as well, because the
+// standard library imports it (`std/crypto/p256.ts` and its neighbours): its
+// names are `runtime/shim.mjs`'s, where a `Secret` is a plain wrapper and
+// `wipe` zero-fills it.
 registerHooks({
-  resolve: (specifier, context, next) =>
-    specifier.startsWith("nish/")
+  resolve: (specifier, context, next) => {
+    if (specifier === "nish:secret") {
+      return next(new URL("./shim.mjs", import.meta.url).href, context);
+    }
+    return specifier.startsWith("nish/")
       ? next(new URL(`../std/${specifier.slice("nish/".length)}.ts`, import.meta.url).href, context)
-      : next(specifier, context),
+      : next(specifier, context);
+  },
 });
