@@ -1920,6 +1920,12 @@ const DECLARED = [
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
   {
+    program: "tests/link/reject_typed_push_alias/main.ts",
+    file: "exit",
+    changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
+    why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
+  },
+  {
     program: "tests/link/net_tls_rfc8448/main.ts",
     file: "exit",
     changelog: "the TLS 1.3 server handshake",
