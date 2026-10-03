@@ -1192,7 +1192,7 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2428
+```ts nish:err NL2440
 import { Secret, expose, secret } from "nish:secret";
 
 const key = (): u8[] => [7, 1, 9];
@@ -1200,7 +1200,7 @@ const width = (k: u8[]): i32 => toI32(k.length);
 
 export const main = (): i32 => {
   const k: Secret<u8[]> = secret(key());
-  return expose(k, width); // NL2428: `k` leaves unwiped
+  return expose(k, width); // NL2440: `k` leaves unwiped
 };
 ```
 
