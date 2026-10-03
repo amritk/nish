@@ -1,0 +1,15 @@
+PASS  a client offering http/1.1 then h2 is accepted
+PASS  and gets h2, the server's first choice
+PASS  EncryptedExtensions carries ALPN with the one protocol: 0010 0005 0003 02 'h2'
+PASS  a client without h2 gets the server's next choice it offers
+PASS  no protocol in common is no_application_protocol
+PASS  and the server has failed
+PASS  with the alert recorded
+PASS  a name that only starts with the server's is not a match
+PASS  over TCP a client without ALPN is accepted
+PASS  and negotiates none
+PASS  and EncryptedExtensions is empty
+PASS  a server configured with no ALPN accepts a client offering some
+PASS  and negotiates none
+PASS  the handshake goes on
+tls alpn: 14 passed, 0 failed, 0 skipped

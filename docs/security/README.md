@@ -32,9 +32,10 @@ the record that found it. The notes below the table name each such finding.
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 3 / 1 / 1 ³ | 0 / 1 / 2 / 2 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 4 ⁴ | 0 / 0 / 0 / 4 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 4 ⁵ | 0 / 0 / 0 / 3 |
+| TLS 1.3 server handshake | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | QUIC packets | [quic.md](quic.md) | `std/net/quic-packet.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
-| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 15** |
+| **Total** | | | **3 / 9 / 8 / 56** | **0 / 2 / 2 / 16** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -67,8 +68,9 @@ only.
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-8 | Low | `src/run-cache.ts` (`fnv1a64Hex`) | The cache entry is named by a 64-bit FNV-1a, not a cryptographic hash | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
-| X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
+| TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts` | What `TlsServer` keeps in its fields (the caller's ephemeral key bytes, the handshake, traffic and exporter secrets) and the schedule's plain-bytes answers are not wiped. The ECDHE secret and the exchange's key copy are `Secret`s, wiped on every path | `secureZero` (#417) is on `main`; the wipes come once a release ships it |
 | QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | Handshake and 1-RTT traffic secrets and the keys derived from them are not wiped yet. The primitives are on `main` (`secureZero`, #417; `nish:secret`, #418) but this module does not use them yet; the Initial keys are public by construction | Before Q2's connection keys ship: move the QUIC and TLS key-holding structs onto `nish:secret` |
+| X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | RT-10 | Low | `runtime/runtime-host.c` (`nish_signal_fd`) | Two threads whose first `signalFd()` calls overlap each make a pipe, and one never hears a signal | — |
 | RT-11 | Low | `runtime/runtime.c` (`nish_write`) | A short `write(2)` is ignored | — |
