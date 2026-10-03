@@ -45,6 +45,7 @@ import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
+import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { panicOracle } from "./panics-oracle.js"
 import {
@@ -10326,6 +10327,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     selfCheckNotes() === null,
     String(selfCheckNotes())
   )
+
+  // The fuzz run's declarations, by the same argument: an intended change to
+  // the IR is accepted only where an entry names the function and both
+  // attribute groups, and an entry nothing uses fails, but the run that
+  // applies them needs a seed. #438 is what an undeclared one costs: #427's
+  // CG-8 moved `nish_str_concat`'s group, and every seeded `npm test` went red.
+  for (const [label, failure] of fuzzDeclarations()) {
+    check(`fuzz --stage1: ${label} (fabricated modules)`, failure === null, String(failure))
+  }
 
   // The same equality on programs nobody wrote. The corpus is checked in and
   // therefore finite and adapted-to; the WP13 fuzzer generates random

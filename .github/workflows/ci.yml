@@ -629,6 +629,19 @@ jobs:
           "$SEED" --version
           NISH_BOOTSTRAP="$SEED" node tests/nish-cmp.js | tee "$RUNNER_TEMP/nish-cmp.log"
 
+      # The same equality on programs nobody wrote, which every seeded
+      # `npm test` runs and the `test` job, with no seed, cannot (#438). Fixed
+      # seed, so a red here is the change's and reproduces locally; 200
+      # programs, a superset of the harness's 16, in about 3 s, because the
+      # candidate is the `build/self/compile` the step above just linked from
+      # this tree rather than a second 15 s link.
+      - name: The released compiler and HEAD emit the same IR for random programs
+        env:
+          SEED: ${{ steps.download.outputs.path }}
+        run: |
+          NISH_BOOTSTRAP="$SEED" node tests/differential/fuzz.js --stage1 --seed 20261001 --count 200 \
+            --candidate build/self/compile
+
       # Reached only when the comparison agreed, which is the point: this line
       # is a claim about a run that happened. The summary line carries its own
       # counts -- programs compared, files, IR lines, and what was refused by
