@@ -229,10 +229,13 @@ export class Emitter {
    * WP29 P2: each scope a `using` declaration opened and its block has not
    * yet closed, innermost last, as the `i8*` its tasks are filed under, and
    * how many loops enclosed it — which is how a `break` or `continue` knows
-   * which scopes it leaves (`emitScopeJoins`).
+   * which scopes it leaves (`emitScopeJoins`). An entry of `openScopeArenas`
+   * is true for a `using a = arena()` instead, whose value is the `i64` mark
+   * its block releases to.
    */
   openScopes: string[]
   openScopeLoops: i32[]
+  openScopeArenas: boolean[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -284,6 +287,7 @@ export class Emitter {
     this.loops = []
     this.openScopes = []
     this.openScopeLoops = []
+    this.openScopeArenas = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -440,6 +444,7 @@ export class Emitter {
     this.loops = []
     this.openScopes = []
     this.openScopeLoops = []
+    this.openScopeArenas = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
@@ -559,10 +564,15 @@ export class Emitter {
       return false
     }
     // The release a tail call sinks ahead of itself is a pass's too, inside a
-    // scoped loop, and the callee reading the bump position is what
-    // `marksTailCall` refuses for the function's scope.
+    // scoped loop, and a `using a = arena()` block's inside one, and the
+    // callee reading the bump position is what `marksTailCall` refuses for
+    // the function's scope.
     const g = this.facts.get(callee.name)
-    if (this.outermostPass() !== null && g !== null && g.readsArenaState) {
+    if (
+      (this.outermostPass() !== null || this.outermostArenaBlock() >= 0) &&
+      g !== null &&
+      g.readsArenaState
+    ) {
       return false
     }
     this.tailCallId = inner.id
@@ -592,10 +602,33 @@ export class Emitter {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return
     }
-    const pass = this.outermostPass()
-    if (pass !== null) {
-      this.releasePass(pass)
+    // The outermost `using a = arena()` is the lowest mark unless a scoped
+    // pass encloses it: a pass's mark is taken at the top of its body, so a
+    // block opened under fewer loops than the pass's own depth is inside it.
+    const block = this.outermostArenaBlock()
+    let depth = 0
+    while (depth < this.loops.length && !this.loops[depth].scopesPass()) {
+      depth = depth + 1
     }
+    if (block >= 0 && depth >= this.openScopeLoops[block]) {
+      this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 ${this.openScopes[block]})`)
+      return
+    }
+    if (depth < this.loops.length) {
+      this.releasePass(this.loops[depth])
+    }
+  }
+
+  /** The index of the outermost open `using a = arena()` among `openScopes`, or -1. */
+  outermostArenaBlock(): i32 {
+    let i = 0
+    while (i < this.openScopeArenas.length) {
+      if (this.openScopeArenas[i]) {
+        return i
+      }
+      i = i + 1
+    }
+    return -1
   }
 
   /**
@@ -1005,8 +1038,9 @@ export class Emitter {
   emitReturn(stmt: Node): void {
     // WP29 P2: every scope open here joins before the value is computed, so
     // the value may read what the tasks stored, and inside every arena scope
-    // the exit is about to release.
-    emitScopeJoins(this, 0)
+    // the exit is about to release. A `using a = arena()` releases after the
+    // value, in `emitScopeExit`, because the value may read what it allocated.
+    emitScopeJoins(this, 0, false)
     const value = stmt.children[0]
     if (value.kind === N_EMPTY) {
       this.emitScopeExit()
