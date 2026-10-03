@@ -332,10 +332,14 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   // The `nish:unsafe` facts (`CheckedProgram.unsafeImports`, `unsafeCalls`):
   // where the module opts out of a check or into a wrap, printed only where it
   // does, so a module that imports nothing from there dumps as it always has.
+  // Written inline rather than through `position` and `jsonQuote`: the
+  // specifier is always `nish:unsafe`, and a call per line in this loop would
+  // leave its string in the arena on every pass (NL9011).
   for (const imp of program.unsafeImports) {
     const local = imp.localName === imp.importedName ? "" : ` as ${imp.localName}`
+    const at = imp.node.start
     out.push(
-      `unsafe import ${position(source, imp.node.start)} ${imp.importedName}${local} from ${jsonQuote(imp.specifier)}`
+      `unsafe import ${source.lineOf(at)}:${source.columnOf(at)} ${imp.importedName}${local} from "${imp.specifier}"`
     )
   }
   for (const call of program.unsafeCalls) {
