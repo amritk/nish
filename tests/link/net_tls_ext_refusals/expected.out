@@ -31,6 +31,7 @@ PASS  an ALPN extension with a byte after its list is decode_error
 PASS  an empty ALPN protocol name is decode_error
 PASS  a server_name with a byte after its list is decode_error
 PASS  a key share whose length runs past the extension is decode_error
+PASS  an extension running past the extensions vector's declared end is decode_error, though the message's length balances
 PASS  a byte after the extensions block is decode_error
 PASS  an extension sent twice is illegal_parameter
 PASS  two shares for x25519 are illegal_parameter
@@ -71,4 +72,4 @@ PASS  and tlsTrafficKey answers an empty key for it rather than panicking
 PASS  as tlsTrafficIv answers an empty IV
 PASS  TLS_AES_256_GCM_SHA384 has a 32-byte key
 PASS  tlsExpandLabel answers the length asked
-tls refusals: 73 passed, 0 failed, 0 skipped
+tls refusals: 74 passed, 0 failed, 0 skipped

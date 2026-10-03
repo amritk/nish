@@ -393,6 +393,11 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   // TLS 1.2 and earlier); it offers no TLS 1.3, which the server refuses.
   if (!r.failed && r.at < end) {
     const extensionsEnd: i32 = tlsReadVector(r, 2, 0, 65535)
+    // The extensions vector's own end bounds every extension in it: one whose
+    // length runs past it is malformed even when the message's length still
+    // balances.
+    const messageEnd: i32 = r.end
+    r.end = extensionsEnd
     while (!r.failed && r.at < extensionsEnd) {
       const type: i32 = tlsReadU16(r)
       const bodyEnd: i32 = tlsReadVector(r, 2, 0, 65535)
@@ -415,6 +420,7 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
       tlsReadExtension(r, type, bodyEnd, hello)
       r.end = outerEnd
     }
+    r.end = messageEnd
   }
   if (r.failed || r.at !== end) {
     tlsHelloRefuse(hello, TLS_ALERT_DECODE_ERROR)

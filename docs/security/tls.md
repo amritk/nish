@@ -40,7 +40,7 @@ mistakes still answer an alert rather than a panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`; `tlsSignEcdsaP256`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`, `TlsTranscript`) | Secret material is not wiped. The ephemeral x25519 private key and the ECDHE secret; the early, handshake and master secrets and the two "derived" salts; both handshake traffic secrets, both application traffic secrets and the exporter secret; both `finished_key`s and the expected client `verify_data`; every traffic key and IV `tlsTrafficKey` and `tlsTrafficIv` answer; and the P-256 private key `tlsSignEcdsaP256` passes to `p256SignSha256` (ECC-2) all stay in arena memory after the call or the handshake that held them, until that memory is reused. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. A later memory disclosure could read any of them. | **Open.** Needs the wipe primitive of #385, in `runtime/` and `src/`, outside this stage. Once a release ships it, each function above wipes before it returns (the server's fields when the handshake ends or fails), and a test pins that the wipe survives `-O2`. |
+| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`; `tlsSignEcdsaP256`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) | Secret material is not wiped. The ephemeral x25519 private key and the ECDHE secret; the early, handshake and master secrets and the two "derived" salts; both handshake traffic secrets, both application traffic secrets and the exporter secret; both `finished_key`s and the expected client `verify_data`; every traffic key and IV `tlsTrafficKey` and `tlsTrafficIv` answer; and the P-256 private key `tlsSignEcdsaP256` passes to `p256SignSha256` (ECC-2) all stay in arena memory after the call or the handshake that held them, until that memory is reused. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. A later memory disclosure could read any of them. | **Open.** Needs the wipe primitive of #385, in `runtime/` and `src/`, outside this stage. Once a release ships it, each function above wipes before it returns (the server's fields when the handshake ends or fails), and a test pins that the wipe survives `-O2`. |
 
 ## Properties verified
 
@@ -55,7 +55,10 @@ and Finished the server writes; the CertificateVerify input; and acceptance
 of the trace's client Finished, fed whole and a byte at a time. The trace
 signs with RSA-PSS, which the stack does not have and which is randomised, so
 its signature is injected through the hand-off and every byte after it is
-checked.
+checked. The same server answering a ClientHello that offers only
+`TLS_AES_256_GCM_SHA384` is checked against an independent Python model: its
+ServerHello, all four traffic secrets, its Finished, and acceptance of the
+model's client Finished, since RFC 8448 pins only the SHA-256 suite.
 
 **A production handshake signs with P-256** (`net_tls_ecdsa`, `_f64`): under
 each of the three suites a client verifies the CertificateVerify with

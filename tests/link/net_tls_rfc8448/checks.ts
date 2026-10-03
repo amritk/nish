@@ -17,6 +17,7 @@ import { x25519 } from "nish/crypto/x25519";
 import { TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 } from "nish/net/tls/codec";
 import {
   TLS_AES_128_GCM_SHA256,
+  TLS_AES_256_GCM_SHA384,
   TlsTranscript,
   tlsDeriveSecret,
   tlsEarlySecret,
@@ -37,7 +38,8 @@ import {
   TlsServer,
   TlsServerConfig,
 } from "nish/net/tls";
-import { toHex } from "../crypto_x509/hex";
+import { fromHex, toHex } from "../crypto_x509/hex";
+import { clientHello, splitMessages, standardExtensions } from "../net_tls_common/client";
 import {
   rfc8448Certificate,
   rfc8448CertificateDer,
@@ -314,6 +316,62 @@ export const rfc8448Checks = (): i32 => {
   }
   t.eqI32("and so is the client Finished", alerts, zero);
   t.eqI32("which completes the handshake", split.state, TLS_STATE_CONNECTED);
+
+  // --- The same server under TLS_AES_256_GCM_SHA384 -------------------------
+  // RFC 8448 pins only the SHA-256 suite. Here the trace's server — its
+  // random, x25519 key, certificate, extra extensions and injected signature —
+  // answers a constructed ClientHello that offers only TLS_AES_256_GCM_SHA384,
+  // and every value below was computed by an independent model in Python
+  // (hashlib, hmac, cryptography's X25519), not by the schedule under test.
+  const sha384: TlsServer = rfc8448Server();
+  const offer384: u8[] = clientHello([TLS_AES_256_GCM_SHA384], standardExtensions());
+  t.eqI32(
+    "SHA-384: the ClientHello is accepted",
+    sha384.receive(TLS_LEVEL_INITIAL, offer384, zero, toI32(offer384.length)),
+    zero
+  );
+  t.eqStr(
+    "SHA-384: the ServerHello (checked against Python)",
+    toHex(sha384.takeOutput(TLS_LEVEL_INITIAL)),
+    "020000560303a6af06a4121860dc5e6e60249cd34c95930c8ac5cb1434dac155772ed3e2692800130200002e00330024001d0020c9828876112095fe66762bdbf7c672e156d6cc253b833df1dd69b1b04e751f0f002b00020304"
+  );
+  t.eqStr(
+    "SHA-384: client_handshake_traffic_secret (checked against Python)",
+    toHex(sha384.readSecret(TLS_LEVEL_HANDSHAKE)),
+    "4ebd28600abdc5615d6c1c8ba9e7ae8fe027e8978bd69a640c650935a806681876f099e4fb970e1eff12595cf8271394"
+  );
+  t.eqStr(
+    "SHA-384: server_handshake_traffic_secret (checked against Python)",
+    toHex(sha384.writeSecret(TLS_LEVEL_HANDSHAKE)),
+    "55feae9ef957a1848583c75529a7843fbc003570a174d669678c3d98292b8e0e062a6d7aed5c7d8fc8daa8c463aa7752"
+  );
+  sha384.takeOutput(TLS_LEVEL_HANDSHAKE);
+  t.eqI32("SHA-384: the trace's signature is taken", sha384.sign(rfc8448RsaPssSignature()), zero);
+  const flight384: u8[][] = splitMessages(sha384.takeOutput(TLS_LEVEL_HANDSHAKE));
+  t.eqStr(
+    "SHA-384: the server's Finished (checked against Python)",
+    toI32(flight384.length) === 2 ? toHex(flight384[1]) : "missing",
+    "14000030a00d336b40c1affb20d7ce6d9c23c16a3c2dd63242a8c0490c3588f6e2588cf506b1370de508adcdd24e0d4b24dc1a4b"
+  );
+  t.eqStr(
+    "SHA-384: client_application_traffic_secret_0 (checked against Python)",
+    toHex(sha384.readSecret(TLS_LEVEL_APPLICATION)),
+    "f02ede38e6a05af1e4273725ae3be408709cc23a80b16cc01346c0fa07a9d33f1b90e38321308a59d5faa922933bf9b1"
+  );
+  t.eqStr(
+    "SHA-384: server_application_traffic_secret_0 (checked against Python)",
+    toHex(sha384.writeSecret(TLS_LEVEL_APPLICATION)),
+    "cbb7b8b8602a1e5dfb8950ef7048c1a2389862aa46ea18799d0d3bfdccf7f171e5827b3c142cb7cba1b97fb2782914c8"
+  );
+  const finished384: u8[] = fromHex(
+    "14000030e007b7690dc21f97f747c151c43e9ef4f8003da112e3bff384013267caec2d022e46246a93055fc82d06973b1e049cc6"
+  );
+  t.eqI32(
+    "SHA-384: the client Finished the model computes is accepted",
+    sha384.receive(TLS_LEVEL_HANDSHAKE, finished384, zero, toI32(finished384.length)),
+    zero
+  );
+  t.eqI32("SHA-384: connected", sha384.state, TLS_STATE_CONNECTED);
 
   return t.done();
 };

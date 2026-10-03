@@ -345,6 +345,24 @@ export const refusalChecks = (): i32 => {
     TLS_ALERT_DECODE_ERROR
   );
   t.eqI32(
+    "an extension running past the extensions vector's declared end is decode_error, though the message's length balances",
+    refusal(
+      message(
+        1,
+        cat([
+          u16(TLS_LEGACY_VERSION),
+          clientRandom(),
+          vec8(empty),
+          vec16(u16List([SUITE])),
+          vec8([toU8(0)]),
+          u16(toI32(4)),
+          extension(toI32(0xfafa), [toU8(0)]),
+        ])
+      )
+    ),
+    TLS_ALERT_DECODE_ERROR
+  );
+  t.eqI32(
     "a byte after the extensions block is decode_error",
     refusal(
       message(

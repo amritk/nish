@@ -1420,8 +1420,8 @@ and their `.ll` goldens are byte-identical files.
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256,
-  crypto/sha512, crypto/x25519, crypto/x509, json, map, net/tls,
-  net/tls/codec, net/tls/schedule, pair, testing, text, threads) ``
+  crypto/sha512, crypto/x25519, crypto/x509, json, map, pair, testing, text,
+  threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1473,12 +1473,6 @@ and their `.ll` goldens are byte-identical files.
   its `ct_asm_*` fixtures hold, on x86-64 and aarch64; the rest is discipline.
   `std/README.md` lists what each module exports, the specification it
   reproduces, which of its functions are verified, and the rules they share.
-- **`nish/net/tls` is the server side of a TLS 1.3 handshake**, with its
-  message codec in `nish/net/tls/codec` and its key schedule in
-  `nish/net/tls/schedule`: modules nested two deep, under the same rules. It
-  takes and answers handshake bytes tagged by level and never touches a
-  socket; `std/README.md` says how a carrier drives it
-  (`tests/link/net_tls_rfc8448` replays RFC 8448 §3 through it).
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the
