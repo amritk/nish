@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_generic.ts","line":6,"panics":[{"kind":"oom","line":9,"column":3,"allowed":true},{"kind":"call","line":9,"column":15,"callee":"at<i32>","via":"index"},{"kind":"call","line":10,"column":15,"callee":"at<string>","via":"index"}]},
+{"name":"at<i32>","symbol":"at$i32","module":"tests/cases/panics_generic.ts","line":4,"panics":[{"kind":"index","line":4,"column":39,"proven":false}]},
+{"name":"at<string>","symbol":"at$str","module":"tests/cases/panics_generic.ts","line":4,"panics":[{"kind":"index","line":4,"column":39,"proven":false}]}
+]}

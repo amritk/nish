@@ -258,6 +258,7 @@ const CG8_MOVED = [
   "tests/cases/net_udp_calls.ts",
   "tests/cases/net_udp_echo.ts",
   "tests/cases/net_udp_offload.ts",
+  "tests/cases/panics_io_exit.ts",
   "tests/cases/parse_numbers.ts",
   "tests/cases/perf_arena_drop.ts",
   "tests/cases/perf_clamp_order.ts",
@@ -403,6 +404,7 @@ const CG8_MOVED = [
   "tests/link/module_stem_clash/main.ts",
   "tests/link/package_symlink/main.ts",
   "tests/link/package_workspace/main.ts",
+  "tests/link/panics_parallel_length/main.ts",
   "tests/link/par_alloc/main.ts",
   "tests/link/par_dst_short/main.ts",
   "tests/link/par_map/main.ts",
@@ -489,7 +491,7 @@ const CG3_MOVED = [
 ]
 
 /** CG-10: a compound element assignment whose right side can resize the array takes the slot again after it. */
-const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts"]
+const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts", "tests/cases/panics_index_recheck.ts"]
 
 /**
  * Output differences that are decided rather than broken, each with the words

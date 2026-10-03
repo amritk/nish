@@ -80,7 +80,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -497,6 +497,14 @@ export const main = (): number => {
         return 2
       }
       opts.emitNapiAsync = process.argv[arg]
+    } else if (value === "--emit-panics") {
+      productFlag = productFlag.length === 0 ? value : productFlag
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-panics needs a file")
+        return 2
+      }
+      opts.emitPanics = process.argv[arg]
     } else if (value === "--emit-capabilities") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -625,6 +633,14 @@ export const main = (): number => {
     )
     return 2
   }
+  // The panic sites are settled after the whole-program proofs, so they are a
+  // fact about a checked program too, and the file would never be written.
+  if (emitAst && opts.emitPanics.length > 0) {
+    console.error(
+      "compile: `--emit-panics` reports on a checked program, and --emit-ast stops before the check"
+    )
+    return 2
+  }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.
   //
@@ -748,6 +764,18 @@ export const main = (): number => {
     }
     writeCapabilityReport(compilation, capabilitiesFile)
     console.error(`wrote ${capabilitiesFile}`)
+  }
+  // The panic sites are read off the checked program, as the capabilities are,
+  // so they are written here, before the dump returns: `--emit-checked` with
+  // `--emit-panics` writes both. Not a WP8 sidecar: the file describes the
+  // checks rather than the ABI, so it does not change the build the way they
+  // do (`buildModeOf`), and it needs no external function list.
+  if (opts.emitPanics.length > 0) {
+    if (!makeDirectoryFor(opts.emitPanics)) {
+      return 1
+    }
+    writeFileSync(opts.emitPanics, compilation.panicsText())
+    console.error(`wrote ${opts.emitPanics}`)
   }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
