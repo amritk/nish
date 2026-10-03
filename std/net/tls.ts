@@ -347,11 +347,11 @@ const tlsHandshakeFromEcdhe384 = (ecdhe: u8[]): u8[] =>
 
 /** The secret of `level` from one side's pair, or `null` for any other level or one not derived yet (still empty). */
 const tlsSecretAt = (level: i32, handshake: u8[], application: u8[]): u8[] | null => {
-  const secret: u8[] = level === TLS_LEVEL_APPLICATION ? application : handshake
-  if ((level !== TLS_LEVEL_HANDSHAKE && level !== TLS_LEVEL_APPLICATION) || toI32(secret.length) === 0) {
+  const chosen: u8[] = level === TLS_LEVEL_APPLICATION ? application : handshake
+  if ((level !== TLS_LEVEL_HANDSHAKE && level !== TLS_LEVEL_APPLICATION) || toI32(chosen.length) === 0) {
     return null
   }
-  return secret
+  return chosen
 }
 
 /**
