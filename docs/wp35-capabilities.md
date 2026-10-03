@@ -59,7 +59,7 @@ so a reader finds a name where they expect it:
 - **`panic`** and every other abort (`throw`, a failed bounds check). It ends
   the process as `exit` does, but with a fixed status and a message about the
   program's own bug; it is not a chosen effect.
-- **Arena control** (`Arena.*`), **`Math.*` except `random`**, the conversions,
+- **Arena control** (`Arena.*` and `using a = arena()`), **`Math.*` except `random`**, the conversions,
   the constant-time builtins, the string, array, `Map` and `Set` surface, and
   **`nish/threads`**. They compute on memory the program owns.
 
@@ -97,7 +97,7 @@ labelled apart.
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
 | `unsafe` | nothing yet |
-| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
 
 Three rows deserve their reason:
 

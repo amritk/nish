@@ -171,6 +171,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "Arena.mark" ||
     name === "Arena.release" ||
     name === "Arena.used" ||
+    name === "arena" ||
     name === "Math.PI" ||
     name === "Math.E" ||
     name === "process.argv" ||

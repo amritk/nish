@@ -25155,7 +25155,7 @@ function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   escaping: name
   calls: isNetExport nish_str_eq
   stackSites=0 stackLocals=0
-  callee 200:7 isNetExport -> @isNetExport
+  callee 201:7 isNetExport -> @isNetExport
 module src/parents.ts
 import Node from "./nodes" -> struct Node
 struct ParentTable (class) size=8 align=8 exported

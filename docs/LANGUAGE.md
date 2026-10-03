@@ -5128,7 +5128,7 @@ one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 | `unsafe` | reserved; nothing carries it yet |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
-`process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*`,
+`process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
 `Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
 string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 `nish:` import carries the label of the builtin it renames.
