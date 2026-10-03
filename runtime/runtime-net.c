@@ -12,9 +12,10 @@
  * scripts/build.sh pairs this file with runtime.c like the other halves, so a
  * link line still names one runtime.
  *
- * The error convention is the one `signalFd` set: an `i32`, `>= 0` for
- * success (a descriptor, a byte count, 0), and a negative errno otherwise.
- * The codes a loop branches on are Linux's numbers on every platform (-11
+ * Errors take the shape `signalFd` set, an `i32` that is `>= 0` for success
+ * (a descriptor, a byte count, 0) and negative for a failure, and add the
+ * errno to it: where `signalFd` and `readSignal` answer a plain -1, a call
+ * here answers the failure's errno, negated. The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
  * address is in use, -22 a bad argument), so `nish_net_err` translates
  * Darwin's; any other failure is the host's own `-errno`. Nothing here
@@ -33,7 +34,10 @@
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
  * (`UDP_SEGMENT`, `UDP_GRO`) and ECN marks, which Linux has and for which
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
- * kqueue on Darwin. The Darwin branch is compiled by CI's Darwin bootstrap
+ * kqueue on Darwin. Only the sending side and the GRO bind say -95 there: a
+ * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
+ * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
+ * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
  * rows and run by nothing. A WASI build has none of this (the checker refuses
  * every `nish:net` call under a wasm target), so there the file is empty.
  */
@@ -390,7 +394,9 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
       .msg_name = &s, .msg_namelen = sizeof s, .msg_iov = &iov, .msg_iovlen = 1, .msg_control = c.b, .msg_controllen = sizeof c};
   ssize_t got = recvmsg(fd, &m, 0);
   if (got < 0) return nish_net_fail();
-  /* Darwin sets neither option, so both stay 0 there. */
+  /* Darwin sets neither option, so both stay 0 there: a `meta[1]` that reads
+     as Not-ECT whatever arrived, which is why the -95 of a marked send, not
+     this, is how a program learns ECN is unsupported. */
   int32_t info[2] = {0, 0};
 #if defined(__linux__)
   for (struct cmsghdr *h = CMSG_FIRSTHDR(&m); h != NULL; h = CMSG_NXTHDR(&m, h)) {
