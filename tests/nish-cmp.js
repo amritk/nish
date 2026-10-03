@@ -515,6 +515,61 @@ const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts"]
  */
 const DECLARED = [
   {
+    program: "tests/link/net_hpack/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_f64/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_bad_huffman_window/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_bad_indexing/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_bad_prefix_decode/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_bad_prefix_encode/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_bad_window/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_negative_list_limit/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_negative_resize/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_negative_settings_limit/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/net_hpack_negative_table_size/main.ts",
+    changelog: "Nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+    why: "a new program: it imports `nish/net/hpack`, which the reference compiler's standard library does not have",
+  },
+  {
     program: "tests/cases/entry_shebang.ts",
     changelog: "shebang line",
     why: "it opens with `#!/usr/bin/env -S nish run`, which the reference lexes as a `#` token and refuses",
