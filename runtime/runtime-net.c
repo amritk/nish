@@ -17,9 +17,10 @@
  * errno to it: where `signalFd` and `readSignal` answer a plain -1, a call
  * here answers the failure's errno, negated. The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
- * address is in use, -22 a bad argument), so `nish_net_err` translates
- * Darwin's; any other failure is the host's own `-errno`. Nothing here
- * allocates: the addresses a call reads or writes are the caller's `u8[]`.
+ * address is in use, -111 refused, -110 timed out, -22 a bad argument), so
+ * `nish_net_err` translates Darwin's; any other failure is the host's own
+ * `-errno`. Nothing here allocates: the addresses a call reads or writes are
+ * the caller's `u8[]`.
  *
  * An address is 18 bytes of that array: the 16 bytes of an IPv6 address, an
  * IPv4 one as `::ffff:a.b.c.d`, then the port, big-endian. An IPv4 address is
@@ -95,6 +96,8 @@ static int32_t nish_net_err(int e) {
   if (e == EOPNOTSUPP || e == ENOTSUP) return -95;
   if (e == ECONNRESET) return -104;
   if (e == EADDRINUSE) return -98;
+  if (e == ECONNREFUSED) return -111;
+  if (e == ETIMEDOUT) return -110;
 #endif
   return -e;
 }
@@ -115,8 +118,11 @@ static int nish_net_parse(const nish_str *s, unsigned char a[16]) {
   return inet_pton(AF_INET6, host, a) == 1;
 }
 
-/* `a` and `port` as a socket address of the family `v4` names. */
-static socklen_t nish_net_sockaddr(nish_sockaddr *s, const unsigned char a[16], int32_t port, int v4) {
+/* `a` and `port` as a socket address of the family `v4` names. `noinline`:
+   three calls share one body, which inlined into each was 42 bytes more of
+   `.text` than the calls cost. */
+__attribute__((noinline)) static socklen_t nish_net_sockaddr(nish_sockaddr *s, const unsigned char a[16],
+                                                             int32_t port, int v4) {
   memset(s, 0, sizeof *s);
   if (v4) {
     s->v4.sin_family = AF_INET;
@@ -271,6 +277,41 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   if (c < 0) return nish_net_fail();
   nish_net_put(peer, &s, n);
   return c;
+}
+
+/* `tcpConnect(addr)`: a new socket, non-blocking and close-on-exec, connecting
+   to the address in `addr`; an IPv4 one is an `AF_INET` socket, any other
+   `AF_INET6`. A non-blocking `connect` seldom finishes at once (on Linux not
+   even over loopback), and its `EINPROGRESS` (-115) is not a failure: the
+   descriptor is answered all the same, and the connection is made once the
+   loop reports it writable, when `connectResult` says how it went. Any other
+   failure closes the socket and is answered instead of it. An `addr` shorter
+   than 18 bytes is -22 before any socket exists. */
+int32_t nish_tcp_connect(const nish_array *addr) {
+  if (addr->len < NISH_ADDR_BYTES) return -22;
+  const unsigned char *p = (const unsigned char *)addr->data;
+  int v4 = memcmp(p, nish_mapped_prefix, 12) == 0;
+  int fd = nish_net_socket(v4 ? AF_INET : AF_INET6, SOCK_STREAM);
+  if (fd < 0) return nish_net_fail();
+  nish_sockaddr s;
+  socklen_t n = nish_net_sockaddr(&s, p, (p[16] << 8) | p[17], v4);
+  if (connect(fd, &s.sa, n) != 0 && errno != EINPROGRESS) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
+  return fd;
+}
+
+/* `connectResult(fd)`: how the connection `tcpConnect` started went, once the
+   descriptor is writable: 0 when it is made, or its failure (-111 refused,
+   -110 timed out) from `SO_ERROR`. The kernel clears `SO_ERROR` as it is
+   read, so a failure is answered once. */
+int32_t nish_connect_result(int32_t fd) {
+  int e = 0;
+  socklen_t n = sizeof e;
+  if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &e, &n) != 0) return nish_net_fail();
+  return e != 0 ? nish_net_err(e) : 0;
 }
 
 /* `netRead(fd, buf, off, len)`: at most `len` bytes into `buf` from `off`.
