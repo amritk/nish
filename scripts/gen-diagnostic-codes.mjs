@@ -26,9 +26,10 @@
  *   - **Every number is well-formed and in its band.** `NL1xxx` Phase 0,
  *     `NL2xxx` the checker, `NL3xxx` the driver, `NL4xxx` the interop
  *     sidecars, `NL7xxx` a deprecation warning, `NL8xxx` a WP33 portability
- *     warning, `NL9xxx` a WP15 section 8 performance warning. Band 0 is not in the tables: `NL0000` (no rule
- *     matched), `NL0001` (a syntax error), `NL0002` (the toolchain) and
- *     `NL0003` (an internal error) are constants. A performance fragment is in
+ *     warning, `NL9xxx` a WP15 section 8 performance warning. Band 0 is not
+ *     in the tables: `NL0000` (no rule matched), `NL0001` (a syntax error),
+ *     `NL0002` (the toolchain) and `NL0003` (an internal error) are
+ *     constants. A performance fragment is in
  *     `performanceRules` and nowhere else, a portability fragment is in
  *     `portabilityRules` and nowhere else, and a deprecation fragment is in
  *     `deprecationRules` and nowhere else.

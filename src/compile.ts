@@ -218,7 +218,7 @@ const reportPortability = (compilation: Compilation, json: boolean): void => {
 /**
  * The deprecation warnings, printed the way the other two classes are and
  * ahead of both. There is no flag to silence them and `nish run` prints them
- * too: a deprecated call is one the next breaking release refuses, and the
+ * too: a deprecated call is one a later breaking release refuses, and the
  * program's author is the reader who has to hear it.
  */
 const reportDeprecations = (compilation: Compilation, json: boolean): void => {

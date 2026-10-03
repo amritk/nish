@@ -367,7 +367,11 @@ export class DiagnosticSink {
   /**
    * The deprecation warnings, in the same report order and kept by the same
    * insertion: a call the language still compiles but is going to take away.
-   * The driver prints them by default, apart from the other two reports.
+   * The driver prints them by default, apart from the other two reports. They
+   * share `warningFileOrder` too, and are found in pass 2 beside the
+   * performance warnings, so a file first warned about for a deprecation takes
+   * its place in both reports from that warning: a program's files are listed
+   * in one order whichever classes it earns.
    */
   deprecations: Diagnostic[]
 

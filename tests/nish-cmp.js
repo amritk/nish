@@ -1956,6 +1956,18 @@ const DECLARED = [
     why: "a new program: every exit of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
   },
   {
+    program: "tests/cases/mem_loop_scope.ts",
+    file: "exit",
+    changelog: "Arena.release and Arena.reset in favour of using a = arena()",
+    why: "measures the arena inside a `using a = arena()` block instead of between `Arena.mark` and the deprecated `Arena.release`, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_loop_scope_forof.ts",
+    file: "exit",
+    changelog: "Arena.release and Arena.reset in favour of using a = arena()",
+    why: "measures the arena inside two `using a = arena()` blocks instead of between `Arena.mark` and the deprecated `Arena.release`, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
     program: "tests/link/reject_typed_push_alias/main.ts",
     file: "exit",
     changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",

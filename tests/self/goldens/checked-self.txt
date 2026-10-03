@@ -812,8 +812,8 @@ function DiagnosticSink.constructor(this: DiagnosticSink): void -> @DiagnosticSi
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 377:22 new StringMap -> @StringMap.constructor
-  callee 378:29 new StringMap -> @StringMap.constructor
+  callee 381:22 new StringMap -> @StringMap.constructor
+  callee 382:29 new StringMap -> @StringMap.constructor
 function DiagnosticSink.report(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.report [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.reportKind
@@ -822,7 +822,7 @@ function DiagnosticSink.report(this: DiagnosticSink, source: SourceFile, start: 
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.reportKind#0
   pointer source: size=24 writesThrough=true captured=true passedTo=DiagnosticSink.reportKind#1
   stackSites=0 stackLocals=0
-  callee 384:5 DiagnosticSink.reportKind -> @DiagnosticSink.reportKind
+  callee 388:5 DiagnosticSink.reportKind -> @DiagnosticSink.reportKind
 function DiagnosticSink.reportKind(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, kind: string, text: string): void -> @DiagnosticSink.reportKind [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.add
@@ -831,19 +831,19 @@ function DiagnosticSink.reportKind(this: DiagnosticSink, source: SourceFile, sta
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.add#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 388:5 DiagnosticSink.add -> @DiagnosticSink.add
-  callee 388:14 new Diagnostic -> @Diagnostic.constructor
+  callee 392:5 DiagnosticSink.add -> @DiagnosticSink.add
+  callee 392:14 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.add(this: DiagnosticSink, diagnostic: Diagnostic): void -> @DiagnosticSink.add [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 403:5
+  sharedWrite: 407:5
   escaping: diagnostic
   calls: StringMap.has StringMap.set StringMap.size nish_array_grow
   pointer this: size=48 writesThrough=false captured=false
   pointer diagnostic: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 400:10 StringMap.has -> @StringMap.has
-  callee 401:7 StringMap.set -> @StringMap.set
-  callee 401:50 StringMap.size -> @StringMap.size
+  callee 404:10 StringMap.has -> @StringMap.has
+  callee 405:7 StringMap.set -> @StringMap.set
+  callee 405:50 StringMap.size -> @StringMap.size
 function DiagnosticSink.reportPerformance(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportPerformance [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
@@ -852,8 +852,8 @@ function DiagnosticSink.reportPerformance(this: DiagnosticSink, source: SourceFi
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 425:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 425:39 new Diagnostic -> @Diagnostic.constructor
+  callee 429:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 429:39 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.reportPortability(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
@@ -862,8 +862,8 @@ function DiagnosticSink.reportPortability(this: DiagnosticSink, source: SourceFi
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 434:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 434:42 new Diagnostic -> @Diagnostic.constructor
+  callee 438:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 438:42 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.reportDeprecation(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportDeprecation [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
@@ -872,23 +872,23 @@ function DiagnosticSink.reportDeprecation(this: DiagnosticSink, source: SourceFi
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  local 443:16 seen: Diagnostic (const)
-  callee 448:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 448:43 new Diagnostic -> @Diagnostic.constructor
+  local 447:16 seen: Diagnostic (const)
+  callee 452:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 452:43 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.insertWarning(this: DiagnosticSink, list: Diagnostic[], warning: Diagnostic): void -> @DiagnosticSink.insertWarning [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 456:5
+  sharedWrite: 460:5
   escaping: warning
   calls: DiagnosticSink.compareWarnings StringMap.has StringMap.set StringMap.size nish_array_grow nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.compareWarnings#0
   pointer list: size=0 writesThrough=true captured=false
   pointer warning: size=40 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
   stackSites=0 stackLocals=0
-  callee 453:10 StringMap.has -> @StringMap.has
-  callee 454:7 StringMap.set -> @StringMap.set
-  callee 454:54 StringMap.size -> @StringMap.size
-  local 457:9 i: i32 (let)
-  callee 458:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
+  callee 457:10 StringMap.has -> @StringMap.has
+  callee 458:7 StringMap.set -> @StringMap.set
+  callee 458:54 StringMap.size -> @StringMap.size
+  local 461:9 i: i32 (let)
+  callee 462:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
 function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: Diagnostic): i32 -> @DiagnosticSink.compareWarnings [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: StringMap.get codeFor compareStrings nish_arena_mark nish_arena_release
@@ -896,13 +896,13 @@ function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: 
   pointer a: size=40 writesThrough=false captured=false
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 478:11 fileA: i32 (const)
-  callee 478:19 StringMap.get -> @StringMap.get
-  local 479:11 fileB: i32 (const)
-  callee 479:19 StringMap.get -> @StringMap.get
-  callee 489:12 compareStrings -> @compareStrings
-  callee 489:27 codeFor -> @codeFor
-  callee 489:52 codeFor -> @codeFor
+  local 482:11 fileA: i32 (const)
+  callee 482:19 StringMap.get -> @StringMap.get
+  local 483:11 fileB: i32 (const)
+  callee 483:19 StringMap.get -> @StringMap.get
+  callee 493:12 compareStrings -> @compareStrings
+  callee 493:27 codeFor -> @codeFor
+  callee 493:52 codeFor -> @codeFor
 function DiagnosticSink.hasErrors(this: DiagnosticSink): boolean -> @DiagnosticSink.hasErrors [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=48 writesThrough=false captured=false
@@ -922,53 +922,53 @@ function DiagnosticSink.compare(this: DiagnosticSink, a: Diagnostic, b: Diagnost
   pointer a: size=40 writesThrough=false captured=false
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 506:11 fileA: i32 (const)
-  callee 506:19 StringMap.get -> @StringMap.get
-  local 507:11 fileB: i32 (const)
-  callee 507:19 StringMap.get -> @StringMap.get
+  local 510:11 fileA: i32 (const)
+  callee 510:19 StringMap.get -> @StringMap.get
+  local 511:11 fileB: i32 (const)
+  callee 511:19 StringMap.get -> @StringMap.get
 function DiagnosticSink.sorted(this: DiagnosticSink): Diagnostic[] -> @DiagnosticSink.sorted [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 532:7
+  sharedWrite: 536:7
   calls: DiagnosticSink.compare nish_array_grow nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.compare#0
   stackSites=0 stackLocals=0
-  local 529:9 source: Diagnostic[] (let)
-  local 530:9 target: Diagnostic[] (let)
-  local 531:16 item: Diagnostic (const)
-  local 535:9 width: i32 (let)
-  local 537:11 low: i32 (let)
-  local 539:15 mid: i32 (const)
-  local 540:15 high: i32 (const)
-  local 541:13 left: i32 (let)
-  local 542:13 right: i32 (let)
-  local 543:13 out: i32 (let)
-  local 545:17 takeLeft: boolean (const)
-  callee 545:60 DiagnosticSink.compare -> @DiagnosticSink.compare
-  local 557:13 swap: Diagnostic[] (const)
+  local 533:9 source: Diagnostic[] (let)
+  local 534:9 target: Diagnostic[] (let)
+  local 535:16 item: Diagnostic (const)
+  local 539:9 width: i32 (let)
+  local 541:11 low: i32 (let)
+  local 543:15 mid: i32 (const)
+  local 544:15 high: i32 (const)
+  local 545:13 left: i32 (let)
+  local 546:13 right: i32 (let)
+  local 547:13 out: i32 (let)
+  local 549:17 takeLeft: boolean (const)
+  callee 549:60 DiagnosticSink.compare -> @DiagnosticSink.compare
+  local 561:13 swap: Diagnostic[] (const)
 function DiagnosticSink.format(this: DiagnosticSink, max: i32): string -> @DiagnosticSink.format [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.sorted
   calls: Diagnostic.message DiagnosticSink.sorted nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.sorted#0
   stackSites=1 stackLocals=1
-  local 571:11 errors: Diagnostic[] (const)
-  callee 571:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 573:14 Diagnostic.message -> @Diagnostic.message
-  local 575:11 lines: string[] (const)
-  local 576:9 i: i32 (let)
-  callee 578:18 Diagnostic.message -> @Diagnostic.message
-  local 581:11 hidden: i32 (const)
+  local 575:11 errors: Diagnostic[] (const)
+  callee 575:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 577:14 Diagnostic.message -> @Diagnostic.message
+  local 579:11 lines: string[] (const)
+  local 580:9 i: i32 (let)
+  callee 582:18 Diagnostic.message -> @Diagnostic.message
+  local 585:11 hidden: i32 (const)
 function formatList(list: Diagnostic[], kind: string, max: i32): string -> @formatList [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Diagnostic.message
   calls: Diagnostic.message nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer list: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  callee 602:12 Diagnostic.message -> @Diagnostic.message
-  local 604:9 lines: string[] (const)
-  local 605:7 i: i32 (let)
-  callee 607:16 Diagnostic.message -> @Diagnostic.message
-  local 610:9 hidden: i32 (const)
+  callee 606:12 Diagnostic.message -> @Diagnostic.message
+  local 608:9 lines: string[] (const)
+  local 609:7 i: i32 (let)
+  callee 611:16 Diagnostic.message -> @Diagnostic.message
+  local 614:9 hidden: i32 (const)
 module src/codes.ts
 const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"
