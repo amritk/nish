@@ -11623,9 +11623,9 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
     const afterFirst = entries()
     const entryDir = afterFirst.length === 1 ? path.join(cache, "nish", "run", afterFirst[0]) : ""
     check(
-      "nish run: a miss leaves one entry, named by 16 hex digits, holding the binary and its key and nothing else",
+      "nish run: a miss leaves one entry, named by 64 hex digits, holding the binary and its key and nothing else",
       afterFirst.length === 1 &&
-        /^[0-9a-f]{16}$/.test(afterFirst[0]) &&
+        /^[0-9a-f]{64}$/.test(afterFirst[0]) &&
         fs.readdirSync(entryDir).sort().join(",") === "argv,key",
       afterFirst.join(", ")
     )

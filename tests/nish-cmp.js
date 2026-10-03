@@ -2181,6 +2181,16 @@ const DECLARED = [
     why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_tcp_connect` and `nish_connect_result` after `nish_net_close`, which moves every declaration after them",
   },
   {
+    program: "tests/cases/owner_checks.ts",
+    changelog: "for the owner checks, and a cryptographic run-cache name",
+    why: "it calls `geteuid`, `lstatOwnerModeSync` and `isExecutableSync`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers each to one call into runtime-host.c",
+  },
+  {
+    program: "docs/cookbook/builtin-owner.ts",
+    changelog: "for the owner checks, and a cryptographic run-cache name",
+    why: "the cookbook entry for the owner builtins, which this tree adds and the reference refuses with `Unknown function`",
+  },
+  {
     program: "tests/link/net_tls_rfc8448/main.ts",
     file: "exit",
     changelog: "the TLS 1.3 server handshake",
