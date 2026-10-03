@@ -8096,6 +8096,7 @@ if (!only || "interop".includes(only)) {
         "-O2",
         sidecar("arrays", "ll"),
         path.join(runtimeDir, "runtime.c"),
+        path.join(runtimeDir, "runtime-os.c"),
         arraysDriver,
         "-o",
         arraysExe,
