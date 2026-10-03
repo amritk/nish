@@ -11112,6 +11112,21 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       !runAst.stderr.includes("reports on a checked program"),
     shown(runAst)
   )
+  // `--fix` rewrites sources and answers before the program is analysed, so
+  // it takes neither capability flag rather than dropping one in silence.
+  for (const flag of [["--capabilities"], ["--emit-capabilities", path.join(capsDir, "fix.json")]]) {
+    const withFix = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--fix", ...flag], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: ${flag[0]} with --fix is a usage error, exit 2, and writes nothing`,
+      withFix.status === 2 &&
+        withFix.stderr.includes(`\`${flag[0]}\` cannot be used with --fix`) &&
+        !fs.existsSync(path.join(capsDir, "fix.json")),
+      shown(withFix)
+    )
+  }
   // `--emit-checked` does stop after it, and both are answered before the dump.
   const withChecked = spawnSync(
     NISH,

@@ -5300,7 +5300,8 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
   `capabilities: none (deterministic)`, before the program runs, and leaves its
   stdout alone. `--emit-capabilities` without a file is a usage error, exit 2,
   and so is either flag with `--emit-ast`, which stops before the checker;
-  with `--emit-checked` both are answered beside the dump. `nish run` refuses
+  with `--emit-checked` both are answered beside the dump, and
+  `--fix`, which answers before the program is analysed, takes neither. `nish run` refuses
   `--emit-capabilities` as it refuses every product it keeps to itself.
 
 ## Semantics decisions
