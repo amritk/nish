@@ -1,4 +1,4 @@
-// NL2429: an unchecked access reads or writes an array of numbers.
+// NL2455: an unchecked access reads or writes an array of numbers.
 import { uncheckedGet } from "nish:unsafe";
 
 export const main = (): i32 => {

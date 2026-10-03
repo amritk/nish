@@ -1,4 +1,4 @@
-// NL2428: the wrapping functions take the signed words i32 and i64 only.
+// NL2454: the wrapping functions take the signed words i32 and i64 only.
 import { wrappingAdd } from "nish:unsafe";
 
 export const main = (): i32 => {

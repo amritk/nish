@@ -23,7 +23,7 @@ import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
-import { isCollectionsModule, isMapExtrasModule } from "./std-modules"
+import { isCollectionsModule, isMapExtrasModule, isSecretModule } from "./std-modules"
 import { Local } from "./symbols"
 import { TypeTable } from "./types"
 
@@ -1238,6 +1238,8 @@ export class CheckedProgram {
   parallelCalls: ParallelCall[]
   /** WP29 P2: every `spawn` call, judged with the facts as `parallelCalls` is (`Compilation.checkParallel`). */
   spawnCalls: ParallelCall[]
+  /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
+  exposeCalls: ParallelCall[]
   /**
    * Every `x.f = e;` in this module's bodies whose field is stored inline, with
    * the length `e` is known to have (`src/inline-arrays.ts`). Parallel lists
@@ -1255,6 +1257,8 @@ export class CheckedProgram {
   newTypeArguments: Node[]
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean
+  /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
+  secretLibrary: boolean
   /** `isMapExtras()`, decided once, as `collectionsLibrary` is. */
   mapExtrasLibrary: boolean
 
@@ -1397,6 +1401,7 @@ export class CheckedProgram {
     this.typeImports = []
     this.entryMain = null
     this.parallelCalls = []
+    this.exposeCalls = []
     this.spawnCalls = []
     this.inlineAssignNodes = []
     this.inlineAssignLengths = []
@@ -1404,6 +1409,7 @@ export class CheckedProgram {
     this.newTypeArguments = []
     this.collectionsLibrary = isCollectionsModule(packageName, source.path)
     this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
+    this.secretLibrary = isSecretModule(packageName, source.path)
     this.usesArgv = false
     this.uncheckedIndexing = false
     this.wrapping = false
@@ -1454,12 +1460,18 @@ export class CheckedProgram {
   }
 
   /**
-   * Whether this module writes no `.ll` of its own: `std/collections.ts`, whose
-   * code is copied into each module that uses it, and `std/map.ts`, whose every
-   * call is lowered in place at the call (docs/wp32-map.md §4.1, §9.2).
+   * Whether this module writes no `.ll` of its own: `std/collections.ts` and
+   * `std/secret.ts`, whose code is copied into each module that uses it, and
+   * `std/map.ts`, whose every call is lowered in place at the call
+   * (docs/wp32-map.md §4.1, §9.2).
    */
   writesNoOutput(): boolean {
-    return this.collectionsLibrary || this.mapExtrasLibrary
+    return this.collectionsLibrary || this.mapExtrasLibrary || this.secretLibrary
+  }
+
+  /** Whether this module is `std/secret.ts`, the source behind `nish:secret`, copied like `std/collections.ts`. */
+  isSecretLibrary(): boolean {
+    return this.secretLibrary
   }
 
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */

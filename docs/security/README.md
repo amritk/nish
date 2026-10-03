@@ -66,9 +66,7 @@ only.
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-8 | Low | `src/run-cache.ts` (`fnv1a64Hex`) | The cache entry is named by a 64-bit FNV-1a, not a cryptographic hash | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
-| ECC-2 | Low | `std/crypto/p256.ts`, `std/crypto/x25519.ts` | Secret intermediates are not wiped. Needs a `secureZero`-style primitive in `runtime/` and `src/` | — |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
-| X509-7 | Low | `std/crypto/x509.ts` (`x509ParseP256PrivateKey`) | Private-key material is not wiped. Same primitive as ECC-2 | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU only. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | RT-10 | Low | `runtime/runtime-host.c` (`nish_signal_fd`) | Two threads whose first `signalFd()` calls overlap each make a pipe, and one never hears a signal | — |
 | RT-11 | Low | `runtime/runtime.c` (`nish_write`) | A short `write(2)` is ignored | — |

@@ -250,13 +250,19 @@ provide("arena", shim.arena);
 // specifier works from any directory. Only the `nish/` package is answered
 // here, and every other specifier goes to Node as it was written.
 //
-// `nish:unsafe` is answered too, by a module that hands back the globals
-// installed above: its functions are globals of this module either way, and
-// the import is what the compiler requires a program to write.
+// `nish:secret` is answered here as well, because the standard library imports
+// it (`std/crypto/p256.ts` and its neighbours): its names are
+// `runtime/shim.mjs`'s, where a `Secret` is a plain wrapper and `wipe`
+// zero-fills it. `nish:unsafe` is answered by a module that hands back the
+// globals installed above: its functions are globals of this module either
+// way, and the import is what the compiler requires a program to write.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 registerHooks({
   resolve: (specifier, context, next) => {
+    if (specifier === "nish:secret") {
+      return next(new URL("./shim.mjs", import.meta.url).href, context);
+    }
     if (specifier === "nish:unsafe") {
       return { url: `data:text/javascript,${encodeURIComponent(unsafeSource)}`, shortCircuit: true };
     }

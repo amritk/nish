@@ -1,7 +1,7 @@
 // Wycheproof's x25519_test.json through `nish/crypto/x25519`, shared by
 // `crypto_x25519` and `crypto_x25519_f64` so both number modes run every case.
 import { Suite } from "nish/testing";
-import { x25519 } from "nish/crypto/x25519";
+import { x25519Plain as x25519 } from "./plain";
 import { WycheproofX25519Case, wycheproofX25519Cases } from "../crypto_wycheproof/x25519";
 import { fromHex, toHex } from "./hex";
 

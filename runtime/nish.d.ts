@@ -475,6 +475,39 @@ declare module "nish:io" {
   export function panic(message: string): never;
 }
 
+// `nish:secret` has source behind it, `std/secret.ts`, but a program imports it
+// by this name, so `tsc` reads these declarations rather than that file. The
+// class is declared with a private constructor and a private field: `tsc` then
+// refuses `new Secret(...)`, `s.value` and a structural look-alike, as `nish`
+// does. Everything else `nish` refuses about a `Secret` — printing it,
+// comparing it, branching on it, dropping it unwiped, an `expose` whose
+// function does I/O — is flow, which `tsc` cannot see
+// (docs/LANGUAGE.md -> Secrets).
+declare module "nish:secret" {
+  /**
+   * Key material: an array of integers or a record of integer fields, held
+   * opaque. Made by `secret`, read only through `expose`, and wiped or
+   * returned by the function that made it.
+   */
+  export class Secret<T> {
+    private constructor();
+    private readonly value: T;
+  }
+  /** `value`, wrapped. A local handed in is moved: it may not be read again. */
+  export function secret<T>(value: T): Secret<T>;
+  /**
+   * `f(value)`. `f` reaches no I/O and no C, keeps nothing of `value`, and
+   * declares a return type that holds no `Secret`: that type is what leaves.
+   */
+  export function expose<T, R>(s: Secret<T>, f: (value: T) => R): R;
+  /** `f(value, arg)`, under `expose`'s rules; `f` may not write `arg` either. */
+  export function exposeWith<T, A, R>(s: Secret<T>, arg: A, f: (value: T, arg: A) => R): R;
+  /** Zero the value's whole storage, with a store the optimiser may not remove. */
+  export function wipe<T>(target: Secret<T>): void;
+  /** Zero an array or record of integers that `expose`'s function holds, likewise. */
+  export function wipe(target: object): void;
+}
+
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 
 declare const Arena: {

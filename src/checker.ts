@@ -17,8 +17,8 @@ import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
 import {
+  isBuiltinSpecifier,
   isNishModule,
-  isNishSpecifier,
   nishExport,
   nishModuleExports,
   nishModuleNames,
@@ -115,6 +115,7 @@ import {
 } from "./program"
 import { BoundsWalk, analyzeBounds } from "./bounds"
 import { checkResultLocalsHandled } from "./result"
+import { checkSecretFlow } from "./secret"
 import { checkReturnValue, checkStatements, refuseUnsupportedForms } from "./statements"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
@@ -1083,7 +1084,7 @@ export class Checker {
     }
     // A `nish:` import names a builtin, so it never looks at `target`: there is
     // no module behind it.
-    if (isNishSpecifier(imp.specifier)) {
+    if (isBuiltinSpecifier(imp.specifier)) {
       this.bindBuiltinImport(index)
       return
     }
@@ -1557,6 +1558,9 @@ export const checkSignatureBody = (
     // WP16: a `Result` local nobody reads is an unhandled failure. Reported
     // after the body so the diagnostic names a variable whose type is known.
     checkResultLocalsHandled(ctx, body)
+    // `nish:secret`: a `Secret` the body makes leaves it returned or wiped on
+    // every path, and is never copied or read once wiped (`src/secret.ts`).
+    checkSecretFlow(ctx, body)
     // WP15 §2.1/§2.2: prove what indices are in range before the warnings
     // are reported, because one of the warnings is about the proofs that did
     // not come off, and it has to be reported by the same source-order walk

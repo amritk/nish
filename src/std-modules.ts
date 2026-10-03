@@ -78,7 +78,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair, testing, text, threads"
+  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair, secret, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -109,3 +109,16 @@ const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 /** Whether a module is the standard library's `std/map.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isMapExtrasModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER)
+
+/**
+ * `std/secret.ts`, the source behind the builtin module `nish:secret`
+ * (`src/nish-modules.ts`). It is in the library's directory so that it ships,
+ * type-checks and is listed like every other module, but it is imported only
+ * as `nish:secret`: `resolveSpecifier` refuses this spelling, so the rules of
+ * `src/secret.ts` have one name to be read under.
+ */
+export const SECRET_STD_SPECIFIER: string = "nish/secret"
+
+/** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
+export const isSecretModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)

@@ -20,7 +20,6 @@
 // and each refusal the module promises — a truncated DER, non-minimal lengths,
 // a wrong PEM label, days 0 and 15, a key on another curve.
 import { Suite } from "nish/testing"
-import { p256PublicKey } from "nish/crypto/p256"
 import {
   X509_MAX_DAYS,
   X509_MAX_SERIAL,
@@ -28,12 +27,11 @@ import {
   derToPem,
   pemToDer,
   x509CertificateHash,
-  x509MintSelfSigned,
   x509ParseCertificate,
   x509ParseChain,
-  x509ParseP256PrivateKey,
   x509VerifySignature,
 } from "nish/crypto/x509"
+import { x509MintSelfSignedPlain as x509MintSelfSigned, x509ParseP256PrivateKeyPlain as x509ParseP256PrivateKey, x509PublicKeyPlain as p256PublicKey } from "./plain"
 import {
   BAD_ALGORITHM_MISMATCH,
   BAD_EXTENSIONS_IN_V1,

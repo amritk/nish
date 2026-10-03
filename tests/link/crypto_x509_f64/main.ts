@@ -11,12 +11,11 @@ import {
   derToPem,
   pemToDer,
   x509CertificateHash,
-  x509MintSelfSigned,
   x509ParseCertificate,
   x509ParseChain,
-  x509ParseP256PrivateKey,
   x509VerifySignature,
 } from "nish/crypto/x509"
+import { x509MintSelfSignedPlain as x509MintSelfSigned, x509ParseP256PrivateKeyPlain as x509ParseP256PrivateKey } from "../crypto_x509/plain"
 import { CA_PEM, CA_PKCS8_PEM, CA_PRIVATE, GOLDEN_PEM } from "../crypto_x509/fixtures"
 import { fromHex, toHex } from "../crypto_x509/hex"
 
