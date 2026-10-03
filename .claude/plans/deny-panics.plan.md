@@ -36,6 +36,8 @@ stages:
         content: Report every in-scope unproven non-oom site as an error with the kind and the guard, reusing the NL9007 guard wording for index and its siblings for range and slice — see Diagnostics
       - id: deny-tests
         content: Add the clean module (golden .ll + native round trip under --deny-panics) and one reject_deny_panics_<kind> per kind plus the noPanic link cases — see Tests
+      - id: caps-panics
+        content: Add a per-function "panics" list to the --emit-capabilities report (landed on main in #423 after this plan was accepted) from the stage-1 site list, in the report's own fixed key order and entry-relative paths, with its .caps.json goldens and LANGUAGE.md text — see The --emit-capabilities panics list
       - id: deny-docs
         content: Add the --deny-panics and noPanic rule to docs/LANGUAGE.md, the Proving it cannot panic recipe and a rule line in docs/AI.md, and the IR_COOKBOOK entry — see Docs
 ---
@@ -123,6 +125,10 @@ After `proveCallSiteRanges` and `checkParallel` in `Compilation.check` ([src/com
 ```
 
 Proven sites are listed with `"proven": true` so the file shows what the checker proved, not only what it did not. Path-valued like `--emit-header`; written by `writeSidecars`; `wrote <file>` on stderr. Keys and order are stable (a contract, like `--json`).
+
+## The --emit-capabilities panics list
+
+Requirement 3 said: if `--emit-capabilities` exists, put the panic sites per function in its JSON as a `"panics"` list. It did not exist when this plan was accepted; #423 landed it on `main` during stage 1. Stage 1 keeps `--emit-panics` (merged, documented, and the oracle is built on it). Stage 2 adds, to every function entry of the capabilities report, a `"panics"` list drawn from the same resolved site list, each site written in the report's own idiom: `{ "kind", "at": "path:line:col", ... }` with `proven` / `callee` / `via` / `allowed` as `--emit-panics` writes them, keys in a fixed order, paths relative to the entry's directory, so the file stays byte-stable. Recording must turn on whenever `--emit-capabilities`, `--emit-panics`, `--deny-panics` or a `noPanic` field is in effect (`Options.recordsPanics`). Every existing `.caps.json` golden gains the list and is regenerated, not hand-edited; LANGUAGE.md's `--emit-capabilities` bullet names the new key.
 
 ## Scope
 
