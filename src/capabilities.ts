@@ -203,9 +203,12 @@ export const builtinCapability = (name: string): i32 => {
   if (isNetExport(name)) {
     return CAP_NET
   }
+  if (name === "getenv") {
+    return CAP_ENV
+  }
   // `geteuid` reads no file: the user the process runs as is part of the
   // environment it was started in, as its variables are.
-  if (name === "getenv" || name === "geteuid") {
+  if (name === "geteuid") {
     return CAP_ENV
   }
   // `statMtimeSync` reads the file system, but what it answers is a time.
