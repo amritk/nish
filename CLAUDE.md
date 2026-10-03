@@ -62,12 +62,15 @@ Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,
 and each audited area keeps its record under
 [`docs/security/`](docs/security/README.md).
 
-**Secret material in `std/crypto` is wiped once it can be.** The runtime has no
-wipe primitive yet that the optimiser cannot drop (#385). Until a release ships
-one, a function that holds a private key, a secret scalar or another secret
-intermediate records it as unwiped in its area's record, as ECC-2 and X509-7
-do. Once it ships, every such function wipes before it returns, and a test pins
-that the wipe survives `-O2`.
+**Secret material in `std/crypto` is a `Secret` and is wiped.** `nish:secret`
+(docs/LANGUAGE.md, "Secrets") is the primitive: a function that holds a
+private key, a secret scalar or another secret intermediate takes and gives
+the key as a `Secret<T>`, computes on it inside `expose`, and `wipe`s every
+intermediate before it returns — a volatile store `tests/run.js` pins under
+`-O2` ("nish:secret: the wipe survives opt -O2"). What a wipe cannot reach (a
+scalar in a register, an immutable string) is recorded in its area's record,
+as ECC-2 and X509-7 do. `std/` may use `nish:secret` now; `src/` only from the
+release that ships it (the rolling freeze).
 
 ## Git & PR Guidelines
 

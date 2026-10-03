@@ -17,12 +17,14 @@ import {
   P256_POINT_SIZE,
   P256_SCALAR_SIZE,
   P256_SIGNATURE_SIZE,
-  p256PublicKey,
-  p256Sign,
-  p256SignSha256,
   p256Verify,
   p256VerifySha256,
 } from "nish/crypto/p256";
+import {
+  p256PublicKeyPlain as p256PublicKey,
+  p256SignPlain as p256Sign,
+  p256SignSha256Plain as p256SignSha256,
+} from "./plain";
 import { x509DerSignatureRS } from "nish/crypto/x509";
 import {
   WycheproofEcdsaCase,

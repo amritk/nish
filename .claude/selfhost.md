@@ -149,6 +149,7 @@ What the rest forces:
 | `validator.ts` | Phase 0 |
 | `checker.ts` `declarations.ts` `structs.ts` `annotations.ts` `constants.ts` `assignment.ts` | pass 1, pass 1b and the declaration-level rules |
 | `generics.ts` `result.ts` | monomorphisation (WP18) and `Result<T, E>` (WP16) |
+| `secret.ts` `emit-secret.ts` | `nish:secret`: where a `Secret` may not go, the wiped-or-returned walk, the `expose` rules over the facts, and the volatile body of `wipe` |
 | `expressions.ts` `statements.ts` `members.ts` `arrays.ts` `builtins.ts` | pass 2, one module per construct family |
 | `bounds.ts` | the WP15 §2 bounds-check proof, whose verdicts the emitter reads out of `nodeProvenIndex` |
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | the IR builder, the runtime ABI table, the target triples, the options |

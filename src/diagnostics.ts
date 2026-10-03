@@ -208,6 +208,30 @@ const startsCharacter = (byte: i32): boolean => (byte & 0xc0) !== 0x80
 const isFourByteLead = (byte: i32): boolean => (byte & 0xf8) === 0xf0
 
 /**
+ * One edit of a machine-applicable fix: replace the bytes `[start, end)` of
+ * the diagnostic's own file with `text`. `start === end` is an insertion.
+ *
+ * Offsets are bytes, like a diagnostic's span, and become line and column only
+ * in `json()`, so `nish --fix` (`src/fix.ts`) applies an edit to the text it
+ * was computed against without converting anything back. A fix is the list of
+ * these on one `Diagnostic`, applied all together or not at all, and it is
+ * attached only when applying it is behaviour-preserving: when in doubt, the
+ * site reports no fix rather than a guess (AGENTS.md, "Machine-readable
+ * surfaces").
+ */
+export class Edit {
+  start: i32
+  end: i32
+  text: string
+
+  constructor(start: i32, end: i32, text: string) {
+    this.start = start
+    this.end = end < start ? start : end
+    this.text = text
+  }
+}
+
+/**
  * One error, anchored to a half-open byte span of one file. `line` and
  * `column` are computed when it is reported rather than when it is printed,
  * because the sort in `DiagnosticSink` reads them for every comparison.
@@ -222,6 +246,12 @@ export class Diagnostic {
   text: string
   line: i32
   column: i32
+  /**
+   * The machine-applicable fix, in the diagnostic's own file; empty when the
+   * site knows no rewrite that is safe. Set by the sink's `*Fix` entry points
+   * rather than through the constructor, so every other report stays as it is.
+   */
+  edits: Edit[]
 
   constructor(source: SourceFile, start: i32, end: i32, kind: string, text: string) {
     this.source = source
@@ -231,6 +261,7 @@ export class Diagnostic {
     this.text = text
     this.line = source.lineOf(start)
     this.column = source.columnOf(start)
+    this.edits = []
   }
 
   /** `<file>:<line>:<col>: <kind>: <text>` — the line the tests match on. */
@@ -306,8 +337,12 @@ export class Diagnostic {
    * `src/codes.ts` — the field to key on rather than the prose, since the
    * prose may improve and the code may not.
    *
-   * The key order matches `diagnosticJson` in stage0's `src/diagnostics.ts` exactly:
-   * `tests/run.js` compares the two compilers' `--json` byte for byte.
+   * The key order is the one stage0's `diagnosticJson` printed, and a reader
+   * that compared lines byte for byte still can: `fix` comes last, after
+   * `message`, and only when there is at least one edit, so a diagnostic
+   * without a fix prints exactly the line it always has. Each edit is placed
+   * the way the diagnostic is — 1-based, columns in UTF-16 code units, the end
+   * exclusive.
    */
   json(): string {
     const endLine = this.source.lineOf(this.end)
@@ -316,7 +351,30 @@ export class Diagnostic {
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}}`
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}${this.fixJson()}}`
+  }
+
+  /** `,"fix":[...]` for `json()`, or `""` when there is no fix to print. */
+  fixJson(): string {
+    if (this.edits.length === 0) {
+      return ""
+    }
+    const source = this.source
+    const out = new StringBuilder()
+    out.add(`,"fix":[`)
+    let i = 0
+    while (i < this.edits.length) {
+      const edit = this.edits[i]
+      out.add(i === 0 ? "{" : ",{")
+      out.add(
+        `"line":${source.lineOf(edit.start)},"column":${source.columnOf(edit.start)},"endLine":${source.lineOf(edit.end)},"endColumn":${source.columnOf(edit.end)},"text":`
+      )
+      out.add(jsonQuote(edit.text))
+      out.add("}")
+      i = i + 1
+    }
+    out.add("]")
+    return out.toText()
   }
 }
 
@@ -371,6 +429,18 @@ export class DiagnosticSink {
   }
 
   /**
+   * Report an error together with its machine-applicable fix: `edits`, in
+   * `source`, which `--json` prints as `fix` and `nish --fix` applies. The
+   * edits are the site's promise that applying all of them keeps the
+   * program's meaning; a site that cannot promise that calls `report`.
+   */
+  reportFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
+    const diagnostic = new Diagnostic(source, start, end, "error", text)
+    diagnostic.edits = edits
+    this.add(diagnostic)
+  }
+
+  /**
    * Record a diagnostic somebody else built. The parser builds its own — it
    * refuses before there is a checker to report through — and they belong in
    * the report with every other error, so that the *driver* is what decides
@@ -407,6 +477,13 @@ export class DiagnosticSink {
     this.insertWarning(this.warnings, new Diagnostic(source, start, end, PERFORMANCE, text))
   }
 
+  /** `reportPerformance` with a machine-applicable fix, on the terms `reportFix` states. */
+  reportPerformanceFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
+    const warning = new Diagnostic(source, start, end, PERFORMANCE, text)
+    warning.edits = edits
+    this.insertWarning(this.warnings, warning)
+  }
+
   /**
    * Record a WP33 portability warning, at its place in the report order of
    * its own list — the insertion `reportPerformance` makes, for the same
@@ -414,6 +491,13 @@ export class DiagnosticSink {
    */
   reportPortability(source: SourceFile, start: i32, end: i32, text: string): void {
     this.insertWarning(this.portability, new Diagnostic(source, start, end, PORTABILITY, text))
+  }
+
+  /** `reportPortability` with a machine-applicable fix, on the terms `reportFix` states. */
+  reportPortabilityFix(source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void {
+    const warning = new Diagnostic(source, start, end, PORTABILITY, text)
+    warning.edits = edits
+    this.insertWarning(this.portability, warning)
   }
 
   /** The stable insertion both warning lists are kept sorted by (`compareWarnings`). */

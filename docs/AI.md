@@ -35,6 +35,7 @@ and it is the only authority.
 
 ```bash
 nish program.ts --json            # one JSON object per diagnostic, on stdout
+nish --fix program.ts             # apply every machine-applicable fix, then report what is left
 nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
 nish run program.ts a b           # build into a cache, then run it with `a b`
@@ -66,6 +67,24 @@ exclusive:
   status after that.
 - Every failure is a `--json` object, toolchain and internal errors included,
   so you never have to parse stderr to find out why a run failed.
+
+Some diagnostics carry a **`fix`**: the edits that make the line compile,
+when the rewrite is mechanical and keeps the program's meaning. It comes last,
+and each edit is placed exactly as the diagnostic is — `text` replaces the span,
+and a span whose start equals its end is an insertion:
+
+```json
+{"file":"p.ts","line":2,"column":10,"endLine":2,"endColumn":16,"severity":"error","code":"NL1047","message":"Loose equality is forbidden; use === / !==","fix":[{"line":2,"column":12,"endLine":2,"endColumn":14,"text":"==="}]}
+```
+
+A diagnostic with no safe rewrite has no `fix` key at all. `nish --fix
+program.ts` applies every fix to the files named on its command line (never to
+an import from `std/` or `node_modules`), recompiles, and repeats until nothing
+changes or five rounds pass; then it reports what is left exactly as a plain
+run would, `--json` included, and exits with that run's code. It writes no IR,
+so it refuses `-o` and `--link`. It rewrites your files in place, with no
+backup, so run it on a committed or backed-up tree. Run it first, then read
+what remains.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -1166,6 +1185,44 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 `u64` only, every operand one type. The mask sits behind an optimisation
 barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
+
+**Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
+array or a record of integer fields). It is opaque: no printing, interpolating,
+comparing with a value, branching, indexing, `.value`, field, array element or
+`Result` payload, and no builtin takes one. Read it only with `expose(s, f)` or
+`exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
+declares its return type, reaches no I/O and no C, keeps nothing of the value
+and returns no `Secret` — that return is what leaves. A `Secret` your function
+makes must be `wipe`d or returned **on every path** (each `return`, `break`,
+`orReturn()`), is moved by `const j = k`, and is never read after `wipe`;
+`secret(local)` moves the local too. `std/crypto`'s `p256`, `x25519` and
+`x509ParseP256PrivateKey` take and give keys this way.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  const n: i32 = expose(k, width);
+  wipe(k);
+  return n === 3 ? 0 : 1;
+};
+```
+
+```ts nish:err NL2440
+import { Secret, expose, secret } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  return expose(k, width); // NL2440: `k` leaves unwiped
+};
+```
 
 **Arrays.** `a.length` (read-only), `a.push(v)`, `a.pop()` (panics when empty —
 there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` is

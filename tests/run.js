@@ -3008,6 +3008,168 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
   )
 }
 
+// ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
+// A diagnostic may carry `fix`, a list of edits that `nish --fix` applies
+// (`src/fix.ts`, AGENTS.md "Machine-readable surfaces"). Each case runs on a copy
+// in a directory of its own, because `--fix` rewrites the file it is given:
+// `<name>.ts` must come out as `<name>.fixed.ts` byte for byte and that must
+// compile clean, and `<name>.nofix.ts` must be reported with no `fix` key and
+// come out untouched. A directory is a case with more than one file, for what
+// the command line decides: which files are named, and which may be rewritten.
+// `tests/fix/README.md` is the table.
+{
+  const fixDir = path.join(root, "tests", "fix")
+  // Every file of a directory case, as paths relative to it, depth first.
+  const filesUnder = (dir, prefix = "") =>
+    fs
+      .readdirSync(path.join(dir, prefix), { withFileTypes: true })
+      .flatMap((e) =>
+        e.isDirectory() ? filesUnder(dir, path.join(prefix, e.name)) : [path.join(prefix, e.name)]
+      )
+      .sort()
+  // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
+  const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
+  const CONTROL = new Set(["argv", "exit", "rewrites", "same-as-plain"])
+  for (const name of fs.readdirSync(fixDir).sort()) {
+    const caseDir = path.join(fixDir, name)
+    if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const sources = filesUnder(caseDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    for (const rel of filesUnder(caseDir).filter((f) => !CONTROL.has(f) && !f.endsWith(".fixed.ts"))) {
+      fs.mkdirSync(path.dirname(path.join(work, workPath(rel))), { recursive: true })
+      fs.copyFileSync(path.join(caseDir, rel), path.join(work, workPath(rel)))
+    }
+    const argv = fs.readFileSync(path.join(caseDir, "argv"), "utf8").trim().split(/\s+/)
+    const exitFile = path.join(caseDir, "exit")
+    const wantExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : 0
+    // `same-as-plain`: what --fix finally reports is what a plain run reports
+    // about the files it leaves, byte for byte, which a plain run that stops at
+    // its first refused root may say before it reaches any fix.
+    const samePlain = fs.existsSync(path.join(caseDir, "same-as-plain"))
+    if (!samePlain) {
+      const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 &&
+          diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+    }
+    const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
+    // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
+    const wrong = sources.filter((rel) => {
+      const expectedFile = path.join(caseDir, rel.replace(/\.ts$/, ".fixed.ts"))
+      const expected = fs.readFileSync(fs.existsSync(expectedFile) ? expectedFile : path.join(caseDir, rel))
+      return !fs.readFileSync(path.join(work, workPath(rel))).equals(expected)
+    })
+    check(
+      `fix ${name}: --fix exits ${wantExit}, rewrites each file with a .fixed.ts to it and leaves every other byte-identical`,
+      fixed.status === wantExit && wrong.length === 0,
+      `${shown(fixed)}\nnot as expected: ${wrong.join(", ")}`
+    )
+    const rewritesFile = path.join(caseDir, "rewrites")
+    if (fs.existsSync(rewritesFile)) {
+      const want = Number(fs.readFileSync(rewritesFile, "utf8").trim())
+      const rewrites = fixed.stderr.split("\n").filter((l) => l.startsWith("fixed ")).length
+      check(`fix ${name}: --fix rewrites a file ${want} times`, rewrites === want, shown(fixed))
+    }
+    if (samePlain) {
+      const plainJson = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix --json reports what a plain --json run reports about the result, byte for byte`,
+        fixed.status === plainJson.status && fixed.stdout === plainJson.stdout,
+        `--fix:\n${shown(fixed)}\nplain:\n${shown(plainJson)}`
+      )
+      // The human report too, from a second --fix with nothing left to apply.
+      const again = spawnSync(NISH, ["--fix", ...argv], { cwd: work, encoding: "utf8" })
+      const plainHuman = spawnSync(NISH, [...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix reports what a plain run reports about the result, byte for byte`,
+        again.status === plainHuman.status &&
+          again.stdout === plainHuman.stdout &&
+          again.stderr === plainHuman.stderr,
+        `--fix:\n${shown(again)}\nplain:\n${shown(plainHuman)}`
+      )
+    } else if (wantExit === 0) {
+      const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: the fixed program compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    } else {
+      // What --fix may not apply is still reported, fix and all.
+      check(
+        `fix ${name}: the fix --fix may not apply is still reported with it`,
+        diagnosticsOf(fixed.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(fixed)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+  const inputs = fs
+    .readdirSync(fixDir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .sort()
+  for (const file of inputs) {
+    const noFix = file.endsWith(".nofix.ts")
+    const name = file.slice(0, -(noFix ? ".nofix.ts" : ".ts").length)
+    if (only && !name.includes(only) && !"fix".includes(only)) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const input = fs.readFileSync(path.join(fixDir, file))
+    fs.writeFileSync(path.join(work, file), input)
+    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plainObjects = diagnosticsOf(plain.stdout)
+    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const after = fs.readFileSync(path.join(work, file))
+    if (noFix) {
+      check(
+        `fix ${name}: reported with no \`fix\` key`,
+        plain.status === 1 && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix leaves the file byte-identical and exits as the plain compile does`,
+        fixed.status === plain.status && after.equals(input) && fixed.stdout === plain.stdout,
+        shown(fixed)
+      )
+    } else {
+      const expected = fs.readFileSync(path.join(fixDir, `${name}.fixed.ts`))
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix exits 0 and writes ${name}.fixed.ts byte for byte`,
+        fixed.status === 0 && after.equals(expected),
+        `${shown(fixed)}\nwrote:\n${after}`
+      )
+      const roundsFile = path.join(fixDir, `${name}.rounds`)
+      if (fs.existsSync(roundsFile)) {
+        const want = Number(fs.readFileSync(roundsFile, "utf8").trim())
+        const rounds = fixed.stderr.split("\n").filter((l) => l.startsWith(`fixed ${file} `)).length
+        check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
+      }
+      fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+        cwd: work,
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.fixed.ts compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+}
+
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
 // compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
@@ -3525,6 +3687,62 @@ if (has("opt") && fs.existsSync(fillZeroLl)) {
     "opt -O2 turns bytes_fill_zero's zero fill loop over i32[] into llvm.memset",
     o.status === 0 && clear !== null && /call void @llvm\.memset/.test(clear[0]),
     o.status === 0 ? out : String(o.stderr)
+  )
+}
+
+// `nish:secret`: the wipe survives `-O2`, as CLAUDE.md requires of every wipe in
+// `std/crypto`. `secret_wipe_o2` wipes a stack array nothing reads again, which is
+// the store an optimiser deletes, and `secret_wipe_o2_plain` zeroes the same array
+// with `fill(0)`: after `opt -O2` the twin's `main` must hold no store at all, which
+// is what shows the deletion happens, and the wiped one must still hold a volatile
+// store of zero for every byte of the array (SROA splits the volatile `llvm.memset`
+// into one per byte; a volatile memset left whole counts as all eight). Both are
+// compiled here, fresh, so a filtered run cannot read a `.ll` another section wrote
+// (.claude/testing.md, the `existsSync` trap).
+if (!only || "secret wipe survives -O2".includes(only)) {
+  if (!has("opt")) {
+    skip("nish:secret: no opt to show the wipe survives -O2")
+  } else {
+    const o2Dir = path.join(buildDir, "secret-o2")
+    fs.rmSync(o2Dir, { recursive: true, force: true })
+    fs.mkdirSync(o2Dir, { recursive: true })
+    /** `main` of `name` after `opt -O2`, or the failure to get it. */
+    const optimisedMain = (name) => {
+      const ll = path.join(o2Dir, `${name}.ll`)
+      const c = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", ll], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      if (c.status !== 0) {
+        return { ok: false, text: c.stderr }
+      }
+      const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+      const body = o.status === 0 ? o.stdout.match(/define[^\n]*@nish_main\([\s\S]*?\n\}/) : null
+      return body === null ? { ok: false, text: o.stderr || o.stdout } : { ok: true, text: body[0] }
+    }
+    const wiped = optimisedMain("secret_wipe_o2")
+    const plain = optimisedMain("secret_wipe_o2_plain")
+    const volatileZeros = wiped.ok ? (wiped.text.match(/store volatile i8 0,/g) || []).length : 0
+    const volatileMemset = wiped.ok && /call void @llvm\.memset[^\n]*i64 8, i1 true\)/.test(wiped.text)
+    const plainStores = plain.ok ? (plain.text.match(/\bstore\b|@llvm\.memset/g) || []).length : -1
+    check(
+      "nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted",
+      wiped.ok && plain.ok && (volatileZeros === 8 || volatileMemset) && plainStores === 0,
+      `wiped: ${volatileZeros} volatile zero stores, volatile memset ${volatileMemset}\n${wiped.text}\n--- plain: ${plainStores} stores\n${plain.text}`
+    )
+  }
+}
+
+// `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
+// `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
+// the native binary prints.
+if (!only || "secret_wipe under the prelude".includes(only)) {
+  const r = runCaseUnderPrelude("secret_wipe", [])
+  const want = fs.readFileSync(path.join(casesDir, "secret_wipe.out"), "utf8")
+  check(
+    "nish:secret: secret_wipe under runtime/nish.mjs prints secret_wipe.out",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
   )
 }
 
@@ -10529,6 +10747,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--target",
     "--profile",
     "--warn-portability",
+    "--fix",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
