@@ -48,20 +48,35 @@ export class FixOutcome {
 }
 
 /**
- * Load every root and check the program, as one run of the compiler would —
- * except that a root that fails to load does not stop the others. A plain run
- * stops there because it has no IR to write after it; this one writes none
- * anyway, and a Phase 0 refusal is exactly what a fix answers, so every named
- * file is loaded each round and each one's fixes are collected in it.
+ * Load the roots named on the command line, in order, and answer whether all
+ * of them loaded. A root is named by the path it was given, but its identity
+ * is `identityOf` that path, so a root the entry already imports under another
+ * spelling is found in `byPath` rather than loaded twice.
+ *
+ * `keepGoing` false is the plain run, which stops at the first root that fails
+ * — its report names that root and nothing after it. `--fix` collects with
+ * `keepGoing` true, because a Phase 0 refusal is exactly what a fix answers, so
+ * every named file is loaded each round and each one's fixes are collected in
+ * it; and it reports from a plain load, so what it prints is what `nish` alone
+ * would print about the files it leaves behind.
  */
-const compileRoots = (opts: Options, roots: string[]): FixOutcome => {
-  const compilation = new Compilation(opts)
+export const loadRoots = (compilation: Compilation, roots: string[], keepGoing: boolean): boolean => {
   let loaded = true
   for (const root of roots) {
     if (!compilation.load(root, root, "")) {
       loaded = false
+      if (!keepGoing) {
+        return false
+      }
     }
   }
+  return loaded
+}
+
+/** Load the roots, as `loadRoots` does, and check the program if they all loaded. */
+const compileRoots = (opts: Options, roots: string[], keepGoing: boolean): FixOutcome => {
+  const compilation = new Compilation(opts)
+  const loaded = loadRoots(compilation, roots, keepGoing)
   return new FixOutcome(compilation, loaded, loaded && compilation.check())
 }
 
@@ -76,13 +91,16 @@ const compileRoots = (opts: Options, roots: string[]): FixOutcome => {
  * once the program checks, the one time a warning is shown.
  */
 export const fixProgram = (opts: Options, roots: string[], warnPerformance: boolean): FixOutcome => {
-  let outcome = compileRoots(opts, roots)
+  let outcome = compileRoots(opts, roots, true)
   let round = 0
   while (round < MAX_FIX_ROUNDS && applyFixes(outcome, roots, warnPerformance) > 0) {
     round = round + 1
-    outcome = compileRoots(opts, roots)
+    outcome = compileRoots(opts, roots, true)
   }
-  return outcome
+  // Every root loaded, so a plain load would have gone the same way and the
+  // last round is already the report. Otherwise the report comes from a load
+  // that stops where a plain run stops.
+  return outcome.loaded ? outcome : compileRoots(opts, roots, false)
 }
 
 /**

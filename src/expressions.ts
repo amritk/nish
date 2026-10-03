@@ -85,7 +85,7 @@ import { ParentTable } from "./parents"
 import { unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
-import { isUndefined, isUndefinedType, strictEqualityFix, undefinedForbidden } from "./validator"
+import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
   intBits,
@@ -705,8 +705,7 @@ export const checkBitwiseAssignOperands = (ctx: CheckContext, expr: Node, target
 const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const op = expr.text
   if (op === "==" || op === "!=") {
-    ctx.errorFix(expr, "Loose equality is forbidden; use === / !==", strictEqualityFix(ctx, expr))
-    return T_ERROR
+    return ctx.errorType(expr, "Loose equality is forbidden; use === / !==")
   }
   if (writesLeft(op)) {
     return checkAssignment(ctx, expr, scope)

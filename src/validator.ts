@@ -201,7 +201,7 @@ const forbiddenOperator = (operator: string): string => {
  * the strict operator the way it was plainly meant. Empty, so no fix, for any
  * other operator, and when the token cannot be found between the operands.
  */
-export const strictEqualityFix = (ctx: CheckContext, node: Node): Edit[] => {
+const strictEqualityFix = (ctx: CheckContext, node: Node): Edit[] => {
   const edits: Edit[] = []
   if (node.text !== "==" && node.text !== "!=") {
     return edits

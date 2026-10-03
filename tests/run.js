@@ -3021,7 +3021,7 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       .sort()
   // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
   const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
-  const CONTROL = new Set(["argv", "exit", "rewrites"])
+  const CONTROL = new Set(["argv", "exit", "rewrites", "same-as-plain"])
   for (const name of fs.readdirSync(fixDir).sort()) {
     const caseDir = path.join(fixDir, name)
     if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
@@ -3036,12 +3036,19 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
     const argv = fs.readFileSync(path.join(caseDir, "argv"), "utf8").trim().split(/\s+/)
     const exitFile = path.join(caseDir, "exit")
     const wantExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : 0
-    const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
-    check(
-      `fix ${name}: --json carries a \`fix\``,
-      plain.status === 1 && diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
-      shown(plain)
-    )
+    // `same-as-plain`: what --fix finally reports is what a plain run reports
+    // about the files it leaves, byte for byte, which a plain run that stops at
+    // its first refused root may say before it reaches any fix.
+    const samePlain = fs.existsSync(path.join(caseDir, "same-as-plain"))
+    if (!samePlain) {
+      const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 &&
+          diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+    }
     const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
     // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
     const wrong = sources.filter((rel) => {
@@ -3060,7 +3067,24 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       const rewrites = fixed.stderr.split("\n").filter((l) => l.startsWith("fixed ")).length
       check(`fix ${name}: --fix rewrites a file ${want} times`, rewrites === want, shown(fixed))
     }
-    if (wantExit === 0) {
+    if (samePlain) {
+      const plainJson = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix --json reports what a plain --json run reports about the result, byte for byte`,
+        fixed.status === plainJson.status && fixed.stdout === plainJson.stdout,
+        `--fix:\n${shown(fixed)}\nplain:\n${shown(plainJson)}`
+      )
+      // The human report too, from a second --fix with nothing left to apply.
+      const again = spawnSync(NISH, ["--fix", ...argv], { cwd: work, encoding: "utf8" })
+      const plainHuman = spawnSync(NISH, [...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix reports what a plain run reports about the result, byte for byte`,
+        again.status === plainHuman.status &&
+          again.stdout === plainHuman.stdout &&
+          again.stderr === plainHuman.stderr,
+        `--fix:\n${shown(again)}\nplain:\n${shown(plainHuman)}`
+      )
+    } else if (wantExit === 0) {
       const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
       check(
         `fix ${name}: the fixed program compiles with no error`,

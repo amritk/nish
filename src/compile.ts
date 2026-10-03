@@ -70,7 +70,7 @@ import { basenameWithout, dirname } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
-import { fixProgram } from "./fix"
+import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
@@ -635,17 +635,7 @@ export const main = (): number => {
   // The tree is printed from what parsed and validated, so pass 1's refusals
   // do not stop the load — stage0 records them and reaches its dump first.
   compilation.dumpOnly = emitAst
-  let loaded = true
-  for (const root of roots) {
-    // A root is named by the path it was given, but its identity is
-    // `identityOf` that path, so a root the entry already imports under
-    // another spelling is found in `byPath` rather than loaded twice.
-    if (!compilation.load(root, root, "")) {
-      loaded = false
-      break
-    }
-  }
-  if (!loaded) {
+  if (!loadRoots(compilation, roots, false)) {
     reportLoadFailure(compilation, json)
     return 1
   }
