@@ -1,0 +1,224 @@
+PASS  A.1: 0xc2197c5eff14e88c decodes to 151,288,809,941,952,652
+PASS  A.1: 0x9d7f3e7d decodes to 494,878,333
+PASS  A.1: 0x7bbd decodes to 15,293
+PASS  A.1: 0x25 decodes to 37
+PASS  A.1: 0x4025 decodes to 37 as well
+PASS  A.1: 151,288,809,941,952,652 encodes to 0xc2197c5eff14e88c
+PASS  A.1: 494,878,333 encodes to 0x9d7f3e7d
+PASS  A.1: 15,293 encodes to 0x7bbd
+PASS  A.1: 37 encodes to 0x25, the shortest form
+PASS  37 in two bytes is accepted
+PASS  and is A.1's 0x4025
+PASS  each length's boundaries: 63 and 64
+PASS  16383 and 16384
+PASS  2^30 - 1 and 2^30
+PASS  2^62 - 1, the largest
+PASS  quicVarintSize of 2^62 - 1 is 8
+PASS  0xffffffffffffffff decodes to 2^62 - 1
+PASS  a varint read at an offset
+PASS  A.2: 0xac5c02 after 0xabe8b3 acknowledged takes 16 bits
+PASS  A.2: 0xace8fe in the same state takes 24 bits
+PASS  packet 0 with nothing acknowledged takes 8 bits
+PASS  128 unacknowledged still fit 8 bits
+PASS  129 take 16
+PASS  2^31 unacknowledged take 32 bits
+PASS  A.3: 0x9b32 after 0xa82f30ea decodes to 0xa82f9b32
+PASS  decoding wraps up a window: 0x01 after 0xff is 0x101
+PASS  and down a window: 0xff after 0x101 is 0xff
+PASS  the first packet of a space: 0 with nothing processed
+PASS  near 2^62 the window does not go up past the largest packet number
+PASS  at the top of the space, 0x00 after 2^62 - 1 is 2^62 - 256, not 2^62
+PASS  0xff after 2^62 - 1 is 2^62 - 1 itself
+PASS  0x80 after 2^62 - 1 is 2^62 - 128
+PASS  0xff after 2^62 - 2 is 2^62 - 1
+PASS  a four-byte 0 after 2^62 - 1 is 2^62 - 2^32
+PASS  and near 0 it does not go down below zero
+PASS  A.1 client_initial_secret
+PASS  A.1 server_initial_secret
+PASS  A.1 client key
+PASS  A.1 client iv
+PASS  A.1 client hp
+PASS  A.1 server key
+PASS  A.1 server iv
+PASS  A.1 server hp
+PASS  A.5 key
+PASS  A.5 iv
+PASS  A.5 hp
+PASS  A.5 ku, the next generation's secret
+PASS  A.2's printed packet is 1200 bytes
+PASS  A.2 unprotected header
+PASS  A.2 protected packet, byte for byte
+PASS  A.2 parses
+PASS  as an Initial
+PASS  of version 1
+PASS  to the client's DCID
+PASS  with an empty SCID and token
+PASS  its packet number at 18, and its end at the datagram's
+PASS  A.2 opens under the client's Initial keys
+PASS  packet number 2
+PASS  sent in 4 bytes
+PASS  the header in the clear
+PASS  the payload, byte for byte
+PASS  A.3 unprotected header
+PASS  A.3 protected packet, byte for byte
+PASS  A.3 parses
+PASS  with the server's SCID and an empty DCID
+PASS  A.3 opens under the server's Initial keys
+PASS  packet number 1
+PASS  sent in 2 bytes
+PASS  the payload, byte for byte
+PASS  A.4 Retry, byte for byte
+PASS  A.4's integrity tag on its own
+PASS  A.4 parses
+PASS  as a Retry
+PASS  whose token is "token"
+PASS  and whose tag is the last 16 bytes
+PASS  A.4 verifies against the client's original DCID
+PASS  and not against another
+PASS  A.5 unprotected header
+PASS  A.5 packet, byte for byte
+PASS  A.5 parses as a short header
+PASS  A.5 opens
+PASS  packet number 654360564
+PASS  the payload is one PING
+PASS  key phase 0
+PASS  the next key (checked against Python)
+PASS  the next iv (checked against Python)
+PASS  and the header-protection key is kept
+PASS  the old generation's hp reads the new phase
+PASS  the new generation decrypts it
+PASS  and the old one does not
+PASS  the first packet is A.3's Initial, ending at 135
+PASS  the second starts there and is A.5's short header, to the datagram's end
+PASS  the Initial opens where it lies
+PASS  the short packet's key phase reads before it is decrypted
+PASS  and it then decrypts in place
+PASS  to A.5's PING
+PASS  type 0: built, sealed, parsed and opened
+PASS  type 1: built, sealed, parsed and opened
+PASS  type 2: built, sealed, parsed and opened
+PASS  a short header with the spin and key-phase bits
+PASS  opens with key phase 1
+PASS  and its first byte back in the clear
+PASS  AES-256-GCM key, SHA-384 (checked against Python)
+PASS  AES-256-GCM iv (checked against Python)
+PASS  AES-256-GCM hp (checked against Python)
+PASS  AES-256-GCM ku, 48 bytes (checked against Python)
+PASS  its short header
+PASS  its packet, byte for byte (checked against Python)
+PASS  and it opens
+PASS  a negative varint has no size
+PASS  nor has 2^62
+PASS  2^62 is refused, appending nothing
+PASS  a size of 3 is refused
+PASS  so is a size too short for the value
+PASS  and neither appended anything
+PASS  a two-byte varint cut to one is refused
+PASS  so is a window past the array
+PASS  and a start outside it
+PASS  a varint's length outside the array is 0, below
+PASS  and above
+PASS  no length for a negative packet number
+PASS  nor one past 2^62 - 1
+PASS  nor one at or below the largest acknowledged
+PASS  nor for a largest acknowledged below -1
+PASS  nor for more than 2^31 unacknowledged
+PASS  no decoding a 0-byte packet number
+PASS  nor a 5-byte one
+PASS  nor a truncated number wider than its length
+PASS  nor a negative one
+PASS  nor against a largest below -1
+PASS  nor against a largest past 2^62 - 1
+PASS  an empty datagram is truncated
+PASS  so is a start before it
+PASS  and a start at its end
+PASS  a short header with the fixed bit clear
+PASS  a short header shorter than its DCID
+PASS  a short-header DCID length over 20
+PASS  a negative short-header DCID length
+PASS  a long header cut inside its version
+PASS  cut before its DCID length
+PASS  cut inside its DCID
+PASS  cut before its SCID length
+PASS  cut inside its SCID
+PASS  draft-29's version is not spoken
+PASS  but its version and connection IDs are read, for Version Negotiation
+PASS  version 0, Version Negotiation itself, likewise
+PASS  another version may have a 21-byte DCID (RFC 8999)
+PASS  a version 1 long header with the fixed bit clear
+PASS  a version 1 DCID of 21 bytes
+PASS  a version 1 SCID of 21 bytes
+PASS  a Retry shorter than its tag
+PASS  an Initial cut before its token length
+PASS  an Initial cut inside a two-byte token length
+PASS  an Initial whose token runs past the datagram
+PASS  a Handshake cut before its Length
+PASS  a Handshake whose Length passes the datagram
+PASS  A.2 one byte short of its Length
+PASS  a Retry carries nothing to open
+PASS  a header that did not parse keeps its own error
+PASS  a packet one byte short of a sample
+PASS  a Handshake whose Length leaves no room for the sample
+PASS  a header built by hand, with no packet number after its start
+PASS  a header read from a longer datagram
+PASS  a flipped ciphertext byte
+PASS  A.2 under the server's Initial keys
+PASS  keys quicKeys did not make are the caller's error, not a forgery
+PASS  AES keys with no packet key expanded
+PASS  keys that fail only at decryption are refused there
+PASS  as the caller's error
+PASS  a packet already in error is not decrypted
+PASS  and keeps its error
+PASS  a long header's reserved bit, once the packet authenticates
+PASS  and a short header's
+PASS  no long header of type Retry
+PASS  nor of the short type
+PASS  nor a Handshake with a token
+PASS  nor a 21-byte DCID
+PASS  nor a 21-byte SCID
+PASS  nor a 0-byte packet number
+PASS  nor a 5-byte one
+PASS  nor a negative packet number
+PASS  nor one past 2^62 - 1
+PASS  nor a negative payload length
+PASS  a Length of 16383, the most two bytes hold, is built
+PASS  one more is refused
+PASS  no short header with a 21-byte DCID
+PASS  nor a 0-byte packet number
+PASS  nor a 5-byte one
+PASS  nor a negative packet number
+PASS  nor one past 2^62 - 1
+PASS  no Initial secrets for a 21-byte DCID
+PASS  no keys for an AEAD this module does not know
+PASS  nor for AES-128-GCM from a 48-byte secret
+PASS  nor for AES-256-GCM from a 32-byte one
+PASS  nor for ChaCha20-Poly1305 from 31 bytes
+PASS  no key update for an unknown AEAD
+PASS  nor from a secret of the wrong length
+PASS  no next generation from a secret of the wrong length
+PASS  nor from keys quicKeys did not make
+PASS  no seal of a one-byte header
+PASS  nor of a header shorter than its packet number
+PASS  nor of a payload too short to sample
+PASS  but three bytes with a one-byte number is enough
+PASS  nor of a negative packet number
+PASS  nor of a number whose low bytes are not the header's
+PASS  a long header sealed with the payload its Length counts
+PASS  but not with one byte more
+PASS  nor of one past 2^62 - 1
+PASS  nor under keys quicKeys did not make
+PASS  nor under AES keys with no header-protection key expanded
+PASS  no Retry tag for a 21-byte original DCID
+PASS  no Retry with a 21-byte DCID
+PASS  nor a 21-byte SCID
+PASS  nor an empty token
+PASS  nor unused bits below 0
+PASS  nor above 15
+PASS  nor a 21-byte original DCID
+PASS  a Retry with one byte of its token changed does not verify
+PASS  nor with a byte of its tag changed
+PASS  nor against a 21-byte original DCID
+PASS  an Initial is not a Retry
+PASS  nor is a header that did not parse
+PASS  a Retry with an empty token still parses (the client discards it)
+quic-packet: 223 passed, 0 failed, 0 skipped
