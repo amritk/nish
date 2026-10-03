@@ -2626,6 +2626,19 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (`tests/cases/reject_struct_field_empty_array`). A value of the wrong type
   is `` Field `code` of `IoError` expects a value of type i32, got f64 ``
   (`reject_struct_field_f64`).
+- A **nullable context** gives an object literal the struct inside it:
+  wherever one of the contexts above expects `E | null` — a declared local,
+  a `return`, an arrow's concise body, a ternary arm whose other arm is
+  `null`, a parameter, or a field — the literal is an `E`, checked against
+  `E`'s fields as above, and that `E` converts to `E | null` as any other
+  `E` value does, the same pointer with no wrapper
+  (`tests/cases/obj_lit_nullable_ternary`, `obj_lit_nullable_return`,
+  `obj_lit_nullable_arrow`, `obj_lit_nullable_local`,
+  `obj_lit_nullable_field`; `reject_obj_lit_nullable_field`). A ternary
+  with no declared type around it gives neither arm a struct, so
+  `const z = c ? { v: 7 } : null` is still
+  `Object literal needs a contextual class or interface type`
+  (`reject_obj_lit_nullable_context`).
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The

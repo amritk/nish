@@ -1805,6 +1805,31 @@ const DECLARED = [
     why: "`\\u{10000D800}` is refused as above 0x10FFFF, where the reference wraps it in i32 to a lone high surrogate",
   },
   {
+    program: "tests/cases/obj_lit_nullable_ternary.ts",
+    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
+    why: "it builds an object literal in a ternary arm beside `null` where `Box | null` is declared, which the reference types as the union and stops on with an internal error (`unknown struct`)",
+  },
+  {
+    program: "tests/cases/obj_lit_nullable_return.ts",
+    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
+    why: "it builds an object literal in a `return` in a function returning `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
+  },
+  {
+    program: "tests/cases/obj_lit_nullable_arrow.ts",
+    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
+    why: "it builds an object literal in an arrow's concise body returning `E | null`, alone and as a ternary arm, which the reference types as the union and stops on with an internal error (`unknown struct`)",
+  },
+  {
+    program: "tests/cases/obj_lit_nullable_local.ts",
+    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
+    why: "it builds an object literal in a local declared `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
+  },
+  {
+    program: "tests/cases/obj_lit_nullable_field.ts",
+    changelog: "Type an object literal in an `I | null` context as the struct, not the union",
+    why: "it builds an object literal in a parameter, an enclosing literal's field and a field store that expect `E | null`, which the reference types as the union and stops on with an internal error (`unknown struct`)",
+  },
+  {
     program: "tests/link/crypto_hkdf/main.ts",
     file: "hkdf.ll",
     changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
