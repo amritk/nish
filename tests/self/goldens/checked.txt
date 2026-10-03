@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 837 programs, 59136 dump lines.
+# 838 programs, 59193 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42425,6 +42425,64 @@ function main(): i32 -> @nish_main [exported entry]
   local 6:9 b: u16 (const)
   local 7:9 c: u32 (const)
   local 8:9 d: u64 (const)
+program tests/cases/net_dual_stack.ts
+module tests/cases/net_dual_stack.ts (entry)
+import netAddress from "nish:net" -> builtin netAddress
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import netRead from "nish:net" -> builtin netRead
+import netWrite from "nish:net" -> builtin netWrite
+import tcpAccept from "nish:net" -> builtin tcpAccept
+import tcpListen from "nish:net" -> builtin tcpListen
+import udpBind from "nish:net" -> builtin udpBind
+import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
+import udpSendTo from "nish:net" -> builtin udpSendTo
+const WOULD_BLOCK: i32 = -11
+function hostOf(a: u8[]): string -> @hostOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_concat nish_str_from_u64
+  pointer a: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 28:12 i: i32 (let)
+  local 36:9 rest: i32 (const)
+function portOf(a: u8[]): i32 -> @portOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer a: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function echoOne(fd: i32, peer: u8[], buf: u8[]): i32 -> @echoOne
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 45:14
+  calls: hostOf nish_arena_mark nish_arena_release nish_net_close nish_net_read nish_net_write nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_tcp_accept portOf
+  pointer peer: size=0 writesThrough=true captured=false passedTo=hostOf#0 portOf#0
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 45:7 conn: i32 (let)
+  callee 52:23 hostOf -> @hostOf
+  callee 52:44 portOf -> @portOf
+  local 53:7 bytes: i32 (let)
+  local 55:11 n: i32 (const)
+  local 66:9 sent: i32 (let)
+  local 68:13 w: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen
+  calls: echoOne hostOf nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_index nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_tcp_listen nish_udp_bind nish_udp_recv_from nish_udp_send_to
+  stackSites=7 stackLocals=5
+  local 83:9 fd: i32 (const)
+  local 89:9 peer: u8[] (const)
+  local 90:9 buf: u8[] (const)
+  local 91:12 i: i32 (let)
+  callee 92:27 echoOne -> @echoOne
+  local 96:9 u: i32 (const)
+  local 97:9 to: u8[] (const)
+  local 98:9 from: u8[] (const)
+  local 99:9 meta: i32[] (const)
+  local 100:14 host: string (const)
+  local 102:16 ecn: i32 (const)
+  local 103:13 sent: i32 (const)
+  local 109:11 n: i32 (let)
+  callee 113:66 hostOf -> @hostOf
 program tests/cases/net_loop_calls.ts
 module tests/cases/net_loop_calls.ts (entry)
 const MS: i64 = 1000000
