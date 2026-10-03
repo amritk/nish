@@ -1,0 +1,843 @@
+{
+  "version": "0.17.0",
+  "date": "2026-10-03",
+  "tag": "v0.17.0",
+  "range": {
+    "from": "v0.16.0",
+    "to": "e3f51559"
+  },
+  "entries": [
+    {
+      "id": "add-the-secret-wipe-and-generated-golden-rules",
+      "type": "docs",
+      "breaking": false,
+      "title": "add the secret-wipe and generated-golden rules to CLAUDE.md",
+      "body": "Two rules from the security audit now sit in CLAUDE.md, where every session reads first.\n\nGenerated goldens are regenerated, never edited or merged by hand. `tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's `--emit-checked` dump of the golden cases and of `src/`, so they move with any `src/` change and conflict with every open pull request that touches `src/`. Rewrite them only with `node tests/self/goldens.js --update`, and on a conflict merge `main` and regenerate.\n\nSecret material in `std/crypto` is wiped once it can be. The runtime has no wipe primitive the optimiser cannot drop yet (#385). Until one ships, a function that holds a private key or a secret intermediate records it as unwiped in its area's record. Once it ships, every such function wipes before it returns, with a test that the wipe survives `-O2`.\n\nA new Security section also points at SECURITY.md and docs/security/. The pull request also carries the v0.16.0 package-lock.json from the release's lockfile pull request (#392).",
+      "metrics": [],
+      "refs": [
+        "SECURITY.md",
+        "docs/security/README.md",
+        "#385"
+      ],
+      "tests": [],
+      "commits": [
+        "1886c23"
+      ],
+      "pr": 391,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-16-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.16.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f120de1"
+      ],
+      "pr": 392,
+      "author": "github-actions[bot]",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "build-the-wasi-profile-against-a-libc-without",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "build the wasi profile against a libc without realpath",
+      "body": "The wasi-libc that Ubuntu and Debian package predates wasi-libc's\n`realpath`. It neither declares nor defines the function, so with\n`WASI_SYSROOT=/usr` every `--profile wasi` link stopped at\n`runtime-os.c`'s call to it. That included `web/`'s `nish.wasm`.\n\n`nish_realpath` now answers NULL there: the \"does not resolve\" answer\nevery caller already handles. The test is whether `<dirent.h>` spells\n`DT_SOCK`. wasi-libc#463 added `DT_SOCK` in the same change that declared\n`realpath` (#473 defined it a month later, with no wasi-sdk release\nbetween them), so wasi-sdk 22 and later still call the real `realpath`.\n\n`docs/INSTALL.md` now says where the package puts its sysroot (`/usr`, not\n`/usr/lib/wasi-sysroot`), and that `realpathSync` answers `null` with it.",
+      "metrics": [],
+      "refs": [
+        "docs/INSTALL.md",
+        "runtime/nish.h"
+      ],
+      "tests": [
+        "tests/run.js (wasi profile and web: checks",
+        "with WASI_SYSROOT=/usr)"
+      ],
+      "commits": [
+        "f67c3ad"
+      ],
+      "pr": 396,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "constant-time-check-plumbing-ct-14-ct-15",
+      "type": "test",
+      "breaking": false,
+      "title": "constant-time check plumbing (CT-14, CT-15), a narrower nish-cmp declaration, and record corrections",
+      "body": "The `ct_asm` assembly check now names each refusal by the kind it expects.\nBefore, every `expect=` other than `load` was reported as \"refused for a\nconditional branch\", so the `call` and `latency` seeds read as branches\n(CT-14). Each spec now carries its `promise` from `ctSpecs`, built from\none table of kinds that the `ct-check` grammar also reads, so a kind it\naccepts always has a name. `via=` callees are named too.\n\nA clang without the aarch64 (or x86-64) target now fails the run instead\nof turning that half of the check into counted skips that left `npm test`\ngreen with a note (CT-15). There is one `ct_asm: clang targets <target>`\ncheck per target, and the failure is reported once with clang's answer.\nThe wasm32 compile, which reads no branches, stays a counted skip.\n\n`tests/nish-cmp.js` loses its four every-program declarations. Against\n0.16.0, three covered nothing. The fourth, the `!tbaa` element-tag\ndeclaration, was absorbing one unrelated difference. In the two\n`crypto_x25519` link programs, the seed names the `std/crypto/x25519`\nmodule's output file by its own install path\n(`home_user_nish_build_seed_std_crypto_x25519.ll`), while HEAD writes\n`std_crypto_x25519.ll`. The bytes are identical. That is the\nown-package-root case nish-cmp already sets aside inside a file, so\n`withoutOwnRootNames` now sets it aside in a file name too, with its own\nself-check cases. Every program agrees with 0.16.0 and no declaration\nadmits a difference everywhere.\n\nSecurity record corrections from #388:\n- K1-6 is marked fixed except for `join`, linking #382.\n- The \"held by discipline only\" list now says `ct_asm_k1_ct` and\n  `ct_asm_k1_base64url` read copies of `ct.ts` and `base64url.ts`.\n- CG-3 links #382, and CT-13 links #378.\n- CLI-6 is marked fixed by RT-4.\n- CT-14 and CT-15 are fixed, and the index counts and open table are\n  updated to match.\n\nSC-16 records immutable releases as on: v0.16.0 reports\n`immutable: true`. Build provenance attestations stay open (#389).",
+      "metrics": [],
+      "refs": [
+        "docs/security/ct-verification.md",
+        "docs/security/README.md"
+      ],
+      "tests": [
+        "tests/run.js (ct_asm)",
+        "tests/nish-cmp.js (selfCheckRoots)"
+      ],
+      "commits": [
+        "e69f37e"
+      ],
+      "pr": 397,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "hkdf-expand-label-for-tls-1-3-and",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "HKDF-Expand-Label for TLS 1.3 and QUIC",
+      "body": "`nish/crypto/hkdf` gains `hkdfExpandLabelSha256` and `hkdfExpandLabelSha384`, RFC 8446 §7.1's HKDF-Expand-Label, written once so that TLS 1.3 and QUIC (RFC 9001 §5.1) share it. The label is given without its `\"tls13 \"` prefix, which the function adds, and the `HkdfLabel` struct is handed to the existing `hkdfExpandSha256/384` as `info`.\n\nEvery argument is the program's choice rather than the peer's, so an out-of-range one panics rather than answering `null`: a length outside 0 to 255, a label empty or longer than 249 bytes, a context longer than 255 bytes, or a secret shorter than HashLen.\n\nThe answers are pinned against every HKDF-Expand-Label step RFC 8448 §3 prints and all of RFC 9001 A.1, in both number modes, with SHA-384 and the largest accepted arguments checked against OpenSSL's TLS13-KDF. The K1 security record gains an addendum for the new functions.",
+      "metrics": [],
+      "refs": [
+        "docs/wp34-hosting-cs.md#5-the-stack-in-lanes-that-start-in-parallel"
+      ],
+      "tests": [
+        "tests/link/crypto_hkdf_expand_label"
+      ],
+      "commits": [
+        "c378ddf"
+      ],
+      "pr": 398,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "declare-the-hkdf-expand-label-nish-cmp-differences",
+      "type": "test",
+      "breaking": false,
+      "title": "declare the HKDF-Expand-Label nish-cmp differences against 0.16.0",
+      "body": "HKDF-Expand-Label (#398) added `hkdfLabel`, `hkdfExpandLabelSha256` and\n`hkdfExpandLabelSha384` to `std/crypto/hkdf.ts`. Each compiler links its\nown `std/`, so against the 0.16.0 seed the five existing HKDF programs'\n`hkdf.ll` now carries the new functions and strings, and the ten new\n`crypto_hkdf_expand_label*` programs are refused by the seed, whose\n`hkdf.ts` has no such export. #398 was branched before #397 removed\nnish-cmp's every-program declarations, which had absorbed these, so main\nwent red on both `nish-cmp` jobs.\n\nNone of the fifteen is a codegen difference: the 0.16.0 seed, given this\ntree's `hkdf.ts`, writes byte-identical IR for all of them. Each now has\na narrow entry, one program and one file, naming the change that ships\nit, as `std_pair_*` does, to go when the next release becomes the seed.",
+      "metrics": [],
+      "refs": [
+        "tests/nish-cmp.js"
+      ],
+      "tests": [
+        "tests/link/crypto_hkdf_expand_label"
+      ],
+      "commits": [
+        "fa02341"
+      ],
+      "pr": 403,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "type-an-object-literal-in-an-i-null",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "type an object literal in an `I | null` context as the struct, not the union",
+      "body": "An object literal whose contextual type is `E | null` was checked against\n`E`'s fields, but the checker recorded `E | null` as the literal's own type.\nThe emitter looks up the struct a literal allocates by that type, found none\nfor the union, and stopped with an internal error (`unknown struct`, exit 70).\nThat hit a ternary arm beside `null`, a `return`, an arrow's concise body, a\ndeclared nullable local, a parameter and a nullable field alike.\n\nThe literal is now typed as the struct `E` itself. An `E` already converts to\n`E | null` as the same pointer, so every one of those contexts compiles with\nno further change, and the ternary's arms meet in one `phi` of `%struct.E*`\nand `null`.\n\nThe 0.16.0 release stops on each of the five new `obj_lit_nullable_*`\nprograms with that internal error, so each is declared to nish-cmp against\nthis change's own release-note subject.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#interfaces-and-object-literals"
+      ],
+      "tests": [
+        "tests/cases/obj_lit_nullable_ternary",
+        "tests/cases/obj_lit_nullable_return",
+        "tests/cases/obj_lit_nullable_arrow",
+        "tests/cases/obj_lit_nullable_local",
+        "tests/cases/obj_lit_nullable_field",
+        "tests/cases/reject_obj_lit_nullable_field",
+        "tests/cases/reject_obj_lit_nullable_context"
+      ],
+      "commits": [
+        "969bb61"
+      ],
+      "pr": 401,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "prove-a-literal-receiver-s-slice-in-range",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "prove a literal receiver's slice in range so NL8002 stays quiet",
+      "body": "`\"abcdef\".slice(1, 3)`, and the same call on a `const` bound to that\nliteral, no longer raise the NL8002 portability warning. The receiver is\nsix bytes long and both bounds are inside `[0, 6]`, so the native check\ncannot fire and TypeScript's clamp cannot move them: both print `bc`.\n\nThe slice proof now knows the length of a receiver whose ASCII text the\nprogram spells out: a string literal, a `const` local bound to one (or\ncopied from such a `const`), and a module constant folded to one. A bound\nis proven when it is a decimal literal at most that length, or a local the\nbounds walk holds between 0 and that length. The receiver must be ASCII, so\nits byte length and its UTF-16 length are the same number.\n\nWith two bounds, the literal proof also needs `start <= end`, from the\nlargest value the start can have and the smallest the end can have, so\n`\"abcdef\".slice(5, 2)`, which panics natively where TypeScript answers\n`\"\"`, still warns. The ordering applies only where the literal length is\nwhat proves a bound; a pair the existing length facts prove is judged as\nbefore, and every warning still names the bound that fails.\n\nThe length is read only on the `slice` path, never as a `State` fact. The\nshared `substring` proof is unchanged, so no emitted clamp moves and no IR\ngolden changes.",
+      "metrics": [],
+      "refs": [
+        "#326",
+        "docs/LANGUAGE.md (NL8002)"
+      ],
+      "tests": [
+        "tests/cases/port_str_slice_literal_quiet",
+        "tests/cases/port_str_slice_literal_past"
+      ],
+      "commits": [
+        "e2826b9"
+      ],
+      "pr": 400,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "remaining-runtime-hardening-rt-10-rt-13-and",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "remaining runtime hardening (RT-10..RT-13) and shim O_NOFOLLOW parity",
+      "body": "The last four open findings of the runtime audit are closed, and the Node\ntwin now refuses a symbolic link where the native runtime does.\n\n- **RT-10** `signalFd()` keeps both ends of its pipe in one 64-bit word and\n  publishes them with one compare-and-swap. Two first calls that overlap\n  answer the same descriptor, the one the handler writes to, and the pipe\n  that lost is closed instead of leaking.\n- **RT-11** `console.log`, `write` and the panic messages finish a short\n  write instead of silently dropping the rest of the line.\n- **RT-12** The descriptors `readFileSync*`, `writeFileSync` and\n  `appendFileSync` open are close-on-exec, so a child another thread spawns\n  does not inherit them.\n- **RT-13** A `pread` or a file `write` that a signal interrupts is retried.\n  A read used to hand back the bytes so far as the whole file, and a write\n  used to fail with `cannot write`.\n- `runtime/shim.mjs` opens `writeFileSync`, `appendFileSync` and\n  `spawnSyncTo`'s streams with `O_NOFOLLOW`, as `runtime-os.c` does (RT-4).\n  `nish.d.ts` says so, and `src/runtime.ts` notes where `willreturn` is the\n  approximation CG-8 records.\n\nEvery unit stays inside its `.text*` ceiling: `nish_die` writes with `fputs`,\n`getenv` and `realpathSync` share one copy into the arena, and a spawn\nalways builds its list of file actions.",
+      "metrics": [
+        ".text* at -Oz, runtime.c 3,583/3,584, runtime-os.c 1,530/1,536, runtime-host.c 764/768"
+      ],
+      "refs": [
+        "docs/security/runtime.md"
+      ],
+      "tests": [
+        "tests/runtime-test.c (RT-10",
+        "RT-11",
+        "RT-12",
+        "RT-13)"
+      ],
+      "commits": [
+        "cd7ce7c"
+      ],
+      "pr": 405,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "pin-the-awfy-storage-and-list-peak-rss",
+      "type": "test",
+      "breaking": false,
+      "title": "pin the AWFY Storage and List peak-RSS results",
+      "body": "#207 measured by hand that the automatic callee arena scope (#210) keeps\nAWFY Storage and List flat in memory, but no test pinned it. `mem_awfy`\nbuilds `bench/awfy` as `bench/run.mjs` does and, with `bench/rss.c`,\nrequires `harness Storage 1 1000` to peak within 1.25x of\n`harness Storage 1 1`, and `harness List 1 100000` within 1.25x of\n`harness List 1 10`. The bound is a ratio between two runs of one\nbinary, as in `mem_loop_scope_chunk`, so it does not depend on the host.\n\nWith `settleScope`'s callee scope switched off, both checks fail by a\nwide margin: Storage peaks at 390,192 KB against 1,840 KB, and List at\n49,968 KB against 1,456 KB.",
+      "metrics": [
+        "Storage 1,844 / 1,844 KB (1.00x), List 1,460 / 1,456 KB (1.00x); regressed 212x and 34x; about 3 s added to npm test"
+      ],
+      "refs": [
+        "#325",
+        "#207"
+      ],
+      "tests": [
+        "tests/run.js mem_awfy"
+      ],
+      "commits": [
+        "1998e69"
+      ],
+      "pr": 408,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "refuse-push-and-pop-on-typed-arrays-reached",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "refuse push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
+      "body": "WP33 R2 refused `push` and `pop` on a receiver spelled `Int32Array`,\n`Float32Array`, `Float64Array` or `BigInt64Array` (NL2415), but three\nshapes still compiled and pushed natively while the same source throws a\n`TypeError` under Node. Each is now refused:\n\n- **Another module's `type` alias.** A return type or a field written as\n  `Samples`, where another module declares `type Samples = Float64Array`,\n  is spelled where it is declared, the one module whose aliases the\n  annotation names, and kept on the signature (`FunctionSig.returnSpelling`)\n  and the field (`FieldInfo.spelling`). A caller reads that, so\n  `make(2).pop()` is refused even in a module that never imports the alias.\n- **A read out of a `Map`.** `Map<string, Float64Array>`, annotated, made\n  with `new Map<…>()` or declared as a field, spells its values: `m.get(k)`\n  once narrowed, `m.get(k) ?? d` and the variable of a `for...of` over\n  `m.values()` carry the name. A `Set` holds no arrays, since an array is\n  not a key.\n- **A generic function's `T` result.** `first(rows)` with\n  `first<T>(xs: T[]): T` and `rows: Float64Array[]` binds `T` to the\n  argument's spelling at the call site, not on the instantiation: an\n  `f64[][]` argument is the same instantiation and is not refused.\n\nThe change is compile-time only: no `.ll` golden moves and `sameType`\nstill holds, and the new spelling loops are guarded where the bounds\nprover reads them, so the performance ratchet is unchanged. A member of a\ngeneric class instantiated at a name, `new Box<Float64Array>(t).value`, is\nthe residue that remains, and docs/LANGUAGE.md says so.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#typed-array-names-have-no-push-or-pop"
+      ],
+      "tests": [
+        "tests/cases/reject_typed_push_map",
+        "tests/cases/reject_typed_push_generic",
+        "tests/link/reject_typed_push_alias"
+      ],
+      "commits": [
+        "b1bb42c"
+      ],
+      "pr": 409,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "exercise-nish-net-s-dual-stack-ipv6-path",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "exercise nish:net's dual-stack IPv6 path, and correct its error-rule wording",
+      "body": "`nish:net` binds `\"::\"` as an IPv6 socket with `IPV6_V6ONLY` off, and falls\nback to IPv4's `0.0.0.0` on a kernel without IPv6. Until now only the fallback\nhad been run, because the containers the suite ran in have no IPv6. The new\ncase `net_dual_stack` listens on `\"::\"`, and the `net_` block of\n`tests/run.js` connects to it from Node over `127.0.0.1` and then over `::1`.\nThe program must name the first peer in its mapped form and the second as\n`::1`, each with Node's own port, and echo both. Its `\"::\"` UDP socket then\nsends itself a datagram with each ECN mark over each family, so the mark\nleaves as `IP_TOS` and as `IPV6_TCLASS`, and it must read every mark back from\n`meta[1]`. CI's `ubuntu-latest` has IPv6 and runs the real path.\n\nA host without IPv6 prints why and counts the check as a pass, not a skip:\nthere `\"::\"` is the documented fallback, not a gap. Only EAFNOSUPPORT (no\nIPv6 in the kernel) and EADDRNOTAVAIL (IPv6 with no `::1` on loopback) count\nas that; any other error on the probe fails the check and names its code,\nand a self-check pins which codes go which way.\n\nThe `nish:net` rules in `docs/LANGUAGE.md` and the header of\n`runtime/runtime-net.c` said errors follow \"the same convention `signalFd`\nset\". They follow its shape, a negative `i32` for a failure, and add the\nerrno, where `signalFd` and `readSignal` answer a plain `-1`. Both now say so.\nThey also say plainly that on Darwin `meta[1]` is always `0`, which reads the\nsame as a real Not-ECT arrival, so a program learns that ECN is unsupported\nfrom the `-95` of a marked send and never from a receive. No runtime code\nchanges.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop"
+      ],
+      "tests": [
+        "tests/cases/net_dual_stack"
+      ],
+      "commits": [
+        "1c6bc54"
+      ],
+      "pr": 402,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "a-secure-wipe-builtin-the-optimiser-cannot-drop",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a secure-wipe builtin the optimiser cannot drop",
+      "body": "`secureZero(bytes: u8[]): void` sets every byte of a `u8[]` to zero in\nstores no optimisation may remove, which is what `std/crypto` needs to\nclear a private key, a secret scalar or another secret intermediate once\nit is used (ECC-2, X509-7). A plain `fill(0)` or `memset` before a key's\nlife ends is a dead store at `-O2`, and every program is linked with\n`-flto`, which inlines a runtime `memset` into that caller and drops it\nthe same way. Non-escaping arrays live in the frame, so this is the\ncommon case, not a corner.\n\nThe builtin is one call to `nish_wipe` in `runtime/runtime.c`, which\nstores each byte through a `volatile` pointer and is `noinline`. Volatile\nstores are behaviour the C standard keeps whatever the optimiser can see,\nso they hold after LTO inlines the body too; the call is declared\n`nounwind willreturn` and `nocapture` without `readonly`, with no memory\nattribute that would let LLVM treat it as a store it may drop. The\nchecker takes a `u8[]` only, refuses a `readonly u8[]`, a value position\nand a write inside a scope's region, as it does for\n`crypto.getRandomValues`. Under Node the prelude supplies the same\nzeroing loop.\n\nThe runtime unit test builds a probe with `-O2 -flto` over the runtime's\nsources: a key written to a block, used, wiped, freed and read back\nthrough a pointer the optimiser cannot follow. With no wipe, and with a\n`memset` wipe in another translation unit, all 48 observed bytes still\nhold the key; with `nish_wipe` none do, and the same test fails when\n`nish_wipe` is written as a `memset`.\n\n`std/crypto` does not call it yet: under the rolling freeze it may once\na release ships the builtin, and the security records say so.",
+      "metrics": [
+        "runtime.c .text* at -Oz 3,583 -> 3,604 bytes (+21; budget 3,584 -> 3,605); -DNISH_THREADS 3,708 -> 3,729 of 3,840"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#wiping-a-secret-securezero",
+        "docs/IR_COOKBOOK.md#securezero",
+        "#385"
+      ],
+      "tests": [
+        "tests/cases/wipe_bytes",
+        "tests/cases/reject_wipe_*",
+        "tests/runtime-test.c (test_wipe)"
+      ],
+      "commits": [
+        "3b32f18"
+      ],
+      "pr": 417,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "nish-net-tcpconnect-the-client-half-of-tcp",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "nish:net tcpConnect — the client half of TCP",
+      "body": "A Nish program can now be a TCP client. `nish:net` gains two calls, each\nalso a global like the other sixteen.\n\n`tcpConnect(addr: readonly u8[]): i32` creates a non-blocking,\nclose-on-exec socket and starts a `connect` to an 18-byte address, using\n`AF_INET` for an IPv4 address and `AF_INET6` for any other. It returns the\ndescriptor at once, while the connection is still being made: the\n`EINPROGRESS` of a non-blocking `connect` is not a failure, and the\nreadiness loop reports the descriptor writable when the connection\nfinishes. Any other failure closes the socket and is returned instead. An\naddress shorter than 18 bytes is -22.\n\n`connectResult(fd: i32): i32` reads `SO_ERROR` once the descriptor is\nwritable. It answers 0 when the connection is made, or the negative\nerrno: -111 for a refused port, -110 for a timeout. The kernel clears\n`SO_ERROR` as it is read, so a second call answers 0.\n\nNeither call waits or allocates, so both are `willreturn`. On Darwin,\n`ECONNREFUSED` and `ETIMEDOUT` are translated to Linux's numbers.\n`nish_net_sockaddr` is now `noinline`, shared by three callers, which\nkeeps `runtime-net.c` under its existing `.text*` ceiling without\nraising it.\n\nThis lands the first item of #357. Batching, edge-triggered mode, timers,\nDNS, Windows and WASI stay open there.",
+      "metrics": [
+        "runtime-net.c .text* at -Oz 2,087 -> 2,303 bytes of the unchanged 2,304 budget"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop"
+      ],
+      "tests": [
+        "tests/cases/net_tcp_connect",
+        "tests/cases/net_tcp_connect_import",
+        "tests/cases/reject_net_connect_*"
+      ],
+      "commits": [
+        "d307827"
+      ],
+      "pr": 411,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "add-using-a-arena-a-checked-arena-bracket",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "add using a = arena(), a checked arena bracket",
+      "body": "A block that declares `using a = arena()` marks the arena where the\ndeclaration stands and releases to that mark on every exit of the block:\nits end, a `return` (after the returned value is computed), a `break` or\n`continue` that leaves it, a `break` out of a `switch`, and an\n`orReturn()`. The releases share the stack `using s = scope()` already\nuses, so they nest with a scope's join, a loop pass's scope and a\nfunction's automatic scope.\n\nThe compiler proves the release safe, which `Arena.release` never did. It\nholds the block to the rule the compiler's own per-pass scopes are held\nto, and refuses the block rather than quietly dropping the bracket. From\nthe declaration to the block's end, nothing allocated may be:\n\n- assigned to a local declared outside (NL2418);\n- stored into a field (NL2419), an element (NL2420) or memory any other\n  way (NL2421);\n- pushed onto an older array (NL2422), which also covers growing that\n  array's buffer;\n- returned or propagated by `orReturn()` (NL2423);\n- kept by a callee (NL2424).\n\nArena control inside the block (NL2426) and a `spawn` on a scope declared\noutside it (NL2427) are refused too. Each message names the value and\nwhere it would escape to.\n\n`arena()` anywhere but a `using` initialiser (NL2416) and any read of its\nbinding (NL2417) are refused. A parallel body or task may not open one\n(NL2351). `using` accepts `arena()` beside `scope()`, with NL2387 and\nNL2393 reworded.\n\n`arena()` is a global builtin declared `declare function arena():\nDisposable` in runtime/nish.d.ts, so a program stays TypeScript. Under\nNode its disposal does nothing. A function that opens a block keeps its\nautomatic scopes.",
+      "metrics": [
+        "20000 passes that each grow a 1000-element array in a function with no automatic pass scope peak at 163,936 kB RSS without the block and 5,416 kB with it"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#using-a--arena"
+      ],
+      "tests": [
+        "tests/cases/mem_using_arena",
+        "tests/link/arena_using_exit_paths",
+        "tests/cases/reject_using_arena_*"
+      ],
+      "commits": [
+        "c397f20"
+      ],
+      "pr": 420,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "add-secret-t-key-material-the-checker-keeps",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "add `Secret<T>`, key material the checker keeps in and wipes",
+      "body": "`nish:secret` holds a key as a `Secret<T>` — an array of integers or a\nrecord of integer fields — and the checker refuses every road out of the\nprogram but one. A `Secret` cannot be interpolated, printed, handed to any\nbuiltin (files, sockets, processes, the environment, entropy), compared with\nanything but another `Secret` or `null`, branched on, indexed or used as an\nindex, read into, built with `new`, or stored in a field, an array element, a\n`Result` or a class's type argument. Each refusal has a code of its own,\nNL2428 to NL2453, and is asked before the general rule the program would also\nbreak, so the one diagnostic names the secret.\n\nThe one road is `expose(s, f)` and `exposeWith(s, arg, f)`. `f` is a function\nparameter, judged once the whole-program facts are in: it may reach no I/O,\nno clock, no entropy and no C at any depth of calls, and no `panic` or exit\nwhose message or status it computes; it keeps nothing of the value, writes\nnothing through the argument `exposeWith` hands it, and declares a result\ntype that holds no `Secret`. That result is what leaves.\n\nA `Secret` a function makes leaves it returned or wiped **on every path**.\nThis is Result rule 1's analysis in its two places, the statement that drops\na value and the body that never handles one, with the second walked path by\npath rather than counted: a `wipe` on one arm of an `if` is not a wipe, and\nevery `return`, `break`, `continue` and `orReturn()` is an exit it checks.\nA wiped `Secret` is not read again, `const j = k` moves `k`, and\n`secret(local)` moves the local, which is not read again either.\n\n`wipe` is one `llvm.memset` with its volatile flag set, over an array's whole\ncapacity or a record's `sizeof`, written by the emitter as the body of each\ninstance. Its facts say what that body does, so no parameter it writes is\n`readonly`. `tests/run.js` holds it under `opt -O2` beside a twin whose\n`fill(0)` of the same dead bytes is deleted outright: the twin keeps no\nstore, the wipe keeps one volatile zero per byte. `secureZero` (#417) stays\nthe global for a bare `u8[]`; key material belongs in a `Secret`.\n\n`nish:secret` is the one builtin module with source behind it, `std/secret.ts`,\nimported only by the builtin name and copied into each module that uses it,\nas `std/collections.ts` is, so it writes no `.ll` of its own. `runtime/nish.d.ts`\ndeclares it for `tsc`, and under Node `runtime/nish.mjs` resolves it to the\nshim, where a `Secret` is a plain wrapper and `wipe` zero-fills it.\n\n`std/crypto/p256.ts`, `x25519.ts` and `x509.ts` take and give private keys as\n`Secret<u8[]>` and wipe every intermediate the key reaches: the key's limbs,\nthe nonce and its inverse, RFC 6979's `K` and `V` (whose HMAC is now written\nout over `Sha256` so its key blocks and hasher state can be wiped), the nonce\npoint, the scalar multiply's table and accumulator, X25519's clamped scalar\nand ladder, and every DER block decoded from a PEM key. ECC-2 and X509-7 are\nclosed; what a wipe cannot reach — a scalar in a register, the caller's PEM\nstring — is recorded in their audit records.\n\nBREAKING CHANGE: `p256PublicKey`, `p256Sign` and `p256SignSha256` take the\nprivate key as a `Secret<u8[]>`; `x25519` takes the scalar as one and answers\nthe shared secret as `Secret<u8[]> | null`; `x25519Base` takes the scalar as\none; `x509ParseP256PrivateKey` answers `Secret<u8[]> | null`, and\n`x509MintSelfSigned` takes one. Wrap a key with `secret(bytes)`, read a result\nwith `expose`, and `wipe` what you made.",
+      "metrics": [
+        "after opt -O2 the 8-byte wiped buffer keeps 8 volatile stores; its fill(0) twin keeps 0"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#secrets-nishsecret"
+      ],
+      "tests": [
+        "tests/cases/secret_wipe",
+        "tests/cases/secret_flow",
+        "tests/cases/secret_wipe_o2",
+        "tests/cases/reject_secret_*"
+      ],
+      "commits": [
+        "f3a4194"
+      ],
+      "pr": 418,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "carry-a-machine-applicable-fix-on-a-diagnostic",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "carry a machine-applicable fix on a diagnostic, and apply it with nish --fix",
+      "body": "A diagnostic printed by `nish --json` may now end with a `fix` key: a list of edits, `{\"line\",\"column\",\"endLine\",\"endColumn\",\"text\"}`, placed exactly as the diagnostic's own span is (1-based, columns in UTF-16 code units, the end exclusive). A span whose start equals its end is an insertion. The key is absent rather than empty when there is no safe rewrite, so every line without a fix is byte-identical to before. A fix is attached only when it keeps the program's meaning.\n\n`nish --fix <files>` applies them. It rewrites only files named on the command line (never the standard library or a dependency), drops a fix that overlaps an earlier one, and recompiles until a round applies nothing or five have. Then it reports what is left exactly as a plain run would, `--json` included, with that run's exit code. It writes no IR, so `-o`, `--link` and the other product flags are a usage error (exit 2).\n\nLoose equality is the first fix: `==` becomes `===` and `!=` becomes `!==`, replacing the operator token alone.",
+      "metrics": [
+        "`--fix` on tests/fix/eq-multi-round takes 3 rounds (4 compiles) in 4 ms, against 3 ms for one plain compile"
+      ],
+      "refs": [
+        "AGENTS.md#machine-readable-surfaces"
+      ],
+      "tests": [
+        "tests/fix/eq-loose",
+        "tests/fix/eq-loose-not",
+        "tests/fix/eq-multi-round",
+        "tests/fix/eq-nofix-throw",
+        "tests/fix/eq-two-roots",
+        "tests/fix/eq-named-twice",
+        "tests/fix/eq-import-not-named",
+        "tests/fix/eq-package-named",
+        "tests/fix/eq-unfixable-first",
+        "tests/fix/eq-missing-roots"
+      ],
+      "commits": [
+        "cd0fbba"
+      ],
+      "pr": 421,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "report-the-capabilities-each-function-module-and-package",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "report the capabilities each function, module and package can reach",
+      "body": "Every builtin now carries exactly one capability label, or a deliberate none,\nin a total audit table (src/capabilities.ts): clock, entropy, env, exit, ffi,\nfs.read, fs.write, net, process.spawn and signal, with unsafe reserved for\nnish:unsafe. A call to a `declare function` is ffi. The attribute pass carries\na capability mask and a shortest witness chain per capability over the whole\nprogram's call graph, per generic instantiation and per function-parameter\ninstance, across packages. Ties go to the earlier call in the source, so the\nreport is byte-stable.\n\n`--emit-capabilities <file.json>` writes the report: the program's set, whether\nit is deterministic (it reaches none of clock, entropy, env, ffi, fs.read,\nfs.write, net and process.spawn), and each package, module and exported\nfunction with its set and a witness chain per capability. Keys come in a fixed\norder, arrays are sorted, and paths are relative to the entry's directory.\n`nish run --capabilities` prints one line on stderr before the program runs,\n`capabilities: fs.read (not deterministic)`, and leaves its stdout alone.\n\nAn unlabelled builtin is an internal compiler error when the walk meets one,\nand tests/capabilities.js fails the suite the day a builtin is added without a\nrow. Nothing is enforced yet; the enforcement is the next work package.",
+      "metrics": [
+        "src/compile.ts self-compile 1,688,381,447 -> 1,691,910,149 instructions under callgrind (+0.21%); wall time within noise (best 0.631 s -> 0.636 s)"
+      ],
+      "refs": [
+        "docs/wp35-capabilities.md",
+        "docs/LANGUAGE.md#capabilities"
+      ],
+      "tests": [
+        "tests/cases/caps_*",
+        "tests/cases/reject_caps_parallel_clock",
+        "tests/link/caps_package",
+        "tests/link/caps_package_named_nish",
+        "tests/link/caps_parallel",
+        "tests/capabilities.js"
+      ],
+      "commits": [
+        "b5b266e"
+      ],
+      "pr": 423,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "nish-net-tls-the-tls-1-3-server",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/tls — the TLS 1.3 server handshake, reproducing RFC 8448 §3",
+      "body": "`nish/net/tls` is a TLS 1.3 server handshake written as a pure state\nmachine: bytes in, records and events out, with no sockets. Fed the\nclient's flight from RFC 8448 §3, it produces the server's flight byte for\nbyte, and the handshake and application traffic secrets match the trace.\n\nIt negotiates TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and\nTLS_CHACHA20_POLY1305_SHA256 over x25519, sends a HelloRetryRequest when\nthe client offers no usable share, and chooses the version from\nsupported_versions alone. It signs CertificateVerify with ECDSA P-256. The\nRFC 8448 trace is signed with RSA-PSS, so for that trace the test checks\nthe content to be signed and injects the trace's signature.\n\nThe parser bounds every length-prefixed vector by its own end, at every\nnesting level: the extensions, each extension, and the lists inside\nkey_share, server_name and ALPN. A malformed hello gets decode_error and\nthe exact message, and never a panic.\n\nThe ephemeral key and the ECDHE secret are a `Secret` (#418) while they\nare used, and both are wiped on every path. What stays unwiped, the\ntraffic secrets the caller receives as plain bytes, is recorded as TLS-1\nin docs/security/tls.md.",
+      "metrics": [],
+      "refs": [
+        "docs/security/tls.md",
+        "RFC 8446",
+        "RFC 8448 §3"
+      ],
+      "tests": [
+        "tests/link/net_tls_rfc8448",
+        "tests/link/net_tls_ecdsa",
+        "tests/link/net_tls_ext_hrr",
+        "tests/link/net_tls_*_f64"
+      ],
+      "commits": [
+        "cb4d26f"
+      ],
+      "pr": 407,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "add-nish-unsafe-and-scope-the-unsafe-flags",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "add nish:unsafe and scope the unsafe flags to the entry package",
+      "body": "`--unchecked-indexing` and `--wrapping` used to reach every module of a\nprogram, dependencies and the `nish/` standard library included, so one flag\non a command line made every out-of-range index anywhere undefined behaviour\nand nothing in the source said so. This adds `nish:unsafe`, a builtin module\nwhose five functions state the same decisions at one site:\n\n- `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of numbers\n  with an `i32` index lower to the load and store `xs[i]` lowers to, with no\n  `len` load, no compare and no branch to the bounds panic.\n- `wrappingAdd`, `wrappingSub` and `wrappingMul` on two `i32`s or two `i64`s\n  are `add`, `sub` and `mul` with no `nsw`, whatever the command line says,\n  and fold wrapping in a module constant.\n\nA call reaches them only through `import { ... } from \"nish:unsafe\"`: the\nglobal spelling `tsc` also accepts is refused (NL2456), so every module that\ngives up a check or defines a wrap says so at its top. Each import and each\ncall site is recorded on the checked program and printed by\n`--emit-checked`, for a capability report to read. Wrong arity, a non-numeric\nreceiver (NL2455), an `f64` index, mixed widths and unsigned operands\n(NL2454) are refused; `runtime/nish.mjs` answers the import, so the same\nprogram runs unmodified under Node.\n\nThe two flags now reach only the entry package's modules, never a\n`node_modules` dependency or a `nish/` module, and each prints a deprecation\nwarning naming its replacement (NL9014, NL9015), under `nish run` too;\n`--no-warn-performance` silences it. They are removed in a later release.\nThe `ct_asm_*` fixtures, which used `--unchecked-indexing` as a means, now\nindex through `uncheckedGet` / `uncheckedSet`, and their asm-checked\nfunctions lower to the same IR as before.",
+      "metrics": [
+        "1.06x on a cache-resident gather loop, `xs[idx[k]]` vs `uncheckedGet(xs, idx[k])` (median 430 ms vs 406 ms over 9 runs, checksum -1447333761 both ways)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping"
+      ],
+      "tests": [
+        "tests/cases/unsafe_get_set",
+        "tests/cases/unsafe_wrapping",
+        "tests/link/unsafe_flag_scope",
+        "tests/cases/reject_unsafe_no_import"
+      ],
+      "commits": [
+        "a793b39"
+      ],
+      "pr": 422,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-02"
+    },
+    {
+      "id": "builtins-for-the-owner-checks-and-a-cryptographic",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "builtins for the owner checks, and a cryptographic run-cache name (CLI-8)",
+      "body": "Three builtins reach the RT-9 primitives `runtime/runtime-host.c` already\ncarries, so that the next release can let `src/` ask who owns a path and\nwhether it runs before trusting it (#386, CLI-7 and CLI-9):\n\n- `lstatOwnerModeSync(path: string): i64` is one `lstat`, so a symbolic link\n  answers for itself: the owner's uid in the high 32 bits and `st_mode` in the\n  low 32, or -1 when the path does not resolve or holds a NUL. One call, so the\n  owner and the mode always describe the same file.\n- `geteuid(): i64` is the effective uid to compare that owner with.\n- `isExecutableSync(path: string): boolean` is `access(path, X_OK)`, the\n  shell's question, where a readable file is not the same answer.\n\nEach lowers to one call, `i64` in both number modes because a uid fills 32\nbits, ordered with every write as `statMtimeSync` is. They are refused on\nwasm32, where `runtime-host.c` is empty, and supplied under Node by\n`runtime/nish.mjs`, which prints the same lines for `owner_checks`. Under the\nrolling freeze `src/` does not call them yet; CLI-7 and CLI-9 adopt them in the\nrelease after this one.\n\nTake the owner apart with `(om >> 32) & 0xffffffff`: a uid of 2^31 or more\nfills bit 63 of the packed `i64`, so a plain `>>` would answer a negative\nowner that never equals `geteuid()`. The builtins carry capability labels:\n`fs.read` for `lstatOwnerModeSync` and `isExecutableSync`, `env` for\n`geteuid`.\n\n`nish run` now names each cache entry by the SHA-256 of its key instead of a\n64-bit FNV-1a (CLI-8), and fingerprints the runtime files in the key the same\nway. A hit still compares the whole key, so a collision never ran the wrong\nprogram; a cryptographic name means two programs no longer share an entry at\nall. The hash is FIPS 180-4 written in plain Nish in `src/run-cache.ts`,\nbecause `src/` reads nothing from `std/`, and it agrees with `sha256sum` at\nevery padding boundary. Existing cache entries are simply not found again and\nare rebuilt once.\n\n`scripts/bootstrap.sh` keeps its stages in `<work>/bin/` and gives `<work>` the\ncheckout's `scripts`, `runtime` and `std` as symbolic links by absolute path,\nso every stage finds the checkout through its own path instead of through the\ncompiler's working-directory fallback. A `--work` outside the checkout, which\nfailed at stage2 with `cannot find scripts/build.sh`, now builds and verifies.",
+      "metrics": [
+        "SHA-256 hashes a 20 MB key in 138 ms where FNV-1a took 50 ms (about 145 vs 400 MB/s), clang 18.1.3, linux-x64"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync",
+        "docs/IR_COOKBOOK.md#lstatownermodesync-geteuid-and-isexecutablesync",
+        "docs/security/cli.md",
+        "#386"
+      ],
+      "tests": [
+        "tests/cases/owner_checks",
+        "tests/cases/reject_owner_*",
+        "tests/nish/cli.ts (CLI-8)"
+      ],
+      "commits": [
+        "1e40d0c"
+      ],
+      "pr": 425,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "close-cg-2-cg-3-cg-4-cg",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "close CG-2, CG-3, CG-4, CG-8 and CG-10",
+      "body": "Closes the five codegen findings the security audit left open (CG-2, CG-3, CG-4, CG-8 and CG-10, tracked in #382). Each is fixed in its own commit and pinned by a regression test that fails on the base commit and passes after. `docs/security/codegen.md` and the index in `docs/security/README.md` now record all five as fixed.\n\n- **CG-8:** the runtime calls that can exit or block are no longer declared `willreturn`. That covers `nish_read_file`, `nish_read_file_or_null`, `nish_read_file_bytes`, `nish_write_file`, `nish_append_file`, `nish_str_concat` and `nish_alloc_array`, and every caller loses it through the fixpoint. The allocator's own out-of-memory exit keeps it: only exits the program's input decides are counted.\n- **CG-4:** `willreturn` is never inferred for a function on a call-graph cycle. A Tarjan walk clears it for self-recursion and for every member of a mutually recursive component before the fixpoint runs. Previously `opt -O2` deleted a non-terminating recursive `readnone` call, and a program that should hang exited 0.\n- **CG-2:** `new Array<T>(n)` checks an `i32` `n` in both number modes. A negative length now panics with `array length out of range` before the inline allocator rounds it, where it used to wrap the rounding and `memset` until the process faulted.\n- **CG-3:** `join` refuses a result longer than 2^31 - 1 bytes before allocating, failing as concatenation does (`nish: out of memory`, exit 1). Every source of a string or array is now bounded, so under `--number-mode i32` no `.length` can read back negative for the bounds prover to trust.\n- **CG-10:** a compound element assignment whose right side may resize the array, as in `xs[0] += grow(xs)`, re-checks the index and re-takes the slot's address after the right side runs. The store lands in the array's current block, in JavaScript's evaluation order. Before this it stored into the old block (1 where Node prints 6).\n\nA C host that links a module with a checked `new Array` length or a `panic` needs `runtime-os.c` (for `nish_exit`) as well as `runtime.c`.",
+      "metrics": [
+        "join past the limit fails in 105 ms instead of answering a negative length after 4.5 s and ~2 GiB; tests/perf-baseline.json unchanged; nish-cmp declares 307 + 10 + 22 + 10 + 1 moved programs (CG-8, CG-4, CG-2, CG-3, CG-10), 0 undeclared"
+      ],
+      "refs": [
+        "docs/security/codegen.md",
+        "docs/security/README.md",
+        "#382"
+      ],
+      "tests": [
+        "tests/cases/cg_sec_exiting_runtime",
+        "tests/cases/cg_sec_recursion_willreturn",
+        "tests/cases/cg_sec_new_array_negative",
+        "tests/cases/cg_sec_new_array_negative_f64",
+        "tests/link/cg_sec_new_array_negative",
+        "tests/cases/cg_sec_join_limit",
+        "tests/link/cg_sec_join_limit",
+        "tests/cases/cg_sec_compound_element_order"
+      ],
+      "commits": [
+        "b6bdde2"
+      ],
+      "pr": 427,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "fix-truthiness-string-n-map-get-and-call",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "fix truthiness, String(n), Map.get and call-site type arguments mechanically",
+      "body": "The expression checker's mechanical rewrites now ride on the diagnostic as a\n`fix`, which `nish --json` prints and `nish --fix` applies:\n\n- A non-boolean condition becomes the comparison it meant under `tsc`:\n  `!== 0` for an integer, `!== null` for a class or array that may be null,\n  `.length !== 0` for a string, parenthesising the operand where it binds\n  looser. A float (`NaN` is falsy) and `string | null` get no fix.\n- `String(x)` and `n.toString()` become `` `${x}` `` when `x` is a number, a\n  boolean or a string; a radix, a second argument, no argument or any other\n  type gets none.\n- `m.get(k)` held in a `let`, passed as an argument or used in arithmetic gets\n  `?? 0`, `?? 0.0`, `?? \"\"` or `?? false`; a class, array, collection or\n  nullable value type gets none.\n- `f<T>(x)` and `h.get<T>(x)` lose the type argument when inference provably\n  gives the type written: one parameter annotated `T`, and an argument that is\n  a local of that type or a literal of it.",
+      "metrics": [
+        "--fix on tests/fix/expr-truthy-number (6 edits, one rewrite) takes 5.0 ms median of 30, against 3.9 ms for the plain refused compile"
+      ],
+      "refs": [
+        "AGENTS.md#machine-readable-surfaces"
+      ],
+      "tests": [
+        "tests/fix/expr-truthy-number",
+        "tests/fix/expr-truthy-nullable",
+        "tests/fix/expr-truthy-string",
+        "tests/fix/expr-string-call",
+        "tests/fix/expr-to-string",
+        "tests/fix/expr-map-get-let",
+        "tests/fix/expr-map-get-arg",
+        "tests/fix/expr-map-get-arith",
+        "tests/fix/expr-type-args",
+        "tests/fix/expr-type-args-method",
+        "tests/fix/expr-type-args-f64",
+        "tests/fix/expr-nofix-*"
+      ],
+      "commits": [
+        "5eef898"
+      ],
+      "pr": 431,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-quic-packet-quic-packets-initial-secrets",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
+      "body": "`nish/net/quic-packet` is QUIC v1's packet layer as pure functions (RFC\n9000 §17, RFC 9001 §5). There are no sockets or connection state here.\n\nIt parses and builds long and short headers, together with the\nvariable-length integers and packet-number encoding they carry. A packet\nnumber is decoded from its truncated form against the largest one seen\n(RFC 9000 Appendix A), and never answers past 2^62 - 1. Initial secrets\ncome from the client's first destination connection id with the version\n1 salt. Packet keys, IVs and header-protection keys come from a traffic\nsecret through HKDF-Expand-Label, and a key update derives the next\ngeneration. Packets are sealed and opened with AES-128-GCM, and the\nheader is protected and unprotected with the AES-ECB mask. Retry packets\ncarry their integrity tag. Every value is checked against RFC 9001's\nAppendix A vectors.\n\nThe traffic secrets and keys are plain arrays and are not wiped yet.\nQUIC-1 in docs/security/quic.md records exactly what is left unwiped, and\n#430 tracks moving the QUIC and TLS key-holding structs onto\n`nish:secret`. That needs a key API redesign, which the connection stages\nwill consume. The security index's P-256/X25519 and X.509 rows, stale\nsince #418, are recounted.",
+      "metrics": [],
+      "refs": [
+        "docs/security/quic.md",
+        "RFC 9000",
+        "RFC 9001 Appendix A"
+      ],
+      "tests": [
+        "tests/link/net_quic_packet",
+        "tests/link/net_quic_packet_f64"
+      ],
+      "commits": [
+        "afa237e"
+      ],
+      "pr": 404,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "fix-export-default-export-lists-type-only-imports",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "fix export default, export lists, type-only imports and fs imports mechanically",
+      "body": "Four more refusals now carry a machine-applicable fix, so `nish --fix` applies them and `nish --json` prints the edit:\n\n- `export default f` (NL2129) deletes the statement and writes `export ` before the declaration of `f`.\n- `export { f, g }` (NL2128) deletes the list and writes `export ` before each declaration it names.\n- `import type { T } from \"./m\"` (NL2243) loses its `type`.\n- `import { readFileSync } from \"fs\"` (NL3015) becomes `from \"nish:fs\"`, when every name it imports is one `nish:fs` exports.\n\nEach fix is all or nothing and is left out whenever it would not keep the program's meaning: `export =`, a default of anything but a bare name, a name that is imported, undeclared, declared twice or already exported, a `const` that binds a second name (which `export` would export too), a re-export (`export { f } from`, `export * from`, `export * as ns from`), a renamed or type-only entry, `import type T from` and `import type * as m from` (each still a refused import without `type`), and an `fs` import naming something `nish:fs` lacks.\n\nThe NL9007 range guard gets no fix. The only behaviour-preserving rewrite is `if (!(i >= 0 && i < xs.length)) { panic(\"...\") }` before the statement, and the bounds analysis does not credit it: it ends a path at `return`, `break` and `continue` but not at `panic`, so the warning and the check would both stay. Wrapping the access in the guard instead would turn the panic into a silent skip.\n\n`nish --fix` now also refuses a fix whose own edits overlap each other, which no order of applying them makes right (`export { f, f }` asks for `export ` before `f` twice). The case that pins it and the case that pins dropping one diagnostic's fix where an earlier one already edits the same span are the first to reach either branch.",
+      "metrics": [
+        "`--fix` on tests/fix/decl-export-list (four declarations, one round) takes 3.4 ms against 2.5 ms for one plain compile, medians of 7"
+      ],
+      "refs": [
+        "AGENTS.md#machine-readable-surfaces"
+      ],
+      "tests": [
+        "tests/fix/decl-export-default",
+        "tests/fix/decl-export-default-class",
+        "tests/fix/decl-export-list",
+        "tests/fix/decl-import-type",
+        "tests/fix/decl-fs",
+        "tests/fix/decl-fs-two-names",
+        "tests/fix/decl-export-list-twice",
+        "tests/fix/decl-nofix-*"
+      ],
+      "commits": [
+        "2b750e2"
+      ],
+      "pr": 429,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-hpack-hpack-with-huffman-wp34-h2",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/hpack — HPACK with Huffman (WP34 H2, first part)",
+      "body": "`nish/net/hpack` is RFC 7541 in pure Nish and sans-IO. It implements the\n§5.1 integer with an N-bit prefix, the §5.2 string literal with Appendix\nB's Huffman code, the 61-entry static table, the dynamic table with size\nupdates and eviction, and all four representations, behind an\n`HpackEncoder` and an `HpackDecoder` per connection direction.\n\nThe Huffman code is stored as its 257 code lengths. Appendix B's code is\ncanonical, so the lengths determine every code, and the test checks each\ncode against the appendix. The encoder takes the representation and the\nHuffman choice per field. It sends a never-indexed field as a literal even\nwhen a table holds it.\n\nThe decoder refuses each of the following with a sticky negative code: a\ntruncated block, an integer past 2^31 - 1, an index of zero or out of\nrange, Huffman padding over seven bits or not all ones, EOS, and a size\nupdate above the SETTINGS limit, after a field, or missing when a lowered\nlimit requires one. A header list over the caller's limit is still decoded\nto its end, so the table stays in step, and is answered with a non-fatal\n`HPACK_LIST_TOO_LARGE`. A field past that limit is counted from the\ntable's own arrays and never copied, so repeated indexes of a large entry\ncannot allocate past it.",
+      "metrics": [],
+      "refs": [
+        "RFC 7541 Appendix C",
+        "docs/wp34-hosting-cs.md §5a"
+      ],
+      "tests": [
+        "tests/link/net_hpack",
+        "tests/link/net_hpack_f64",
+        "tests/link/net_hpack_*"
+      ],
+      "commits": [
+        "0b5e8c7"
+      ],
+      "pr": 406,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "record-every-panic-site-with-its-kind-and",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "record every panic site with its kind, and --emit-panics",
+      "body": "A compiled program can stop with exit 1 in more places than the `panic`\ncalls its author wrote: a bounds check the checker could not prove away, an\ninteger division, a value entering `integer<Lo, Hi>`, `r.expect`, a\n`readFileSync` of a missing file. The checker now records each of those as a\n**panic site** with its kind, and `--emit-panics <file.json>` writes them\nfunction by function, beside the IR and without changing a byte of it.\n\nThe kinds are `index`, `pop`, `slice`, `divide`, `range`, `array-length`,\n`panic`, `expect`, `io-exit`, `parallel-length`, `call` and `oom`. A site is\nlisted exactly where the emitter writes a check that can fail, or calls into\nthe runtime where it exits, and is `\"proven\": true` where a proof table lets\nthe emitter leave the check out, so the file shows what the checker proved as\nwell as what it did not. This includes the checks #427 added: an i32 or\nranged `new Array(n)` length, and the index re-check of a compound store\nwhose right side makes a call. A call into a function that may panic is a\n`call` site of the caller, naming the callee and the kind it reaches\n(`\"via\"`), decided as a fixpoint over the whole program, the standard library\nand dependencies included. `--unchecked-indexing` is not a proof: the access\nit stops checking is still an unproven site. Out of memory is listed as `oom`\nwith `\"allowed\": true` and never makes a function one that may panic; stack\noverflow and signed overflow (still `nsw`) are not sites at all.\n\nThe sites are recorded by the attribute walk in `src/attributes.ts`, beside\nthe line that already tells the fixpoint each construct reaches a `noreturn`\ncallee, and resolved once in `src/panics.ts` after `proveCallSiteRanges` and\n`checkParallel`, over the attribute pass's own call graph. Nothing is\nrecorded unless the flag is given. `--emit-panics` is refused with\n`--emit-ast` (which stops before the check), by `nish run` and by `--fix`,\nand is written beside the `--emit-checked` dump.\n\n`npm test` holds the list to the IR: every golden in `tests/cases/` is\ncompiled again with the flag and its IR must be byte-identical, and there and\nin every program in `tests/link/` a function whose sites are all proven (or\n`oom`) must have no `nish_panic_*` call, no panic tail and no exiting runtime\ncall in its IR. A function the file lists for the module being checked but\nthe IR does not define is a failure, so a drifted symbol cannot pass in\nsilence. The rule is \"Panic sites\" in docs/LANGUAGE.md.",
+      "metrics": [
+        "compiling src/compile.ts (77 modules), median of 11 interleaved runs, both compilers built by one seed: 1211 ms before, 1161 ms after without the flag (noise; nothing is recorded), 1225 ms with --emit-panics (2236 functions listed); IR byte-identical"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#panic-sites"
+      ],
+      "tests": [
+        "tests/cases/panics_index",
+        "panics_index_recheck",
+        "panics_pop",
+        "panics_slice",
+        "panics_divide",
+        "panics_range",
+        "panics_array_length",
+        "panics_panic",
+        "panics_expect",
+        "panics_io_exit",
+        "panics_call",
+        "panics_oom",
+        "panics_generic",
+        "panics_unchecked_indexing; tests/link/panics_parallel_length; tests/panics-oracle.js"
+      ],
+      "commits": [
+        "c2496d2"
+      ],
+      "pr": 424,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "deprecate-arena-release-and-arena-reset-in-favour",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "deprecate Arena.release and Arena.reset in favour of using a = arena()",
+      "body": "`Arena.release` and `Arena.reset` are the one place left where ordinary code can reach undefined behaviour in the arena: releasing while anything allocated after the mark is still referenced reuses that memory. `using a = arena()` does the same release with the proof done by the compiler. Every call to the old two now prints a deprecation warning that points to it. They still compile and run, and `Arena.mark` and `Arena.used` are unchanged.\n\nDeprecation is a new warning class beside performance and portability:\n\n- It prints by default as `file:line:col: deprecation: …`, and no flag silences it.\n- `--json` carries it as `severity: \"deprecation\"` under code NL7001, the first code of a new NL7xxx band. `gen-diagnostic-codes.mjs` checks that band like NL8 and NL9.\n- It never changes an exit code, and it is dropped when the program fails to check, as performance warnings are.\n- It is reported the same way under `--fix` and `nish run`.\n- A call inside a generic function warns once per call site, not once per instantiation.\n\nThe NL9011 arena-loop advice now recommends `using a = arena()` instead of `Arena.mark()` and `Arena.release(m)`. The repo's own loop-scope tests use the new bracket. The tests that exist to exercise the old API keep it and pin the warning. `std/` and `examples/` call neither.",
+      "metrics": [
+        "2 repo programs migrated to `using a = arena()` (mem_loop_scope, mem_loop_scope_forof); 0 deprecation warnings across std/ and examples/"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#arena"
+      ],
+      "tests": [
+        "tests/run.js (deprecation block",
+        "incl. --fix and --json)",
+        "tests/wordings/nl7001_arena_release",
+        "tests/nish/cli.ts"
+      ],
+      "commits": [
+        "c36bcf1"
+      ],
+      "pr": 428,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-http1-and-nish-net-websocket-the",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+      "body": "`nish/net/http1` is an incremental, sans-IO HTTP/1.1 request parser after\nRFC 9112. It reads the request line, header fields and a body framed by\nContent-Length or chunked transfer coding. Every limit is the caller's:\nline, header-field count and size, and body. It refuses with a sticky\nstatus what the RFC refuses: bare CR, obs-fold, a Content-Length together\nwith Transfer-Encoding, conflicting lengths, a chunk size with trailing\nwhitespace and no extension, and an overlong method or target fed in\npieces. It also writes responses.\n\n`nish/net/websocket` is RFC 6455's server side: the opening-handshake key\ncheck and accept value (on a new `nish/crypto/sha1`, used only for this\nand checked against RFC 3174's vectors), and frame parsing and building\nwith masking, fragmentation, control-frame limits, and close codes and\nreasons. Every RFC 6455 example frame is reproduced byte for byte.",
+      "metrics": [],
+      "refs": [
+        "RFC 9112",
+        "RFC 6455",
+        "docs/wp34-hosting-cs.md §5a"
+      ],
+      "tests": [
+        "tests/link/net_http1",
+        "tests/link/net_websocket",
+        "tests/link/crypto_sha1 and their f64 twins"
+      ],
+      "commits": [
+        "c872086"
+      ],
+      "pr": 399,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-tls-records-over-tcp-wp34-t2",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/tls records over TCP (WP34 T2)",
+      "body": "TLS 1.3 now runs over TCP. Three new modules sit around `nish/net/tls`'s\nhandshake.\n\n- `nish/net/tls/record` is the record layer of RFC 8446 §5. It frames a\n  stream into records in a buffer allocated once. It seals and opens each\n  record under a traffic secret: the nonce comes from the sequence number,\n  the header is the additional data, and the inner content type and zero\n  padding are found without branching on the padding. It also derives\n  KeyUpdate's next secret.\n- `nish/net/tls/record-server` runs a `TlsServer` over a byte stream,\n  sans-IO. It sends the flight as one record once it is signed, installs\n  every key at the record boundary §5.1 puts it on, sends the compatibility\n  change_cipher_spec of §D.4, handles alerts both ways, and does KeyUpdate\n  both ways and on a schedule.\n- `nish/net/tls-tcp` puts it on `nish:net` for a program that owns its\n  loop. A pool of slots is sized at start-up. Every call answers the slot's\n  interest, whose low bits are `pollModify`'s events.\n\nAfter its handshake a connection allocates nothing per record. A key install\nleaves HKDF's and the AES schedule's temporaries in the arena (5,248 bytes),\nbecause `Arena.release` is deprecated and a `using a = arena()` block is\nrefused while those callees store allocations. So a connection takes at most\n64 KeyUpdates from its client and refuses the 65th with `unexpected_message`.\nRFC 8446 §4.6.3 sets no such limit, so a client that updates on a clock of its\nown is disconnected at its 65th: a deliberate trade-off that TLS-3 records.\nOn this path `TlsServer`'s traffic and handshake secrets, the ephemeral key\nand every per-record nonce are wiped with `secureZero` once they are no longer\nneeded.\n\nRFC 8448 §3's nine records are reproduced byte for byte, both by the record\nlayer and over a socket, and the client's stream is replayed at every cut\npoint. openssl s_client (under all three suites, and with a KeyUpdate) and\ncurl interoperate from tests/run.js. docs/security/tls.md records what is\nstill open:\n\n- TLS-2: the AES schedule's wipe.\n- TLS-3: the memory each handshake leaves behind, and the KeyUpdate cap.\n- TLS-4: the carrier has no timeout.\n\nMeasured: 0 arena bytes over 200 echoes; 10,496 bytes per answered KeyUpdate, 671,744 at the 64-update cap; about 52 KB per handshake (peak RSS, 1,000 to 4,000 handshakes)\nRefs: docs/security/tls.md, std/README.md, RFC 8446 §5, RFC 8448 §3\nTests: tests/link/net_tls_record_rfc8448, tests/link/net_tls_record_refusals, tests/link/net_tls_record_tcp, tests/link/net_tls_record_*_f64, tests/run.js net_tls_tcp\n\nPart of #395",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "93cb2bd"
+      ],
+      "pr": 437,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-quic-quic-connections-the-handshake-and",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+      "body": "`nish/net/quic` is the server side of a QUIC version 1 connection, sans-IO.\n`QuicConnection` takes the datagrams a client sends and answers the ones to\nsend back. It has no socket, clock or random device of its own.\n\nIt drives `nish/net/tls`'s `TlsServer` over CRYPTO frames at the Initial,\nHandshake and 1-RTT levels (RFC 9001 §4). Each level's packet keys come from\n`nish/net/quic-packet` as soon as TLS knows the secret, and are discarded\nand wiped when RFC 9001 §4.9 says.\n\nThe server's transport parameters go out in EncryptedExtensions and name the\noriginal and initial connection IDs. The client's are parsed and checked\nbefore the flight leaves (RFC 9000 §7.3).\n\nOnce connected:\n\n- Every ack-eliciting packet is acknowledged in its space.\n- The client gets new connection IDs once the handshake is confirmed.\n- PATH_CHALLENGE is answered.\n- A datagram with an ack-eliciting Initial is padded to 1200 bytes, and an\n  unvalidated client is sent at most three times what it sent (§8.1).\n- The client's stream data comes out of `readStream()` in order per stream,\n  and `writeStream` queues a reply within the client's credit.\n\nA protocol violation closes the connection with the transport error\nRFC 9000 names, and a TLS alert closes it with CRYPTO_ERROR. A packet that\ncannot be used is dropped and counted. A NEW_CONNECTION_ID refused for the\n§5.1 limits leaves the connection-ID table exactly as it was.\n\nFour modules beside it hold the parts, each tested on its own:\n\n- `nish/net/quic-frame` reads every frame of RFC 9000 §19 and writes the\n  ones a server sends.\n- `nish/net/quic-conn-params` handles the transport parameters of §18.\n- `nish/net/quic-conn-ack` holds the received packet numbers an ACK is\n  written from.\n- `nish/net/quic-conn-cid` is the connection-ID table.\n\nNot here:\n\n- Loss recovery (Q3).\n- Flow-control updates and server-opened streams (Q4).\n- Retry, Version Negotiation, stateless reset, the idle timer and key update\n  (Q2b).\n\ndocs/security/quic.md records what is open. QUIC-2 is what a connection holds\nbetween calls that no wipe reaches. QUIC-3 is its per-packet arena growth.\n\nMeasured: aioquic 1.3.0 completes a handshake and a stream echo against the server over loopback; the replay of that exchange from a Nish UDP client takes 4 ms, every server datagram byte for byte\nRefs: docs/security/quic.md, std/README.md, RFC 9000, RFC 9001\nTests: tests/link/net_quic_frame, tests/link/net_quic_conn_parts, tests/link/net_quic_conn, tests/link/net_quic_conn_replay (each with an _f64 twin)\n\nPart of #395",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "6a7db69"
+      ],
+      "pr": 441,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "nish-net-quic-retry-version-negotiation-stateless-reset",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
+      "body": "`nish/net/quic-listener` answers what a QUIC server sees before any\nconnection exists. `QuicListener.handle(datagram, address, now)` does three\nthings:\n\n- It answers Version Negotiation for any version but 1 in a full-sized\n  datagram, and never for version 0.\n- It sends a Retry whose token is good for at most a minute. The token is\n  an HMAC-SHA256 over the issue time, the original DCID, the Retry's SCID\n  and the client's address and port. A forged, moved, expired or\n  misdirected token closes the attempt with INVALID_TOKEN.\n- It answers a short header to an unknown ID with a stateless reset that\n  ends in the token the static key gives that ID. The reset is always\n  shorter than what it answers, never under 21 bytes, and rate limited.\n\n`nish/net/quic` now takes the caller's time: `receive(datagram, now)`,\n`takeDatagram(now)`, `deadline()` and `handleTimer(now)`.\n\n- **Idle timeout.** It is the smaller of both sides' `max_idle_timeout`,\n  at least three probe timeouts, and it closes silently.\n- **Key update, both ways.** The next read keys are derived ahead of time,\n  so a forged Key Phase bit costs nothing. The client's updates are\n  followed, and the server starts its own with `updateKeys()`. A client may\n  start at most 64 updates a connection, which bounds what it can make the\n  server derive (QUIC-4).\n- **Stateless reset tokens.** Every connection ID now carries the token the\n  configuration's static key gives it, the first one in the\n  `stateless_reset_token` transport parameter.\n- **Retry.** `acceptRetry` opens a connection the listener validated.\n\n`release()` and the idle timeout wipe every key and secret the connection\nholds. That includes both sides' stateless reset tokens and TLS's expected\nclient Finished.\n\nMeasured: each key update a client starts leaves 11,200 bytes in the arena (AES-128-GCM), capped at 64 a connection (716,800 bytes); a forged Key Phase bit costs 608 bytes and derives nothing; the five aioquic 1.3.0 scenarios replay in 12 ms\nRefs: docs/security/quic.md, std/README.md, RFC 9000 §6, §8.1, §10.1, §10.3, RFC 9001 §6\nTests: tests/link/net_quic_lifecycle, tests/link/net_quic_lifecycle_replay (each with an _f64 twin), tests/link/net_quic_conn, tests/link/net_quic_conn_replay\n\nPart of #395",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c665746"
+      ],
+      "pr": 444,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "write-down-the-builtin-and-mutation-check-conventions",
+      "type": "docs",
+      "scope": "self",
+      "breaking": false,
+      "title": "write down the builtin and mutation-check conventions, and bring the security records up to date",
+      "body": "`.claude/selfhost.md` gains two conventions that contributors had been\nrediscovering. **Adding a builtin** lists every file one touches: the checker\nrule in `src/builtins.ts`, the runtime declaration in `src/runtime.ts`, the\nlowering and its callees in `src/emit-builtins.ts`, the written-argument\nletters in `src/emit-util.ts`, exactly one capability row in\n`src/capabilities.ts` (audited by `tests/capabilities.js`), the Node twin in\n`runtime/shim.mjs`, `runtime/nish.mjs` and `runtime/nish.d.ts`, and narrow\nper-program `DECLARED` entries in `tests/nish-cmp.js` for the cases the\nreleased compiler refuses, with the owner builtins (#425) as the worked\nexample that shows the whole list; `secureZero` (#417) predates the\ncapabilities audit. **The mutation checks** names the `tests/run.js`\nchecks that edit a copy of `src/codes.ts`, `src/builtins.ts` and\n`src/capabilities.ts` by exact text with `String.replace`, and the rule that\nfollows: keep a targeted line byte-identical and add a change beside it.\n\nThe security index stops listing fixed findings as open. RT-10 to RT-13\n(fixed by #405) and CLI-8 (fixed by #425) move from the open-findings table\nto the fixed counts, recomputed from the area records: 3 / 10 / 10 / 65 fixed\nand 0 / 1 / 2 / 13 open. Every \"correction still to make\" is now made, the\nlast being `std/README.md`, which no longer says a string built by `join` can\npass 2^31 − 1 bytes now that #427 closed CG-3. The K1, runtime, CLI and\ncodegen records note the same closures where they still read as open, and\nthe index's footnotes name the issue each fix PR answers.",
+      "metrics": [],
+      "refs": [
+        ".claude/selfhost.md",
+        "docs/security/README.md"
+      ],
+      "tests": [
+        "tests/capabilities.js",
+        "tests/run.js (capabilities",
+        "codes)"
+      ],
+      "commits": [
+        "854935b"
+      ],
+      "pr": 449,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    },
+    {
+      "id": "let-the-stage-1-fuzz-differential-declare-an",
+      "type": "test",
+      "scope": "self",
+      "breaking": false,
+      "title": "let the stage-1 fuzz differential declare an intended IR change, and run it in CI",
+      "body": "`tests/differential/fuzz.js --stage1` compares the released seed's IR with\nHEAD's over random programs, and until now it had no way to accept a\ndifference HEAD means to make. #427's CG-8 fix took `willreturn` from\n`nish_str_concat`, so every seeded `npm test` failed with 15 disagreements\non seed 20261001 (#438), while CI, whose `test` job has no seed, saw nothing.\n\nThe fuzzer now has a `DECLARED` list of its own, the counterpart of\n`tests/nish-cmp.js`'s. An entry names a function and its attribute group's\ntext on the seed side and on HEAD's, keyed by text rather than `#N` because\nthe numbers follow first use; it carries the `changelog` subject that made\nthe change and a `why`. A program whose only differences are declared ones\nis reported as `declared` and passes, anything else still fails, and an\nentry nothing in the run matches fails as stale, so the reseed after the\nrelease retires it. Only `nish_str_concat` is declared: the other functions\nCG-8 changed read files or build arrays, which no generated program does,\nand 200 programs from seed 7000 differ nowhere else.\n\n`tests/run.js` drives the matcher over fabricated modules on every run,\nseed or not: an undeclared group change fails, a declared one passes (and a\nmodule that also differs in an instruction does not), and a declaration\nnothing matches is stale. CI's `nish-cmp` job now runs 200 programs from\nthe fixed seed against each released seed, reusing the candidate nish-cmp\njust linked, which adds about 3 s per row. `.claude/testing.md` states the\nrule: an intended IR change is declared wherever HEAD meets the seed.\n\nEach entry's `changelog` words are checked as nish-cmp checks its own,\nthrough its exported `isNamed` and `pendingNotes`, against `CHANGELOG.md`\nand the release notes the unreleased commits render, so a mistyped or\nnever-shipped subject fails the run; the CG-8 entry carries the words as\nthe notes render them, \"Close CG-2, CG-3, CG-4, CG-8 and CG-10\". A\ndiffering module must also refer to every attribute group it defines, so\nan orphan group cannot ride along with a declared change.\n\nRefs: #438, #427, .claude/testing.md\nTests: tests/run.js \"fuzz --stage1: ...\" self-checks, fuzz.js --stage1 --seed 20261001 --count 16\n\nCloses #438",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "e3f5155"
+      ],
+      "pr": 448,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-03"
+    }
+  ]
+}
