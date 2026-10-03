@@ -96,37 +96,62 @@ const applyFixes = (outcome: FixOutcome, roots: string[], warnPerformance: boole
       diagnostics.push(warning)
     }
   }
-  // The roots by identity, so a file named twice, or under two spellings, is
-  // rewritten once.
+  // The files to rewrite, collected first: each root by identity, so a file
+  // named twice, or under two spellings, is rewritten once, and not the
+  // standard library or a dependency even when it is named — those belong to
+  // whoever installed them, and the next install would undo the edit.
+  // `packageName` already knows a package reached through a link.
   const seen = new StringSet()
-  let rewritten = 0
+  const targets: FixTarget[] = []
   for (const root of roots) {
     const identity = compilation.identityOf(root)
     const at = compilation.byPath.get(identity, -1)
-    if (at < 0 || seen.has(identity)) {
-      continue
+    if (at >= 0 && !seen.has(identity) && compilation.modules[at].packageName === ROOT_PACKAGE) {
+      seen.add(identity)
+      targets.push(new FixTarget(compilation.modules[at], identity))
     }
-    seen.add(identity)
-    const unit = compilation.modules[at]
-    // Not the standard library or a dependency even when it is named: those
-    // belong to whoever installed them, and the next install would undo the
-    // edit. `packageName` already knows a package reached through a link.
-    if (unit.packageName !== ROOT_PACKAGE) {
-      continue
+  }
+  let rewritten = 0
+  for (const target of targets) {
+    if (rewriteFile(diagnostics, target)) {
+      rewritten = rewritten + 1
     }
-    const edits = acceptedEdits(diagnostics, unit)
-    if (edits.length === 0) {
-      continue
-    }
-    // The real path rather than the spelling: `writeFileSync` refuses a
-    // symbolic link as the last component, and a root named through one means
-    // the file it points at.
-    writeFileSync(identity, applyEdits(unit.source.text, edits))
-    // stderr, like `wrote <file>`: stdout belongs to `--json`.
-    console.error(`fixed ${unit.name} (${edits.length} edit${edits.length === 1 ? "" : "s"})`)
-    rewritten = rewritten + 1
   }
   return rewritten
+}
+
+/** A module `--fix` may rewrite, and the real path it is written to. */
+class FixTarget {
+  unit: ModuleUnit
+  /**
+   * The real path rather than the spelling: `writeFileSync` refuses a symbolic
+   * link as the last component, and a root named through one means the file
+   * it points at.
+   */
+  path: string
+
+  constructor(unit: ModuleUnit, path: string) {
+    this.unit = unit
+    this.path = path
+  }
+}
+
+/**
+ * Rewrite one file with every fix that applies to it, and answer whether there
+ * was one. A function of its own that answers a boolean, so the edit list and
+ * the new text go back to the arena when it returns rather than piling up
+ * over the files of the round.
+ */
+const rewriteFile = (diagnostics: Diagnostic[], target: FixTarget): boolean => {
+  const unit = target.unit
+  const edits = acceptedEdits(diagnostics, unit)
+  if (edits.length === 0) {
+    return false
+  }
+  writeFileSync(target.path, applyEdits(unit.source.text, edits))
+  // stderr, like `wrote <file>`: stdout belongs to `--json`.
+  console.error(`fixed ${unit.name} (${edits.length} edit${edits.length === 1 ? "" : "s"})`)
+  return true
 }
 
 /**
@@ -154,11 +179,13 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
       // A stable insertion by start, so the result is in source order.
       accepted.push(edit)
       let i = accepted.length - 1
-      while (i > 0 && accepted[i - 1].start > edit.start) {
+      while (i > 0 && i < accepted.length && accepted[i - 1].start > edit.start) {
         accepted[i] = accepted[i - 1]
         i = i - 1
       }
-      accepted[i] = edit
+      if (i >= 0 && i < accepted.length) {
+        accepted[i] = edit
+      }
     }
   }
   return accepted
@@ -190,10 +217,12 @@ const applyEdits = (text: string, edits: Edit[]): string => {
   const out = new StringBuilder()
   let at = 0
   for (const edit of edits) {
-    out.add(text.substring(at, edit.start))
+    // `slice`, not `substring`: the offsets come from this very text, so one
+    // out of range is a broken invariant to stop on, not a value to clamp.
+    out.add(text.slice(at, edit.start))
     out.add(edit.text)
     at = edit.end
   }
-  out.add(text.substring(at, text.length))
+  out.add(text.slice(at, text.length))
   return out.toText()
 }

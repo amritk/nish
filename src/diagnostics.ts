@@ -360,13 +360,21 @@ export class Diagnostic {
       return ""
     }
     const source = this.source
-    const parts: string[] = []
-    for (const edit of this.edits) {
-      parts.push(
-        `{"line":${source.lineOf(edit.start)},"column":${source.columnOf(edit.start)},"endLine":${source.lineOf(edit.end)},"endColumn":${source.columnOf(edit.end)},"text":${jsonQuote(edit.text)}}`
+    const out = new StringBuilder()
+    out.add(`,"fix":[`)
+    let i = 0
+    while (i < this.edits.length) {
+      const edit = this.edits[i]
+      out.add(i === 0 ? "{" : ",{")
+      out.add(
+        `"line":${source.lineOf(edit.start)},"column":${source.columnOf(edit.start)},"endLine":${source.lineOf(edit.end)},"endColumn":${source.columnOf(edit.end)},"text":`
       )
+      out.add(jsonQuote(edit.text))
+      out.add("}")
+      i = i + 1
     }
-    return `,"fix":[${parts.join(",")}]`
+    out.add("]")
+    return out.toText()
   }
 }
 
