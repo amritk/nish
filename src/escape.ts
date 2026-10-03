@@ -92,7 +92,7 @@ import { Options } from "./options"
 import { isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
-import { isNumeric, K_ENUM, T_BOOL, T_STRING, TypeTable } from "./types"
+import { isNumeric, K_ENUM, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 const STACK_ARRAY_BYTES: i32 = 4096
@@ -1440,8 +1440,10 @@ class PassWalk {
       }
     } else if (node.kind === N_RETURN) {
       const value = node.children[0]
-      // A register `Result` is packed before a block releases (`emitReturnValue`).
-      if (value.kind !== N_EMPTY && !(this.block && this.returnsByValue) && !this.isOld(value)) {
+      // A block hands back nothing through a `void` call, and a register
+      // `Result` is packed before it releases (`emitReturnValue`).
+      const handsNothing = this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)
+      if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
       }
