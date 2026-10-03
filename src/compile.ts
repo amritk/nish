@@ -80,7 +80,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -505,6 +505,8 @@ export const main = (): number => {
         return 2
       }
       opts.emitPanics = process.argv[arg]
+    } else if (value === "--deny-panics") {
+      opts.denyPanics = true
     } else if (value === "--emit-capabilities") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -634,13 +636,15 @@ export const main = (): number => {
     return 2
   }
   // The panic sites are settled after the whole-program proofs, so they are a
-  // fact about a checked program too, and the file would never be written.
-  if (emitAst && opts.emitPanics.length > 0) {
+  // fact about a checked program too, and the file would never be written,
+  // nor a site refused.
+  if (emitAst && (opts.emitPanics.length > 0 || opts.denyPanics)) {
     console.error(
-      "compile: `--emit-panics` reports on a checked program, and --emit-ast stops before the check"
+      `compile: \`${opts.denyPanics ? "--deny-panics" : "--emit-panics"}\` reports on a checked program, and --emit-ast stops before the check`
     )
     return 2
   }
+  opts.capabilityReport = capabilitiesFile.length > 0
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.
   //

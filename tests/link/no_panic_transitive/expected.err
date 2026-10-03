@@ -1,0 +1,1 @@
+main.ts:8:10: error: This call to `second` may panic: it reaches the `index` site at

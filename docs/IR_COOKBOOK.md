@@ -8333,8 +8333,11 @@ divisor or `MIN / -1` branches to the cold `div.fail` block, which calls the
 `noreturn` `nish_panic_div` (`attempt to divide by zero` when its `i1`
 argument is true, `attempt to divide with overflow` otherwise) and exits 1;
 `div.ok` holds the plain `sdiv`. Because the panic path exists the function
-is neither `willreturn` nor `readnone`. LLVM folds the check away for a
-constant divisor at `-O1`. `f64` division is a bare `fdiv`.
+is neither `willreturn` nor `readnone`. A divisor the bounds walk proves to
+be neither 0 nor -1 — a constant, a declared range that leaves both out, or a
+guard such as `if (d !== 0 && d !== -1)` — gets the bare `sdiv` and no
+`div.fail` at all ([A module with no panic site](#a-module-with-no-panic-site---deny-panics)).
+`f64` division is a bare `fdiv`.
 
 <!-- cookbook:begin expr-div-checked -->
 ```ts
@@ -8366,6 +8369,101 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end expr-div-checked -->
+
+### A module with no panic site: `--deny-panics`
+
+Under `--deny-panics`, or for a module the root `package.json` lists in
+`"nish".noPanic`, every check that could still panic is a compile error
+(docs/LANGUAGE.md, "The no-panic scope"), so a module that compiles has none
+left in its IR: no `nish_panic_*` call, no `div.fail` or `pop.empty` block, no
+panic tail. Each check came off because a proof removed it, not because a flag
+did. `ratio`'s divisor is guarded against 0 and -1, so the `sdiv` stands alone;
+`half` divides by constants, which need no guard; `last` pops behind
+`xs.length > 0`, the length fact the bounds proof already keeps, so the length
+is decremented with no `pop.empty` branch. The listing is the golden
+`tests/cases/deny_panics_clean.ll`, which `npm test` holds this section to.
+
+<!-- golden:begin deny_panics_clean -->
+```ts
+const ratio = (a: i32, d: i32): i32 => {
+  if (d !== 0 && d !== -1) {
+    return a / d;
+  }
+  return 0;
+};
+
+const half = (a: i32): i32 => a / 2 + a % 10;
+
+const last = (xs: i32[]): i32 => {
+  if (xs.length > 0) {
+    return xs.pop();
+  }
+  return 0;
+};
+
+const last = (xs: i32[]): i32 => {
+  if (xs.length > 0) {
+    return xs.pop();
+  }
+  return 0;
+};
+```
+
+```llvm
+define internal noundef i32 @ratio(i32 noundef %a, i32 noundef %d) #1 {
+entry:
+  %0 = icmp ne i32 %d, 0
+  br i1 %0, label %land.rhs, label %land.end
+
+land.rhs:
+  %1 = icmp ne i32 %d, -1
+  br label %land.end
+
+land.end:
+  %2 = phi i1 [ false, %entry ], [ %1, %land.rhs ]
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = sdiv i32 %a, %d
+  ret i32 %3
+
+if.end:
+  ret i32 0
+}
+
+define internal noundef i32 @half(i32 noundef %a) #1 {
+entry:
+  %0 = sdiv i32 %a, 2
+  %1 = srem i32 %a, 10
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
+}
+
+define internal noundef i32 @last(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = icmp sgt i32 %2, 0
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %6 = sub i64 %5, 1
+  store i64 %6, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %11
+
+if.end:
+  ret i32 0
+}
+```
+<!-- golden:end deny_panics_clean -->
 
 ### Unsigned integers
 

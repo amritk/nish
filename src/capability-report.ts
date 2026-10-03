@@ -9,7 +9,8 @@
 // keys always in the same order, capability lists in the fixed order of
 // `src/capabilities.ts`, packages, modules and functions sorted, and every path
 // relative to the entry's directory so the file reads the same from any
-// checkout.
+// checkout. Each function also carries its `"panics"`, the sites
+// `src/panics.ts` settled for it, written with the same relative paths.
 //
 // Each quoted name is pushed onto the report as a piece of its own rather than
 // spliced into a template: spliced, the quoted copy is garbage as soon as the
@@ -25,7 +26,8 @@ import { ROOT_PACKAGE } from "./packages"
 import { isStdModule } from "./std-modules"
 import { dirname, relativePath } from "./paths"
 import { Node } from "./nodes"
-import { FunctionSig } from "./program"
+import { CheckedProgram, FunctionSig } from "./program"
+import { siteReportEntry, sitesOf } from "./panics"
 import { compareStrings, jsonQuote } from "./strings"
 
 /** How the root package is named in the report: it has no name of its own. */
@@ -293,7 +295,7 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
         pushNames(out, mask)
         out.push("],\n")
         if (f === null || mask === 0) {
-          out.push('              "witnesses": {}\n')
+          out.push('              "witnesses": {},\n')
         } else {
           out.push('              "witnesses": {\n')
           let first = true
@@ -342,8 +344,9 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
             }
             c = c + 1
           }
-          out.push("\n              }\n")
+          out.push("\n              },\n")
         }
+        pushPanics(out, unitProgram, sig, unitPath, facts)
         out.push(s < sorted.length - 1 ? "            },\n" : "            }\n")
         s = s + 1
       }
@@ -360,6 +363,34 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
   out.push("  ]\n")
   out.push("}\n")
   writeFileSync(file, out.join(""))
+}
+
+/**
+ * A function's panic sites (docs/LANGUAGE.md, "Panic sites"), one per line,
+ * from the list `Compilation.check` settled: what the function can stop the
+ * program at, beside what it can reach.
+ */
+const pushPanics = (
+  out: string[],
+  program: CheckedProgram,
+  sig: FunctionSig,
+  path: string,
+  facts: FactsTable
+): void => {
+  const sites = sitesOf(program, sig.name)
+  if (sites.length === 0) {
+    out.push('              "panics": []\n')
+    return
+  }
+  out.push('              "panics": [\n')
+  let k = 0
+  while (k < sites.length) {
+    out.push("                ")
+    out.push(siteReportEntry(sites[k], path, facts))
+    out.push(k < sites.length - 1 ? ",\n" : "\n")
+    k = k + 1
+  }
+  out.push("              ]\n")
 }
 
 /**

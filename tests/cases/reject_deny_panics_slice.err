@@ -1,0 +1,2 @@
+error: `slice` may panic here
+`slice` panics when its range is outside the string, and no proof removes that check yet: `substring` clamps the range instead

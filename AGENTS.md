@@ -77,7 +77,8 @@ itself.
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
 | where the program can panic | `nish --emit-panics <file.json> <files>` | one JSON object in the file, every function with its panic sites, each with its kind and whether the checker proved it away ([LANGUAGE.md](./docs/LANGUAGE.md#panic-sites)); the IR is unchanged |
-| what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
+| that a module cannot panic | `nish --deny-panics <files>`, or `"nish": { "noPanic": [...] }` in the root `package.json` | every unproven panic site in scope is an error (NL2457, or NL2458 at a call out of the scope) naming its kind and the guard that proves it; out of memory is allowed; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#the-no-panic-scope)) |
+| what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, and each function's panic sites, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,

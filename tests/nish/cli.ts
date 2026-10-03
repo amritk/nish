@@ -68,6 +68,8 @@ const WORK: string = "build/cli-contract";
 const DEFAULT_CLI: string = "build/nish";
 /** The entry the checks that need a whole program compile. */
 const FIXTURE_OK: string = "ok.ts";
+/** One unproven index, the one site `--deny-panics` refuses (`checkDenyPanics`). */
+const FIXTURE_DENY: string = "deny.ts";
 /** A program with two errors in it, so "one object per diagnostic" is a countable claim. */
 const FIXTURE_BAD: string = "bad.ts";
 /** A loose equality, the diagnostic with a fix: `--fix` rewrites a copy of it, never this file. */
@@ -93,6 +95,7 @@ const advertisedFlags = (): string[] => [
   "--emit-napi",
   "--emit-napi-async",
   "--emit-panics",
+  "--deny-panics",
   "--target",
   "--profile",
   "--warn-portability",
@@ -285,6 +288,7 @@ const writeFixtures = (): void => {
     `${WORK}/${FIXTURE_FIX}`,
     ["export const same = (a: i32, b: i32): boolean => {", "  return a == b;", "};", ""].join("\n")
   );
+  writeFileSync(`${WORK}/${FIXTURE_DENY}`, "export const at = (xs: i32[], i: i32): i32 => xs[i];\n");
   writeFileSync(
     `${WORK}/${FIXTURE_NOFIX}`,
     ["export const fail = (): i32 => {", '  throw new Error("no");', "};", ""].join("\n")
@@ -724,6 +728,32 @@ const checkPanicSites = (t: Suite, cli: Cli): void => {
 
   const noValue = cli.plain("emit_panics_no_value", [source, "--emit-panics"]);
   t.eqI32("--emit-panics with no file exits 2", noValue.status, 2);
+};
+
+/**
+ * `--deny-panics`: a program with no panic site compiles to the bytes it
+ * compiles to without the flag, and one with a site is refused, band 1, with
+ * one `--json` object whose code is the rule's (NL2457). With `--emit-ast`,
+ * which stops before the sites are known, it is a usage error.
+ */
+const checkDenyPanics = (t: Suite, cli: Cli): void => {
+  const irPath = `${WORK}/deny_ok.ll`;
+  const clean = cli.plain("deny_ok", [`${WORK}/${FIXTURE_OK}`, "-o", irPath, "--deny-panics"]);
+  if (t.eqI32("--deny-panics on a program with no site exits 0", clean.status, 0)) {
+    t.eqStr("and the IR is the bytes a compile without it writes", readOrEmpty(irPath), readOrEmpty(`${WORK}/ok.ll`));
+  }
+  const refused = cli.plain("deny_site", [`${WORK}/${FIXTURE_DENY}`, "--deny-panics", "--json", "-o", `${WORK}/deny.ll`]);
+  if (!t.eqI32("--deny-panics on an unproven index exits 1", refused.status, 1)) {
+    return;
+  }
+  const objects = cliObjectLines(refused.stdout);
+  if (!t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr("whose severity is error", cliField(objects[0], "severity"), "error");
+  t.eqStr("and whose code is the no-panic scope's", cliField(objects[0], "code"), "NL2457");
+  const ast = cli.plain("deny_ast", [`${WORK}/${FIXTURE_DENY}`, "--deny-panics", "--emit-ast"]);
+  t.eqI32("--deny-panics with --emit-ast exits 2", ast.status, 2);
 };
 
 /** An input that cannot be read: band 1, and an object under `--json` like any other failure. */
@@ -1398,6 +1428,7 @@ export const main = (): number => {
   checkFixField(t, cli);
   checkDumps(t, cli);
   checkPanicSites(t, cli);
+  checkDenyPanics(t, cli);
   checkCapabilities(t, cli, env);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
