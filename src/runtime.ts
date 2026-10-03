@@ -497,6 +497,21 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // #385, runtime.c. `nish_random_fill`'s shape: writes every byte of the
+    // array and keeps nothing of it, so `nocapture` without `readonly`; and
+    // `willreturn`, unlike it, because the loop is bounded by `len` and makes
+    // no system call. Its stores are `volatile`, and nothing here may let LLVM
+    // treat the call as one it can drop: no `memory(argmem: write)`, which
+    // would make it a dead store wherever the array is not read again, and
+    // that is every call. A call that may write memory is never deleted,
+    // `willreturn` or not.
+    this.add(
+      plain(
+        "nish_wipe",
+        "declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture)",
+        EFFECT_WRITE
+      )
+    )
     // One `stat`, `nish_is_dir`'s shape and for its reasons: the file system is
     // not memory LLVM tracks, so two reads either side of a `writeFileSync`
     // must not fold, and a failed `stat` stores `errno`.
@@ -578,6 +593,16 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
+    )
+    // The client half. `tcpConnect` makes a non-blocking socket and starts a
+    // `connect`, which on such a socket never waits, and `connectResult` is
+    // one `getsockopt`: both are `willreturn` as `tcpListen` is. The address
+    // is only read, so it keeps `readonly`.
+    this.add(
+      plain("nish_tcp_connect", `declare noundef i32 @nish_tcp_connect(${NET_BUFFER} readonly)`, EFFECT_WRITE)
+    )
+    this.add(
+      plain("nish_connect_result", "declare noundef i32 @nish_connect_result(i32 noundef)", EFFECT_WRITE)
     )
     // UDP. `udpBind` makes a socket, sets options and binds, none of which
     // waits, so it is `willreturn` as `tcpListen` is. `sendmsg` and `recvmsg`

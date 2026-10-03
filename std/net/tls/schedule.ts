@@ -18,10 +18,11 @@
  * into one. The traffic key and IV are here too, because T2's record layer
  * needs them and RFC 8448 prints them beside the secrets.
  *
- * **Secrets are not wiped.** Every function here answers or holds a secret,
- * and each stays in arena memory until that memory is reused, because the
- * language has no store the optimiser may not remove (CLAUDE.md §Security,
- * TLS-1 in `docs/security/tls.md`).
+ * **Secrets are not wiped.** Every function here answers or holds a secret as
+ * plain bytes, and each stays in arena memory until that memory is reused.
+ * `secureZero`, the store no optimiser removes, is on `main`, and `std/` may
+ * call it once a release ships it (CLAUDE.md §Security, TLS-1 in
+ * `docs/security/tls.md`).
  *
  * Written from RFC 8446, not ported from another implementation.
  */

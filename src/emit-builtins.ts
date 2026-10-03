@@ -752,6 +752,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "monotonicNanos") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_monotonic_nanos")}()`)
   }
+  // The mark a `using a = arena()` block releases to (`openScope`).
+  if (name === "arena") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
+  }
   // WP14 §7a: one `stat`, and the C answer is already the language's `boolean`.
   if (name === "isDirectorySync") {
     return emitter.fn.emitValue(
@@ -790,6 +794,14 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "readSignal") {
     const fd = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
+  }
+  // #385: the header goes to the runtime as `crypto.getRandomValues`'s does,
+  // and `nish_wipe` reads `len` and `data` from it.
+  if (name === "secureZero") {
+    emitter.declareType(ARRAY_TYPE)
+    const bytes = emitter.emitExpression(firstArgument(expr))
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_wipe")}(${ARRAY_STRUCT}* ${bytes})`)
+    return "void"
   }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
@@ -903,6 +915,15 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_monotonic_nanos")
     return out
   }
+  // The release every exit of the block makes. The mark the call itself takes
+  // is left out: it only reads, the release already writes, and a
+  // `nish_arena_mark` among the callees is what `readsArenaState` and
+  // `managesArena` read as `Arena.mark`, which a checked block is not
+  // (`FunctionFacts.opensArena` is its fact).
+  if (name === "arena") {
+    out.push("nish_arena_release")
+    return out
+  }
   if (name === "isDirectorySync") {
     out.push("nish_is_dir")
     return out
@@ -929,6 +950,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "readSignal") {
     out.push("nish_read_signal")
+    return out
+  }
+  if (name === "secureZero") {
+    out.push("nish_wipe")
     return out
   }
   if (name === "write" || name === "writeError") {

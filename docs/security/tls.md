@@ -8,9 +8,12 @@ this file) starts from evidence.
 
 **Result.** Every refusal is an alert and none is a panic; the client's
 Finished and the ECDHE secret are compared in constant time; RFC 8448 §3 is
-reproduced byte for byte. One Low finding is open, as CLAUDE.md §Security
-requires: the handshake's secrets are not wiped, because the runtime has no
-wipe the optimiser cannot drop (#385).
+reproduced byte for byte. The ECDHE secret and the copy of the ephemeral key
+it is computed with are `Secret`s, wiped on every path. One Low finding is
+open, as CLAUDE.md §Security requires: the secrets the handshake keeps in
+`TlsServer`'s fields and hands its carrier are not wiped yet. The primitive
+that will wipe them, `secureZero` (#417), is on `main`; `std/` may call it once
+a release ships it.
 
 ## Scope
 
@@ -40,7 +43,7 @@ mistakes still answer an alert rather than a panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`; `tlsSignEcdsaP256`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) | Secret material is not wiped. The ephemeral x25519 private key and the ECDHE secret; the early, handshake and master secrets and the two "derived" salts; both handshake traffic secrets, both application traffic secrets and the exporter secret; both `finished_key`s and the expected client `verify_data`; every traffic key and IV `tlsTrafficKey` and `tlsTrafficIv` answer; and the P-256 private key `tlsSignEcdsaP256` passes to `p256SignSha256` (ECC-2) all stay in arena memory after the call or the handshake that held them, until that memory is reused. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. A later memory disclosure could read any of them. | **Open.** Needs the wipe primitive of #385, in `runtime/` and `src/`, outside this stage. Once a release ships it, each function above wipes before it returns (the server's fields when the handshake ends or fails), and a test pins that the wipe survives `-O2`. |
+| TLS-1 | Low | `std/net/tls.ts` (`TlsServer`: the constructor's `ephemeralPrivate`, `handleClientHello`, `sign`, `handleFinished`), `std/net/tls/schedule.ts` (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`) | Secret material is not wiped once the handshake is done with it. `TlsServer` holds the caller's ephemeral x25519 key as plain bytes, because a `Secret` may not be a field (NL2430); it keeps the handshake secret, both handshake traffic secrets, both application traffic secrets, the exporter secret and the expected client `verify_data`, which its carrier reads; and the schedule's functions answer the early and master secrets, the "derived" salts, both `finished_key`s and every traffic key and IV as plain `u8[]`. All of them stay in arena memory until that memory is reused, and a later memory disclosure could read them. `handleFinished` drops the server's reference to the handshake secret, which shortens how long it is reachable and wipes nothing. **What is wiped:** the copy of the ephemeral key the exchange runs on, and the ECDHE secret, are `Secret<u8[]>`s (`nish:secret`, #418) that `handleClientHello` wipes on every path, and the all-zero check and the handshake secret's extract run on the ECDHE secret only inside `expose`. The P-256 key `tlsSignEcdsaP256` signs with is the caller's `Secret`, borrowed, and `p256` wipes what it derives from it (ECC-2). | **Open.** The primitive exists on `main`: `secureZero` (#417), a store no optimiser removes, for bytes that are not a `Secret`. Under the rolling freeze `std/` may call it once a release ships it; then `TlsServer` wipes its fields when the handshake ends or fails, the schedule's callers wipe what they are handed, and a test pins that the wipes survive `-O2`. |
 
 ## Properties verified
 
@@ -106,7 +109,8 @@ under `f64` in `net_tls_ext_f64`):
 secret is all zeros, is `illegal_parameter` before any ServerHello is written
 (RFC 8446 §7.4.2, RFC 7748 §6.1); a share of the wrong length is
 `illegal_parameter`. The all-zero test reads all 32 bytes with
-`timingSafeEqual`, since the secret is secret.
+`timingSafeEqual`, since the secret is secret, and runs inside `expose`, on a
+`Secret` that is wiped on every path whichever way the test goes.
 
 **One HelloRetryRequest, and its transcript** (`net_tls_ext_hrr`): RFC 8448
 §5's `message_hash` transcript and the schedule over it, a constructed retry

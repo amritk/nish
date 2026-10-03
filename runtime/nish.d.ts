@@ -112,9 +112,10 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 /**
  * The disposable protocol `using` reads (WP29 P2, docs/wp29-thread-surface.md
- * §5): declared here so that a program using `nish/threads`'s scope needs no
- * `"ESNext.Disposable"` in its `lib`. `nish` itself takes `using` only for a
- * `scope()`, and `[Symbol.dispose]` only in `nish/threads`.
+ * §5): declared here so that a program using `nish/threads`'s scope or
+ * `arena()` needs no `"ESNext.Disposable"` in its `lib`. `nish` itself takes
+ * `using` only for a `scope()` or an `arena()`, and `[Symbol.dispose]` only in
+ * `nish/threads`.
  */
 interface SymbolConstructor {
   readonly dispose: unique symbol;
@@ -172,6 +173,12 @@ declare function bitsToF64(bits: i64): f64;
 declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
 /** All-ones of the operands' type when `a === b`, zero otherwise, without a branch. */
 declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
+/**
+ * Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
+ * drop as dead (#385): how a key, a secret scalar or another secret is cleared
+ * once it is used. A statement.
+ */
+declare function secureZero(bytes: u8[]): void;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -260,9 +267,10 @@ declare function readSignal(fd: i32): i32;
 //
 // Every call answers an `i32`: `>= 0` on success, a negative errno otherwise, in
 // Linux's numbering on every platform for -11 (would block), -95, -32, -104,
-// -98 and -22. An address is 18 bytes of a `u8[]`: 16 of IPv6 address (IPv4 as
-// `::ffff:a.b.c.d`), then the port, big-endian. Every socket is non-blocking and
-// close-on-exec. No reading under Node, where each throws.
+// -98, -111 (refused), -110 (timed out) and -22. An address is 18 bytes of a
+// `u8[]`: 16 of IPv6 address (IPv4 as `::ffff:a.b.c.d`), then the port,
+// big-endian. Every socket is non-blocking and close-on-exec. No reading under
+// Node, where each throws.
 
 /** Write the address form of a numeric `host` and `port` into `out`: 0, or -22. */
 declare function netAddress(out: u8[], host: string, port: i32): i32;
@@ -280,6 +288,10 @@ declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
 declare function netClose(fd: i32): i32;
+/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+declare function tcpConnect(addr: readonly u8[]): i32;
+/** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
+declare function connectResult(fd: i32): i32;
 /** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
 declare function udpBind(host: string, port: i32, flags: i32): i32;
 /** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
@@ -394,6 +406,10 @@ declare module "nish:net" {
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;
+  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+  export function tcpConnect(addr: readonly u8[]): i32;
+  /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
+  export function connectResult(fd: i32): i32;
   /** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
   export function udpBind(host: string, port: i32, flags: i32): i32;
   /** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
@@ -429,6 +445,39 @@ declare module "nish:io" {
   export function panic(message: string): never;
 }
 
+// `nish:secret` has source behind it, `std/secret.ts`, but a program imports it
+// by this name, so `tsc` reads these declarations rather than that file. The
+// class is declared with a private constructor and a private field: `tsc` then
+// refuses `new Secret(...)`, `s.value` and a structural look-alike, as `nish`
+// does. Everything else `nish` refuses about a `Secret` — printing it,
+// comparing it, branching on it, dropping it unwiped, an `expose` whose
+// function does I/O — is flow, which `tsc` cannot see
+// (docs/LANGUAGE.md -> Secrets).
+declare module "nish:secret" {
+  /**
+   * Key material: an array of integers or a record of integer fields, held
+   * opaque. Made by `secret`, read only through `expose`, and wiped or
+   * returned by the function that made it.
+   */
+  export class Secret<T> {
+    private constructor();
+    private readonly value: T;
+  }
+  /** `value`, wrapped. A local handed in is moved: it may not be read again. */
+  export function secret<T>(value: T): Secret<T>;
+  /**
+   * `f(value)`. `f` reaches no I/O and no C, keeps nothing of `value`, and
+   * declares a return type that holds no `Secret`: that type is what leaves.
+   */
+  export function expose<T, R>(s: Secret<T>, f: (value: T) => R): R;
+  /** `f(value, arg)`, under `expose`'s rules; `f` may not write `arg` either. */
+  export function exposeWith<T, A, R>(s: Secret<T>, arg: A, f: (value: T, arg: A) => R): R;
+  /** Zero the value's whole storage, with a store the optimiser may not remove. */
+  export function wipe<T>(target: Secret<T>): void;
+  /** Zero an array or record of integers that `expose`'s function holds, likewise. */
+  export function wipe(target: object): void;
+}
+
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 
 declare const Arena: {
@@ -441,6 +490,15 @@ declare const Arena: {
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };
+
+/**
+ * `using a = arena()` (docs/LANGUAGE.md -> Arena): everything the block
+ * allocates after this declaration is released when the block ends, on every
+ * exit, and the compiler refuses the block if anything allocated in it could
+ * outlive it. Only a `using` initialiser, and the binding is never read; under
+ * Node there is no arena and the disposal does nothing.
+ */
+declare function arena(): Disposable;
 
 /**
  * `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and

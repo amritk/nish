@@ -5,6 +5,7 @@
 // for each of the three suites. Then the DER encoding of an ECDSA signature
 // at its edges, which `nish/crypto/x509` must read back.
 import { Suite } from "nish/testing";
+import { Secret, secret, wipe } from "nish:secret";
 import { x509DerSignatureRS } from "nish/crypto/x509";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import {
@@ -83,10 +84,14 @@ export const ecdsaChecks = (): i32 => {
 
   // A signature over other bytes does not verify: the check above is not vacuous.
   const content: u8[] = fromHex("00010203");
-  const signature: u8[] | null = tlsSignEcdsaP256(leafPrivate(), content);
+  const leaf: Secret<u8[]> = secret(leafPrivate());
+  const signature: u8[] | null = tlsSignEcdsaP256(leaf, content);
+  wipe(leaf);
   const rs: u8[] | null = signature === null ? null : x509DerSignatureRS(signature);
   t.ok("tlsSignEcdsaP256 answers a DER signature that x509 reads back", rs !== null);
-  t.eqStr("a 31-byte key signs nothing", toHex(tlsSignEcdsaP256(fromHex("01"), content)), "null");
+  const short: Secret<u8[]> = secret(fromHex("01"));
+  t.eqStr("a 1-byte key signs nothing", toHex(tlsSignEcdsaP256(short, content)), "null");
+  wipe(short);
 
   // DER at its edges: a high bit gets a zero byte, leading zeros go, and
   // zero is one zero octet.

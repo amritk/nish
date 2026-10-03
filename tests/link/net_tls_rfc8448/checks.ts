@@ -13,7 +13,7 @@
 // signs; `rfc8448CertificateTranscriptHash` was computed with Python's
 // hashlib over the trace's four messages.
 import { Suite } from "nish/testing";
-import { x25519 } from "nish/crypto/x25519";
+import { x25519Plain } from "../crypto_x25519/plain";
 import { TLS_SIGNATURE_RSA_PSS_RSAE_SHA256 } from "nish/net/tls/codec";
 import {
   TLS_AES_128_GCM_SHA256,
@@ -142,7 +142,7 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqStr(
     "the ECDHE secret from the trace's two x25519 keys",
-    toHex(x25519(rfc8448ServerPrivate(), rfc8448ClientPublic())),
+    toHex(x25519Plain(rfc8448ServerPrivate(), rfc8448ClientPublic())),
     toHex(rfc8448Ecdhe())
   );
   const handshake: u8[] = tlsHandshakeSecret(h, early, rfc8448Ecdhe());

@@ -10,7 +10,7 @@
 import { p256VerifySha256 } from "nish/crypto/p256";
 import { sha256 } from "nish/crypto/sha256";
 import { sha384 } from "nish/crypto/sha512";
-import { x25519, x25519Base } from "nish/crypto/x25519";
+import { x25519BasePlain, x25519Plain } from "../crypto_x25519/plain";
 import { x509DerSignatureRS } from "nish/crypto/x509";
 import {
   TLS_EXT_ALPN,
@@ -149,7 +149,7 @@ export const clientPrivate = (): u8[] => fromHex("77076d0a7318a57d3c16c17251b266
 
 /** The client's x25519 share. */
 export const clientShare = (): u8[] => {
-  const share: u8[] | null = x25519Base(clientPrivate());
+  const share: u8[] | null = x25519BasePlain(clientPrivate());
   if (share === null) {
     return [];
   }
@@ -269,7 +269,7 @@ export const clientFinish = (
 ): ClientView => {
   const view = new ClientView();
   const serverHello: u8[] = initial;
-  const shared: u8[] | null = x25519(clientPrivate(), serverShareOf(serverHello));
+  const shared: u8[] | null = x25519Plain(clientPrivate(), serverShareOf(serverHello));
   const none: u8[] = [];
   const ecdhe: u8[] = shared === null ? none : shared;
   const handshakeSecret: u8[] = tlsHandshakeSecret(hashLength, tlsEarlySecret(hashLength), ecdhe);

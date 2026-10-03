@@ -1,8 +1,9 @@
 // The server side of the `nish/net/tls` tests: a P-256 key and the
 // self-signed certificate `nish/crypto/x509` mints for it, the injected
 // randomness, and the configuration every case starts from.
-import { p256PublicKey } from "nish/crypto/p256";
+import { Secret, secret, wipe } from "nish:secret";
 import { x509MintSelfSigned } from "nish/crypto/x509";
+import { p256PublicKeyPlain } from "../crypto_p256/plain";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TlsServer, TlsServerConfig, tlsSignEcdsaP256 } from "nish/net/tls";
 import { fromHex } from "../crypto_x509/hex";
@@ -12,7 +13,7 @@ export const leafPrivate = (): u8[] => fromHex("c9afa9d845ba75166b5c215767b1d693
 
 /** Its public key, 65 bytes uncompressed. */
 export const leafPublic = (): u8[] => {
-  const pub: u8[] | null = p256PublicKey(leafPrivate());
+  const pub: u8[] | null = p256PublicKeyPlain(leafPrivate());
   if (pub === null) {
     return [];
   }
@@ -24,7 +25,9 @@ export const leafCertificate = (): u8[] => {
   const notBefore: i64 = 1767225600000;
   const days: i32 = 1;
   const serial: u8[] = [toU8(1)];
-  const der: u8[] | null = x509MintSelfSigned(leafPrivate(), "localhost", notBefore, days, serial);
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const der: u8[] | null = x509MintSelfSigned(key, "localhost", notBefore, days, serial);
+  wipe(key);
   if (der === null) {
     return [];
   }
@@ -73,6 +76,8 @@ export const newServer = (config: TlsServerConfig): TlsServer => new TlsServer(c
 export const signWithLeaf = (server: TlsServer): i32 => {
   const input: u8[] | null = server.signatureInput();
   const none: u8[] = [];
-  const signature: u8[] | null = input === null ? null : tlsSignEcdsaP256(leafPrivate(), input);
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const signature: u8[] | null = input === null ? null : tlsSignEcdsaP256(key, input);
+  wipe(key);
   return server.sign(signature === null ? none : signature);
 };

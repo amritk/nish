@@ -123,6 +123,52 @@ export function ctEq(a, b) {
   return (a ^ b) === 0 ? 0xffffffff : 0;
 }
 
+/**
+ * `nish:secret` (docs/LANGUAGE.md, "Secrets"). Natively the compiler holds a
+ * `Secret` to its rules and `wipe` is a volatile store of zeros; here the rules
+ * have already been checked by the compiler or by nobody, so a `Secret` is a
+ * plain wrapper and `wipe` zero-fills what it holds. `runtime/nish.mjs`
+ * resolves the `nish:secret` specifier to this module, so these are its
+ * exports by name. A zero-fill under Node promises nothing about copies the
+ * engine made, which is the native wipe's whole point and is not claimed here.
+ */
+export class Secret {
+  constructor(value) {
+    this.value = value;
+  }
+}
+
+export function secret(value) {
+  return new Secret(value);
+}
+
+export function expose(s, f) {
+  return f(s.value);
+}
+
+export function exposeWith(s, arg, f) {
+  return f(s.value, arg);
+}
+
+/** Zero an array of integers, or every integer field of a record: `0` for a number, `0n` for an `i64` or `u64`. */
+function zeroFill(target) {
+  if (Array.isArray(target) || ArrayBuffer.isView(target)) {
+    for (let i = 0; i < target.length; i++) {
+      target[i] = typeof target[i] === "bigint" ? 0n : 0;
+    }
+    return;
+  }
+  for (const key of Object.keys(target)) {
+    const field = target[key];
+    if (typeof field === "bigint") target[key] = 0n;
+    else if (typeof field === "number") target[key] = 0;
+  }
+}
+
+export function wipe(target) {
+  zeroFill(target instanceof Secret ? target.value : target);
+}
+
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
 export function wrapI64(x) {
   return BigInt.asIntN(64, x);
@@ -711,6 +757,19 @@ export function statMtimeSync(path) {
 }
 
 /**
+ * `secureZero(bytes)` (#385): every element set to zero, which is what the
+ * native `nish_wipe` leaves. Nothing here can drop a store to an array the
+ * caller still holds, so a loop is the whole of it. What it cannot promise is
+ * what the native build does: a collector that moved the array may have left a
+ * copy of the old bytes behind, and JavaScript has no way to reach it.
+ */
+export function secureZero(bytes) {
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = 0;
+  }
+}
+
+/**
  * Node's own fill, taken before `runtime/nish.mjs` puts the one below in its
  * place on the same object: `webcrypto` is the global `crypto`.
  */
@@ -821,3 +880,7 @@ export function arenaUsed() { return 0; }
 export function arenaMark() { return 0; }
 export function arenaRelease() {}
 export function arenaReset() {}
+/** `using a = arena()`: a disposable whose disposal does nothing, because there is no arena to release. */
+export function arena() {
+  return { [Symbol.dispose]() {} };
+}

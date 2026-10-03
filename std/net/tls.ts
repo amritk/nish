@@ -46,14 +46,20 @@
  * is in `TLS_STATE_FAILED` and answers the same alert to every call. Nothing
  * the peer sends can make it panic.
  *
- * **Secrets are not wiped.** The ephemeral private key, the ECDHE secret, the
- * handshake and master secrets and every traffic secret stay in arena memory
- * until it is reused (CLAUDE.md §Security; TLS-1 in `docs/security/tls.md`).
+ * **Secrets.** The ECDHE secret, and the copy of the ephemeral key it is
+ * computed with, are `Secret`s (`nish:secret`) wiped on every path. What the
+ * server keeps in its fields — the caller's ephemeral key bytes, since a
+ * `Secret` may not be a field, and the handshake, traffic and exporter secrets
+ * its carrier reads — is not wiped yet: `secureZero` will, once a release ships
+ * it (CLAUDE.md §Security; TLS-1 in `docs/security/tls.md`).
  *
  * The state is a class and a `switch`, with no closures; a message allocates
  * only what the handshake keeps. Written from RFC 8446, RFC 7301, RFC 6066
  * and RFC 9001, not ported from another implementation.
  */
+import { Secret, expose, secret, wipe } from "nish:secret"
+import { hkdfExtractSha256, hkdfExtractSha384 } from "nish/crypto/hkdf"
+import { SHA384_SIZE } from "nish/crypto/sha512"
 import { p256SignSha256 } from "nish/crypto/p256"
 import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
@@ -87,9 +93,7 @@ import {
 import {
   TlsTranscript,
   tlsDeriveSecret,
-  tlsEarlySecret,
   tlsFinishedVerifyData,
-  tlsHandshakeSecret,
   tlsMasterSecret,
   tlsSuiteHashLength,
 } from "nish/net/tls/schedule"
@@ -286,15 +290,60 @@ export const tlsEcdsaDerSignature = (rs: u8[]): u8[] | null => {
  * Signs a CertificateVerify input for `ecdsa_secp256r1_sha256` with the P-256
  * private key `priv`: `p256SignSha256` (RFC 6979's deterministic nonce), DER
  * encoded. `null` for a malformed key. The answer is what `TlsServer.sign`
- * takes.
+ * takes. The key is borrowed, as every `Secret` parameter is: the caller made
+ * it, and wipes it.
  */
-export const tlsSignEcdsaP256 = (priv: u8[], content: u8[]): u8[] | null => {
+export const tlsSignEcdsaP256 = (priv: Secret<u8[]>, content: u8[]): u8[] | null => {
   const rs: u8[] | null = p256SignSha256(priv, content)
   if (rs === null) {
     return null
   }
   return tlsEcdsaDerSignature(rs)
 }
+
+/** A fresh copy of `bytes`, which is what a `Secret` is made from (`secret` moves its argument). */
+const tlsCopyBytes = (bytes: u8[]): u8[] => {
+  const out: u8[] = new Array<u8>(bytes.length)
+  for (let k: i32 = 0; k < toI32(out.length) && k < toI32(bytes.length); k++) {
+    out[k] = bytes[k]
+  }
+  return out
+}
+
+/** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
+const tlsIsZeroSecret = (shared: u8[]): boolean => timingSafeEqual(shared, new Array<u8>(X25519_SIZE))
+
+/**
+ * `Derive-Secret(early, "derived", "")` with no PSK, the salt the handshake
+ * secret is extracted under: a constant of the hash alone (RFC 8448 §3 prints
+ * the SHA-256 one; the SHA-384 one was computed with Python's hmac and
+ * hashlib). It is written out rather than derived because the functions below
+ * run on the ECDHE secret inside `expose`, and Expand-Label may panic with a
+ * computed message, which such a function may not reach.
+ */
+const TLS_DERIVED_SALT_SHA256: string = "6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
+const TLS_DERIVED_SALT_SHA384: string =
+  "1591dac5cbbf0330a4a84de9c753330e92d01f0a88214b4464972fd668049e93e52f2b16fad922fdc0584478428f282b"
+
+/** The bytes of a lowercase hex constant of this module. */
+const tlsHexBytes = (text: string): u8[] => {
+  const out: u8[] = []
+  const length: i32 = toI32(text.length)
+  for (let k: i32 = 1; k < length; k += 2) {
+    const hi: i32 = toI32(text.charCodeAt(k - 1))
+    const lo: i32 = toI32(text.charCodeAt(k))
+    out.push(toU8(((hi <= 57 ? hi - 48 : hi - 87) << 4) | (lo <= 57 ? lo - 48 : lo - 87)))
+  }
+  return out
+}
+
+/** The SHA-256 handshake secret: HKDF-Extract of the ECDHE secret under the derived salt (run inside `expose`). */
+const tlsHandshakeFromEcdhe256 = (ecdhe: u8[]): u8[] =>
+  hkdfExtractSha256(tlsHexBytes(TLS_DERIVED_SALT_SHA256), ecdhe)
+
+/** The SHA-384 handshake secret: HKDF-Extract of the ECDHE secret under the derived salt (run inside `expose`). */
+const tlsHandshakeFromEcdhe384 = (ecdhe: u8[]): u8[] =>
+  hkdfExtractSha384(tlsHexBytes(TLS_DERIVED_SALT_SHA384), ecdhe)
 
 /** The secret of `level` from one side's pair, or `null` for any other level or one not derived yet (still empty). */
 const tlsSecretAt = (level: i32, handshake: u8[], application: u8[]): u8[] | null => {
@@ -596,17 +645,28 @@ export class TlsServer {
       this.clientTransportParameters = hello.quicTransportParameters
     }
 
-    const serverPublic: u8[] | null = x25519Base(this.ephemeralPrivate)
-    const shared: u8[] | null = x25519(this.ephemeralPrivate, hello.x25519Share)
-    if (serverPublic === null || shared === null) {
+    // The ephemeral key is held as the caller's plain bytes, because a
+    // `Secret` may not live in a field (NL2430); it is wrapped in a fresh one
+    // for the exchange, and that one and the ECDHE secret are wiped on every
+    // path out of here (TLS-1).
+    const key: Secret<u8[]> = secret(tlsCopyBytes(this.ephemeralPrivate))
+    const serverPublic: u8[] | null = x25519Base(key)
+    const shared: Secret<u8[]> | null = x25519(key, hello.x25519Share)
+    wipe(key)
+    if (shared === null) {
       return TLS_ALERT_INTERNAL_ERROR
     }
     // RFC 7748 §6.1 leaves the all-zero check to the protocol, and RFC 8446
     // §7.4.2 makes it: a low-order client share gives the zero secret, which
     // anybody can compute. The secret is secret, so the compare reads it all.
-    if (timingSafeEqual(shared, new Array<u8>(X25519_SIZE))) {
-      return TLS_ALERT_ILLEGAL_PARAMETER
+    if (serverPublic === null || expose(shared, tlsIsZeroSecret)) {
+      wipe(shared)
+      return serverPublic === null ? TLS_ALERT_INTERNAL_ERROR : TLS_ALERT_ILLEGAL_PARAMETER
     }
+    const h: i32 = this.hashLength
+    this.handshakeSecret =
+      h === SHA384_SIZE ? expose(shared, tlsHandshakeFromEcdhe384) : expose(shared, tlsHandshakeFromEcdhe256)
+    wipe(shared)
 
     const serverHello: u8[] = tlsEncodeServerHello(
       this.serverRandom,
@@ -616,8 +676,6 @@ export class TlsServer {
     )
     this.send(TLS_LEVEL_INITIAL, serverHello)
 
-    const h: i32 = this.hashLength
-    this.handshakeSecret = tlsHandshakeSecret(h, tlsEarlySecret(h), shared)
     const helloHash: u8[] = this.transcript.hash()
     this.clientHandshakeSecret = tlsDeriveSecret(h, this.handshakeSecret, "c hs traffic", helloHash)
     this.serverHandshakeSecret = tlsDeriveSecret(h, this.handshakeSecret, "s hs traffic", helloHash)

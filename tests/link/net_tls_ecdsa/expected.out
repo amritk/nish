@@ -41,7 +41,7 @@ PASS  TLS_AES_256_GCM_SHA384: connected
 PASS  TLS_AES_256_GCM_SHA384: application secrets of HashLen bytes
 PASS  TLS_AES_256_GCM_SHA384: nothing written at the Application level
 PASS  tlsSignEcdsaP256 answers a DER signature that x509 reads back
-PASS  a 31-byte key signs nothing
+PASS  a 1-byte key signs nothing
 PASS  r with its top bit set gains a 0x00, and s = 0 is one zero octet
 PASS  leading zero bytes are dropped
 PASS  and x509DerSignatureRS reads the encoding back to r || s
