@@ -954,6 +954,13 @@ const classifyArgumentUse = (unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (isWrittenArgument(builtinArgumentLetters(program, owner), index)) {
       return use(USE_WRITE)
     }
+    // `uncheckedGet(p, i)` (`nish:unsafe`) is one load of an element of `p`,
+    // inline, and the element is a number, so `p` is read and kept by nothing
+    // -- which is all `readonly nocapture` claims of it. `uncheckedSet`'s `p`
+    // is the written argument above.
+    if (index === 0 && builtinNameOf(program, owner) === "uncheckedGet") {
+      return use(USE_READ)
+    }
     // WP34 N2: `dst.set(p)` reads `p`'s elements into `dst`'s buffer and keeps
     // nothing — the elements are numbers, and the copy is a `memmove` whose
     // source is `nocapture readonly`.
@@ -1518,7 +1525,7 @@ class FactCollector {
       this.addCallees(
         stringConstructCallees(
           node.children[0].text,
-          this.opts.uncheckedIndexing,
+          this.unit.program.uncheckedIndexing,
           program.nodeProvenIndex[node.id]
         )
       )
@@ -1683,7 +1690,7 @@ class FactCollector {
       // proved in range emits no call, so listing `nish_panic_index` here would
       // cost the function `willreturn` for a `noreturn` callee that is not in
       // its IR.
-      if (!this.opts.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
+      if (!this.unit.program.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
         this.facts.callees.add("nish_panic_index")
       }
       return
@@ -1756,7 +1763,7 @@ class FactCollector {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(call, methodReceiver(call))
       this.facts.resizesArray = true
-      if (!this.opts.uncheckedIndexing) {
+      if (!this.unit.program.uncheckedIndexing) {
         this.facts.callees.add("nish_panic_index")
       }
       return
@@ -1774,7 +1781,7 @@ class FactCollector {
       this.noteArrayWrite(call, methodReceiver(call))
       if (method === "set") {
         this.facts.readsMemory = true
-        if (!this.opts.uncheckedIndexing) {
+        if (!this.unit.program.uncheckedIndexing) {
           this.facts.callees.add("nish_panic_slice")
         }
       }
@@ -1887,7 +1894,7 @@ class FactCollector {
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
-    const unchecked = this.opts.uncheckedIndexing
+    const unchecked = this.unit.program.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
     if (this.known !== null) {
       this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
@@ -1910,6 +1917,16 @@ class FactCollector {
     // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
     // are handed.
     this.noteWrittenArguments(node)
+    // `nish:unsafe`: `uncheckedGet` is the load `xs[i]` is and
+    // `uncheckedSet` the store `xs[i] = v` is (`collectArrayFacts`), less the
+    // bounds check, so neither lists `nish_panic_index`. The store's receiver
+    // is a shared write above, through its `w`.
+    const name = builtinNameOf(this.unit.program, node)
+    if (name === "uncheckedGet") {
+      this.facts.readsMemory = true
+    } else if (name === "uncheckedSet") {
+      this.facts.effect = EFFECT_WRITE
+    }
   }
 }
 

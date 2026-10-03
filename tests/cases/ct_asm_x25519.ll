@@ -34,10 +34,11 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 declare i64 @llvm.smin.i64(i64, i64) #0
 declare i64 @llvm.smax.i64(i64, i64) #0
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -1848,7 +1849,7 @@ cond.end:
   ret i32 %3
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @fromHex(i8* noundef nonnull noalias readonly align 8 nocapture %text) #1 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @fromHex(i8* noundef nonnull noalias readonly align 8 nocapture %text) #2 {
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %i.addr = alloca i32, align 4
@@ -1882,45 +1883,61 @@ for.body:
   %13 = sext i32 %12 to i64
   %14 = bitcast i8* %text to i64*
   %15 = load i64, i64* %14, align 8
-  %16 = getelementptr inbounds i8, i8* %text, i64 8
-  %17 = getelementptr inbounds i8, i8* %16, i64 %13
-  %18 = load i8, i8* %17, align 1
-  %19 = zext i8 %18 to i32
-  %20 = call i32 @hexNibble(i32 %19)
-  store i32 %20, i32* %high.addr, align 4
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = mul nsw i32 2, %21
-  %23 = add nsw i32 %22, 1
-  %24 = sext i32 %23 to i64
-  %25 = bitcast i8* %text to i64*
-  %26 = load i64, i64* %25, align 8
-  %27 = getelementptr inbounds i8, i8* %text, i64 8
-  %28 = getelementptr inbounds i8, i8* %27, i64 %24
-  %29 = load i8, i8* %28, align 1
-  %30 = zext i8 %29 to i32
-  %31 = call i32 @hexNibble(i32 %30)
-  store i32 %31, i32* %low.addr, align 4
-  %32 = load i32, i32* %i.addr, align 4
-  %33 = sext i32 %32 to i64
-  %34 = load i32, i32* %high.addr, align 4
-  %35 = mul nsw i32 %34, 16
-  %36 = load i32, i32* %low.addr, align 4
-  %37 = add nsw i32 %35, %36
-  %38 = trunc i32 %37 to i8
-  %39 = bitcast i8* %8 to i8*
-  %40 = getelementptr inbounds i8, i8* %39, i64 %33
-  store i8 %38, i8* %40, align 1, !alias.scope !4, !noalias !3, !tbaa !16
+  %16 = icmp ult i64 %13, %15
+  br i1 %16, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %13, i64 %15)
+  unreachable
+
+bounds.ok:
+  %17 = getelementptr inbounds i8, i8* %text, i64 8
+  %18 = getelementptr inbounds i8, i8* %17, i64 %13
+  %19 = load i8, i8* %18, align 1
+  %20 = zext i8 %19 to i32
+  %21 = call i32 @hexNibble(i32 %20)
+  store i32 %21, i32* %high.addr, align 4
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = mul nsw i32 2, %22
+  %24 = add nsw i32 %23, 1
+  %25 = sext i32 %24 to i64
+  %26 = bitcast i8* %text to i64*
+  %27 = load i64, i64* %26, align 8
+  %28 = icmp ult i64 %25, %27
+  br i1 %28, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 %25, i64 %27)
+  unreachable
+
+bounds.ok.1:
+  %29 = getelementptr inbounds i8, i8* %text, i64 8
+  %30 = getelementptr inbounds i8, i8* %29, i64 %25
+  %31 = load i8, i8* %30, align 1
+  %32 = zext i8 %31 to i32
+  %33 = call i32 @hexNibble(i32 %32)
+  store i32 %33, i32* %low.addr, align 4
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = sext i32 %34 to i64
+  %36 = load i32, i32* %high.addr, align 4
+  %37 = mul nsw i32 %36, 16
+  %38 = load i32, i32* %low.addr, align 4
+  %39 = add nsw i32 %37, %38
+  %40 = trunc i32 %39 to i8
+  %41 = bitcast i8* %8 to i8*
+  %42 = getelementptr inbounds i8, i8* %41, i64 %35
+  store i8 %40, i8* %42, align 1, !alias.scope !4, !noalias !3, !tbaa !16
   br label %for.inc
 
 for.inc:
-  %41 = load i32, i32* %i.addr, align 4
-  %42 = add nsw i32 %41, 1
-  store i32 %42, i32* %i.addr, align 4
+  %43 = load i32, i32* %i.addr, align 4
+  %44 = add nsw i32 %43, 1
+  store i32 %44, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %43 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  ret %struct.nish_array* %43
+  %45 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  ret %struct.nish_array* %45
 }
 
 define internal noundef nonnull align 8 i8* @toHex(%struct.nish_array* noundef readonly align 8 nocapture %bytes) #1 {
@@ -2277,7 +2294,8 @@ attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -38,7 +38,7 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitSliceCheck } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
@@ -694,8 +694,10 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
-    const needsLen = !emitter.opts.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id]
+    const needsLen = !emitter.program.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id]
     noteArrayUse(emitter, node.children[0], needsLen, true, out)
+  } else if (isUncheckedAccess(emitter.program, node)) {
+    noteArrayUse(emitter, node.children[1].children[0], false, true, out)
   } else if (node.kind === N_MEMBER && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
@@ -937,7 +939,7 @@ export const emitNumberFromI64 = (emitter: Emitter, value: string, expr: Node): 
  * this one check, this one panic and this one message.
  */
 export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void => {
-  if (emitter.opts.uncheckedIndexing) {
+  if (emitter.program.uncheckedIndexing) {
     return
   }
   const fn = emitter.fn
@@ -962,7 +964,7 @@ export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void
  * safety is unchanged (WP15 §2.1/§2.2, `src/bounds.ts`).
  */
 const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: Node): void => {
-  if (emitter.opts.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
+  if (emitter.program.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
     return
   }
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
@@ -1192,6 +1194,27 @@ export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
 }
 
 /**
+ * `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` from `nish:unsafe`: the
+ * load and the store `xs[i]` and `xs[i] = v` lower to, through the same base,
+ * index and slot, with the bounds check left out — no `len` load, no compare,
+ * no branch to the panic. Arguments are evaluated left to right, as every
+ * call's are. Answers the element, or `"void"` for the store.
+ */
+export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolean): string => {
+  const args = expr.children[1].children
+  const elem = emitter.table.refOf(emitter.typeOf(args[0]))
+  emitter.declareType(ARRAY_TYPE)
+  const base = emitArrayBase(emitter, args[0])
+  const idx = emitIndex(emitter, args[1])
+  if (!store) {
+    return loadElement(emitter, base, elem, idx)
+  }
+  const value = emitter.emitExpression(args[2])
+  storeElement(emitter, elementPointer(emitter, base, elem, idx), elem, value)
+  return "void"
+}
+
+/**
  * `a[i] = v`: array, index, value, then the check and the store (the value is
  * the expression's result). `a[i] op= v`: array, index, check, load, value,
  * op, store, matching JavaScript's read-before-right-operand order. When the
@@ -1307,7 +1330,7 @@ const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
   const fn = emitter.fn
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
-  if (!emitter.opts.uncheckedIndexing) {
+  if (!emitter.program.uncheckedIndexing) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`)
     const failBlock = fn.newBlock("pop.empty")
     const okBlock = fn.newBlock("pop.ok")
@@ -1508,7 +1531,7 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
   const end = fn.emitValue(`add i64 ${at}, ${count}`)
-  if (!emitter.opts.uncheckedIndexing) {
+  if (!emitter.program.uncheckedIndexing) {
     emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
   }
   const size = elementSize(emitter, elem)
