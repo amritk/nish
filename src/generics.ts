@@ -33,7 +33,13 @@ import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
-import { annotationSpelling } from "./arrays"
+import {
+  annotationName,
+  annotationSpelling,
+  peelSpelling,
+  spellAnnotation,
+  typedArraySpelling,
+} from "./arrays"
 import { StringMap, StringSet } from "./map"
 import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
 import {
@@ -1859,6 +1865,7 @@ const liftArrow = (
   fn.role = ROLE_FUNCTION
   fn.lifted = true
   fn.returnType = returnType < 0 ? T_ERROR : returnType
+  fn.returnSpelling = annotationSpelling(ctx, true, arrow.children[2])
   const scope = new Scope(null)
   let k = 0
   for (const param of arrow.children[1].children) {
@@ -2466,6 +2473,51 @@ export const isParameterValue = (ctx: CheckContext, expr: Node, scope: Scope): b
   }
   const node = unwrapOrigin(at.annotation)
   return isBareName(node) && ctx.typeBindings.has(node.text)
+}
+
+/**
+ * WP33 R2 (#347): the typed-array name a call of a generic function gives
+ * its result, or `""`: the return type is spelled with each type parameter
+ * standing for the spelling of the argument that binds it, so `first(rows)`
+ * over `rows: Float64Array[]`, with `first<T>(xs: T[]): T`, is a
+ * `Float64Array` to TypeScript and has no `pop`. It is the call site's
+ * spelling, not the instantiation's, because a `Float64Array[]` and an
+ * `f64[][]` argument are one type and so share one instantiation. A
+ * parameter whose annotation is not a bare `T` behind its levels binds
+ * nothing here, which leaves its `T` unspelled.
+ */
+export const genericCallSpelling = (
+  ctx: CheckContext,
+  call: Node,
+  callee: FunctionSig,
+  scope: Scope
+): string => {
+  const decl = callee.decl
+  if (callee.instance === null || decl.kind === N_CONSTRUCTOR) {
+    return ""
+  }
+  const names = collectTypeParamNames(decl)
+  const spellings: string[] = []
+  while (spellings.length < names.length) {
+    spellings.push("")
+  }
+  const params = decl.children[1].children
+  const args = call.children[1].children
+  let i = 0
+  while (i < params.length && i < args.length) {
+    const levels: string[] = []
+    const at = annotationName(params[i].children[1], levels)
+    const k = at === null ? -1 : indexOfName(names, at.text)
+    if (k >= 0 && spellings[k].length === 0) {
+      let spelled = typedArraySpelling(ctx, args[i], scope)
+      for (const level of levels) {
+        spelled = peelSpelling(spelled, level)
+      }
+      spellings[k] = spelled
+    }
+    i = i + 1
+  }
+  return spellAnnotation(ctx, null, decl.children[2], names, spellings)
 }
 
 /** The position of `name` in `names`, or -1. */

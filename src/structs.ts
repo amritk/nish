@@ -18,6 +18,7 @@
 import { DISPOSE_METHOD, disposeElsewhereMessage, isThreadsSource } from "./parallel"
 import { CheckContext } from "./context"
 import { rejectForeignPointer, resolveType } from "./annotations"
+import { annotationSpelling } from "./arrays"
 import {
   collectTypeParamNames,
   implementsDeclaration,
@@ -492,6 +493,7 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   const field = new FieldInfo(name, type, decl)
   field.index = owner.fields.length
   field.readonly = (decl.flags & FLAG_READONLY) !== 0
+  field.spelling = annotationSpelling(ctx, true, decl.children[1])
   const initializer = decl.children[2]
   if (initializer.kind !== N_EMPTY) {
     const initType = literalInitializerType(ctx, initializer, type)
@@ -615,6 +617,7 @@ export const collectMethodSignature = (
     sig.returnType = T_ERROR
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx)
+    sig.returnSpelling = annotationSpelling(ctx, true, returnAnnotation)
     rejectForeignPointer(
       ctx,
       sig.returnType,

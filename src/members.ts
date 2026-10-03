@@ -9,7 +9,15 @@
 // checker and its method checker agree about what it owns — is a thing to
 // keep in mind rather than something the shape enforces.
 
-import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays"
+import {
+  ARRAY_LEVEL,
+  checkArrayMethod,
+  checkArrayProperty,
+  checkNewArray,
+  MAP_LEVEL,
+  peelSpelling,
+  typedArraySpelling,
+} from "./arrays"
 import { checkBuiltinArity, checkNamespaceProperty, dateRefusal } from "./builtins"
 import { checkResultMethod, checkResultProperty } from "./result"
 import { CheckContext } from "./context"
@@ -267,6 +275,35 @@ const checkMapGet = (ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   checkMethodArguments(ctx, expr, probe, args, `${ctx.table.typeName(info.type)}.get`, scope, false)
   ctx.program.nodeCallees[expr.id] = probe
   return ctx.table.maybeOf(read.returnType)
+}
+
+/**
+ * WP33 R2 (#347): the typed-array name a read out of the global `Map` gives,
+ * or `""`. `m.get(k)` on a `Map<string, Float64Array>` is a
+ * `Float64Array | undefined` to TypeScript, so the value it holds once
+ * narrowed, or once `??` has given it a default, has no `push` or `pop`;
+ * `m.values()` is answered as an array of the values, so that a `for...of`
+ * over it gives its variable the element's spelling. A `Set` holds no
+ * arrays, since an array is not a key, and a `Map`'s keys are not one either.
+ */
+export const mapReadSpelling = (ctx: CheckContext, call: Node, scope: Scope): string => {
+  const access = unwrapParens(call.children[0])
+  if (access.kind !== N_MEMBER || (access.text !== "get" && access.text !== "values")) {
+    return ""
+  }
+  const holder = ctx.program.nodeTypes[access.children[0].id]
+  if (holder < 0) {
+    return ""
+  }
+  const info = ctx.program.struct(ctx.table.nameOf(ctx.table.stripNull(holder)))
+  if (info === null || !isMapOwner(info) || !isCollectionStruct(info)) {
+    return ""
+  }
+  const value = peelSpelling(typedArraySpelling(ctx, access.children[0], scope), MAP_LEVEL)
+  if (value.length === 0 || access.text === "get") {
+    return value
+  }
+  return `${value}${ARRAY_LEVEL}`
 }
 
 /**
