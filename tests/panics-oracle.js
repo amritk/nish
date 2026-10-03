@@ -57,13 +57,16 @@ const canPanic = (site) => site.kind !== "oom" && site.proven !== true
 
 /**
  * Hold `report` (a parsed `--emit-panics` file) against the IR text `ir`.
- * Answers `{ checked, failures }`: how many functions with nothing left that
- * can panic were found in this IR and read, and one line per such function
- * whose IR has a panic path anyway.
+ * Answers `{ checked, own, failures }`: how many functions with nothing left
+ * that can panic were found in this IR and read, how many of `module`'s own
+ * functions the report lists (a caller asserts it is not zero, so a module
+ * path spelled differently from the report's cannot turn the drift check off
+ * in silence), and one line per function the IR fails.
  *
- * `module` is the path of the one module `ir` is the whole of, as it is for a
- * one-module `tests/cases/` compile, or null when `ir` is part of a link. A
- * function of that module with no `define` in `ir` is a failure: the report's
+ * `module` is the path of a module whose IR `ir` holds in full: the case of a
+ * one-module `tests/cases/` compile, or the entry of a link, whose modules'
+ * `.ll` files are all joined into `ir`. A function of that module with no
+ * `define` in `ir` is a failure: the report's
  * `symbol` and the IR have drifted apart (a mangling change, an instantiation
  * renamed), and skipping it would let the oracle pass having read nothing.
  * A function of any other module is skipped when it is not there: it is
@@ -75,7 +78,11 @@ export const panicOracle = (ir, report, module) => {
   const lines = ir.split("\n")
   const failures = []
   let checked = 0
+  let own = 0
   for (const fn of report.functions) {
+    if (fn.module === module) {
+      own++
+    }
     const body = definitionOf(lines, fn.symbol)
     if (body === null) {
       if (fn.module === module) {
@@ -92,5 +99,5 @@ export const panicOracle = (ir, report, module) => {
       failures.push(`${fn.name} (@${fn.symbol}) lists nothing that can panic, and its IR has: ${found}`)
     }
   }
-  return { checked, failures }
+  return { checked, own, failures }
 }

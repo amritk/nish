@@ -862,15 +862,17 @@ const caseResults = caseRuns.map((run) => run.compiled)
     missed.length === 0 && flagged.length === 0 && quiet.length === 0,
     `missed: ${missed.join(" | ")}\nflagged despite a site: ${flagged.join(" | ")}\nnot a panic: ${quiet.join(" | ")}`
   )
-  // A listed function the IR does not define: a failure for the module the IR
-  // is the whole of, whatever its sites, and skipped for one of another module.
+  // A listed function the IR does not define: a failure for the module whose
+  // IR is in hand, whatever its sites, and skipped for one of another module;
+  // and the count of the module's own functions the link check asserts on.
   const absent = define([]).replace("@f(", "@g(")
   const own = [clean, unproven].map((report) => panicOracle(absent, report, "m.ts").failures.length)
   const other = [clean, unproven].map((report) => panicOracle(absent, report, "other.ts").failures.length)
+  const counted = [panicOracle(absent, clean, "m.ts").own, panicOracle(absent, clean, "other.ts").own]
   check(
     "--emit-panics: the IR oracle fails a listed function its own module's IR does not define",
-    own.every((n) => n === 1) && other.every((n) => n === 0),
-    `failures for the module's own function: ${own.join(", ")}; for another module's: ${other.join(", ")}`
+    own.every((n) => n === 1) && other.every((n) => n === 0) && counted[0] === 1 && counted[1] === 0,
+    `failures for the module's own function: ${own.join(", ")}; for another module's: ${other.join(", ")}; own counted: ${counted.join(", ")}`
   )
 }
 
@@ -3266,11 +3268,17 @@ for (const name of linkTests) {
       .filter((f) => f.endsWith(".ll"))
       .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
       .join("\n")
-    const oracle = panicOracle(ir, JSON.parse(listText), null)
+    // The entry is named by the path it was given, `side("main.ts")`, and its
+    // `.ll` is among those joined above, so its own functions are held to the
+    // drift check too; a module of a library that writes no `.ll` of its own
+    // stays skipped (`panicOracle`'s `module`).
+    const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
     check(
-      `link/${name}: --emit-panics agrees with the IR of every module`,
-      oracle.failures.length === 0,
-      oracle.failures.join("\n")
+      `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
+      oracle.failures.length === 0 && oracle.own > 0,
+      oracle.own > 0
+        ? oracle.failures.join("\n")
+        : `no listed function names ${side("main.ts")} as its module`
     )
     if (fs.existsSync(side("expected.panics"))) {
       const want = read("expected.panics").trim()
