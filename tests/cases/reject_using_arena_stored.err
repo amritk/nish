@@ -1,0 +1,1 @@
+`` `box ${b.label.length}` `` may be allocated inside the `using arena()` block at 14:5 and is stored into memory — handed to a callee that keeps it, or held by an object or an array — where this analysis stops following it, so nothing proves it is gone when the block releases

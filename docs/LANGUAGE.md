@@ -2401,7 +2401,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_par_arena`).
 - **The result is a number, a `boolean` or an enum** — `U` for a map, `T` for a
   reduce — because the element's memory is released before the result is
@@ -2515,11 +2515,11 @@ export const main = (): i32 => {
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
   another). `throw` and a panic end the process and join nothing.
-- **A scope is introduced by `using`, and `using` takes only a scope.** A
-  scope bound any other way is
+- **A scope is introduced by `using`, and `using` takes only a scope or an
+  [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
   (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
-  `` `using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs ``
+  `` `using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version: they are the values whose disposal the language defines — a scope joins its tasks, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs ``
   (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
   statement of a block; as the body of an `if` or a loop it is
   `` A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block ``
@@ -2534,7 +2534,7 @@ export const main = (): i32 => {
 - **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` declares one,
   so TypeScript and Node accept `using s = scope()`; the compiler emits the join
   itself and never calls it. Any other class's is
-  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called ``
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method of any other class would never be called ``
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
   thread; a scope with more tasks than cores leaves the scheduler to share them
@@ -2560,7 +2560,7 @@ element's arena, which a task does not share, and each rule is reported at the
   is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -3562,7 +3562,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -3769,6 +3769,63 @@ BigInts, and the `ct_prelude` check in `tests/run.js` holds its answers to
 under Node, as all 64-bit arithmetic is ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)):
 a bare `u64` literal is a `number` there, and mixing one with a BigInt throws a
 `TypeError` rather than comparing the two and answering zero.
+
+### Wiping a secret: `secureZero`
+
+A key, a secret scalar or another secret intermediate has to be cleared once it
+is used, and a store the program never reads again is exactly what the optimiser
+removes: `key.fill(0)` just before a key goes out of scope is a dead store at
+`-O2`, and a `memset` in the runtime is one too once `-flto` inlines it into
+that caller. This builtin is the store that stays (#385).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `secureZero(bytes: u8[]): void` | every byte of `bytes` set to zero, in stores no optimisation removes; an empty array is a call that clears nothing; a statement | write | `wipe_bytes`; `reject_wipe_i32`, `reject_wipe_string`, `reject_wipe_readonly`, `reject_wipe_value`, `reject_wipe_arity`, `reject_wipe_region` |
+
+- **A `u8[]` only**, as `crypto.getRandomValues` takes, because the byte is the
+  unit a secret is written in: anything else is
+  `` `secureZero` fills a `u8[]`, got i32[] `` (NL2402), a string included,
+  which is immutable and has nothing to clear (`reject_wipe_i32`,
+  `reject_wipe_string`). The call writes its argument, so a `readonly u8[]` is
+  `` Cannot `secureZero` through readonly u8[] (declare it u8[] to write through it) ``
+  (NL2264, `reject_wipe_readonly`), and a function that wipes a parameter does
+  not get `readonly` on it (`wipe_bytes`). In a scope's region it is refused
+  where `fill` is (NL2394, `reject_wipe_region`).
+- **A statement**: there is nothing to answer, so
+  `` `secureZero` returns void and can only be used as a statement `` (NL2105,
+  `reject_wipe_value`), and it takes exactly one argument (NL2061,
+  `reject_wipe_arity`).
+- **The lowering is one call**, `call void @nish_wipe(%struct.nish_array* %key)`,
+  declared `nounwind willreturn` and `nocapture` without `readonly` and with no
+  memory attribute, so LLVM may not treat it as a store it can drop.
+  `nish_wipe` in `runtime/runtime.c` writes each byte through a `volatile`
+  pointer, which the C standard makes behaviour no optimisation may remove
+  even once LTO has inlined the body, and is `noinline` besides, so the call
+  stays visible in a disassembly. [IR_COOKBOOK.md](IR_COOKBOOK.md#securezero)
+  shows the IR.
+- **It is pinned under `-O2 -flto`, where it matters.** The runtime unit test
+  builds a probe the way `--link` builds, `-O2 -flto` over the runtime's
+  sources: a key written to a block, used, wiped and freed, then read back
+  through a pointer the optimiser cannot follow. With no wipe the key is still
+  there, and with a `memset` wipe in another translation unit it is still there
+  too, dropped as a store before `free`; with `nish_wipe` nothing is left. The
+  same test fails when `nish_wipe` is written as a `memset`.
+- **What it does not promise: the copies the program made.** It clears the
+  bytes of the array it is handed. A copy taken before (`slice`, a `push` into
+  another array, an element read into a local, a register spilled to the stack)
+  is the program's to clear, and nothing clears what the operating system
+  swapped out.
+- **It is a global, and not in a `nish:` module.** It is backed by the C
+  runtime, so by the rule [Builtin modules](#builtin-modules-nish) sets it may
+  be imported, but no module exports it yet. It works under the wasi profile,
+  which links `runtime.c`; a freestanding wasm module linked with
+  `runtime-wasm.c` has no `nish_wipe`, as it has no strings.
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
+**class A**: `runtime/nish.mjs` supplies it as a loop that sets every element
+to zero, and `wipe_bytes` prints the same lines under the prelude as natively.
+What Node cannot promise is the native build's stronger claim, because a
+collector that moved the array may have left the old bytes behind.
 
 ### `process`
 
@@ -4003,13 +4060,14 @@ versions throw rather than answer. The row in
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
-and reads and writes bytes, or binds and trades datagrams, and every socket is
+and reads and writes bytes, a client connects, or either binds and trades
+datagrams, and every socket is
 **non-blocking**, so a call that
 would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All sixteen functions
+so a child that `spawnSync` starts inherits none of them. All eighteen functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -4021,7 +4079,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | --- | --- | --- | --- |
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
-| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_arity`, `reject_net_wasm` |
+| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -4032,12 +4090,17 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 descriptor, a count, `0`), and a negative number is the failure's errno,
 negated. The codes a loop branches on are **Linux's numbers on every platform**:
 `-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
-connection was reset, `-98` the address is in use and `-22` a bad argument; the
-Darwin runtime translates its own. Any other failure is the host's `-errno`
+connection was reset, `-98` the address is in use, `-111` the connection was
+refused, `-110` it timed out and `-22` a bad argument; the Darwin runtime
+translates its own. Any other failure is the host's `-errno`
 (`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
 answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
-`Result`, because no builtin answers one and a failure here is routine — the
-same convention `signalFd` set — and because a number allocates nothing: no
+`Result`, because no builtin answers one and a failure here is routine, and
+because a number allocates nothing. It follows the shape `signalFd` set, where
+a negative `i32` is a failure, and adds the errno to it: `signalFd` and
+`readSignal` answer a plain `-1` for any failure (and `readFileBytesSync`
+answers `null`), while a `nish:net` call says which failure it was, so a loop
+tells "would block" from "the peer has gone" without asking again. No
 `nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
 in a loop whose pass scope gives back what each pass builds, and prints `flat`
 when that moved the arena no further than one message did).
@@ -4051,11 +4114,48 @@ big-endian. So `127.0.0.1:8080` is ten zeros, `255 255`, `127 0 0 1`, `31 144`
 server that accepts a million connections allocates nothing to learn who they
 are from. An array longer than 18 bytes is fine; the rest is not touched.
 
+**Both families on one socket.** `net_dual_stack` listens on `"::"`, and the
+`net_` block of `tests/run.js` connects to it from Node over `127.0.0.1` and
+then over `::1`: the first peer arrives as `::ffff:127.0.0.1` and the second as
+`::1`, each with Node's own port in the last two bytes, and both are echoed.
+Its UDP socket, bound to `"::"` too, sends itself a datagram with each ECN mark
+to its IPv4 address and to its IPv6 one, and reads every mark back from
+`meta[1]` over both. That needs a host with IPv6: where `::1` cannot be listened
+on, `"::"` is the IPv4 fallback above, and the check says so and passes rather
+than counting a skip. CI's `ubuntu-latest` has IPv6 and runs it.
+
+#### The client half
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `tcpConnect(addr: readonly u8[]): i32` | a new TCP socket, non-blocking and close-on-exec, that starts connecting to the [address](#the-address-form) in `addr` — an IPv4 one from an IPv4 socket, any other from an IPv6 one — and answers its descriptor **at once, while the connection is still being made**: the `EINPROGRESS` (`-115`) of a non-blocking `connect` is not a failure, and the loop says when it has finished by reporting the descriptor writable. Any other failure closes the socket and is answered instead of it; an `addr` shorter than 18 bytes is `-22` before any socket exists | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_element`, `reject_net_connect_arity` |
+| `connectResult(fd: i32): i32` | how the connection went, asked once `fd` is writable: `0` when it is made, or its failure from `SO_ERROR`, such as **`-111` for a port nobody listens on** and `-110` for one that never answered. The kernel clears the failure as it is read, so a second call answers `0`; the descriptor is closed with `netClose` either way | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_wasm` |
+
+A connection is made the way everything else here waits: in the loop. Linux
+answers `EINPROGRESS` even over loopback, so a program asks for writability and
+not for an answer from the call. Neither call waits, so both are `willreturn`,
+and neither allocates. `net_tcp_connect` is a Nish client and a Nish server in
+one loop: two exchanges of 1 and 200 messages come back byte for byte with the
+arena where it stood, and a port that was bound and closed again answers `-111`
+and then `0`. The `net_` block of `tests/run.js` runs it under a timeout, so a
+lost wake fails the run rather than hangs it.
+
+```ts
+const addr: u8[] = new Array<u8>(18);
+netAddress(addr, "127.0.0.1", 8080);
+const fd = tcpConnect(addr);          // the descriptor, still connecting
+pollAdd(loop, fd, 2, 1);              // writable once it has finished
+// ... pollWait until token 1 comes back ...
+if (connectResult(fd) === 0) {
+  pollModify(loop, fd, 1, 1);         // connected: now wait to read
+}
+```
+
 #### UDP
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
+| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
 | `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to the address `to` in one `sendmsg`: the bytes sent. A `segment` above `0` is **GSO**: the kernel cuts the payload into datagrams of `segment` bytes, the last one shorter, so one call sends many. `ecn` is the two ECN bits of the IP header (`0` not ECN-capable, `1` ECT(1), `2` ECT(0), `3` CE). A `to` shorter than 18 bytes, a `segment` outside `0..65535` or an `ecn` outside `0..3` is `-22`, and so is a payload the kernel will not cut (more segments than it takes in one call, or a segment the route cannot carry); `-11` when the send buffer is full. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
 | `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`: its length, or `-11` when none is waiting. The sender's address goes into `from`, and two numbers into `meta`: `meta[0]` the **GRO** segment size, the size of each datagram the kernel coalesced into this one (`0` when it coalesced none), and `meta[1]` the ECN bits the datagram arrived with. A `from` shorter than 18 bytes or a `meta` shorter than 2 is `-22` before anything is taken. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`, `net_udp_unchecked`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
 
@@ -4086,7 +4186,10 @@ receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
 
 **Darwin has none of the three.** There `udpSendTo` with a `segment` or an
 `ecn` above `0`, and `udpBind` with flag `2`, answer `-95`, and `meta` is
-always `0, 0`. That branch is compiled by CI's Darwin rows and run by nothing.
+always `0, 0`. A `meta[1]` of `0` is also what a datagram that really is not
+ECN-capable reads as, so a receive on Darwin cannot say ECN is unsupported: a
+program learns that from the `-95` a send with an `ecn` above `0` answers, and
+on Darwin it reads every arrival as Not-ECT. That branch is compiled by CI's Darwin rows and run by nothing.
 On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
 there by `tcpAccept` on a datagram socket instead, above), so the Darwin
 answers are a statement about the code, not about a test.
@@ -4204,8 +4307,8 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
   `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`).
-- **Not yet.** There is no `tcpConnect` (`reject_net_unknown_export`), no name
-  resolution, no `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
+- **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
+  `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait
   for a connection, a byte or a datagram by calling again on `-11`, as
   `net_tcp_echo` and `net_udp_echo` do.
@@ -4218,7 +4321,8 @@ so `npm run check` types these programs, and under `runtime/nish.mjs` each
 function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
-`net_` block of `tests/run.js`, for `netAddress`, `udpBind` and `pollCreate`).
+`net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
+`pollCreate`).
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
@@ -4462,25 +4566,38 @@ it when it is:
   infers as the typed array (`reject_typed_push_inferred`), or `const u = t`;
 - **a field read** `o.f` whose field is declared with one of the names;
 - **a call** whose callee declares one of the names as its return type
-  (`reject_typed_pop_receivers` has one of each);
+  (`reject_typed_pop_receivers` has one of each). A field or a return type
+  written through a `type` alias carries it in every module that reads it,
+  including one that does not import the alias, because the declaring module
+  reads the spelling where its aliases are (`tests/link/reject_typed_push_alias`);
+- **a call of a generic function** whose return type is a type parameter —
+  or an array of one — that an argument binds to a receiver carrying it:
+  `first(rows)` with `first<T>(xs: T[]): T` and `rows: Float64Array[]`,
+  `same(new Int32Array(n))` with `same<T>(x: T): T`. The spelling is the
+  call's, not the instantiation's: `first(plain)` over an `f64[][]` is the
+  same instantiation and is not refused (`reject_typed_push_generic`);
+- **a value read out of a `Map`** whose value type is spelled with a name,
+  whether the `Map` is annotated `Map<string, Float64Array>`, made with
+  `new Map<string, Float64Array>()` or is a field so declared: `m.get(k)`
+  once narrowed, `m.get(k) ?? d`, and the variable of a `for...of` over
+  `m.values()` (`reject_typed_push_map`). A `Set` holds no arrays and a
+  `Map`'s keys are none, since an array is not a key;
 - **an element of an array spelled with a name**: `rows[i]` or a `for...of`
   variable over `rows`, where `rows` is any of the above spelled
   `Float64Array[]` or `Array<Float64Array>`, or is an array literal of
   receivers that carry it, `[new Float64Array(n)]`
   (`reject_typed_push_element`). The array itself is an ordinary array, and
   `rows.push(new Float64Array(n))` compiles;
-- **a ternary** either of whose branches carries it: `c ? xs : t` is
-  `number[] | Float64Array` to TypeScript, which has no `pop` either
+- **a ternary or a `??`** either of whose operands carries it: `c ? xs : t`
+  is `number[] | Float64Array` to TypeScript, which has no `pop` either
   (`reject_typed_push_ternary`).
 
-What does not carry it is narrower, and each is a program that compiles and
-pushes natively where the same source throws a `TypeError` under Node: a field
-or return type written through **another module's** `type` alias (a
-declaration in another module carries the spelling only when it writes the
-name itself, `[]` and `Array<>` included); a value read out of a `Map` or
-`Set` of typed arrays; and the `T` result of a generic function instantiated
-at one of the names. Declare such a value `f64[]` where it is bound, which is
-what TypeScript needs to accept the push as well.
+What does not carry it is a member of a generic **class** instantiated at
+one of the names: `new Box<Float64Array>(t).value` and a method of it that
+returns `T` still push natively where the same source throws a `TypeError`
+under Node, because a binding records one spelling and not one per type
+argument. Declare such a value `f64[]` where it is bound, which is what
+TypeScript needs to accept the push as well.
 
 **A typed array that flows into a binding spelled `T[]` may be pushed there**:
 `const a: f64[] = t; a.push(v)`, or a `Float64Array` passed to a parameter
@@ -4511,10 +4628,90 @@ scope release moved ahead of it, so the position it reports is the one it would
 have reported before ([Memory model](#memory-model), item 2). **Safety rule**:
 releasing or resetting while any object, array, or string allocated after
 the mark is still referenced is undefined behaviour (the memory is reused by
-the next allocation). A function that calls `Arena.release` or `Arena.reset`
+the next allocation). That undefined behaviour belongs to `Arena.release` and
+`Arena.reset` alone: [`using a = arena()`](#using-a--arena) below is the same
+release with the proof done by the compiler, and is the way to free a batch.
+A function that calls `Arena.release` or `Arena.reset`
 itself, or through a callee, never gets an automatic arena scope, for the
 function or for a loop's pass, so the compiler's own marks are never
 invalidated by user resets.
+
+#### `using a = arena()`
+
+A block that declares `using a = arena()` takes the arena's mark where the
+declaration stands and releases to it on every exit of the block, and the
+compiler refuses the block if anything allocated after the declaration could
+still be reachable once it has released. It is the
+[per-pass scope](#memory-model) of item 2 written by the program, held to the
+same rule with the block as the pass, and refused rather than quietly dropped
+when the rule fails.
+
+```typescript
+const tally = (rows: string[]): i32 => {
+  let total = 0;
+  for (const row of rows) {
+    using a = arena();                // the mark
+    const line = `${row}: ${row.length}`;
+    total = total + line.length;      // a number leaves the block; the string does not
+  }                                   // released here, and on every other exit
+  return total;
+};
+```
+
+- **`arena()` is a global builtin** declared in `runtime/nish.d.ts` as
+  `declare function arena(): Disposable`, so a program stays TypeScript; under
+  Node its disposal does nothing. It is only the initialiser of a `using`
+  declaration, which is a statement of a block (the
+  [`using` placement rule](#scoped-tasks-using-s--scope)); anywhere else it is
+  `` `arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end ``
+  (NL2416, `tests/cases/reject_using_arena_not_using`). The binding holds the
+  mark and is never read:
+  `` `a` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark ``
+  (NL2417, `reject_using_arena_binding`).
+- **The release is emitted at every exit of the block**: its end, a `return`
+  (after the returned value is computed, so the value may read what the block
+  allocated), a `break` or `continue` that leaves it, and an `orReturn()`
+  (`tests/link/arena_using_exit_paths`, `tests/cases/mem_using_arena`,
+  `mem_using_arena_or_return`). It nests with everything else on the same
+  stack, innermost first: a `using s = scope()` inside the block joins before
+  the block releases, and a block inside a scoped loop pass or a function's
+  automatic scope releases before they do; a `return` releases only the
+  outermost of them, whose mark is the lowest. A `return g(n)` whose
+  arguments are all numbers is a tail call with the release moved ahead of
+  it, unless `g` reads the arena (`mem_using_arena_tail`). `throw` and a
+  panic end the process. Statements of the block before the declaration are
+  outside it.
+- **Nothing allocated inside may outlive the block.** From the declaration to
+  the end of the block, each of these is refused, naming the value and where
+  it would go:
+
+  | Route | Refused when | Code | Test |
+  | --- | --- | --- | --- |
+  | assigned to a local declared outside the block | the value is not older than the block (a literal, a parameter or outer local, a field or element read, a call that allocates nothing) | NL2418 | `reject_using_arena_outer_local` |
+  | stored into a field, `o.f = v` | `v` is not older than the block, unless the field is a number, a `boolean` or an `enum` | NL2419 | `reject_using_arena_field` |
+  | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
+  | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
+  | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
+  | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
+  | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
+  | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+
+  A number, a `boolean` or an `enum` leaves the block freely, and so does a
+  value older than it. The rule is the escape analysis's, so it is
+  conservative: a block that stores a fresh string into an object it also
+  allocated, or builds a `Map`, is refused even though nothing escapes, and
+  what has to outlive the block is allocated before it opens. The first route
+  reads ``` `` `item ${i}` `` may be allocated inside the `using arena()` block at 6:5 and is assigned to `last`, which is declared outside the block: the block releases what it allocated when it ends, and the local would outlive it pointing into freed memory ```
+  (`reject_using_arena_outer_local`).
+- **A parallel body or a task may not open one**, for the reason it may not
+  call `Arena.*` (`reject_using_arena_parallel`, NL2351).
+- **It costs no scope.** A function that declares one keeps its automatic
+  scope and its loops' pass scopes, because the block's mark is checked like
+  theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
+  nothing about a call inside the block, whose leftovers the block releases
+  (`tests/cases/perf_arena_using`).
 
 ### `Map` and `Set`
 
@@ -5146,7 +5343,10 @@ where its memory lives and when it is reused.
    `mem_loop_scope_threads` the same round trip under `--threads`, where the
    arena, and so the scope, is per thread. A `for` loop's condition and
    update run outside the bracket. Like the function scope it is invisible to
-   a program except through `Arena.used()`.
+   a program except through `Arena.used()`. A program that wants the same
+   bracket around a block of its own writes
+   [`using a = arena()`](#using-a--arena), which this rule checks and refuses
+   rather than declines.
 
    **A function whose callees are what allocate gets a scope too.** One that
    allocates nothing of its own, returns a number, a `boolean`, an `enum` or

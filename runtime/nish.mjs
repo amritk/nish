@@ -109,6 +109,8 @@ for (const name of [
   "netWrite",
   "netShutdown",
   "netClose",
+  "tcpConnect",
+  "connectResult",
   "udpBind",
   "udpSendTo",
   "udpRecvFrom",
@@ -174,6 +176,9 @@ provide("bitsToF64", shim.bitsToF64);
 // agree with a native run; the timing does not, and is not claimed here.
 provide("ctSelect", shim.ctSelect);
 provide("ctEq", shim.ctEq);
+// `secureZero` (#385): the bytes are zero afterwards here too, though what a
+// collector may have copied before is out of reach.
+provide("secureZero", shim.secureZero);
 
 // `Result`. Everything works but `orReturn`, which needs the caller's control
 // flow and therefore the rewriter; see the header.
@@ -200,6 +205,9 @@ provide("Arena", {
   reset: shim.arenaReset,
   used: shim.arenaUsed,
 });
+// `using a = arena()` releases nothing here either: what the block allocated
+// is the garbage collector's, and the disposal is a no-op.
+provide("arena", shim.arena);
 
 // The standard library. A program imports it as `nish/<module>`, which the
 // compiler resolves to `std/<module>.ts` beside itself; this does the same for

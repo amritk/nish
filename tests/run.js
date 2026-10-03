@@ -1159,7 +1159,7 @@ if (!only || "net_tcp".includes(only)) {
               { cwd: root, encoding: "utf8" }
             )
           : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll)_\w+)/g)].map(
+      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
         (m) => m[1]
       )
       return { ok: cc.status === 0, removed, why: String(cc.stderr) }
@@ -1186,6 +1186,8 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_write",
       "nish_net_shutdown",
       "nish_net_close",
+      "nish_tcp_connect",
+      "nish_connect_result",
       "nish_udp_bind",
       "nish_udp_send_to",
       "nish_udp_recv_from",
@@ -1213,6 +1215,43 @@ if (!only || "net_tcp".includes(only)) {
         `${none.why}${echo.why}`
     )
   }
+}
+
+// ---- `nish:net`'s client half, against its own server (WP34 N5, #357) -----------
+//
+// `tests/cases/net_tcp_connect` is a Nish client and a Nish server in one loop:
+// the client's `tcpConnect` completes when the loop reports it writable, two
+// exchanges of 1 and 200 messages come back byte for byte with the arena flat,
+// and a port nobody listens on is refused, -111, read once. No peer is needed,
+// so it could be an `.out`; it runs here instead because every step waits on
+// the loop, and a lost wake must be a timeout and a SIGKILL, never a hung suite.
+if (!only || "net_tcp_connect".includes(only)) {
+  const netDir = path.join(buildDir, "net-connect")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  const connectExe = buildCaseIn(netDir, "net_tcp_connect")
+  if (connectExe !== null) {
+    const want =
+      "short -22\nnot a descriptor -9\n" +
+      "peer 127.0.0.1, end of stream 0\n".repeat(2) +
+      "one: 1 intact, many: 200 intact\nflat\nrefused -111\nread once 0\n"
+    // Nothing to answer as the output arrives: the program is its own peer.
+    const r = await runWatched(connectExe, [], () => undefined)
+    check(
+      "net_tcp_connect: a Nish client connects through the loop to a Nish server, both exchanges come back intact, the arena stays flat, a closed port is refused once, and the program exits 0",
+      !r.timedOut && r.code === 0 && r.out === want,
+      `${r.timedOut ? "timed out after 10 s: a wake was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(want)}\nstderr: ${r.err}`
+    )
+  }
+
+  const loud = runCaseUnderPrelude("net_tcp_connect", [])
+  check(
+    "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------
@@ -1357,6 +1396,129 @@ if (!only || "net_udp".includes(only)) {
         `exit ${r.code} signal ${r.signal}\nstdout: ${JSON.stringify(r.out)}\nwant the end: ${JSON.stringify(ecn)}\nstderr: ${r.err}`
       )
     }
+  }
+}
+
+// ---- `nish:net` over both families, against Node (#355) ---------------------------
+//
+// Every other `net_` program binds 127.0.0.1, and a container without IPv6
+// turns `"::"` into `0.0.0.0`, so this is the one that reaches the dual-stack
+// code: `tests/cases/net_dual_stack` listens on `"::"` and Node connects over
+// 127.0.0.1 and then ::1, and the program must name each peer in its address
+// form, with Node's own port, and echo both. Then its `"::"` UDP socket marks a
+// datagram to itself with each ECN value over each family, `IP_TOS` and then
+// `IPV6_TCLASS`, and reads the mark back from `meta[1]`. A host whose `::1`
+// cannot be listened on cannot run any of that, so the check prints why and
+// passes, the way `net_udp_offload` does off Linux, rather than counting a skip:
+// the dual-stack path is not missing there, it is the documented fallback.
+if (!only || "net_dual_stack".includes(only)) {
+  const netDir = path.join(buildDir, "net-dual")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  // What a failed listen on ::1 means. Only two codes say the host has no IPv6
+  // loopback: EAFNOSUPPORT, a kernel without IPv6, and EADDRNOTAVAIL, IPv6
+  // without ::1 on lo (`disable_ipv6`). Any other code (EMFILE, EACCES,
+  // ENOBUFS, ...) is a fault on a host that may well have IPv6, so it fails
+  // the check rather than passing it as not applicable.
+  const ipv6Verdict = (code) => {
+    if (code === null) {
+      return "run"
+    }
+    return code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL" ? "absent" : "fault"
+  }
+  const verdicts = {
+    EAFNOSUPPORT: "absent",
+    EADDRNOTAVAIL: "absent",
+    EMFILE: "fault",
+    EACCES: "fault",
+    ENOBUFS: "fault",
+  }
+  const wrong = Object.keys(verdicts).filter((code) => ipv6Verdict(code) !== verdicts[code])
+  check(
+    "net_dual_stack: the IPv6 probe passes only EAFNOSUPPORT and EADDRNOTAVAIL as a host without IPv6, and fails EMFILE, EACCES and ENOBUFS",
+    wrong.length === 0 && ipv6Verdict(null) === "run",
+    `misjudged: ${wrong.map((code) => `${code} as ${ipv6Verdict(code)}`).join(", ")}`
+  )
+
+  // The code a listen on ::1 fails with here, or null when it succeeds.
+  const probeCode = await new Promise((resolve) => {
+    const probe = net.createServer()
+    probe.once("error", (e) => resolve(String(e.code)))
+    probe.listen(0, "::1", () => probe.close(() => resolve(null)))
+  })
+  const ipv6 = ipv6Verdict(probeCode)
+
+  // One connection to `host` that sends a line and waits for it back, then ends
+  // its side; its local port, which the program must report, and whether the
+  // line came back unchanged.
+  const talkOver = (port, host) =>
+    new Promise((resolve) => {
+      const line = `over ${host}\n`
+      const socket = net.connect(port, host)
+      let got = ""
+      let localPort = -1
+      socket.on("connect", () => {
+        localPort = socket.localPort
+        socket.write(line)
+      })
+      socket.on("data", (chunk) => {
+        got += chunk
+        if (got.length === line.length) {
+          socket.end()
+        }
+      })
+      socket.on("error", (e) => {
+        got += `<${e.code}>`
+      })
+      socket.on("close", () => resolve({ host, localPort, echoed: got === line, bytes: line.length }))
+    })
+
+  const dualExe = buildCaseIn(netDir, "net_dual_stack")
+  if (ipv6 === "fault") {
+    check(
+      `net_dual_stack: listening on ::1 answers ${probeCode}, which is a fault rather than a host without IPv6`,
+      false,
+      "only EAFNOSUPPORT and EADDRNOTAVAIL mean there is no IPv6 loopback to test"
+    )
+  } else if (ipv6 === "absent") {
+    console.log(
+      `      net_dual_stack does not run here: listening on ::1 answers ${probeCode}, so "::" is IPv4's 0.0.0.0 on this host (docs/LANGUAGE.md); CI's ubuntu-latest has IPv6 and runs it`
+    )
+    check(
+      `net_dual_stack: not applicable on a host without IPv6 (listening on ::1 answers ${probeCode})`,
+      true,
+      ""
+    )
+  } else if (dualExe !== null) {
+    const r = await runWithPort(dualExe, [], async (port) => [
+      await talkOver(port, "127.0.0.1"),
+      await talkOver(port, "::1"),
+    ])
+    // Off Linux a send with a mark answers -95 and the mark is never read back.
+    const udp = ["127.0.0.1", "::1"]
+      .flatMap((host) =>
+        [1, 2, 3, 0].map((ecn) =>
+          process.platform !== "linux" && ecn > 0
+            ? `udp to ${host}, ecn ${ecn}: sent -95\n`
+            : `udp to ${host}, ecn ${ecn}: 8 bytes from ${host}, ecn ${ecn}\n`
+        )
+      )
+      .join("")
+    const want =
+      r.results.map((t) => `peer ${t.host} port ${t.localPort}\nechoed ${t.bytes} bytes\n`).join("") + udp
+    const body = r.out.replace(/^port \d+\n/, "")
+    check(
+      "net_dual_stack: a listener on :: accepts Node over 127.0.0.1 as the mapped form and over ::1 as ::1, with each peer's port, echoes both, and its :: UDP socket reads back every ECN mark over IPv4 and IPv6",
+      !r.timedOut &&
+        r.code === 0 &&
+        r.results.length === 2 &&
+        r.results.every((t) => t.echoed) &&
+        body === want,
+      `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `connections: ${JSON.stringify(r.results)}\nstdout: ${JSON.stringify(r.out)}\n` +
+        `want:   ${JSON.stringify(`port <n>\n${want}`)}\nstderr: ${r.err}`
+    )
   }
 }
 
@@ -2398,6 +2560,14 @@ if (!only || "performance".includes(only)) {
     arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
     arenaControl.stderr
   )
+  // A call inside a `using a = arena()` block leaves nothing behind once the
+  // block releases, whatever refused the pass and the function their scopes.
+  const arenaUsing = compile("perf_arena_using", "perf_arena_using_report.ll")
+  check(
+    "mem_loop_scope: no NL9011 for a call inside a `using a = arena()` block",
+    arenaUsing.status === 0 && summaries(arenaUsing.stderr).length === 0,
+    arenaUsing.stderr
+  )
 
   // #216's acceptance, as a peak resident set rather than as `Arena.used()`:
   // `mem_loop_scope_chunk`'s pointer-returning loop allocates more than an
@@ -2661,6 +2831,58 @@ if (!only || "performance".includes(only)) {
       many.stderr.includes("\n...and 5 more performance warnings\n25 performance warnings"),
     many.stderr
   )
+}
+
+// #207's criteria 1 and 2, measured by hand there and pinned here (#325). The
+// AWFY harness is built as bench/run.mjs builds it, and no port calls `Arena`:
+// what each inner iteration allocates is handed back by the automatic arena
+// scope of the scalar-returning function that called the allocating one (#210,
+// `settleScope` in src/attributes.ts). #207 measured 1.002x and 1.00x; with
+// that scope switched off, Storage 1 1000 peaks at 390 MB and List 1 100000 at
+// 49 MB, against under 2 MB for each. Like `mem_loop_scope_chunk`, the bound is
+// a ratio between two runs of one binary, so the runtime's footprint can move.
+if (!only || "mem_awfy".includes(only)) {
+  if (has("clang")) {
+    const dir = path.join(buildDir, "mem_awfy")
+    const exe = path.join(dir, "harness")
+    const rssExe = path.join(dir, "rss")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const built = spawnSync(
+      NISH,
+      [
+        path.join("bench", "awfy", "main.ts"),
+        "-o",
+        `${path.relative(root, path.join(dir, "awfy"))}${path.sep}`,
+        "--link",
+        path.relative(root, exe),
+        "--profile",
+        "speed",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const rc = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], {
+      encoding: "utf8",
+    })
+    const ready = built.status === 0 && rc.status === 0
+    const peak = (args) => {
+      const r = spawnSync(rssExe, [exe, ...args], { encoding: "utf8" })
+      return r.status === 0 ? Number(r.stdout.trim()) : -1
+    }
+    for (const [name, small, large] of [
+      ["Storage", "1", "1000"],
+      ["List", "10", "100000"],
+    ]) {
+      const few = ready ? peak([name, "1", small]) : -1
+      const many = ready ? peak([name, "1", large]) : -1
+      check(
+        `mem_awfy: AWFY ${name} at ${large} inner iterations peaks within 1.25x of ${name} at ${small}`,
+        few > 0 && many > 0 && many <= few * 1.25,
+        `peak of \`harness ${name} 1 ${small}\`: ${few} KB, of \`harness ${name} 1 ${large}\`: ${many} KB\n${built.status === 0 ? "" : built.stderr}${rc.stderr}`
+      )
+    }
+  } else {
+    skip("mem_awfy: the peak resident set runs need clang")
+  }
 }
 
 // ---- WP33: the `portability` diagnostic class --------------------------------------
@@ -3015,7 +3237,13 @@ if (!only || "par_alloc".includes(only)) {
 // before the scope's block ends, so every scope program prints the same both
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
+//
+// `arena_using_exit_paths` is the `using a = arena()` program: its block's
+// disposal does nothing under Node and `Arena.*` answers zero there, so the
+// lines it prints, each of which ends with how far the arena moved, are the
+// native ones exactly when every exit released.
 for (const name of [
+  "arena_using_exit_paths",
   "par_map",
   "par_reduce",
   "thread_scope_basic",
@@ -5869,8 +6097,13 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  * raising this number -- unlike raising the one below it -- should be rare enough to be
  * argued for. Either way it comes with its own measurement and a row in
  * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
+ *
+ * Raised by 21 bytes, from 3,584 to 3,605, for `nish_wipe` (#385, `secureZero`): measured
+ * 3,583 before it and 3,604 with it on 2026-10-03 with clang 18.1.3 on linux-x64. Every
+ * other unit was as close to its own ceiling, and the wipe is no system call, so it is here,
+ * and the raise is the measured size of what was added and nothing more.
  */
-const RUNTIME_TEXT_BUDGET = 3584
+const RUNTIME_TEXT_BUDGET = 3605
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *

@@ -112,9 +112,10 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 /**
  * The disposable protocol `using` reads (WP29 P2, docs/wp29-thread-surface.md
- * §5): declared here so that a program using `nish/threads`'s scope needs no
- * `"ESNext.Disposable"` in its `lib`. `nish` itself takes `using` only for a
- * `scope()`, and `[Symbol.dispose]` only in `nish/threads`.
+ * §5): declared here so that a program using `nish/threads`'s scope or
+ * `arena()` needs no `"ESNext.Disposable"` in its `lib`. `nish` itself takes
+ * `using` only for a `scope()` or an `arena()`, and `[Symbol.dispose]` only in
+ * `nish/threads`.
  */
 interface SymbolConstructor {
   readonly dispose: unique symbol;
@@ -172,6 +173,12 @@ declare function bitsToF64(bits: i64): f64;
 declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
 /** All-ones of the operands' type when `a === b`, zero otherwise, without a branch. */
 declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
+/**
+ * Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
+ * drop as dead (#385): how a key, a secret scalar or another secret is cleared
+ * once it is used. A statement.
+ */
+declare function secureZero(bytes: u8[]): void;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -200,7 +207,14 @@ declare function readFileSyncOrNull(path: string): string | null;
  * `readFileSyncOrNull` answers `null` for.
  */
 declare function readFileBytesSync(path: string): u8[] | null;
+/**
+ * The file's contents replaced by `data`, created at 0644 when missing. A
+ * symbolic link as the last component of the path is refused rather than
+ * followed, natively and under Node alike, and a path that cannot be written
+ * prints `nish: cannot write <path>` and exits 1.
+ */
 declare function writeFileSync(path: string, data: string): void;
+/** `data` added at the end of the file, with the same refusal of a symbolic link. */
 declare function appendFileSync(path: string, data: string): void;
 /** One directory, not recursive; whether a directory is there afterwards. */
 declare function mkdirSync(path: string): boolean;
@@ -221,7 +235,8 @@ declare function realpathSync(path: string): string | null;
 declare function spawnSync(argv: string[]): number;
 /**
  * The same run with each non-empty path receiving that stream, created or
- * truncated; an empty string leaves that stream inherited.
+ * truncated; an empty string leaves that stream inherited. A symbolic link at
+ * either path is refused, as `writeFileSync` refuses one, and the answer is -1.
  */
 declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
@@ -252,9 +267,10 @@ declare function readSignal(fd: i32): i32;
 //
 // Every call answers an `i32`: `>= 0` on success, a negative errno otherwise, in
 // Linux's numbering on every platform for -11 (would block), -95, -32, -104,
-// -98 and -22. An address is 18 bytes of a `u8[]`: 16 of IPv6 address (IPv4 as
-// `::ffff:a.b.c.d`), then the port, big-endian. Every socket is non-blocking and
-// close-on-exec. No reading under Node, where each throws.
+// -98, -111 (refused), -110 (timed out) and -22. An address is 18 bytes of a
+// `u8[]`: 16 of IPv6 address (IPv4 as `::ffff:a.b.c.d`), then the port,
+// big-endian. Every socket is non-blocking and close-on-exec. No reading under
+// Node, where each throws.
 
 /** Write the address form of a numeric `host` and `port` into `out`: 0, or -22. */
 declare function netAddress(out: u8[], host: string, port: i32): i32;
@@ -272,6 +288,10 @@ declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
 declare function netClose(fd: i32): i32;
+/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+declare function tcpConnect(addr: readonly u8[]): i32;
+/** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
+declare function connectResult(fd: i32): i32;
 /** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
 declare function udpBind(host: string, port: i32, flags: i32): i32;
 /** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
@@ -325,7 +345,9 @@ declare module "nish:fs" {
   export function readFileSync(path: string): string;
   export function readFileSyncOrNull(path: string): string | null;
   export function readFileBytesSync(path: string): u8[] | null;
+  /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function writeFileSync(path: string, data: string): void;
+  /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function appendFileSync(path: string, data: string): void;
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
@@ -347,7 +369,8 @@ declare module "nish:process" {
   export function spawnSync(argv: string[]): number;
   /**
    * The same run with each non-empty path receiving that stream, created or
-   * truncated; an empty string leaves that stream inherited.
+   * truncated; an empty string leaves that stream inherited. A symbolic link
+   * at either path is refused, and the answer is -1.
    */
   export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
   /**
@@ -383,6 +406,10 @@ declare module "nish:net" {
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;
+  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+  export function tcpConnect(addr: readonly u8[]): i32;
+  /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
+  export function connectResult(fd: i32): i32;
   /** A UDP socket: flag 1 `SO_REUSEPORT`, flag 2 `UDP_GRO` (-95 on Darwin); ECN is always read. */
   export function udpBind(host: string, port: i32, flags: i32): i32;
   /** `buf[off, off + len)` to `to`, cut into `segment`-byte datagrams when `segment > 0`, with ECN bits `ecn`. */
@@ -430,6 +457,15 @@ declare const Arena: {
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };
+
+/**
+ * `using a = arena()` (docs/LANGUAGE.md -> Arena): everything the block
+ * allocates after this declaration is released when the block ends, on every
+ * exit, and the compiler refuses the block if anything allocated in it could
+ * outlive it. Only a `using` initialiser, and the binding is never read; under
+ * Node there is no arena and the disposal does nothing.
+ */
+declare function arena(): Disposable;
 
 /**
  * `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and
