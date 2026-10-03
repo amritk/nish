@@ -6320,7 +6320,13 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   (`tests/cases/panics_unchecked_indexing`).
 - **A `call` names its callee and the kind it reaches** (`"via"`), and is
   decided over the whole program, the standard library and dependencies
-  included. A generic function's sites are its instantiations', each under its
+  included. The kind is the one the callee reaches first at run time, its own
+  checks and its calls taken together: an operation checks its operands once
+  they are evaluated, so `pick(xs, i) + 1`, `1 + pick(xs, i)`,
+  `x += pick(xs, i)` and `100 / pick(xs, i)` reach `pick`'s `index` before
+  their own `overflow` or `divide`, while `pick(xs, i - 1)` reaches its
+  argument's `overflow` before the call (`tests/cases/panics_overflow_via`).
+  The list itself stays in source order, by where each site starts. A generic function's sites are its instantiations', each under its
   own symbol and decided over its own side tables
   (`tests/cases/panics_generic`).
 - **Two ways a program can stop are not sites**, because no proof the checker

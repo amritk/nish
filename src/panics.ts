@@ -105,6 +105,14 @@ export class PanicSite {
   kind: i32
   /** The checker proved the check cannot fail, and the emitter left it out. */
   proven: boolean
+  /**
+   * Where the body reaches the site at run time, among its own: the walk
+   * numbers a node's sites after its operands' (`FactCollector.orderSites`),
+   * so `f(x) + 1` and `1 + f(x)` both call `f` before they add. -1 for a
+   * check the prologue makes, before the body. The listing is in source
+   * order; this decides only which site a function reaches first.
+   */
+  order: i32
 
   constructor(node: Node, kind: i32, fn: string, proven: boolean, callee: string) {
     this.node = node
@@ -113,6 +121,7 @@ export class PanicSite {
     this.reaches = null
     this.kind = kind
     this.proven = proven
+    this.order = -1
   }
 }
 
@@ -165,6 +174,26 @@ const sortByPosition = (sites: PanicSite[]): void => {
   }
 }
 
+/** `sites` in the order the body reaches them (`PanicSite.order`), as a new list. */
+const inEvaluationOrder = (sites: PanicSite[]): PanicSite[] => {
+  const out: PanicSite[] = []
+  for (const site of sites) {
+    out.push(site)
+  }
+  let i = 1
+  while (i < out.length) {
+    const site = out[i]
+    let j = i - 1
+    while (j >= 0 && out[j].order > site.order) {
+      out[j + 1] = out[j]
+      j = j - 1
+    }
+    out[j + 1] = site
+    i = i + 1
+  }
+  return out
+}
+
 /**
  * Settle every function's sites, once, after the attribute fixpoint: drop the
  * calls into functions that cannot panic, follow the rest to the site they
@@ -177,30 +206,27 @@ const sortByPosition = (sites: PanicSite[]): void => {
  * `--unchecked-indexing` build clears for the checks it drops.
  */
 export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): void => {
+  const ordered: PanicSite[][] = []
   const reach: (PanicSite | null)[] = []
   for (const f of facts.list) {
     sortByPosition(f.panicSites)
-    let first: PanicSite | null = null
-    for (const site of f.panicSites) {
-      if (first === null && panicsHere(site)) {
-        first = site
-      }
-    }
-    reach.push(first)
+    ordered.push(inEvaluationOrder(f.panicSites))
+    reach.push(null)
   }
-  // A function reaches what its first callee that may panic reaches, in the
-  // order the walk met the callees, which is the order the body calls them.
+  // A function reaches the first of its sites, in the order the body reaches
+  // them, that panics by itself or calls a function that reaches one. A call
+  // only ever starts to reach something, so each function's choice only moves
+  // earlier, and the fixpoint settles.
   let changed = true
   while (changed) {
     changed = false
     let i = 0
-    while (i < facts.list.length && i < reach.length) {
-      if (reach[i] === null) {
-        const found = firstReached(facts, reach, facts.list[i])
-        if (found !== null) {
-          reach[i] = found
-          changed = true
-        }
+    while (i < facts.list.length && i < ordered.length && i < reach.length) {
+      const found = firstPanic(facts, reach, ordered[i], facts.list[i])
+      const held = reach[i]
+      if (found !== null && (held === null || found !== held)) {
+        reach[i] = found
+        changed = true
       }
       i = i + 1
     }
@@ -215,6 +241,32 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
       }
     }
   }
+}
+
+/**
+ * The first site `f` reaches that can panic, given what its callees reach so
+ * far: its own unproven check, or what a call reaches, whichever the body
+ * reaches first. A callee no recorded call names (a routed `nish/map` method)
+ * is reached after them, in the order the walk met the callees.
+ */
+const firstPanic = (
+  facts: FactsTable,
+  reach: (PanicSite | null)[],
+  sites: PanicSite[],
+  f: FunctionFacts
+): PanicSite | null => {
+  for (const site of sites) {
+    if (panicsHere(site)) {
+      return site
+    }
+    if (isCallSite(site)) {
+      const found = reachOf(facts, reach, site.callee)
+      if (found !== null) {
+        return found
+      }
+    }
+  }
+  return firstReached(facts, reach, f)
 }
 
 /** What the function called `name` can panic at first, or null: none, or a runtime symbol. */

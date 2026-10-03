@@ -1257,6 +1257,8 @@ class FactCollector {
   facts: FunctionFacts
   /** Round 1's fixpoint, or `null` in round 1 itself; see `bodyMayExtend`. */
   known: FactsTable | null
+  /** The next `PanicSite.order`: how many sites the walk has put in evaluation order. */
+  siteOrder: i32
 
   constructor(
     unit: AnalysisUnit,
@@ -1272,6 +1274,7 @@ class FactCollector {
     this.sig = sig
     this.facts = facts
     this.known = known
+    this.siteOrder = 0
   }
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
@@ -1295,6 +1298,22 @@ class FactCollector {
   noteSite(node: Node, kind: i32, proven: boolean, callee: string): void {
     if (this.opts.recordsPanics()) {
       this.facts.panicSites.push(new PanicSite(node, kind, this.sig.name, proven, callee))
+    }
+  }
+
+  /**
+   * Put the sites `node` itself recorded, `panicSites[from]` up to `to`, next
+   * in evaluation order (`PanicSite.order`). The walk calls it once the
+   * node's operands are visited, because a check is made on their values and
+   * a call once its arguments are evaluated, so an operand's sites come first;
+   * a `for...of`'s walk calls are made before its body, and it calls it then.
+   */
+  orderSites(from: i32, to: i32): void {
+    let k = from
+    while (k < to) {
+      this.facts.panicSites[k].order = this.siteOrder
+      this.siteOrder = this.siteOrder + 1
+      k = k + 1
     }
   }
 
@@ -1398,6 +1417,7 @@ class FactCollector {
     if (node.kind === N_THROW) {
       this.facts.hasTrap = true
     }
+    const ownSites = this.facts.panicSites.length
     // WP32 S5: a fused lookup, and a `nish/map` call, call the table's
     // pieces rather than what they were checked as (`fusedCalleesOf`).
     const fused: FunctionSig[] | null =
@@ -1446,8 +1466,15 @@ class FactCollector {
     this.collectRangeFacts(node)
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
+    const ownEnd = this.facts.panicSites.length
+    if (node.kind === N_FOR_OF) {
+      this.orderSites(ownSites, ownEnd)
+    }
     for (const child of node.children) {
       this.visit(child)
+    }
+    if (node.kind !== N_FOR_OF) {
+      this.orderSites(ownSites, ownEnd)
     }
   }
 

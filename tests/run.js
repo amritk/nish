@@ -873,6 +873,7 @@ const caseResults = caseRuns.map((run) => run.compiled)
     "  call void @nish_panic_index(i64 %0, i64 %1)",
     "  call void @nish_panic_slice(i64 %0, i64 %1, i64 %2)",
     "  call void @nish_panic_div(i1 zeroext %0)",
+    "  call void @nish_panic_overflow(i32 0)",
     "  %1 = call i8* @nish_read_file(i8* %0)",
     "  call void @nish_write_file(i8* %0, i8* %1)",
     "  call void @nish_append_file(i8* %0, i8* %1)",

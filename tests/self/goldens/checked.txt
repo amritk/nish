@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 908 programs, 62508 dump lines.
+# 909 programs, 62562 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -45554,6 +45554,61 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=0
   callee 15:15 parity -> @parity
   callee 16:15 word -> @word
+program tests/cases/panics_overflow_via.ts
+module tests/cases/panics_overflow_via.ts (entry)
+function pick(xs: i32[], i: i32): i32 -> @pick
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function after(xs: i32[], i: i32): i32 -> @after
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_overflow pick
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  callee 10:43 pick -> @pick
+function before(xs: i32[], i: i32): i32 -> @before
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_overflow pick
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  callee 12:48 pick -> @pick
+function compound(xs: i32[], i: i32): i32 -> @compound
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_overflow pick
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  local 15:7 x: i32 (let)
+  callee 16:8 pick -> @pick
+function divided(xs: i32[], i: i32): i32 -> @divided
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_div pick
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  callee 20:51 pick -> @pick
+function argument(xs: i32[], i: i32): i32 -> @argument
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow pick
+  pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
+  stackSites=0 stackLocals=0
+  callee 22:46 pick -> @pick
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: after argument before compound divided nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 25:9 k: i32 (const)
+  local 26:9 xs: i32[] (const)
+  callee 27:15 after -> @after
+  callee 28:15 before -> @before
+  callee 29:15 compound -> @compound
+  callee 30:15 divided -> @divided
+  callee 31:15 argument -> @argument
 program tests/cases/panics_overflow_wrapping.ts --wrapping
 module tests/cases/panics_overflow_wrapping.ts (entry)
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
