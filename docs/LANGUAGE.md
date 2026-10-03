@@ -5646,6 +5646,9 @@ by the caller.
   offset, size, align, constructor and methods), imports, and functions
   (resolved signature, LLVM symbol, attribute facts, pointer-parameter facts,
   locals with types, callees) (`tests/cases/dump_checked`).
+- **`--emit-panics <file.json>`** writes every panic site of the program,
+  function by function, beside the IR, and changes no byte of it; see
+  [Panic sites](#panic-sites) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -5669,6 +5672,65 @@ by the caller.
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
   linked binary's line table with `llvm-dwarfdump`).
+
+### Panic sites
+
+A compiled program can stop with exit 1 in more places than the `panic` calls
+its author wrote: a bounds check the checker could not prove away, an integer
+division, a value entering a range, `r.expect`, a `readFileSync` of a file that
+is not there. Each such place is a **panic site**, and
+`--emit-panics <file.json>` lists them all, per function, after the checker's
+whole-program proofs have run. A site is listed exactly where the emitter
+writes a check that can fail or calls into the runtime where it exits; it is
+`"proven": true` where a proof table lets the emitter leave the check out, and
+a function whose sites are all proven (or `oom`) has no panic path in its IR
+— `npm test` holds every golden in `tests/cases/` and `tests/link/` to that
+(`tests/panics-oracle.js`). The kinds:
+
+| kind | what fails | what proves it away |
+| --- | --- | --- |
+| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)` | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`) |
+| `pop` | `a.pop()` on an empty array | nothing yet: every `pop` is checked (`tests/cases/panics_pop`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
+| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | nothing yet: every integer division is checked, a constant divisor included, and a float division is not a site (`tests/cases/panics_divide`) |
+| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
+| `array-length` | `new Array<T>(n)` whose length type could make a bad header (an `i64`, a float, a `u32` under `--number-mode i32`) | an `i32` length or a literal, which is not checked and not a site (`tests/cases/panics_array_length`) |
+| `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
+| `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
+| `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
+| `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
+| `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
+| `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
+
+- **`--unchecked-indexing` is not a proof.** It removes a check and makes the
+  out-of-range access undefined behaviour instead of a panic, so the site
+  stays, unproven, and so does every `call` into its function
+  (`tests/cases/panics_unchecked_indexing`).
+- **A `call` names its callee and the kind it reaches** (`"via"`), and is
+  decided over the whole program, the standard library and dependencies
+  included. A generic function's sites are its instantiations', each under its
+  own symbol and decided over its own side tables
+  (`tests/cases/panics_generic`).
+- **Three ways a program can stop are not sites**, because no proof the checker
+  makes could remove them. Out of memory is listed, as `oom`, but excluded: every
+  allocation can fail and no guard in the source prevents it. Stack overflow is
+  a fault the operating system raises, with no handler in the runtime and no
+  check in the IR. Signed overflow is not checked at all: `+`, `-` and `*` are
+  `nsw`, undefined on overflow rather than a panic, until checked overflow lands
+  (see *Signed integer overflow is undefined behaviour* above). Neither are
+  `process.exit(n)`, which is a deliberate exit, or a call into a `declare
+  function`, whose body is C the compiler does not see.
+- **The file is a contract**, like `--json`: one `{"functions":[...]}` object,
+  one function per line in module and declaration order, each
+  `{"name","symbol","module","line","panics"}`, where `symbol` is the
+  function's LLVM name; per site `{"kind","line","column"}` and then
+  `"proven"` for a check, `"proven","callee"` for `parallel-length`,
+  `"callee","via"` for `call` and `"allowed": true` for `oom`. Lines and
+  columns are 1-based, in the units a diagnostic uses. The `wrote <file>` line
+  is on stderr, like the IR's. It is written by a compile that writes IR: a
+  program that does not compile writes none, and neither does a dump flag
+  (`--emit-ast`, `--emit-checked`), which answers instead of compiling; `nish
+  run` refuses the flag.
 
 ## Forbidden constructs (Phase 0 validator)
 

@@ -75,6 +75,7 @@ itself.
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
+| where the program can panic | `nish --emit-panics <file.json> <files>` | one JSON object in the file, every function with its panic sites, each with its kind and whether the checker proved it away ([LANGUAGE.md](./docs/LANGUAGE.md#panic-sites)); the IR is unchanged |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,

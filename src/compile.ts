@@ -71,7 +71,7 @@ import { resolveTarget, supportedTargets } from "./target"
 import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -445,6 +445,14 @@ export const main = (): number => {
         return 2
       }
       opts.emitNapiAsync = process.argv[arg]
+    } else if (value === "--emit-panics") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-panics needs a file")
+        return 2
+      }
+      opts.emitPanics = process.argv[arg]
     } else if (value === "--plain") {
       opts.optimizeAttributes = false
     } else if (value === "--strict-exports") {
@@ -693,6 +701,16 @@ export const main = (): number => {
   }
   if (anySidecar && !writeSidecars(compilation, fns)) {
     return 1
+  }
+  // Not a WP8 sidecar: it describes the checks rather than the ABI, so it
+  // does not change the build the way they do (`buildModeOf`), and it needs
+  // no external function list.
+  if (opts.emitPanics.length > 0) {
+    if (!makeDirectoryFor(opts.emitPanics)) {
+      return 1
+    }
+    writeFileSync(opts.emitPanics, compilation.panicsText())
+    console.error(`wrote ${opts.emitPanics}`)
   }
   if (link.length === 0) {
     return 0

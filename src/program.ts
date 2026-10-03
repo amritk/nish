@@ -23,6 +23,7 @@ import { BuiltinExport } from "./nish-modules"
 import { StringMap, StringSet } from "./map"
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
+import { PanicSite } from "./panics"
 import { isCollectionsModule, isMapExtrasModule } from "./std-modules"
 import { Local } from "./symbols"
 import { TypeTable } from "./types"
@@ -1198,6 +1199,13 @@ export class CheckedProgram {
   /** WP29 P2: every `spawn` call, judged with the facts as `parallelCalls` is (`Compilation.checkParallel`). */
   spawnCalls: ParallelCall[]
   /**
+   * Every panic site of the functions this module defines, settled after the
+   * whole-program proofs (`resolvePanicSites` in `src/panics.ts`), grouped by
+   * function in `functions` order and in source order within one. Empty
+   * unless the build asked for them (`Options.recordsPanics`).
+   */
+  panicSites: PanicSite[]
+  /**
    * Every `x.f = e;` in this module's bodies whose field is stored inline, with
    * the length `e` is known to have (`src/inline-arrays.ts`). Parallel lists
    * rather than a table by node id: there are a handful per program, and a
@@ -1356,6 +1364,7 @@ export class CheckedProgram {
     this.typeImports = []
     this.entryMain = null
     this.parallelCalls = []
+    this.panicSites = []
     this.spawnCalls = []
     this.inlineAssignNodes = []
     this.inlineAssignLengths = []

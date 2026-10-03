@@ -122,6 +122,14 @@ export class Options {
    * compile, and off by default means none of it is done.
    */
   warnPortability: boolean
+  /**
+   * `--emit-panics <file.json>`: the path the panic sites are written to, or
+   * the empty string (`src/panics.ts`). Like the WP8 sidecars it changes no
+   * byte of the IR; unlike them it does not change the build either, so
+   * `buildModeOf` does not read it. The attribute walk records the sites only
+   * when something will read them (`recordsPanics`).
+   */
+  emitPanics: string
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -144,5 +152,11 @@ export class Options {
     this.json = false
     this.rangeReference = false
     this.warnPortability = false
+    this.emitPanics = ""
+  }
+
+  /** Whether the attribute walk records panic sites and `Compilation.check` resolves them. */
+  recordsPanics(): boolean {
+    return this.emitPanics.length > 0
   }
 }

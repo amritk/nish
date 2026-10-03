@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"fromWide","symbol":"fromWide","module":"tests/cases/panics_array_length.ts","line":3,"panics":[{"kind":"array-length","line":3,"column":37,"proven":false},{"kind":"oom","line":3,"column":37,"allowed":true}]},
+{"name":"fromNarrow","symbol":"fromNarrow","module":"tests/cases/panics_array_length.ts","line":5,"panics":[{"kind":"oom","line":5,"column":39,"allowed":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_array_length.ts","line":7,"panics":[{"kind":"oom","line":8,"column":3,"allowed":true},{"kind":"call","line":8,"column":15,"callee":"fromWide","via":"array-length"},{"kind":"oom","line":9,"column":3,"allowed":true}]}
+]}
