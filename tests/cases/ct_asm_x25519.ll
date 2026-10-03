@@ -30,7 +30,7 @@ declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
@@ -2130,7 +2130,7 @@ join.end:
   ret i8* %101
 }
 
-define internal noundef i32 @check(i8* noundef nonnull noalias readonly align 8 nocapture %label, i8* noundef nonnull noalias readonly align 8 nocapture %got, i8* noundef nonnull noalias readonly align 8 nocapture %want) #1 {
+define internal noundef i32 @check(i8* noundef nonnull noalias readonly align 8 nocapture %label, i8* noundef nonnull noalias readonly align 8 nocapture %got, i8* noundef nonnull noalias readonly align 8 nocapture %want) #2 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call zeroext i1 @nish_str_eq(i8* %got, i8* %want)

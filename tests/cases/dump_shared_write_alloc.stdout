@@ -8,7 +8,7 @@ function make(x: i32): Point -> @make
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
 function label(n: i32): string -> @label
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function sum(n: i32): i32 -> @sum
@@ -27,7 +27,7 @@ function grow(xs: i32[], v: i32): void -> @grow
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function run(xs: i32[]): i32 -> @run [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via grow
   calls: grow label make sum
   pointer xs: size=0 writesThrough=true captured=false passedTo=grow#0

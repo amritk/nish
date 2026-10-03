@@ -60,7 +60,7 @@ declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
@@ -17688,7 +17688,7 @@ for.end:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @baseMult(i8* noundef nonnull noalias readonly align 8 nocapture %k) #1 {
+define internal noundef nonnull align 8 i8* @baseMult(i8* noundef nonnull noalias readonly align 8 nocapture %k) #2 {
 entry:
   %gx.addr = alloca %struct.nish_array*, align 8
   %gy.addr = alloca %struct.nish_array*, align 8
@@ -17971,7 +17971,7 @@ for.end.2:
   ret i8* %151
 }
 
-define internal noundef i32 @report(i8* noundef nonnull noalias readonly align 8 nocapture %name, i8* noundef nonnull noalias readonly align 8 nocapture %actual, i8* noundef nonnull noalias readonly align 8 nocapture %expected) #1 {
+define internal noundef i32 @report(i8* noundef nonnull noalias readonly align 8 nocapture %name, i8* noundef nonnull noalias readonly align 8 nocapture %actual, i8* noundef nonnull noalias readonly align 8 nocapture %expected) #2 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call zeroext i1 @nish_str_eq(i8* %actual, i8* %expected)
@@ -18063,7 +18063,7 @@ entry:
   ret i8* %9
 }
 
-define internal noundef i32 @knownAnswers() #1 {
+define internal noundef i32 @knownAnswers() #2 {
 entry:
   %a.addr = alloca i8*, align 8
   %b.addr = alloca i8*, align 8
@@ -18251,7 +18251,7 @@ for.end:
   ret i32 %119
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #2 {
 entry:
   %failed.addr = alloca i32, align 4
   %sample.addr = alloca i8*, align 8
