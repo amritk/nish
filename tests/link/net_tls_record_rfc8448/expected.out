@@ -1,0 +1,58 @@
+PASS  {server} the ServerHello record, in the clear
+PASS  {server} the client's ClientHello record opens to the ClientHello, whatever its legacy version says
+PASS  server handshake write key
+PASS  server handshake write iv
+PASS  {server} the flight record: EncryptedExtensions through Finished, one record, sequence 0
+PASS  {client} the flight record opens to the flight
+PASS  {client} the Finished record, sequence 0
+PASS  {server} the client's Finished record opens to its Finished
+PASS  server application write key
+PASS  server application write iv
+PASS  {server} the NewSessionTicket record, sequence 0
+PASS  {server} the application data record, sequence 1
+PASS  {server} the close_notify record, sequence 2
+PASS  {client} the application data record, sequence 0
+PASS  {client} the close_notify record, sequence 1
+PASS  {server} the client's data record opens to the fifty bytes
+PASS  {server} the client's close_notify record opens to the alert
+PASS  the sequence number counts each record opened
+PASS  the reader finds the client's four records in its stream
+PASS  the same four records with the stream cut in two at each of its 354 inner points
+PASS  the same four records with the stream fed a byte at a time
+PASS  the same four records under 64 seeded random cuttings, pieces of 1 to 40 bytes
+PASS  the ClientHello record is taken whole
+PASS  the server asks for its signature, with the ServerHello to send
+PASS  it writes the trace's ServerHello record, and nothing else yet
+PASS  the ephemeral key it was handed is wiped once the ServerHello is written
+PASS  the trace's signature is taken
+PASS  its flight is the trace's one 679-byte record
+PASS  still in the handshake until the client's Finished
+PASS  the handshake and server secrets are wiped in TlsServer once installed here
+PASS  and the server's application secret lives on here
+PASS  the client's Finished opens the connection
+PASS  its application secret is kept here and wiped in TlsServer
+PASS  the client's data is waiting to be read
+PASS  it reads as the fifty bytes
+PASS  writing them back takes all fifty
+PASS  {client} the echo is one record under the server's application keys, sequence 0 (no NewSessionTicket went first)
+PASS  the client's close_notify ends its stream
+PASS  a read at the end of the stream answers 0
+PASS  closing writes the server's close_notify
+PASS  {client} which opens at sequence 1
+PASS  and then there is nothing more to do
+PASS  the replay fed whole sends the ServerHello and flight records and reads the fifty bytes
+PASS  the same replay with the stream cut in two at each of its 354 inner points
+PASS  the same replay with the stream fed a byte at a time
+PASS  the same replay under 16 seeded random cuttings, pieces of 1 to 60 bytes
+PASS  KeyUpdate's next secret over SHA-256, from the trace's client_application_traffic_secret_0
+PASS  KeyUpdate's next secret over SHA-384
+PASS  ChaCha20-Poly1305: application data with seven bytes of padding, sequence 0
+PASS  ChaCha20-Poly1305: empty application data, sequence 1
+PASS  ChaCha20-Poly1305: a KeyUpdate asking for one back, sequence 2
+PASS  ChaCha20-Poly1305: the padded record opens with its padding gone
+PASS  ChaCha20-Poly1305: and the empty one to nothing
+PASS  AES-256-GCM-SHA384: application data, sequence 0
+PASS  AES-256-GCM-SHA384: close_notify with three bytes of padding, sequence 1
+PASS  AES-256-GCM-SHA384: the padded alert opens at sequence 1
+PASS  AES-128-GCM: thirteen bytes of padding at sequence 3, under the trace's server application keys
+tls records rfc8448: 57 passed, 0 failed, 0 skipped

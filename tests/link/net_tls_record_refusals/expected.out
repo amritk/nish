@@ -1,0 +1,170 @@
+PASS  a header of type 19 is unexpected_message
+PASS  so is type 24, heartbeat, which TLS 1.3 does not define
+PASS  a body of 2^14 + 256 bytes is allowed
+PASS  one byte more is record_overflow, from the header alone
+PASS  four bytes are not yet a header
+PASS  a window outside the buffer is the caller's mistake
+PASS  the reader refuses a window outside its input
+PASS  it takes no more than one largest record
+PASS  and then has no room
+PASS  consuming a negative count lets nothing go
+PASS  consuming past the end lets everything go
+PASS  an unknown suite is not installed
+PASS  nor a secret of the wrong length
+PASS  seal: content over 2^14 bytes
+PASS  seal: a negative padding
+PASS  seal: padding in the clear, which TLSPlaintext has no room for
+PASS  seal: a cleartext record past the end of the output
+PASS  seal: application data in the clear, which a direction without keys never sends
+PASS  seal: a window outside the content
+PASS  seal: padding that takes the inner plaintext past 2^14 + 1
+PASS  seal: a protected record past the end of the output
+PASS  a refused seal spends no sequence number
+PASS  seal: 2^14 bytes of content is the largest record
+PASS  and so is no content with 2^14 bytes of padding
+PASS  which opens to nothing, its padding gone
+PASS  seal: the last sequence number is never used, so the counter cannot wrap
+PASS  seal: an AES key aesKey did not make
+PASS  seal: a ChaCha20 key of the wrong length
+PASS  one protection installed under AES-128, AES-256, ChaCha20 and AES-128 again seals under each
+PASS  open: application data in the clear is unexpected_message
+PASS  open: a cleartext body over 2^14 bytes is record_overflow
+PASS  open: a header of unknown type
+PASS  open: no room for the content
+PASS  open: a length that is not the header's
+PASS  open: a window outside the record
+PASS  open: fewer bytes than a header
+PASS  open: a protected record must say application_data outside
+PASS  open: a body shorter than a tag and a type is bad_record_mac
+PASS  open: one flipped bit of the tag is bad_record_mac
+PASS  and spends no sequence number
+PASS  open: a record read at the wrong sequence number is bad_record_mac
+PASS  the record itself opens at its own
+PASS  open: a record of nothing but padding is unexpected_message (§5.4)
+PASS  open: an inner plaintext of 2^14 + 2 bytes is record_overflow
+PASS  open: an inner type nobody defined is answered, for the caller to refuse
+PASS  open: no room for the protected content
+PASS  open: the last sequence number is never used
+PASS  a change_cipher_spec before the first ClientHello is unexpected_message
+PASS  sent as a fatal alert in the clear
+PASS  one after the ClientHello is dropped
+PASS  so is one between the server's flight and the client's Finished
+PASS  a change_cipher_spec of 2 is unexpected_message
+PASS  so is one of two bytes
+PASS  a ClientHello in two records is one ClientHello
+PASS  a change_cipher_spec between them is unexpected_message (§5.1)
+PASS  and so is an alert
+PASS  an empty handshake record is unexpected_message (§5.1)
+PASS  application data in the clear is unexpected_message
+PASS  records after the ClientHello wait while the server signs
+PASS  and are then read under the handshake keys it installed: bad_record_mac
+PASS  a cleartext record over 2^14 bytes is record_overflow
+PASS  a header announcing more than 2^14 + 256 bytes, before the body
+PASS  a header of a type nobody defined
+PASS  the client's handshake_failure ends the connection, with nothing sent back
+PASS  an alert nobody defined is an error alert too (§6.2)
+PASS  user_canceled is passed over
+PASS  and the close_notify after it ends the client's stream
+PASS  a handshake that fails before its ServerHello wipes the ephemeral key it never used
+PASS  an alert of three bytes is decode_error
+PASS  application data before the client's Finished is unexpected_message
+PASS  sent under the server's application keys, which its Finished switched to
+PASS  a protected change_cipher_spec is unexpected_message (§5)
+PASS  so is a protected record of a type nobody defined
+PASS  a Finished record that does not authenticate is bad_record_mac
+PASS  a Finished that authenticates but does not verify is TlsServer's decrypt_error
+PASS  sent as a fatal alert under the server's application keys
+PASS  the failure wipes what TlsServer still held: the client's application secret, the exporter secret, the expected Finished
+PASS  a TlsServer that refused its randomness fails the connection at once
+PASS  with internal_error in the clear
+PASS  there is no signature input before the ClientHello
+PASS  signing before one is due is internal_error
+PASS  and the failure is answered again
+PASS  nor once the connection has failed
+PASS  an empty signature is TlsServer's internal_error
+PASS  a padding no record can carry fails the flight with internal_error
+PASS  and the alert, which cannot carry it either, is not sent
+PASS  two data records, one padded, read as their content
+PASS  a read with nothing waiting answers -11
+PASS  a read of no bytes answers 0
+PASS  a read window outside the buffer is -22
+PASS  so is a write window
+PASS  and a receive window
+PASS  an empty write sends nothing
+PASS  a change_cipher_spec after the client's Finished is unexpected_message
+PASS  sent under the server's application keys
+PASS  a failed connection reads -104
+PASS  writes -32
+PASS  refuses a key update with -32
+PASS  and takes and drops what arrives
+PASS  closing it sends nothing more
+PASS  after the handshake: a KeyUpdate of 2 (illegal_parameter), a NewSessionTicket from the client (unexpected_message), a KeyUpdate of length 2 (decode_error), one followed by another message in its record (unexpected_message, §5.1), an empty handshake record (unexpected_message)
+PASS  application data between the records of a KeyUpdate is unexpected_message (§5.1)
+PASS  a protected change_cipher_spec after the handshake is unexpected_message
+PASS  so is a record of a type nobody defined
+PASS  and a data record that does not authenticate is bad_record_mac
+PASS  the client's error alert ends an open connection
+PASS  the client's KeyUpdate moves the read keys: its next record is under the next secret
+PASS  nothing is owed back when the client did not ask
+PASS  a record under the old keys no longer authenticates
+PASS  a KeyUpdate asking for one, in two records, is answered with the server's own, under its old keys
+PASS  the server's next write takes everything
+PASS  and is under its next secret
+PASS  keyUpdate(true) sends one asking the client back
+PASS  whose request byte is 1
+PASS  after recordLimit records the writer sends a KeyUpdate of its own before the next
+PASS  a hundred KeyUpdates asking for one back, each followed by data, are each answered, and move the arena not at all (0 bytes)
+PASS  and the hundred-and-first key reads the next record
+PASS  seventeen KeyUpdates, empty data records or user_canceled warnings in a row are unexpected_message
+PASS  and so are seventeen change_cipher_specs
+PASS  a read secret that installs no keys fails the client's KeyUpdate with internal_error
+PASS  and a write secret that installs none fails the server's: -104
+PASS  with internal_error
+PASS  with two records unread, the third waits and the connection stops asking to be read
+PASS  reading everything lets the third in
+PASS  and it asks to be read again
+PASS  a write larger than the output takes what fits, in records shortened to the room
+PASS  the next write waits
+PASS  and so does a key update
+PASS  what it took arrives whole
+PASS  once the socket has taken it, the rest fits
+PASS  consuming a negative count sends nothing
+PASS  a partial send leaves the rest in order
+PASS  and the unsent bytes move to the front to make room for more
+PASS  signing an open connection is internal_error, and changes nothing
+PASS  it is still open
+PASS  a stream that ends without close_notify is truncation: failed
+PASS  though what was written before may still go out
+PASS  and then nothing is due
+PASS  a stream that ends inside a record is truncation too
+PASS  a stream that ends while its close_notify waits behind unread data is not truncation yet
+PASS  reading everything reaches the close_notify
+PASS  and the stream ends in order
+PASS  after close_notify the end of the stream is orderly
+PASS  and later records are taken and dropped (§6.1)
+PASS  the server may still write after the client's close_notify
+PASS  a socket failure ends the connection with nothing sent
+PASS  closing before the handshake sends close_notify in the clear
+PASS  after which writes are -32, key updates -32 and nothing is due
+PASS  closing twice sends nothing more
+PASS  after its close_notify the server answers no KeyUpdate (§6.1)
+PASS  and sends no alert when it then fails
+PASS  a close with the output full waits for room, and is not done
+PASS  its close_notify follows the data once there is room, and then it is done
+PASS  a write during the handshake waits
+PASS  and so does a key update
+PASS  with one byte of padding a 20,000-byte write is taken whole
+PASS  in records of 2^14 − 1 bytes, the padding's byte taken from the content's room (§5.4)
+PASS  a write whose padding no record can carry fails the connection: -104
+PASS  with internal_error
+PASS  a client with a session id gets the ServerHello and then one change_cipher_spec (§D.4)
+PASS  its flight is one record of four messages
+PASS  and its change_cipher_spec and Finished open the connection
+PASS  a HelloRetryRequest is followed by the change_cipher_spec, since it is the first message
+PASS  the second ServerHello comes alone: one change_cipher_spec per connection
+PASS  and the server waits for its signature
+PASS  a 50 KB flight is held back and sealed as the output drains
+PASS  in records of at most 2^14 bytes, four in all
+PASS  which join into its four messages
+PASS  and the client that read it finishes the handshake
+tls records refusals: 169 passed, 0 failed, 0 skipped

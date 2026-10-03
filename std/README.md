@@ -129,14 +129,18 @@ Three rules hold across the modules:
 The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, written on
 `nish/crypto` (decision S2). Each module takes bytes and answers bytes:
 randomness is an argument and nothing reads a socket or a clock, so a test
-injects an RFC trace's values and replays it byte for byte. The carriers that
-put them on sockets come after.
+injects an RFC trace's values and replays it byte for byte. The carriers put
+them on sockets: `net/tls-tcp` is the first, and the one module here that
+reads one, and it still takes its randomness as an argument.
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |
 | [`net/tls.ts`](./net/tls.ts) | The server side of a TLS 1.3 handshake, ClientHello through the client's Finished. `new TlsServer(config, serverRandom, x25519Private)`, then `receive(level, buf, off, len)` with what the client sent, `takeOutput(level)` for what to send, and `signatureInput()` / `sign(signature)` for the CertificateVerify hand-off (`tlsSignEcdsaP256` signs for a P-256 key, DER-encoded). A `TlsServerConfig` names the certificate chain, the signature scheme, the ALPN protocols, whether the carrier is QUIC, the server's transport parameters, and extensions to pass through in EncryptedExtensions. The suites are `TLS_AES_128_GCM_SHA256`, `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384` (in the client's order), the group x25519 (one HelloRetryRequest when the client offers it without a share), and `server_name`, ALPN and `quic_transport_parameters` are read; PSKs, 0-RTT, NewSessionTicket and client authentication are not. Every refusal is the alert to send — `receive` and `sign` answer 0 or a `TLS_ALERT_*` — never a panic, and a low-order x25519 share is refused | RFC 8446 §4, §7; RFC 8448 §3 byte for byte, and §5's transcript |
 | [`net/tls/codec.ts`](./net/tls/codec.ts) | The handshake messages as bytes: `tlsParseClientHello` into a `TlsClientHello` (structure checked, an alert on a malformed or duplicated field), and `tlsEncodeServerHello`, `tlsEncodeHelloRetryRequest`, `tlsEncodeEncryptedExtensions`, `tlsEncodeCertificate`, `tlsEncodeCertificateVerify`, `tlsEncodeFinished` and `tlsCertificateVerifyContent`. The wire's constants: handshake and extension types, versions, the x25519 group, the two signature schemes, and the `TLS_ALERT_*` descriptions | RFC 8446 §4, RFC 6066 §3, RFC 7301 §3.1, RFC 9001 §8.2 |
 | [`net/tls/schedule.ts`](./net/tls/schedule.ts) | The key schedule over SHA-256 or SHA-384: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsFinishedVerifyData`, and `tlsTrafficKey` / `tlsTrafficIv` for a record layer. `TlsTranscript` is the running transcript hash, with HelloRetryRequest's `message_hash` rule. The suite constants and `tlsSuiteHashLength` / `tlsSuiteKeyLength` | RFC 8446 §4.4.1, §7.1, §7.3 |
+| [`net/tls/record.ts`](./net/tls/record.ts) | The record layer (RFC 8446 §5): `TlsRecordReader` cuts a stream into records in a buffer allocated once, refusing a header of unknown type or a body past 2^14 + 256 bytes before the body is waited for; `TlsRecordProtection` is one direction, cleartext until `install(suite, secret)`, then `seal` and `open` a record into the caller's buffer — the nonce from the sequence number, the header as additional data, the inner content type and zero padding found without branching on the padding. `tlsNextTrafficSecret` is KeyUpdate's next secret. Every refusal is the alert, negated | RFC 8448 §3's nine records byte for byte; ChaCha20-Poly1305, AES-256-GCM-SHA384 and padding against Python's `cryptography` |
+| [`net/tls/record-server.ts`](./net/tls/record-server.ts) | `TlsRecordServer`: a TLS 1.3 server over a byte stream, sans-IO, wrapping a `TlsServer` in records. `receive` the client's bytes, send `output[outputStart .. outputEnd)` and `consume` what was sent, `read` and `write` application data, `sign` when asked, `keyUpdate`, `close`; `interest()` answers what it wants next as `TLS_RECORD_*` bits. It adds the compatibility `change_cipher_spec`, alerts both ways, KeyUpdate both ways and on a schedule, a limit of `TLS_RECORD_IDLE_LIMIT` (16) records in a row that carry nothing, and fixed buffers per connection | RFC 8448 §3 replayed at every cut of the client's stream |
+| [`net/tls-tcp.ts`](./net/tls-tcp.ts) | `TlsTcpServer`: TLS 1.3 over `nish:net` TCP for a program that owns its loop — a pool of `TlsRecordServer` slots sized at start-up, `accept(serverRandom, ephemeralPrivate)` into a free one, `readable` / `writable` when the loop says so, `signP256` with a `Secret` key, and `read`, `write`, `shutdown` and `close` answering as `nish:net`'s calls do. `accept` copies the ephemeral key into the slot and wipes the caller's array. Every call answers the slot's interest, whose low two bits are `pollModify`'s events. Native only, as `nish:net` is | openssl s_client under all three suites and curl, from `tests/run.js`; RFC 8448 §3 over loopback from a Nish client |
 
 **How a carrier drives `TlsServer`.** The server speaks in handshake
 *messages*, tagged by level: `TLS_LEVEL_INITIAL` (cleartext — ClientHello,
@@ -165,6 +169,22 @@ wiped until `secureZero` ships in a release (TLS-1 in
 what each refusal is and the test that pins it).
 `tests/link/net_tls_*` are the module's programs, each also run under
 `--number-mode f64`.
+
+**TLS over TCP.** `nish/net/tls-tcp` is the carrier of the paragraph above
+for TCP, and `nish/net/tls/record-server` is all of it but the socket, for a
+test or another transport. The program is the loop: there are no callbacks,
+so each call answers the slot's interest and the program re-arms the
+descriptor with `pollModify(loop, tls.fd(slot), wants & 3, slot)`, signs on
+`TLS_RECORD_SIGN`, reads on `TLS_RECORD_DATA` and calls `close(slot)` on
+`TLS_RECORD_DONE`. A slot's buffers — about a hundred kilobytes — are
+allocated once, and after its handshake a connection allocates nothing that
+outlives a record or a KeyUpdate; the handshake itself leaves about 52 KB
+behind until the arena is reset (TLS-3), and the carrier has no clock, so
+closing quiet slots is the program's (TLS-4). On this path the record layer
+wipes `TlsServer`'s traffic and handshake secrets and the ephemeral key once
+it has what it needs from them, which narrows TLS-1.
+`tests/link/net_tls_record_*` are its programs, and the `net_tls_tcp` block
+of `tests/run.js` drives the carrier with openssl and curl.
 
 ## How a program imports it
 
