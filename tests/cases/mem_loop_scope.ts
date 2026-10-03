@@ -32,12 +32,15 @@ const summarise = (rounds: i32): Box => {
 
 /** How far a call to `summarise(rounds)` moves the arena, and what it answered. */
 const grows = (rounds: i32): string => {
-  const m = Arena.mark();
-  const before = Arena.used();
-  const box = summarise(rounds);
-  const grown = Arena.used() - before;
-  const total = box.length;
-  Arena.release(m);
+  let grown: i64 = 0;
+  let total = 0;
+  {
+    using a = arena();
+    const before = Arena.used();
+    const box = summarise(rounds);
+    grown = Arena.used() - before;
+    total = box.length;
+  }
   return `${total} ${grown}`;
 };
 

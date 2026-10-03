@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"parse","symbol":"parse","module":"tests/cases/panics_expect.ts","line":3,"panics":[{"kind":"oom","line":5,"column":12,"allowed":true},{"kind":"oom","line":7,"column":10,"allowed":true}]},
+{"name":"strict","symbol":"strict","module":"tests/cases/panics_expect.ts","line":10,"panics":[{"kind":"expect","line":10,"column":36,"proven":false}]},
+{"name":"lenient","symbol":"lenient","module":"tests/cases/panics_expect.ts","line":12,"panics":[]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_expect.ts","line":14,"panics":[{"kind":"oom","line":15,"column":3,"allowed":true},{"kind":"call","line":15,"column":15,"callee":"strict","via":"expect"},{"kind":"oom","line":16,"column":3,"allowed":true}]}
+]}

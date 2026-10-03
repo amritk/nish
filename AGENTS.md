@@ -76,20 +76,22 @@ itself.
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
+| where the program can panic | `nish --emit-panics <file.json> <files>` | one JSON object in the file, every function with its panic sites, each with its kind and whether the checker proved it away ([LANGUAGE.md](./docs/LANGUAGE.md#panic-sites)); the IR is unchanged |
 | what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
 1-based, `endLine`/`endColumn` exclusive, and a trailing `"fix"` when there is one.
 
-- **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
-  never changes the exit code, and a portability warning prints only under
-  `--warn-portability`.
+- **`severity`** is `"error"`, `"performance"`, `"portability"` or
+  `"deprecation"`. A warning never changes the exit code, a portability warning
+  prints only under `--warn-portability`, and a deprecation warning always
+  prints.
 - **`code`** is the stable rule identifier — `NL1013`, `NL2231` — and is the
   field to key on. The prose in `message` may improve between releases; the
   code may not. `NL0000` means the message has no rule yet. The bands
   (`NL1xxx` Phase 0, `NL2xxx` checker, `NL3xxx` driver, `NL4xxx` interop,
-  `NL8xxx` portability, `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
+  `NL7xxx` deprecation, `NL8xxx` portability, `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
   the registry are documented in
   [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry is
   `src/codes.ts`, and it is **kept by hand**: a new diagnostic gets the next

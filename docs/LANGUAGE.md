@@ -4898,12 +4898,17 @@ Explicit control of the arena the runtime allocates from
 The automatic placement described under [Memory model](#memory-model) makes
 these unnecessary for most programs; they exist for code that manages
 batches itself. All four are available in both number modes.
+**`Arena.release` and `Arena.reset` are deprecated** (NL7001, below): they
+still compile and run as they always did, and each call warns, pointing to
+[`using a = arena()`](#using-a--arena), the same release with the proof done
+by the compiler. `Arena.mark` and `Arena.used` are not deprecated: they free
+nothing, and the memory tests read the arena through them.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `Arena.mark(): i64` | the current bump address (`nish_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
-| `Arena.release(m: i64): void` | free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
-| `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
+| `Arena.release(m: i64): void` | **deprecated** (NL7001): free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
+| `Arena.reset(): void` | **deprecated** (NL7001): recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
 | `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
 
 `mark` and `used` only read the arena, but they are recorded as writes so
@@ -4916,6 +4921,12 @@ the mark is still referenced is undefined behaviour (the memory is reused by
 the next allocation). That undefined behaviour belongs to `Arena.release` and
 `Arena.reset` alone: [`using a = arena()`](#using-a--arena) below is the same
 release with the proof done by the compiler, and is the way to free a batch.
+So each call to either still compiles, exits 0 and warns:
+`` `Arena.release` is deprecated: releasing to a mark while anything allocated after it is still referenced is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it ``
+(`file:line:col: deprecation: …`, NL7001, `tests/cases/mem_arena_builtins`;
+`Arena.reset`'s reads "resetting the arena while anything allocated in it"
+where this one reads "releasing to a mark …"). Removing them, or refusing
+them, is a later breaking change.
 A function that calls `Arena.release` or `Arena.reset`
 itself, or through a callee, never gets an automatic arena scope, for the
 function or for a loop's pass, so the compiler's own marks are never
@@ -5847,8 +5858,8 @@ by the caller.
   - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
     declared inside a loop whose value never leaves the iteration. A
     dynamically sized array cannot be a stack slot, so the arena grows once per
-    pass; the hint is to hoist it above the loop or to bracket the loop body
-    with `Arena.mark()` / `Arena.release(m)`
+    pass; the hint is to hoist it above the loop or to open the loop body
+    with [`using a = arena()`](#using-a--arena)
     (`tests/cases/perf_alloc_loop`). Not reported for a `new C(...)`, an object
     or array literal, or a `new Array<T>(<literal>)`, all of which the escape
     analysis already turns into one entry-block alloca whose slot is reused
@@ -5861,8 +5872,8 @@ by the caller.
     what takes away the proof the automatic arena scope needs
     ([Memory model](#memory-model)), so the whole body's allocations live until
     the program exits. The hints are a `const` per value and, where the
-    assignment is the point, an explicit `Arena.mark()` / `Arena.release(m)`
-    bracket (`tests/cases/perf_arena_drop`). Not reported when the local was
+    assignment is the point, a block around the body that opens with
+    [`using a = arena()`](#using-a--arena) (`tests/cases/perf_arena_drop`). Not reported when the local was
     declared holding a literal and is then given its one value in a branch
     (`let what = "unbound"; if (...) what = \`long ${s}\`;`), which drops
     nothing and has no rewrite — that function still loses its arena scope and
@@ -5889,8 +5900,8 @@ by the caller.
     the pass allocated in a local declared outside the loop or grows an array
     older than the pass, or a callee that releases or resets the arena — and
     what refused the function its own, and the hints are to keep what a pass
-    allocates out of outer locals and older memory, or to bracket the loop
-    body with `Arena.mark()` / `Arena.release(m)`
+    allocates out of outer locals and older memory, or to open the loop body
+    with [`using a = arena()`](#using-a--arena)
     (`tests/cases/perf_arena_loop`). A call in a `for` loop's condition or
     update is outside the pass's bracket and is reported as such. It is found
     after the whole-program analysis rather than by the checker, because
@@ -6148,13 +6159,30 @@ by the caller.
   Every row but the retired NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
   `tests/wordings/`.
+- **Deprecation warnings are the third diagnostic that is not an error.** One
+  marks a call the language still compiles, to exactly the IR it always did,
+  and is going to take away in a later breaking release, naming what replaces
+  it: `file:line:col: deprecation: <text>`, with the excerpt, and
+  `"severity":"deprecation"` under `--json`. They are **on by default** with
+  no flag to silence them — `--no-warn-performance` does not, and `nish run`
+  prints them too — and **never change the exit code**. They print only for a
+  compilation that checked cleanly, **before** the performance warnings and on
+  the same streams, capped at 20 with `...and N more deprecation warnings` and
+  an `N deprecation warnings` line, in the order the other two reports use. A
+  call in a generic body warns once, however many instantiations check it. The
+  standard library and the examples call nothing deprecated, and `npm test`
+  fails the day one of them does. The rules, one code each in band NL7xxx:
+
+  | Code | What is deprecated | Its replacement | Test |
+  | --- | --- | --- | --- |
+  | NL7001 | `Arena.release(m)` and `Arena.reset()`: their undefined behaviour is the one the compiler does not check | [`using a = arena()`](#using-a--arena) | `tests/cases/mem_arena_builtins`, the deprecation block of `tests/run.js`, `tests/wordings/nl7001_arena_release` |
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
   `message`), nothing else on stdout and nothing on stderr, with the same exit
   code. `severity` is `"error"` for every error, `"performance"` for a
-  WP15 §8 warning and `"portability"` for a WP33 one, which is the field a tool
-  filters on; `code` is the stable
+  WP15 §8 warning, `"portability"` for a WP33 one and `"deprecation"` for a
+  deprecated call, which is the field a tool filters on; `code` is the stable
   identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
   failure with no source position — an unusable C toolchain, an internal
@@ -6171,6 +6199,9 @@ by the caller.
   offset, size, align, constructor and methods), imports, and functions
   (resolved signature, LLVM symbol, attribute facts, pointer-parameter facts,
   locals with types, callees) (`tests/cases/dump_checked`).
+- **`--emit-panics <file.json>`** writes every panic site of the program,
+  function by function, beside the IR, and changes no byte of it; see
+  [Panic sites](#panic-sites) below.
 - **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
   `DIFile` per source file a declaration comes from — the name as it was given
   on the command line, with `.` for the directory, so the metadata depends only
@@ -6194,6 +6225,66 @@ by the caller.
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
   linked binary's line table with `llvm-dwarfdump`).
+
+### Panic sites
+
+A compiled program can stop with exit 1 in more places than the `panic` calls
+its author wrote: a bounds check the checker could not prove away, an integer
+division, a value entering a range, `r.expect`, a `readFileSync` of a file that
+is not there. Each such place is a **panic site**, and
+`--emit-panics <file.json>` lists them all, per function, after the checker's
+whole-program proofs have run. A site is listed exactly where the emitter
+writes a check that can fail or calls into the runtime where it exits; it is
+`"proven": true` where a proof table lets the emitter leave the check out, and
+a function whose sites are all proven (or `oom`) has no panic path in its IR
+— `npm test` holds every golden in `tests/cases/` and `tests/link/` to that
+(`tests/panics-oracle.js`). The kinds:
+
+| kind | what fails | what proves it away |
+| --- | --- | --- |
+| `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
+| `pop` | `a.pop()` on an empty array | nothing yet: every `pop` is checked (`tests/cases/panics_pop`) |
+| `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
+| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | nothing yet: every integer division is checked, a constant divisor included, and a float division is not a site (`tests/cases/panics_divide`) |
+| `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
+| `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
+| `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
+| `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
+| `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
+| `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
+| `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
+| `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
+
+- **`--unchecked-indexing` is not a proof.** It removes a check and makes the
+  out-of-range access undefined behaviour instead of a panic, so the site
+  stays, unproven, and so does every `call` into its function
+  (`tests/cases/panics_unchecked_indexing`).
+- **A `call` names its callee and the kind it reaches** (`"via"`), and is
+  decided over the whole program, the standard library and dependencies
+  included. A generic function's sites are its instantiations', each under its
+  own symbol and decided over its own side tables
+  (`tests/cases/panics_generic`).
+- **Three ways a program can stop are not sites**, because no proof the checker
+  makes could remove them. Out of memory is listed, as `oom`, but excluded: every
+  allocation can fail and no guard in the source prevents it. Stack overflow is
+  a fault the operating system raises, with no handler in the runtime and no
+  check in the IR. Signed overflow is not checked at all: `+`, `-` and `*` are
+  `nsw`, undefined on overflow rather than a panic, until checked overflow lands
+  (see *Signed integer overflow is undefined behaviour* above). Neither are
+  `process.exit(n)`, which is a deliberate exit, or a call into a `declare
+  function`, whose body is C the compiler does not see.
+- **The file is a contract**, like `--json`: one `{"functions":[...]}` object,
+  one function per line in module and declaration order, each
+  `{"name","symbol","module","line","panics"}`, where `symbol` is the
+  function's LLVM name; per site `{"kind","line","column"}` and then
+  `"proven"` for a check, `"proven","callee"` for `parallel-length`,
+  `"callee","via"` for `call` and `"allowed": true` for `oom`. Lines and
+  columns are 1-based, in the units a diagnostic uses. The `wrote <file>` line
+  is on stderr, like the IR's. It is written once the program is checked: a
+  program that does not compile writes none, and `--emit-checked` writes it
+  beside its dump. `--emit-ast`, which stops before the check, refuses it with
+  a usage error (exit 2) rather than leaving the file unwritten, and so do
+  `nish run`, which keeps its build to itself, and `--fix`, which writes no IR.
 
 ## Forbidden constructs (Phase 0 validator)
 

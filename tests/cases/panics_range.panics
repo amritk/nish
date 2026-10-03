@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"digit","symbol":"digit","module":"tests/cases/panics_range.ts","line":6,"panics":[{"kind":"range","line":6,"column":34,"proven":false}]},
+{"name":"guarded","symbol":"guarded","module":"tests/cases/panics_range.ts","line":8,"panics":[{"kind":"range","line":10,"column":12,"proven":true}]},
+{"name":"bump","symbol":"bump","module":"tests/cases/panics_range.ts","line":15,"panics":[{"kind":"range","line":17,"column":3,"proven":false}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_range.ts","line":21,"panics":[{"kind":"oom","line":22,"column":3,"allowed":true},{"kind":"call","line":22,"column":15,"callee":"digit","via":"range"},{"kind":"oom","line":23,"column":3,"allowed":true},{"kind":"oom","line":24,"column":3,"allowed":true},{"kind":"call","line":24,"column":15,"callee":"bump","via":"range"}]},
+{"name":"fromHost","symbol":"fromHost","module":"tests/cases/panics_range.ts","line":30,"panics":[{"kind":"range","line":30,"column":1,"proven":false}]}
+]}

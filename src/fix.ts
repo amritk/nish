@@ -14,7 +14,8 @@
 // file comes back byte-identical unless a fix applied to it. Two edits in one
 // file that overlap cannot both be right, so the later one in report order is
 // dropped with the rest of its diagnostic's fix, and the next round, compiling
-// the file the earlier one produced, reports it again if it still applies.
+// the file the earlier one produced, reports it again if it still applies. A
+// fix whose own edits overlap is dropped every round.
 
 import { Compilation, ModuleUnit } from "./compilation"
 import { Diagnostic, Edit } from "./diagnostics"
@@ -184,6 +185,9 @@ const rewriteFile = (diagnostics: Diagnostic[], target: FixTarget): boolean => {
  * Diagnostics are taken in report order and a fix is all or nothing: one that
  * overlaps an edit already accepted is dropped whole, and the next round will
  * report it against the text the accepted one produced, if it still applies.
+ * So is one whose own edits overlap each other, which no order of applying
+ * them makes right — `export { f, f }` asks for `export ` before `f` twice —
+ * and the next round reports it again, so it is never applied.
  */
 const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
   const accepted: Edit[] = []
@@ -192,10 +196,13 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
       continue
     }
     let clear = true
+    const own: Edit[] = []
     for (const edit of diagnostic.edits) {
-      if (overlapsAny(edit, accepted)) {
+      if (overlapsAny(edit, accepted) || overlapsAny(edit, own)) {
         clear = false
+        break
       }
+      own.push(edit)
     }
     if (!clear) {
       continue

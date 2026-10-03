@@ -52,15 +52,22 @@ import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
-import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
+import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
 import { emitProgram } from "./emit"
 import { StringMap, StringSet } from "./map"
-import { isBuiltinSpecifier, isNishSourceModule, SECRET_SPECIFIER, unsafeModule } from "./nish-modules"
+import {
+  isBuiltinSpecifier,
+  isNishSourceModule,
+  nishModuleExports,
+  SECRET_SPECIFIER,
+  unsafeModule,
+} from "./nish-modules"
 import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
+import { panicsJson, resolvePanicSites } from "./panics"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -74,6 +81,7 @@ import {
   CheckedProgram,
   EnumInfo,
   FunctionSig,
+  ImportBinding,
   STRUCT_CLASS,
   StructRegistry,
   StructTemplateInfo,
@@ -88,7 +96,15 @@ import {
   resolveModule,
   resolvePath,
 } from "./paths"
-import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX, VERSION } from "./branding"
+import {
+  BUILTIN_SCHEME,
+  CLI,
+  LANGUAGE,
+  PACKAGE_CONDITION,
+  packageConditionFor,
+  STD_PREFIX,
+  VERSION,
+} from "./branding"
 import {
   ENGINE_TOO_OLD,
   ENGINE_UNREADABLE,
@@ -714,7 +730,15 @@ export class Compilation {
       if (found.error.length > 0) {
         // At the module specifier, where stage0 points
         // (`imp.node.moduleSpecifier` in stage0's `src/compilation.ts`).
-        checker.ctx.errorAtSpecifier(imp.decl, found.error)
+        const fix: Edit[] = checker.ctx.errored
+          ? []
+          : fsSpecifierFix(checker.ctx, checker.program.imports, imp)
+        if (fix.length > 0) {
+          // The span `errorAtSpecifier` reports: the literal, quotes and all.
+          checker.ctx.sink.reportFix(checker.ctx.source, fix[0].start - 1, fix[0].end + 1, found.error, fix)
+        } else {
+          checker.ctx.errorAtSpecifier(imp.decl, found.error)
+        }
         checker.ctx.errored = false
         continue
       }
@@ -1119,6 +1143,12 @@ export class Compilation {
     this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
       return false
+    }
+    // Every panic site, settled once the proofs above are committed and the
+    // fixpoint `reportArenaLoops` paid for has its call graph (`src/panics.ts`).
+    if (this.opts.recordsPanics()) {
+      const facts = this.analyze()
+      resolvePanicSites(this.analysisUnits, facts)
     }
     if (this.opts.warnPortability) {
       this.reportPortability()
@@ -1712,6 +1742,12 @@ export class Compilation {
     return facts
   }
 
+  /** The `--emit-panics` file, from the sites `check` settled (`panicsJson`). */
+  panicsText(): string {
+    const facts = this.analyze() // fills `analysisUnits` when nothing has yet
+    return panicsJson(this.analysisUnits, facts)
+  }
+
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
   libraryRoot(): string {
     return this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
@@ -1967,3 +2003,55 @@ const clashMessage = (
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
 }
+
+/**
+ * The fix for `import { readFileSync } from "fs"` when no package `fs` loads
+ * (NL3015): the specifier becomes `"nish:fs"`, the builtin module that exports
+ * the same functions under the same names, so every call means what Node's
+ * `fs` would have done with it. Empty, so no fix, for any other specifier, and
+ * when any name the statement imports is not one `nish:fs` exports, because
+ * the rewrite would only trade this error for that one. The edit replaces the
+ * two letters inside the quotes, whichever quotes they are.
+ */
+const fsSpecifierFix = (ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] => {
+  const edits: Edit[] = []
+  if (imp.specifier !== "fs") {
+    return edits
+  }
+  const builtin = `${BUILTIN_SCHEME}fs`
+  if (!exportsAllOf(builtin, imports, imp.decl)) {
+    return edits
+  }
+  // The closing quote is the last one in the statement: attributes after the
+  // specifier are refused before any module is resolved (NL1057).
+  const text = ctx.source.text
+  let close = imp.decl.end - 1
+  while (close >= 0 && close > imp.decl.start && close < text.length && !isQuote(text.charCodeAt(close))) {
+    close = close - 1
+  }
+  const quote = text.substring(close, close + 1)
+  if (close - 3 <= imp.decl.start || text.substring(close - 3, close + 1) !== `${quote}fs${quote}`) {
+    return edits
+  }
+  edits.push(ctx.edit(close - 2, close, builtin))
+  return edits
+}
+
+/**
+ * Whether the builtin module `specifier` exports every name the `import`
+ * statement `decl` imports. Read off the list `nishModuleExports` prints
+ * rather than asked of `nishExport` name by name, because that allocates the
+ * export it answers into memory no pass of the loop could give back.
+ */
+const exportsAllOf = (specifier: string, imports: ImportBinding[], decl: Node): boolean => {
+  const listed = `, ${nishModuleExports(specifier)}, `
+  for (const other of imports) {
+    if (other.decl === decl && listed.indexOf(`, ${other.importedName}, `) < 0) {
+      return false
+    }
+  }
+  return true
+}
+
+/** A `"` or a `'`, the two quotes a module specifier is written in. */
+const isQuote = (byte: i32): boolean => byte === 34 || byte === 39
