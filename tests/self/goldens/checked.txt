@@ -42523,6 +42523,9 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 33:9 xs: Point[] (const)
   callee 33:14 makePoints -> @makePoints
+reject tests/cases/mem_using_arena.ts: nish 0.16.0: internal compiler error
+reject tests/cases/mem_using_arena_or_return.ts: nish 0.16.0: internal compiler error
+reject tests/cases/mem_using_arena_tail.ts: nish 0.16.0: internal compiler error
 program tests/cases/neg_literal_i64_min.ts
 module tests/cases/neg_literal_i64_min.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -43623,6 +43626,7 @@ function test(): i32 -> @test [exported]
   local 42:7 row: string (let)
   local 43:12 i: i32 (let)
   callee 48:46 build -> @build
+reject tests/cases/perf_arena_using.ts: nish 0.16.0: internal compiler error
 program tests/cases/perf_bounds_loop.ts
 module tests/cases/perf_bounds_loop.ts (entry)
 function test(): i32 -> @test [exported]
@@ -51947,6 +51951,7 @@ function joinTo(n: i32, text: string): i32 -> @joinTo
   calls: joinTo nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 33:10 joinTo -> @joinTo
+reject docs/cookbook/mem-using-arena.ts: nish 0.16.0: internal compiler error
 program docs/cookbook/mod-main.ts
 module docs/cookbook/mod-main.ts (entry)
 import square from "./mod-math" -> function @square
@@ -58603,7 +58608,7 @@ function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.construc
   escaping: x y
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-reject tests/parser/using.ts: error: `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called
+reject tests/parser/using.ts: error: `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method of any other class would never be called
 program tests/differential/corpus/argv_words.ts
 module tests/differential/corpus/argv_words.ts (entry)
 function longest(words: string[]): string -> @longest

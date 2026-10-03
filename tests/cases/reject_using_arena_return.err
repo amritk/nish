@@ -1,0 +1,1 @@
+`` `n is ${n}` `` may be allocated inside the `using arena()` block at 4:3 and is handed back by `return`: the block releases what it allocated before the function returns, so the caller would be handed freed memory

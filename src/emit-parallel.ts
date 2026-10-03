@@ -34,6 +34,7 @@ import { Emitter } from "./emit"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam } from "./ir"
 import { loadLocal } from "./emit-ops"
+import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
 import { isParallelEntry, mapGrain, parallelBodyOf, parallelRoleOf, taskStoreOf } from "./parallel"
 import { FunctionSig, PAR_CHUNK, PAR_MAP, PAR_SPAWN, PAR_TASK } from "./program"
@@ -354,7 +355,9 @@ const taskFinish = (
  * A `using` declaration has just been emitted: its scope is open until the
  * block that declared it ends. The scope's address, as the `i8*` its tasks
  * are filed under, is read once here; every exit of the block is dominated by
- * the declaration, so each join can name the same value.
+ * the declaration, so each join can name the same value. A `using a = arena()`
+ * goes on the same stack, as the mark its local holds, so that every exit
+ * closes the two kinds in the reverse of the order they opened in.
  */
 export const openScope = (emitter: Emitter, list: Node): void => {
   for (const decl of list.children) {
@@ -373,42 +376,59 @@ const openOneScope = (emitter: Emitter, decl: Node): void => {
     process.exit(internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json))
   }
   const value = loadLocal(emitter, local)
-  emitter.openScopes.push(emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`))
+  const arena = isArenaCall(emitter.program, unwrapParens(decl.children[2]))
+  emitter.openScopes.push(
+    arena ? value : emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`)
+  )
   emitter.openScopeLoops.push(emitter.loops.length)
+  emitter.openScopeArenas.push(arena)
+}
+
+/** Close open entry `i`: join a scope's tasks, or release an arena to its mark. */
+const closeScope = (emitter: Emitter, i: i32): void => {
+  if (emitter.openScopeArenas[i]) {
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${emitter.openScopes[i]})`)
+  } else {
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
+  }
 }
 
 /**
- * Join, innermost first, every open scope that `minLoops` or more loops
+ * Close, innermost first, every open entry that `minLoops` or more loops
  * enclosed: 0 for a `return`, which leaves them all, and one more than the
- * target's position for a `break` or `continue`, which leaves the scopes
- * opened inside the loop it targets. The scopes stay open for the paths
- * that did not take this exit.
+ * target's position for a `break` or `continue`, which leaves the ones
+ * opened inside the loop it targets. They stay open for the paths that did
+ * not take this exit. A `return` passes `arenas` false: its scopes join
+ * before its value is computed, which may read what the tasks stored, and its
+ * arenas release after (`Emitter.emitScopeExit`), because the value may read
+ * what the block allocated.
  */
-export const emitScopeJoins = (emitter: Emitter, minLoops: i32): void => {
+export const emitScopeJoins = (emitter: Emitter, minLoops: i32, arenas: boolean): void => {
   let i = emitter.openScopes.length - 1
   while (i >= 0) {
-    if (emitter.openScopeLoops[i] >= minLoops) {
-      emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
+    if (emitter.openScopeLoops[i] >= minLoops && (arenas || !emitter.openScopeArenas[i])) {
+      closeScope(emitter, i)
     }
     i = i - 1
   }
 }
 
 /**
- * The end of a block that had `count` scopes open when it began: the ones it
- * opened join, innermost first, if control reaches the end, and are closed
- * either way.
+ * The end of a block that had `count` entries open when it began: the ones
+ * it opened close, innermost first, if control reaches the end, and are
+ * popped either way.
  */
 export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
   if (!emitter.fn.currentBlock().terminated()) {
     let i = emitter.openScopes.length - 1
     while (i >= count) {
-      emitter.fn.emit(`call void ${emitter.useRuntime("nish_scope_join")}(i8* ${emitter.openScopes[i]})`)
+      closeScope(emitter, i)
       i = i - 1
     }
   }
   while (emitter.openScopes.length > count) {
     emitter.openScopes.pop()
     emitter.openScopeLoops.pop()
+    emitter.openScopeArenas.pop()
   }
 }

@@ -1,0 +1,1 @@
+`wipe` releases or resets the arena inside the `using arena()` block at 9:5: the block releases to the mark it took when it opened, which a release or a reset in between has already moved the arena below

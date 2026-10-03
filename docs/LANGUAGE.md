@@ -2402,7 +2402,7 @@ from the whole-program facts, and each rule is reported there:
   `` `width` allocates at main.ts:21:21 and stores the allocation into memory, and `parallelMapInto` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored ``
   (`tests/cases/reject_par_alloc_escapes`). And a function that reads or moves
   the arena would see the arena of whichever thread ran the element:
-  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_par_arena`).
 - **The result is a number, a `boolean` or an enum** — `U` for a map, `T` for a
   reduce — because the element's memory is released before the result is
@@ -2516,11 +2516,11 @@ export const main = (): i32 => {
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
   another). `throw` and a panic end the process and join nothing.
-- **A scope is introduced by `using`, and `using` takes only a scope.** A
-  scope bound any other way is
+- **A scope is introduced by `using`, and `using` takes only a scope or an
+  [`arena()`](#using-a--arena).** A scope bound any other way is
   `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
   (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
-  `` `using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs ``
+  `` `using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version: they are the values whose disposal the language defines — a scope joins its tasks, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs ``
   (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
   statement of a block; as the body of an `if` or a loop it is
   `` A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, and a single-statement body is not a block ``
@@ -2535,7 +2535,7 @@ export const main = (): i32 => {
 - **`[Symbol.dispose]` is `nish/threads`'s alone.** `ThreadScope` declares one,
   so TypeScript and Node accept `using s = scope()`; the compiler emits the join
   itself and never calls it. Any other class's is
-  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called ``
+  `` `Handle` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method of any other class would never be called ``
   (`tests/cases/reject_thread_dispose_elsewhere`).
 - **There is no thread count.** Each spawn is one task and each task one
   thread; a scope with more tasks than cores leaves the scheduler to share them
@@ -2561,7 +2561,7 @@ element's arena, which a task does not share, and each rule is reported at the
   is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
-  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset` ``
+  `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_thread_task_arena`).
 - **Its argument is not a `Result` small enough to travel as its parts**:
   `` The argument of `spawn` is `Result<i32, i32>`, which a task cannot be handed: a `Result` is passed as its parts rather than as one value, so hand the task the value it holds ``
@@ -4629,10 +4629,90 @@ scope release moved ahead of it, so the position it reports is the one it would
 have reported before ([Memory model](#memory-model), item 2). **Safety rule**:
 releasing or resetting while any object, array, or string allocated after
 the mark is still referenced is undefined behaviour (the memory is reused by
-the next allocation). A function that calls `Arena.release` or `Arena.reset`
+the next allocation). That undefined behaviour belongs to `Arena.release` and
+`Arena.reset` alone: [`using a = arena()`](#using-a--arena) below is the same
+release with the proof done by the compiler, and is the way to free a batch.
+A function that calls `Arena.release` or `Arena.reset`
 itself, or through a callee, never gets an automatic arena scope, for the
 function or for a loop's pass, so the compiler's own marks are never
 invalidated by user resets.
+
+#### `using a = arena()`
+
+A block that declares `using a = arena()` takes the arena's mark where the
+declaration stands and releases to it on every exit of the block, and the
+compiler refuses the block if anything allocated after the declaration could
+still be reachable once it has released. It is the
+[per-pass scope](#memory-model) of item 2 written by the program, held to the
+same rule with the block as the pass, and refused rather than quietly dropped
+when the rule fails.
+
+```typescript
+const tally = (rows: string[]): i32 => {
+  let total = 0;
+  for (const row of rows) {
+    using a = arena();                // the mark
+    const line = `${row}: ${row.length}`;
+    total = total + line.length;      // a number leaves the block; the string does not
+  }                                   // released here, and on every other exit
+  return total;
+};
+```
+
+- **`arena()` is a global builtin** declared in `runtime/nish.d.ts` as
+  `declare function arena(): Disposable`, so a program stays TypeScript; under
+  Node its disposal does nothing. It is only the initialiser of a `using`
+  declaration, which is a statement of a block (the
+  [`using` placement rule](#scoped-tasks-using-s--scope)); anywhere else it is
+  `` `arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end ``
+  (NL2416, `tests/cases/reject_using_arena_not_using`). The binding holds the
+  mark and is never read:
+  `` `a` is the binding of a `using` declaration of `arena()` and cannot be read: it holds the mark its block releases to when it ends, and nothing but that release may see or move the mark ``
+  (NL2417, `reject_using_arena_binding`).
+- **The release is emitted at every exit of the block**: its end, a `return`
+  (after the returned value is computed, so the value may read what the block
+  allocated), a `break` or `continue` that leaves it, and an `orReturn()`
+  (`tests/link/arena_using_exit_paths`, `tests/cases/mem_using_arena`,
+  `mem_using_arena_or_return`). It nests with everything else on the same
+  stack, innermost first: a `using s = scope()` inside the block joins before
+  the block releases, and a block inside a scoped loop pass or a function's
+  automatic scope releases before they do; a `return` releases only the
+  outermost of them, whose mark is the lowest. A `return g(n)` whose
+  arguments are all numbers is a tail call with the release moved ahead of
+  it, unless `g` reads the arena (`mem_using_arena_tail`). `throw` and a
+  panic end the process. Statements of the block before the declaration are
+  outside it.
+- **Nothing allocated inside may outlive the block.** From the declaration to
+  the end of the block, each of these is refused, naming the value and where
+  it would go:
+
+  | Route | Refused when | Code | Test |
+  | --- | --- | --- | --- |
+  | assigned to a local declared outside the block | the value is not older than the block (a literal, a parameter or outer local, a field or element read, a call that allocates nothing) | NL2418 | `reject_using_arena_outer_local` |
+  | stored into a field, `o.f = v` | `v` is not older than the block, unless the field is a number, a `boolean` or an `enum` | NL2419 | `reject_using_arena_field` |
+  | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
+  | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
+  | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
+  | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
+  | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
+  | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+
+  A number, a `boolean` or an `enum` leaves the block freely, and so does a
+  value older than it. The rule is the escape analysis's, so it is
+  conservative: a block that stores a fresh string into an object it also
+  allocated, or builds a `Map`, is refused even though nothing escapes, and
+  what has to outlive the block is allocated before it opens. The first route
+  reads ``` `` `item ${i}` `` may be allocated inside the `using arena()` block at 6:5 and is assigned to `last`, which is declared outside the block: the block releases what it allocated when it ends, and the local would outlive it pointing into freed memory ```
+  (`reject_using_arena_outer_local`).
+- **A parallel body or a task may not open one**, for the reason it may not
+  call `Arena.*` (`reject_using_arena_parallel`, NL2351).
+- **It costs no scope.** A function that declares one keeps its automatic
+  scope and its loops' pass scopes, because the block's mark is checked like
+  theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
+  nothing about a call inside the block, whose leftovers the block releases
+  (`tests/cases/perf_arena_using`).
 
 ### `Map` and `Set`
 
@@ -5315,7 +5395,10 @@ where its memory lives and when it is reused.
    `mem_loop_scope_threads` the same round trip under `--threads`, where the
    arena, and so the scope, is per thread. A `for` loop's condition and
    update run outside the bracket. Like the function scope it is invisible to
-   a program except through `Arena.used()`.
+   a program except through `Arena.used()`. A program that wants the same
+   bracket around a block of its own writes
+   [`using a = arena()`](#using-a--arena), which this rule checks and refuses
+   rather than declines.
 
    **A function whose callees are what allocate gets a scope too.** One that
    allocates nothing of its own, returns a number, a `boolean`, an `enum` or
