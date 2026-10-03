@@ -3843,9 +3843,14 @@ it (#386; [security/cli.md](security/cli.md), CLI-7 and CLI-9).
 
 - **The owner and the mode are one answer.** Both come out of one `lstat`, so
   they describe the same file however the path changes in between; two calls
-  could describe two. Take them apart with `om >> 32` (the owner) and
-  `om & 0xfff` (the permission bits) or `om & 0xf000` (the type: `0x8000` a
-  regular file, `0x4000` a directory, `0xa000` a symbolic link). A uid fills
+  could describe two. Take them apart with `(om >> 32) & 0xffffffff` (the
+  owner) and `om & 0xfff` (the permission bits) or `om & 0xf000` (the type:
+  `0x8000` a regular file, `0x4000` a directory, `0xa000` a symbolic link).
+  The mask is not optional: a uid is unsigned and one of 2^31 or more fills
+  bit 63, which `>>` on an `i64` copies down, so `om >> 32` alone answers a
+  negative owner for a file such a user owns and never equals their
+  `geteuid()`. `>>>` would say the same natively, but a BigInt has no `>>>`, so
+  the mask is the spelling that reads the same under Node (`owner_checks`). A uid fills
   32 bits, so the answer is an `i64` in both number modes, as `geteuid`'s is,
   and an `i32` is refused rather than truncated
   (`` Cannot initialize i32 variable `om` with i64 ``, `reject_owner_i32`).

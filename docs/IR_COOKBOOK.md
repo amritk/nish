@@ -13151,11 +13151,12 @@ file ([LANGUAGE.md](LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-i
 // #386: who owns a path, and whether it runs. Each is one call into
 // runtime-host.c, ordered with the file system as `statMtimeSync` is. A root is
 // trusted when this user owns it and no one else may write to it: the owner in
-// the high 32 bits of one `lstat`, and the group and other write bits, 0o022,
-// clear in the low ones.
+// the high 32 bits of one `lstat`, masked after the shift because a uid of 2^31
+// or more fills the sign bit, and the group and other write bits, 0o022, clear
+// in the low ones.
 export const trusted = (root: string): boolean => {
   const om = lstatOwnerModeSync(root)
-  return om !== -1 && om >> 32 === geteuid() && (om & 18) === 0
+  return om !== -1 && ((om >> 32) & 0xffffffff) === geteuid() && (om & 18) === 0
 }
 
 export const runs = (program: string): boolean => isExecutableSync(program)
@@ -13178,23 +13179,24 @@ entry:
 land.rhs.1:
   %3 = load i64, i64* %om.addr, align 8
   %4 = ashr i64 %3, 32
-  %5 = call i64 @nish_euid()
-  %6 = icmp eq i64 %4, %5
+  %5 = and i64 %4, 4294967295
+  %6 = call i64 @nish_euid()
+  %7 = icmp eq i64 %5, %6
   br label %land.end.1
 
 land.end.1:
-  %7 = phi i1 [ false, %entry ], [ %6, %land.rhs.1 ]
-  br i1 %7, label %land.rhs, label %land.end
+  %8 = phi i1 [ false, %entry ], [ %7, %land.rhs.1 ]
+  br i1 %8, label %land.rhs, label %land.end
 
 land.rhs:
-  %8 = load i64, i64* %om.addr, align 8
-  %9 = and i64 %8, 18
-  %10 = icmp eq i64 %9, 0
+  %9 = load i64, i64* %om.addr, align 8
+  %10 = and i64 %9, 18
+  %11 = icmp eq i64 %10, 0
   br label %land.end
 
 land.end:
-  %11 = phi i1 [ false, %land.end.1 ], [ %10, %land.rhs ]
-  ret i1 %11
+  %12 = phi i1 [ false, %land.end.1 ], [ %11, %land.rhs ]
+  ret i1 %12
 }
 
 define noundef zeroext i1 @runs(i8* noundef nonnull noalias readonly align 8 nocapture %program) #0 {

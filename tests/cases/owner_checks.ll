@@ -25,7 +25,14 @@ entry:
   %0 = sext i32 32 to i64
   %1 = and i64 %0, 63
   %2 = ashr i64 %ownerMode, %1
-  ret i64 %2
+  %3 = sext i32 1 to i64
+  %4 = sext i32 32 to i64
+  %5 = and i64 %4, 63
+  %6 = shl i64 %3, %5
+  %7 = sext i32 1 to i64
+  %8 = sub nsw i64 %6, %7
+  %9 = and i64 %2, %8
+  ret i64 %9
 }
 
 define internal noundef i64 @typeOf(i64 noundef %ownerMode) #0 {
@@ -40,6 +47,7 @@ entry:
   %file.addr = alloca i8*, align 8
   %me.addr = alloca i64, align 8
   %om.addr = alloca i64, align 8
+  %highUid.addr = alloca i64, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call zeroext i1 @nish_mkdir(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
   %1 = call zeroext i1 @nish_mkdir(i8* bitcast ({ i64, [11 x i8] }* @.str.1 to i8*))
@@ -79,25 +87,41 @@ entry:
   %27 = icmp eq i64 %25, %26
   %28 = select i1 %27, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
   call void @nish_print(i8* %28)
-  %29 = call i64 @nish_lstat_owner_mode(i8* bitcast ({ i64, [32 x i8] }* @.str.6 to i8*))
-  %30 = call i8* @nish_str_from_i64(i64 %29)
-  call void @nish_print(i8* %30)
-  %31 = call i64 @nish_lstat_owner_mode(i8* bitcast ({ i64, [30 x i8] }* @.str.7 to i8*))
-  %32 = call i8* @nish_str_from_i64(i64 %31)
-  call void @nish_print(i8* %32)
-  %33 = load i8*, i8** %file.addr, align 8
-  %34 = call zeroext i1 @nish_is_executable(i8* %33)
-  %35 = select i1 %34, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
-  call void @nish_print(i8* %35)
-  %36 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [8 x i8] }* @.str.8 to i8*))
-  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
-  call void @nish_print(i8* %37)
-  %38 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [10 x i8] }* @.str.9 to i8*))
-  %39 = select i1 %38, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
-  call void @nish_print(i8* %39)
-  %40 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [32 x i8] }* @.str.6 to i8*))
-  %41 = select i1 %40, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
-  call void @nish_print(i8* %41)
+  %29 = sext i32 1 to i64
+  %30 = sext i32 31 to i64
+  %31 = and i64 %30, 63
+  %32 = shl i64 %29, %31
+  store i64 %32, i64* %highUid.addr, align 8
+  %33 = load i64, i64* %highUid.addr, align 8
+  %34 = sext i32 32 to i64
+  %35 = and i64 %34, 63
+  %36 = shl i64 %33, %35
+  %37 = sext i32 33188 to i64
+  %38 = or i64 %36, %37
+  %39 = call i64 @ownerOf(i64 %38)
+  %40 = load i64, i64* %highUid.addr, align 8
+  %41 = icmp eq i64 %39, %40
+  %42 = select i1 %41, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  call void @nish_print(i8* %42)
+  %43 = call i64 @nish_lstat_owner_mode(i8* bitcast ({ i64, [32 x i8] }* @.str.6 to i8*))
+  %44 = call i8* @nish_str_from_i64(i64 %43)
+  call void @nish_print(i8* %44)
+  %45 = call i64 @nish_lstat_owner_mode(i8* bitcast ({ i64, [30 x i8] }* @.str.7 to i8*))
+  %46 = call i8* @nish_str_from_i64(i64 %45)
+  call void @nish_print(i8* %46)
+  %47 = load i8*, i8** %file.addr, align 8
+  %48 = call zeroext i1 @nish_is_executable(i8* %47)
+  %49 = select i1 %48, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  call void @nish_print(i8* %49)
+  %50 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [8 x i8] }* @.str.8 to i8*))
+  %51 = select i1 %50, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  call void @nish_print(i8* %51)
+  %52 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [10 x i8] }* @.str.9 to i8*))
+  %53 = select i1 %52, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  call void @nish_print(i8* %53)
+  %54 = call zeroext i1 @nish_is_executable(i8* bitcast ({ i64, [32 x i8] }* @.str.6 to i8*))
+  %55 = select i1 %54, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.5 to i8*)
+  call void @nish_print(i8* %55)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 850 programs, 59695 dump lines.
+# 850 programs, 59697 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -43280,12 +43280,14 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_mkdir
   calls: nish_arena_mark nish_arena_release nish_euid nish_is_executable nish_lstat_owner_mode nish_mkdir nish_print nish_str_from_i64 nish_write_file ownerOf typeOf
   stackSites=0 stackLocals=0
-  local 16:9 file: string (const)
-  local 18:9 me: i64 (const)
-  local 20:9 om: i64 (const)
-  callee 22:15 ownerOf -> @ownerOf
-  callee 24:15 typeOf -> @typeOf
-  callee 25:15 typeOf -> @typeOf
+  local 18:9 file: string (const)
+  local 20:9 me: i64 (const)
+  local 22:9 om: i64 (const)
+  callee 24:15 ownerOf -> @ownerOf
+  callee 26:15 typeOf -> @typeOf
+  callee 27:15 typeOf -> @typeOf
+  local 30:9 highUid: i64 (const)
+  callee 31:15 ownerOf -> @ownerOf
 program tests/cases/parse_numbers.ts
 module tests/cases/parse_numbers.ts (entry)
 function show(label: string, v: f64): void -> @show
@@ -49581,7 +49583,7 @@ function trusted(root: string): boolean -> @trusted [exported]
   sharedWrite: via nish_lstat_owner_mode
   calls: nish_euid nish_lstat_owner_mode
   stackSites=0 stackLocals=0
-  local 7:9 om: i64 (const)
+  local 8:9 om: i64 (const)
 function runs(program: string): boolean -> @runs [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_is_executable

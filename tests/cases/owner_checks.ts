@@ -7,7 +7,9 @@
 // is RT-9 in tests/runtime-test.c, since the language cannot make one. The
 // `i64`s are compared with `toI64` so that the source reads the same under
 // `runtime/nish.mjs`, where an `i64` is a BigInt.
-const ownerOf = (ownerMode: i64): i64 => ownerMode >> toI64(32);
+// The owner is masked after the shift: a uid of 2^31 or more fills bit 63,
+// which `>>` copies down, and a BigInt has no `>>>`.
+const ownerOf = (ownerMode: i64): i64 => (ownerMode >> toI64(32)) & ((toI64(1) << toI64(32)) - toI64(1));
 const typeOf = (ownerMode: i64): i64 => ownerMode & toI64(0xf000);
 
 export const main = (): i32 => {
@@ -23,6 +25,10 @@ export const main = (): i32 => {
   // S_IFREG and S_IFDIR: a regular file, then a directory.
   console.log(typeOf(om) === toI64(0x8000));
   console.log(typeOf(lstatOwnerModeSync("build/test")) === toI64(0x4000));
+  // A uid with bit 31 set, packed as `nish_lstat_owner_mode` packs it, needs
+  // no such user to exist: its owner unpacks to the uid, not a negative one.
+  const highUid = toI64(1) << toI64(31);
+  console.log(ownerOf((highUid << toI64(32)) | toI64(0x81a4)) === highUid);
   // Nothing there, and a path that names nothing because it holds a NUL.
   console.log(lstatOwnerModeSync("build/test/owner_checks.missing"));
   console.log(lstatOwnerModeSync("build/test/owner_checks.txt\0x"));
