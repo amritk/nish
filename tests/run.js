@@ -11179,6 +11179,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["--link", "x"],
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
+      ["--emit-panics", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {
