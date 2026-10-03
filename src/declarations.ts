@@ -8,8 +8,10 @@
 // `collectImports`, in the order stage0 asked, and the rest of this file is
 // the semantic half: names, types, arity and the rules about `main`.
 
-import { refuseTopLevelForm } from "./checker"
+import { refuseTopLevelForm, skipBlanks } from "./checker"
 import { CheckContext } from "./context"
+import { Edit } from "./diagnostics"
+import { Lexer } from "./lexer"
 import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
@@ -242,6 +244,36 @@ export const markEntryMain = (ctx: CheckContext, sig: FunctionSig): void => {
 }
 
 /**
+ * The fix for `import type { T } from "./m"` (NL2243): delete the `type`, and
+ * the blanks after it, so the names are imported as values are. What is
+ * imported is the same declarations under the same names, and a name used
+ * only as a type reads the same either way, to this compiler and to
+ * TypeScript. Empty, so no fix, unless the import is a braces list and nothing
+ * else: without `type`, `import type T from` is a default import and
+ * `import type * as m from` a namespace one, each refused in its turn.
+ */
+const typeOnlyImportFix = (ctx: CheckContext, decl: Node, defaultName: Node | null): Edit[] => {
+  const edits: Edit[] = []
+  const text = ctx.source.text
+  if (
+    decl.children[0].kind !== N_LIST ||
+    defaultName !== null ||
+    text.substring(decl.start, decl.start + 6) !== "import"
+  ) {
+    return edits
+  }
+  const scan = new Lexer(text)
+  scan.pos = decl.start + 6
+  scan.skipTrivia()
+  const at = scan.pos
+  if (text.substring(at, at + 4) !== "type") {
+    return edits
+  }
+  edits.push(ctx.edit(at, skipBlanks(text, at + 4), ""))
+  return edits
+}
+
+/**
  * One binding per name in an `import`. Every form but `import { a, b as c }
  * from "..."` is refused first, once, in the order stage0 asked and the source
  * writes them — `export import` (NL2226), a specifier that is not a string literal (NL2212), the
@@ -293,7 +325,7 @@ export const collectImports = (ctx: CheckContext, decl: Node): void => {
     return
   }
   if ((decl.flags & FLAG_TYPE_ONLY) !== 0) {
-    ctx.error(decl, "Type-only imports are not supported")
+    ctx.errorFix(decl, "Type-only imports are not supported", typeOnlyImportFix(ctx, decl, defaultName))
     return
   }
   if (defaultName !== null) {
