@@ -31,8 +31,9 @@ fi
 {
   echo "// The transcript \`record.sh\` wrote: aioquic $("$python" -c 'import aioquic; print(aioquic.__version__)') against"
   echo "// the Nish echo server. Generated: re-record rather than edit by hand."
-  echo "// \`c\` a datagram the client sent, \`s\` one the server sent, \`e\` the stream"
-  echo "// data the server echoed, \`x\` the error code the client closed with."
+  echo "// \`c\` the time in milliseconds and a datagram the client sent, \`s\` one the"
+  echo "// server sent, \`e\` the stream data the server echoed, \`x\` the error code the"
+  echo "// client closed with."
   echo "export const transcript = (): string[] => ["
   sed 's/\\/\\\\/g; s/"/\\"/g; s/^/  "/; s/$/",/' "$out/transcript.txt"
   echo "];"

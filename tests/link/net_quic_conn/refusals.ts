@@ -31,7 +31,7 @@ import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { cat } from "../net_tls_common/client";
 import { fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { CLIENT_SCID, QcClient, qcConnect, qcCrypto, qcDrain, qcExchange, qcHandshake, qcHello, qcInitial, qcParams, qcReadFlight, qcSendHello, qcShort, qcShortTo } from "./client";
+import { CLIENT_SCID, QC_T0, QcClient, qcConnect, qcCrypto, qcDrain, qcExchange, qcHandshake, qcHello, qcInitial, qcParams, qcReadFlight, qcSendHello, qcShort, qcShortTo } from "./client";
 import { QcFound, qcConfig, qcConnected, qcDefaultConfig, qcFind, qcServer } from "./common";
 import { qcStream } from "./data";
 
@@ -194,20 +194,20 @@ const handshakeRefusals = (t: Suite): void => {
 
   const c5 = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const streamy: QuicConnection = qcServer(qcDefaultConfig());
-  streamy.receive(qcInitial(c5, qcStream(n64(0), n64(0), "x", false), n32(1200)));
+  streamy.receive(qcInitial(c5, qcStream(n64(0), n64(0), "x", false), n32(1200)), QC_T0);
   t.eqI64("STREAM in an Initial is PROTOCOL_VIOLATION (§12.4)", streamy.error, QUIC_ERROR_PROTOCOL_VIOLATION);
   qcDrain(streamy, c5);
   t.eqStr("closed in an Initial, naming STREAM", closeOf(qcFind(c5.longPayloads, QUIC_FRAME_CONNECTION_CLOSE)), `${QUIC_ERROR_PROTOCOL_VIOLATION} 8`);
 
   const c6 = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const ahead: QuicConnection = qcServer(qcDefaultConfig());
-  ahead.receive(qcInitial(c6, qcCrypto(n64(16384), fromHex("01")), n32(1200)));
+  ahead.receive(qcInitial(c6, qcCrypto(n64(16384), fromHex("01")), n32(1200)), QC_T0);
   t.eqI64("CRYPTO data 16 KiB ahead is CRYPTO_BUFFER_EXCEEDED (§7.5)", ahead.error, QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED);
 
   const c7 = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const cut: QuicConnection = qcServer(qcDefaultConfig());
   // PADDING first, so the truncated frame is the payload's last.
-  cut.receive(qcInitial(c7, cat([new Array<u8>(1180), fromHex("060005")]), n32(0)));
+  cut.receive(qcInitial(c7, cat([new Array<u8>(1180), fromHex("060005")]), n32(0)), QC_T0);
   t.eqI64("a CRYPTO frame running past its packet is FRAME_ENCODING_ERROR", cut.error, QUIC_ERROR_FRAME_ENCODING);
 
   // A Handshake packet with a frame it may not carry: the close goes in both
@@ -225,8 +225,8 @@ const handshakeRefusals = (t: Suite): void => {
 
   const c9 = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const unsigned: QuicConnection = qcServer(qcDefaultConfig());
-  unsigned.receive(qcInitial(c9, qcCrypto(n64(0), hello), n32(1200)));
-  t.ok("while TLS waits for the signature nothing is sent", unsigned.signatureInput() !== null && unsigned.takeDatagram() === null);
+  unsigned.receive(qcInitial(c9, qcCrypto(n64(0), hello), n32(1200)), QC_T0);
+  t.ok("while TLS waits for the signature nothing is sent", unsigned.signatureInput() !== null && unsigned.takeDatagram(QC_T0) === null);
   const nothing: u8[] = [];
   t.eqI64("an empty signature fails TLS with internal_error", unsigned.sign(nothing), QUIC_ERROR_CRYPTO + 80);
 };

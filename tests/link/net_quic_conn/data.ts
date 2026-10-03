@@ -61,7 +61,7 @@ import { cat, transcriptHash } from "../net_tls_common/client";
 import { leafCertificate } from "../net_tls_common/server";
 import { bytesOf, fromHex, textOf, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { fixedEntropy } from "../net_quic_conn_replay/server";
+import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
 import {
   CLIENT_ODCID,
   CLIENT_SCID,
@@ -79,6 +79,7 @@ import {
   qcSendHello,
   qcShort,
   qcShortTo,
+  QC_T0,
 } from "./client";
 import { QcFound, qcConfig, qcConnected, qcData, qcDefaultConfig, qcFind, qcFrameTypes, qcServer } from "./common";
 
@@ -254,7 +255,7 @@ const idChecks = (t: Suite): void => {
   quicPushAck(ack, [n64(0), n64(1)], n32(1), n64(0));
   qcExchange(conn, c, qcShort(c, ack));
   t.eqI64("an ACK from the client moves the space's largest acknowledged", conn.application.largestAcked, n64(1));
-  t.eqStr("and, eliciting nothing, is not acknowledged", toHex(conn.takeDatagram()), "null");
+  t.eqStr("and, eliciting nothing, is not acknowledged", toHex(conn.takeDatagram(QC_T0)), "null");
   const older: u8[] = [];
   quicPushAck(older, [n64(0), n64(0)], n32(1), n64(0));
   qcExchange(conn, c, qcShort(c, older));
@@ -270,8 +271,8 @@ const closeChecks = (t: Suite): void => {
   t.eqI32("the next datagram is the close", qcDrain(conn, c), n32(1));
   const close: QcFound = qcFind([lastApp(c)], QUIC_FRAME_CONNECTION_CLOSE_APP);
   t.ok("an application CONNECTION_CLOSE (0x1d) with code 7, in a 1-RTT packet", close.found && close.frame.errorCode === n64(7));
-  t.ok("then nothing", conn.takeDatagram() === null);
-  t.eqI64("and every datagram is ignored, answering the code", conn.receive(qcShort(c, qcStream(n64(0), n64(0), "x", false))), n64(7));
+  t.ok("then nothing", conn.takeDatagram(QC_T0) === null);
+  t.eqI64("and every datagram is ignored, answering the code", conn.receive(qcShort(c, qcStream(n64(0), n64(0), "x", false)), QC_T0), n64(7));
   conn.close(n64(8));
   t.eqI64("closing twice changes nothing", conn.error, n64(7));
 
@@ -279,7 +280,7 @@ const closeChecks = (t: Suite): void => {
   const scid: u8[] = fromHex(CLIENT_SCID);
   const e = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const hello: u8[] = qcHello([TLS_AES_128_GCM_SHA256], "nish-echo", quicEncodeTransportParameters(qcParams(scid, n64(65536))));
-  early.receive(qcInitial(e, qcCrypto(n64(0), hello), n32(1200)));
+  early.receive(qcInitial(e, qcCrypto(n64(0), hello), n32(1200)), QC_T0);
   t.eqI32("a connection mid-handshake", early.state, QUIC_STATE_HANDSHAKE);
   early.close(n64(9));
   t.eqI32("closed by the application sends one datagram", qcDrain(early, e), n32(1));
@@ -306,9 +307,23 @@ const closeChecks = (t: Suite): void => {
   t.eqI64("and the application cannot close it again", appClosed.error, n64(42));
 
   const released: QuicConnection = qcServer(qcDefaultConfig());
-  qcConnected(released, n64(65536));
+  const rc: QcClient = qcConnected(released, n64(65536));
+  const token: u8[] = fromHex("000102030405060708090a0b0c0d0e0f");
+  const fromClient: u8[] = [];
+  quicPushNewConnectionId(fromClient, n64(1), n64(0), fromHex("d1d2"), token);
+  qcExchange(released, rc, qcShort(rc, fromClient));
   const keys = released.application.writeKeys;
   const key: u8[] = keys === null ? fromHex("ff") : keys.key;
+  const tlsAtRelease = released.tls;
+  const finished: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.expectedClientFinished;
+  const params: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.config.quicTransportParameters;
+  const tokens: u8[][] = [];
+  for (const entry of released.cids.local) {
+    tokens.push(entry.resetToken);
+  }
+  for (const entry of released.cids.peer) {
+    tokens.push(entry.resetToken);
+  }
   released.release();
   t.ok("release() discards the 1-RTT keys", released.application.discarded && released.application.writeKeys === null);
   let zero: boolean = toI32(key.length) > 0;
@@ -316,7 +331,22 @@ const closeChecks = (t: Suite): void => {
     zero = zero && toI32(b) === 0;
   }
   t.ok("wiping the key bytes", zero);
-  t.ok("and the connection sends nothing more", released.state === QUIC_STATE_CLOSING && released.takeDatagram() === null);
+  let tokensZero: boolean = toI32(tokens.length) === 6;
+  for (const tk of tokens) {
+    for (const b of tk) {
+      tokensZero = tokensZero && toI32(b) === 0;
+    }
+  }
+  t.ok("and both sides' stateless reset tokens, four issued and the client's one beside its first ID", tokensZero);
+  let tlsZero: boolean = toI32(finished.length) === 32 && toI32(params.length) > 0;
+  for (const b of finished) {
+    tlsZero = tlsZero && toI32(b) === 0;
+  }
+  for (const b of params) {
+    tlsZero = tlsZero && toI32(b) === 0;
+  }
+  t.ok("and TLS's expected client Finished and the encoded transport parameters, which carry a token", tlsZero);
+  t.ok("and the connection sends nothing more", released.state === QUIC_STATE_CLOSING && released.takeDatagram(QC_T0) === null);
 };
 
 /** The packets a server drops rather than act on. */
@@ -325,33 +355,33 @@ const dropChecks = (t: Suite): void => {
   const scid: u8[] = fromHex(CLIENT_SCID);
   const c = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   const hello: u8[] = qcHello([TLS_AES_128_GCM_SHA256], "nish-echo", quicEncodeTransportParameters(qcParams(scid, n64(65536))));
-  t.eqI64("a first Initial in a datagram under 1200 bytes", conn.receive(qcInitial(c, qcCrypto(n64(0), hello), n32(0))), n64(0));
+  t.eqI64("a first Initial in a datagram under 1200 bytes", conn.receive(qcInitial(c, qcCrypto(n64(0), hello), n32(0)), QC_T0), n64(0));
   t.ok("is dropped, and the connection still waits", conn.dropped === 1 && conn.state === QUIC_STATE_WAIT_INITIAL);
   const garbage: u8[] = new Array<u8>(1200);
-  conn.receive(garbage);
+  conn.receive(garbage, QC_T0);
   t.ok("so is a datagram that does not parse", conn.dropped === 2 && conn.state === QUIC_STATE_WAIT_INITIAL);
   const forged: u8[] = qcInitial(c, qcCrypto(n64(0), hello), n32(1200));
   forged[1100] = toU8(toI32(forged[1100]) ^ 1);
-  conn.receive(forged);
+  conn.receive(forged, QC_T0);
   t.ok("so is a first Initial that does not authenticate, leaving nothing behind", conn.dropped === 3 && conn.state === QUIC_STATE_WAIT_INITIAL && conn.tls === null);
   const short = new QcClient(TLS_AES_128_GCM_SHA256, scid);
   short.odcid = fromHex("00010203040506");
-  conn.receive(qcInitial(short, qcCrypto(n64(0), hello), n32(1200)));
+  conn.receive(qcInitial(short, qcCrypto(n64(0), hello), n32(1200)), QC_T0);
   t.ok("so is one to a DCID under 8 bytes (RFC 9000 §7.2)", conn.dropped === 4 && conn.state === QUIC_STATE_WAIT_INITIAL);
 
-  t.ok("a connection that has read nothing has nothing to send", conn.takeDatagram() === null);
+  t.ok("a connection that has read nothing has nothing to send", conn.takeDatagram(QC_T0) === null);
   const shortFirst: u8[] = new Array<u8>(1200);
   shortFirst[0] = toU8(0x40);
-  conn.receive(shortFirst);
+  conn.receive(shortFirst, QC_T0);
   t.ok("a 1-RTT packet cannot start a connection", conn.dropped === 5 && conn.state === QUIC_STATE_WAIT_INITIAL);
   const retryFirst: u8[] | null = quicRetryPacket(scid, fromHex("4040404040404040"), fromHex("aa"), fromHex(CLIENT_ODCID), n32(0));
   if (retryFirst !== null) {
-    conn.receive(cat([retryFirst, new Array<u8>(1200)]));
+    conn.receive(cat([retryFirst, new Array<u8>(1200)]), QC_T0);
   }
   t.ok("nor can a Retry", conn.dropped === 6 && conn.state === QUIC_STATE_WAIT_INITIAL);
   const unstarted: QuicConnection = qcServer(qcDefaultConfig());
   unstarted.close(n64(3));
-  t.ok("a connection closed before it started sends nothing", unstarted.state === QUIC_STATE_CLOSING && unstarted.takeDatagram() === null);
+  t.ok("a connection closed before it started sends nothing", unstarted.state === QUIC_STATE_CLOSING && unstarted.takeDatagram(QC_T0) === null);
 
   const from: i32 = qcSendHello(conn, c, hello, n64(0), hello);
   t.ok("a good first Initial still starts the connection", conn.state === QUIC_STATE_HANDSHAKE && toI32(c.datagrams.length) - from === 1);
@@ -361,25 +391,25 @@ const dropChecks = (t: Suite): void => {
   if (zeroRtt !== null && keys !== null) {
     const packet: u8[] | null = quicSealPacket(keys, zeroRtt, n64(9), new Array<u8>(8));
     if (packet !== null) {
-      conn.receive(packet);
+      conn.receive(packet, QC_T0);
     }
   }
   t.eqI32("a 0-RTT packet is dropped: there is no 0-RTT here", conn.dropped - dropped0, n32(1));
   const stranger = new QcClient(TLS_AES_128_GCM_SHA256, fromHex("eeeeeeeeeeeeeeee"));
   stranger.serverScid = c.serverScid;
-  conn.receive(qcInitial(stranger, qcCrypto(n64(0), hello), n32(1200)));
+  conn.receive(qcInitial(stranger, qcCrypto(n64(0), hello), n32(1200)), QC_T0);
   t.eqI32("an Initial from another SCID is dropped", conn.dropped - dropped0, n32(2));
   t.ok("1-RTT data is not processed before the handshake completes", qcReadFlight(c, from, n32(0)));
-  conn.receive(qcShort(c, qcStream(n64(0), n64(0), "early", true)));
+  conn.receive(qcShort(c, qcStream(n64(0), n64(0), "early", true)), QC_T0);
   t.ok("(dropped, RFC 9001 §5.7)", conn.dropped - dropped0 === 3 && conn.readStream() === null);
   // The Finished and the stream data in one datagram: the Handshake packet
   // completes the handshake, and the 1-RTT packet after it is then read.
   qcExchange(conn, c, cat([qcFinishedPacket(c), qcShort(c, qcStream(n64(0), n64(0), "late", true))]));
   t.eqStr("a 1-RTT packet coalesced after the Finished is read once the handshake completes", qcReadAll(conn), "0:late <fin>");
-  conn.receive(qcShortTo(c, fromHex("0909090909090909"), qcStream(n64(4), n64(0), "x", true), n32(0)));
+  conn.receive(qcShortTo(c, fromHex("0909090909090909"), qcStream(n64(4), n64(0), "x", true), n32(0)), QC_T0);
   t.ok("a 1-RTT packet to an ID the server never issued is dropped", conn.dropped - dropped0 === 4 && conn.readStream() === null);
   const resent: u8[] = qcInitial(c, qcCrypto(n64(0), hello), n32(1200));
-  conn.receive(resent);
+  conn.receive(resent, QC_T0);
   t.ok("an Initial after the Initial keys are discarded is dropped", conn.dropped - dropped0 === 5);
 };
 
@@ -421,7 +451,7 @@ const shapeChecks = (t: Suite): void => {
   // Any keys will do: the server cannot open a Handshake packet yet.
   const beforeKeys: i32 = split.dropped;
   s.handshakeWrite = s.initialWrite;
-  split.receive(qcHandshake(s, fromHex("01")));
+  split.receive(qcHandshake(s, fromHex("01")), QC_T0);
   s.handshakeWrite = null;
   s.handshakePn = 0;
   t.eqI32("a Handshake packet before the server has Handshake keys is dropped", split.dropped - beforeKeys, n32(1));
@@ -444,6 +474,10 @@ const shapeChecks = (t: Suite): void => {
     maxStreamsBidi: n64(4),
     maxIdleTimeout: n64(0),
     activeConnectionIdLimit: n64(2),
+    statelessResetKey: resetKey(),
+    retryTokenKey: tokenKey(),
+    retry: false,
+    retryTokenLifetime: n64(10000),
   };
   const amp = new QuicConnection(config, fixedEntropy());
   const a = new QcClient(TLS_AES_128_GCM_SHA256, scid);
@@ -453,7 +487,7 @@ const shapeChecks = (t: Suite): void => {
   const ackOnly: u8[] = [];
   quicPushAck(ackOnly, [n64(0), n64(0)], n32(1), n64(0));
   qcExchange(amp, a, qcInitial(a, ackOnly, n32(1200)));
-  t.eqStr("another 1200 bytes from the client release the rest", `${toI32(a.datagrams.length) - ampFrom} datagrams, ${amp.bytesSent} bytes, validated ${amp.addressValidated}`, "5 datagrams, 4851 bytes, validated false");
+  t.eqStr("another 1200 bytes from the client release the rest", `${toI32(a.datagrams.length) - ampFrom} datagrams, ${amp.bytesSent} bytes, validated ${amp.addressValidated}`, "5 datagrams, 4867 bytes, validated false");
   t.ok("which the client accepts", qcReadFlight(a, ampFrom, n32(0)));
   qcExchange(amp, a, qcFinishedPacket(a));
   t.ok("and the handshake completes, validating the address", amp.state === QUIC_STATE_CONNECTED && amp.addressValidated);
@@ -465,8 +499,8 @@ const constructorChecks = (t: Suite): void => {
   const short: u8[] = new Array<u8>(QUIC_CONN_ENTROPY_SIZE - 1);
   const bad = new QuicConnection(qcDefaultConfig(), short);
   t.ok("entropy of the wrong length leaves the connection closed with INTERNAL_ERROR", bad.state === QUIC_STATE_CLOSING && bad.error === QUIC_ERROR_INTERNAL);
-  t.ok("sending nothing", bad.takeDatagram() === null);
-  t.eqI64("and ignoring every datagram", bad.receive(new Array<u8>(1200)), QUIC_ERROR_INTERNAL);
+  t.ok("sending nothing", bad.takeDatagram(QC_T0) === null);
+  t.eqI64("and ignoring every datagram", bad.receive(new Array<u8>(1200), QC_T0), QUIC_ERROR_INTERNAL);
   t.ok("nor does it sign anything", bad.signatureInput() === null && bad.sign(fromHex("01")) === QUIC_ERROR_INTERNAL);
   const entropy: u8[] = fixedEntropy();
   qcServer(qcDefaultConfig());

@@ -1,0 +1,118 @@
+PASS  both sockets bind
+PASS  version: everything the server did before is accounted for
+PASS  version: client datagram 1 reaches the server
+PASS  version: the server prints l version negotiation
+PASS  version: server datagram 1 reaches the client
+PASS  version: server datagram 1 is the recorded one, byte for byte
+PASS  version: everything the server did before is accounted for
+PASS  version: client datagram 2 reaches the server
+PASS  version: the server prints l accept
+PASS  version: server datagram 2 reaches the client
+PASS  version: server datagram 2 is the recorded one, byte for byte
+PASS  version: everything the server did before is accounted for
+PASS  version: client datagram 3 reaches the server
+PASS  version: server datagram 3 reaches the client
+PASS  version: server datagram 3 is the recorded one, byte for byte
+PASS  version: everything the server did before is accounted for
+PASS  version: client datagram 4 reaches the server
+PASS  version: the server prints e stream 0: "hello after version" fin
+PASS  version: server datagram 4 reaches the client
+PASS  version: server datagram 4 is the recorded one, byte for byte
+PASS  version: everything the server did before is accounted for
+PASS  version: client datagram 5 reaches the server
+PASS  version: the server prints x 0
+PASS  version: and the scenario ends where the recording does
+PASS  retry: everything the server did before is accounted for
+PASS  retry: client datagram 1 reaches the server
+PASS  retry: the server prints l retry
+PASS  retry: server datagram 1 reaches the client
+PASS  retry: server datagram 1 is the recorded one, byte for byte
+PASS  retry: everything the server did before is accounted for
+PASS  retry: client datagram 2 reaches the server
+PASS  retry: the server prints l accept
+PASS  retry: server datagram 2 reaches the client
+PASS  retry: server datagram 2 is the recorded one, byte for byte
+PASS  retry: everything the server did before is accounted for
+PASS  retry: client datagram 3 reaches the server
+PASS  retry: server datagram 3 reaches the client
+PASS  retry: server datagram 3 is the recorded one, byte for byte
+PASS  retry: everything the server did before is accounted for
+PASS  retry: client datagram 4 reaches the server
+PASS  retry: the server prints e stream 0: "hello after retry" fin
+PASS  retry: server datagram 4 reaches the client
+PASS  retry: server datagram 4 is the recorded one, byte for byte
+PASS  retry: everything the server did before is accounted for
+PASS  retry: client datagram 5 reaches the server
+PASS  retry: the server prints x 0
+PASS  retry: and the scenario ends where the recording does
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 1 reaches the server
+PASS  keys: the server prints l accept
+PASS  keys: server datagram 1 reaches the client
+PASS  keys: server datagram 1 is the recorded one, byte for byte
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 2 reaches the server
+PASS  keys: server datagram 2 reaches the client
+PASS  keys: server datagram 2 is the recorded one, byte for byte
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 3 reaches the server
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 4 reaches the server
+PASS  keys: the server prints e stream 0: "after the client's key update" fin
+PASS  keys: server datagram 3 reaches the client
+PASS  keys: server datagram 3 is the recorded one, byte for byte
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 5 reaches the server
+PASS  keys: everything the server did before is accounted for
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 6 reaches the server
+PASS  keys: the server prints k the server starts a key update, to phase 0
+PASS  keys: the server prints e stream 4: "after the server's key update" fin
+PASS  keys: server datagram 4 reaches the client
+PASS  keys: server datagram 4 is the recorded one, byte for byte
+PASS  keys: everything the server did before is accounted for
+PASS  keys: client datagram 7 reaches the server
+PASS  keys: the server prints x 0
+PASS  keys: and the scenario ends where the recording does
+PASS  idle: everything the server did before is accounted for
+PASS  idle: client datagram 1 reaches the server
+PASS  idle: the server prints l accept
+PASS  idle: server datagram 1 reaches the client
+PASS  idle: server datagram 1 is the recorded one, byte for byte
+PASS  idle: everything the server did before is accounted for
+PASS  idle: client datagram 2 reaches the server
+PASS  idle: server datagram 2 reaches the client
+PASS  idle: server datagram 2 is the recorded one, byte for byte
+PASS  idle: everything the server did before is accounted for
+PASS  idle: client datagram 3 reaches the server
+PASS  idle: the server prints e stream 0: "then silence" fin
+PASS  idle: server datagram 3 reaches the client
+PASS  idle: server datagram 3 is the recorded one, byte for byte
+PASS  idle: everything the server did before is accounted for
+PASS  idle: client datagram 4 reaches the server
+PASS  idle: everything the server did before is accounted for
+PASS  idle: the server prints x idle
+PASS  idle: and the scenario ends where the recording does
+PASS  reset: everything the server did before is accounted for
+PASS  reset: client datagram 1 reaches the server
+PASS  reset: the server prints l accept
+PASS  reset: server datagram 1 reaches the client
+PASS  reset: server datagram 1 is the recorded one, byte for byte
+PASS  reset: everything the server did before is accounted for
+PASS  reset: client datagram 2 reaches the server
+PASS  reset: server datagram 2 reaches the client
+PASS  reset: server datagram 2 is the recorded one, byte for byte
+PASS  reset: everything the server did before is accounted for
+PASS  reset: client datagram 3 reaches the server
+PASS  reset: the server prints e stream 0: "then the server forgets" fin
+PASS  reset: the server prints x forget
+PASS  reset: server datagram 3 reaches the client
+PASS  reset: server datagram 3 is the recorded one, byte for byte
+PASS  reset: everything the server did before is accounted for
+PASS  reset: client datagram 4 reaches the server
+PASS  reset: the server prints l stateless reset
+PASS  reset: the server prints x reset
+PASS  reset: server datagram 4 reaches the client
+PASS  reset: server datagram 4 is the recorded one, byte for byte
+PASS  reset: and the scenario ends where the recording does
+quic lifecycle replay against aioquic: 117 passed, 0 failed, 0 skipped
