@@ -229,6 +229,7 @@ cases/os_random added after R6: no rewriter to freeze it with
 cases/os_random_limit added after R6: no rewriter to freeze it with
 cases/os_signal added after R6: no rewriter to freeze it with
 cases/os_signal_import added after R6: no rewriter to freeze it with
+cases/owner_checks added after R6: no rewriter to freeze it with
 cases/perf_arena_control added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_arena_using added after R6: no rewriter to freeze it with

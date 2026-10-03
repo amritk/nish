@@ -179,6 +179,16 @@ declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
  * once it is used. A statement.
  */
 declare function secureZero(bytes: u8[]): void;
+/**
+ * One `lstat` of `path`, so a symbolic link answers for itself: the owner's uid
+ * in the high 32 bits and `st_mode` in the low 32, or -1 when the path does not
+ * resolve (#386).
+ */
+declare function lstatOwnerModeSync(path: string): i64;
+/** The effective user id, the one to compare an owner from `lstatOwnerModeSync` with. */
+declare function geteuid(): i64;
+/** Whether the real user may run `path`: `access(path, X_OK)`. */
+declare function isExecutableSync(path: string): boolean;
 
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
