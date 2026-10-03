@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "main.ts:9:32", "calls": "configSize" },
+                  { "function": "configSize", "at": "node_modules/pkg_caps/src/index.ts:5:50", "calls": "read" },
+                  { "function": "read", "at": "node_modules/pkg_caps/src/index.ts:3:40", "calls": "readFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pkg_caps",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "node_modules/pkg_caps/src/index.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "configSize",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "configSize", "at": "node_modules/pkg_caps/src/index.ts:5:50", "calls": "read" },
+                  { "function": "read", "at": "node_modules/pkg_caps/src/index.ts:3:40", "calls": "readFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

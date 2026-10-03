@@ -1,0 +1,1 @@
+writes memory its caller can see in the runtime's `nish_date_now`, and `parallelMapInto` runs it on several threads at once

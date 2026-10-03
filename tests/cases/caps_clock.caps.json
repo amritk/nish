@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_clock.ts",
+  "deterministic": false,
+  "capabilities": ["clock"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["clock"],
+      "modules": [
+        {
+          "path": "caps_clock.ts",
+          "capabilities": ["clock"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["clock"],
+              "witnesses": {
+                "clock": [
+                  { "function": "main", "at": "caps_clock.ts:7:17", "calls": "now" },
+                  { "function": "now", "at": "caps_clock.ts:4:24", "calls": "monotonicNanos" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

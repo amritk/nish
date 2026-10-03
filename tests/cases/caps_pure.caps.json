@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "entry": "caps_pure.ts",
+  "deterministic": true,
+  "capabilities": [],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": [],
+      "modules": [
+        {
+          "path": "caps_pure.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "total",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
