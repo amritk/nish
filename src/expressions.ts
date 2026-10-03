@@ -22,6 +22,7 @@ import {
   templateMessage as secretTemplateMessage,
 } from "./secret"
 import { LANGUAGE } from "./branding"
+import { Edit } from "./diagnostics"
 import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
 import { arrowElsewhereMessage, capturedMessage, checkGenericCall, refuseOnce } from "./generics"
@@ -83,6 +84,7 @@ import {
   N_THIS,
   N_TRUE,
   N_TYPE_NULL,
+  N_TYPE_REF,
   N_UNARY,
   N_VAR_DECL,
   Node,
@@ -740,14 +742,94 @@ const checkBinary = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   if (op === "<") {
     const template = callSiteTemplate(ctx, expr.children[0], scope)
     if (template !== null) {
-      return ctx.errorType(
+      ctx.errorFix(
         expr.children[1],
         `Type arguments are not written at a call site in ${LANGUAGE}: \`${template.typeParams[0]}\` is inferred ` +
-          `from the arguments, so write \`${ctx.textOf(expr.children[0])}(...)\``
+          `from the arguments, so write \`${ctx.textOf(expr.children[0])}(...)\``,
+        typeArgumentFix(ctx, expr, template, scope)
       )
+      return T_ERROR
     }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope)
+}
+
+/**
+ * Delete the `<W>` of `f<W>(x)`, where `less` is the `f < W` the parser read
+ * it as, inside `(f < W) > (x)`. Deleting it is only what the author meant
+ * when inference gives `T` the `W` they wrote, and that is proved here rather
+ * than hoped for: `T` has one parameter of its own, annotated `T` and nothing
+ * else, and the one argument is a local declared `W` or a literal whose type
+ * is `W`. `identity<f64>(7)` gets no fix, since `identity(7)` is an `i32` call.
+ */
+const typeArgumentFix = (ctx: CheckContext, less: Node, template: TemplateInfo, scope: Scope): Edit[] => {
+  const edits: Edit[] = []
+  const written = less.children[1]
+  const call = linkedParent(new ParentTable(ctx.program.file, ctx.program.nodeTypes.length), less)
+  if (
+    call === null ||
+    call.kind !== N_BINARY ||
+    call.text !== ">" ||
+    call.children[0] !== less ||
+    call.children[1].kind !== N_PAREN ||
+    written.kind !== N_IDENT ||
+    !takesTypeParamOnce(template) ||
+    !inferredAs(ctx, call.children[1].children[0], written.text, scope)
+  ) {
+    return edits
+  }
+  const open = ctx.operatorStart(less)
+  const close = ctx.operatorStart(call)
+  if (open >= 0 && close >= 0) {
+    edits.push(ctx.edit(open, close + 1, ""))
+  }
+  return edits
+}
+
+/** Whether `template` has one type parameter and one parameter, annotated as that type parameter, bare. */
+const takesTypeParamOnce = (template: TemplateInfo): boolean => {
+  const params = template.decl.children[1].children
+  if (template.typeParams.length !== 1 || params.length !== 1) {
+    return false
+  }
+  const annotation = params[0].children[1]
+  return (
+    annotation.kind === N_TYPE_REF &&
+    annotation.text === template.typeParams[0] &&
+    annotation.children[0].children.length === 0
+  )
+}
+
+/**
+ * Whether `arg` is something inference types as the type named `name`, which
+ * `typeUnchecked` says without checking it. An integer literal is `number`,
+ * which is `i32` or `f64` as the compilation lowers it.
+ */
+const inferredAs = (ctx: CheckContext, arg: Node, name: string, scope: Scope): boolean => {
+  const type = typeUnchecked(ctx, arg, scope)
+  const wanted = name === "number" ? ctx.table.typeName(ctx.numberType()) : name
+  return type >= 0 && ctx.table.typeName(type) === wanted
+}
+
+/**
+ * The type of `expr` where it can be read off without checking it, or -1: a
+ * local's declared (or narrowed) type, an integer literal's `number`, a
+ * string literal and `true` / `false`. The sites that ask have refused the
+ * expression around `expr` and never checked `expr` itself, and checking it
+ * now could report a second diagnostic on a statement that already has one.
+ */
+const typeUnchecked = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  if (expr.kind === N_IDENT) {
+    const local = scope.lookup(expr.text)
+    return local === null ? -1 : scope.typeOf(local)
+  }
+  if (expr.kind === N_NUMBER) {
+    return isFractional(expr.text) ? -1 : ctx.numberType()
+  }
+  if (expr.kind === N_STRING) {
+    return T_STRING
+  }
+  return expr.kind === N_TRUE || expr.kind === N_FALSE ? T_BOOL : -1
 }
 
 /**
@@ -1096,12 +1178,94 @@ export const checkCondition = (ctx: CheckContext, expr: Node, scope: Scope): voi
     return
   }
   if (type !== T_BOOL && type !== T_ERROR) {
-    ctx.error(
+    ctx.errorFix(
       expr,
-      `Condition must be boolean, got ${ctx.table.typeName(type)} (${LANGUAGE} has no truthiness)`
+      `Condition must be boolean, got ${ctx.table.typeName(type)} (${LANGUAGE} has no truthiness)`,
+      truthinessFix(ctx, expr, type)
     )
   }
 }
+
+/**
+ * The comparison that says what a truthiness test of `type` meant, only where
+ * it says exactly that under `tsc` too: an integer is truthy when it is not
+ * `0`, a class or an array behind `| null` when it is not `null` (an object is
+ * always truthy), and a string when it is not empty. A float has none, because
+ * `NaN` is falsy and `NaN !== 0` is true; nor does `string | null`, where `""`
+ * and `null` are both falsy and the reader has to say which one was meant.
+ */
+const truthinessFix = (ctx: CheckContext, expr: Node, type: i32): Edit[] => {
+  if (isInteger(type)) {
+    return appendFix(ctx, expr, bindsTighterThanEquality(expr), " !== 0")
+  }
+  const inner = ctx.table.stripNull(type)
+  if (ctx.table.isNullable(type) && (ctx.table.isStruct(inner) || ctx.table.isArray(inner))) {
+    return appendFix(ctx, expr, bindsTighterThanEquality(expr), " !== null")
+  }
+  if (type === T_STRING) {
+    return appendFix(ctx, expr, isMemberReceiver(expr), ".length !== 0")
+  }
+  const none: Edit[] = []
+  return none
+}
+
+/**
+ * Edits that put `suffix` after `expr`, parenthesising `expr` first unless
+ * `bare` says the suffix already binds to the whole of it. Two insertions
+ * rather than one replacement, so a fix inside `expr` never overlaps this one.
+ */
+const appendFix = (ctx: CheckContext, expr: Node, bare: boolean, suffix: string): Edit[] => {
+  const edits: Edit[] = []
+  if (bare) {
+    edits.push(ctx.edit(expr.end, expr.end, suffix))
+  } else {
+    edits.push(ctx.edit(expr.start, expr.start, "("))
+    edits.push(ctx.edit(expr.end, expr.end, `)${suffix}`))
+  }
+  return edits
+}
+
+/**
+ * Whether `expr`, as written, stays the whole left operand of an `===` or
+ * `!==` written after it: a primary, a unary, or a binary whose operator binds
+ * tighter than equality (arithmetic, a shift, a relation). Anything else —
+ * `a & b`, `a ?? b`, an assignment, a conditional — is parenthesised.
+ */
+const bindsTighterThanEquality = (expr: Node): boolean => {
+  if (expr.kind === N_UNARY || expr.kind === N_NUMBER || expr.kind === N_NEW || expr.kind === N_ARRAY) {
+    return true
+  }
+  if (expr.kind !== N_BINARY) {
+    return isMemberReceiver(expr)
+  }
+  const op = expr.text
+  return (
+    op === "+" ||
+    op === "-" ||
+    op === "*" ||
+    op === "/" ||
+    op === "%" ||
+    op === "**" ||
+    op === "<<" ||
+    op === ">>" ||
+    op === ">>>" ||
+    op === "<" ||
+    op === ">" ||
+    op === "<=" ||
+    op === ">="
+  )
+}
+
+/** Whether `.name` written after `expr` reads a member of the whole of it. */
+const isMemberReceiver = (expr: Node): boolean =>
+  expr.kind === N_IDENT ||
+  expr.kind === N_THIS ||
+  expr.kind === N_CALL ||
+  expr.kind === N_MEMBER ||
+  expr.kind === N_INDEX ||
+  expr.kind === N_PAREN ||
+  expr.kind === N_STRING ||
+  expr.kind === N_TEMPLATE
 
 // ---- Narrowing ---------------------------------------------------------------------
 
@@ -1284,14 +1448,7 @@ const checkCoalesce = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * building them (`src/parents.ts`) — only here, on a program that is already
  * refused, so a program that compiles never pays for the walk.
  */
-const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 =>
-  ctx.errorType(
-    expr,
-    `\`${ctx.textOf(expr)}\` is \`${ctx.table.typeName(type)}\`${maybePlaceReason(ctx, expr)}`
-  )
-
-/** What `refuseMaybe` says after the type: where `expr`, parentheses aside, stands, and the rewrite. */
-const maybePlaceReason = (ctx: CheckContext, expr: Node): string => {
+const refuseMaybe = (ctx: CheckContext, expr: Node, type: i32): i32 => {
   const parents = new ParentTable(ctx.program.file, ctx.program.nodeTypes.length)
   let node = expr
   let parent = linkedParent(parents, node)
@@ -1299,9 +1456,73 @@ const maybePlaceReason = (ctx: CheckContext, expr: Node): string => {
     node = parent
     parent = linkedParent(parents, node)
   }
-  if (parent === null) {
-    return ELSEWHERE
+  const reason = parent === null ? ELSEWHERE : maybePlaceReason(parents, node, parent)
+  ctx.errorFix(
+    expr,
+    `\`${ctx.textOf(expr)}\` is \`${ctx.table.typeName(type)}\`${reason}`,
+    maybeDefaultFix(ctx, expr, type, reason, parent, node !== expr)
+  )
+  return T_ERROR
+}
+
+/**
+ * ` ?? <zero>` after a refused `m.get(k)`, in the three places the rewrite is
+ * plainly that: held in a `let`, passed as an argument, and an operand of
+ * arithmetic, where it is parenthesised unless it already is, since `??` binds
+ * looser than every arithmetic operator. Only a `V` with a literal zero gets
+ * one (`0`, `0.0`, `""`, `false`); a class, an array, a collection or a
+ * nullable `V` has no value that obviously stands in for a missing one.
+ */
+const maybeDefaultFix = (
+  ctx: CheckContext,
+  expr: Node,
+  type: i32,
+  reason: string,
+  parent: Node | null,
+  inParens: boolean
+): Edit[] => {
+  const edits: Edit[] = []
+  const value = ctx.table.refOf(type)
+  const zero = zeroLiteralOf(value)
+  const call = unwrapParens(expr)
+  const isGet = call.kind === N_CALL && call.children[0].kind === N_MEMBER && call.children[0].text === "get"
+  if (zero === "" || !isGet) {
+    return edits
   }
+  if (reason === IN_LET || reason === AS_ARGUMENT || (inParens && isArithmeticOperand(parent, value))) {
+    edits.push(ctx.edit(expr.end, expr.end, ` ?? ${zero}`))
+  } else if (isArithmeticOperand(parent, value)) {
+    edits.push(ctx.edit(expr.start, expr.start, "("))
+    edits.push(ctx.edit(expr.end, expr.end, ` ?? ${zero})`))
+  }
+  return edits
+}
+
+/** Whether a `V` read under `parent` is an operand of binary arithmetic on numbers. */
+const isArithmeticOperand = (parent: Node | null, value: i32): boolean => {
+  if (parent === null || parent.kind !== N_BINARY || !isNumeric(value)) {
+    return false
+  }
+  const op = parent.text
+  return op === "+" || op === "-" || op === "*" || op === "/" || op === "%"
+}
+
+/** The literal zero of `type`, or `""` when it has none a reader would take for "missing". */
+const zeroLiteralOf = (type: i32): string => {
+  if (isInteger(type)) {
+    return "0"
+  }
+  if (isFloat(type)) {
+    return "0.0"
+  }
+  if (type === T_STRING) {
+    return `""`
+  }
+  return type === T_BOOL ? "false" : ""
+}
+
+/** What `refuseMaybe` says after the type: where `node`, the maybe with its parentheses, stands, and the rewrite. */
+const maybePlaceReason = (parents: ParentTable, node: Node, parent: Node): string => {
   switch (parent.kind) {
     case N_VAR_DECL: {
       const list = linkedParent(parents, parent)
@@ -1538,6 +1759,39 @@ export const assignInto = (
 // ---- Calls ---------------------------------------------------------------------
 
 /**
+ * `String(x)` to `` `${x}` ``, which `tsc` reads as the same string for every
+ * `x`. Only the global `String` with one argument: `String()` is `""`, a
+ * second argument is ignored by JavaScript and would be lost, and a local
+ * named `String` is not the global at all. And only for an `x` a template
+ * hole takes — a number, a boolean or a string — which the argument has to
+ * show without being checked (`typeUnchecked`), since this call never checks it.
+ */
+const stringCallFix = (ctx: CheckContext, call: Node, global: boolean, scope: Scope): Edit[] => {
+  const args = call.children[1].children
+  if (!global || call.children[0].text !== "String" || args.length !== 1) {
+    const none: Edit[] = []
+    return none
+  }
+  const type = typeUnchecked(ctx, unwrapParens(args[0]), scope)
+  if (!(isNumeric(type) || type === T_BOOL || type === T_STRING)) {
+    const none: Edit[] = []
+    return none
+  }
+  return templateFix(ctx, call, args[0])
+}
+
+/**
+ * Replace `call` with a template literal holding `value`, parentheses aside,
+ * as its one hole: the conversion to a string the language has. `String(x)`
+ * and `x.toString()` (`checkMethodCall`) share it.
+ */
+export const templateFix = (ctx: CheckContext, call: Node, value: Node): Edit[] => {
+  const edits: Edit[] = []
+  edits.push(ctx.edit(call.start, call.end, "`${" + ctx.textOf(unwrapParens(value)) + "}`"))
+  return edits
+}
+
+/**
  * A call to a name a `nish:` import bound (`readFileSync`, `exit`, and any
  * `as` rename of either). The rule applied is the one the global spelling
  * uses, so there is exactly one of each and the diagnostics keep naming the
@@ -1634,7 +1888,12 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
     }
-    return ctx.errorType(callee, `Unknown function \`${callee.text}\``)
+    ctx.errorFix(
+      callee,
+      `Unknown function \`${callee.text}\``,
+      stringCallFix(ctx, expr, local === null, scope)
+    )
+    return T_ERROR
   }
   const args = expr.children[1]
   if (args.children.length !== sig.paramTypes.length) {
