@@ -2702,6 +2702,58 @@ if (!only || "performance".includes(only)) {
   )
 }
 
+// #207's criteria 1 and 2, measured by hand there and pinned here (#325). The
+// AWFY harness is built as bench/run.mjs builds it, and no port calls `Arena`:
+// what each inner iteration allocates is handed back by the automatic arena
+// scope of the scalar-returning function that called the allocating one (#210,
+// `settleScope` in src/attributes.ts). #207 measured 1.002x and 1.00x; with
+// that scope switched off, Storage 1 1000 peaks at 390 MB and List 1 100000 at
+// 49 MB, against under 2 MB for each. Like `mem_loop_scope_chunk`, the bound is
+// a ratio between two runs of one binary, so the runtime's footprint can move.
+if (!only || "mem_awfy".includes(only)) {
+  if (has("clang")) {
+    const dir = path.join(buildDir, "mem_awfy")
+    const exe = path.join(dir, "harness")
+    const rssExe = path.join(dir, "rss")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const built = spawnSync(
+      NISH,
+      [
+        path.join("bench", "awfy", "main.ts"),
+        "-o",
+        `${path.relative(root, path.join(dir, "awfy"))}${path.sep}`,
+        "--link",
+        path.relative(root, exe),
+        "--profile",
+        "speed",
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const rc = spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], {
+      encoding: "utf8",
+    })
+    const ready = built.status === 0 && rc.status === 0
+    const peak = (args) => {
+      const r = spawnSync(rssExe, [exe, ...args], { encoding: "utf8" })
+      return r.status === 0 ? Number(r.stdout.trim()) : -1
+    }
+    for (const [name, small, large] of [
+      ["Storage", "1", "1000"],
+      ["List", "10", "100000"],
+    ]) {
+      const few = ready ? peak([name, "1", small]) : -1
+      const many = ready ? peak([name, "1", large]) : -1
+      check(
+        `mem_awfy: AWFY ${name} at ${large} inner iterations peaks within 1.25x of ${name} at ${small}`,
+        few > 0 && many > 0 && many <= few * 1.25,
+        `peak of \`harness ${name} 1 ${small}\`: ${few} KB, of \`harness ${name} 1 ${large}\`: ${many} KB\n${built.status === 0 ? "" : built.stderr}${rc.stderr}`
+      )
+    }
+  } else {
+    skip("mem_awfy: the peak resident set runs need clang")
+  }
+}
+
 // ---- WP33: the `portability` diagnostic class --------------------------------------
 // Warnings about the program's TypeScript reading rather than about this build:
 // where the same source, run under Node, runs to the end and answers
