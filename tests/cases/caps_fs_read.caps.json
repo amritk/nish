@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "entry": "caps_fs_read.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "caps_fs_read.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "half",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "caps_fs_read.ts:10:15", "calls": "sizeOf" },
+                  { "function": "sizeOf", "at": "caps_fs_read.ts:5:39", "calls": "readFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

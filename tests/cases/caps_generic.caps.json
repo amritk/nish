@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "entry": "caps_generic.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "caps_generic.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "caps_generic.ts:18:15", "calls": "pick<string, firstLine>" },
+                  { "function": "pick<string, firstLine>", "at": "caps_generic.ts:6:53", "calls": "firstLine" },
+                  { "function": "firstLine", "at": "caps_generic.ts:11:16", "calls": "readFileSync" }
+                ]
+              }
+            },
+            {
+              "name": "pick<i32, double>",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "pick<string, firstLine>",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "pick<string, firstLine>", "at": "caps_generic.ts:6:53", "calls": "firstLine" },
+                  { "function": "firstLine", "at": "caps_generic.ts:11:16", "calls": "readFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

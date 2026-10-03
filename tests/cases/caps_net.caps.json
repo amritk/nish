@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_net.ts",
+  "deterministic": false,
+  "capabilities": ["net"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["net"],
+      "modules": [
+        {
+          "path": "caps_net.ts",
+          "capabilities": ["net"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["net"],
+              "witnesses": {
+                "net": [
+                  { "function": "main", "at": "caps_net.ts:11:15", "calls": "encode" },
+                  { "function": "encode", "at": "caps_net.ts:7:36", "calls": "netAddress" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
