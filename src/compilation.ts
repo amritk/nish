@@ -806,9 +806,8 @@ export class Compilation {
       // dumped at all. `compile.ts` always hands over a root, so the command
       // never reaches this: a `std/` in whatever directory it was started in
       // is not the library (docs/security/cli.md, CLI-2).
-      const root = this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
       const std: ResolvedModule = {
-        path: stdModulePath(root, specifier),
+        path: stdModulePath(this.libraryRoot(), specifier),
         name: stdModuleName(specifier),
         packageName: CLI,
         error: "",
@@ -1711,6 +1710,11 @@ export class Compilation {
     this.analysisUnits = units
     this.facts = facts
     return facts
+  }
+
+  /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
+  libraryRoot(): string {
+    return this.opts.packageRoot.length > 0 ? this.opts.packageRoot : "."
   }
 
   /**

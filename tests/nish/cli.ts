@@ -94,6 +94,8 @@ const advertisedFlags = (): string[] => [
   "--profile",
   "--warn-portability",
   "--fix",
+  "--emit-capabilities",
+  "[--capabilities]",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -586,6 +588,86 @@ const checkPortabilityObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is `portability`", cliField(objects[1], "severity"), "portability");
   t.eqStr("and whose code is the zero-fill row's", cliField(objects[1], "code"), "NL8005");
+};
+
+/**
+ * WP35, the capability report: the one surface this file pins byte for byte,
+ * because its stability is the promise (docs/wp35-capabilities.md §5). A tool
+ * diffs it in CI, so the key order, the sorted arrays, the relative paths and
+ * the trailing newline are the contract and not its wording. The golden is the
+ * corpus case's own, `tests/cases/caps_generic.caps.json`, compiled here from
+ * the same path, and the paths in it are relative to the entry's directory, so
+ * where this file sits does not move a byte.
+ *
+ * The summary line `--capabilities` prints is pinned exactly too, on stderr
+ * with stdout untouched, in a compile and before a `nish run` starts the
+ * program; the run is one counted skip without env(1) or a C compiler.
+ */
+const checkCapabilities = (t: Suite, cli: Cli, env: boolean): void => {
+  const source = "tests/cases/caps_generic.ts";
+  const report = `${WORK}/caps.json`;
+  const noFile = cli.plain("caps_no_file", [source, "--emit-capabilities"]);
+  t.eqI32("--emit-capabilities with no file is a usage error, exit 2", noFile.status, 2);
+  t.contains("and names the flag", noFile.stderr, "--emit-capabilities needs a file");
+  t.eqStr("and says nothing on stdout", trim(noFile.stdout), "");
+
+  removeTree(report);
+  const run = cli.plain("caps_report", [source, "-o", `${WORK}/caps.ll`, "--emit-capabilities", report]);
+  if (!t.eqI32("--emit-capabilities exits 0", run.status, 0)) {
+    return;
+  }
+  t.eqStr("and leaves stdout empty", trim(run.stdout), "");
+  t.contains("and says on stderr where it wrote the report", run.stderr, `wrote ${report}`);
+  const got = readOrEmpty(report);
+  const want = readOrEmpty("tests/cases/caps_generic.caps.json");
+  t.eqLines("the report is the golden, line for line", splitLines(got), splitLines(want));
+  t.eqBool("and byte for byte, the trailing newline included", got === want && got.endsWith("}\n"), true);
+  t.eqStr("its version is 1", jsonFieldOr(got, "version"), "1");
+  t.eqStr("its entry is named from its own directory", jsonFieldOr(got, "entry"), "caps_generic.ts");
+
+  const pure = cli.plain("caps_line_pure", ["tests/cases/caps_pure.ts", "-o", `${WORK}/caps.ll`, "--capabilities"]);
+  t.eqStr(
+    "--capabilities prints `none (deterministic)` for a program that reaches nothing",
+    firstLine(pure.stderr),
+    "capabilities: none (deterministic)"
+  );
+  t.eqStr("and nothing on stdout", trim(pure.stdout), "");
+  const loud = cli.plain("caps_line_loud", [source, "-o", `${WORK}/caps.ll`, "--capabilities"]);
+  t.eqStr(
+    "--capabilities names the program's set, in the fixed order",
+    firstLine(loud.stderr),
+    "capabilities: fs.read (not deterministic)"
+  );
+
+  if (!env) {
+    t.skip("nish run --capabilities", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("nish run --capabilities", `cannot resolve ${WORK}`);
+    return;
+  }
+  const ran = cli.run("caps_run", [`XDG_CACHE_HOME=${abs}/caps-cache`], ["run", "--capabilities", "tests/cases/caps_pure.ts"]);
+  if (ran.status === 3 && contains(ran.stderr, "no usable C compiler")) {
+    t.skip("nish run --capabilities", "no C compiler, so nothing can be linked");
+    return;
+  }
+  t.eqI32("nish run --capabilities runs the program, and answers its status", ran.status, 0);
+  t.eqStr("and prints exactly the one line on stderr", ran.stderr, "capabilities: none (deterministic)\n");
+  t.eqStr("and leaves the program's stdout alone", ran.stdout, "true\n6\n3.5\n");
+};
+
+/** The first line of a captured stream, without its newline. */
+const firstLine = (text: string): string => {
+  const lines = splitLines(text);
+  return lines.length > 0 ? lines[0] : "";
+};
+
+/** A top-level field of a JSON object, as written, or `""` when it is missing. */
+const jsonFieldOr = (object: string, name: string): string => {
+  const value = jsonField(object, name);
+  return value === null ? "" : value;
 };
 
 /**
@@ -1266,6 +1348,7 @@ export const main = (): number => {
   checkPortabilityObjects(t, cli);
   checkFixField(t, cli);
   checkDumps(t, cli);
+  checkCapabilities(t, cli, env);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);
