@@ -60,7 +60,6 @@ import path from "node:path"
 import * as lib from "./lib.js"
 import * as cmp from "../nish-cmp.js"
 import ts from "typescript"
-import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { root } from "../self/corpus.js"
 
@@ -700,42 +699,6 @@ const unnamedDeclarations = (declarations, changelogText, pending) =>
   declarations.filter((d) => !cmp.isNamed(d.changelog, changelogText, pending))
 
 /**
- * The release section `scripts/changelog-gen.mjs` would render for the
- * commits since the last release, as `{ text }` or `{ error }`. This is
- * `tests/nish-cmp.js`'s `pendingNotes`, which that file does not export: a
- * shallow checkout or one with no tags is deepened first, because the
- * generator would otherwise render the fetched commits as a first release
- * rather than fail. In CI the `nish-cmp` step before this one has already
- * deepened it.
- */
-const pendingNotes = () => {
-  const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8" })
-  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
-  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true"
-  if (shallow()) {
-    git(["fetch", "--quiet", "--unshallow", "--tags", "origin"])
-  } else if (describe().status !== 0) {
-    git(["fetch", "--quiet", "--tags", "origin"])
-  }
-  if (shallow() || describe().status !== 0) {
-    return {
-      error:
-        "the commits since the last release tag cannot be read: the checkout is shallow or has no v* tag",
-    }
-  }
-  const rendered = spawnSync(
-    process.execPath,
-    [path.join(root, "scripts", "changelog-gen.mjs"), "--stdout", "md"],
-    {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    }
-  )
-  return rendered.status === 0 ? { text: rendered.stdout } : { error: rendered.stderr.trim() }
-}
-
-/**
  * The reference and the candidate this mode compares, resolved the way
  * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
  * `NISH_BOOTSTRAP` naming the seed. With no seed there is nothing to compare
@@ -898,7 +861,7 @@ const stage1Run = ({
   const stale = staleDeclarations(DECLARED, used)
   const changelogFile = path.join(root, "CHANGELOG.md")
   const changelogText = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : ""
-  const pending = DECLARED.some((d) => !changelogText.includes(d.changelog)) ? pendingNotes() : null
+  const pending = DECLARED.some((d) => !changelogText.includes(d.changelog)) ? cmp.pendingNotes() : null
   const unnamed = unnamedDeclarations(DECLARED, changelogText, pending)
   return { seed, count, pair, agreed, declared, stale, unnamed, pending, files, lines, disagreements }
 }
