@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1245730 dump lines live, 76 distinct modules.
+# 76 programs, 1245716 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -35484,112 +35484,105 @@ function sha256Constants(): u32[] -> @sha256Constants
 function rotr(x: u32, n: u32): u32 -> @rotr
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 82:9 thirtyTwo: u32 (const)
 function paddedByte(text: string, j: i32, padded: i32): u32 -> @paddedByte
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   stackSites=0 stackLocals=0
-  local 93:9 n: i32 (const)
-  local 100:9 fromEnd: i32 (const)
-  local 104:9 eight: u64 (const)
-  local 105:9 bits: u64 (const)
+  local 90:9 n: i32 (const)
+  local 97:9 fromEnd: i32 (const)
+  local 101:9 bits: u64 (const)
 function sha256Hex(text: string): string -> @sha256Hex [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   escaping: text
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText hexDigitLower nish_panic_index paddedByte rotr sha256Constants
   stackSites=3 stackLocals=3
-  local 117:9 k: u32[] (const)
-  callee 117:13 sha256Constants -> @sha256Constants
-  local 118:9 h: u32[] (const)
-  local 121:9 w: u32[] (const)
-  local 122:9 n: i32 (const)
-  local 124:9 padded: i32 (const)
-  local 125:9 eight: u32 (const)
-  local 126:9 sixteen: u32 (const)
-  local 127:9 twentyFour: u32 (const)
-  local 128:7 block: i32 (let)
-  local 130:9 t: i32 (let)
-  local 132:13 at: i32 (const)
-  local 133:11 word: u32 (let)
-  callee 142:12 paddedByte -> @paddedByte
-  callee 143:12 paddedByte -> @paddedByte
-  callee 144:12 paddedByte -> @paddedByte
-  callee 145:11 paddedByte -> @paddedByte
-  local 151:13 w15: u32 (const)
-  local 152:13 w2: u32 (const)
-  local 153:13 three: u32 (const)
-  local 154:13 ten: u32 (const)
-  local 155:13 s0: u32 (const)
-  callee 155:18 rotr -> @rotr
-  callee 155:33 rotr -> @rotr
-  local 156:13 s1: u32 (const)
-  callee 156:18 rotr -> @rotr
-  callee 156:33 rotr -> @rotr
-  local 160:9 a: u32 (let)
-  local 161:9 b: u32 (let)
-  local 162:9 c: u32 (let)
-  local 163:9 d: u32 (let)
-  local 164:9 e: u32 (let)
-  local 165:9 f: u32 (let)
-  local 166:9 g: u32 (let)
-  local 167:9 hh: u32 (let)
-  local 170:13 big1: u32 (const)
-  callee 170:20 rotr -> @rotr
-  callee 170:33 rotr -> @rotr
-  callee 170:47 rotr -> @rotr
-  local 171:13 choose: u32 (const)
-  local 172:13 t1: u32 (const)
-  local 173:13 big0: u32 (const)
-  callee 173:20 rotr -> @rotr
-  callee 173:33 rotr -> @rotr
-  callee 173:47 rotr -> @rotr
-  local 174:13 majority: u32 (const)
-  local 175:13 t2: u32 (const)
-  local 196:9 out: StringBuilder (const)
-  callee 196:15 new StringBuilder -> @StringBuilder.constructor
-  local 197:14 word: u32 (const)
-  local 198:9 shift: i32 (let)
-  callee 200:7 StringBuilder.add -> @StringBuilder.add
-  callee 200:15 hexDigitLower -> @hexDigitLower
-  callee 204:10 StringBuilder.toText -> @StringBuilder.toText
+  local 113:9 k: u32[] (const)
+  callee 113:13 sha256Constants -> @sha256Constants
+  local 114:9 h: u32[] (const)
+  local 117:9 w: u32[] (const)
+  local 118:9 n: i32 (const)
+  local 120:9 padded: i32 (const)
+  local 121:7 block: i32 (let)
+  local 123:9 t: i32 (let)
+  local 125:13 at: i32 (const)
+  local 126:11 word: u32 (let)
+  callee 137:12 paddedByte -> @paddedByte
+  callee 138:12 paddedByte -> @paddedByte
+  callee 139:12 paddedByte -> @paddedByte
+  callee 140:11 paddedByte -> @paddedByte
+  local 146:13 w15: u32 (const)
+  local 147:13 w2: u32 (const)
+  local 148:13 s0: u32 (const)
+  callee 148:18 rotr -> @rotr
+  callee 148:33 rotr -> @rotr
+  local 149:13 s1: u32 (const)
+  callee 149:18 rotr -> @rotr
+  callee 149:33 rotr -> @rotr
+  local 153:9 a: u32 (let)
+  local 154:9 b: u32 (let)
+  local 155:9 c: u32 (let)
+  local 156:9 d: u32 (let)
+  local 157:9 e: u32 (let)
+  local 158:9 f: u32 (let)
+  local 159:9 g: u32 (let)
+  local 160:9 hh: u32 (let)
+  local 164:13 big1: u32 (const)
+  callee 164:20 rotr -> @rotr
+  callee 164:33 rotr -> @rotr
+  callee 164:47 rotr -> @rotr
+  local 165:13 choose: u32 (const)
+  local 166:13 t1: u32 (const)
+  local 167:13 big0: u32 (const)
+  callee 167:20 rotr -> @rotr
+  callee 167:33 rotr -> @rotr
+  callee 167:47 rotr -> @rotr
+  local 168:13 majority: u32 (const)
+  local 169:13 t2: u32 (const)
+  local 190:9 out: StringBuilder (const)
+  callee 190:15 new StringBuilder -> @StringBuilder.constructor
+  local 191:14 word: u32 (const)
+  local 192:9 shift: i32 (let)
+  callee 194:7 StringBuilder.add -> @StringBuilder.add
+  callee 194:15 hexDigitLower -> @hexDigitLower
+  callee 198:10 StringBuilder.toText -> @StringBuilder.toText
 function fileFingerprint(path: string): string -> @fileFingerprint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_or_null
   calls: nish_read_file_or_null sha256Hex
   stackSites=0 stackLocals=0
-  local 214:9 text: string | null (const)
-  callee 215:32 sha256Hex -> @sha256Hex
+  local 208:9 text: string | null (const)
+  callee 209:32 sha256Hex -> @sha256Hex
 function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, debugInfo: boolean, threads: boolean, cc: string): string -> @runCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 237:9 key: StringBuilder (const)
-  callee 237:15 new StringBuilder -> @StringBuilder.constructor
+  local 231:9 key: StringBuilder (const)
+  callee 231:15 new StringBuilder -> @StringBuilder.constructor
+  callee 232:3 StringBuilder.add -> @StringBuilder.add
+  callee 233:3 StringBuilder.add -> @StringBuilder.add
+  callee 234:3 StringBuilder.add -> @StringBuilder.add
+  callee 235:3 StringBuilder.add -> @StringBuilder.add
+  callee 236:3 StringBuilder.add -> @StringBuilder.add
+  callee 236:23 fileFingerprint -> @fileFingerprint
+  callee 237:3 StringBuilder.add -> @StringBuilder.add
+  callee 237:24 fileFingerprint -> @fileFingerprint
   callee 238:3 StringBuilder.add -> @StringBuilder.add
+  callee 238:27 fileFingerprint -> @fileFingerprint
   callee 239:3 StringBuilder.add -> @StringBuilder.add
+  callee 239:33 fileFingerprint -> @fileFingerprint
   callee 240:3 StringBuilder.add -> @StringBuilder.add
+  callee 240:29 fileFingerprint -> @fileFingerprint
   callee 241:3 StringBuilder.add -> @StringBuilder.add
+  callee 241:28 fileFingerprint -> @fileFingerprint
   callee 242:3 StringBuilder.add -> @StringBuilder.add
-  callee 242:23 fileFingerprint -> @fileFingerprint
-  callee 243:3 StringBuilder.add -> @StringBuilder.add
-  callee 243:24 fileFingerprint -> @fileFingerprint
-  callee 244:3 StringBuilder.add -> @StringBuilder.add
-  callee 244:27 fileFingerprint -> @fileFingerprint
-  callee 245:3 StringBuilder.add -> @StringBuilder.add
-  callee 245:33 fileFingerprint -> @fileFingerprint
-  callee 246:3 StringBuilder.add -> @StringBuilder.add
-  callee 246:29 fileFingerprint -> @fileFingerprint
-  callee 247:3 StringBuilder.add -> @StringBuilder.add
-  callee 247:28 fileFingerprint -> @fileFingerprint
-  callee 248:3 StringBuilder.add -> @StringBuilder.add
-  callee 248:32 fileFingerprint -> @fileFingerprint
-  local 249:14 module: EmittedModule (const)
-  callee 250:5 StringBuilder.add -> @StringBuilder.add
-  callee 251:5 StringBuilder.add -> @StringBuilder.add
-  callee 253:10 StringBuilder.toText -> @StringBuilder.toText
+  callee 242:32 fileFingerprint -> @fileFingerprint
+  local 243:14 module: EmittedModule (const)
+  callee 244:5 StringBuilder.add -> @StringBuilder.add
+  callee 245:5 StringBuilder.add -> @StringBuilder.add
+  callee 247:10 StringBuilder.toText -> @StringBuilder.toText
 module src/dump-ast.ts
 import astLines from "./ast-text" -> function @astLines
 import SourceFile from "./diagnostics" -> struct SourceFile
