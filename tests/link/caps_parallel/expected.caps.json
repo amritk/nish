@@ -20,7 +20,14 @@
                 "clock": [
                   { "function": "main", "at": "main.ts:16:17", "calls": "monotonicNanos" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "main.ts:13:22", "allowed": true },
+                { "kind": "oom", "at": "main.ts:14:22", "allowed": true },
+                { "kind": "parallel-length", "at": "main.ts:15:3", "proven": false, "callee": "parallelMapInto<i32, i32, square>" },
+                { "kind": "oom", "at": "main.ts:17:3", "allowed": true },
+                { "kind": "index", "at": "main.ts:17:15", "proven": false }
+              ]
             }
           ]
         }
@@ -38,13 +45,19 @@
               "name": "parallelMapInto<i32, i32, square>",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/threads.ts:151:5", "callee": "dstTooShort", "via": "panic" }
+              ]
             },
             {
               "name": "scope",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "oom", "at": "std/threads.ts:238:41", "allowed": true }
+              ]
             }
           ]
         }

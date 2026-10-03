@@ -19,9 +19,8 @@ declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 nou
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_exit(i32 noundef) #3
-declare void @nish_panic_div(i1 noundef zeroext) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -97,23 +96,11 @@ entry:
 
 if.then:
   %4 = call i32 @Random.next(%struct.Random* %random)
-  %5 = icmp eq i32 10, 0
-  %6 = icmp eq i32 %4, -2147483648
-  %7 = icmp eq i32 10, -1
-  %8 = and i1 %6, %7
-  %9 = or i1 %5, %8
-  br i1 %9, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %5)
-  unreachable
-
-div.ok:
-  %10 = srem i32 %4, 10
-  %11 = add nsw i32 %10, 1
-  %12 = sext i32 %11 to i64
-  %13 = icmp ule i64 %12, 2147483647
-  br i1 %13, label %len.ok, label %len.fail
+  %5 = srem i32 %4, 10
+  %6 = add nsw i32 %5, 1
+  %7 = sext i32 %6 to i64
+  %8 = icmp ule i64 %7, 2147483647
+  br i1 %8, label %len.ok, label %len.fail
 
 len.fail:
   call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
@@ -121,65 +108,65 @@ len.fail:
   unreachable
 
 len.ok:
-  %14 = call i8* @nish_alloc_struct(i64 24)
-  %15 = bitcast i8* %14 to %struct.nish_array*
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
-  store i64 %12, i64* %16, align 8, !alias.scope !13, !noalias !14, !tbaa !18
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 1
-  store i64 %12, i64* %17, align 8, !alias.scope !13, !noalias !14, !tbaa !19
-  %18 = mul i64 %12, 8
-  %19 = call i8* @nish_alloc_struct(i64 %18)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %19, i8 0, i64 %18, i1 false), !alias.scope !14, !noalias !13
-  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
-  store i8* %19, i8** %20, align 8, !alias.scope !13, !noalias !14, !tbaa !20
-  ret %struct.nish_array* %15
+  %9 = call i8* @nish_alloc_struct(i64 24)
+  %10 = bitcast i8* %9 to %struct.nish_array*
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
+  store i64 %7, i64* %11, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 1
+  store i64 %7, i64* %12, align 8, !alias.scope !13, !noalias !14, !tbaa !19
+  %13 = mul i64 %7, 8
+  %14 = call i8* @nish_alloc_struct(i64 %13)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %14, i8 0, i64 %13, i1 false), !alias.scope !14, !noalias !13
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  store i8* %14, i8** %15, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  ret %struct.nish_array* %10
 
 if.end:
-  %21 = call i8* @nish_alloc_struct(i64 24)
-  %22 = bitcast i8* %21 to %struct.nish_array*
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
-  store i64 4, i64* %23, align 8, !alias.scope !13, !noalias !14, !tbaa !18
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 1
-  store i64 4, i64* %24, align 8, !alias.scope !13, !noalias !14, !tbaa !19
-  %25 = mul i64 4, 8
-  %26 = call i8* @nish_alloc_struct(i64 %25)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %26, i8 0, i64 %25, i1 false), !alias.scope !14, !noalias !13
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 2
-  store i8* %26, i8** %27, align 8, !alias.scope !13, !noalias !14, !tbaa !20
-  store %struct.nish_array* %22, %struct.nish_array** %arr.addr, align 8
+  %16 = call i8* @nish_alloc_struct(i64 24)
+  %17 = bitcast i8* %16 to %struct.nish_array*
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  store i64 4, i64* %18, align 8, !alias.scope !13, !noalias !14, !tbaa !18
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 1
+  store i64 4, i64* %19, align 8, !alias.scope !13, !noalias !14, !tbaa !19
+  %20 = mul i64 4, 8
+  %21 = call i8* @nish_alloc_struct(i64 %20)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %21, i8 0, i64 %20, i1 false), !alias.scope !14, !noalias !13
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  store i8* %21, i8** %22, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  store %struct.nish_array* %17, %struct.nish_array** %arr.addr, align 8
   store i32 0, i32* %i.addr, align 4
-  %28 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 2
-  %30 = load i8*, i8** %29, align 8, !alias.scope !13, !noalias !14, !tbaa !20
+  %23 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !13, !noalias !14, !tbaa !20
   br label %for.cond
 
 for.cond:
-  %31 = load i32, i32* %i.addr, align 4
-  %32 = icmp slt i32 %31, 4
-  br i1 %32, label %for.body, label %for.end
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = icmp slt i32 %26, 4
+  br i1 %27, label %for.body, label %for.end
 
 for.body:
-  %33 = load i32, i32* %i.addr, align 4
-  %34 = sext i32 %33 to i64
-  %35 = call i8* @nish_alloc_struct(i64 8)
-  %36 = bitcast i8* %35 to %struct.ArrayTree*
-  %37 = sub nsw i32 %depth, 1
-  %38 = call %struct.nish_array* @Storage.buildTreeDepth(%struct.Storage* %this, i32 %37, %struct.Random* %random)
-  call void @ArrayTree.constructor(%struct.ArrayTree* %36, %struct.nish_array* %38)
-  %39 = bitcast i8* %30 to %struct.ArrayTree**
-  %40 = getelementptr inbounds %struct.ArrayTree*, %struct.ArrayTree** %39, i64 %34
-  store %struct.ArrayTree* %36, %struct.ArrayTree** %40, align 8, !alias.scope !14, !noalias !13, !tbaa !22
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = sext i32 %28 to i64
+  %30 = call i8* @nish_alloc_struct(i64 8)
+  %31 = bitcast i8* %30 to %struct.ArrayTree*
+  %32 = sub nsw i32 %depth, 1
+  %33 = call %struct.nish_array* @Storage.buildTreeDepth(%struct.Storage* %this, i32 %32, %struct.Random* %random)
+  call void @ArrayTree.constructor(%struct.ArrayTree* %31, %struct.nish_array* %33)
+  %34 = bitcast i8* %25 to %struct.ArrayTree**
+  %35 = getelementptr inbounds %struct.ArrayTree*, %struct.ArrayTree** %34, i64 %29
+  store %struct.ArrayTree* %31, %struct.ArrayTree** %35, align 8, !alias.scope !14, !noalias !13, !tbaa !22
   br label %for.inc
 
 for.inc:
-  %41 = load i32, i32* %i.addr, align 4
-  %42 = add nsw i32 %41, 1
-  store i32 %42, i32* %i.addr, align 4
+  %36 = load i32, i32* %i.addr, align 4
+  %37 = add nsw i32 %36, 1
+  store i32 %37, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %43 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
-  ret %struct.nish_array* %43
+  %38 = load %struct.nish_array*, %struct.nish_array** %arr.addr, align 8
+  ret %struct.nish_array* %38
 }
 
 define noundef i32 @nish_main() #1 {
@@ -236,8 +223,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

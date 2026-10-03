@@ -6,19 +6,18 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare void @nish.parallelMapInto$i32$i32$fn.3.mix(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare void @nish_free_arena() #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
-declare void @nish_exit(i32 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare void @nish_panic_div(i1 noundef zeroext) #4
+declare void @nish.parallelMapInto$i32$i32$fn.3.mix(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #3
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #3
+declare void @nish_exit(i32 noundef) #4
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -46,23 +45,11 @@ define hidden noundef i32 @mix(i32 noundef %x) #0 {
 entry:
   %0 = mul nsw i32 %x, 31
   %1 = add nsw i32 %0, 7
-  %2 = icmp eq i32 1000, 0
-  %3 = icmp eq i32 %1, -2147483648
-  %4 = icmp eq i32 1000, -1
-  %5 = and i1 %3, %4
-  %6 = or i1 %2, %5
-  br i1 %6, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %2)
-  unreachable
-
-div.ok:
-  %7 = srem i32 %1, 1000
-  ret i32 %7
+  %2 = srem i32 %1, 1000
+  ret i32 %2
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %n.addr = alloca i32, align 4
   %src.addr = alloca %struct.nish_array*, align 8
@@ -247,19 +234,20 @@ bounds.ok.2:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { noreturn nounwind }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

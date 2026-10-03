@@ -21,11 +21,10 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
-declare void @nish_panic_div(i1 noundef zeroext) #4
-declare i64 @llvm.smin.i64(i64, i64) #5
-declare i64 @llvm.smax.i64(i64, i64) #5
+declare i64 @llvm.smin.i64(i64, i64) #4
+declare i64 @llvm.smax.i64(i64, i64) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -74,57 +73,45 @@ entry:
 
 for.cond:
   %5 = load i32, i32* %i.addr, align 4
-  %6 = icmp eq i32 7, 0
-  %7 = icmp eq i32 %n, -2147483648
-  %8 = icmp eq i32 7, -1
-  %9 = and i1 %7, %8
-  %10 = or i1 %6, %9
-  br i1 %10, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %6)
-  unreachable
-
-div.ok:
-  %11 = srem i32 %n, 7
-  %12 = add nsw i32 64, %11
-  %13 = icmp slt i32 %5, %12
-  br i1 %13, label %for.body, label %for.end
+  %6 = srem i32 %n, 7
+  %7 = add nsw i32 64, %6
+  %8 = icmp slt i32 %5, %7
+  br i1 %8, label %for.body, label %for.end
 
 for.body:
-  %14 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 0
-  %17 = load i64, i64* %16, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 1
-  %19 = load i64, i64* %18, align 8, !alias.scope !8, !noalias !9, !tbaa !14
-  %20 = icmp eq i64 %17, %19
-  br i1 %20, label %push.grow, label %push.store
+  %9 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %12 = load i64, i64* %11, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 1
+  %14 = load i64, i64* %13, align 8, !alias.scope !8, !noalias !9, !tbaa !14
+  %15 = icmp eq i64 %12, %14
+  br i1 %15, label %push.grow, label %push.store
 
 push.grow:
-  call void @nish_array_grow(%struct.nish_array* %14, i64 4)
+  call void @nish_array_grow(%struct.nish_array* %9, i64 4)
   br label %push.store
 
 push.store:
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %14, i64 0, i32 2
-  %22 = load i8*, i8** %21, align 8, !alias.scope !8, !noalias !9, !tbaa !15
-  %23 = bitcast i8* %22 to i32*
-  %24 = getelementptr inbounds i32, i32* %23, i64 %17
-  store i32 %15, i32* %24, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %25 = add i64 %17, 1
-  store i64 %25, i64* %16, align 8, !alias.scope !8, !noalias !9, !tbaa !13
-  %26 = trunc i64 %25 to i32
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !8, !noalias !9, !tbaa !15
+  %18 = bitcast i8* %17 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 %12
+  store i32 %10, i32* %19, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %20 = add i64 %12, 1
+  store i64 %20, i64* %11, align 8, !alias.scope !8, !noalias !9, !tbaa !13
+  %21 = trunc i64 %20 to i32
   br label %for.inc
 
 for.inc:
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = add nsw i32 %27, 1
-  store i32 %28, i32* %i.addr, align 4
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %29 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  ret %struct.nish_array* %29
+  %24 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  ret %struct.nish_array* %24
 }
 
 define internal noundef nonnull align 8 dereferenceable(4) %struct.Box* @summarise(i32 noundef %rounds) #1 {
@@ -319,9 +306,8 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

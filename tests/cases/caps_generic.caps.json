@@ -22,13 +22,18 @@
                   { "function": "pick<string, firstLine>", "at": "caps_generic.ts:6:53", "calls": "firstLine" },
                   { "function": "firstLine", "at": "caps_generic.ts:11:16", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_generic.ts:17:3", "allowed": true },
+                { "kind": "call", "at": "caps_generic.ts:18:15", "callee": "pick<string, firstLine>", "via": "io-exit" }
+              ]
             },
             {
               "name": "pick<i32, double>",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": []
             },
             {
               "name": "pick<string, firstLine>",
@@ -39,7 +44,10 @@
                   { "function": "pick<string, firstLine>", "at": "caps_generic.ts:6:53", "calls": "firstLine" },
                   { "function": "firstLine", "at": "caps_generic.ts:11:16", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "caps_generic.ts:6:53", "callee": "firstLine", "via": "io-exit" }
+              ]
             }
           ]
         }

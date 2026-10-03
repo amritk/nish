@@ -1,0 +1,2 @@
+error: `expect` may panic here
+`expect` panics on an `Err`: hand the error on with `orReturn`, or supply a value with `unwrapOr`

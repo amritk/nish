@@ -1,0 +1,2 @@
+error: This call to `trim` may panic: it reaches the `index`
+outside the no-panic scope this call is in

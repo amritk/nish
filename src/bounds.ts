@@ -175,7 +175,17 @@ import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, inlineElementS
 import { Options } from "./options"
 import { isAsciiText } from "./strings"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
-import { DeclaredRange, T_BOOL, T_I32, T_I64, T_STRING, TypeTable, isNumeric, isUnsigned } from "./types"
+import {
+  DeclaredRange,
+  T_BOOL,
+  T_I32,
+  T_I64,
+  T_STRING,
+  TypeTable,
+  isInteger,
+  isNumeric,
+  isUnsigned,
+} from "./types"
 
 /** The largest bound the fold carries; a literal past it is answered "not a bound". */
 const I32_MAX: i64 = 2147483647
@@ -186,6 +196,7 @@ const FACT_AT_MOST: i32 = 2
 const FACT_MAX_INDEX: i32 = 3
 const FACT_MIN_LENGTH: i32 = 4
 const FACT_MIN_VALUE: i32 = 5
+const FACT_EXCLUDES: i32 = 6
 
 /**
  * One fact. `v` is the index variable for every kind but `minLength`, whose `v`
@@ -239,6 +250,12 @@ export class State {
   minLengthValue: i32[]
   minValueVar: Local[]
   minValueValue: i32[]
+  /**
+   * `v !== n`, for the two values a divisor must not take, `0` and `-1`: the
+   * only family whose `n` may be negative, and read only by `provesDivisor`.
+   */
+  excludedVar: Local[]
+  excludedValue: i32[]
 
   constructor(table: TypeTable) {
     this.table = table
@@ -253,6 +270,8 @@ export class State {
     this.minLengthValue = []
     this.minValueVar = []
     this.minValueValue = []
+    this.excludedVar = []
+    this.excludedValue = []
   }
 }
 
@@ -291,6 +310,12 @@ const cloneState = (s: State): State => {
     out.minValueValue.push(s.minValueValue[k])
     k = k + 1
   }
+  k = 0
+  while (k < s.excludedVar.length) {
+    out.excludedVar.push(s.excludedVar[k])
+    out.excludedValue.push(s.excludedValue[k])
+    k = k + 1
+  }
   return out
 }
 
@@ -312,6 +337,8 @@ const copyInto = (into: State, from: State): void => {
   into.minLengthValue = from.minLengthValue
   into.minValueVar = from.minValueVar
   into.minValueValue = from.minValueValue
+  into.excludedVar = from.excludedVar
+  into.excludedValue = from.excludedValue
 }
 
 // ---- Reading the state ------------------------------------------------------------
@@ -448,7 +475,26 @@ const minValueOf = (state: State, v: Local): i32 => {
 
 // ---- Writing the state ------------------------------------------------------------
 
+/** `v !== n`, recorded by a guard (`addDisequalityFacts`). */
+const knownExcludes = (state: State, v: Local, n: i32): boolean => {
+  let k = 0
+  while (k < state.excludedVar.length) {
+    if (state.excludedVar[k] === v && state.excludedValue[k] === n) {
+      return true
+    }
+    k = k + 1
+  }
+  return false
+}
+
 const addFact = (state: State, fact: Fact): void => {
+  if (fact.kind === FACT_EXCLUDES) {
+    if (!knownExcludes(state, fact.v, fact.n)) {
+      state.excludedVar.push(fact.v)
+      state.excludedValue.push(fact.n)
+    }
+    return
+  }
   if (fact.kind === FACT_NON_NEGATIVE) {
     for (const x of state.nonNegative) {
       if (x === fact.v) {
@@ -551,7 +597,28 @@ const mentions = (state: State, v: Local): boolean => {
       return true
     }
   }
+  for (const x of state.excludedVar) {
+    if (x === v) {
+      return true
+    }
+  }
   return false
+}
+
+/** Drop every `v !== n`: any write to `v` may land on the value it excluded. */
+const forgetExcluded = (state: State, v: Local): void => {
+  const kept: Local[] = []
+  const values: i32[] = []
+  let k = 0
+  while (k < state.excludedVar.length) {
+    if (state.excludedVar[k] !== v) {
+      kept.push(state.excludedVar[k])
+      values.push(state.excludedValue[k])
+    }
+    k = k + 1
+  }
+  state.excludedVar = kept
+  state.excludedValue = values
 }
 
 /** Drop the upper bounds of `v` and keep its lower one: what an increment leaves behind. */
@@ -595,6 +662,7 @@ const forgetUpperBounds = (state: State, v: Local): void => {
   }
   state.maxIndexVar = maxVar
   state.maxIndexValue = maxValue
+  forgetExcluded(state, v)
 }
 
 /**
@@ -691,6 +759,7 @@ const forgetLowerBounds = (state: State, v: Local): void => {
   }
   state.minValueVar = floorVar
   state.minValueValue = floorValue
+  forgetExcluded(state, v)
 }
 
 /**
@@ -794,6 +863,14 @@ const intersect = (a: State, b: State): State => {
     if (other > 0) {
       out.minValueVar.push(a.minValueVar[k])
       out.minValueValue.push(a.minValueValue[k] < other ? a.minValueValue[k] : other)
+    }
+    k = k + 1
+  }
+  k = 0
+  while (k < a.excludedVar.length) {
+    if (knownExcludes(b, a.excludedVar[k], a.excludedValue[k])) {
+      out.excludedVar.push(a.excludedVar[k])
+      out.excludedValue.push(a.excludedValue[k])
     }
     k = k + 1
   }
@@ -1167,6 +1244,135 @@ const literalValue = (expr: Node): i32 => {
   return toI32(value)
 }
 
+/** `-1` as written: a minus sign before the literal `1`. */
+const isMinusOne = (expr: Node): boolean => {
+  const e = unwrapBoundsParens(expr)
+  return e.kind === N_UNARY && e.text === "-" && literalValue(e.children[0]) === 1
+}
+
+/**
+ * The values `expr` can have whatever the state says, or `null` when only a
+ * fact could tell: one value for a literal, a negated literal or a folded
+ * integer constant, and the declared range of a ranged or unsigned type.
+ */
+const valueRange = (ctx: CheckContext, expr: Node): DeclaredRange | null => {
+  const e = unwrapBoundsParens(expr)
+  const n = literalValue(e)
+  if (n >= 0) {
+    return new DeclaredRange(toI64(n), toI64(n))
+  }
+  if (e.kind === N_UNARY && e.text === "-") {
+    const negated = literalValue(e.children[0])
+    if (negated >= 0) {
+      return new DeclaredRange(toI64(-negated), toI64(-negated))
+    }
+  }
+  if (e.kind === N_IDENT) {
+    const constant = ctx.program.nodeConstants[e.id]
+    if (constant !== null && constant.folded && isInteger(constant.type)) {
+      return new DeclaredRange(constant.intValue, constant.intValue)
+    }
+  }
+  return ctx.table.declaredRange(ctx.program.nodeTypes[e.id])
+}
+
+/** Whether no value `range` allows is `n`. */
+const rangeExcludes = (range: DeclaredRange | null, n: i64): boolean =>
+  range !== null && (range.lo > n || range.hi < n)
+
+/**
+ * Whether `dividend / divisor` cannot fail: the divisor is not zero, and the
+ * signed overflow `MIN / -1` cannot happen because the divisor is not `-1` or
+ * the dividend is not negative. Each half comes from what the expression is —
+ * a literal, a constant, a declared range, which is how an unsigned divisor
+ * is never `-1` — or from a guard on a local: `d > 0`, or `d !== 0` and
+ * `d !== -1` (`FACT_EXCLUDES`).
+ */
+const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: Node): boolean => {
+  const ctx = walk.ctx
+  const range = valueRange(ctx, divisor)
+  const d = indexLocal(ctx, divisor)
+  const zero: i64 = 0
+  const minusOne: i64 = -1
+  const nonZero =
+    rangeExcludes(range, zero) || (d !== null && (minValueOf(state, d) >= 1 || knownExcludes(state, d, 0)))
+  if (!nonZero) {
+    return false
+  }
+  if (
+    rangeExcludes(range, minusOne) ||
+    (d !== null && (knownNonNegative(state, d) || knownExcludes(state, d, -1)))
+  ) {
+    return true
+  }
+  const top = valueRange(ctx, dividend)
+  const x = indexLocal(ctx, dividend)
+  return (top !== null && top.lo >= zero) || (x !== null && knownNonNegative(state, x))
+}
+
+/**
+ * Record the verdict for an integer `/`, `%`, `/=` or `%=` at `node`, judged
+ * in the state its divisor has been evaluated in, which is where the emitter
+ * writes the check. A proof goes into `nodeProvenIndex`, beside the accesses',
+ * and `emitIntBinary` leaves the check out.
+ */
+const judgeDivision = (walk: BoundsWalk, state: State, node: Node): void => {
+  // Only pass 2 judges a divisor, as only it judges a range entry: the
+  // whole-program walks of `src/ranges.ts` revisit only the bodies an access
+  // keeps open, so a proof drawn there would depend on which those were.
+  if (walk.tables !== null) {
+    return
+  }
+  const op = node.text
+  if (op !== "/" && op !== "%" && op !== "/=" && op !== "%=") {
+    return
+  }
+  const ctx = walk.ctx
+  const left = ctx.program.nodeTypes[node.children[0].id]
+  if (left < 0 || !isInteger(ctx.table.baseOf(left))) {
+    return
+  }
+  if (!provesDivisor(walk, state, node.children[0], node.children[1])) {
+    return
+  }
+  noteProof(walk, node)
+}
+
+/** A check proved away at `node`: into the side table, or aside until the caller commits it. */
+const noteProof = (walk: BoundsWalk, node: Node): void => {
+  if (!walk.ctx.program.nodeProvenIndex[node.id]) {
+    walk.proved.push(node)
+    if (walk.record) {
+      walk.ctx.program.nodeProvenIndex[node.id] = true
+    }
+  }
+}
+
+/** `xs.pop()` on an array receiver, which panics on an empty array (`emitPop`). */
+const isArrayPop = (ctx: CheckContext, call: Node): boolean => {
+  const callee = unwrapBoundsParens(call.children[0])
+  if (callee.kind !== N_MEMBER || callee.text !== "pop" || call.children[1].children.length > 0) {
+    return false
+  }
+  return ctx.table.isArray(ctx.program.nodeTypes[callee.children[0].id])
+}
+
+/**
+ * Record the verdict for a `pop`: proven where its receiver is known to hold
+ * an element, which `if (xs.length > 0)` says. Pass 2 alone judges it. Under `--unchecked-indexing`
+ * there is no check to leave out, and the site stays unproven
+ * (`src/panics.ts`), as an index does.
+ */
+const judgePop = (walk: BoundsWalk, state: State, call: Node): void => {
+  if (walk.tables !== null) {
+    return // pass 2 only, as `judgeDivision` says
+  }
+  const holder = holderOf(walk, unwrapBoundsParens(call.children[0]).children[0])
+  if (holder !== null && knownMinLength(state, holder, 1)) {
+    noteProof(walk, call)
+  }
+}
+
 // ---- Conditions -------------------------------------------------------------------
 
 /**
@@ -1259,7 +1465,15 @@ const disequalityFacts = (walk: BoundsWalk, state: State, left: Node, right: Nod
 const addDisequalityFacts = (walk: BoundsWalk, state: State, out: Fact[], value: Node, other: Node): void => {
   const n = literalValue(other)
   const v = indexLocal(walk.ctx, value)
-  if (n < 0 || v === null) {
+  if (v === null) {
+    return
+  }
+  // `d !== 0` and `d !== -1` are what a divisor needs (`provesDivisor`), and
+  // neither is a bound, so they are kept apart from the families above.
+  if (n === 0 || isMinusOne(other)) {
+    out.push(new Fact(FACT_EXCLUDES, v, null, n === 0 ? 0 : -1))
+  }
+  if (n < 0) {
     return
   }
   if (minValueOf(state, v) === n) {
@@ -1380,6 +1594,11 @@ const factsOf = (state: State): Fact[] => {
   k = 0
   while (k < state.minValueVar.length) {
     out.push(new Fact(FACT_MIN_VALUE, state.minValueVar[k], null, state.minValueValue[k]))
+    k = k + 1
+  }
+  k = 0
+  while (k < state.excludedVar.length) {
+    out.push(new Fact(FACT_EXCLUDES, state.excludedVar[k], null, state.excludedValue[k]))
     k = k + 1
   }
   return out
@@ -1798,12 +2017,7 @@ const judge = (
     recordPassedCheck(walk, state, holder, index)
   }
   if (proven) {
-    if (!ctx.program.nodeProvenIndex[node.id]) {
-      walk.proved.push(node)
-      if (walk.record) {
-        ctx.program.nodeProvenIndex[node.id] = true
-      }
-    }
+    noteProof(walk, node)
     return
   }
   // A path receiver is proved when it can be and never warned about: the
@@ -2251,6 +2465,9 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     if (isCharCodeAt(ctx, e)) {
       judge(walk, state, e, callee.children[0], e.children[1].children[0], true)
     }
+    if (isArrayPop(ctx, e)) {
+      judgePop(walk, state, e)
+    }
     if (callsNothing(ctx, e)) {
       return
     }
@@ -2665,6 +2882,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
   if (!isBoundsAssignment(op)) {
     walkExpression(walk, state, left)
     walkExpression(walk, state, right)
+    judgeDivision(walk, state, expr)
     return
   }
 
@@ -2677,6 +2895,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
       // (`emitElementAssignment`), so the check is judged before `v` runs.
       judge(walk, state, target, target.children[0], target.children[1], true)
       walkExpression(walk, state, right)
+      judgeDivision(walk, state, expr)
     } else {
       // `a[i] = v` reads the array and the index, evaluates `v`, and only then
       // checks — with the index and the array it read *before* `v`. So a call
@@ -2712,6 +2931,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     // second judged `g.hs[i]` in `g.hs[i].n = (i = 0)` against the new `i`.
     walkExpression(walk, state, target.children[0])
     walkExpression(walk, state, right)
+    judgeDivision(walk, state, expr)
     forgetPathsThrough(walk, state, target.text)
     // `this.v = new Array<i32>(6)` leaves the path naming an array of six,
     // which is what a later `this.v[5]` — or a callee handed `this` — needs.
@@ -2727,6 +2947,7 @@ const walkBinary = (walk: BoundsWalk, state: State, expr: Node): void => {
     return
   }
   walkExpression(walk, state, right)
+  judgeDivision(walk, state, expr)
   const v = localOf(ctx.program, target)
   if (v === null) {
     return
@@ -3223,9 +3444,10 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
 }
 
 /**
- * Whether `node` holds anything `judge`, `judgeClampBound` or `judgeRange` is
- * ever called on: an element access, a call spelled `.charCodeAt(...)` or
- * `.substring(...)` whatever its receiver, or a value entering a range. Read
+ * Whether `node` holds anything `judge`, `judgeClampBound`, `judgeRange`,
+ * `judgeDivision` or `judgePop` is ever called on: an element access, a call
+ * spelled `.charCodeAt(...)`, `.substring(...)` or `.pop()` whatever its
+ * receiver, a division, or a value entering a range. Read
  * off the syntax and the entries the checker recorded, so it answers `true`
  * for more than the walk judges, never less.
  */
@@ -3235,9 +3457,17 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   }
   if (node.kind === N_CALL) {
     const callee = unwrapBoundsParens(node.children[0])
-    if (callee.kind === N_MEMBER && (callee.text === "charCodeAt" || callee.text === "substring")) {
+    const name = callee.kind === N_MEMBER ? callee.text : ""
+    if (name === "charCodeAt" || name === "substring" || name === "pop") {
       return true
     }
+  }
+  // A division is judged for its divisor (`judgeDivision`), whatever its type.
+  if (
+    node.kind === N_BINARY &&
+    (node.text === "/" || node.text === "%" || node.text === "/=" || node.text === "%=")
+  ) {
+    return true
   }
   for (const child of node.children) {
     // A leaf judges nothing unless a value enters a range there (WP31 §6).

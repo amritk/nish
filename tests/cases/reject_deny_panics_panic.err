@@ -1,0 +1,2 @@
+error: `panic` may panic here
+`panic` stops the program, and no proof removes a call to it: return a `Result` and let the caller decide

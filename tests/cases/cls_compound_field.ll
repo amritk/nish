@@ -5,7 +5,6 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_div(i1 noundef zeroext) #2
 
 define internal void @Stats.constructor(%struct.Stats* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this) #0 {
 entry:
@@ -33,47 +32,23 @@ entry:
   ret i32 %7
 }
 
-define internal void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #1 {
+define internal void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
-  %2 = icmp eq i32 2, 0
-  %3 = icmp eq i32 %1, -2147483648
-  %4 = icmp eq i32 2, -1
-  %5 = and i1 %3, %4
-  %6 = or i1 %2, %5
-  br i1 %6, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %2)
-  unreachable
-
-div.ok:
-  %7 = sdiv i32 %1, 2
-  store i32 %7, i32* %0, align 4
-  %8 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
-  %9 = load i32, i32* %8, align 4
-  %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4, !tbaa !5
-  %12 = icmp eq i32 2, 0
-  %13 = icmp eq i32 %11, -2147483648
-  %14 = icmp eq i32 2, -1
-  %15 = and i1 %13, %14
-  %16 = or i1 %12, %15
-  br i1 %16, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %12)
-  unreachable
-
-div.ok.1:
-  %17 = srem i32 %11, 2
-  %18 = sub nsw i32 %9, %17
-  store i32 %18, i32* %8, align 4
+  %2 = sdiv i32 %1, 2
+  store i32 %2, i32* %0, align 4
+  %3 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
+  %4 = load i32, i32* %3, align 4
+  %5 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
+  %6 = load i32, i32* %5, align 4, !tbaa !5
+  %7 = srem i32 %6, 2
+  %8 = sub nsw i32 %4, %7
+  store i32 %8, i32* %3, align 4
   ret void
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %s.addr = alloca %struct.Stats*, align 8
   %Stats.obj = alloca %struct.Stats, align 8
@@ -119,7 +94,6 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

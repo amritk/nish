@@ -1,0 +1,2 @@
+error: `parallel-length` may panic here
+`parallelMapInto` panics when `dst` is shorter than `src`, and no proof removes that check yet: make the call from a module outside the scope

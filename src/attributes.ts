@@ -1292,7 +1292,9 @@ class FactCollector {
   /** A panic site of this body (`src/panics.ts`), when the build reads them. */
   noteSite(node: Node, kind: i32, proven: boolean, callee: string): void {
     if (this.opts.recordsPanics()) {
-      this.facts.panicSites.push(new PanicSite(node, kind, this.sig.name, proven, callee))
+      this.facts.panicSites.push(
+        new PanicSite(node, this.unit.program.source, kind, this.sig.name, proven, callee)
+      )
     }
   }
 
@@ -1824,10 +1826,11 @@ class FactCollector {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(call, methodReceiver(call))
       this.facts.resizesArray = true
-      if (!this.unit.program.uncheckedIndexing) {
+      const proven = this.unit.program.nodeProvenIndex[call.id]
+      if (!this.unit.program.uncheckedIndexing && !proven) {
         this.facts.callees.add("nish_panic_index")
       }
-      this.noteSite(call, PANIC_POP, false, "")
+      this.noteSite(call, PANIC_POP, proven, "")
       return
     }
     if (method === "join") {
@@ -1861,7 +1864,7 @@ class FactCollector {
     }
   }
 
-  /** Every integer division may call the noreturn panic. */
+  /** An integer division may call the noreturn panic, unless its divisor is proven. */
   collectDivisionFacts(node: Node): void {
     if (node.kind !== N_BINARY) {
       return
@@ -1874,8 +1877,12 @@ class FactCollector {
     // division is its base's, `i32`.
     const left = this.unit.program.nodeTypes[node.children[0].id]
     if (left >= 0 && isInteger(this.table.baseOf(left))) {
-      this.facts.callees.add("nish_panic_div")
-      this.noteSite(node, PANIC_DIVIDE, false, "")
+      // Mirrors `emitIntBinary`: a proven divisor (`judgeDivision`) has no check.
+      const proven = this.unit.program.nodeProvenIndex[node.id]
+      if (!proven) {
+        this.facts.callees.add("nish_panic_div")
+      }
+      this.noteSite(node, PANIC_DIVIDE, proven, "")
     }
   }
 

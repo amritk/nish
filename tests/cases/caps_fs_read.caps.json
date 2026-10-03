@@ -16,7 +16,10 @@
               "name": "half",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "divide", "at": "caps_fs_read.ts:7:38", "proven": true }
+              ]
             },
             {
               "name": "main",
@@ -27,7 +30,11 @@
                   { "function": "main", "at": "caps_fs_read.ts:10:15", "calls": "sizeOf" },
                   { "function": "sizeOf", "at": "caps_fs_read.ts:5:39", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "caps_fs_read.ts:10:15", "callee": "sizeOf", "via": "io-exit" },
+                { "kind": "oom", "at": "caps_fs_read.ts:11:3", "allowed": true }
+              ]
             }
           ]
         }

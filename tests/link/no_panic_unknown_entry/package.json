@@ -1,0 +1,7 @@
+{
+  "name": "no-panic-unknown-entry",
+  "private": true,
+  "nish": {
+    "noPanic": ["main.ts", "parser.ts"]
+  }
+}

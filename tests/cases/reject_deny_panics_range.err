@@ -1,0 +1,2 @@
+error: `range` may panic here
+`n` is not proven to lie in integer<0, 9> here: guard it with a test that reaches it — `if (n >= 0 && n <= 9)` proves it
