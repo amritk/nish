@@ -45,7 +45,7 @@ so a reader finds a name where they expect it:
 | `net` | opens, reads or writes a socket, or waits on one | talks to other machines |
 | `process.spawn` | starts another program | the child can do anything, unobserved by this analysis |
 | `signal` | receives operating-system signals | an asynchronous input |
-| `unsafe` | reserved | `nish:unsafe` has not landed; nothing carries this bit yet |
+| `unsafe` | reserved | nothing carries this bit yet; `nish:unsafe`'s five functions are labelled none until it is wired |
 
 **Ambient is none.** These are not capabilities, and say why:
 
@@ -97,7 +97,7 @@ labelled apart.
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
 | `unsafe` | nothing yet |
-| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, the five `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`), and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
 
 Three rows deserve their reason:
 
@@ -286,8 +286,8 @@ and one edge per user call.
   it.
 - Capability-typed handles and `using` tokens.
 - Argument-level precision: which path is read, which host is dialled, taint.
-- `nish:unsafe`: the bit is reserved, and labels nothing until the module
-  lands.
+- `nish:unsafe`: the bit is reserved and labels nothing yet; the module's
+  five functions are labelled none until it is wired.
 - wasm and WASI targets beyond reporting what the program calls.
 - Nondeterminism from thread scheduling or float reduction order.
 - Memory-safety and undefined-behaviour facts.

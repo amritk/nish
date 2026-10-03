@@ -48,7 +48,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 567
+export const RULE_COUNT: i32 = 572
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -160,6 +160,8 @@ const diagnosticRules = (): string[] => [
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
   "NL2354",
+  "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
+  "NL2456",
   "A `Secret` cannot be indexed or be an index: either reads key material outside `expose`, and an index that depends on a key is a cache-timing channel",
   "NL2435",
   "`, which is declared outside the block: the block releases what it allocated when it ends, and the local would outlive it pointing into freed memory",
@@ -374,6 +376,8 @@ const diagnosticRules = (): string[] => [
   "NL2139",
   "` mentions a type parameter no other argument binds; annotate the parameter",
   "NL2342",
+  "` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got ",
+  "NL2455",
   "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
   "NL2135",
   "`parallelReduce` folds every block from its identity, and the identity of `",
@@ -462,6 +466,8 @@ const diagnosticRules = (): string[] => [
   "NL3002",
   "` is generic: it must be written with its type arguments, e.g. ",
   "NL2317",
+  "` takes i32 or i64 operands (convert with toI32 or toI64), got ",
+  "NL2454",
   "` takes u32 or u64 operands (convert with toU32 or toU64), got ",
   "NL2399",
   "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
@@ -1183,8 +1189,12 @@ const portabilityRules = (): string[] => [
 
 /** The WP15 section 8 rules, matched by substring: their message opens with a variable name. */
 const performanceRules = (): string[] => [
+  "--wrapping is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `wrappingAdd`, `wrappingSub` and `wrappingMul` from `",
+  "NL9015",
   "` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both",
   "NL9012",
+  "--unchecked-indexing is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `uncheckedGet` and `uncheckedSet` from `",
+  "NL9014",
   "so entering the range keeps its check on every iteration of this loop",
   "NL9013",
   "allocates a dynamically sized array on every iteration of this loop",
