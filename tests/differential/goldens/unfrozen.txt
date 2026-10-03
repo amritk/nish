@@ -282,3 +282,4 @@ cases/set_str added after R6: no rewriter to freeze it with
 cases/str_surrogate_lone added after R6: no rewriter to freeze it with
 cases/str_surrogate_map_key added after R6: no rewriter to freeze it with
 cases/str_surrogate_pair added after R6: no rewriter to freeze it with
+cases/wipe_bytes added after R6: no rewriter to freeze it with
