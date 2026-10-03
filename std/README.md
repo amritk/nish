@@ -38,16 +38,15 @@ Every module here was security-audited (#363); the records are in
 [`docs/security/`](../docs/security/README.md), and how to report a
 vulnerability is in [`SECURITY.md`](../SECURITY.md). Two limits hold across the
 modules. **Lengths stop at 2^31 − 1.** No array built by `push` or `new Array`,
-and no array or string the runtime makes (a file read, a concatenation, a
-template), can pass 2^31 − 1 elements or bytes, and the one-shot functions
-below refuse a longer input as each row says. A string built by `join` still
-can, and under `--number-mode i32` its `length` is then wrong, which nothing in
-`std` can tell (CG-3, open): a program built in that mode must not hand these
-functions anything built from such a string. **Private keys are `Secret`s.**
-`crypto/p256.ts`, `crypto/x25519.ts` and `crypto/x509.ts` take and give a
-private key as a `Secret<u8[]>` from `nish:secret`, compute on it only inside
-`expose`, and wipe every intermediate the key reaches before they return, with
-a store the optimiser may not remove (ECC-2, X509-7, closed). The other modules
+no array or string the runtime makes (a file read, a concatenation, a
+template) and no string built by `join` can pass 2^31 − 1 elements or bytes
+(K1-6, CG-3, closed), so `length` is right in both number modes, and the
+one-shot functions below refuse a longer input as each row says. **Private
+keys are `Secret`s.** `crypto/p256.ts`, `crypto/x25519.ts` and
+`crypto/x509.ts` take and give a private key as a `Secret<u8[]>` from
+`nish:secret`, compute on it only inside `expose`, and wipe every intermediate
+the key reaches before they return, with a store the optimiser may not remove
+(ECC-2, X509-7, closed). The other modules
 take their keys as plain arrays and do not wipe them yet.
 
 | Module | What it is | Reproduces |
