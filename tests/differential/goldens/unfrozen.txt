@@ -199,6 +199,11 @@ cases/net_tcp_import added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with
 cases/net_udp_echo added after R6: no rewriter to freeze it with
 cases/net_udp_offload added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_arrow added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_field added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_local added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_return added after R6: no rewriter to freeze it with
+cases/obj_lit_nullable_ternary added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with
@@ -247,6 +252,8 @@ cases/port_str_length_printed added after R6: no rewriter to freeze it with
 cases/port_str_needle_step_printed added after R6: no rewriter to freeze it with
 cases/port_str_nonascii_charcode added after R6: no rewriter to freeze it with
 cases/port_str_offset_roundtrip_quiet added after R6: no rewriter to freeze it with
+cases/port_str_slice_literal_past added after R6: no rewriter to freeze it with
+cases/port_str_slice_literal_quiet added after R6: no rewriter to freeze it with
 cases/port_str_slice_negative added after R6: no rewriter to freeze it with
 cases/port_str_slice_proven_quiet added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 826 programs, 58897 dump lines.
+# 833 programs, 59026 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42751,6 +42751,99 @@ function echoOnce(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @echoOnce
   pointer meta: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 5:9 n: i32 (const)
+program tests/cases/obj_lit_nullable_arrow.ts
+module tests/cases/obj_lit_nullable_arrow.ts (entry)
+struct E (interface) size=4 align=4
+  field tag: i32 index=0 offset=0
+function make(at: i32): E | null -> @make
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function pick(some: boolean): E | null -> @pick
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: make nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pick
+  stackSites=0 stackLocals=0
+  local 12:9 e: E | null (const)
+  callee 12:13 make -> @make
+  local 16:9 p: E | null (const)
+  callee 16:13 pick -> @pick
+  callee 20:7 pick -> @pick
+program tests/cases/obj_lit_nullable_field.ts
+module tests/cases/obj_lit_nullable_field.ts (entry)
+struct E (interface) size=4 align=4
+  field tag: i32 index=0 offset=0
+struct Link (interface) size=8 align=8
+  field head: E | null index=0 offset=0
+struct Holder (class) size=8 align=8
+  field next: E | null index=0 offset=0 initialized
+function show(e: E | null): void -> @show
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  pointer e: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via show
+  calls: nish_alloc_struct show
+  stackSites=3 stackLocals=2
+  callee 22:3 show -> @show
+  local 23:9 l: Link (const)
+  callee 24:3 show -> @show
+  local 25:9 h: Holder (const)
+  callee 27:3 show -> @show
+program tests/cases/obj_lit_nullable_local.ts
+module tests/cases/obj_lit_nullable_local.ts (entry)
+struct E (interface) size=4 align=4
+  field tag: i32 index=0 offset=0
+function make(at: i32): E | null -> @make
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+  local 8:9 e: E | null (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: make nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 13:7 e: E | null (let)
+  local 21:9 m: E | null (const)
+  callee 21:13 make -> @make
+program tests/cases/obj_lit_nullable_return.ts
+module tests/cases/obj_lit_nullable_return.ts (entry)
+struct E (interface) size=4 align=4
+  field tag: i32 index=0 offset=0
+function make(at: i32): E | null -> @make
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: make nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 15:9 e: E | null (const)
+  callee 15:13 make -> @make
+  callee 19:7 make -> @make
+program tests/cases/obj_lit_nullable_ternary.ts
+module tests/cases/obj_lit_nullable_ternary.ts (entry)
+struct Box (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=0
+  local 9:9 some: boolean (const)
+  local 10:9 z: Box | null (const)
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4
@@ -44299,6 +44392,49 @@ function main(): i32 -> @nish_main [exported entry]
   callee 34:15 countSpaces -> @countSpaces
   callee 35:15 hasArrow -> @hasArrow
   callee 36:15 tail -> @tail
+program tests/cases/port_str_slice_literal_past.ts
+module tests/cases/port_str_slice_literal_past.ts (entry)
+function never(): boolean -> @never
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function upTo(k: i32): string -> @upTo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: never nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new upTo
+  stackSites=0 stackLocals=0
+  local 19:9 t: string (const)
+  local 20:7 v: string (let)
+  callee 21:7 never -> @never
+  local 23:11 far: i32 (const)
+  callee 28:17 upTo -> @upTo
+program tests/cases/port_str_slice_literal_quiet.ts
+module tests/cases/port_str_slice_literal_quiet.ts (entry)
+const GREETING: string = "hello"
+function middle(k: i32): string -> @middle
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+  local 11:9 word: string (const)
+function fromGuard(i: i32): string -> @fromGuard
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+  local 19:9 s: string (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: fromGuard middle nish_arena_mark nish_arena_release nish_panic_slice nish_print nish_str_new
+  stackSites=0 stackLocals=0
+  local 28:9 t: string (const)
+  local 31:9 u: string (const)
+  local 33:9 from: i32 (const)
+  local 35:7 to: i32 (let)
+  callee 38:15 middle -> @middle
+  callee 39:15 fromGuard -> @fromGuard
 program tests/cases/port_str_slice_negative.ts
 module tests/cases/port_str_slice_negative.ts (entry)
 function lastTwo(s: string): string -> @lastTwo
