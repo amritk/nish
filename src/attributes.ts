@@ -39,7 +39,6 @@
 import { WIPE_MEMSET } from "./emit-secret"
 import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
 import {
-  builtinCallees,
   builtinCalleesNamed,
   checksRangesInPrologue,
   identifierBuiltinCallees,
@@ -47,9 +46,12 @@ import {
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
+import { isBuiltinFunction } from "./builtins"
 import { numericLiteralValue } from "./constants"
+import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
+import { unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -62,6 +64,7 @@ import {
 } from "./escape"
 import {
   arrayMethodName,
+  builtinNameOf,
   isArrayWriteMethod,
   dottedName,
   intrinsicType,
@@ -81,6 +84,7 @@ import {
   unwrapParens,
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
+import { compareStrings } from "./strings"
 import {
   N_ARRAY,
   N_BINARY,
@@ -128,7 +132,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
-import { resultLayout } from "./result"
+import { isResultConstructor, resultLayout } from "./result"
 import {
   isInteger,
   K_ARRAY,
@@ -456,6 +460,26 @@ export class FunctionFacts {
   cycleLow: i32
   /** On the walk's stack: in the component still being collected. */
   onCycleStack: boolean
+  // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
+  /**
+   * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
+   * directly or through a callee (`propagateCapabilities`). Round 2 only: round
+   * 1's facts carry none, because nothing reads them before the report.
+   */
+  caps: i32
+  /**
+   * The witness of each capability in `caps`, by the capability's index:
+   * what the chain calls next (a builtin's name, a `declare function`'s name,
+   * or a user callee's symbol), the call that does it, and how many calls
+   * away the builtin is (0 when `via` is the builtin itself). Empty until the
+   * first bit is set, so a function that reaches nothing allocates nothing.
+   */
+  capVia: string[]
+  capSite: (Node | null)[]
+  capDist: i32[]
+  /** Every call to a user function, by callee symbol and call node, in walk order: the edges the witnesses follow. */
+  capCallees: string[]
+  capSites: Node[]
 
   constructor(paramNames: string[], nodeCount: i32) {
     this.hasLoops = false
@@ -505,6 +529,53 @@ export class FunctionFacts {
     this.allocatesItself = false
     this.managesArena = false
     this.netAllocates = false
+    this.caps = 0
+    this.capVia = []
+    this.capSite = []
+    this.capDist = []
+    this.capCallees = []
+    this.capSites = []
+  }
+
+  /**
+   * WP35: offer `site` as the witness of the capability with index `index`,
+   * `dist` calls from the builtin, through `via`; answers whether it was
+   * taken. The shorter chain wins, then the earlier site in this function's
+   * source, then the smaller `via`, so the witness the fixpoint settles on is
+   * the same whatever order it visited the program in.
+   */
+  offerCapability(index: i32, via: string, site: Node, dist: i32): boolean {
+    if (this.capVia.length === 0) {
+      const none: Node | null = null
+      let i = 0
+      while (i < CAPABILITY_COUNT) {
+        this.capVia.push("")
+        this.capSite.push(none)
+        this.capDist.push(0)
+        i = i + 1
+      }
+    }
+    const bit = 1 << index
+    const held = this.capSite[index]
+    if ((this.caps & bit) !== 0 && held !== null) {
+      const heldDist = this.capDist[index]
+      if (dist > heldDist) {
+        return false
+      }
+      if (dist === heldDist) {
+        if (site.start > held.start) {
+          return false
+        }
+        if (site.start === held.start && compareStrings(via, this.capVia[index]) >= 0) {
+          return false
+        }
+      }
+    }
+    this.caps = this.caps | bit
+    this.capVia[index] = via
+    this.capSite[index] = site
+    this.capDist[index] = dist
+    return true
   }
 
   /** The pointer facts of the parameter called `name`, or `null` when it is not one. */
@@ -1281,18 +1352,20 @@ class FactCollector {
     const fused: FunctionSig[] | null =
       node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
-      this.addSigs(fused)
+      for (const sig of fused) {
+        this.addUserCallee(sig.name, node)
+      }
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
-        this.facts.callees.add(callee.name)
+        this.addCallee(callee, node)
       }
       // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
       // finds the key, that table's `valueAt` (`checkMapGet`).
       const reads: FunctionSig | null =
         callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null
       if (reads !== null) {
-        this.facts.callees.add(reads.name)
+        this.addUserCallee(reads.name, node)
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
@@ -1301,7 +1374,7 @@ class FactCollector {
       const read = program.nodeCallees[node.id]
       if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
-          this.facts.callees.add(sig.name)
+          this.addUserCallee(sig.name, node)
         }
       }
     }
@@ -1322,9 +1395,56 @@ class FactCollector {
     }
   }
 
-  addSigs(sigs: FunctionSig[]): void {
-    for (const sig of sigs) {
-      this.facts.callees.add(sig.name)
+  /**
+   * A call to a user function: a callee for the attribute fixpoint and, in
+   * round 2, an edge a capability can arrive along (WP35). One helper for
+   * both, so that no kind of call can reach the first and miss the second.
+   */
+  addUserCallee(callee: string, site: Node): void {
+    this.facts.callees.add(callee)
+    if (this.known !== null) {
+      this.facts.capCallees.push(callee)
+      this.facts.capSites.push(site)
+    }
+  }
+
+  /**
+   * A call whose callee has a signature. A `declare function`'s body is C, so
+   * the call is where `ffi` is exercised and the chain ends there, named by the
+   * declaration as written (WP35); any other callee is a user one.
+   */
+  addCallee(callee: FunctionSig, call: Node): void {
+    if (!callee.foreign()) {
+      this.addUserCallee(callee.name, call)
+      return
+    }
+    this.facts.callees.add(callee.name)
+    if (this.known !== null) {
+      this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
+    }
+  }
+
+  /**
+   * WP35: a builtin call, by the name the checker knows it by, seeds its one
+   * label (`builtinCapability`); round 2 only, which its callers check. A
+   * builtin with no row is a broken invariant rather than a program error --
+   * the table is meant to be total, and `tests/capabilities.js` holds it to
+   * that -- so it ends the compile with the exit-70 report. `Options.unlabelledBuiltin` is the suite's way of
+   * provoking that path (`NISH_SIMULATE_ICE=unlabelled:<name>`).
+   */
+  noteBuiltin(name: string, call: Node, resolved: boolean): void {
+    const label = name === this.opts.unlabelledBuiltin ? CAP_UNLABELLED : builtinCapability(name)
+    if (label === CAP_UNLABELLED) {
+      // `resolved` says the checker recorded the call as a builtin. A plain
+      // name with no row is one only if the checker accepts it as one; any
+      // other call with no recorded callee is none this table speaks for.
+      if (!resolved && !isBuiltinFunction(name) && !isResultConstructor(name)) {
+        return
+      }
+      process.exit(unlabelledBuiltinError(name, this.opts.json))
+    }
+    if (label !== CAP_NONE) {
+      this.facts.offerCapability(label, name, call, 0)
     }
   }
 
@@ -1370,10 +1490,13 @@ class FactCollector {
       node.children[0].kind === N_MEMBER &&
       !receiverIsValue(program, node.children[0].children[0])
     ) {
-      const dotted = builtinCallees(program, table, node)
+      const name = dottedName(node.children[0])
+      const dotted = builtinCalleesNamed(program, table, node, name)
       this.addCallees(dotted)
-      const receiver = node.children[0].children[0]
-      this.noteWorld(node, dotted, `${receiver.text}.${node.children[0].text}`)
+      this.noteWorld(node, dotted, name)
+      if (this.known !== null) {
+        this.noteBuiltin(name, node, true)
+      }
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
       this.noteWrittenArguments(node)
@@ -1466,7 +1589,7 @@ class FactCollector {
       }
       const ctor = constructorOf(program, table, intrinsicType(program, node))
       if (ctor !== null) {
-        this.facts.callees.add(ctor.name)
+        this.addUserCallee(ctor.name, node)
       }
       return
     }
@@ -1766,6 +1889,9 @@ class FactCollector {
     // it has not earned.
     const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
+    if (this.known !== null) {
+      this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
+    }
     if (imported.length > 0) {
       const named =
         imported.indexOf(".") < 0
@@ -1896,6 +2022,13 @@ const collectFacts = (
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
+    // WP35: the routed code runs in place of the body, so its capabilities
+    // are this instance's, arriving at the declaration (no call names them).
+    if (known !== null) {
+      for (const callee of routeCalleesOf(table, sig)) {
+        collector.addUserCallee(callee.name, sig.decl)
+      }
+    }
   }
   if (secretRoleOf(sig) === SECRET_WIPE) {
     markWipe(facts)
@@ -2043,6 +2176,7 @@ export const analyzeFunctions = (
   // then: it is syntax plus the call graph, and neither moves between rounds.
   const facts = collectRound(units, table, opts, escapes, first)
   propagate(facts, runtime)
+  propagateCapabilities(facts)
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
     f.contained = f.contained || !f.allocEscapes
@@ -2523,6 +2657,138 @@ const propagateCallee = (
 }
 
 const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0
+
+/**
+ * WP35: carry every function's capabilities to its callers, over the edges
+ * round 2's walk recorded, until nothing moves (docs/wp35-capabilities.md
+ * §3). A caller reaches what each callee reaches, one call further away, and
+ * keeps the shortest chain per capability (`offerCapability`).
+ *
+ * It is a relaxation of its own rather than more of `propagateCallee`: no
+ * attribute reads a capability, so the attribute fixpoint converges exactly
+ * as it did, and a witness needs each edge's call site, which `callees` -- a
+ * set of symbols -- does not keep.
+ *
+ * A worklist over the edges turned round, rather than whole passes over the
+ * program until one changes nothing: only a function whose witnesses just
+ * moved can move its callers', and on `src/` the passes cost three times what
+ * this does. The order the list is worked in cannot change the answer. A
+ * callee's offers only ever get shorter, so the smallest offer a caller holds
+ * at the end is the smallest of the callees' final ones, and that minimum is
+ * one value whichever order it was reached in. It terminates because a bit is
+ * only ever set and a witness only ever replaced by a shorter or earlier one.
+ */
+const propagateCapabilities = (facts: FactsTable): void => {
+  const list = facts.list
+  // The edges turned round, as one flat list grouped by callee: the callers of
+  // the function at index g are `fromFn[starts[g]]` up to `ends[g]`, and
+  // `fromEdge` is the edge's index in that caller's `capCallees`.
+  const calleeAt: i32[] = []
+  const counts: i32[] = []
+  while (counts.length < list.length) {
+    counts.push(0)
+  }
+  for (const f of list) {
+    for (const callee of f.capCallees) {
+      const g = facts.indexOf(callee)
+      calleeAt.push(g)
+      if (g >= 0 && g < counts.length) {
+        counts[g] = counts[g] + 1
+      }
+    }
+  }
+  const starts: i32[] = []
+  const ends: i32[] = []
+  let total = 0
+  for (const count of counts) {
+    starts.push(total)
+    total = total + count
+    ends.push(total)
+  }
+  const next: i32[] = []
+  for (const start of starts) {
+    next.push(start)
+  }
+  const fromFn: i32[] = []
+  const fromEdge: i32[] = []
+  let slot = 0
+  while (slot < total) {
+    fromFn.push(0)
+    fromEdge.push(0)
+    slot = slot + 1
+  }
+  let k = 0
+  let fi = 0
+  for (const f of list) {
+    let e = 0
+    while (e < f.capCallees.length && k < calleeAt.length) {
+      const g = calleeAt[k]
+      if (g >= 0 && g < next.length) {
+        const at = next[g]
+        next[g] = at + 1
+        if (at >= 0 && at < fromFn.length && at < fromEdge.length) {
+          fromFn[at] = fi
+          fromEdge[at] = e
+        }
+      }
+      e = e + 1
+      k = k + 1
+    }
+    fi = fi + 1
+  }
+  // Every function that reaches something starts on the list.
+  const queue: i32[] = []
+  const queued: boolean[] = []
+  let i = 0
+  for (const f of list) {
+    const seeded = f.caps !== 0
+    queued.push(seeded)
+    if (seeded) {
+      queue.push(i)
+    }
+    i = i + 1
+  }
+  let head = 0
+  while (head < queue.length) {
+    const gi = queue[head]
+    head = head + 1
+    if (gi < 0 || gi >= list.length || gi >= queued.length || gi >= starts.length || gi >= ends.length) {
+      continue
+    }
+    queued[gi] = false
+    const g = list[gi]
+    let r = starts[gi]
+    const end = ends[gi]
+    while (r >= 0 && r < end && r < fromFn.length && r < fromEdge.length) {
+      const ci = fromFn[r]
+      const e = fromEdge[r]
+      // The call ends what a guard before it proved, so `queued` is guarded after it.
+      if (ci >= 0 && ci < list.length && relaxEdge(list[ci], e, g)) {
+        if (ci < queued.length && !queued[ci]) {
+          queued[ci] = true
+          queue.push(ci)
+        }
+      }
+      r = r + 1
+    }
+  }
+}
+
+/** Offer each of `g`'s capabilities to `f` along `f`'s edge `e`; answers whether any witness of `f`'s moved. */
+const relaxEdge = (f: FunctionFacts, e: i32, g: FunctionFacts): boolean => {
+  if (e < 0 || e >= f.capCallees.length || e >= f.capSites.length) {
+    return false
+  }
+  let moved = false
+  let c = 0
+  while (c < CAPABILITY_COUNT && c < g.capDist.length) {
+    if ((g.caps & (1 << c)) !== 0 && f.offerCapability(c, f.capCallees[e], f.capSites[e], g.capDist[c] + 1)) {
+      moved = true
+    }
+    c = c + 1
+  }
+  return moved
+}
 
 /**
  * WP29 P1: calling `callee`, whose facts and runtime entry the caller has

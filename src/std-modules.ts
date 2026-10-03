@@ -45,6 +45,16 @@ export const stdModulePath = (root: string, specifier: string): string =>
   normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`)
 
 /**
+ * Whether a module named `name` at `path` is a standard-library module: the
+ * pair the two functions above answer for one specifier, under the library
+ * root `root`. Asked by where the module was resolved rather than by its
+ * package name, because a dependency may itself be called `nish`
+ * (WP35, `src/capability-report.ts`).
+ */
+export const isStdModule = (root: string, name: string, path: string): boolean =>
+  name.startsWith(`${STD_DIR}/`) && path === normalizePath(`${root}/${name}`)
+
+/**
  * Whether `nish/<name>` names a module *inside* the library
  * (`isStdModuleName` in stage0's `src/std-modules.ts` is the same rule).
  *

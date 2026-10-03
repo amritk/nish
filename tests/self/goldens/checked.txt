@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 854 programs, 60132 dump lines.
+# 868 programs, 60371 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3613,6 +3613,236 @@ function test(): i32 -> @test [exported]
   calls: into
   stackSites=0 stackLocals=0
   callee 16:32 into -> @into
+program tests/cases/caps_clock.ts
+module tests/cases/caps_clock.ts (entry)
+function now(): i64 -> @now
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via now
+  calls: nish_print now
+  stackSites=0 stackLocals=0
+  local 7:9 start: i64 (const)
+  callee 7:17 now -> @now
+  callee 8:15 now -> @now
+program tests/cases/caps_entropy.ts
+module tests/cases/caps_entropy.ts (entry)
+function roll(): f64 -> @roll
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_random
+  calls: nish_random
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via roll
+  calls: nish_print roll
+  stackSites=0 stackLocals=0
+  local 7:9 r: f64 (const)
+  callee 7:13 roll -> @roll
+program tests/cases/caps_env.ts
+module tests/cases/caps_env.ts (entry)
+function setting(name: string): string -> @setting
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_getenv
+  stackSites=0 stackLocals=0
+  local 4:9 value: string | null (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print setting
+  stackSites=0 stackLocals=0
+  callee 9:15 setting -> @setting
+program tests/cases/caps_exit.ts
+module tests/cases/caps_exit.ts (entry)
+import exit from "nish:process" -> builtin process.exit
+function finish(code: i32): void -> @finish
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  calls: nish_exit
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: finish nish_print
+  stackSites=0 stackLocals=0
+  callee 12:3 finish -> @finish
+program tests/cases/caps_ffi.ts
+module tests/cases/caps_ffi.ts (entry)
+function labs(n: i64): i64 -> @labs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function magnitude(n: i64): i64 -> @magnitude
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via labs
+  escaping: n
+  calls: labs
+  stackSites=0 stackLocals=0
+  callee 6:36 labs -> @labs
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: magnitude nish_arena_mark nish_arena_release nish_print nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 9:9 n: i64 (const)
+  callee 10:15 magnitude -> @magnitude
+program tests/cases/caps_fnarg.ts
+module tests/cases/caps_fnarg.ts (entry)
+function lengthOf(s: string): i32 -> @lengthOf
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: apply$fn.16.nish_main$arrow0 apply$fn.8.lengthOf nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 9:15 apply<lengthOf> -> @apply$fn.8.lengthOf
+  callee 11:5 apply<(name) => ...> -> @apply$fn.16.nish_main$arrow0
+  local 12:13 value: string | null (const)
+function (name) => ...(name: string): i32 -> @nish_main$arrow0
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_arena_mark nish_arena_release nish_getenv
+  stackSites=0 stackLocals=0
+  local 12:13 value: string | null (const)
+function apply<lengthOf>(f: void, s: string): i32 -> @apply$fn.8.lengthOf [exported instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: lengthOf
+  stackSites=0 stackLocals=0
+  callee 4:65 lengthOf -> @lengthOf
+function apply<(name) => ...>(f: void, s: string): i32 -> @apply$fn.16.nish_main$arrow0 [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_main$arrow0
+  escaping: s
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 4:65 (name) => ... -> @nish_main$arrow0
+program tests/cases/caps_fs_read.ts
+module tests/cases/caps_fs_read.ts (entry)
+function sizeOf(path: string): i32 -> @sizeOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file
+  calls: nish_arena_mark nish_arena_release nish_read_file
+  stackSites=0 stackLocals=0
+function half(n: i32): i32 -> @half [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: half nish_arena_mark nish_arena_release nish_print nish_str_from_i32 sizeOf
+  stackSites=0 stackLocals=0
+  callee 10:15 sizeOf -> @sizeOf
+  callee 11:15 half -> @half
+program tests/cases/caps_fs_write.ts
+module tests/cases/caps_fs_write.ts (entry)
+function save(path: string, text: string): void -> @save
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write_file
+  calls: nish_write_file
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via save
+  calls: nish_arena_mark nish_arena_release nish_print nish_read_file save
+  stackSites=0 stackLocals=0
+  local 10:9 path: string (const)
+  callee 11:3 save -> @save
+program tests/cases/caps_generic.ts
+module tests/cases/caps_generic.ts (entry)
+function double(n: i32): i32 -> @double
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function firstLine(path: string): string -> @firstLine
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file
+  calls: nish_read_file nish_str_at nish_str_new
+  stackSites=0 stackLocals=0
+  local 11:9 text: string (const)
+  local 12:9 end: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pick$i32$fn.6.double pick$str$fn.9.firstLine
+  stackSites=0 stackLocals=0
+  callee 17:15 pick<i32, double> -> @pick$i32$fn.6.double
+  callee 18:15 pick<string, firstLine> -> @pick$str$fn.9.firstLine
+function pick<i32, double>(x: i32, f: void): i32 -> @pick$i32$fn.6.double [exported instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: double
+  stackSites=0 stackLocals=0
+  callee 6:53 double -> @double
+function pick<string, firstLine>(x: string, f: void): string -> @pick$str$fn.9.firstLine [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via firstLine
+  escaping: x
+  calls: firstLine
+  stackSites=0 stackLocals=0
+  callee 6:53 firstLine -> @firstLine
+program tests/cases/caps_net.ts
+module tests/cases/caps_net.ts (entry)
+import netAddress from "nish:net" -> builtin netAddress
+function encode(out: u8[]): i32 -> @encode
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 7:36
+  calls: nish_net_address
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: encode nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 10:9 out: u8[] (const)
+  callee 11:15 encode -> @encode
+program tests/cases/caps_process_spawn.ts
+module tests/cases/caps_process_spawn.ts (entry)
+function run(script: string): i32 -> @run
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_spawn
+  escaping: script
+  calls: nish_spawn
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 run
+  stackSites=0 stackLocals=0
+  callee 6:15 run -> @run
+program tests/cases/caps_pure.ts
+module tests/cases/caps_pure.ts (entry)
+function total(xs: i32[]): i32 -> @total [exported]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 5:7 sum: i32 (let)
+  local 6:14 x: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 total
+  stackSites=1 stackLocals=0
+  callee 14:15 total -> @total
+program tests/cases/caps_signal.ts
+module tests/cases/caps_signal.ts (entry)
+function listen(): i32 -> @listen
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_signal_fd
+  calls: nish_signal_fd
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: listen nish_print
+  stackSites=0 stackLocals=0
+  callee 7:15 listen -> @listen
 program tests/cases/cf_break_continue.ts
 module tests/cases/cf_break_continue.ts (entry)
 function firstMultipleOver(n: i32, limit: i32): i32 -> @firstMultipleOver
@@ -49815,6 +50045,29 @@ function get(a: i32[], i: i32): i32 -> @get
   calls: nish_panic_index
   pointer a: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin-capabilities.ts
+module docs/cookbook/builtin-capabilities.ts (entry)
+function load(path: string): string -> @load
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file
+  calls: nish_read_file
+  stackSites=0 stackLocals=0
+function lineCount(path: string): i32 -> @lineCount [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via load
+  escaping: path
+  calls: load nish_arena_mark nish_arena_release
+  stackSites=0 stackLocals=0
+  local 4:9 text: string (const)
+  callee 4:16 load -> @load
+  local 5:7 lines: i32 (let)
+  local 6:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: lineCount nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 15:15 lineCount -> @lineCount
 program docs/cookbook/builtin-conversions.ts
 module docs/cookbook/builtin-conversions.ts (entry)
 function widen(n: i32): i64 -> @widen
