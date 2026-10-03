@@ -1188,7 +1188,7 @@ if (!only || "net_tcp".includes(only)) {
               { cwd: root, encoding: "utf8" }
             )
           : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll)_\w+)/g)].map(
+      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
         (m) => m[1]
       )
       return { ok: cc.status === 0, removed, why: String(cc.stderr) }
@@ -1215,6 +1215,8 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_write",
       "nish_net_shutdown",
       "nish_net_close",
+      "nish_tcp_connect",
+      "nish_connect_result",
       "nish_udp_bind",
       "nish_udp_send_to",
       "nish_udp_recv_from",
@@ -1242,6 +1244,43 @@ if (!only || "net_tcp".includes(only)) {
         `${none.why}${echo.why}`
     )
   }
+}
+
+// ---- `nish:net`'s client half, against its own server (WP34 N5, #357) -----------
+//
+// `tests/cases/net_tcp_connect` is a Nish client and a Nish server in one loop:
+// the client's `tcpConnect` completes when the loop reports it writable, two
+// exchanges of 1 and 200 messages come back byte for byte with the arena flat,
+// and a port nobody listens on is refused, -111, read once. No peer is needed,
+// so it could be an `.out`; it runs here instead because every step waits on
+// the loop, and a lost wake must be a timeout and a SIGKILL, never a hung suite.
+if (!only || "net_tcp_connect".includes(only)) {
+  const netDir = path.join(buildDir, "net-connect")
+  fs.rmSync(netDir, { recursive: true, force: true })
+  fs.mkdirSync(netDir, { recursive: true })
+
+  const connectExe = buildCaseIn(netDir, "net_tcp_connect")
+  if (connectExe !== null) {
+    const want =
+      "short -22\nnot a descriptor -9\n" +
+      "peer 127.0.0.1, end of stream 0\n".repeat(2) +
+      "one: 1 intact, many: 200 intact\nflat\nrefused -111\nread once 0\n"
+    // Nothing to answer as the output arrives: the program is its own peer.
+    const r = await runWatched(connectExe, [], () => undefined)
+    check(
+      "net_tcp_connect: a Nish client connects through the loop to a Nish server, both exchanges come back intact, the arena stays flat, a closed port is refused once, and the program exits 0",
+      !r.timedOut && r.code === 0 && r.out === want,
+      `${r.timedOut ? "timed out after 10 s: a wake was lost\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+        `stdout: ${JSON.stringify(r.out)}\nwant:   ${JSON.stringify(want)}\nstderr: ${r.err}`
+    )
+  }
+
+  const loud = runCaseUnderPrelude("net_tcp_connect", [])
+  check(
+    "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
+    shown(loud)
+  )
 }
 
 // ---- `nish:net` UDP, against Node's `dgram` (WP34 N5) -----------------------------

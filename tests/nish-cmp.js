@@ -1936,10 +1936,28 @@ const DECLARED = [
     why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
   },
   {
+    program: "tests/cases/net_tcp_connect.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: a Nish client and server in one loop through `tcpConnect` and `connectResult`, which the reference compiler refuses because it has neither builtin",
+  },
+  {
+    program: "tests/cases/net_tcp_connect_import.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: `tcpConnect` and `connectResult` imported from `nish:net`, which the reference compiler refuses because the module exports neither",
+  },
+  {
     program: "docs/cookbook/runtime-prelude.ts",
     file: "runtime-prelude.ll",
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_tcp_connect` and `nish_connect_result` after `nish_net_close`, which moves every declaration after them",
   },
 ]
 
