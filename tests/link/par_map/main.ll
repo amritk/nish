@@ -9,7 +9,7 @@ declare void @nish.parallelMapInto$i32$f64$fn.16.nish_main$arrow0(%struct.nish_a
 declare void @nish.parallelMapInto$f64$f64$fn.16.nish_main$arrow1(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #3
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4

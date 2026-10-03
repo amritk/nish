@@ -3117,11 +3117,10 @@ divide with overflow` is simply unreachable on an unsigned type.
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
   A length no array can hold panics with `array length out of range` before
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
-  under `f64`, a negative `i64`, or a NaN. An `i32` length, a narrower
-  unsigned one, a ranged integer and a literal are not checked, so a negative
-  `i32` length is not refused yet: it wraps the allocator and the zero fill
-  faults (CG-2, open) (`tests/cases/cg_sec_new_array_guard`,
-  `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1).
+  under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
+  `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
+  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
   the same lowering (`tests/cases/arr_typed_views`), and no `push` or `pop`
@@ -3539,9 +3538,9 @@ hole is `s` itself (`tests/cases/str_param_passthrough`).
 
 A concatenation or a template whose result would pass 2^31 − 1 bytes fails as
 an allocation does, `nish: out of memory` and exit 1, in both number modes
-([docs/security/runtime.md](security/runtime.md), RT-2). `join` does not check
-yet, so a string it builds can pass that length, and under `--number-mode i32`
-its `length` is then wrong (CG-3 in [docs/security/codegen.md](security/codegen.md)).
+([docs/security/runtime.md](security/runtime.md), RT-2), and so does a `join`
+whose result would (CG-3 in [docs/security/codegen.md](security/codegen.md);
+`tests/link/cg_sec_join_limit`). No string can therefore pass that length.
 
 ### `this` and object literals
 
@@ -4621,7 +4620,7 @@ returns to it.
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Unlike a concatenation, its result is not yet held to 2^31 − 1 bytes (CG-3, open) | `arr_join`; `reject_arr_join_elem` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
@@ -5599,7 +5598,11 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
-  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
+  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`),
+  and when `v` can push to or pop from `a` the store goes into `a` as `v`
+  left it, its index checked again against the length then: `xs[0] +=
+  grow(xs)` writes the block `grow` moved the elements to, and an index `v`
+  shrank past panics (`tests/cases/cg_sec_compound_element_order`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
   the target expression is evaluated **once** whichever `op=` it is, so
   `a[next()] |= 1` calls `next()` a single time and pays for a single bounds

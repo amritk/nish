@@ -9,7 +9,7 @@
 @.str.6 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"x\00" }, align 8
 
 declare void @nish_free_arena() #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1

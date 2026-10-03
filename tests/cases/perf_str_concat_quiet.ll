@@ -11,7 +11,7 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish_arena_release(i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 
 define noundef i32 @test() #0 {
 entry:

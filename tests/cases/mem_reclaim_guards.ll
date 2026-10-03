@@ -15,7 +15,7 @@ declare void @nish_reset_arena() #0
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
@@ -50,7 +50,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #1 {
 entry:
   %s.addr = alloca i8*, align 8
   %0 = call i8* @nish_str_from_i32(i32 %i)
@@ -63,7 +63,7 @@ entry:
   ret i8* %4
 }
 
-define internal noundef nonnull align 8 i8* @sweep(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @sweep(i32 noundef %i) #1 {
 entry:
   call void @nish_reset_arena()
   %0 = call i8* @nish_str_from_i32(i32 %i)
@@ -71,7 +71,7 @@ entry:
   ret i8* %1
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_result.str.i32* @label(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_result.str.i32* @label(i32 noundef %i) #1 {
 entry:
   %0 = call i8* @nish_str_from_i32(i32 %i)
   %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %0)
@@ -84,14 +84,14 @@ entry:
   ret %struct.nish_result.str.i32* %3
 }
 
-define internal noundef nonnull align 8 i8* @plain(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @plain(i32 noundef %i) #1 {
 entry:
   %0 = call i8* @nish_str_from_i32(i32 %i)
   %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*), i8* %0)
   ret i8* %1
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %b.addr = alloca %struct.Box*, align 8
   %Box.obj = alloca %struct.Box, align 8
