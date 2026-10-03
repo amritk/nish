@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 909 programs, 62562 dump lines.
+# 910 programs, 62656 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -45307,6 +45307,101 @@ function main(): i32 -> @nish_main [exported entry]
   local 15:9 xs: i32[] (const)
   callee 16:15 viaTwo -> @viaTwo
   callee 17:15 clean -> @clean
+program tests/cases/panics_call_cycle.ts
+module tests/cases/panics_call_cycle.ts (entry)
+function a0(d: u32, k: i32): i32 -> @a0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: a1 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 10:52 a1 -> @a1
+function a1(d: u32, k: i32): i32 -> @a1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: a2 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 11:52 a2 -> @a2
+function a2(d: u32, k: i32): i32 -> @a2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: a0 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 12:52 a0 -> @a0
+function b0(d: u32, k: i32): i32 -> @b0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: b1 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 15:52 b1 -> @b1
+function b1(d: u32, k: i32): i32 -> @b1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: b2 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 16:52 b2 -> @b2
+function b2(d: u32, k: i32): i32 -> @b2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: b3 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 17:52 b3 -> @b3
+function b3(d: u32, k: i32): i32 -> @b3
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: b0 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 18:52 b0 -> @b0
+function c0(xs: i32[], d: u32, k: i32): i32 -> @c0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: c1 nish_panic_index nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false passedTo=c1#0
+  stackSites=0 stackLocals=0
+  callee 22:63 c1 -> @c1
+function c1(xs: i32[], d: u32, k: i32): i32 -> @c1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: c2 nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false passedTo=c2#0
+  stackSites=0 stackLocals=0
+  callee 23:63 c2 -> @c2
+function c2(xs: i32[], d: u32, k: i32): i32 -> @c2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: c0 nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false passedTo=c0#0
+  stackSites=0 stackLocals=0
+  callee 24:63 c0 -> @c0
+function e0(d: u32, k: i32): i32 -> @e0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: e1
+  stackSites=0 stackLocals=0
+  callee 27:52 e1 -> @e1
+function e1(d: u32, k: i32): i32 -> @e1
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: e0 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 28:52 e0 -> @e0
+function f(d: u32, k: i32): i32 -> @f
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: f nish_panic_overflow
+  stackSites=0 stackLocals=0
+  callee 31:51 f -> @f
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: a0 b0 c0 e0 f nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 34:9 k: i32 (const)
+  local 35:9 xs: i32[] (const)
+  callee 36:15 a0 -> @a0
+  callee 37:15 b0 -> @b0
+  callee 38:15 c0 -> @c0
+  callee 39:15 e0 -> @e0
+  callee 40:15 f -> @f
 program tests/cases/panics_divide.ts
 module tests/cases/panics_divide.ts (entry)
 function quotient(a: i32, b: i32): i32 -> @quotient

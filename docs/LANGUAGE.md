@@ -6326,7 +6326,11 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   `x += pick(xs, i)` and `100 / pick(xs, i)` reach `pick`'s `index` before
   their own `overflow` or `divide`, while `pick(xs, i - 1)` reaches its
   argument's `overflow` before the call (`tests/cases/panics_overflow_via`).
-  The list itself stays in source order, by where each site starts. A generic function's sites are its instantiations', each under its
+  In a cycle of calls made before any check, the cycle's first function in
+  declaration order with a site of its own or a call out of the cycle passes
+  over its calls back into it, and the rest of the cycle reaches what it
+  reaches (`tests/cases/panics_call_cycle`). The list itself stays in source
+  order, by where each site starts. A generic function's sites are its instantiations', each under its
   own symbol and decided over its own side tables
   (`tests/cases/panics_generic`).
 - **Two ways a program can stop are not sites**, because no proof the checker

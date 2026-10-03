@@ -235,6 +235,7 @@ cases/ovf_repro_wrapping added after R6: no rewriter to freeze it with
 cases/owner_checks added after R6: no rewriter to freeze it with
 cases/panics_array_length added after R6: no rewriter to freeze it with
 cases/panics_call added after R6: no rewriter to freeze it with
+cases/panics_call_cycle added after R6: no rewriter to freeze it with
 cases/panics_divide added after R6: no rewriter to freeze it with
 cases/panics_expect added after R6: no rewriter to freeze it with
 cases/panics_generic added after R6: no rewriter to freeze it with

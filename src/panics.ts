@@ -213,23 +213,42 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
     ordered.push(inEvaluationOrder(f.panicSites))
     reach.push(null)
   }
+  const may = mayPanicSet(facts, ordered)
   // A function reaches the first of its sites, in the order the body reaches
-  // them, that panics by itself or calls a function that reaches one. A call
-  // only ever starts to reach something, so each function's choice only moves
-  // earlier, and the fixpoint settles.
-  let changed = true
-  while (changed) {
-    changed = false
+  // them, that panics by itself or calls a function that may panic, and then
+  // what that callee reaches. A function is settled once its answer is known
+  // and waits while a call before it is into a function not yet settled. When
+  // nothing settles, every waiting function waits on a cycle of calls, and the
+  // first of them in function order that can settles by passing over its
+  // calls into functions not yet settled; the rest of its cycle then reach
+  // what it reaches. It terminates because each pass settles at least one
+  // function, from null to a site, and no function is settled twice.
+  let settling = true
+  while (settling) {
+    let settled = false
     let i = 0
-    while (i < facts.list.length && i < ordered.length && i < reach.length) {
-      const found = firstPanic(facts, reach, ordered[i], facts.list[i])
-      const held = reach[i]
-      if (found !== null && (held === null || found !== held)) {
-        reach[i] = found
-        changed = true
+    while (i < facts.list.length && i < ordered.length && i < reach.length && i < may.length) {
+      if (may[i] && reach[i] === null) {
+        const found = firstPanic(facts, may, reach, ordered[i], facts.list[i], false)
+        if (found !== null) {
+          reach[i] = found
+          settled = true
+        }
       }
       i = i + 1
     }
+    i = 0
+    while (!settled && i < facts.list.length && i < ordered.length && i < reach.length && i < may.length) {
+      if (may[i] && reach[i] === null) {
+        const found = firstPanic(facts, may, reach, ordered[i], facts.list[i], true)
+        if (found !== null) {
+          reach[i] = found
+          settled = true
+        }
+      }
+      i = i + 1
+    }
+    settling = settled
   }
   for (const unit of units) {
     const program = unit.program
@@ -244,48 +263,110 @@ export const resolvePanicSites = (units: AnalysisUnit[], facts: FactsTable): voi
 }
 
 /**
- * The first site `f` reaches that can panic, given what its callees reach so
- * far: its own unproven check, or what a call reaches, whichever the body
- * reaches first. A callee no recorded call names (a routed `nish/map` method)
- * is reached after them, in the order the walk met the callees.
+ * Which functions may panic: one with a site that panics by itself, and one
+ * that calls such a function, to a fixpoint. A function only ever joins the
+ * set, so it settles.
+ */
+const mayPanicSet = (facts: FactsTable, ordered: PanicSite[][]): boolean[] => {
+  const may: boolean[] = []
+  for (const sites of ordered) {
+    let here = false
+    for (const site of sites) {
+      if (panicsHere(site)) {
+        here = true
+      }
+    }
+    may.push(here)
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    let i = 0
+    while (i < facts.list.length && i < ordered.length && i < may.length) {
+      if (!may[i] && callsMayPanic(facts, may, ordered[i], facts.list[i])) {
+        may[i] = true
+        changed = true
+      }
+      i = i + 1
+    }
+  }
+  return may
+}
+
+/** Whether `f` calls a function in `may`, by a recorded call or as a callee no call names. */
+const callsMayPanic = (facts: FactsTable, may: boolean[], sites: PanicSite[], f: FunctionFacts): boolean => {
+  for (const site of sites) {
+    if (isCallSite(site) && mayPanicAt(facts, may, site.callee)) {
+      return true
+    }
+  }
+  let c = 0
+  while (c < f.callees.size()) {
+    if (mayPanicAt(facts, may, f.callees.at(c))) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
+}
+
+/** Whether the function called `name` may panic; false for a runtime symbol. */
+const mayPanicAt = (facts: FactsTable, may: boolean[], name: string): boolean => {
+  const at = facts.indexOf(name)
+  return at >= 0 && at < may.length && may[at]
+}
+
+/**
+ * The first site `f` reaches that can panic, given the functions settled so
+ * far: its own unproven check, or what a call into a function that may panic
+ * reaches, whichever the body reaches first. A callee no recorded call names
+ * (a routed `nish/map` method) is reached after them, in the order the walk
+ * met the callees. Null while a call before the answer is into a function not
+ * yet settled, unless `passOver`, which passes over such a call instead.
  */
 const firstPanic = (
   facts: FactsTable,
+  may: boolean[],
   reach: (PanicSite | null)[],
   sites: PanicSite[],
-  f: FunctionFacts
+  f: FunctionFacts,
+  passOver: boolean
 ): PanicSite | null => {
   for (const site of sites) {
     if (panicsHere(site)) {
       return site
     }
-    if (isCallSite(site)) {
+    if (isCallSite(site) && mayPanicAt(facts, may, site.callee)) {
       const found = reachOf(facts, reach, site.callee)
       if (found !== null) {
         return found
       }
+      if (!passOver) {
+        return null
+      }
     }
   }
-  return firstReached(facts, reach, f)
+  let c = 0
+  while (c < f.callees.size()) {
+    const callee = f.callees.at(c)
+    if (mayPanicAt(facts, may, callee)) {
+      const found = reachOf(facts, reach, callee)
+      if (found !== null) {
+        return found
+      }
+      if (!passOver) {
+        return null
+      }
+    }
+    c = c + 1
+  }
+  return null
 }
 
 /** What the function called `name` can panic at first, or null: none, or a runtime symbol. */
 const reachOf = (facts: FactsTable, reach: (PanicSite | null)[], name: string): PanicSite | null => {
   const at = facts.indexOf(name)
   return at >= 0 && at < reach.length ? reach[at] : null
-}
-
-/** What the first callee of `f` that may panic reaches, or null. */
-const firstReached = (facts: FactsTable, reach: (PanicSite | null)[], f: FunctionFacts): PanicSite | null => {
-  let c = 0
-  while (c < f.callees.size()) {
-    const found = reachOf(facts, reach, f.callees.at(c))
-    if (found !== null) {
-      return found
-    }
-    c = c + 1
-  }
-  return null
 }
 
 /** The facts of a function `--emit-panics` lists: one with a body, defined in `program`. */

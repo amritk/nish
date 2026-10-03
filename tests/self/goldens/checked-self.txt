@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 82 programs, 1834887 dump lines live, 82 distinct modules.
+# 82 programs, 1837110 dump lines live, 82 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/constants.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/panics.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/constants.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/symbols.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/std-modules.ts src/paths.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/statements.ts src/debug.ts src/target.ts src/capabilities.ts
@@ -9175,41 +9175,92 @@ function inEvaluationOrder(sites: PanicSite[]): PanicSite[] -> @inEvaluationOrde
   local 186:9 j: i32 (let)
 function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @resolvePanicSites [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 236:5
-  calls: firstPanic inEvaluationOrder keepSites listedFacts nish_array_grow sortByPosition
+  sharedWrite: 255:5
+  calls: firstPanic inEvaluationOrder keepSites listedFacts mayPanicSet nish_array_grow sortByPosition
   pointer units: size=0 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=firstPanic#0 listedFacts#1 keepSites#1
+  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicSet#0 firstPanic#0 firstPanic#0 listedFacts#1 keepSites#1
   stackSites=2 stackLocals=2
   local 209:9 ordered: PanicSite[][] (const)
   local 210:9 reach: PanicSite | null[] (const)
   local 211:14 f: FunctionFacts (const)
   callee 212:5 sortByPosition -> @sortByPosition
   callee 213:18 inEvaluationOrder -> @inEvaluationOrder
-  local 220:7 changed: boolean (let)
-  local 223:9 i: i32 (let)
-  local 225:13 found: PanicSite | null (const)
-  callee 225:21 firstPanic -> @firstPanic
-  local 226:13 held: PanicSite | null (const)
-  local 234:14 unit: AnalysisUnit (const)
-  local 235:11 program: CheckedProgram (const)
-  local 237:16 sig: FunctionSig (const)
-  local 238:13 f: FunctionFacts | null (const)
-  callee 238:17 listedFacts -> @listedFacts
-  callee 240:9 keepSites -> @keepSites
-function firstPanic(facts: FactsTable, reach: PanicSite | null[], sites: PanicSite[], f: FunctionFacts): PanicSite | null -> @firstPanic
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: firstReached isCallSite panicsHere reachOf
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachOf#0 firstReached#0
-  pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 firstReached#1
-  pointer sites: size=0 writesThrough=false captured=false
-  pointer f: size=280 writesThrough=false captured=false passedTo=firstReached#2
+  local 216:9 may: boolean[] (const)
+  callee 216:15 mayPanicSet -> @mayPanicSet
+  local 226:7 settling: boolean (let)
+  local 228:9 settled: boolean (let)
+  local 229:9 i: i32 (let)
+  local 232:15 found: PanicSite | null (const)
+  callee 232:23 firstPanic -> @firstPanic
+  local 243:15 found: PanicSite | null (const)
+  callee 243:23 firstPanic -> @firstPanic
+  local 253:14 unit: AnalysisUnit (const)
+  local 254:11 program: CheckedProgram (const)
+  local 256:16 sig: FunctionSig (const)
+  local 257:13 f: FunctionFacts | null (const)
+  callee 257:17 listedFacts -> @listedFacts
+  callee 259:9 keepSites -> @keepSites
+function mayPanicSet(facts: FactsTable, ordered: PanicSite[][]): boolean[] -> @mayPanicSet
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 279:5
+  calls: callsMayPanic nish_array_grow panicsHere
+  pointer facts: size=16 writesThrough=false captured=false passedTo=callsMayPanic#0
+  pointer ordered: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 258:14 site: PanicSite (const)
-  callee 259:9 panicsHere -> @panicsHere
-  callee 262:9 isCallSite -> @isCallSite
-  local 263:13 found: PanicSite | null (const)
-  callee 263:21 reachOf -> @reachOf
-  callee 269:10 firstReached -> @firstReached
+  local 271:9 may: boolean[] (const)
+  local 272:14 sites: PanicSite[] (const)
+  local 273:9 here: boolean (let)
+  local 274:16 site: PanicSite (const)
+  callee 275:11 panicsHere -> @panicsHere
+  local 281:7 changed: boolean (let)
+  local 284:9 i: i32 (let)
+  callee 286:22 callsMayPanic -> @callsMayPanic
+function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f: FunctionFacts): boolean -> @callsMayPanic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: StringSet.at StringSet.size isCallSite mayPanicAt
+  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicAt#0 mayPanicAt#0
+  pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
+  pointer sites: size=0 writesThrough=false captured=false
+  pointer f: size=280 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 298:14 site: PanicSite (const)
+  callee 299:9 isCallSite -> @isCallSite
+  callee 299:29 mayPanicAt -> @mayPanicAt
+  local 303:7 c: i32 (let)
+  callee 304:14 StringSet.size -> @StringSet.size
+  callee 305:9 mayPanicAt -> @mayPanicAt
+  callee 305:32 StringSet.at -> @StringSet.at
+function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean -> @mayPanicAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: FactsTable.indexOf
+  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
+  pointer may: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 315:9 at: i32 (const)
+  callee 315:14 FactsTable.indexOf -> @FactsTable.indexOf
+function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[], sites: PanicSite[], f: FunctionFacts, passOver: boolean): PanicSite | null -> @firstPanic
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: StringSet.at StringSet.size isCallSite mayPanicAt panicsHere reachOf
+  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicAt#0 reachOf#0 mayPanicAt#0 reachOf#0
+  pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
+  pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
+  pointer sites: size=0 writesThrough=false captured=false
+  pointer f: size=280 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 335:14 site: PanicSite (const)
+  callee 336:9 panicsHere -> @panicsHere
+  callee 339:9 isCallSite -> @isCallSite
+  callee 339:29 mayPanicAt -> @mayPanicAt
+  local 340:13 found: PanicSite | null (const)
+  callee 340:21 reachOf -> @reachOf
+  local 349:7 c: i32 (let)
+  callee 350:14 StringSet.size -> @StringSet.size
+  local 351:11 callee: string (const)
+  callee 351:20 StringSet.at -> @StringSet.at
+  callee 352:9 mayPanicAt -> @mayPanicAt
+  local 353:13 found: PanicSite | null (const)
+  callee 353:21 reachOf -> @reachOf
 function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): PanicSite | null -> @reachOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -9217,20 +9268,8 @@ function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): Pa
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer reach: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 274:9 at: i32 (const)
-  callee 274:14 FactsTable.indexOf -> @FactsTable.indexOf
-function firstReached(facts: FactsTable, reach: PanicSite | null[], f: FunctionFacts): PanicSite | null -> @firstReached
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: StringSet.at StringSet.size reachOf
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachOf#0
-  pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1
-  pointer f: size=280 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 280:7 c: i32 (let)
-  callee 281:14 StringSet.size -> @StringSet.size
-  local 282:11 found: PanicSite | null (const)
-  callee 282:19 reachOf -> @reachOf
-  callee 282:41 StringSet.at -> @StringSet.at
+  local 368:9 at: i32 (const)
+  callee 368:14 FactsTable.indexOf -> @FactsTable.indexOf
 function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSig): FunctionFacts | null -> @listedFacts
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.definedIn FunctionSig.foreign
@@ -9238,12 +9277,12 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer sig: size=112 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
-  callee 293:3 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 293:37 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 293:53 FactsTable.get -> @FactsTable.get
+  callee 374:3 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 374:37 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 374:53 FactsTable.get -> @FactsTable.get
 function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite | null[], sig: FunctionSig, f: FunctionFacts): void -> @keepSites
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 317:7
+  sharedWrite: 398:7
   calls: PanicSite.constructor StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size isCallSite nish_alloc_struct nish_array_grow reachOf sortByPosition
   pointer program: size=608 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
@@ -9251,28 +9290,28 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   pointer sig: size=112 writesThrough=false captured=false
   pointer f: size=280 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 308:9 sites: PanicSite[] (const)
-  local 309:9 named: StringSet (const)
-  callee 309:17 new StringSet -> @StringSet.constructor
-  local 310:14 site: PanicSite (const)
-  callee 311:10 isCallSite -> @isCallSite
-  local 315:11 found: PanicSite | null (const)
-  callee 315:19 reachOf -> @reachOf
-  callee 319:7 StringSet.add -> @StringSet.add
-  local 322:7 c: i32 (let)
-  callee 323:14 StringSet.size -> @StringSet.size
-  local 324:11 callee: string (const)
-  callee 324:20 StringSet.at -> @StringSet.at
-  local 325:11 found: PanicSite | null (const)
-  callee 325:19 reachOf -> @reachOf
-  callee 326:28 StringSet.has -> @StringSet.has
-  local 327:13 site: PanicSite (const)
-  callee 327:20 new PanicSite -> @PanicSite.constructor
-  callee 330:7 StringSet.add -> @StringSet.add
-  local 334:14 node: Node (const)
-  callee 335:16 new PanicSite -> @PanicSite.constructor
-  callee 337:3 sortByPosition -> @sortByPosition
-  local 338:14 site: PanicSite (const)
+  local 389:9 sites: PanicSite[] (const)
+  local 390:9 named: StringSet (const)
+  callee 390:17 new StringSet -> @StringSet.constructor
+  local 391:14 site: PanicSite (const)
+  callee 392:10 isCallSite -> @isCallSite
+  local 396:11 found: PanicSite | null (const)
+  callee 396:19 reachOf -> @reachOf
+  callee 400:7 StringSet.add -> @StringSet.add
+  local 403:7 c: i32 (let)
+  callee 404:14 StringSet.size -> @StringSet.size
+  local 405:11 callee: string (const)
+  callee 405:20 StringSet.at -> @StringSet.at
+  local 406:11 found: PanicSite | null (const)
+  callee 406:19 reachOf -> @reachOf
+  callee 407:28 StringSet.has -> @StringSet.has
+  local 408:13 site: PanicSite (const)
+  callee 408:20 new PanicSite -> @PanicSite.constructor
+  callee 411:7 StringSet.add -> @StringSet.add
+  local 415:14 node: Node (const)
+  callee 416:16 new PanicSite -> @PanicSite.constructor
+  callee 418:3 sortByPosition -> @sortByPosition
+  local 419:14 site: PanicSite (const)
 function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panicsJson [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
@@ -9280,30 +9319,30 @@ function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panics
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=listedFacts#1 siteJson#2
   stackSites=1 stackLocals=1
-  local 357:9 out: StringBuilder (const)
-  callee 357:15 new StringBuilder -> @StringBuilder.constructor
-  callee 358:3 StringBuilder.add -> @StringBuilder.add
-  local 359:7 first: boolean (let)
-  local 360:14 unit: AnalysisUnit (const)
-  local 361:11 program: CheckedProgram (const)
-  local 362:9 at: i32 (let)
-  local 363:16 sig: FunctionSig (const)
-  callee 364:11 listedFacts -> @listedFacts
-  callee 367:7 StringBuilder.add -> @StringBuilder.add
-  callee 369:7 StringBuilder.add -> @StringBuilder.add
-  callee 370:7 addJsonQuoted -> @addJsonQuoted
-  callee 371:7 StringBuilder.add -> @StringBuilder.add
-  callee 372:7 addJsonQuoted -> @addJsonQuoted
-  callee 373:7 StringBuilder.add -> @StringBuilder.add
-  callee 374:7 addJsonQuoted -> @addJsonQuoted
-  callee 375:7 StringBuilder.add -> @StringBuilder.add
-  callee 375:26 SourceFile.lineOf -> @SourceFile.lineOf
-  local 376:11 comma: boolean (let)
-  callee 378:9 StringBuilder.add -> @StringBuilder.add
-  callee 380:9 siteJson -> @siteJson
-  callee 383:7 StringBuilder.add -> @StringBuilder.add
-  callee 386:3 StringBuilder.add -> @StringBuilder.add
-  callee 387:10 StringBuilder.toText -> @StringBuilder.toText
+  local 438:9 out: StringBuilder (const)
+  callee 438:15 new StringBuilder -> @StringBuilder.constructor
+  callee 439:3 StringBuilder.add -> @StringBuilder.add
+  local 440:7 first: boolean (let)
+  local 441:14 unit: AnalysisUnit (const)
+  local 442:11 program: CheckedProgram (const)
+  local 443:9 at: i32 (let)
+  local 444:16 sig: FunctionSig (const)
+  callee 445:11 listedFacts -> @listedFacts
+  callee 448:7 StringBuilder.add -> @StringBuilder.add
+  callee 450:7 StringBuilder.add -> @StringBuilder.add
+  callee 451:7 addJsonQuoted -> @addJsonQuoted
+  callee 452:7 StringBuilder.add -> @StringBuilder.add
+  callee 453:7 addJsonQuoted -> @addJsonQuoted
+  callee 454:7 StringBuilder.add -> @StringBuilder.add
+  callee 455:7 addJsonQuoted -> @addJsonQuoted
+  callee 456:7 StringBuilder.add -> @StringBuilder.add
+  callee 456:26 SourceFile.lineOf -> @SourceFile.lineOf
+  local 457:11 comma: boolean (let)
+  callee 459:9 StringBuilder.add -> @StringBuilder.add
+  callee 461:9 siteJson -> @siteJson
+  callee 464:7 StringBuilder.add -> @StringBuilder.add
+  callee 467:3 StringBuilder.add -> @StringBuilder.add
+  callee 468:10 StringBuilder.toText -> @StringBuilder.toText
 function siteJson(out: StringBuilder, program: CheckedProgram, facts: FactsTable, site: PanicSite): void -> @siteJson
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
@@ -9313,23 +9352,23 @@ function siteJson(out: StringBuilder, program: CheckedProgram, facts: FactsTable
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer site: size=48 writesThrough=false captured=false passedTo=isCallSite#0
   stackSites=0 stackLocals=0
-  local 392:9 source: SourceFile (const)
-  callee 393:3 StringBuilder.add -> @StringBuilder.add
-  callee 393:23 panicKindName -> @panicKindName
-  callee 393:59 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 394:3 StringBuilder.add -> @StringBuilder.add
-  callee 394:24 SourceFile.columnOf -> @SourceFile.columnOf
-  callee 396:5 StringBuilder.add -> @StringBuilder.add
-  callee 400:5 StringBuilder.add -> @StringBuilder.add
-  callee 402:7 isCallSite -> @isCallSite
-  local 403:11 callee: FunctionFacts | null (const)
-  callee 403:20 FactsTable.get -> @FactsTable.get
-  callee 404:5 StringBuilder.add -> @StringBuilder.add
-  callee 405:5 addJsonQuoted -> @addJsonQuoted
-  local 407:9 reaches: PanicSite | null (const)
-  callee 409:5 StringBuilder.add -> @StringBuilder.add
-  callee 409:24 panicKindName -> @panicKindName
-  callee 411:3 StringBuilder.add -> @StringBuilder.add
+  local 473:9 source: SourceFile (const)
+  callee 474:3 StringBuilder.add -> @StringBuilder.add
+  callee 474:23 panicKindName -> @panicKindName
+  callee 474:59 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 475:3 StringBuilder.add -> @StringBuilder.add
+  callee 475:24 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 477:5 StringBuilder.add -> @StringBuilder.add
+  callee 481:5 StringBuilder.add -> @StringBuilder.add
+  callee 483:7 isCallSite -> @isCallSite
+  local 484:11 callee: FunctionFacts | null (const)
+  callee 484:20 FactsTable.get -> @FactsTable.get
+  callee 485:5 StringBuilder.add -> @StringBuilder.add
+  callee 486:5 addJsonQuoted -> @addJsonQuoted
+  local 488:9 reaches: PanicSite | null (const)
+  callee 490:5 StringBuilder.add -> @StringBuilder.add
+  callee 490:24 panicKindName -> @panicKindName
+  callee 492:3 StringBuilder.add -> @StringBuilder.add
 module src/std-modules.ts
 import CLI from "./branding" -> const CLI
 import STD_PREFIX from "./branding" -> const STD_PREFIX
