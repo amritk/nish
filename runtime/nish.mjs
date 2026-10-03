@@ -109,6 +109,8 @@ for (const name of [
   "netWrite",
   "netShutdown",
   "netClose",
+  "tcpConnect",
+  "connectResult",
   "udpBind",
   "udpSendTo",
   "udpRecvFrom",

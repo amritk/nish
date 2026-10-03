@@ -3564,7 +3564,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -4203,13 +4203,14 @@ versions throw rather than answer. The row in
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
-and reads and writes bytes, or binds and trades datagrams, and every socket is
+and reads and writes bytes, a client connects, or either binds and trades
+datagrams, and every socket is
 **non-blocking**, so a call that
 would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All sixteen functions
+so a child that `spawnSync` starts inherits none of them. All eighteen functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -4232,8 +4233,9 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 descriptor, a count, `0`), and a negative number is the failure's errno,
 negated. The codes a loop branches on are **Linux's numbers on every platform**:
 `-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
-connection was reset, `-98` the address is in use and `-22` a bad argument; the
-Darwin runtime translates its own. Any other failure is the host's `-errno`
+connection was reset, `-98` the address is in use, `-111` the connection was
+refused, `-110` it timed out and `-22` a bad argument; the Darwin runtime
+translates its own. Any other failure is the host's `-errno`
 (`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
 answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
 `Result`, because no builtin answers one and a failure here is routine, and
@@ -4264,6 +4266,33 @@ to its IPv4 address and to its IPv6 one, and reads every mark back from
 `meta[1]` over both. That needs a host with IPv6: where `::1` cannot be listened
 on, `"::"` is the IPv4 fallback above, and the check says so and passes rather
 than counting a skip. CI's `ubuntu-latest` has IPv6 and runs it.
+
+#### The client half
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `tcpConnect(addr: readonly u8[]): i32` | a new TCP socket, non-blocking and close-on-exec, that starts connecting to the [address](#the-address-form) in `addr` — an IPv4 one from an IPv4 socket, any other from an IPv6 one — and answers its descriptor **at once, while the connection is still being made**: the `EINPROGRESS` (`-115`) of a non-blocking `connect` is not a failure, and the loop says when it has finished by reporting the descriptor writable. Any other failure closes the socket and is answered instead of it; an `addr` shorter than 18 bytes is `-22` before any socket exists | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_element`, `reject_net_connect_arity` |
+| `connectResult(fd: i32): i32` | how the connection went, asked once `fd` is writable: `0` when it is made, or its failure from `SO_ERROR`, such as **`-111` for a port nobody listens on** and `-110` for one that never answered. The kernel clears the failure as it is read, so a second call answers `0`; the descriptor is closed with `netClose` either way | write | `net_tcp_connect`, `net_tcp_connect_import`; `reject_net_connect_wasm` |
+
+A connection is made the way everything else here waits: in the loop. Linux
+answers `EINPROGRESS` even over loopback, so a program asks for writability and
+not for an answer from the call. Neither call waits, so both are `willreturn`,
+and neither allocates. `net_tcp_connect` is a Nish client and a Nish server in
+one loop: two exchanges of 1 and 200 messages come back byte for byte with the
+arena where it stood, and a port that was bound and closed again answers `-111`
+and then `0`. The `net_` block of `tests/run.js` runs it under a timeout, so a
+lost wake fails the run rather than hangs it.
+
+```ts
+const addr: u8[] = new Array<u8>(18);
+netAddress(addr, "127.0.0.1", 8080);
+const fd = tcpConnect(addr);          // the descriptor, still connecting
+pollAdd(loop, fd, 2, 1);              // writable once it has finished
+// ... pollWait until token 1 comes back ...
+if (connectResult(fd) === 0) {
+  pollModify(loop, fd, 1, 1);         // connected: now wait to read
+}
+```
 
 #### UDP
 
@@ -4421,8 +4450,8 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
   `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`).
-- **Not yet.** There is no `tcpConnect` (`reject_net_unknown_export`), no name
-  resolution, no `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
+- **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
+  `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait
   for a connection, a byte or a datagram by calling again on `-11`, as
   `net_tcp_echo` and `net_udp_echo` do.
@@ -4435,7 +4464,8 @@ so `npm run check` types these programs, and under `runtime/nish.mjs` each
 function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
-`net_` block of `tests/run.js`, for `netAddress`, `udpBind` and `pollCreate`).
+`net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
+`pollCreate`).
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
