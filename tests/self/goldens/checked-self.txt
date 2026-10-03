@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1244304 dump lines live, 76 distinct modules.
+# 77 programs, 1284207 dump lines live, 77 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -19,7 +19,7 @@ entry src/builtins.ts: src/builtins.ts src/arrays.ts src/annotations.ts src/bran
 entry src/checker.ts: src/checker.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/declarations.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/codes.ts: src/codes.ts
 entry src/compilation.ts: src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/portability.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/manifest.ts
-entry src/compile.ts: src/compile.ts src/ast-text.ts src/nodes.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/portability.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/manifest.ts src/dump.ts src/interop-abi.ts src/interop-dts.ts src/interop-wasm.ts src/interop-header.ts src/interop-napi.ts src/run-cache.ts
+entry src/compile.ts: src/compile.ts src/ast-text.ts src/nodes.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/portability.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/manifest.ts src/dump.ts src/interop-abi.ts src/interop-dts.ts src/interop-wasm.ts src/interop-header.ts src/interop-napi.ts src/fix.ts src/run-cache.ts
 entry src/constants.ts: src/constants.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/lexer.ts src/tokens.ts
 entry src/context.ts: src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
 entry src/debug.ts: src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/members.ts src/emit-util.ts src/fusion.ts src/parents.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/assignment.ts src/statements.ts
@@ -42,6 +42,7 @@ entry src/emit-util.ts: src/emit-util.ts src/nish-modules.ts src/branding.ts src
 entry src/emit.ts: src/emit.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/ir.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts
 entry src/escape.ts: src/escape.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/emit-util.ts src/emit-result.ts src/emit.ts src/debug.ts src/ir.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts
 entry src/expressions.ts: src/expressions.ts src/branding.ts src/constants.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/lexer.ts src/tokens.ts src/annotations.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/emit-util.ts src/members.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/fusion.ts src/assignment.ts src/statements.ts
+entry src/fix.ts: src/fix.ts src/branding.ts src/compilation.ts src/attributes.ts src/emit-builtins.ts src/builtins.ts src/arrays.ts src/annotations.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit.ts src/debug.ts src/ir.ts src/emit-control.ts src/emit-parallel.ts src/emit-ops.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/declarations.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/portability.ts src/portability-numbers.ts src/portability-records.ts src/portability-strings.ts src/inline-arrays.ts src/visibility.ts src/ranges.ts src/parser.ts src/manifest.ts
 entry src/fusion.ts: src/fusion.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/emit-util.ts src/generics.ts src/annotations.ts src/constants.ts src/lexer.ts src/tokens.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/assignment.ts src/statements.ts
 entry src/generics.ts: src/generics.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/ice.ts: src/ice.ts src/branding.ts src/codes.ts
@@ -379,6 +380,7 @@ function packageConditionFor(numberMode: string): string -> @packageConditionFor
   stackSites=0 stackLocals=0
 module src/context.ts
 import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
+import Edit from "./diagnostics" -> struct Edit
 import SourceFile from "./diagnostics" -> struct SourceFile
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
@@ -432,6 +434,10 @@ struct CheckContext (class) size=192 align=8 exported
   constructor -> @CheckContext.constructor
   method error -> @CheckContext.error
   method errorAtSpan -> @CheckContext.errorAtSpan
+  method errorFix -> @CheckContext.errorFix
+  method performanceFix -> @CheckContext.performanceFix
+  method edit -> @CheckContext.edit
+  method operatorStart -> @CheckContext.operatorStart
   method errorAtSpecifier -> @CheckContext.errorAtSpecifier
   method errorAtProperty -> @CheckContext.errorAtProperty
   method errorAtKey -> @CheckContext.errorAtKey
@@ -476,6 +482,44 @@ function CheckContext.errorAtSpan(this: CheckContext, start: i32, end: i32, mess
   pointer this: size=192 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee 231:5 DiagnosticSink.report -> @DiagnosticSink.report
+function CheckContext.errorFix(this: CheckContext, node: Node, message: string, edits: Edit[]): void -> @CheckContext.errorFix [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 247:5
+  escaping: message
+  calls: DiagnosticSink.reportFix
+  pointer this: size=192 writesThrough=true captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  pointer edits: size=0 writesThrough=true captured=true passedTo=DiagnosticSink.reportFix#5
+  stackSites=0 stackLocals=0
+  callee 246:5 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+function CheckContext.performanceFix(this: CheckContext, node: Node, message: string, edits: Edit[]): void -> @CheckContext.performanceFix [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.reportPerformanceFix
+  escaping: message
+  calls: DiagnosticSink.reportPerformanceFix
+  pointer this: size=192 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  pointer edits: size=0 writesThrough=true captured=true passedTo=DiagnosticSink.reportPerformanceFix#5
+  stackSites=0 stackLocals=0
+  callee 252:5 DiagnosticSink.reportPerformanceFix -> @DiagnosticSink.reportPerformanceFix
+function CheckContext.edit(this: CheckContext, start: i32, end: i32, text: string): Edit -> @CheckContext.edit [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
+  escaping: end start text
+  calls: Edit.constructor nish_alloc_struct
+  pointer this: size=192 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 261:12 new Edit -> @Edit.constructor
+function CheckContext.operatorStart(this: CheckContext, node: Node): i32 -> @CheckContext.operatorStart [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_index nish_str_eq nish_str_new
+  pointer this: size=192 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 275:11 text: string (const)
+  local 276:11 op: string (const)
+  local 277:11 to: i32 (const)
+  local 278:9 i: i32 (let)
+  local 280:13 ch: i32 (const)
 function CheckContext.errorAtSpecifier(this: CheckContext, node: Node, message: string): void -> @CheckContext.errorAtSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -484,12 +528,12 @@ function CheckContext.errorAtSpecifier(this: CheckContext, node: Node, message: 
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 248:11 text: string (const)
-  local 249:9 end: i32 (let)
-  local 253:9 start: i32 (let)
-  local 254:11 quote: i32 (const)
-  callee 261:7 CheckContext.error -> @CheckContext.error
-  callee 264:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
+  local 317:11 text: string (const)
+  local 318:9 end: i32 (let)
+  local 322:9 start: i32 (let)
+  local 323:11 quote: i32 (const)
+  callee 330:7 CheckContext.error -> @CheckContext.error
+  callee 333:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
 function CheckContext.errorAtProperty(this: CheckContext, member: Node, message: string): void -> @CheckContext.errorAtProperty [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtSpan
@@ -498,7 +542,7 @@ function CheckContext.errorAtProperty(this: CheckContext, member: Node, message:
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer member: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 276:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
+  callee 345:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
 function CheckContext.errorAtKey(this: CheckContext, property: Node, message: string): void -> @CheckContext.errorAtKey [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtSpan
@@ -507,7 +551,7 @@ function CheckContext.errorAtKey(this: CheckContext, property: Node, message: st
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer property: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 291:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
+  callee 360:5 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
 function CheckContext.performance(this: CheckContext, node: Node, message: string): void -> @CheckContext.performance [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.reportPerformance
@@ -516,30 +560,30 @@ function CheckContext.performance(this: CheckContext, node: Node, message: strin
   pointer this: size=192 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 300:5 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
+  callee 369:5 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
 function CheckContext.errorOnce(this: CheckContext, node: Node, start: i32, message: string): void -> @CheckContext.errorOnce [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 313:7
+  sharedWrite: 382:7
   escaping: message start
   calls: CheckContext.errorAtSpan StringSet.add StringSet.has nish_str_from_i32
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 311:11 key: string (const)
-  callee 312:9 StringSet.has -> @StringSet.has
-  callee 315:7 StringSet.add -> @StringSet.add
-  callee 316:7 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
-  local 318:11 current: FunctionSig | null (const)
+  local 380:11 key: string (const)
+  callee 381:9 StringSet.has -> @StringSet.has
+  callee 384:7 StringSet.add -> @StringSet.add
+  callee 385:7 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
+  local 387:11 current: FunctionSig | null (const)
 function CheckContext.capturesOuter(this: CheckContext, name: string): boolean -> @CheckContext.capturesOuter [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FunctionBindings.get Scope.lookup
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 331:16 scope: Scope (const)
-  callee 332:11 Scope.lookup -> @Scope.lookup
-  local 336:16 bindings: FunctionBindings (const)
-  callee 337:11 FunctionBindings.get -> @FunctionBindings.get
+  local 400:16 scope: Scope (const)
+  callee 401:11 Scope.lookup -> @Scope.lookup
+  local 405:16 bindings: FunctionBindings (const)
+  callee 406:11 FunctionBindings.get -> @FunctionBindings.get
 function CheckContext.errorType(this: CheckContext, node: Node, message: string): i32 -> @CheckContext.errorType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -548,7 +592,7 @@ function CheckContext.errorType(this: CheckContext, node: Node, message: string)
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 346:5 CheckContext.error -> @CheckContext.error
+  callee 415:5 CheckContext.error -> @CheckContext.error
 function CheckContext.textOf(this: CheckContext, node: Node): string -> @CheckContext.textOf [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
@@ -565,38 +609,38 @@ function CheckContext.signature(this: CheckContext, name: string): FunctionSig |
   calls: StringMap.get nish_panic_index
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 362:11 at: i32 (const)
-  callee 362:16 StringMap.get -> @StringMap.get
+  local 431:11 at: i32 (const)
+  callee 431:16 StringMap.get -> @StringMap.get
 function CheckContext.template(this: CheckContext, name: string): TemplateInfo | null -> @CheckContext.template [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.template
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 368:12 CheckedProgram.template -> @CheckedProgram.template
+  callee 437:12 CheckedProgram.template -> @CheckedProgram.template
 function CheckContext.addFunction(this: CheckContext, sig: FunctionSig): void -> @CheckContext.addFunction [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 374:5
+  sharedWrite: 443:5
   escaping: sig
   calls: StringMap.set nish_array_grow
   pointer this: size=192 writesThrough=false captured=false
   pointer sig: size=112 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 373:5 StringMap.set -> @StringMap.set
+  callee 442:5 StringMap.set -> @StringMap.set
 function CheckContext.pushLoop(this: CheckContext, kind: i32): void -> @CheckContext.pushLoop [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 379:5
+  sharedWrite: 448:5
   escaping: kind
   calls: nish_array_grow
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function CheckContext.popLoop(this: CheckContext): boolean -> @CheckContext.popLoop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 386:5
+  sharedWrite: 455:5
   calls: nish_panic_index
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 385:11 broke: boolean (const)
+  local 454:11 broke: boolean (const)
 module src/diagnostics.ts
 import codeFor from "./codes" -> function @codeFor
 import compareStrings from "./strings" -> function @compareStrings
@@ -620,7 +664,12 @@ struct SourceFile (class) size=24 align=8 exported
   method columnOf -> @SourceFile.columnOf
   method codeUnits -> @SourceFile.codeUnits
   method lineText -> @SourceFile.lineText
-struct Diagnostic (class) size=40 align=8 exported
+struct Edit (class) size=16 align=8 exported
+  field start: i32 index=0 offset=0
+  field end: i32 index=1 offset=4
+  field text: string index=2 offset=8
+  constructor -> @Edit.constructor
+struct Diagnostic (class) size=48 align=8 exported
   field source: SourceFile index=0 offset=0
   field start: i32 index=1 offset=8
   field end: i32 index=2 offset=12
@@ -628,11 +677,13 @@ struct Diagnostic (class) size=40 align=8 exported
   field text: string index=4 offset=24
   field line: i32 index=5 offset=32
   field column: i32 index=6 offset=36
+  field edits: Edit[] index=7 offset=40
   constructor -> @Diagnostic.constructor
   method summary -> @Diagnostic.summary
   method excerpt -> @Diagnostic.excerpt
   method message -> @Diagnostic.message
   method json -> @Diagnostic.json
+  method fixJson -> @Diagnostic.fixJson
 struct DiagnosticSink (class) size=40 align=8 exported
   field items: Diagnostic[] index=0 offset=0
   field warnings: Diagnostic[] index=1 offset=8
@@ -642,9 +693,12 @@ struct DiagnosticSink (class) size=40 align=8 exported
   constructor -> @DiagnosticSink.constructor
   method report -> @DiagnosticSink.report
   method reportKind -> @DiagnosticSink.reportKind
+  method reportFix -> @DiagnosticSink.reportFix
   method add -> @DiagnosticSink.add
   method reportPerformance -> @DiagnosticSink.reportPerformance
+  method reportPerformanceFix -> @DiagnosticSink.reportPerformanceFix
   method reportPortability -> @DiagnosticSink.reportPortability
+  method reportPortabilityFix -> @DiagnosticSink.reportPortabilityFix
   method insertWarning -> @DiagnosticSink.insertWarning
   method compareWarnings -> @DiagnosticSink.compareWarnings
   method hasErrors -> @DiagnosticSink.hasErrors
@@ -718,89 +772,109 @@ function startsCharacter(byte: i32): boolean -> @startsCharacter
 function isFourByteLead(byte: i32): boolean -> @isFourByteLead
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function Edit.constructor(this: Edit, start: i32, end: i32, text: string): void -> @Edit.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: end start text
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function Diagnostic.constructor(this: Diagnostic, source: SourceFile, start: i32, end: i32, kind: string, text: string): void -> @Diagnostic.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: end kind source start text
   calls: SourceFile.columnOf SourceFile.lineOf
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   pointer source: size=24 writesThrough=true captured=true passedTo=SourceFile.lineOf#0 SourceFile.columnOf#0
   stackSites=0 stackLocals=0
-  callee 232:17 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 233:19 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 262:17 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 263:19 SourceFile.columnOf -> @SourceFile.columnOf
 function Diagnostic.summary(this: Diagnostic): string -> @Diagnostic.summary [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32
-  pointer this: size=40 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Diagnostic.excerpt(this: Diagnostic): string -> @Diagnostic.excerpt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.addChar
   calls: SourceFile.codeUnits SourceFile.lineIndex SourceFile.lineText StringBuilder.addChar StringBuilder.constructor StringBuilder.toText isFourByteLead nish_panic_index nish_str_concat nish_str_from_i32 startsCharacter
-  pointer this: size=40 writesThrough=false captured=false
+  pointer this: size=48 writesThrough=false captured=false
   stackSites=3 stackLocals=3
-  local 248:11 line: i32 (const)
-  callee 248:18 SourceFile.lineIndex -> @SourceFile.lineIndex
-  local 249:11 text: string (const)
-  callee 249:18 SourceFile.lineText -> @SourceFile.lineText
-  local 250:11 lineNo: string (const)
-  local 251:11 lineStart: i32 (const)
-  local 252:11 lineEnd: i32 (const)
-  local 253:11 markerEnd: i32 (const)
-  local 257:9 markerLength: i32 (let)
-  callee 257:24 SourceFile.codeUnits -> @SourceFile.codeUnits
-  local 265:11 prefix: i32 (const)
-  local 266:11 pad: StringBuilder (const)
-  callee 266:17 new StringBuilder -> @StringBuilder.constructor
-  local 267:9 i: i32 (let)
-  local 269:13 byte: i32 (const)
-  callee 270:11 startsCharacter -> @startsCharacter
-  callee 271:9 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 272:13 isFourByteLead -> @isFourByteLead
-  callee 273:11 StringBuilder.addChar -> @StringBuilder.addChar
-  local 278:11 marker: StringBuilder (const)
-  callee 278:20 new StringBuilder -> @StringBuilder.constructor
-  callee 279:5 StringBuilder.addChar -> @StringBuilder.addChar
-  local 280:9 tilde: i32 (let)
-  callee 282:7 StringBuilder.addChar -> @StringBuilder.addChar
-  local 286:11 gutter: StringBuilder (const)
-  callee 286:20 new StringBuilder -> @StringBuilder.constructor
-  local 287:9 space: i32 (let)
-  callee 289:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 292:40 StringBuilder.toText -> @StringBuilder.toText
-  callee 292:61 StringBuilder.toText -> @StringBuilder.toText
-  callee 292:76 StringBuilder.toText -> @StringBuilder.toText
+  local 279:11 line: i32 (const)
+  callee 279:18 SourceFile.lineIndex -> @SourceFile.lineIndex
+  local 280:11 text: string (const)
+  callee 280:18 SourceFile.lineText -> @SourceFile.lineText
+  local 281:11 lineNo: string (const)
+  local 282:11 lineStart: i32 (const)
+  local 283:11 lineEnd: i32 (const)
+  local 284:11 markerEnd: i32 (const)
+  local 288:9 markerLength: i32 (let)
+  callee 288:24 SourceFile.codeUnits -> @SourceFile.codeUnits
+  local 296:11 prefix: i32 (const)
+  local 297:11 pad: StringBuilder (const)
+  callee 297:17 new StringBuilder -> @StringBuilder.constructor
+  local 298:9 i: i32 (let)
+  local 300:13 byte: i32 (const)
+  callee 301:11 startsCharacter -> @startsCharacter
+  callee 302:9 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 303:13 isFourByteLead -> @isFourByteLead
+  callee 304:11 StringBuilder.addChar -> @StringBuilder.addChar
+  local 309:11 marker: StringBuilder (const)
+  callee 309:20 new StringBuilder -> @StringBuilder.constructor
+  callee 310:5 StringBuilder.addChar -> @StringBuilder.addChar
+  local 311:9 tilde: i32 (let)
+  callee 313:7 StringBuilder.addChar -> @StringBuilder.addChar
+  local 317:11 gutter: StringBuilder (const)
+  callee 317:20 new StringBuilder -> @StringBuilder.constructor
+  local 318:9 space: i32 (let)
+  callee 320:7 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 323:40 StringBuilder.toText -> @StringBuilder.toText
+  callee 323:61 StringBuilder.toText -> @StringBuilder.toText
+  callee 323:76 StringBuilder.toText -> @StringBuilder.toText
 function Diagnostic.message(this: Diagnostic): string -> @Diagnostic.message [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Diagnostic.excerpt
   calls: Diagnostic.excerpt Diagnostic.summary nish_str_concat
-  pointer this: size=40 writesThrough=false captured=false passedTo=Diagnostic.summary#0 Diagnostic.excerpt#0
+  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.summary#0 Diagnostic.excerpt#0
   stackSites=0 stackLocals=0
-  callee 297:15 Diagnostic.summary -> @Diagnostic.summary
-  callee 297:34 Diagnostic.excerpt -> @Diagnostic.excerpt
+  callee 328:15 Diagnostic.summary -> @Diagnostic.summary
+  callee 328:34 Diagnostic.excerpt -> @Diagnostic.excerpt
 function Diagnostic.json(this: Diagnostic): string -> @Diagnostic.json [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonQuote
-  calls: SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
-  pointer this: size=40 writesThrough=false captured=false
+  calls: Diagnostic.fixJson SourceFile.columnOf SourceFile.lineOf codeFor jsonQuote nish_str_concat nish_str_eq nish_str_from_i32
+  pointer this: size=48 writesThrough=false captured=false passedTo=Diagnostic.fixJson#0
   stackSites=0 stackLocals=0
-  local 313:11 endLine: i32 (const)
-  callee 313:21 SourceFile.lineOf -> @SourceFile.lineOf
-  local 314:11 endColumn: i32 (const)
-  callee 314:23 SourceFile.columnOf -> @SourceFile.columnOf
-  local 315:11 warning: boolean (const)
-  local 316:11 severity: string (const)
-  local 317:11 message: string (const)
-  local 318:11 code: string (const)
-  callee 318:18 codeFor -> @codeFor
-  callee 319:23 jsonQuote -> @jsonQuote
-  callee 319:196 jsonQuote -> @jsonQuote
+  local 348:11 endLine: i32 (const)
+  callee 348:21 SourceFile.lineOf -> @SourceFile.lineOf
+  local 349:11 endColumn: i32 (const)
+  callee 349:23 SourceFile.columnOf -> @SourceFile.columnOf
+  local 350:11 warning: boolean (const)
+  local 351:11 severity: string (const)
+  local 352:11 message: string (const)
+  local 353:11 code: string (const)
+  callee 353:18 codeFor -> @codeFor
+  callee 354:23 jsonQuote -> @jsonQuote
+  callee 354:196 jsonQuote -> @jsonQuote
+  callee 354:217 Diagnostic.fixJson -> @Diagnostic.fixJson
+function Diagnostic.fixJson(this: Diagnostic): string -> @Diagnostic.fixJson [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via jsonQuote
+  calls: SourceFile.columnOf SourceFile.lineOf jsonQuote nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 362:11 parts: string[] (const)
+  local 363:16 edit: Edit (const)
+  local 364:13 source: SourceFile (const)
+  callee 366:20 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 366:58 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 366:99 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 366:138 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 366:174 jsonQuote -> @jsonQuote
 function DiagnosticSink.constructor(this: DiagnosticSink): void -> @DiagnosticSink.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 360:22 new StringMap -> @StringMap.constructor
-  callee 361:29 new StringMap -> @StringMap.constructor
+  callee 410:22 new StringMap -> @StringMap.constructor
+  callee 411:29 new StringMap -> @StringMap.constructor
 function DiagnosticSink.report(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.report [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.reportKind
@@ -809,7 +883,7 @@ function DiagnosticSink.report(this: DiagnosticSink, source: SourceFile, start: 
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.reportKind#0
   pointer source: size=24 writesThrough=true captured=true passedTo=DiagnosticSink.reportKind#1
   stackSites=0 stackLocals=0
-  callee 366:5 DiagnosticSink.reportKind -> @DiagnosticSink.reportKind
+  callee 416:5 DiagnosticSink.reportKind -> @DiagnosticSink.reportKind
 function DiagnosticSink.reportKind(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, kind: string, text: string): void -> @DiagnosticSink.reportKind [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.add
@@ -818,19 +892,31 @@ function DiagnosticSink.reportKind(this: DiagnosticSink, source: SourceFile, sta
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.add#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 370:5 DiagnosticSink.add -> @DiagnosticSink.add
-  callee 370:14 new Diagnostic -> @Diagnostic.constructor
+  callee 420:5 DiagnosticSink.add -> @DiagnosticSink.add
+  callee 420:14 new Diagnostic -> @Diagnostic.constructor
+function DiagnosticSink.reportFix(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void -> @DiagnosticSink.reportFix [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 431:5
+  escaping: edits end start text
+  calls: Diagnostic.constructor DiagnosticSink.add nish_alloc_struct
+  pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.add#0
+  pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
+  pointer edits: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 430:11 diagnostic: Diagnostic (const)
+  callee 430:24 new Diagnostic -> @Diagnostic.constructor
+  callee 432:5 DiagnosticSink.add -> @DiagnosticSink.add
 function DiagnosticSink.add(this: DiagnosticSink, diagnostic: Diagnostic): void -> @DiagnosticSink.add [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 385:5
+  sharedWrite: 447:5
   escaping: diagnostic
   calls: StringMap.has StringMap.set StringMap.size nish_array_grow
   pointer this: size=40 writesThrough=false captured=false
-  pointer diagnostic: size=40 writesThrough=true captured=true
+  pointer diagnostic: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 382:10 StringMap.has -> @StringMap.has
-  callee 383:7 StringMap.set -> @StringMap.set
-  callee 383:50 StringMap.size -> @StringMap.size
+  callee 444:10 StringMap.has -> @StringMap.has
+  callee 445:7 StringMap.set -> @StringMap.set
+  callee 445:50 StringMap.size -> @StringMap.size
 function DiagnosticSink.reportPerformance(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportPerformance [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
@@ -839,8 +925,20 @@ function DiagnosticSink.reportPerformance(this: DiagnosticSink, source: SourceFi
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 407:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 407:39 new Diagnostic -> @Diagnostic.constructor
+  callee 469:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 469:39 new Diagnostic -> @Diagnostic.constructor
+function DiagnosticSink.reportPerformanceFix(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void -> @DiagnosticSink.reportPerformanceFix [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 475:5
+  escaping: edits end start text
+  calls: Diagnostic.constructor DiagnosticSink.insertWarning nish_alloc_struct
+  pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
+  pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
+  pointer edits: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 474:11 warning: Diagnostic (const)
+  callee 474:21 new Diagnostic -> @Diagnostic.constructor
+  callee 476:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
 function DiagnosticSink.reportPortability(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportPortability [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
@@ -849,36 +947,48 @@ function DiagnosticSink.reportPortability(this: DiagnosticSink, source: SourceFi
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  callee 416:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 416:42 new Diagnostic -> @Diagnostic.constructor
+  callee 485:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 485:42 new Diagnostic -> @Diagnostic.constructor
+function DiagnosticSink.reportPortabilityFix(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string, edits: Edit[]): void -> @DiagnosticSink.reportPortabilityFix [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 491:5
+  escaping: edits end start text
+  calls: Diagnostic.constructor DiagnosticSink.insertWarning nish_alloc_struct
+  pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
+  pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
+  pointer edits: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 490:11 warning: Diagnostic (const)
+  callee 490:21 new Diagnostic -> @Diagnostic.constructor
+  callee 492:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
 function DiagnosticSink.insertWarning(this: DiagnosticSink, list: Diagnostic[], warning: Diagnostic): void -> @DiagnosticSink.insertWarning [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 424:5
+  sharedWrite: 500:5
   escaping: warning
   calls: DiagnosticSink.compareWarnings StringMap.has StringMap.set StringMap.size nish_array_grow nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.compareWarnings#0
   pointer list: size=0 writesThrough=true captured=false
-  pointer warning: size=40 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
+  pointer warning: size=48 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
   stackSites=0 stackLocals=0
-  callee 421:10 StringMap.has -> @StringMap.has
-  callee 422:7 StringMap.set -> @StringMap.set
-  callee 422:54 StringMap.size -> @StringMap.size
-  local 425:9 i: i32 (let)
-  callee 426:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
+  callee 497:10 StringMap.has -> @StringMap.has
+  callee 498:7 StringMap.set -> @StringMap.set
+  callee 498:54 StringMap.size -> @StringMap.size
+  local 501:9 i: i32 (let)
+  callee 502:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
 function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: Diagnostic): i32 -> @DiagnosticSink.compareWarnings [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: StringMap.get codeFor compareStrings nish_arena_mark nish_arena_release
   pointer this: size=40 writesThrough=false captured=false
-  pointer a: size=40 writesThrough=false captured=false
-  pointer b: size=40 writesThrough=false captured=false
+  pointer a: size=48 writesThrough=false captured=false
+  pointer b: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 446:11 fileA: i32 (const)
-  callee 446:19 StringMap.get -> @StringMap.get
-  local 447:11 fileB: i32 (const)
-  callee 447:19 StringMap.get -> @StringMap.get
-  callee 457:12 compareStrings -> @compareStrings
-  callee 457:27 codeFor -> @codeFor
-  callee 457:52 codeFor -> @codeFor
+  local 522:11 fileA: i32 (const)
+  callee 522:19 StringMap.get -> @StringMap.get
+  local 523:11 fileB: i32 (const)
+  callee 523:19 StringMap.get -> @StringMap.get
+  callee 533:12 compareStrings -> @compareStrings
+  callee 533:27 codeFor -> @codeFor
+  callee 533:52 codeFor -> @codeFor
 function DiagnosticSink.hasErrors(this: DiagnosticSink): boolean -> @DiagnosticSink.hasErrors [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=40 writesThrough=false captured=false
@@ -895,56 +1005,56 @@ function DiagnosticSink.compare(this: DiagnosticSink, a: Diagnostic, b: Diagnost
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.get
   pointer this: size=40 writesThrough=false captured=false
-  pointer a: size=40 writesThrough=false captured=false
-  pointer b: size=40 writesThrough=false captured=false
+  pointer a: size=48 writesThrough=false captured=false
+  pointer b: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 474:11 fileA: i32 (const)
-  callee 474:19 StringMap.get -> @StringMap.get
-  local 475:11 fileB: i32 (const)
-  callee 475:19 StringMap.get -> @StringMap.get
+  local 550:11 fileA: i32 (const)
+  callee 550:19 StringMap.get -> @StringMap.get
+  local 551:11 fileB: i32 (const)
+  callee 551:19 StringMap.get -> @StringMap.get
 function DiagnosticSink.sorted(this: DiagnosticSink): Diagnostic[] -> @DiagnosticSink.sorted [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 500:7
+  sharedWrite: 576:7
   calls: DiagnosticSink.compare nish_array_grow nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.compare#0
   stackSites=0 stackLocals=0
-  local 497:9 source: Diagnostic[] (let)
-  local 498:9 target: Diagnostic[] (let)
-  local 499:16 item: Diagnostic (const)
-  local 503:9 width: i32 (let)
-  local 505:11 low: i32 (let)
-  local 507:15 mid: i32 (const)
-  local 508:15 high: i32 (const)
-  local 509:13 left: i32 (let)
-  local 510:13 right: i32 (let)
-  local 511:13 out: i32 (let)
-  local 513:17 takeLeft: boolean (const)
-  callee 513:60 DiagnosticSink.compare -> @DiagnosticSink.compare
-  local 525:13 swap: Diagnostic[] (const)
+  local 573:9 source: Diagnostic[] (let)
+  local 574:9 target: Diagnostic[] (let)
+  local 575:16 item: Diagnostic (const)
+  local 579:9 width: i32 (let)
+  local 581:11 low: i32 (let)
+  local 583:15 mid: i32 (const)
+  local 584:15 high: i32 (const)
+  local 585:13 left: i32 (let)
+  local 586:13 right: i32 (let)
+  local 587:13 out: i32 (let)
+  local 589:17 takeLeft: boolean (const)
+  callee 589:60 DiagnosticSink.compare -> @DiagnosticSink.compare
+  local 601:13 swap: Diagnostic[] (const)
 function DiagnosticSink.format(this: DiagnosticSink, max: i32): string -> @DiagnosticSink.format [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.sorted
   calls: Diagnostic.message DiagnosticSink.sorted nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=40 writesThrough=false captured=false passedTo=DiagnosticSink.sorted#0
   stackSites=1 stackLocals=1
-  local 539:11 errors: Diagnostic[] (const)
-  callee 539:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 541:14 Diagnostic.message -> @Diagnostic.message
-  local 543:11 lines: string[] (const)
-  local 544:9 i: i32 (let)
-  callee 546:18 Diagnostic.message -> @Diagnostic.message
-  local 549:11 hidden: i32 (const)
+  local 615:11 errors: Diagnostic[] (const)
+  callee 615:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 617:14 Diagnostic.message -> @Diagnostic.message
+  local 619:11 lines: string[] (const)
+  local 620:9 i: i32 (let)
+  callee 622:18 Diagnostic.message -> @Diagnostic.message
+  local 625:11 hidden: i32 (const)
 function formatList(list: Diagnostic[], kind: string, max: i32): string -> @formatList [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Diagnostic.message
   calls: Diagnostic.message nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer list: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  callee 570:12 Diagnostic.message -> @Diagnostic.message
-  local 572:9 lines: string[] (const)
-  local 573:7 i: i32 (let)
-  callee 575:16 Diagnostic.message -> @Diagnostic.message
-  local 578:9 hidden: i32 (const)
+  callee 646:12 Diagnostic.message -> @Diagnostic.message
+  local 648:9 lines: string[] (const)
+  local 649:7 i: i32 (let)
+  callee 651:16 Diagnostic.message -> @Diagnostic.message
+  local 654:9 hidden: i32 (const)
 module src/codes.ts
 const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"
@@ -9056,6 +9166,7 @@ import TemplateInfo from "./program" -> struct TemplateInfo
 import coercesTo from "./structs" -> function @coercesTo
 import isUndefined from "./validator" -> function @isUndefined
 import isUndefinedType from "./validator" -> function @isUndefinedType
+import strictEqualityFix from "./validator" -> function @strictEqualityFix
 import undefinedForbidden from "./validator" -> function @undefinedForbidden
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
@@ -9421,26 +9532,27 @@ function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target: i32, 
   callee 699:94 f64Hint -> @f64Hint
 function checkBinary(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via CheckContext.errorType
-  calls: CheckContext.errorType CheckContext.textOf callSiteTemplate checkAssignment checkCoalesce checkLogical checkOperator checkUndefinedTest isUndefinedValue nish_panic_index nish_str_concat nish_str_eq writesLeft
-  pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkAssignment#0 checkLogical#0 checkCoalesce#0 checkUndefinedTest#0 callSiteTemplate#0 CheckContext.errorType#0 CheckContext.textOf#0 checkOperator#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkAssignment#1 checkLogical#1 checkCoalesce#1 checkUndefinedTest#1 checkOperator#1
+  sharedWrite: via CheckContext.errorFix
+  calls: CheckContext.errorFix CheckContext.errorType CheckContext.textOf callSiteTemplate checkAssignment checkCoalesce checkLogical checkOperator checkUndefinedTest isUndefinedValue nish_panic_index nish_str_concat nish_str_eq strictEqualityFix writesLeft
+  pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.errorFix#0 strictEqualityFix#0 checkAssignment#0 checkLogical#0 checkCoalesce#0 checkUndefinedTest#0 callSiteTemplate#0 CheckContext.errorType#0 CheckContext.textOf#0 checkOperator#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorFix#1 strictEqualityFix#1 checkAssignment#1 checkLogical#1 checkCoalesce#1 checkUndefinedTest#1 checkOperator#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkAssignment#2 checkLogical#2 checkCoalesce#2 isUndefinedValue#1 isUndefinedValue#1 checkUndefinedTest#2 callSiteTemplate#2 checkOperator#5
   stackSites=0 stackLocals=0
   local 706:9 op: string (const)
-  callee 708:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 710:7 writesLeft -> @writesLeft
-  callee 711:12 checkAssignment -> @checkAssignment
-  callee 714:12 checkLogical -> @checkLogical
-  callee 717:12 checkCoalesce -> @checkCoalesce
-  callee 721:6 isUndefinedValue -> @isUndefinedValue
-  callee 721:51 isUndefinedValue -> @isUndefinedValue
-  callee 723:12 checkUndefinedTest -> @checkUndefinedTest
-  local 731:11 template: TemplateInfo | null (const)
-  callee 731:22 callSiteTemplate -> @callSiteTemplate
-  callee 733:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 736:45 CheckContext.textOf -> @CheckContext.textOf
-  callee 740:10 checkOperator -> @checkOperator
+  callee 708:5 CheckContext.errorFix -> @CheckContext.errorFix
+  callee 708:70 strictEqualityFix -> @strictEqualityFix
+  callee 711:7 writesLeft -> @writesLeft
+  callee 712:12 checkAssignment -> @checkAssignment
+  callee 715:12 checkLogical -> @checkLogical
+  callee 718:12 checkCoalesce -> @checkCoalesce
+  callee 722:6 isUndefinedValue -> @isUndefinedValue
+  callee 722:51 isUndefinedValue -> @isUndefinedValue
+  callee 724:12 checkUndefinedTest -> @checkUndefinedTest
+  local 732:11 template: TemplateInfo | null (const)
+  callee 732:22 callSiteTemplate -> @callSiteTemplate
+  callee 734:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 737:45 CheckContext.textOf -> @CheckContext.textOf
+  callee 741:10 checkOperator -> @checkOperator
 function callSiteTemplate(ctx: CheckContext, left: Node, scope: Scope): TemplateInfo | null -> @callSiteTemplate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.template StructInfo.methodTemplate nish_panic_index pathStruct
@@ -9448,10 +9560,10 @@ function callSiteTemplate(ctx: CheckContext, left: Node, scope: Scope): Template
   pointer left: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=pathStruct#2
   stackSites=0 stackLocals=0
-  callee 753:12 CheckContext.template -> @CheckContext.template
-  local 758:9 info: StructInfo | null (const)
-  callee 758:16 pathStruct -> @pathStruct
-  callee 759:33 StructInfo.methodTemplate -> @StructInfo.methodTemplate
+  callee 754:12 CheckContext.template -> @CheckContext.template
+  local 759:9 info: StructInfo | null (const)
+  callee 759:16 pathStruct -> @pathStruct
+  callee 760:33 StructInfo.methodTemplate -> @StructInfo.methodTemplate
 function pathStruct(ctx: CheckContext, path: Node, scope: Scope): StructInfo | null -> @pathStruct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Scope.lookup StructInfo.field TypeTable.isStruct nish_panic_index pathStruct structOf
@@ -9459,37 +9571,37 @@ function pathStruct(ctx: CheckContext, path: Node, scope: Scope): StructInfo | n
   pointer path: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 pathStruct#2
   stackSites=0 stackLocals=0
-  local 768:7 type: i32 (let)
-  local 770:11 local: Local | null (const)
-  callee 770:19 Scope.lookup -> @Scope.lookup
-  local 775:11 current: FunctionSig | null (const)
-  local 776:11 owner: StructInfo | null (const)
-  local 781:11 holder: StructInfo | null (const)
-  callee 781:20 pathStruct -> @pathStruct
-  local 782:11 field: FieldInfo | null (const)
-  callee 782:62 StructInfo.field -> @StructInfo.field
-  callee 787:23 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 787:50 structOf -> @structOf
+  local 769:7 type: i32 (let)
+  local 771:11 local: Local | null (const)
+  callee 771:19 Scope.lookup -> @Scope.lookup
+  local 776:11 current: FunctionSig | null (const)
+  local 777:11 owner: StructInfo | null (const)
+  local 782:11 holder: StructInfo | null (const)
+  callee 782:20 pathStruct -> @pathStruct
+  local 783:11 field: FieldInfo | null (const)
+  callee 783:62 StructInfo.field -> @StructInfo.field
+  callee 788:23 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 788:50 structOf -> @structOf
 function literalHint(other: i32, fallback: i32): i32 -> @literalHint
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: fallback other
   calls: isNumeric
   stackSites=0 stackLocals=0
-  callee 802:58 isNumeric -> @isNumeric
+  callee 803:58 isNumeric -> @isNumeric
 function literalOperand(node: Node): boolean -> @literalOperand [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: literalOperand nish_panic_index nish_str_eq
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 823:12 literalOperand -> @literalOperand
-  callee 826:33 literalOperand -> @literalOperand
+  callee 824:12 literalOperand -> @literalOperand
+  callee 827:33 literalOperand -> @literalOperand
 function peekable(node: Node): boolean -> @peekable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq peekable
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 846:12 peekable -> @peekable
-  callee 849:33 peekable -> @peekable
+  callee 847:12 peekable -> @peekable
+  callee 850:33 peekable -> @peekable
 function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node, rightNode: Node, scope: Scope): i32 -> @checkOperator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9501,36 +9613,36 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   pointer rightNode: size=40 writesThrough=true captured=true passedTo=literalOperand#0 checkExpression#1 peekable#0 checkExpression#1 checkEquality#6
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 878:7 left: i32 (let)
-  local 879:7 right: i32 (let)
-  callee 880:7 literalOperand -> @literalOperand
-  callee 880:36 literalOperand -> @literalOperand
-  callee 881:13 checkExpression -> @checkExpression
-  callee 885:12 checkExpression -> @checkExpression
-  callee 885:50 peekable -> @peekable
-  callee 885:72 literalHint -> @literalHint
-  callee 887:12 checkExpression -> @checkExpression
-  callee 891:13 checkExpression -> @checkExpression
-  callee 895:37 literalHint -> @literalHint
-  local 901:9 a: string (const)
-  callee 901:13 TypeTable.typeName -> @TypeTable.typeName
-  local 902:9 b: string (const)
+  local 879:7 left: i32 (let)
+  local 880:7 right: i32 (let)
+  callee 881:7 literalOperand -> @literalOperand
+  callee 881:36 literalOperand -> @literalOperand
+  callee 882:13 checkExpression -> @checkExpression
+  callee 886:12 checkExpression -> @checkExpression
+  callee 886:50 peekable -> @peekable
+  callee 886:72 literalHint -> @literalHint
+  callee 888:12 checkExpression -> @checkExpression
+  callee 892:13 checkExpression -> @checkExpression
+  callee 896:37 literalHint -> @literalHint
+  local 902:9 a: string (const)
   callee 902:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 908:10 isNumeric -> @isNumeric
-  local 909:13 hint: string (const)
-  callee 913:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 921:12 checkEquality -> @checkEquality
-  callee 924:28 isNumeric -> @isNumeric
-  callee 925:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 929:7 isShift -> @isShift
-  callee 931:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 931:83 booleanAlternative -> @booleanAlternative
-  callee 933:10 isInteger -> @isInteger
-  callee 934:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 936:96 f64Hint -> @f64Hint
-  callee 942:10 isNumeric -> @isNumeric
-  callee 943:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 950:10 CheckContext.errorType -> @CheckContext.errorType
+  local 903:9 b: string (const)
+  callee 903:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 909:10 isNumeric -> @isNumeric
+  local 910:13 hint: string (const)
+  callee 914:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 922:12 checkEquality -> @checkEquality
+  callee 925:28 isNumeric -> @isNumeric
+  callee 926:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 930:7 isShift -> @isShift
+  callee 932:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 932:83 booleanAlternative -> @booleanAlternative
+  callee 934:10 isInteger -> @isInteger
+  callee 935:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 937:96 f64Hint -> @f64Hint
+  callee 943:10 isNumeric -> @isNumeric
+  callee 944:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 951:10 CheckContext.errorType -> @CheckContext.errorType
 function booleanAlternative(op: string): string -> @booleanAlternative
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -9540,8 +9652,8 @@ function f64Hint(ctx: CheckContext, left: i32, right: i32): string -> @f64Hint
   calls: CheckContext.numberType
   pointer ctx: size=192 writesThrough=false captured=false passedTo=CheckContext.numberType#0
   stackSites=0 stackLocals=0
-  local 973:9 fromMode: boolean (const)
-  callee 973:20 CheckContext.numberType -> @CheckContext.numberType
+  local 974:9 fromMode: boolean (const)
+  callee 974:20 CheckContext.numberType -> @CheckContext.numberType
 function isShift(op: string): boolean -> @isShift
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -9556,16 +9668,16 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   pointer leftNode: size=40 writesThrough=false captured=false
   pointer rightNode: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 993:9 a: string (const)
-  callee 993:13 TypeTable.typeName -> @TypeTable.typeName
-  local 994:9 b: string (const)
+  local 994:9 a: string (const)
   callee 994:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 996:9 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 996:39 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 997:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 1002:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1006:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 1007:12 CheckContext.errorType -> @CheckContext.errorType
+  local 995:9 b: string (const)
+  callee 995:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 997:9 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 997:39 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 998:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 1003:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1007:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 1008:12 CheckContext.errorType -> @CheckContext.errorType
 function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkLogical
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9574,18 +9686,18 @@ function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @chec
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.child#0
   stackSites=0 stackLocals=0
-  local 1016:9 left: i32 (const)
-  callee 1016:16 checkExpression -> @checkExpression
-  local 1019:9 guarded: Scope (const)
-  callee 1019:19 Scope.child -> @Scope.child
-  callee 1020:3 narrow -> @narrow
-  local 1021:9 right: i32 (const)
-  callee 1021:17 checkExpression -> @checkExpression
-  local 1026:11 a: string (const)
-  callee 1026:15 TypeTable.typeName -> @TypeTable.typeName
-  local 1027:11 b: string (const)
+  local 1017:9 left: i32 (const)
+  callee 1017:16 checkExpression -> @checkExpression
+  local 1020:9 guarded: Scope (const)
+  callee 1020:19 Scope.child -> @Scope.child
+  callee 1021:3 narrow -> @narrow
+  local 1022:9 right: i32 (const)
+  callee 1022:17 checkExpression -> @checkExpression
+  local 1027:11 a: string (const)
   callee 1027:15 TypeTable.typeName -> @TypeTable.typeName
-  callee 1028:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1028:11 b: string (const)
+  callee 1028:15 TypeTable.typeName -> @TypeTable.typeName
+  callee 1029:12 CheckContext.errorType -> @CheckContext.errorType
 function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkConditional
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkCondition
@@ -9595,29 +9707,29 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
   pointer expr: size=40 writesThrough=false captured=false passedTo=ternaryResult#1 ternaryResult#1 ternaryResult#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkCondition#2 Scope.child#0 Scope.child#0
   stackSites=0 stackLocals=0
-  callee 1034:3 checkCondition -> @checkCondition
-  local 1035:9 thenScope: Scope (const)
-  callee 1035:21 Scope.child -> @Scope.child
-  callee 1036:3 narrow -> @narrow
-  local 1037:9 elseScope: Scope (const)
-  callee 1037:21 Scope.child -> @Scope.child
-  callee 1038:3 narrow -> @narrow
-  local 1041:9 whenTrue: i32 (const)
-  callee 1041:20 unproven -> @unproven
-  callee 1041:34 checkExpression -> @checkExpression
-  local 1042:9 whenFalse: i32 (const)
-  callee 1042:21 unproven -> @unproven
-  callee 1042:35 checkExpression -> @checkExpression
-  callee 1047:12 ternaryResult -> @ternaryResult
-  callee 1050:7 TypeTable.assignable -> @TypeTable.assignable
-  callee 1051:12 ternaryResult -> @ternaryResult
-  callee 1053:7 TypeTable.assignable -> @TypeTable.assignable
-  callee 1054:12 ternaryResult -> @ternaryResult
-  local 1056:9 a: string (const)
-  callee 1056:13 TypeTable.typeName -> @TypeTable.typeName
-  local 1057:9 b: string (const)
+  callee 1035:3 checkCondition -> @checkCondition
+  local 1036:9 thenScope: Scope (const)
+  callee 1036:21 Scope.child -> @Scope.child
+  callee 1037:3 narrow -> @narrow
+  local 1038:9 elseScope: Scope (const)
+  callee 1038:21 Scope.child -> @Scope.child
+  callee 1039:3 narrow -> @narrow
+  local 1042:9 whenTrue: i32 (const)
+  callee 1042:20 unproven -> @unproven
+  callee 1042:34 checkExpression -> @checkExpression
+  local 1043:9 whenFalse: i32 (const)
+  callee 1043:21 unproven -> @unproven
+  callee 1043:35 checkExpression -> @checkExpression
+  callee 1048:12 ternaryResult -> @ternaryResult
+  callee 1051:7 TypeTable.assignable -> @TypeTable.assignable
+  callee 1052:12 ternaryResult -> @ternaryResult
+  callee 1054:7 TypeTable.assignable -> @TypeTable.assignable
+  callee 1055:12 ternaryResult -> @ternaryResult
+  local 1057:9 a: string (const)
   callee 1057:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 1058:10 CheckContext.errorType -> @CheckContext.errorType
+  local 1058:9 b: string (const)
+  callee 1058:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 1059:10 CheckContext.errorType -> @CheckContext.errorType
 function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 -> @ternaryResult
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9626,7 +9738,7 @@ function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 -> @ternar
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  callee 1070:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1071:12 CheckContext.errorType -> @CheckContext.errorType
 function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void -> @checkCondition [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9635,10 +9747,10 @@ function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void -> @c
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 1077:9 type: i32 (const)
-  callee 1077:16 checkExpression -> @checkExpression
-  callee 1079:5 CheckContext.error -> @CheckContext.error
-  callee 1081:41 TypeTable.typeName -> @TypeTable.typeName
+  local 1078:9 type: i32 (const)
+  callee 1078:16 checkExpression -> @checkExpression
+  callee 1080:5 CheckContext.error -> @CheckContext.error
+  callee 1082:41 TypeTable.typeName -> @TypeTable.typeName
 function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void -> @narrow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via narrow
@@ -9648,10 +9760,10 @@ function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean):
   pointer cond: size=40 writesThrough=false captured=false passedTo=narrowBinary#1 narrowResultTest#0
   pointer scope: size=40 writesThrough=false captured=false passedTo=narrow#2 narrow#2 narrowBinary#2 narrowResultTest#1
   stackSites=0 stackLocals=0
-  callee 1100:7 narrow -> @narrow
-  callee 1104:9 narrow -> @narrow
-  callee 1108:7 narrowBinary -> @narrowBinary
-  callee 1113:7 narrowResultTest -> @narrowResultTest
+  callee 1101:7 narrow -> @narrow
+  callee 1105:9 narrow -> @narrow
+  callee 1109:7 narrowBinary -> @narrowBinary
+  callee 1114:7 narrowResultTest -> @narrowResultTest
 function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void -> @narrowBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via narrow
@@ -9661,57 +9773,57 @@ function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   pointer cond: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=narrow#2 clearNarrowingsAssignedIn#2 narrow#2 isUndefinedValue#1 isUndefinedValue#1 Scope.lookup#0 Scope.typeOf#0 Scope.narrow#0
   stackSites=0 stackLocals=0
-  local 1119:9 op: string (const)
-  callee 1121:5 narrow -> @narrow
-  callee 1126:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
-  callee 1127:5 narrow -> @narrow
-  local 1135:9 left: Node (const)
-  local 1136:9 right: Node (const)
-  local 1137:9 rightAbsent: boolean (const)
-  callee 1137:48 isUndefinedValue -> @isUndefinedValue
-  local 1138:9 leftAbsent: boolean (const)
-  callee 1138:46 isUndefinedValue -> @isUndefinedValue
-  local 1142:9 variable: Node (const)
-  local 1146:9 local: Local | null (const)
-  callee 1146:17 Scope.lookup -> @Scope.lookup
-  local 1150:9 declared: i32 (const)
-  callee 1150:20 Scope.typeOf -> @Scope.typeOf
-  local 1151:9 byUndefined: boolean (const)
-  local 1152:7 present: i32 (let)
-  callee 1153:22 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee 1154:15 TypeTable.refOf -> @TypeTable.refOf
-  callee 1155:30 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 1156:15 TypeTable.stripNull -> @TypeTable.stripNull
-  local 1162:9 narrows: boolean (const)
-  callee 1164:5 Scope.narrow -> @Scope.narrow
+  local 1120:9 op: string (const)
+  callee 1122:5 narrow -> @narrow
+  callee 1127:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
+  callee 1128:5 narrow -> @narrow
+  local 1136:9 left: Node (const)
+  local 1137:9 right: Node (const)
+  local 1138:9 rightAbsent: boolean (const)
+  callee 1138:48 isUndefinedValue -> @isUndefinedValue
+  local 1139:9 leftAbsent: boolean (const)
+  callee 1139:46 isUndefinedValue -> @isUndefinedValue
+  local 1143:9 variable: Node (const)
+  local 1147:9 local: Local | null (const)
+  callee 1147:17 Scope.lookup -> @Scope.lookup
+  local 1151:9 declared: i32 (const)
+  callee 1151:20 Scope.typeOf -> @Scope.typeOf
+  local 1152:9 byUndefined: boolean (const)
+  local 1153:7 present: i32 (let)
+  callee 1154:22 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee 1155:15 TypeTable.refOf -> @TypeTable.refOf
+  callee 1156:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 1157:15 TypeTable.stripNull -> @TypeTable.stripNull
+  local 1163:9 narrows: boolean (const)
+  callee 1165:5 Scope.narrow -> @Scope.narrow
 function isUndefinedValue(node: Node, scope: Scope): boolean -> @isUndefinedValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Scope.lookup isUndefined
   pointer node: size=40 writesThrough=false captured=false passedTo=isUndefined#0
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
-  callee 1191:3 isUndefined -> @isUndefined
-  callee 1191:24 Scope.lookup -> @Scope.lookup
+  callee 1192:3 isUndefined -> @isUndefined
+  callee 1192:24 Scope.lookup -> @Scope.lookup
 function checkUndefinedTest(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkUndefinedTest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1210:3
+  sharedWrite: 1211:3
   calls: CheckContext.errorType TypeTable.isMaybe isUndefinedValue maybeOperand nish_panic_index undefinedForbidden
   pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.errorType#0 maybeOperand#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=isUndefinedValue#1 isUndefinedValue#1 maybeOperand#2
   stackSites=0 stackLocals=0
-  local 1195:9 leftAbsent: boolean (const)
-  callee 1195:22 isUndefinedValue -> @isUndefinedValue
-  local 1196:9 operand: Node (const)
-  local 1197:9 absent: Node (const)
-  callee 1198:7 isUndefinedValue -> @isUndefinedValue
-  callee 1199:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1199:35 undefinedForbidden -> @undefinedForbidden
-  local 1201:9 type: i32 (const)
-  callee 1201:16 maybeOperand -> @maybeOperand
-  callee 1205:8 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee 1206:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1206:34 undefinedForbidden -> @undefinedForbidden
+  local 1196:9 leftAbsent: boolean (const)
+  callee 1196:22 isUndefinedValue -> @isUndefinedValue
+  local 1197:9 operand: Node (const)
+  local 1198:9 absent: Node (const)
+  callee 1199:7 isUndefinedValue -> @isUndefinedValue
+  callee 1200:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1200:35 undefinedForbidden -> @undefinedForbidden
+  local 1202:9 type: i32 (const)
+  callee 1202:16 maybeOperand -> @maybeOperand
+  callee 1206:8 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee 1207:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1207:34 undefinedForbidden -> @undefinedForbidden
 function maybeOperand(ctx: CheckContext, operand: Node, scope: Scope): i32 -> @maybeOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9720,13 +9832,13 @@ function maybeOperand(ctx: CheckContext, operand: Node, scope: Scope): i32 -> @m
   pointer operand: size=40 writesThrough=true captured=true passedTo=checkExpression#1 unwrapParens#0
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.lookup#0
   stackSites=0 stackLocals=0
-  local 1220:9 type: i32 (const)
-  callee 1220:16 checkExpression -> @checkExpression
-  local 1221:9 bare: Node (const)
-  callee 1221:16 unwrapParens -> @unwrapParens
-  local 1222:9 local: Local | null (const)
-  callee 1222:55 Scope.lookup -> @Scope.lookup
-  callee 1223:45 TypeTable.isMaybe -> @TypeTable.isMaybe
+  local 1221:9 type: i32 (const)
+  callee 1221:16 checkExpression -> @checkExpression
+  local 1222:9 bare: Node (const)
+  callee 1222:16 unwrapParens -> @unwrapParens
+  local 1223:9 local: Local | null (const)
+  callee 1223:55 Scope.lookup -> @Scope.lookup
+  callee 1224:45 TypeTable.isMaybe -> @TypeTable.isMaybe
 function checkCoalesce(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkCoalesce
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via maybeOperand
@@ -9735,18 +9847,18 @@ function checkCoalesce(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=maybeOperand#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 1236:9 left: i32 (const)
-  callee 1236:16 maybeOperand -> @maybeOperand
-  callee 1240:8 TypeTable.isMaybe -> @TypeTable.isMaybe
-  callee 1241:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1246:9 value: i32 (const)
-  callee 1246:17 TypeTable.refOf -> @TypeTable.refOf
-  local 1247:9 fallback: i32 (const)
-  callee 1247:20 checkExpression -> @checkExpression
-  callee 1251:8 TypeTable.assignable -> @TypeTable.assignable
-  callee 1252:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1254:85 TypeTable.typeName -> @TypeTable.typeName
-  callee 1254:158 TypeTable.typeName -> @TypeTable.typeName
+  local 1237:9 left: i32 (const)
+  callee 1237:16 maybeOperand -> @maybeOperand
+  callee 1241:8 TypeTable.isMaybe -> @TypeTable.isMaybe
+  callee 1242:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1247:9 value: i32 (const)
+  callee 1247:17 TypeTable.refOf -> @TypeTable.refOf
+  local 1248:9 fallback: i32 (const)
+  callee 1248:20 checkExpression -> @checkExpression
+  callee 1252:8 TypeTable.assignable -> @TypeTable.assignable
+  callee 1253:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1255:85 TypeTable.typeName -> @TypeTable.typeName
+  callee 1255:158 TypeTable.typeName -> @TypeTable.typeName
 function refuseMaybe(ctx: CheckContext, expr: Node, type: i32): i32 -> @refuseMaybe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9755,10 +9867,10 @@ function refuseMaybe(ctx: CheckContext, expr: Node, type: i32): i32 -> @refuseMa
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.textOf#0 maybePlaceReason#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=CheckContext.errorType#1 CheckContext.textOf#1 maybePlaceReason#1
   stackSites=0 stackLocals=0
-  callee 1268:3 CheckContext.errorType -> @CheckContext.errorType
-  callee 1270:10 CheckContext.textOf -> @CheckContext.textOf
-  callee 1270:37 TypeTable.typeName -> @TypeTable.typeName
-  callee 1270:66 maybePlaceReason -> @maybePlaceReason
+  callee 1269:3 CheckContext.errorType -> @CheckContext.errorType
+  callee 1271:10 CheckContext.textOf -> @CheckContext.textOf
+  callee 1271:37 TypeTable.typeName -> @TypeTable.typeName
+  callee 1271:66 maybePlaceReason -> @maybePlaceReason
 function maybePlaceReason(ctx: CheckContext, expr: Node): string -> @maybePlaceReason
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ParentTable.constructor
@@ -9767,36 +9879,36 @@ function maybePlaceReason(ctx: CheckContext, expr: Node): string -> @maybePlaceR
   pointer ctx: size=192 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=1 stackLocals=1
-  local 1275:9 parents: ParentTable (const)
-  callee 1275:19 new ParentTable -> @ParentTable.constructor
-  local 1276:7 node: Node (let)
-  local 1277:7 parent: Node | null (let)
-  callee 1277:16 linkedParent -> @linkedParent
-  callee 1280:14 linkedParent -> @linkedParent
-  local 1287:13 list: Node | null (const)
-  callee 1287:20 linkedParent -> @linkedParent
-  local 1288:13 statement: Node | null (const)
-  callee 1288:61 linkedParent -> @linkedParent
-  callee 1292:14 operatorPlaceReason -> @operatorPlaceReason
-  local 1296:13 owner: Node | null (const)
-  callee 1296:21 linkedParent -> @linkedParent
-  local 1297:13 isArguments: boolean (const)
+  local 1276:9 parents: ParentTable (const)
+  callee 1276:19 new ParentTable -> @ParentTable.constructor
+  local 1277:7 node: Node (let)
+  local 1278:7 parent: Node | null (let)
+  callee 1278:16 linkedParent -> @linkedParent
+  callee 1281:14 linkedParent -> @linkedParent
+  local 1288:13 list: Node | null (const)
+  callee 1288:20 linkedParent -> @linkedParent
+  local 1289:13 statement: Node | null (const)
+  callee 1289:61 linkedParent -> @linkedParent
+  callee 1293:14 operatorPlaceReason -> @operatorPlaceReason
+  local 1297:13 owner: Node | null (const)
+  callee 1297:21 linkedParent -> @linkedParent
+  local 1298:13 isArguments: boolean (const)
 function operatorPlaceReason(parent: Node, node: Node): string -> @operatorPlaceReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
   pointer parent: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1330:9 target: Node (const)
+  local 1331:9 target: Node (const)
 function linkedParent(parents: ParentTable, node: Node): Node | null -> @linkedParent [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ParentTable.parentOf
   pointer parents: size=8 writesThrough=false captured=false passedTo=ParentTable.parentOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
-  local 1371:9 parent: Node | null (const)
-  callee 1371:18 ParentTable.parentOf -> @ParentTable.parentOf
-  local 1375:14 child: Node (const)
+  local 1372:9 parent: Node | null (const)
+  callee 1372:18 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1376:14 child: Node (const)
 function resolveMaybeAnnotation(ctx: CheckContext, annotation: Node): i32 -> @resolveMaybeAnnotation [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via resolveType
@@ -9804,37 +9916,37 @@ function resolveMaybeAnnotation(ctx: CheckContext, annotation: Node): i32 -> @re
   pointer ctx: size=192 writesThrough=true captured=true passedTo=resolveType#1 nullableOfChecked#0
   pointer annotation: size=40 writesThrough=false captured=false passedTo=nullableOfChecked#1
   stackSites=0 stackLocals=0
-  local 1390:7 value: i32 (let)
-  local 1391:7 nullable: boolean (let)
-  local 1392:14 member: Node (const)
-  callee 1395:17 isUndefinedType -> @isUndefinedType
-  callee 1396:15 resolveType -> @resolveType
-  local 1402:9 present: i32 (const)
-  callee 1402:30 nullableOfChecked -> @nullableOfChecked
-  callee 1403:42 TypeTable.maybeOf -> @TypeTable.maybeOf
+  local 1391:7 value: i32 (let)
+  local 1392:7 nullable: boolean (let)
+  local 1393:14 member: Node (const)
+  callee 1396:17 isUndefinedType -> @isUndefinedType
+  callee 1397:15 resolveType -> @resolveType
+  local 1403:9 present: i32 (const)
+  callee 1403:30 nullableOfChecked -> @nullableOfChecked
+  callee 1404:42 TypeTable.maybeOf -> @TypeTable.maybeOf
 function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1430:3
+  sharedWrite: 1431:3
   calls: CheckContext.errorType CheckedProgram.constant Scope.lookup assignInto checkIndexAssignment checkMemberAssignment nish_panic_index nish_str_concat
   pointer ctx: size=192 writesThrough=true captured=true passedTo=checkMemberAssignment#0 checkIndexAssignment#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 assignInto#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMemberAssignment#1 checkIndexAssignment#1 assignInto#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkMemberAssignment#2 checkIndexAssignment#2 Scope.lookup#0 assignInto#2
   stackSites=0 stackLocals=0
-  local 1409:9 target: Node (const)
-  callee 1411:12 checkMemberAssignment -> @checkMemberAssignment
-  callee 1414:12 checkIndexAssignment -> @checkIndexAssignment
-  callee 1417:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1419:9 local: Local | null (const)
-  callee 1419:17 Scope.lookup -> @Scope.lookup
-  callee 1421:9 CheckedProgram.constant -> @CheckedProgram.constant
-  callee 1422:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 1424:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1427:11 what: string (const)
-  callee 1428:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1431:10 assignInto -> @assignInto
+  local 1410:9 target: Node (const)
+  callee 1412:12 checkMemberAssignment -> @checkMemberAssignment
+  callee 1415:12 checkIndexAssignment -> @checkIndexAssignment
+  callee 1418:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1420:9 local: Local | null (const)
+  callee 1420:17 Scope.lookup -> @Scope.lookup
+  callee 1422:9 CheckedProgram.constant -> @CheckedProgram.constant
+  callee 1423:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 1425:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1428:11 what: string (const)
+  callee 1429:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1432:10 assignInto -> @assignInto
 function assignInto(ctx: CheckContext, expr: Node, scope: Scope, local: Local | null, slot: i32, name: string, what: string): i32 -> @assignInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1477:7
+  sharedWrite: 1478:7
   escaping: slot
   calls: CheckContext.errorType Scope.clearNarrowing TypeTable.assignable TypeTable.baseOf TypeTable.isRanged TypeTable.typeName checkBitwiseAssignOperands checkExpression isBitwiseCompound isNumeric literalHint nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=192 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.errorType#0 checkExpression#0 checkBitwiseAssignOperands#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0
@@ -9842,102 +9954,102 @@ function assignInto(ctx: CheckContext, expr: Node, scope: Scope, local: Local | 
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.clearNarrowing#0 checkExpression#2 Scope.clearNarrowing#0 checkExpression#2 checkExpression#2 Scope.clearNarrowing#0
   pointer local: size=40 writesThrough=false captured=false passedTo=Scope.clearNarrowing#1 Scope.clearNarrowing#1 Scope.clearNarrowing#1
   stackSites=0 stackLocals=0
-  local 1448:9 op: string (const)
-  local 1449:9 value: Node (const)
-  local 1451:11 rhs: i32 (const)
-  callee 1451:17 checkExpression -> @checkExpression
-  callee 1453:7 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 1455:49 TypeTable.assignable -> @TypeTable.assignable
-  local 1456:13 got: string (const)
-  callee 1456:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 1457:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 1457:62 TypeTable.typeName -> @TypeTable.typeName
-  local 1465:9 operand: i32 (const)
-  callee 1465:19 TypeTable.baseOf -> @TypeTable.baseOf
-  callee 1466:7 isBitwiseCompound -> @isBitwiseCompound
-  local 1470:11 bits: i32 (const)
-  callee 1470:18 checkExpression -> @checkExpression
-  callee 1472:7 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 1476:9 TypeTable.isRanged -> @TypeTable.isRanged
-  local 1479:11 result: i32 (const)
-  callee 1479:20 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
-  local 1496:9 target: i32 (const)
-  callee 1496:18 TypeTable.baseOf -> @TypeTable.baseOf
-  callee 1496:35 checkExpression -> @checkExpression
-  local 1497:9 rhs: i32 (const)
-  callee 1497:15 checkExpression -> @checkExpression
-  callee 1501:31 literalHint -> @literalHint
-  callee 1504:5 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 1509:8 isNumeric -> @isNumeric
-  callee 1510:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1512:81 TypeTable.typeName -> @TypeTable.typeName
-  callee 1512:116 TypeTable.typeName -> @TypeTable.typeName
+  local 1449:9 op: string (const)
+  local 1450:9 value: Node (const)
+  local 1452:11 rhs: i32 (const)
+  callee 1452:17 checkExpression -> @checkExpression
+  callee 1454:7 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 1456:49 TypeTable.assignable -> @TypeTable.assignable
+  local 1457:13 got: string (const)
+  callee 1457:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 1458:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 1458:62 TypeTable.typeName -> @TypeTable.typeName
+  local 1466:9 operand: i32 (const)
+  callee 1466:19 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 1467:7 isBitwiseCompound -> @isBitwiseCompound
+  local 1471:11 bits: i32 (const)
+  callee 1471:18 checkExpression -> @checkExpression
+  callee 1473:7 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 1477:9 TypeTable.isRanged -> @TypeTable.isRanged
+  local 1480:11 result: i32 (const)
+  callee 1480:20 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
+  local 1497:9 target: i32 (const)
+  callee 1497:18 TypeTable.baseOf -> @TypeTable.baseOf
+  callee 1497:35 checkExpression -> @checkExpression
+  local 1498:9 rhs: i32 (const)
+  callee 1498:15 checkExpression -> @checkExpression
+  callee 1502:31 literalHint -> @literalHint
+  callee 1505:5 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 1510:8 isNumeric -> @isNumeric
+  callee 1511:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1513:81 TypeTable.typeName -> @TypeTable.typeName
+  callee 1513:116 TypeTable.typeName -> @TypeTable.typeName
 function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 -> @checkImportedBuiltin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1535:3
+  sharedWrite: 1536:3
   calls: CheckContext.errorType checkBuiltinFunctionNamed checkImportedDottedBuiltin nish_panic_index nish_str_concat
   pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkImportedDottedBuiltin#0 checkBuiltinFunctionNamed#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkImportedDottedBuiltin#1 checkBuiltinFunctionNamed#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkImportedDottedBuiltin#2 checkBuiltinFunctionNamed#2
   pointer imported: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1531:9 callee: Node (const)
-  callee 1533:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 1537:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
-  callee 1538:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
+  local 1532:9 callee: Node (const)
+  callee 1534:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 1538:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
+  callee 1539:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1623:3
+  sharedWrite: 1624:3
   escaping: want
   calls: CheckContext.capturesOuter CheckContext.error CheckContext.errorType CheckContext.signature CheckContext.template CheckedProgram.builtinImport FunctionBindings.get Scope.lookup Scope.typeOf TypeTable.assignable TypeTable.typeName capturedMessage checkBuiltinCall checkBuiltinFunction checkDirectCall checkExpression checkGenericCall checkImportedBuiltin checkMethodCall checkResultConstructor dateRefusal isBuiltinFunction isResultConstructor isValueReceiver nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 refuseOnce
   pointer ctx: size=192 writesThrough=true captured=true passedTo=checkExpression#0 isValueReceiver#0 checkMethodCall#0 checkBuiltinCall#0 CheckContext.errorType#0 CheckContext.capturesOuter#0 refuseOnce#0 checkDirectCall#0 CheckContext.template#0 checkGenericCall#0 CheckContext.signature#0 checkImportedBuiltin#0 checkResultConstructor#0 checkBuiltinFunction#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkExpression#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkMethodCall#1 checkBuiltinCall#1 CheckContext.errorType#1 checkDirectCall#1 checkGenericCall#1 checkImportedBuiltin#1 checkResultConstructor#1 checkBuiltinFunction#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 isValueReceiver#2 checkMethodCall#2 checkBuiltinCall#2 Scope.lookup#0 checkDirectCall#4 checkGenericCall#3 checkImportedBuiltin#2 checkResultConstructor#2 checkBuiltinFunction#2 Scope.typeOf#0 checkExpression#2
   stackSites=0 stackLocals=0
-  local 1542:9 callee: Node (const)
-  callee 1544:12 checkExpression -> @checkExpression
-  callee 1549:12 isValueReceiver -> @isValueReceiver
-  callee 1550:9 checkMethodCall -> @checkMethodCall
-  callee 1551:9 checkBuiltinCall -> @checkBuiltinCall
-  callee 1554:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1559:9 local: Local | null (const)
-  callee 1559:17 Scope.lookup -> @Scope.lookup
-  callee 1561:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
-  callee 1562:7 refuseOnce -> @refuseOnce
-  callee 1562:31 capturedMessage -> @capturedMessage
-  local 1565:11 bound: FunctionSig | null (const)
-  callee 1565:19 FunctionBindings.get -> @FunctionBindings.get
-  callee 1567:14 checkDirectCall -> @checkDirectCall
-  local 1570:9 template: TemplateInfo | null (const)
-  callee 1570:20 CheckContext.template -> @CheckContext.template
-  callee 1572:12 checkGenericCall -> @checkGenericCall
-  local 1574:9 sig: FunctionSig | null (const)
-  callee 1574:15 CheckContext.signature -> @CheckContext.signature
-  local 1578:11 imported: BuiltinExport | null (const)
-  callee 1578:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 1580:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee 1582:9 isResultConstructor -> @isResultConstructor
-  callee 1586:14 checkResultConstructor -> @checkResultConstructor
-  callee 1588:9 isBuiltinFunction -> @isBuiltinFunction
-  callee 1589:14 checkBuiltinFunction -> @checkBuiltinFunction
-  callee 1593:27 Scope.typeOf -> @Scope.typeOf
-  callee 1599:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 1599:34 dateRefusal -> @dateRefusal
-  callee 1601:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1603:9 args: Node (const)
-  callee 1605:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1610:7 i: i32 (let)
-  local 1612:11 arg: Node (const)
-  local 1613:11 got: i32 (const)
-  callee 1613:17 checkExpression -> @checkExpression
-  callee 1614:29 TypeTable.assignable -> @TypeTable.assignable
-  local 1615:13 wantName: string (const)
-  callee 1615:24 TypeTable.typeName -> @TypeTable.typeName
-  callee 1616:7 CheckContext.error -> @CheckContext.error
-  callee 1618:76 TypeTable.typeName -> @TypeTable.typeName
+  local 1543:9 callee: Node (const)
+  callee 1545:12 checkExpression -> @checkExpression
+  callee 1550:12 isValueReceiver -> @isValueReceiver
+  callee 1551:9 checkMethodCall -> @checkMethodCall
+  callee 1552:9 checkBuiltinCall -> @checkBuiltinCall
+  callee 1555:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1560:9 local: Local | null (const)
+  callee 1560:17 Scope.lookup -> @Scope.lookup
+  callee 1562:9 CheckContext.capturesOuter -> @CheckContext.capturesOuter
+  callee 1563:7 refuseOnce -> @refuseOnce
+  callee 1563:31 capturedMessage -> @capturedMessage
+  local 1566:11 bound: FunctionSig | null (const)
+  callee 1566:19 FunctionBindings.get -> @FunctionBindings.get
+  callee 1568:14 checkDirectCall -> @checkDirectCall
+  local 1571:9 template: TemplateInfo | null (const)
+  callee 1571:20 CheckContext.template -> @CheckContext.template
+  callee 1573:12 checkGenericCall -> @checkGenericCall
+  local 1575:9 sig: FunctionSig | null (const)
+  callee 1575:15 CheckContext.signature -> @CheckContext.signature
+  local 1579:11 imported: BuiltinExport | null (const)
+  callee 1579:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 1581:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee 1583:9 isResultConstructor -> @isResultConstructor
+  callee 1587:14 checkResultConstructor -> @checkResultConstructor
+  callee 1589:9 isBuiltinFunction -> @isBuiltinFunction
+  callee 1590:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee 1594:27 Scope.typeOf -> @Scope.typeOf
+  callee 1600:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 1600:34 dateRefusal -> @dateRefusal
+  callee 1602:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1604:9 args: Node (const)
+  callee 1606:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1611:7 i: i32 (let)
+  local 1613:11 arg: Node (const)
+  local 1614:11 got: i32 (const)
+  callee 1614:17 checkExpression -> @checkExpression
+  callee 1615:29 TypeTable.assignable -> @TypeTable.assignable
+  local 1616:13 wantName: string (const)
+  callee 1616:24 TypeTable.typeName -> @TypeTable.typeName
+  callee 1617:7 CheckContext.error -> @CheckContext.error
+  callee 1619:76 TypeTable.typeName -> @TypeTable.typeName
 function checkDirectCall(ctx: CheckContext, expr: Node, sig: FunctionSig, shown: string, scope: Scope): i32 -> @checkDirectCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1670:3
+  sharedWrite: 1671:3
   escaping: sig
   calls: CheckContext.error CheckContext.errorType TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32
   pointer ctx: size=192 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkExpression#0 CheckContext.error#0
@@ -9945,19 +10057,19 @@ function checkDirectCall(ctx: CheckContext, expr: Node, sig: FunctionSig, shown:
   pointer sig: size=112 writesThrough=true captured=true
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 1641:9 args: Node (const)
-  callee 1643:12 CheckContext.errorType -> @CheckContext.errorType
-  local 1651:7 bad: i32 (let)
-  local 1652:7 badType: i32 (let)
-  local 1653:7 i: i32 (let)
-  local 1655:11 want: i32 (const)
-  local 1656:11 got: i32 (const)
-  callee 1656:17 checkExpression -> @checkExpression
-  callee 1657:40 TypeTable.assignable -> @TypeTable.assignable
-  local 1664:11 want: string (const)
-  callee 1664:18 TypeTable.typeName -> @TypeTable.typeName
-  callee 1665:5 CheckContext.error -> @CheckContext.error
-  callee 1667:69 TypeTable.typeName -> @TypeTable.typeName
+  local 1642:9 args: Node (const)
+  callee 1644:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1652:7 bad: i32 (let)
+  local 1653:7 badType: i32 (let)
+  local 1654:7 i: i32 (let)
+  local 1656:11 want: i32 (const)
+  local 1657:11 got: i32 (const)
+  callee 1657:17 checkExpression -> @checkExpression
+  callee 1658:40 TypeTable.assignable -> @TypeTable.assignable
+  local 1665:11 want: string (const)
+  callee 1665:18 TypeTable.typeName -> @TypeTable.typeName
+  callee 1666:5 CheckContext.error -> @CheckContext.error
+  callee 1668:69 TypeTable.typeName -> @TypeTable.typeName
 function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope): void -> @clearNarrowingsAssignedIn [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via clearTarget
@@ -9966,11 +10078,11 @@ function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope):
   pointer node: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=clearTarget#1 clearTarget#1 clearNarrowingsAssignedIn#2
   stackSites=0 stackLocals=0
-  callee 1682:33 writesLeft -> @writesLeft
-  callee 1683:5 clearTarget -> @clearTarget
-  callee 1685:5 clearTarget -> @clearTarget
-  local 1687:14 child: Node (const)
-  callee 1688:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
+  callee 1683:33 writesLeft -> @writesLeft
+  callee 1684:5 clearTarget -> @clearTarget
+  callee 1686:5 clearTarget -> @clearTarget
+  local 1688:14 child: Node (const)
+  callee 1689:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
 function clearTarget(target: Node, scope: Scope): void -> @clearTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Scope.clearNarrowing
@@ -9978,9 +10090,9 @@ function clearTarget(target: Node, scope: Scope): void -> @clearTarget
   pointer target: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.clearNarrowing#0
   stackSites=0 stackLocals=0
-  local 1696:9 local: Local | null (const)
-  callee 1696:17 Scope.lookup -> @Scope.lookup
-  callee 1698:5 Scope.clearNarrowing -> @Scope.clearNarrowing
+  local 1697:9 local: Local | null (const)
+  callee 1697:17 Scope.lookup -> @Scope.lookup
+  callee 1699:5 Scope.clearNarrowing -> @Scope.clearNarrowing
 module src/result.ts
 import checkBuiltinArity from "./builtins" -> function @checkBuiltinArity
 import roundUpTo from "./structs" -> function @roundUpTo
@@ -24378,6 +24490,7 @@ function methodsNamed(owner: StructInfo | null, names: string[]): FunctionSig[] 
 module src/validator.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import CheckContext from "./context" -> struct CheckContext
+import Edit from "./diagnostics" -> struct Edit
 import unwrapParens from "./emit-util" -> function @unwrapParens
 import FLAG_ASYNC from "./nodes" -> const FLAG_ASYNC
 import FLAG_ATTRIBUTES from "./nodes" -> const FLAG_ATTRIBUTES
@@ -24441,16 +24554,27 @@ function forbiddenValue(name: string): string -> @forbiddenValue
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_eq undefinedForbidden
   stackSites=0 stackLocals=0
-  callee 124:12 undefinedForbidden -> @undefinedForbidden
+  callee 125:12 undefinedForbidden -> @undefinedForbidden
 function forbiddenType(name: string): string -> @forbiddenType
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_eq undefinedForbidden
   stackSites=0 stackLocals=0
-  callee 152:12 undefinedForbidden -> @undefinedForbidden
+  callee 153:12 undefinedForbidden -> @undefinedForbidden
 function forbiddenOperator(operator: string): string -> @forbiddenOperator
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
+function strictEqualityFix(ctx: CheckContext, node: Node): Edit[] -> @strictEqualityFix [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 208:5
+  calls: CheckContext.edit CheckContext.operatorStart nish_array_grow nish_str_concat
+  pointer ctx: size=192 writesThrough=false captured=false passedTo=CheckContext.operatorStart#0 CheckContext.edit#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.operatorStart#1
+  stackSites=0 stackLocals=0
+  local 205:9 edits: Edit[] (const)
+  local 206:9 at: i32 (const)
+  callee 206:14 CheckContext.operatorStart -> @CheckContext.operatorStart
+  callee 208:16 CheckContext.edit -> @CheckContext.edit
 function isShapeMutation(member: string): boolean -> @isShapeMutation
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -24460,9 +24584,9 @@ function isNumericIndexShape(expr: Node): boolean -> @isNumericIndexShape
   calls: isNumericIndexShape nish_panic_index nish_str_eq
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 222:14 isNumericIndexShape -> @isNumericIndexShape
-  callee 233:16 isNumericIndexShape -> @isNumericIndexShape
-  callee 233:57 isNumericIndexShape -> @isNumericIndexShape
+  callee 240:14 isNumericIndexShape -> @isNumericIndexShape
+  callee 251:16 isNumericIndexShape -> @isNumericIndexShape
+  callee 251:57 isNumericIndexShape -> @isNumericIndexShape
 function validate(ctx: CheckContext, node: Node): void -> @validate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via visit
@@ -24470,69 +24594,71 @@ function validate(ctx: CheckContext, node: Node): void -> @validate [exported]
   pointer ctx: size=192 writesThrough=true captured=false passedTo=visit#0
   pointer node: size=40 writesThrough=false captured=false passedTo=visit#1
   stackSites=0 stackLocals=0
-  callee 250:3 visit -> @visit
+  callee 268:3 visit -> @visit
 function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void -> @visit
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via rejectFunctionModifiers
   escaping: inTypePosition
-  calls: CheckContext.error CheckContext.errorAtKey checkNullUnion computedNameForbidden forbiddenOperator forbiddenType forbiddenValue isUndefined nish_panic_index nish_str_concat nish_str_eq refuseUndefinedIn rejectComputedEnumMembers rejectForbiddenAssertion rejectForbiddenCall rejectForbiddenIndex rejectForbiddenMember rejectForbiddenNew rejectFunctionModifiers rejectImportForms rejectVar visit visitDeclaration
-  pointer ctx: size=192 writesThrough=true captured=false passedTo=rejectFunctionModifiers#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenMember#0 rejectForbiddenIndex#0 CheckContext.error#0 checkNullUnion#0 CheckContext.error#0 visit#0 CheckContext.error#0 visit#0 CheckContext.errorAtKey#0 CheckContext.error#0 visit#0 rejectForbiddenNew#0 rejectForbiddenCall#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenAssertion#0 rejectComputedEnumMembers#0 CheckContext.error#0 visit#0 rejectVar#0 visitDeclaration#0 rejectVar#0 refuseUndefinedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectImportForms#0 CheckContext.error#0 visit#0
-  pointer node: size=40 writesThrough=false captured=false passedTo=rejectFunctionModifiers#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenMember#1 rejectForbiddenIndex#1 CheckContext.error#1 checkNullUnion#1 CheckContext.errorAtKey#1 rejectForbiddenNew#1 rejectForbiddenCall#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenAssertion#1 rejectComputedEnumMembers#1 CheckContext.error#1 rejectVar#1 rejectVar#1 refuseUndefinedIn#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectImportForms#1 CheckContext.error#1
+  calls: CheckContext.error CheckContext.errorAtKey CheckContext.errorFix checkNullUnion computedNameForbidden forbiddenOperator forbiddenType forbiddenValue isUndefined nish_panic_index nish_str_concat nish_str_eq refuseUndefinedIn rejectComputedEnumMembers rejectForbiddenAssertion rejectForbiddenCall rejectForbiddenIndex rejectForbiddenMember rejectForbiddenNew rejectFunctionModifiers rejectImportForms rejectVar strictEqualityFix visit visitDeclaration
+  pointer ctx: size=192 writesThrough=true captured=false passedTo=rejectFunctionModifiers#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenMember#0 rejectForbiddenIndex#0 CheckContext.error#0 checkNullUnion#0 CheckContext.error#0 visit#0 CheckContext.error#0 visit#0 CheckContext.errorAtKey#0 CheckContext.error#0 visit#0 rejectForbiddenNew#0 rejectForbiddenCall#0 CheckContext.error#0 CheckContext.error#0 rejectForbiddenAssertion#0 rejectComputedEnumMembers#0 CheckContext.errorFix#0 strictEqualityFix#0 CheckContext.error#0 visit#0 rejectVar#0 visitDeclaration#0 rejectVar#0 refuseUndefinedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 rejectImportForms#0 CheckContext.error#0 visit#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=rejectFunctionModifiers#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenMember#1 rejectForbiddenIndex#1 CheckContext.error#1 checkNullUnion#1 CheckContext.errorAtKey#1 rejectForbiddenNew#1 rejectForbiddenCall#1 CheckContext.error#1 CheckContext.error#1 rejectForbiddenAssertion#1 rejectComputedEnumMembers#1 CheckContext.errorFix#1 strictEqualityFix#1 CheckContext.error#1 rejectVar#1 rejectVar#1 refuseUndefinedIn#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 CheckContext.error#1 rejectImportForms#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 254:3 rejectFunctionModifiers -> @rejectFunctionModifiers
-  callee 261:5 CheckContext.error -> @CheckContext.error
-  local 268:13 message: string (const)
-  callee 268:23 forbiddenValue -> @forbiddenValue
-  callee 270:9 CheckContext.error -> @CheckContext.error
-  local 275:13 message: string (const)
-  callee 275:23 forbiddenType -> @forbiddenType
-  callee 277:9 CheckContext.error -> @CheckContext.error
-  callee 282:7 rejectForbiddenMember -> @rejectForbiddenMember
-  callee 285:7 rejectForbiddenIndex -> @rejectForbiddenIndex
-  callee 288:7 CheckContext.error -> @CheckContext.error
-  callee 293:7 checkNullUnion -> @checkNullUnion
-  local 299:18 member: Node (const)
-  callee 301:11 CheckContext.error -> @CheckContext.error
-  callee 303:9 visit -> @visit
-  callee 311:9 CheckContext.error -> @CheckContext.error
-  callee 311:37 computedNameForbidden -> @computedNameForbidden
-  callee 312:9 visit -> @visit
-  callee 316:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
-  callee 323:9 CheckContext.error -> @CheckContext.error
-  callee 323:37 computedNameForbidden -> @computedNameForbidden
-  local 324:18 i: i32 (let)
-  callee 325:11 visit -> @visit
-  callee 331:7 rejectForbiddenNew -> @rejectForbiddenNew
-  callee 334:7 rejectForbiddenCall -> @rejectForbiddenCall
-  local 337:13 message: string (const)
-  callee 337:23 forbiddenOperator -> @forbiddenOperator
-  callee 339:9 CheckContext.error -> @CheckContext.error
-  callee 344:7 CheckContext.error -> @CheckContext.error
-  callee 350:7 rejectForbiddenAssertion -> @rejectForbiddenAssertion
-  callee 353:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
-  local 356:13 message: string (const)
-  callee 356:23 forbiddenOperator -> @forbiddenOperator
-  callee 358:9 CheckContext.error -> @CheckContext.error
-  local 364:20 child: Node (const)
-  callee 365:16 isUndefined -> @isUndefined
-  callee 366:13 visit -> @visit
-  callee 374:7 rejectVar -> @rejectVar
-  local 378:18 decl: Node (const)
-  callee 379:9 visitDeclaration -> @visitDeclaration
-  callee 383:7 rejectVar -> @rejectVar
-  callee 384:7 refuseUndefinedIn -> @refuseUndefinedIn
-  callee 387:7 CheckContext.error -> @CheckContext.error
-  callee 393:7 CheckContext.error -> @CheckContext.error
-  callee 399:7 CheckContext.error -> @CheckContext.error
-  callee 403:9 CheckContext.error -> @CheckContext.error
-  callee 412:7 CheckContext.error -> @CheckContext.error
-  callee 416:9 CheckContext.error -> @CheckContext.error
-  callee 418:9 CheckContext.error -> @CheckContext.error
-  callee 427:9 CheckContext.error -> @CheckContext.error
-  callee 436:7 rejectImportForms -> @rejectImportForms
-  callee 447:7 CheckContext.error -> @CheckContext.error
-  local 457:14 child: Node (const)
-  callee 458:5 visit -> @visit
+  callee 272:3 rejectFunctionModifiers -> @rejectFunctionModifiers
+  callee 279:5 CheckContext.error -> @CheckContext.error
+  local 286:13 message: string (const)
+  callee 286:23 forbiddenValue -> @forbiddenValue
+  callee 288:9 CheckContext.error -> @CheckContext.error
+  local 293:13 message: string (const)
+  callee 293:23 forbiddenType -> @forbiddenType
+  callee 295:9 CheckContext.error -> @CheckContext.error
+  callee 300:7 rejectForbiddenMember -> @rejectForbiddenMember
+  callee 303:7 rejectForbiddenIndex -> @rejectForbiddenIndex
+  callee 306:7 CheckContext.error -> @CheckContext.error
+  callee 311:7 checkNullUnion -> @checkNullUnion
+  local 317:18 member: Node (const)
+  callee 319:11 CheckContext.error -> @CheckContext.error
+  callee 321:9 visit -> @visit
+  callee 329:9 CheckContext.error -> @CheckContext.error
+  callee 329:37 computedNameForbidden -> @computedNameForbidden
+  callee 330:9 visit -> @visit
+  callee 334:9 CheckContext.errorAtKey -> @CheckContext.errorAtKey
+  callee 341:9 CheckContext.error -> @CheckContext.error
+  callee 341:37 computedNameForbidden -> @computedNameForbidden
+  local 342:18 i: i32 (let)
+  callee 343:11 visit -> @visit
+  callee 349:7 rejectForbiddenNew -> @rejectForbiddenNew
+  callee 352:7 rejectForbiddenCall -> @rejectForbiddenCall
+  local 355:13 message: string (const)
+  callee 355:23 forbiddenOperator -> @forbiddenOperator
+  callee 357:9 CheckContext.error -> @CheckContext.error
+  callee 362:7 CheckContext.error -> @CheckContext.error
+  callee 368:7 rejectForbiddenAssertion -> @rejectForbiddenAssertion
+  callee 371:7 rejectComputedEnumMembers -> @rejectComputedEnumMembers
+  local 374:13 message: string (const)
+  callee 374:23 forbiddenOperator -> @forbiddenOperator
+  callee 376:9 CheckContext.errorFix -> @CheckContext.errorFix
+  callee 376:37 strictEqualityFix -> @strictEqualityFix
+  callee 378:9 CheckContext.error -> @CheckContext.error
+  local 384:20 child: Node (const)
+  callee 385:16 isUndefined -> @isUndefined
+  callee 386:13 visit -> @visit
+  callee 394:7 rejectVar -> @rejectVar
+  local 398:18 decl: Node (const)
+  callee 399:9 visitDeclaration -> @visitDeclaration
+  callee 403:7 rejectVar -> @rejectVar
+  callee 404:7 refuseUndefinedIn -> @refuseUndefinedIn
+  callee 407:7 CheckContext.error -> @CheckContext.error
+  callee 413:7 CheckContext.error -> @CheckContext.error
+  callee 419:7 CheckContext.error -> @CheckContext.error
+  callee 423:9 CheckContext.error -> @CheckContext.error
+  callee 432:7 CheckContext.error -> @CheckContext.error
+  callee 436:9 CheckContext.error -> @CheckContext.error
+  callee 438:9 CheckContext.error -> @CheckContext.error
+  callee 447:9 CheckContext.error -> @CheckContext.error
+  callee 456:7 rejectImportForms -> @rejectImportForms
+  callee 467:7 CheckContext.error -> @CheckContext.error
+  local 477:14 child: Node (const)
+  callee 478:5 visit -> @visit
 function rejectImportForms(ctx: CheckContext, node: Node): void -> @rejectImportForms
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24540,13 +24666,13 @@ function rejectImportForms(ctx: CheckContext, node: Node): void -> @rejectImport
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 visit#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 471:5 CheckContext.error -> @CheckContext.error
-  local 478:9 bindings: Node (const)
-  local 480:16 spec: Node (const)
-  callee 482:9 CheckContext.error -> @CheckContext.error
-  local 491:14 child: Node (const)
-  callee 492:5 visit -> @visit
-  callee 495:5 CheckContext.error -> @CheckContext.error
+  callee 491:5 CheckContext.error -> @CheckContext.error
+  local 498:9 bindings: Node (const)
+  local 500:16 spec: Node (const)
+  callee 502:9 CheckContext.error -> @CheckContext.error
+  local 511:14 child: Node (const)
+  callee 512:5 visit -> @visit
+  callee 515:5 CheckContext.error -> @CheckContext.error
 function rejectFunctionModifiers(ctx: CheckContext, node: Node): void -> @rejectFunctionModifiers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24554,9 +24680,9 @@ function rejectFunctionModifiers(ctx: CheckContext, node: Node): void -> @reject
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 510:9 holdsModifiers: boolean (const)
-  callee 520:5 CheckContext.error -> @CheckContext.error
-  callee 522:5 CheckContext.error -> @CheckContext.error
+  local 530:9 holdsModifiers: boolean (const)
+  callee 540:5 CheckContext.error -> @CheckContext.error
+  callee 542:5 CheckContext.error -> @CheckContext.error
 function rejectVar(ctx: CheckContext, node: Node): void -> @rejectVar
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24564,7 +24690,7 @@ function rejectVar(ctx: CheckContext, node: Node): void -> @rejectVar
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 529:5 CheckContext.error -> @CheckContext.error
+  callee 549:5 CheckContext.error -> @CheckContext.error
 function isUndefined(node: Node): boolean -> @isUndefined [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -24580,19 +24706,19 @@ function isMaybeAnnotation(annotation: Node): boolean -> @isMaybeAnnotation [exp
   calls: isUndefinedType
   pointer annotation: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 549:7 undefineds: i32 (let)
-  local 550:7 nulls: i32 (let)
-  local 551:14 member: Node (const)
-  callee 552:9 isUndefinedType -> @isUndefinedType
+  local 569:7 undefineds: i32 (let)
+  local 570:7 nulls: i32 (let)
+  local 571:14 member: Node (const)
+  callee 572:9 isUndefinedType -> @isUndefinedType
 function isMaybeDeclaration(decl: Node): boolean -> @isMaybeDeclaration
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isMaybeAnnotation nish_panic_index nish_str_eq unwrapParens
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 570:9 init: Node (const)
-  callee 570:16 unwrapParens -> @unwrapParens
-  local 571:9 callsGet: boolean (const)
-  callee 573:22 isMaybeAnnotation -> @isMaybeAnnotation
+  local 590:9 init: Node (const)
+  callee 590:16 unwrapParens -> @unwrapParens
+  local 591:9 callsGet: boolean (const)
+  callee 593:22 isMaybeAnnotation -> @isMaybeAnnotation
 function refuseUndefinedIn(ctx: CheckContext, node: Node): void -> @refuseUndefinedIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24600,11 +24726,11 @@ function refuseUndefinedIn(ctx: CheckContext, node: Node): void -> @refuseUndefi
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 refuseUndefinedIn#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isUndefined#0 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 582:7 isUndefined -> @isUndefined
-  callee 583:5 CheckContext.error -> @CheckContext.error
-  callee 583:21 undefinedForbidden -> @undefinedForbidden
-  local 586:14 child: Node (const)
-  callee 587:5 refuseUndefinedIn -> @refuseUndefinedIn
+  callee 602:7 isUndefined -> @isUndefined
+  callee 603:5 CheckContext.error -> @CheckContext.error
+  callee 603:21 undefinedForbidden -> @undefinedForbidden
+  local 606:14 child: Node (const)
+  callee 607:5 refuseUndefinedIn -> @refuseUndefinedIn
 function visitDeclaration(ctx: CheckContext, decl: Node, inTypePosition: boolean): void -> @visitDeclaration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via visit
@@ -24613,13 +24739,13 @@ function visitDeclaration(ctx: CheckContext, decl: Node, inTypePosition: boolean
   pointer ctx: size=192 writesThrough=true captured=false passedTo=visit#0 visit#0 visit#0 visit#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=isMaybeDeclaration#0 visit#1
   stackSites=0 stackLocals=0
-  callee 593:8 isMaybeDeclaration -> @isMaybeDeclaration
-  callee 594:5 visit -> @visit
-  callee 597:3 visit -> @visit
-  local 598:14 member: Node (const)
-  callee 599:10 isUndefinedType -> @isUndefinedType
-  callee 600:7 visit -> @visit
-  callee 603:3 visit -> @visit
+  callee 613:8 isMaybeDeclaration -> @isMaybeDeclaration
+  callee 614:5 visit -> @visit
+  callee 617:3 visit -> @visit
+  local 618:14 member: Node (const)
+  callee 619:10 isUndefinedType -> @isUndefinedType
+  callee 620:7 visit -> @visit
+  callee 623:3 visit -> @visit
 function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void -> @rejectComputedEnumMembers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24627,10 +24753,10 @@ function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void -> @reje
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 613:14 member: Node (const)
-  local 614:11 initializer: Node (const)
-  callee 615:42 isNumericLiteralShape -> @isNumericLiteralShape
-  callee 616:7 CheckContext.error -> @CheckContext.error
+  local 633:14 member: Node (const)
+  local 634:11 initializer: Node (const)
+  callee 635:42 isNumericLiteralShape -> @isNumericLiteralShape
+  callee 636:7 CheckContext.error -> @CheckContext.error
 function isNumericLiteralShape(expr: Node): boolean -> @isNumericLiteralShape
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -24643,12 +24769,12 @@ function rejectForbiddenMember(ctx: CheckContext, node: Node): void -> @rejectFo
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 636:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 640:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  local 643:9 receiver: Node (const)
-  callee 648:5 CheckContext.error -> @CheckContext.error
-  callee 656:66 isShapeMutation -> @isShapeMutation
-  callee 657:5 CheckContext.error -> @CheckContext.error
+  callee 656:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 660:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 663:9 receiver: Node (const)
+  callee 668:5 CheckContext.error -> @CheckContext.error
+  callee 676:66 isShapeMutation -> @isShapeMutation
+  callee 677:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenIndex(ctx: CheckContext, node: Node): void -> @rejectForbiddenIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24656,10 +24782,10 @@ function rejectForbiddenIndex(ctx: CheckContext, node: Node): void -> @rejectFor
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 665:9 key: Node (const)
-  callee 667:5 CheckContext.error -> @CheckContext.error
-  callee 675:8 isNumericIndexShape -> @isNumericIndexShape
-  callee 676:5 CheckContext.error -> @CheckContext.error
+  local 685:9 key: Node (const)
+  callee 687:5 CheckContext.error -> @CheckContext.error
+  callee 695:8 isNumericIndexShape -> @isNumericIndexShape
+  callee 696:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenNew(ctx: CheckContext, node: Node): void -> @rejectForbiddenNew
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24667,9 +24793,9 @@ function rejectForbiddenNew(ctx: CheckContext, node: Node): void -> @rejectForbi
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 681:9 callee: Node (const)
-  callee 686:5 CheckContext.error -> @CheckContext.error
-  callee 688:5 CheckContext.error -> @CheckContext.error
+  local 701:9 callee: Node (const)
+  callee 706:5 CheckContext.error -> @CheckContext.error
+  callee 708:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenCall(ctx: CheckContext, node: Node): void -> @rejectForbiddenCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24677,10 +24803,10 @@ function rejectForbiddenCall(ctx: CheckContext, node: Node): void -> @rejectForb
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 693:9 callee: Node (const)
-  callee 700:5 CheckContext.error -> @CheckContext.error
-  callee 705:5 CheckContext.error -> @CheckContext.error
-  callee 707:5 CheckContext.error -> @CheckContext.error
+  local 713:9 callee: Node (const)
+  callee 720:5 CheckContext.error -> @CheckContext.error
+  callee 725:5 CheckContext.error -> @CheckContext.error
+  callee 727:5 CheckContext.error -> @CheckContext.error
 function rejectForbiddenAssertion(ctx: CheckContext, node: Node): void -> @rejectForbiddenAssertion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24688,9 +24814,9 @@ function rejectForbiddenAssertion(ctx: CheckContext, node: Node): void -> @rejec
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 717:9 type: Node (const)
-  callee 722:5 CheckContext.error -> @CheckContext.error
-  callee 724:5 CheckContext.error -> @CheckContext.error
+  local 737:9 type: Node (const)
+  callee 742:5 CheckContext.error -> @CheckContext.error
+  callee 744:5 CheckContext.error -> @CheckContext.error
 function checkNullUnion(ctx: CheckContext, node: Node): void -> @checkNullUnion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -24698,9 +24824,9 @@ function checkNullUnion(ctx: CheckContext, node: Node): void -> @checkNullUnion
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 730:7 nulls: i32 (let)
-  local 731:14 member: Node (const)
-  callee 737:5 CheckContext.error -> @CheckContext.error
+  local 750:7 nulls: i32 (let)
+  local 751:14 member: Node (const)
+  callee 757:5 CheckContext.error -> @CheckContext.error
 module src/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
@@ -29635,7 +29761,7 @@ function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_at
   pointer ctx: size=192 writesThrough=false captured=false
-  pointer warning: size=40 writesThrough=false captured=false
+  pointer warning: size=48 writesThrough=false captured=false
   pointer proved: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 923:14 access: Node (const)
@@ -33154,6 +33280,7 @@ import codeFor from "./codes" -> function @codeFor
 import TOOLCHAIN from "./codes" -> const TOOLCHAIN
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import formatList from "./diagnostics" -> function @formatList
+import fixProgram from "./fix" -> function @fixProgram
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import simulatedInternalError from "./ice" -> function @simulatedInternalError
 import resolveTarget from "./target" -> function @resolveTarget
@@ -33178,49 +33305,49 @@ function makeDirectory(dir: string): boolean -> @makeDirectory
   escaping: dir
   calls: dirname makeDirectory nish_arena_mark nish_arena_release nish_mkdir nish_str_eq
   stackSites=0 stackLocals=0
-  local 99:9 parent: string (const)
-  callee 99:18 dirname -> @dirname
-  callee 100:26 makeDirectory -> @makeDirectory
+  local 104:9 parent: string (const)
+  callee 104:18 dirname -> @dirname
+  callee 105:26 makeDirectory -> @makeDirectory
 function makeDirectoryFor(file: string): boolean -> @makeDirectoryFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via makeDirectory
   escaping: file
   calls: dirname makeDirectory nish_arena_mark nish_arena_release nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  local 108:9 dir: string (const)
-  callee 108:15 dirname -> @dirname
-  callee 109:7 makeDirectory -> @makeDirectory
+  local 113:9 dir: string (const)
+  callee 113:15 dirname -> @dirname
+  callee 114:7 makeDirectory -> @makeDirectory
 function planOutputs(stems: string[], paths: string[], output: string, link: string): string[] -> @planOutputs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 146:7
+  sharedWrite: 151:7
   escaping: output
   calls: nish_alloc_struct nish_array_grow nish_is_dir nish_str_at nish_str_concat nish_str_from_i32 nish_str_new nish_write perModule
   pointer stems: size=0 writesThrough=false captured=false passedTo=perModule#0 perModule#0 perModule#0
   pointer paths: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 137:9 out: string[] (const)
-  callee 140:14 perModule -> @perModule
-  callee 143:14 perModule -> @perModule
-  callee 160:12 perModule -> @perModule
-  local 162:14 path: string (const)
+  local 142:9 out: string[] (const)
+  callee 145:14 perModule -> @perModule
+  callee 148:14 perModule -> @perModule
+  callee 165:12 perModule -> @perModule
+  local 167:14 path: string (const)
 function perModule(stems: string[], dir: string): string[] -> @perModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 171:5
+  sharedWrite: 176:5
   calls: nish_array_grow nish_str_concat
   pointer stems: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 169:9 out: string[] (const)
-  local 170:14 stem: string (const)
+  local 174:9 out: string[] (const)
+  local 175:14 stem: string (const)
 function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: Diagnostic.json DiagnosticSink.format DiagnosticSink.sorted nish_print nish_str_concat nish_write
   pointer compilation: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 184:19 DiagnosticSink.format -> @DiagnosticSink.format
-  local 187:14 diagnostic: Diagnostic (const)
-  callee 187:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 188:17 Diagnostic.json -> @Diagnostic.json
+  callee 189:19 DiagnosticSink.format -> @DiagnosticSink.format
+  local 192:14 diagnostic: Diagnostic (const)
+  callee 192:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 193:17 Diagnostic.json -> @Diagnostic.json
 function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void -> @reportPerformance
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportWarnings
@@ -33228,7 +33355,7 @@ function reportPerformance(compilation: Compilation, enabled: boolean, json: boo
   calls: reportWarnings
   pointer compilation: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 205:5 reportWarnings -> @reportWarnings
+  callee 210:5 reportWarnings -> @reportWarnings
 function reportPortability(compilation: Compilation, json: boolean): void -> @reportPortability
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportWarnings
@@ -33236,7 +33363,7 @@ function reportPortability(compilation: Compilation, json: boolean): void -> @re
   calls: reportWarnings
   pointer compilation: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 215:3 reportWarnings -> @reportWarnings
+  callee 220:3 reportWarnings -> @reportWarnings
 function reportWarnings(warnings: Diagnostic[], kind: string, json: boolean): void -> @reportWarnings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -33244,33 +33371,43 @@ function reportWarnings(warnings: Diagnostic[], kind: string, json: boolean): vo
   calls: Diagnostic.json formatList nish_print nish_str_concat nish_write
   pointer warnings: size=0 writesThrough=true captured=false passedTo=formatList#0
   stackSites=0 stackLocals=0
-  local 227:16 warning: Diagnostic (const)
-  callee 228:19 Diagnostic.json -> @Diagnostic.json
-  callee 232:17 formatList -> @formatList
+  local 232:16 warning: Diagnostic (const)
+  callee 233:19 Diagnostic.json -> @Diagnostic.json
+  callee 237:17 formatList -> @formatList
 function reportRootFailure(message: string, json: boolean): void -> @reportRootFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   escaping: message
   calls: codeFor jsonQuote nish_arena_mark nish_arena_release nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 243:48 codeFor -> @codeFor
-  callee 243:88 jsonQuote -> @jsonQuote
+  callee 248:48 codeFor -> @codeFor
+  callee 248:88 jsonQuote -> @jsonQuote
+function reportLoadFailure(compilation: Compilation, json: boolean): void -> @reportLoadFailure
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via reportRootFailure
+  escaping: json
+  calls: DiagnosticSink.hasErrors nish_str_concat report reportRootFailure
+  pointer compilation: size=112 writesThrough=false captured=false passedTo=report#0
+  stackSites=0 stackLocals=0
+  callee 264:5 reportRootFailure -> @reportRootFailure
+  callee 265:14 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee 266:5 report -> @report
 function reportToolchainFailure(message: string, json: boolean): void -> @reportToolchainFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   escaping: message
   calls: jsonQuote nish_arena_mark nish_arena_release nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 257:72 jsonQuote -> @jsonQuote
+  callee 278:72 jsonQuote -> @jsonQuote
 function toolchainInstallHint(): string -> @toolchainInstallHint
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow nish_str_concat platformMark
   stackSites=1 stackLocals=1
-  local 269:9 lines: string[] (const)
-  callee 270:17 platformMark -> @platformMark
-  callee 271:17 platformMark -> @platformMark
-  callee 273:8 platformMark -> @platformMark
-  callee 275:17 platformMark -> @platformMark
+  local 290:9 lines: string[] (const)
+  callee 291:17 platformMark -> @platformMark
+  callee 292:17 platformMark -> @platformMark
+  callee 294:8 platformMark -> @platformMark
+  callee 296:17 platformMark -> @platformMark
 function platformMark(platform: string): string -> @platformMark
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_platform nish_str_eq
@@ -33280,170 +33417,176 @@ function cCompiler(): string -> @cCompiler
   sharedWrite: via nish_getenv
   calls: nish_getenv
   stackSites=0 stackLocals=0
-  local 284:9 fromEnvironment: string | null (const)
+  local 305:9 fromEnvironment: string | null (const)
 function missingToolchain(asker: string): string -> @missingToolchain
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 299:3
+  sharedWrite: 320:3
   calls: cCompiler nish_alloc_struct nish_array_grow nish_spawn_to nish_str_concat nish_str_from_i32 toolchainInstallHint
   stackSites=1 stackLocals=1
-  local 297:9 cc: string (const)
-  callee 297:14 cCompiler -> @cCompiler
-  local 298:9 probe: string[] (const)
-  local 301:9 status: i32 (const)
-  local 305:9 why: string (const)
-  local 306:9 lines: string[] (const)
-  callee 311:14 toolchainInstallHint -> @toolchainInstallHint
+  local 318:9 cc: string (const)
+  callee 318:14 cCompiler -> @cCompiler
+  local 319:9 probe: string[] (const)
+  local 322:9 status: i32 (const)
+  local 326:9 why: string (const)
+  local 327:9 lines: string[] (const)
+  callee 332:14 toolchainInstallHint -> @toolchainInstallHint
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 330:3
-  calls: Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.load DiagnosticSink.hasErrors Options.constructor acceptsSidecars astText basenameWithout cDeclared checkedText externalFunctions internalErrorFor isProfile libraryRoot linkProgram makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram simulatedInternalError supportedTargets usageText writeSidecars
+  sharedWrite: 351:3
+  calls: Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.load Options.constructor acceptsSidecars astText basenameWithout cDeclared checkedText externalFunctions fixProgram internalErrorFor isProfile libraryRoot linkProgram makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError supportedTargets usageText writeSidecars
   stackSites=4 stackLocals=4
-  callee 320:19 usageText -> @usageText
-  local 323:9 opts: Options (const)
-  callee 323:16 new Options -> @Options.constructor
-  callee 330:22 libraryRoot -> @libraryRoot
-  local 335:9 runMode: boolean (const)
-  local 338:7 notForRun: string (let)
-  local 339:7 runArgsFrom: i32 (let)
-  local 340:9 roots: string[] (const)
-  local 341:7 output: string (let)
-  local 342:7 link: string (let)
-  local 343:7 profile: string (let)
-  local 344:7 json: boolean (let)
-  local 345:7 emitChecked: boolean (let)
-  local 346:7 emitAst: boolean (let)
-  local 349:7 warnPerformance: boolean (let)
-  local 350:7 arg: i32 (let)
-  local 352:11 value: string (const)
-  local 359:13 mode: string (const)
-  callee 391:12 isProfile -> @isProfile
-  local 404:13 spec: string (const)
-  local 405:13 resolved: Target | null (const)
-  callee 405:24 resolveTarget -> @resolveTarget
-  callee 408:72 supportedTargets -> @supportedTargets
-  callee 489:19 usageText -> @usageText
-  callee 498:60 usageText -> @usageText
-  callee 515:19 usageText -> @usageText
-  local 564:11 problem: string (const)
-  callee 564:21 missingToolchain -> @missingToolchain
-  callee 566:7 reportToolchainFailure -> @reportToolchainFailure
-  callee 575:7 simulatedInternalError -> @simulatedInternalError
-  callee 576:12 internalErrorFor -> @internalErrorFor
-  local 579:9 compilation: Compilation (const)
-  callee 579:23 new Compilation -> @Compilation.constructor
-  local 583:7 loaded: boolean (let)
-  local 584:14 root: string (const)
-  callee 588:10 Compilation.load -> @Compilation.load
-  callee 599:7 reportRootFailure -> @reportRootFailure
-  callee 600:16 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee 601:7 report -> @report
-  local 618:16 unit: ModuleUnit (const)
-  callee 619:13 astText -> @astText
-  callee 623:8 Compilation.check -> @Compilation.check
-  callee 624:5 report -> @report
-  callee 627:3 reportPerformance -> @reportPerformance
-  callee 628:3 reportPortability -> @reportPortability
-  callee 632:11 checkedText -> @checkedText
-  callee 638:39 Compilation.entry -> @Compilation.entry
-  callee 640:58 Compilation.entry -> @Compilation.entry
-  local 647:9 anySidecar: boolean (const)
-  local 652:9 fns: ExternalFunction[] (const)
-  callee 652:48 externalFunctions -> @externalFunctions
-  callee 653:22 acceptsSidecars -> @acceptsSidecars
-  callee 653:51 cDeclared -> @cDeclared
-  callee 654:5 report -> @report
-  local 657:9 emitted: EmittedModule[] (const)
-  callee 657:19 Compilation.emit -> @Compilation.emit
-  callee 659:12 runProgram -> @runProgram
-  callee 661:7 basenameWithout -> @basenameWithout
-  local 669:9 stems: string[] (const)
-  local 670:9 paths: string[] (const)
-  local 673:14 module: EmittedModule (const)
-  local 677:9 outputs: string[] (const)
-  callee 677:19 planOutputs -> @planOutputs
-  local 682:7 i: i32 (let)
-  local 684:11 file: string (const)
-  callee 685:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 694:22 writeSidecars -> @writeSidecars
-  callee 700:10 linkProgram -> @linkProgram
+  callee 341:19 usageText -> @usageText
+  local 344:9 opts: Options (const)
+  callee 344:16 new Options -> @Options.constructor
+  callee 351:22 libraryRoot -> @libraryRoot
+  local 356:9 runMode: boolean (const)
+  local 359:7 notForRun: string (let)
+  local 361:7 notForFix: string (let)
+  local 362:7 fix: boolean (let)
+  local 363:7 runArgsFrom: i32 (let)
+  local 364:9 roots: string[] (const)
+  local 365:7 output: string (let)
+  local 366:7 link: string (let)
+  local 367:7 profile: string (let)
+  local 368:7 json: boolean (let)
+  local 369:7 emitChecked: boolean (let)
+  local 370:7 emitAst: boolean (let)
+  local 373:7 warnPerformance: boolean (let)
+  local 374:7 arg: i32 (let)
+  local 376:11 value: string (const)
+  local 383:13 mode: string (const)
+  callee 417:12 isProfile -> @isProfile
+  local 430:13 spec: string (const)
+  local 431:13 resolved: Target | null (const)
+  callee 431:24 resolveTarget -> @resolveTarget
+  callee 434:72 supportedTargets -> @supportedTargets
+  callee 524:19 usageText -> @usageText
+  callee 533:60 usageText -> @usageText
+  callee 550:19 usageText -> @usageText
+  local 605:11 problem: string (const)
+  callee 605:21 missingToolchain -> @missingToolchain
+  callee 607:7 reportToolchainFailure -> @reportToolchainFailure
+  callee 616:7 simulatedInternalError -> @simulatedInternalError
+  callee 617:12 internalErrorFor -> @internalErrorFor
+  local 624:11 outcome: FixOutcome (const)
+  callee 624:21 fixProgram -> @fixProgram
+  callee 626:7 reportLoadFailure -> @reportLoadFailure
+  callee 630:7 report -> @report
+  callee 633:5 reportPerformance -> @reportPerformance
+  callee 634:5 reportPortability -> @reportPortability
+  local 638:9 compilation: Compilation (const)
+  callee 638:23 new Compilation -> @Compilation.constructor
+  local 642:7 loaded: boolean (let)
+  local 643:14 root: string (const)
+  callee 647:10 Compilation.load -> @Compilation.load
+  callee 653:5 reportLoadFailure -> @reportLoadFailure
+  local 669:16 unit: ModuleUnit (const)
+  callee 670:13 astText -> @astText
+  callee 674:8 Compilation.check -> @Compilation.check
+  callee 675:5 report -> @report
+  callee 678:3 reportPerformance -> @reportPerformance
+  callee 679:3 reportPortability -> @reportPortability
+  callee 683:11 checkedText -> @checkedText
+  callee 689:39 Compilation.entry -> @Compilation.entry
+  callee 691:58 Compilation.entry -> @Compilation.entry
+  local 698:9 anySidecar: boolean (const)
+  local 703:9 fns: ExternalFunction[] (const)
+  callee 703:48 externalFunctions -> @externalFunctions
+  callee 704:22 acceptsSidecars -> @acceptsSidecars
+  callee 704:51 cDeclared -> @cDeclared
+  callee 705:5 report -> @report
+  local 708:9 emitted: EmittedModule[] (const)
+  callee 708:19 Compilation.emit -> @Compilation.emit
+  callee 710:12 runProgram -> @runProgram
+  callee 712:7 basenameWithout -> @basenameWithout
+  local 720:9 stems: string[] (const)
+  local 721:9 paths: string[] (const)
+  local 724:14 module: EmittedModule (const)
+  local 728:9 outputs: string[] (const)
+  callee 728:19 planOutputs -> @planOutputs
+  local 733:7 i: i32 (let)
+  local 735:11 file: string (const)
+  callee 736:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 745:22 writeSidecars -> @writeSidecars
+  callee 751:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv nish_read_file_or_null nish_str_concat splitByte
   stackSites=0 stackLocals=0
-  local 727:9 pathVar: string | null (const)
-  local 731:9 entries: string[] (const)
-  callee 731:19 splitByte -> @splitByte
-  local 732:7 i: i32 (let)
-  local 734:11 entry: string (const)
-  local 735:11 dir: string (const)
-  local 736:11 candidate: string (const)
+  local 778:9 pathVar: string | null (const)
+  local 782:9 entries: string[] (const)
+  callee 782:19 splitByte -> @splitByte
+  local 783:7 i: i32 (let)
+  local 785:11 entry: string (const)
+  local 786:11 dir: string (const)
+  local 787:11 candidate: string (const)
 function packageRootCandidates(): string[] -> @packageRootCandidates
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 804:5
+  sharedWrite: 855:5
   calls: dirname nish_array_grow nish_panic_index nish_realpath nish_str_at nish_str_concat nish_str_eq programOnPath
   stackSites=0 stackLocals=0
-  local 799:9 candidates: string[] (const)
-  local 800:9 program: string (const)
-  local 801:9 invoked: string (const)
-  callee 801:46 programOnPath -> @programOnPath
-  local 803:11 asInvoked: string (const)
-  callee 803:26 dirname -> @dirname
-  local 808:11 real: string | null (const)
-  local 810:13 throughLink: string (const)
-  callee 810:30 dirname -> @dirname
-  local 814:13 here: string | null (const)
+  local 850:9 candidates: string[] (const)
+  local 851:9 program: string (const)
+  local 852:9 invoked: string (const)
+  callee 852:46 programOnPath -> @programOnPath
+  local 854:11 asInvoked: string (const)
+  callee 854:26 dirname -> @dirname
+  local 859:11 real: string | null (const)
+  local 861:13 throughLink: string (const)
+  callee 861:30 dirname -> @dirname
+  local 865:13 here: string | null (const)
 function packageRootIn(candidates: string[]): string -> @packageRootIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_or_null
   calls: nish_arena_mark nish_arena_release nish_read_file_or_null nish_str_concat
   pointer candidates: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 825:7 i: i32 (let)
-  local 827:11 root: string (const)
+  local 876:7 i: i32 (let)
+  local 878:11 root: string (const)
 function packageRoot(): string -> @packageRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packageRootIn
   calls: packageRootCandidates packageRootIn
   stackSites=0 stackLocals=0
-  callee 836:35 packageRootIn -> @packageRootIn
-  callee 836:49 packageRootCandidates -> @packageRootCandidates
+  callee 887:35 packageRootIn -> @packageRootIn
+  callee 887:49 packageRootCandidates -> @packageRootCandidates
 function libraryRoot(): string -> @libraryRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via packageRootCandidates
   calls: packageRootCandidates packageRootIn
   stackSites=0 stackLocals=0
-  local 845:9 candidates: string[] (const)
-  callee 845:22 packageRootCandidates -> @packageRootCandidates
-  local 846:9 root: string (const)
-  callee 846:16 packageRootIn -> @packageRootIn
+  local 896:9 candidates: string[] (const)
+  callee 896:22 packageRootCandidates -> @packageRootCandidates
+  local 897:9 root: string (const)
+  callee 897:16 packageRootIn -> @packageRootIn
 function runProgram(emitted: EmittedModule[], name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, argsFrom: i32): i32 -> @runProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 907:3
+  sharedWrite: 958:3
   escaping: argsFrom debugInfo json name profile threads
   calls: buildIntoCache cCompiler fnv1a64Hex nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file packageRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   stackSites=0 stackLocals=0
-  local 874:9 cacheRoot: string (const)
-  callee 874:21 runCacheRoot -> @runCacheRoot
-  callee 876:5 reportToolchainFailure -> @reportToolchainFailure
-  local 882:9 file: string (const)
-  callee 882:16 runBinaryName -> @runBinaryName
-  local 883:9 key: string (const)
-  callee 883:15 runCacheKey -> @runCacheKey
-  callee 883:42 packageRoot -> @packageRoot
-  callee 883:86 cCompiler -> @cCompiler
-  local 884:9 cacheEntry: string (const)
-  callee 884:38 fnv1a64Hex -> @fnv1a64Hex
-  local 885:9 binary: string (const)
-  local 886:9 keyFile: string (const)
-  local 887:9 stored: string | null (const)
-  local 889:11 status: i32 (const)
-  callee 889:20 buildIntoCache -> @buildIntoCache
-  local 906:9 argv: string[] (const)
-  local 908:7 i: i32 (let)
-  local 913:9 status: i32 (const)
-  callee 915:5 reportToolchainFailure -> @reportToolchainFailure
+  local 925:9 cacheRoot: string (const)
+  callee 925:21 runCacheRoot -> @runCacheRoot
+  callee 927:5 reportToolchainFailure -> @reportToolchainFailure
+  local 933:9 file: string (const)
+  callee 933:16 runBinaryName -> @runBinaryName
+  local 934:9 key: string (const)
+  callee 934:15 runCacheKey -> @runCacheKey
+  callee 934:42 packageRoot -> @packageRoot
+  callee 934:86 cCompiler -> @cCompiler
+  local 935:9 cacheEntry: string (const)
+  callee 935:38 fnv1a64Hex -> @fnv1a64Hex
+  local 936:9 binary: string (const)
+  local 937:9 keyFile: string (const)
+  local 938:9 stored: string | null (const)
+  local 940:11 status: i32 (const)
+  callee 940:20 buildIntoCache -> @buildIntoCache
+  local 957:9 argv: string[] (const)
+  local 959:7 i: i32 (let)
+  local 964:9 status: i32 (const)
+  callee 966:5 reportToolchainFailure -> @reportToolchainFailure
 function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @buildIntoCache
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via missingToolchain
@@ -33451,56 +33594,56 @@ function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry:
   calls: hexOfI64 linkProgram makeDirectory missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_spawn_to nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 955:9 problem: string (const)
-  callee 955:19 missingToolchain -> @missingToolchain
-  callee 957:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 960:8 makeDirectory -> @makeDirectory
-  callee 961:5 reportToolchainFailure -> @reportToolchainFailure
-  local 964:9 privateRoot: string[] (const)
-  callee 966:5 reportToolchainFailure -> @reportToolchainFailure
-  local 969:9 work: string (const)
-  callee 969:37 hexOfI64 -> @hexOfI64
-  callee 970:8 makeDirectory -> @makeDirectory
-  local 974:9 outputs: string[] (const)
-  local 975:14 module: EmittedModule (const)
-  local 976:11 file: string (const)
-  local 980:9 built: string (const)
-  local 981:7 status: i32 (let)
-  callee 981:16 linkProgram -> @linkProgram
-  local 984:11 move: string[] (const)
-  callee 986:7 reportToolchainFailure -> @reportToolchainFailure
-  local 990:9 clean: string[] (const)
+  local 1006:9 problem: string (const)
+  callee 1006:19 missingToolchain -> @missingToolchain
+  callee 1008:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1011:8 makeDirectory -> @makeDirectory
+  callee 1012:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1015:9 privateRoot: string[] (const)
+  callee 1017:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1020:9 work: string (const)
+  callee 1020:37 hexOfI64 -> @hexOfI64
+  callee 1021:8 makeDirectory -> @makeDirectory
+  local 1025:9 outputs: string[] (const)
+  local 1026:14 module: EmittedModule (const)
+  local 1027:11 file: string (const)
+  local 1031:9 built: string (const)
+  local 1032:7 status: i32 (let)
+  callee 1032:16 linkProgram -> @linkProgram
+  local 1035:11 move: string[] (const)
+  callee 1037:7 reportToolchainFailure -> @reportToolchainFailure
+  local 1041:9 clean: string[] (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1034:3
+  sharedWrite: 1085:3
   escaping: json link profile
   calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1018:9 root: string (const)
-  callee 1018:16 packageRoot -> @packageRoot
-  callee 1020:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1021:58 packageRootCandidates -> @packageRootCandidates
-  callee 1026:8 makeDirectoryFor -> @makeDirectoryFor
-  local 1029:9 script: string (const)
-  local 1033:9 argv: string[] (const)
-  local 1040:14 file: string (const)
-  local 1060:9 status: i32 (const)
-  local 1062:11 why: string (const)
-  callee 1063:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1069:9 binary: string | null (const)
+  local 1069:9 root: string (const)
+  callee 1069:16 packageRoot -> @packageRoot
+  callee 1071:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1072:58 packageRootCandidates -> @packageRootCandidates
+  callee 1077:8 makeDirectoryFor -> @makeDirectoryFor
+  local 1080:9 script: string (const)
+  local 1084:9 argv: string[] (const)
+  local 1091:14 file: string (const)
+  local 1111:9 status: i32 (const)
+  local 1113:11 why: string (const)
+  callee 1114:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1120:9 binary: string | null (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1092:7
+  sharedWrite: 1143:7
   escaping: fns
   calls: napiBridges nish_array_grow
   pointer compilation: size=112 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1082:9 opts: Options (const)
-  local 1089:9 out: ExternalFunction[] (const)
-  local 1090:14 fn: ExternalFunction (const)
-  callee 1091:9 napiBridges -> @napiBridges
+  local 1133:9 opts: Options (const)
+  local 1140:9 out: ExternalFunction[] (const)
+  local 1141:14 fn: ExternalFunction (const)
+  callee 1142:9 napiBridges -> @napiBridges
 function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
@@ -33508,18 +33651,18 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   pointer compilation: size=112 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
-  local 1111:9 opts: Options (const)
-  callee 1113:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1116:36 generateHeader -> @generateHeader
-  callee 1120:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1123:33 generateDts -> @generateDts
-  local 1125:11 loader: string (const)
-  callee 1125:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 1126:27 generateWasmLoader -> @generateWasmLoader
-  callee 1130:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1133:34 generateNapiShim -> @generateNapiShim
-  callee 1137:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1140:39 generateNapiShim -> @generateNapiShim
+  local 1162:9 opts: Options (const)
+  callee 1164:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1167:36 generateHeader -> @generateHeader
+  callee 1171:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1174:33 generateDts -> @generateDts
+  local 1176:11 loader: string (const)
+  callee 1176:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 1177:27 generateWasmLoader -> @generateWasmLoader
+  callee 1181:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1184:34 generateNapiShim -> @generateNapiShim
+  callee 1188:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1191:39 generateNapiShim -> @generateNapiShim
 module src/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -35428,6 +35571,123 @@ function generateNapiShim(compilation: Compilation, fns: ExternalFunction[], asy
   local 1438:14 p: Plan (const)
   local 1439:11 js: string (const)
   callee 1439:16 jsExportName -> @jsExportName
+module src/fix.ts
+import CLI from "./branding" -> const CLI
+import Compilation from "./compilation" -> struct Compilation
+import ModuleUnit from "./compilation" -> struct ModuleUnit
+import Diagnostic from "./diagnostics" -> struct Diagnostic
+import Edit from "./diagnostics" -> struct Edit
+import StringSet from "./map" -> struct StringSet
+import Options from "./options" -> struct Options
+import StringBuilder from "./strings" -> struct StringBuilder
+const MAX_FIX_ROUNDS: i32 = 5
+struct FixOutcome (class) size=16 align=8 exported
+  field compilation: Compilation index=0 offset=0
+  field loaded: boolean index=1 offset=8
+  field checked: boolean index=2 offset=9
+  constructor -> @FixOutcome.constructor
+function FixOutcome.constructor(this: FixOutcome, compilation: Compilation, loaded: boolean, checked: boolean): void -> @FixOutcome.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: checked compilation loaded
+  pointer this: size=16 writesThrough=true captured=false
+  pointer compilation: size=112 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function compileRoots(opts: Options, roots: string[]): FixOutcome -> @compileRoots
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: via Compilation.constructor
+  calls: Compilation.check Compilation.constructor Compilation.load FixOutcome.constructor nish_alloc_struct
+  pointer opts: size=96 writesThrough=true captured=true passedTo=Compilation.constructor#1
+  pointer roots: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 52:9 compilation: Compilation (const)
+  callee 52:23 new Compilation -> @Compilation.constructor
+  local 53:14 root: string (const)
+  callee 54:10 Compilation.load -> @Compilation.load
+  callee 55:14 new FixOutcome -> @FixOutcome.constructor
+  callee 58:10 new FixOutcome -> @FixOutcome.constructor
+  callee 58:44 Compilation.check -> @Compilation.check
+function fixProgram(opts: Options, roots: string[], warnPerformance: boolean): FixOutcome -> @fixProgram [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: via compileRoots
+  escaping: warnPerformance
+  calls: applyFixes compileRoots
+  pointer opts: size=96 writesThrough=true captured=true passedTo=compileRoots#0 compileRoots#0
+  pointer roots: size=0 writesThrough=false captured=false passedTo=compileRoots#1 applyFixes#1 compileRoots#1
+  stackSites=0 stackLocals=0
+  local 72:7 outcome: FixOutcome (let)
+  callee 72:17 compileRoots -> @compileRoots
+  local 73:7 round: i32 (let)
+  callee 74:36 applyFixes -> @applyFixes
+  callee 76:15 compileRoots -> @compileRoots
+function applyFixes(outcome: FixOutcome, roots: string[], warnPerformance: boolean): i32 -> @applyFixes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  calls: Compilation.identityOf DiagnosticSink.sorted StringSet.add StringSet.constructor acceptedEdits applyEdits isFixable nish_array_grow nish_str_concat nish_str_from_i32 nish_write nish_write_file
+  pointer outcome: size=16 writesThrough=false captured=false
+  pointer roots: size=0 writesThrough=false captured=false
+  stackSites=2 stackLocals=2
+  local 86:9 compilation: Compilation (const)
+  local 87:9 named: StringSet (const)
+  callee 87:17 new StringSet -> @StringSet.constructor
+  local 88:14 root: string (const)
+  callee 89:5 StringSet.add -> @StringSet.add
+  callee 89:15 Compilation.identityOf -> @Compilation.identityOf
+  local 91:9 diagnostics: Diagnostic[] (const)
+  local 92:14 diagnostic: Diagnostic (const)
+  callee 92:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  local 97:18 warning: Diagnostic (const)
+  local 101:16 warning: Diagnostic (const)
+  local 105:7 rewritten: i32 (let)
+  local 106:14 unit: ModuleUnit (const)
+  callee 107:10 isFixable -> @isFixable
+  local 110:11 edits: Edit[] (const)
+  callee 110:19 acceptedEdits -> @acceptedEdits
+  callee 114:30 applyEdits -> @applyEdits
+function isFixable(compilation: Compilation, unit: ModuleUnit, named: StringSet): boolean -> @isFixable
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Compilation.identityOf
+  calls: Compilation.identityOf StringSet.has nish_str_at nish_str_eq
+  pointer compilation: size=112 writesThrough=false captured=false passedTo=Compilation.identityOf#0
+  pointer unit: size=88 writesThrough=false captured=false
+  pointer named: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
+  stackSites=0 stackLocals=0
+  local 131:9 identity: string (const)
+  callee 131:20 Compilation.identityOf -> @Compilation.identityOf
+  callee 132:10 StringSet.has -> @StringSet.has
+function acceptedEdits(diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] -> @acceptedEdits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 158:7
+  calls: nish_array_grow nish_panic_index nish_str_eq overlapsAny
+  pointer diagnostics: size=0 writesThrough=false captured=false
+  pointer unit: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 142:9 accepted: Edit[] (const)
+  local 143:14 diagnostic: Diagnostic (const)
+  local 147:9 clear: boolean (let)
+  local 148:16 edit: Edit (const)
+  callee 149:11 overlapsAny -> @overlapsAny
+  local 156:16 edit: Edit (const)
+  local 159:11 i: i32 (let)
+function overlapsAny(edit: Edit, list: Edit[]): boolean -> @overlapsAny
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer edit: size=16 writesThrough=false captured=false
+  pointer list: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 178:14 other: Edit (const)
+function applyEdits(text: string, edits: Edit[]): string -> @applyEdits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.add
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_str_new
+  pointer edits: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 193:9 out: StringBuilder (const)
+  callee 193:15 new StringBuilder -> @StringBuilder.constructor
+  local 194:7 at: i32 (let)
+  local 195:14 edit: Edit (const)
+  callee 196:5 StringBuilder.add -> @StringBuilder.add
+  callee 197:5 StringBuilder.add -> @StringBuilder.add
+  callee 200:3 StringBuilder.add -> @StringBuilder.add
+  callee 201:10 StringBuilder.toText -> @StringBuilder.toText
 module src/run-cache.ts
 import CLI from "./branding" -> const CLI
 import RUNTIME_HEADER from "./branding" -> const RUNTIME_HEADER

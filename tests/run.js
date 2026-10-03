@@ -2961,6 +2961,76 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
   )
 }
 
+// ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
+// A diagnostic may carry `fix`, a list of edits that `nish --fix` applies
+// (`src/fix.ts`, AGENTS.md "Machine-readable surfaces"). Each case runs on a copy
+// in a directory of its own, because `--fix` rewrites the file it is given:
+// `<name>.ts` must come out as `<name>.fixed.ts` byte for byte and that must
+// compile clean, and `<name>.nofix.ts` must be reported with no `fix` key and
+// come out untouched. `tests/fix/README.md` is the table.
+{
+  const fixDir = path.join(root, "tests", "fix")
+  const inputs = fs
+    .readdirSync(fixDir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .sort()
+  for (const file of inputs) {
+    const noFix = file.endsWith(".nofix.ts")
+    const name = file.slice(0, -(noFix ? ".nofix.ts" : ".ts").length)
+    if (only && !name.includes(only) && !"fix".includes(only)) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const input = fs.readFileSync(path.join(fixDir, file))
+    fs.writeFileSync(path.join(work, file), input)
+    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plainObjects = diagnosticsOf(plain.stdout)
+    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const after = fs.readFileSync(path.join(work, file))
+    if (noFix) {
+      check(
+        `fix ${name}: reported with no \`fix\` key`,
+        plain.status === 1 && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix leaves the file byte-identical and exits as the plain compile does`,
+        fixed.status === plain.status && after.equals(input) && fixed.stdout === plain.stdout,
+        shown(fixed)
+      )
+    } else {
+      const expected = fs.readFileSync(path.join(fixDir, `${name}.fixed.ts`))
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix exits 0 and writes ${name}.fixed.ts byte for byte`,
+        fixed.status === 0 && after.equals(expected),
+        `${shown(fixed)}\nwrote:\n${after}`
+      )
+      const roundsFile = path.join(fixDir, `${name}.rounds`)
+      if (fs.existsSync(roundsFile)) {
+        const want = Number(fs.readFileSync(roundsFile, "utf8").trim())
+        const rounds = fixed.stderr.split("\n").filter((l) => l.startsWith(`fixed ${file} `)).length
+        check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
+      }
+      fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+        cwd: work,
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.fixed.ts compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+}
+
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
 // compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
@@ -10470,6 +10540,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--target",
     "--profile",
     "--warn-portability",
+    "--fix",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
