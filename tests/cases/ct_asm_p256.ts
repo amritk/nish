@@ -2,8 +2,8 @@
 // check in tests/run.js (tests/ct-asm.js). The check reads one module's `.s`,
 // so these are copies, and each is the module's function of the same name
 // without the length guard that opens it there: that guard is a branch, and
-// here --unchecked-indexing (ct_asm_p256.args) stands in for the bounds proof
-// it gives. `main` runs every copy on known answers and on RFC 6979, so one
+// here `uncheckedGet` and `uncheckedSet` from `nish:unsafe`, at every index the
+// guard covers, stand in for the bounds proof it gives. `main` runs every copy on known answers and on RFC 6979, so one
 // that drifted from the arithmetic fails there (ct_asm_p256.out).
 //
 // Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
@@ -42,6 +42,8 @@
 // ct-check: p256PointAdd secret=contents
 // ct-check: p256WindowStep secret=digit,contents
 
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+
 /**
  * fiat's `addcarryx_u32`: `arg1 + arg2 + arg3` with `arg1` a carry of 0 or 1.
  * The sum is below 2^33, so its low 32 bits are fiat's `out1` and bit 32 its
@@ -70,36 +72,36 @@ export const p256FiatCmovznzU32 = (arg1: u32, arg2: u32, arg3: u32): u32 => ctSe
 
 /** fiat's `fiat_p256_mul`: multiplies two field elements in the Montgomery domain. */
 export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
-  const x1: u32 = arg1[1]
-  const x2: u32 = arg1[2]
-  const x3: u32 = arg1[3]
-  const x4: u32 = arg1[4]
-  const x5: u32 = arg1[5]
-  const x6: u32 = arg1[6]
-  const x7: u32 = arg1[7]
-  const x8: u32 = arg1[0]
-  const w9: u64 = p256FiatMulxU32(x8, arg2[7])
+  const x1: u32 = uncheckedGet(arg1, 1)
+  const x2: u32 = uncheckedGet(arg1, 2)
+  const x3: u32 = uncheckedGet(arg1, 3)
+  const x4: u32 = uncheckedGet(arg1, 4)
+  const x5: u32 = uncheckedGet(arg1, 5)
+  const x6: u32 = uncheckedGet(arg1, 6)
+  const x7: u32 = uncheckedGet(arg1, 7)
+  const x8: u32 = uncheckedGet(arg1, 0)
+  const w9: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 7))
   const x9: u32 = toU32(w9)
   const x10: u32 = toU32(w9 >> 32)
-  const w11: u64 = p256FiatMulxU32(x8, arg2[6])
+  const w11: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 6))
   const x11: u32 = toU32(w11)
   const x12: u32 = toU32(w11 >> 32)
-  const w13: u64 = p256FiatMulxU32(x8, arg2[5])
+  const w13: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 5))
   const x13: u32 = toU32(w13)
   const x14: u32 = toU32(w13 >> 32)
-  const w15: u64 = p256FiatMulxU32(x8, arg2[4])
+  const w15: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 4))
   const x15: u32 = toU32(w15)
   const x16: u32 = toU32(w15 >> 32)
-  const w17: u64 = p256FiatMulxU32(x8, arg2[3])
+  const w17: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 3))
   const x17: u32 = toU32(w17)
   const x18: u32 = toU32(w17 >> 32)
-  const w19: u64 = p256FiatMulxU32(x8, arg2[2])
+  const w19: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 2))
   const x19: u32 = toU32(w19)
   const x20: u32 = toU32(w19 >> 32)
-  const w21: u64 = p256FiatMulxU32(x8, arg2[1])
+  const w21: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 1))
   const x21: u32 = toU32(w21)
   const x22: u32 = toU32(w21 >> 32)
-  const w23: u64 = p256FiatMulxU32(x8, arg2[0])
+  const w23: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 0))
   const x23: u32 = toU32(w23)
   const x24: u32 = toU32(w23 >> 32)
   const w25: u64 = p256FiatAddcarryxU32(0x0, x24, x21)
@@ -169,28 +171,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const w69: u64 = p256FiatAddcarryxU32(x68, x39, x41)
   const x69: u32 = toU32(w69)
   const x70: u32 = toU32(w69 >> 32)
-  const w71: u64 = p256FiatMulxU32(x1, arg2[7])
+  const w71: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 7))
   const x71: u32 = toU32(w71)
   const x72: u32 = toU32(w71 >> 32)
-  const w73: u64 = p256FiatMulxU32(x1, arg2[6])
+  const w73: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 6))
   const x73: u32 = toU32(w73)
   const x74: u32 = toU32(w73 >> 32)
-  const w75: u64 = p256FiatMulxU32(x1, arg2[5])
+  const w75: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 5))
   const x75: u32 = toU32(w75)
   const x76: u32 = toU32(w75 >> 32)
-  const w77: u64 = p256FiatMulxU32(x1, arg2[4])
+  const w77: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 4))
   const x77: u32 = toU32(w77)
   const x78: u32 = toU32(w77 >> 32)
-  const w79: u64 = p256FiatMulxU32(x1, arg2[3])
+  const w79: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 3))
   const x79: u32 = toU32(w79)
   const x80: u32 = toU32(w79 >> 32)
-  const w81: u64 = p256FiatMulxU32(x1, arg2[2])
+  const w81: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 2))
   const x81: u32 = toU32(w81)
   const x82: u32 = toU32(w81 >> 32)
-  const w83: u64 = p256FiatMulxU32(x1, arg2[1])
+  const w83: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 1))
   const x83: u32 = toU32(w83)
   const x84: u32 = toU32(w83 >> 32)
-  const w85: u64 = p256FiatMulxU32(x1, arg2[0])
+  const w85: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 0))
   const x85: u32 = toU32(w85)
   const x86: u32 = toU32(w85 >> 32)
   const w87: u64 = p256FiatAddcarryxU32(0x0, x86, x83)
@@ -288,28 +290,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x149: u32 = toU32(w149)
   const x150: u32 = toU32(w149 >> 32)
   const x151: u32 = x150 + x119
-  const w152: u64 = p256FiatMulxU32(x2, arg2[7])
+  const w152: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 7))
   const x152: u32 = toU32(w152)
   const x153: u32 = toU32(w152 >> 32)
-  const w154: u64 = p256FiatMulxU32(x2, arg2[6])
+  const w154: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 6))
   const x154: u32 = toU32(w154)
   const x155: u32 = toU32(w154 >> 32)
-  const w156: u64 = p256FiatMulxU32(x2, arg2[5])
+  const w156: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 5))
   const x156: u32 = toU32(w156)
   const x157: u32 = toU32(w156 >> 32)
-  const w158: u64 = p256FiatMulxU32(x2, arg2[4])
+  const w158: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 4))
   const x158: u32 = toU32(w158)
   const x159: u32 = toU32(w158 >> 32)
-  const w160: u64 = p256FiatMulxU32(x2, arg2[3])
+  const w160: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 3))
   const x160: u32 = toU32(w160)
   const x161: u32 = toU32(w160 >> 32)
-  const w162: u64 = p256FiatMulxU32(x2, arg2[2])
+  const w162: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 2))
   const x162: u32 = toU32(w162)
   const x163: u32 = toU32(w162 >> 32)
-  const w164: u64 = p256FiatMulxU32(x2, arg2[1])
+  const w164: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 1))
   const x164: u32 = toU32(w164)
   const x165: u32 = toU32(w164 >> 32)
-  const w166: u64 = p256FiatMulxU32(x2, arg2[0])
+  const w166: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 0))
   const x166: u32 = toU32(w166)
   const x167: u32 = toU32(w166 >> 32)
   const w168: u64 = p256FiatAddcarryxU32(0x0, x167, x164)
@@ -407,28 +409,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x230: u32 = toU32(w230)
   const x231: u32 = toU32(w230 >> 32)
   const x232: u32 = x231 + x200
-  const w233: u64 = p256FiatMulxU32(x3, arg2[7])
+  const w233: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 7))
   const x233: u32 = toU32(w233)
   const x234: u32 = toU32(w233 >> 32)
-  const w235: u64 = p256FiatMulxU32(x3, arg2[6])
+  const w235: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 6))
   const x235: u32 = toU32(w235)
   const x236: u32 = toU32(w235 >> 32)
-  const w237: u64 = p256FiatMulxU32(x3, arg2[5])
+  const w237: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 5))
   const x237: u32 = toU32(w237)
   const x238: u32 = toU32(w237 >> 32)
-  const w239: u64 = p256FiatMulxU32(x3, arg2[4])
+  const w239: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 4))
   const x239: u32 = toU32(w239)
   const x240: u32 = toU32(w239 >> 32)
-  const w241: u64 = p256FiatMulxU32(x3, arg2[3])
+  const w241: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 3))
   const x241: u32 = toU32(w241)
   const x242: u32 = toU32(w241 >> 32)
-  const w243: u64 = p256FiatMulxU32(x3, arg2[2])
+  const w243: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 2))
   const x243: u32 = toU32(w243)
   const x244: u32 = toU32(w243 >> 32)
-  const w245: u64 = p256FiatMulxU32(x3, arg2[1])
+  const w245: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 1))
   const x245: u32 = toU32(w245)
   const x246: u32 = toU32(w245 >> 32)
-  const w247: u64 = p256FiatMulxU32(x3, arg2[0])
+  const w247: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 0))
   const x247: u32 = toU32(w247)
   const x248: u32 = toU32(w247 >> 32)
   const w249: u64 = p256FiatAddcarryxU32(0x0, x248, x245)
@@ -526,28 +528,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x311: u32 = toU32(w311)
   const x312: u32 = toU32(w311 >> 32)
   const x313: u32 = x312 + x281
-  const w314: u64 = p256FiatMulxU32(x4, arg2[7])
+  const w314: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 7))
   const x314: u32 = toU32(w314)
   const x315: u32 = toU32(w314 >> 32)
-  const w316: u64 = p256FiatMulxU32(x4, arg2[6])
+  const w316: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 6))
   const x316: u32 = toU32(w316)
   const x317: u32 = toU32(w316 >> 32)
-  const w318: u64 = p256FiatMulxU32(x4, arg2[5])
+  const w318: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 5))
   const x318: u32 = toU32(w318)
   const x319: u32 = toU32(w318 >> 32)
-  const w320: u64 = p256FiatMulxU32(x4, arg2[4])
+  const w320: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 4))
   const x320: u32 = toU32(w320)
   const x321: u32 = toU32(w320 >> 32)
-  const w322: u64 = p256FiatMulxU32(x4, arg2[3])
+  const w322: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 3))
   const x322: u32 = toU32(w322)
   const x323: u32 = toU32(w322 >> 32)
-  const w324: u64 = p256FiatMulxU32(x4, arg2[2])
+  const w324: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 2))
   const x324: u32 = toU32(w324)
   const x325: u32 = toU32(w324 >> 32)
-  const w326: u64 = p256FiatMulxU32(x4, arg2[1])
+  const w326: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 1))
   const x326: u32 = toU32(w326)
   const x327: u32 = toU32(w326 >> 32)
-  const w328: u64 = p256FiatMulxU32(x4, arg2[0])
+  const w328: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 0))
   const x328: u32 = toU32(w328)
   const x329: u32 = toU32(w328 >> 32)
   const w330: u64 = p256FiatAddcarryxU32(0x0, x329, x326)
@@ -645,28 +647,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x392: u32 = toU32(w392)
   const x393: u32 = toU32(w392 >> 32)
   const x394: u32 = x393 + x362
-  const w395: u64 = p256FiatMulxU32(x5, arg2[7])
+  const w395: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 7))
   const x395: u32 = toU32(w395)
   const x396: u32 = toU32(w395 >> 32)
-  const w397: u64 = p256FiatMulxU32(x5, arg2[6])
+  const w397: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 6))
   const x397: u32 = toU32(w397)
   const x398: u32 = toU32(w397 >> 32)
-  const w399: u64 = p256FiatMulxU32(x5, arg2[5])
+  const w399: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 5))
   const x399: u32 = toU32(w399)
   const x400: u32 = toU32(w399 >> 32)
-  const w401: u64 = p256FiatMulxU32(x5, arg2[4])
+  const w401: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 4))
   const x401: u32 = toU32(w401)
   const x402: u32 = toU32(w401 >> 32)
-  const w403: u64 = p256FiatMulxU32(x5, arg2[3])
+  const w403: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 3))
   const x403: u32 = toU32(w403)
   const x404: u32 = toU32(w403 >> 32)
-  const w405: u64 = p256FiatMulxU32(x5, arg2[2])
+  const w405: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 2))
   const x405: u32 = toU32(w405)
   const x406: u32 = toU32(w405 >> 32)
-  const w407: u64 = p256FiatMulxU32(x5, arg2[1])
+  const w407: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 1))
   const x407: u32 = toU32(w407)
   const x408: u32 = toU32(w407 >> 32)
-  const w409: u64 = p256FiatMulxU32(x5, arg2[0])
+  const w409: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 0))
   const x409: u32 = toU32(w409)
   const x410: u32 = toU32(w409 >> 32)
   const w411: u64 = p256FiatAddcarryxU32(0x0, x410, x407)
@@ -764,28 +766,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x473: u32 = toU32(w473)
   const x474: u32 = toU32(w473 >> 32)
   const x475: u32 = x474 + x443
-  const w476: u64 = p256FiatMulxU32(x6, arg2[7])
+  const w476: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 7))
   const x476: u32 = toU32(w476)
   const x477: u32 = toU32(w476 >> 32)
-  const w478: u64 = p256FiatMulxU32(x6, arg2[6])
+  const w478: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 6))
   const x478: u32 = toU32(w478)
   const x479: u32 = toU32(w478 >> 32)
-  const w480: u64 = p256FiatMulxU32(x6, arg2[5])
+  const w480: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 5))
   const x480: u32 = toU32(w480)
   const x481: u32 = toU32(w480 >> 32)
-  const w482: u64 = p256FiatMulxU32(x6, arg2[4])
+  const w482: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 4))
   const x482: u32 = toU32(w482)
   const x483: u32 = toU32(w482 >> 32)
-  const w484: u64 = p256FiatMulxU32(x6, arg2[3])
+  const w484: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 3))
   const x484: u32 = toU32(w484)
   const x485: u32 = toU32(w484 >> 32)
-  const w486: u64 = p256FiatMulxU32(x6, arg2[2])
+  const w486: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 2))
   const x486: u32 = toU32(w486)
   const x487: u32 = toU32(w486 >> 32)
-  const w488: u64 = p256FiatMulxU32(x6, arg2[1])
+  const w488: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 1))
   const x488: u32 = toU32(w488)
   const x489: u32 = toU32(w488 >> 32)
-  const w490: u64 = p256FiatMulxU32(x6, arg2[0])
+  const w490: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 0))
   const x490: u32 = toU32(w490)
   const x491: u32 = toU32(w490 >> 32)
   const w492: u64 = p256FiatAddcarryxU32(0x0, x491, x488)
@@ -883,28 +885,28 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x554: u32 = toU32(w554)
   const x555: u32 = toU32(w554 >> 32)
   const x556: u32 = x555 + x524
-  const w557: u64 = p256FiatMulxU32(x7, arg2[7])
+  const w557: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 7))
   const x557: u32 = toU32(w557)
   const x558: u32 = toU32(w557 >> 32)
-  const w559: u64 = p256FiatMulxU32(x7, arg2[6])
+  const w559: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 6))
   const x559: u32 = toU32(w559)
   const x560: u32 = toU32(w559 >> 32)
-  const w561: u64 = p256FiatMulxU32(x7, arg2[5])
+  const w561: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 5))
   const x561: u32 = toU32(w561)
   const x562: u32 = toU32(w561 >> 32)
-  const w563: u64 = p256FiatMulxU32(x7, arg2[4])
+  const w563: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 4))
   const x563: u32 = toU32(w563)
   const x564: u32 = toU32(w563 >> 32)
-  const w565: u64 = p256FiatMulxU32(x7, arg2[3])
+  const w565: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 3))
   const x565: u32 = toU32(w565)
   const x566: u32 = toU32(w565 >> 32)
-  const w567: u64 = p256FiatMulxU32(x7, arg2[2])
+  const w567: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 2))
   const x567: u32 = toU32(w567)
   const x568: u32 = toU32(w567 >> 32)
-  const w569: u64 = p256FiatMulxU32(x7, arg2[1])
+  const w569: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 1))
   const x569: u32 = toU32(w569)
   const x570: u32 = toU32(w569 >> 32)
-  const w571: u64 = p256FiatMulxU32(x7, arg2[0])
+  const w571: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 0))
   const x571: u32 = toU32(w571)
   const x572: u32 = toU32(w571 >> 32)
   const w573: u64 = p256FiatAddcarryxU32(0x0, x572, x569)
@@ -1036,26 +1038,26 @@ export const p256FiatMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x661: u32 = p256FiatCmovznzU32(x655, x648, x631)
   const x662: u32 = p256FiatCmovznzU32(x655, x650, x633)
   const x663: u32 = p256FiatCmovznzU32(x655, x652, x635)
-  out1[0] = x656
-  out1[1] = x657
-  out1[2] = x658
-  out1[3] = x659
-  out1[4] = x660
-  out1[5] = x661
-  out1[6] = x662
-  out1[7] = x663
+  uncheckedSet(out1, 0, x656);
+  uncheckedSet(out1, 1, x657);
+  uncheckedSet(out1, 2, x658);
+  uncheckedSet(out1, 3, x659);
+  uncheckedSet(out1, 4, x660);
+  uncheckedSet(out1, 5, x661);
+  uncheckedSet(out1, 6, x662);
+  uncheckedSet(out1, 7, x663);
 }
 
 /** fiat's `fiat_p256_square`: squares a field element in the Montgomery domain. */
 export const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
-  const arg1Limb0: u32 = arg1[0]
-  const arg1Limb1: u32 = arg1[1]
-  const arg1Limb2: u32 = arg1[2]
-  const arg1Limb3: u32 = arg1[3]
-  const arg1Limb4: u32 = arg1[4]
-  const arg1Limb5: u32 = arg1[5]
-  const arg1Limb6: u32 = arg1[6]
-  const arg1Limb7: u32 = arg1[7]
+  const arg1Limb0: u32 = uncheckedGet(arg1, 0)
+  const arg1Limb1: u32 = uncheckedGet(arg1, 1)
+  const arg1Limb2: u32 = uncheckedGet(arg1, 2)
+  const arg1Limb3: u32 = uncheckedGet(arg1, 3)
+  const arg1Limb4: u32 = uncheckedGet(arg1, 4)
+  const arg1Limb5: u32 = uncheckedGet(arg1, 5)
+  const arg1Limb6: u32 = uncheckedGet(arg1, 6)
+  const arg1Limb7: u32 = uncheckedGet(arg1, 7)
   const x1: u32 = arg1Limb1
   const x2: u32 = arg1Limb2
   const x3: u32 = arg1Limb3
@@ -2022,49 +2024,49 @@ export const p256FiatSquare = (out1: u32[], arg1: u32[]): void => {
   const x661: u32 = p256FiatCmovznzU32(x655, x648, x631)
   const x662: u32 = p256FiatCmovznzU32(x655, x650, x633)
   const x663: u32 = p256FiatCmovznzU32(x655, x652, x635)
-  out1[0] = x656
-  out1[1] = x657
-  out1[2] = x658
-  out1[3] = x659
-  out1[4] = x660
-  out1[5] = x661
-  out1[6] = x662
-  out1[7] = x663
+  uncheckedSet(out1, 0, x656);
+  uncheckedSet(out1, 1, x657);
+  uncheckedSet(out1, 2, x658);
+  uncheckedSet(out1, 3, x659);
+  uncheckedSet(out1, 4, x660);
+  uncheckedSet(out1, 5, x661);
+  uncheckedSet(out1, 6, x662);
+  uncheckedSet(out1, 7, x663);
 }
 
 
 /** fiat's `fiat_p256_scalar_mul`: multiplies two field elements in the Montgomery domain. */
 export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
-  const x1: u32 = arg1[1]
-  const x2: u32 = arg1[2]
-  const x3: u32 = arg1[3]
-  const x4: u32 = arg1[4]
-  const x5: u32 = arg1[5]
-  const x6: u32 = arg1[6]
-  const x7: u32 = arg1[7]
-  const x8: u32 = arg1[0]
-  const w9: u64 = p256FiatMulxU32(x8, arg2[7])
+  const x1: u32 = uncheckedGet(arg1, 1)
+  const x2: u32 = uncheckedGet(arg1, 2)
+  const x3: u32 = uncheckedGet(arg1, 3)
+  const x4: u32 = uncheckedGet(arg1, 4)
+  const x5: u32 = uncheckedGet(arg1, 5)
+  const x6: u32 = uncheckedGet(arg1, 6)
+  const x7: u32 = uncheckedGet(arg1, 7)
+  const x8: u32 = uncheckedGet(arg1, 0)
+  const w9: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 7))
   const x9: u32 = toU32(w9)
   const x10: u32 = toU32(w9 >> 32)
-  const w11: u64 = p256FiatMulxU32(x8, arg2[6])
+  const w11: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 6))
   const x11: u32 = toU32(w11)
   const x12: u32 = toU32(w11 >> 32)
-  const w13: u64 = p256FiatMulxU32(x8, arg2[5])
+  const w13: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 5))
   const x13: u32 = toU32(w13)
   const x14: u32 = toU32(w13 >> 32)
-  const w15: u64 = p256FiatMulxU32(x8, arg2[4])
+  const w15: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 4))
   const x15: u32 = toU32(w15)
   const x16: u32 = toU32(w15 >> 32)
-  const w17: u64 = p256FiatMulxU32(x8, arg2[3])
+  const w17: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 3))
   const x17: u32 = toU32(w17)
   const x18: u32 = toU32(w17 >> 32)
-  const w19: u64 = p256FiatMulxU32(x8, arg2[2])
+  const w19: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 2))
   const x19: u32 = toU32(w19)
   const x20: u32 = toU32(w19 >> 32)
-  const w21: u64 = p256FiatMulxU32(x8, arg2[1])
+  const w21: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 1))
   const x21: u32 = toU32(w21)
   const x22: u32 = toU32(w21 >> 32)
-  const w23: u64 = p256FiatMulxU32(x8, arg2[0])
+  const w23: u64 = p256FiatMulxU32(x8, uncheckedGet(arg2, 0))
   const x23: u32 = toU32(w23)
   const x24: u32 = toU32(w23 >> 32)
   const w25: u64 = p256FiatAddcarryxU32(0x0, x24, x21)
@@ -2154,28 +2156,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const w83: u64 = p256FiatAddcarryxU32(x82, x39, x43)
   const x83: u32 = toU32(w83)
   const x84: u32 = toU32(w83 >> 32)
-  const w85: u64 = p256FiatMulxU32(x1, arg2[7])
+  const w85: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 7))
   const x85: u32 = toU32(w85)
   const x86: u32 = toU32(w85 >> 32)
-  const w87: u64 = p256FiatMulxU32(x1, arg2[6])
+  const w87: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 6))
   const x87: u32 = toU32(w87)
   const x88: u32 = toU32(w87 >> 32)
-  const w89: u64 = p256FiatMulxU32(x1, arg2[5])
+  const w89: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 5))
   const x89: u32 = toU32(w89)
   const x90: u32 = toU32(w89 >> 32)
-  const w91: u64 = p256FiatMulxU32(x1, arg2[4])
+  const w91: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 4))
   const x91: u32 = toU32(w91)
   const x92: u32 = toU32(w91 >> 32)
-  const w93: u64 = p256FiatMulxU32(x1, arg2[3])
+  const w93: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 3))
   const x93: u32 = toU32(w93)
   const x94: u32 = toU32(w93 >> 32)
-  const w95: u64 = p256FiatMulxU32(x1, arg2[2])
+  const w95: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 2))
   const x95: u32 = toU32(w95)
   const x96: u32 = toU32(w95 >> 32)
-  const w97: u64 = p256FiatMulxU32(x1, arg2[1])
+  const w97: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 1))
   const x97: u32 = toU32(w97)
   const x98: u32 = toU32(w97 >> 32)
-  const w99: u64 = p256FiatMulxU32(x1, arg2[0])
+  const w99: u64 = p256FiatMulxU32(x1, uncheckedGet(arg2, 0))
   const x99: u32 = toU32(w99)
   const x100: u32 = toU32(w99 >> 32)
   const w101: u64 = p256FiatAddcarryxU32(0x0, x100, x97)
@@ -2293,28 +2295,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x177: u32 = toU32(w177)
   const x178: u32 = toU32(w177 >> 32)
   const x179: u32 = x178 + x133
-  const w180: u64 = p256FiatMulxU32(x2, arg2[7])
+  const w180: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 7))
   const x180: u32 = toU32(w180)
   const x181: u32 = toU32(w180 >> 32)
-  const w182: u64 = p256FiatMulxU32(x2, arg2[6])
+  const w182: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 6))
   const x182: u32 = toU32(w182)
   const x183: u32 = toU32(w182 >> 32)
-  const w184: u64 = p256FiatMulxU32(x2, arg2[5])
+  const w184: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 5))
   const x184: u32 = toU32(w184)
   const x185: u32 = toU32(w184 >> 32)
-  const w186: u64 = p256FiatMulxU32(x2, arg2[4])
+  const w186: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 4))
   const x186: u32 = toU32(w186)
   const x187: u32 = toU32(w186 >> 32)
-  const w188: u64 = p256FiatMulxU32(x2, arg2[3])
+  const w188: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 3))
   const x188: u32 = toU32(w188)
   const x189: u32 = toU32(w188 >> 32)
-  const w190: u64 = p256FiatMulxU32(x2, arg2[2])
+  const w190: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 2))
   const x190: u32 = toU32(w190)
   const x191: u32 = toU32(w190 >> 32)
-  const w192: u64 = p256FiatMulxU32(x2, arg2[1])
+  const w192: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 1))
   const x192: u32 = toU32(w192)
   const x193: u32 = toU32(w192 >> 32)
-  const w194: u64 = p256FiatMulxU32(x2, arg2[0])
+  const w194: u64 = p256FiatMulxU32(x2, uncheckedGet(arg2, 0))
   const x194: u32 = toU32(w194)
   const x195: u32 = toU32(w194 >> 32)
   const w196: u64 = p256FiatAddcarryxU32(0x0, x195, x192)
@@ -2432,28 +2434,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x272: u32 = toU32(w272)
   const x273: u32 = toU32(w272 >> 32)
   const x274: u32 = x273 + x228
-  const w275: u64 = p256FiatMulxU32(x3, arg2[7])
+  const w275: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 7))
   const x275: u32 = toU32(w275)
   const x276: u32 = toU32(w275 >> 32)
-  const w277: u64 = p256FiatMulxU32(x3, arg2[6])
+  const w277: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 6))
   const x277: u32 = toU32(w277)
   const x278: u32 = toU32(w277 >> 32)
-  const w279: u64 = p256FiatMulxU32(x3, arg2[5])
+  const w279: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 5))
   const x279: u32 = toU32(w279)
   const x280: u32 = toU32(w279 >> 32)
-  const w281: u64 = p256FiatMulxU32(x3, arg2[4])
+  const w281: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 4))
   const x281: u32 = toU32(w281)
   const x282: u32 = toU32(w281 >> 32)
-  const w283: u64 = p256FiatMulxU32(x3, arg2[3])
+  const w283: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 3))
   const x283: u32 = toU32(w283)
   const x284: u32 = toU32(w283 >> 32)
-  const w285: u64 = p256FiatMulxU32(x3, arg2[2])
+  const w285: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 2))
   const x285: u32 = toU32(w285)
   const x286: u32 = toU32(w285 >> 32)
-  const w287: u64 = p256FiatMulxU32(x3, arg2[1])
+  const w287: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 1))
   const x287: u32 = toU32(w287)
   const x288: u32 = toU32(w287 >> 32)
-  const w289: u64 = p256FiatMulxU32(x3, arg2[0])
+  const w289: u64 = p256FiatMulxU32(x3, uncheckedGet(arg2, 0))
   const x289: u32 = toU32(w289)
   const x290: u32 = toU32(w289 >> 32)
   const w291: u64 = p256FiatAddcarryxU32(0x0, x290, x287)
@@ -2571,28 +2573,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x367: u32 = toU32(w367)
   const x368: u32 = toU32(w367 >> 32)
   const x369: u32 = x368 + x323
-  const w370: u64 = p256FiatMulxU32(x4, arg2[7])
+  const w370: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 7))
   const x370: u32 = toU32(w370)
   const x371: u32 = toU32(w370 >> 32)
-  const w372: u64 = p256FiatMulxU32(x4, arg2[6])
+  const w372: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 6))
   const x372: u32 = toU32(w372)
   const x373: u32 = toU32(w372 >> 32)
-  const w374: u64 = p256FiatMulxU32(x4, arg2[5])
+  const w374: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 5))
   const x374: u32 = toU32(w374)
   const x375: u32 = toU32(w374 >> 32)
-  const w376: u64 = p256FiatMulxU32(x4, arg2[4])
+  const w376: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 4))
   const x376: u32 = toU32(w376)
   const x377: u32 = toU32(w376 >> 32)
-  const w378: u64 = p256FiatMulxU32(x4, arg2[3])
+  const w378: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 3))
   const x378: u32 = toU32(w378)
   const x379: u32 = toU32(w378 >> 32)
-  const w380: u64 = p256FiatMulxU32(x4, arg2[2])
+  const w380: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 2))
   const x380: u32 = toU32(w380)
   const x381: u32 = toU32(w380 >> 32)
-  const w382: u64 = p256FiatMulxU32(x4, arg2[1])
+  const w382: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 1))
   const x382: u32 = toU32(w382)
   const x383: u32 = toU32(w382 >> 32)
-  const w384: u64 = p256FiatMulxU32(x4, arg2[0])
+  const w384: u64 = p256FiatMulxU32(x4, uncheckedGet(arg2, 0))
   const x384: u32 = toU32(w384)
   const x385: u32 = toU32(w384 >> 32)
   const w386: u64 = p256FiatAddcarryxU32(0x0, x385, x382)
@@ -2710,28 +2712,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x462: u32 = toU32(w462)
   const x463: u32 = toU32(w462 >> 32)
   const x464: u32 = x463 + x418
-  const w465: u64 = p256FiatMulxU32(x5, arg2[7])
+  const w465: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 7))
   const x465: u32 = toU32(w465)
   const x466: u32 = toU32(w465 >> 32)
-  const w467: u64 = p256FiatMulxU32(x5, arg2[6])
+  const w467: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 6))
   const x467: u32 = toU32(w467)
   const x468: u32 = toU32(w467 >> 32)
-  const w469: u64 = p256FiatMulxU32(x5, arg2[5])
+  const w469: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 5))
   const x469: u32 = toU32(w469)
   const x470: u32 = toU32(w469 >> 32)
-  const w471: u64 = p256FiatMulxU32(x5, arg2[4])
+  const w471: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 4))
   const x471: u32 = toU32(w471)
   const x472: u32 = toU32(w471 >> 32)
-  const w473: u64 = p256FiatMulxU32(x5, arg2[3])
+  const w473: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 3))
   const x473: u32 = toU32(w473)
   const x474: u32 = toU32(w473 >> 32)
-  const w475: u64 = p256FiatMulxU32(x5, arg2[2])
+  const w475: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 2))
   const x475: u32 = toU32(w475)
   const x476: u32 = toU32(w475 >> 32)
-  const w477: u64 = p256FiatMulxU32(x5, arg2[1])
+  const w477: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 1))
   const x477: u32 = toU32(w477)
   const x478: u32 = toU32(w477 >> 32)
-  const w479: u64 = p256FiatMulxU32(x5, arg2[0])
+  const w479: u64 = p256FiatMulxU32(x5, uncheckedGet(arg2, 0))
   const x479: u32 = toU32(w479)
   const x480: u32 = toU32(w479 >> 32)
   const w481: u64 = p256FiatAddcarryxU32(0x0, x480, x477)
@@ -2849,28 +2851,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x557: u32 = toU32(w557)
   const x558: u32 = toU32(w557 >> 32)
   const x559: u32 = x558 + x513
-  const w560: u64 = p256FiatMulxU32(x6, arg2[7])
+  const w560: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 7))
   const x560: u32 = toU32(w560)
   const x561: u32 = toU32(w560 >> 32)
-  const w562: u64 = p256FiatMulxU32(x6, arg2[6])
+  const w562: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 6))
   const x562: u32 = toU32(w562)
   const x563: u32 = toU32(w562 >> 32)
-  const w564: u64 = p256FiatMulxU32(x6, arg2[5])
+  const w564: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 5))
   const x564: u32 = toU32(w564)
   const x565: u32 = toU32(w564 >> 32)
-  const w566: u64 = p256FiatMulxU32(x6, arg2[4])
+  const w566: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 4))
   const x566: u32 = toU32(w566)
   const x567: u32 = toU32(w566 >> 32)
-  const w568: u64 = p256FiatMulxU32(x6, arg2[3])
+  const w568: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 3))
   const x568: u32 = toU32(w568)
   const x569: u32 = toU32(w568 >> 32)
-  const w570: u64 = p256FiatMulxU32(x6, arg2[2])
+  const w570: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 2))
   const x570: u32 = toU32(w570)
   const x571: u32 = toU32(w570 >> 32)
-  const w572: u64 = p256FiatMulxU32(x6, arg2[1])
+  const w572: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 1))
   const x572: u32 = toU32(w572)
   const x573: u32 = toU32(w572 >> 32)
-  const w574: u64 = p256FiatMulxU32(x6, arg2[0])
+  const w574: u64 = p256FiatMulxU32(x6, uncheckedGet(arg2, 0))
   const x574: u32 = toU32(w574)
   const x575: u32 = toU32(w574 >> 32)
   const w576: u64 = p256FiatAddcarryxU32(0x0, x575, x572)
@@ -2988,28 +2990,28 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x652: u32 = toU32(w652)
   const x653: u32 = toU32(w652 >> 32)
   const x654: u32 = x653 + x608
-  const w655: u64 = p256FiatMulxU32(x7, arg2[7])
+  const w655: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 7))
   const x655: u32 = toU32(w655)
   const x656: u32 = toU32(w655 >> 32)
-  const w657: u64 = p256FiatMulxU32(x7, arg2[6])
+  const w657: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 6))
   const x657: u32 = toU32(w657)
   const x658: u32 = toU32(w657 >> 32)
-  const w659: u64 = p256FiatMulxU32(x7, arg2[5])
+  const w659: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 5))
   const x659: u32 = toU32(w659)
   const x660: u32 = toU32(w659 >> 32)
-  const w661: u64 = p256FiatMulxU32(x7, arg2[4])
+  const w661: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 4))
   const x661: u32 = toU32(w661)
   const x662: u32 = toU32(w661 >> 32)
-  const w663: u64 = p256FiatMulxU32(x7, arg2[3])
+  const w663: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 3))
   const x663: u32 = toU32(w663)
   const x664: u32 = toU32(w663 >> 32)
-  const w665: u64 = p256FiatMulxU32(x7, arg2[2])
+  const w665: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 2))
   const x665: u32 = toU32(w665)
   const x666: u32 = toU32(w665 >> 32)
-  const w667: u64 = p256FiatMulxU32(x7, arg2[1])
+  const w667: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 1))
   const x667: u32 = toU32(w667)
   const x668: u32 = toU32(w667 >> 32)
-  const w669: u64 = p256FiatMulxU32(x7, arg2[0])
+  const w669: u64 = p256FiatMulxU32(x7, uncheckedGet(arg2, 0))
   const x669: u32 = toU32(w669)
   const x670: u32 = toU32(w669 >> 32)
   const w671: u64 = p256FiatAddcarryxU32(0x0, x670, x667)
@@ -3161,14 +3163,14 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
   const x773: u32 = p256FiatCmovznzU32(x767, x760, x743)
   const x774: u32 = p256FiatCmovznzU32(x767, x762, x745)
   const x775: u32 = p256FiatCmovznzU32(x767, x764, x747)
-  out1[0] = x768
-  out1[1] = x769
-  out1[2] = x770
-  out1[3] = x771
-  out1[4] = x772
-  out1[5] = x773
-  out1[6] = x774
-  out1[7] = x775
+  uncheckedSet(out1, 0, x768);
+  uncheckedSet(out1, 1, x769);
+  uncheckedSet(out1, 2, x770);
+  uncheckedSet(out1, 3, x771);
+  uncheckedSet(out1, 4, x772);
+  uncheckedSet(out1, 5, x773);
+  uncheckedSet(out1, 6, x774);
+  uncheckedSet(out1, 7, x775);
 }
 
 /**
@@ -3177,40 +3179,40 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
  * way, at an offset that is the caller's loop position, never the secret.
  */
 export const p256TableMove = (out: u32[], table: u32[], at: i32, hit: u32): void => {
-  out[0] = p256FiatCmovznzU32(hit, out[0], table[at])
-  out[1] = p256FiatCmovznzU32(hit, out[1], table[at + 1])
-  out[2] = p256FiatCmovznzU32(hit, out[2], table[at + 2])
-  out[3] = p256FiatCmovznzU32(hit, out[3], table[at + 3])
-  out[4] = p256FiatCmovznzU32(hit, out[4], table[at + 4])
-  out[5] = p256FiatCmovznzU32(hit, out[5], table[at + 5])
-  out[6] = p256FiatCmovznzU32(hit, out[6], table[at + 6])
-  out[7] = p256FiatCmovznzU32(hit, out[7], table[at + 7])
+  uncheckedSet(out, 0, p256FiatCmovznzU32(hit, uncheckedGet(out, 0), uncheckedGet(table, at)));
+  uncheckedSet(out, 1, p256FiatCmovznzU32(hit, uncheckedGet(out, 1), uncheckedGet(table, at + 1)));
+  uncheckedSet(out, 2, p256FiatCmovznzU32(hit, uncheckedGet(out, 2), uncheckedGet(table, at + 2)));
+  uncheckedSet(out, 3, p256FiatCmovznzU32(hit, uncheckedGet(out, 3), uncheckedGet(table, at + 3)));
+  uncheckedSet(out, 4, p256FiatCmovznzU32(hit, uncheckedGet(out, 4), uncheckedGet(table, at + 4)));
+  uncheckedSet(out, 5, p256FiatCmovznzU32(hit, uncheckedGet(out, 5), uncheckedGet(table, at + 5)));
+  uncheckedSet(out, 6, p256FiatCmovznzU32(hit, uncheckedGet(out, 6), uncheckedGet(table, at + 6)));
+  uncheckedSet(out, 7, p256FiatCmovznzU32(hit, uncheckedGet(out, 7), uncheckedGet(table, at + 7)));
 }
 
 /** fiat's `fiat_p256_add`: adds two field elements in the Montgomery domain. */
 export const p256FiatAdd = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
-  const w1: u64 = p256FiatAddcarryxU32(0x0, arg1[0], arg2[0])
+  const w1: u64 = p256FiatAddcarryxU32(0x0, uncheckedGet(arg1, 0), uncheckedGet(arg2, 0))
   const x1: u32 = toU32(w1)
   const x2: u32 = toU32(w1 >> 32)
-  const w3: u64 = p256FiatAddcarryxU32(x2, arg1[1], arg2[1])
+  const w3: u64 = p256FiatAddcarryxU32(x2, uncheckedGet(arg1, 1), uncheckedGet(arg2, 1))
   const x3: u32 = toU32(w3)
   const x4: u32 = toU32(w3 >> 32)
-  const w5: u64 = p256FiatAddcarryxU32(x4, arg1[2], arg2[2])
+  const w5: u64 = p256FiatAddcarryxU32(x4, uncheckedGet(arg1, 2), uncheckedGet(arg2, 2))
   const x5: u32 = toU32(w5)
   const x6: u32 = toU32(w5 >> 32)
-  const w7: u64 = p256FiatAddcarryxU32(x6, arg1[3], arg2[3])
+  const w7: u64 = p256FiatAddcarryxU32(x6, uncheckedGet(arg1, 3), uncheckedGet(arg2, 3))
   const x7: u32 = toU32(w7)
   const x8: u32 = toU32(w7 >> 32)
-  const w9: u64 = p256FiatAddcarryxU32(x8, arg1[4], arg2[4])
+  const w9: u64 = p256FiatAddcarryxU32(x8, uncheckedGet(arg1, 4), uncheckedGet(arg2, 4))
   const x9: u32 = toU32(w9)
   const x10: u32 = toU32(w9 >> 32)
-  const w11: u64 = p256FiatAddcarryxU32(x10, arg1[5], arg2[5])
+  const w11: u64 = p256FiatAddcarryxU32(x10, uncheckedGet(arg1, 5), uncheckedGet(arg2, 5))
   const x11: u32 = toU32(w11)
   const x12: u32 = toU32(w11 >> 32)
-  const w13: u64 = p256FiatAddcarryxU32(x12, arg1[6], arg2[6])
+  const w13: u64 = p256FiatAddcarryxU32(x12, uncheckedGet(arg1, 6), uncheckedGet(arg2, 6))
   const x13: u32 = toU32(w13)
   const x14: u32 = toU32(w13 >> 32)
-  const w15: u64 = p256FiatAddcarryxU32(x14, arg1[7], arg2[7])
+  const w15: u64 = p256FiatAddcarryxU32(x14, uncheckedGet(arg1, 7), uncheckedGet(arg2, 7))
   const x15: u32 = toU32(w15)
   const x16: u32 = toU32(w15 >> 32)
   const w17: u64 = p256FiatSubborrowxU32(0x0, x1, 0xffffffff)
@@ -3247,40 +3249,40 @@ export const p256FiatAdd = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x40: u32 = p256FiatCmovznzU32(x34, x27, x11)
   const x41: u32 = p256FiatCmovznzU32(x34, x29, x13)
   const x42: u32 = p256FiatCmovznzU32(x34, x31, x15)
-  out1[0] = x35
-  out1[1] = x36
-  out1[2] = x37
-  out1[3] = x38
-  out1[4] = x39
-  out1[5] = x40
-  out1[6] = x41
-  out1[7] = x42
+  uncheckedSet(out1, 0, x35);
+  uncheckedSet(out1, 1, x36);
+  uncheckedSet(out1, 2, x37);
+  uncheckedSet(out1, 3, x38);
+  uncheckedSet(out1, 4, x39);
+  uncheckedSet(out1, 5, x40);
+  uncheckedSet(out1, 6, x41);
+  uncheckedSet(out1, 7, x42);
 }
 
 /** fiat's `fiat_p256_sub`: subtracts two field elements in the Montgomery domain. */
 export const p256FiatSub = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
-  const w1: u64 = p256FiatSubborrowxU32(0x0, arg1[0], arg2[0])
+  const w1: u64 = p256FiatSubborrowxU32(0x0, uncheckedGet(arg1, 0), uncheckedGet(arg2, 0))
   const x1: u32 = toU32(w1)
   const x2: u32 = toU32(w1 >> 32)
-  const w3: u64 = p256FiatSubborrowxU32(x2, arg1[1], arg2[1])
+  const w3: u64 = p256FiatSubborrowxU32(x2, uncheckedGet(arg1, 1), uncheckedGet(arg2, 1))
   const x3: u32 = toU32(w3)
   const x4: u32 = toU32(w3 >> 32)
-  const w5: u64 = p256FiatSubborrowxU32(x4, arg1[2], arg2[2])
+  const w5: u64 = p256FiatSubborrowxU32(x4, uncheckedGet(arg1, 2), uncheckedGet(arg2, 2))
   const x5: u32 = toU32(w5)
   const x6: u32 = toU32(w5 >> 32)
-  const w7: u64 = p256FiatSubborrowxU32(x6, arg1[3], arg2[3])
+  const w7: u64 = p256FiatSubborrowxU32(x6, uncheckedGet(arg1, 3), uncheckedGet(arg2, 3))
   const x7: u32 = toU32(w7)
   const x8: u32 = toU32(w7 >> 32)
-  const w9: u64 = p256FiatSubborrowxU32(x8, arg1[4], arg2[4])
+  const w9: u64 = p256FiatSubborrowxU32(x8, uncheckedGet(arg1, 4), uncheckedGet(arg2, 4))
   const x9: u32 = toU32(w9)
   const x10: u32 = toU32(w9 >> 32)
-  const w11: u64 = p256FiatSubborrowxU32(x10, arg1[5], arg2[5])
+  const w11: u64 = p256FiatSubborrowxU32(x10, uncheckedGet(arg1, 5), uncheckedGet(arg2, 5))
   const x11: u32 = toU32(w11)
   const x12: u32 = toU32(w11 >> 32)
-  const w13: u64 = p256FiatSubborrowxU32(x12, arg1[6], arg2[6])
+  const w13: u64 = p256FiatSubborrowxU32(x12, uncheckedGet(arg1, 6), uncheckedGet(arg2, 6))
   const x13: u32 = toU32(w13)
   const x14: u32 = toU32(w13 >> 32)
-  const w15: u64 = p256FiatSubborrowxU32(x14, arg1[7], arg2[7])
+  const w15: u64 = p256FiatSubborrowxU32(x14, uncheckedGet(arg1, 7), uncheckedGet(arg2, 7))
   const x15: u32 = toU32(w15)
   const x16: u32 = toU32(w15 >> 32)
   const x17: u32 = p256FiatCmovznzU32(x16, 0x0, 0xffffffff)
@@ -3307,14 +3309,14 @@ export const p256FiatSub = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
   const x31: u32 = toU32(w30 >> 32)
   const w32: u64 = p256FiatAddcarryxU32(x31, x15, x17)
   const x32: u32 = toU32(w32)
-  out1[0] = x18
-  out1[1] = x20
-  out1[2] = x22
-  out1[3] = x24
-  out1[4] = x26
-  out1[5] = x28
-  out1[6] = x30
-  out1[7] = x32
+  uncheckedSet(out1, 0, x18);
+  uncheckedSet(out1, 1, x20);
+  uncheckedSet(out1, 2, x22);
+  uncheckedSet(out1, 3, x24);
+  uncheckedSet(out1, 4, x26);
+  uncheckedSet(out1, 5, x28);
+  uncheckedSet(out1, 6, x30);
+  uncheckedSet(out1, 7, x32);
 }
 
 /**
@@ -3323,20 +3325,20 @@ export const p256FiatSub = (out1: u32[], arg1: u32[], arg2: u32[]): void => {
  * on their own stack.
  */
 const p256CurveB = (out: u32[]): void => {
-  out[0] = 0x29c4bddf
-  out[1] = 0xd89cdf62
-  out[2] = 0x78843090
-  out[3] = 0xacf005cd
-  out[4] = 0xf7212ed6
-  out[5] = 0xe5a220ab
-  out[6] = 0x04874834
-  out[7] = 0xdc30061d
+  uncheckedSet(out, 0, 0x29c4bddf);
+  uncheckedSet(out, 1, 0xd89cdf62);
+  uncheckedSet(out, 2, 0x78843090);
+  uncheckedSet(out, 3, 0xacf005cd);
+  uncheckedSet(out, 4, 0xf7212ed6);
+  uncheckedSet(out, 5, 0xe5a220ab);
+  uncheckedSet(out, 6, 0x04874834);
+  uncheckedSet(out, 7, 0xdc30061d);
 }
 
 /** `p256Copy`. */
 const p256Copy = (out: u32[], a: u32[]): void => {
   for (let i: i32 = 0; i < 8; i++) {
-    out[i] = a[i]
+    uncheckedSet(out, i, uncheckedGet(a, i));
   }
 }
 
@@ -3469,9 +3471,9 @@ const p256TableSelectEntry = (outX: u32[], outY: u32[], outZ: u32[], table: u32[
  */
 export const p256TableSelect = (outX: u32[], outY: u32[], outZ: u32[], table: u32[], digit: u32): void => {
   for (let j: i32 = 0; j < 8; j++) {
-    outX[j] = 0
-    outY[j] = 0
-    outZ[j] = 0
+    uncheckedSet(outX, j, 0);
+    uncheckedSet(outY, j, 0);
+    uncheckedSet(outZ, j, 0);
   }
   p256TableSelectEntry(outX, outY, outZ, table, 0, digit)
   p256TableSelectEntry(outX, outY, outZ, table, 1, digit)
@@ -3518,7 +3520,7 @@ const limbsOfHex = (text: string): u32[] => {
     const nibble: u32 = toU32(code <= 57 ? code - 48 : code - 87)
     const limb: i32 = (63 - i) >> 3
     if (limb >= 0 && limb < 8) {
-      out[limb] = out[limb] | (nibble << toU32(4 * ((63 - i) & 7)))
+      uncheckedSet(out, limb, uncheckedGet(out, limb) | (nibble << toU32(4 * ((63 - i) & 7))));
     }
   }
   return out
@@ -3531,7 +3533,7 @@ const hexOfLimbs = (a: u32[]): string => {
   for (let i: i32 = 63; i >= 0; i--) {
     const limb: i32 = i >> 3
     if (limb >= 0 && limb < 8) {
-      const v: i32 = toI32((a[limb] >> toU32(4 * (i & 7))) & 15)
+      const v: i32 = toI32((uncheckedGet(a, limb) >> toU32(4 * (i & 7))) & 15)
       if (v >= 0 && v < toI32(digits.length)) {
         parts.push(digits.substring(v, v + 1))
       }
@@ -3558,7 +3560,7 @@ const invert = (out: u32[], a: u32[]): void => {
   for (let i: i32 = 255; i >= 0; i--) {
     p256FiatSquare(acc, acc)
     const limb: i32 = i >> 5
-    if (limb >= 0 && limb < 8 && ((e[limb] >> toU32(i & 31)) & 1) === 1) {
+    if (limb >= 0 && limb < 8 && ((uncheckedGet(e, limb) >> toU32(i & 31)) & 1) === 1) {
       p256FiatMul(acc, acc, a)
     }
   }
@@ -3581,9 +3583,9 @@ const baseMult = (k: string): string => {
   const az: u32[] = new Array<u32>(8)
   for (let i: i32 = 0; i < 16; i++) {
     for (let j: i32 = 0; j < 8; j++) {
-      table[i * 24 + j] = ax[j]
-      table[i * 24 + 8 + j] = ay[j]
-      table[i * 24 + 16 + j] = az[j]
+      uncheckedSet(table, i * 24 + j, uncheckedGet(ax, j));
+      uncheckedSet(table, i * 24 + 8 + j, uncheckedGet(ay, j));
+      uncheckedSet(table, i * 24 + 16 + j, uncheckedGet(az, j));
     }
     p256PointAdd(ax, ay, az, gx, gy, gz)
   }
@@ -3673,7 +3675,7 @@ const knownAnswers = (): i32 => {
   // A three-entry table of eight limbs each, entry i holding 100 i + limb.
   const table: u32[] = new Array<u32>(24)
   for (let i: i32 = 0; i < 24; i++) {
-    table[i] = toU32(100 * (i >> 3) + (i & 7))
+    uncheckedSet(table, i, toU32(100 * (i >> 3) + (i & 7)));
   }
   const moved: u32[] = limbsOfHex(a)
   p256TableMove(moved, table, 8, 0)

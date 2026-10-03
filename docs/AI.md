@@ -201,7 +201,7 @@ compatible only when their types are identical.
 | Type | Is | Notes |
 | --- | --- | --- |
 | `number` | `i32`, or `f64` under `--number-mode f64` | the mode's default width |
-| `i32`, `i64` | signed integers | signed overflow is undefined; `--wrapping` wraps |
+| `i32`, `i64` | signed integers | signed overflow is undefined; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
 | `u8`, `u16`, `u32`, `u64` | unsigned integers | arithmetic **always** wraps; `>>` is logical |
 | `f32`, `f64` | IEEE-754 | `f32` is never the lowering of `number` |
 | `boolean` | `i1` | no truthiness anywhere |
@@ -213,6 +213,26 @@ compatible only when their types are identical.
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
+
+**An unchecked index and a defined wrap are `nish:unsafe` imports**, written at
+the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
+numbers with an `i32` index (out of range is undefined behaviour), and
+`wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
+Calling one without the import is NL2456. `--unchecked-indexing` and
+`--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
+never a dependency or `nish/`.
+
+```ts nish:ok
+import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";
+
+export const hash = (bytes: u8[]): i32 => {
+  let h: i32 = 17;
+  for (let i: i32 = 0; i < toI32(bytes.length); i++) {
+    h = wrappingAdd(wrappingMul(h, 31), toI32(uncheckedGet(bytes, i)));
+  }
+  return h;
+};
+```
 
 **Mixing widths is an error, always.** `f32 + f64`, `i64 + number`, even
 `u32 + i32` (same LLVM type, different signedness) are rejected. Convert

@@ -1,0 +1,1 @@
+--wrapping is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe` where an operation is meant to wrap

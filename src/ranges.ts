@@ -222,7 +222,14 @@ const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
  * side tables, and before the attribute analysis, which reads the proofs.
  */
 export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, reference: boolean): void => {
-  if (contexts.length === 0 || contexts[0].uncheckedIndexing) {
+  // Nothing to prove when no module checks an index. A module that does not
+  // is still walked beside the ones that do: its body records no passed check
+  // (`recordPassedCheck`), so what it tells its callees is only ever less.
+  let checked = false
+  for (const ctx of contexts) {
+    checked = checked || !ctx.uncheckedIndexing
+  }
+  if (!checked) {
     return
   }
   const tables = new RangeTables()
