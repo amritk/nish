@@ -773,7 +773,6 @@ const typeArgumentFix = (ctx: CheckContext, less: Node, template: TemplateInfo, 
     call.children[0] !== less ||
     call.children[1].kind !== N_PAREN ||
     written.kind !== N_IDENT ||
-    template.typeParams.length !== 1 ||
     !takesTypeParamOnce(template) ||
     !inferredAs(ctx, call.children[1].children[0], written.text, scope)
   ) {
@@ -787,10 +786,10 @@ const typeArgumentFix = (ctx: CheckContext, less: Node, template: TemplateInfo, 
   return edits
 }
 
-/** Whether `template` has exactly one parameter, annotated as its one type parameter, bare. */
+/** Whether `template` has one type parameter and one parameter, annotated as that type parameter, bare. */
 const takesTypeParamOnce = (template: TemplateInfo): boolean => {
   const params = template.decl.children[1].children
-  if (params.length !== 1) {
+  if (template.typeParams.length !== 1 || params.length !== 1) {
     return false
   }
   const annotation = params[0].children[1]
