@@ -14,6 +14,7 @@ import { isNishSpecifier, nishModuleNames } from "./nish-modules"
 import { STD_PREFIX } from "./branding"
 import { parseBareSpecifier } from "./packages"
 import { rejectForeignPointer, resolveType } from "./annotations"
+import { annotationSpelling } from "./arrays"
 import { functionTypeHereMessage, isFunctionParameter } from "./generics"
 import { isThreadsSource } from "./parallel"
 import { FLAG_COMPUTED, FLAG_EXPORTED, FLAG_TYPE_ONLY, N_EMPTY, N_IDENT, N_LIST, Node } from "./nodes"
@@ -115,6 +116,7 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
     sig.returnType = T_ERROR
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx)
+    sig.returnSpelling = annotationSpelling(ctx, true, returnAnnotation)
   }
   if (foreign) {
     checkForeignSignature(ctx, sig, decl, name)
