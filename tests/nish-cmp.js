@@ -2652,6 +2652,18 @@ const DECLARED = [
     "CG-10",
     "a new program: its compound element assignments resize the array on their right side, and the reference stores into the old block"
   ),
+  {
+    program: "tests/link/net_quic_packet/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
+    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+  },
+  {
+    program: "tests/link/net_quic_packet_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
+    why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
