@@ -86,11 +86,11 @@ labelled apart.
 
 | label | builtins |
 | --- | --- |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync` |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` |
 | `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` |
-| `env` | `getenv` |
+| `env` | `getenv`, `geteuid` |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` |
 | `entropy` | `crypto.getRandomValues`, `Math.random` |
 | `signal` | `signalFd`, `readSignal` |

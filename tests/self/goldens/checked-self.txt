@@ -28332,7 +28332,7 @@ function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   escaping: name
   calls: isNetExport nish_str_eq
   stackSites=0 stackLocals=0
-  callee 201:7 isNetExport -> @isNetExport
+  callee 203:7 isNetExport -> @isNetExport
 module src/ast-text.ts
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR

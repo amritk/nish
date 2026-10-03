@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 862 programs, 59904 dump lines.
+# 864 programs, 59936 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -43497,7 +43497,27 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_read_signal nish_signal_fd nish_str_from_i32
   stackSites=0 stackLocals=0
   local 6:9 fd: i32 (const)
-reject tests/cases/owner_checks.ts: nish 0.16.0: internal compiler error
+program tests/cases/owner_checks.ts
+module tests/cases/owner_checks.ts (entry)
+function ownerOf(ownerMode: i64): i64 -> @ownerOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function typeOf(ownerMode: i64): i64 -> @typeOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_mkdir
+  calls: nish_arena_mark nish_arena_release nish_euid nish_is_executable nish_lstat_owner_mode nish_mkdir nish_print nish_str_from_i64 nish_write_file ownerOf typeOf
+  stackSites=0 stackLocals=0
+  local 18:9 file: string (const)
+  local 20:9 me: i64 (const)
+  local 22:9 om: i64 (const)
+  callee 24:15 ownerOf -> @ownerOf
+  callee 26:15 typeOf -> @typeOf
+  callee 27:15 typeOf -> @typeOf
+  local 30:9 highUid: i64 (const)
+  callee 31:15 ownerOf -> @ownerOf
 program tests/cases/parse_numbers.ts
 module tests/cases/parse_numbers.ts (entry)
 function show(label: string, v: f64): void -> @show
@@ -49809,7 +49829,19 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_write_file
   calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_str_from_i32 nish_write nish_write_file
   stackSites=0 stackLocals=0
-reject docs/cookbook/builtin-owner.ts: nish 0.16.0: internal compiler error
+program docs/cookbook/builtin-owner.ts
+module docs/cookbook/builtin-owner.ts (entry)
+function trusted(root: string): boolean -> @trusted [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_lstat_owner_mode
+  calls: nish_euid nish_lstat_owner_mode
+  stackSites=0 stackLocals=0
+  local 8:9 om: i64 (const)
+function runs(program: string): boolean -> @runs [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_is_executable
+  calls: nish_is_executable
+  stackSites=0 stackLocals=0
 program docs/cookbook/builtin-process.ts
 module docs/cookbook/builtin-process.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
