@@ -1205,10 +1205,10 @@ class PassWalk {
   /** The `const` variables of the `for...of` loops nested in the body, and the arrays they walk. */
   elementLocals: Local[]
   elementSources: Node[]
-  /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
-  allocates: boolean
   /** The body's own locals it binds to a `readdirSync` listing, whose elements are as new as it (CG-5). */
   listingLocals: Local[]
+  /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
+  allocates: boolean
   /**
    * The walk is over a `using a = arena()` block rather than a loop's pass
    * (`decideArenaBlock`): the release is the program's, so arena control and
