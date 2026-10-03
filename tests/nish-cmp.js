@@ -1974,6 +1974,66 @@ const DECLARED = [
     why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
   },
   {
+    program: "tests/cases/secret_wipe.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: `nish:secret`'s `secret`, `expose`, `exposeWith` and `wipe`, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/cases/secret_flow.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: the ownership shapes `nish:secret` accepts, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/cases/secret_wipe_o2.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: a `wipe` of bytes nothing reads again, whose volatile store survives `opt -O2`; the reference compiler refuses it because it has no `nish:secret`",
+  },
+  {
+    program: "docs/cookbook/builtin-secret.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new cookbook entry for `nish:secret`, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/link/crypto_p256/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_p256_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x25519/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x25519_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_audit/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_malformed/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
     program: "tests/cases/wipe_bytes.ts",
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",

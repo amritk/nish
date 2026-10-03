@@ -18,6 +18,12 @@ import {
   peelSpelling,
   typedArraySpelling,
 } from "./arrays"
+import {
+  isSecretSource,
+  isSecretTemplate,
+  memberMessage as secretMemberMessage,
+  newMessage as secretNewMessage,
+} from "./secret"
 import { checkBuiltinArity, checkNamespaceProperty, dateRefusal } from "./builtins"
 import { checkResultMethod, checkResultProperty } from "./result"
 import { CheckContext } from "./context"
@@ -115,6 +121,9 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   if (receiver === T_ERROR) {
     return T_ERROR
   }
+  if (refuseSecretMember(ctx, receiver, expr)) {
+    return T_ERROR
+  }
   if (ctx.table.isNullable(receiver)) {
     // Against the property name, where stage0 puts it (`expr.name`).
     ctx.errorAtProperty(
@@ -174,6 +183,19 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
   return field.type
 }
 
+/**
+ * `nish:secret`: what a `Secret` holds is read, written and called on only by
+ * `std/secret.ts`. Everywhere else a member of one is refused, at the member,
+ * before any rule about the field it names.
+ */
+const refuseSecretMember = (ctx: CheckContext, receiver: i32, member: Node): boolean => {
+  if (!ctx.table.isSecret(receiver) || isSecretSource(ctx.program)) {
+    return false
+  }
+  ctx.errorAtProperty(member, secretMemberMessage(member.text))
+  return true
+}
+
 /** The `StructInfo` behind a struct-typed value; the emitter relies on the same lookup. */
 export const structOf = (ctx: CheckContext, type: i32): StructInfo | null =>
   ctx.program.struct(ctx.table.nameOf(type))
@@ -196,6 +218,9 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return T_ERROR
   }
   const args = expr.children[1]
+  if (refuseSecretMember(ctx, receiver, access)) {
+    return T_ERROR
+  }
   if (ctx.table.isNullable(receiver)) {
     // Against the method name, where stage0 puts it (`access.name`).
     ctx.errorAtProperty(
@@ -434,6 +459,9 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     if (info === null) {
       return T_ERROR
     }
+    if (isSecretTemplate(template) && !isSecretSource(ctx.program)) {
+      return ctx.errorType(expr, secretNewMessage())
+    }
   } else {
     info = ctx.program.struct(name)
   }
@@ -599,6 +627,9 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
     return T_ERROR
   }
   if (refuseParameterMember(ctx, receiverExpr, receiver, target, "assign to", false, scope)) {
+    return T_ERROR
+  }
+  if (refuseSecretMember(ctx, receiver, target)) {
     return T_ERROR
   }
   if (ctx.table.isArray(receiver) && target.text === "length") {
