@@ -4022,7 +4022,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | --- | --- | --- | --- |
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
-| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_arity`, `reject_net_wasm` |
+| `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -4038,8 +4038,12 @@ refused, `-110` it timed out and `-22` a bad argument; the Darwin runtime
 translates its own. Any other failure is the host's `-errno`
 (`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
 answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
-`Result`, because no builtin answers one and a failure here is routine — the
-same convention `signalFd` set — and because a number allocates nothing: no
+`Result`, because no builtin answers one and a failure here is routine, and
+because a number allocates nothing. It follows the shape `signalFd` set, where
+a negative `i32` is a failure, and adds the errno to it: `signalFd` and
+`readSignal` answer a plain `-1` for any failure (and `readFileBytesSync`
+answers `null`), while a `nish:net` call says which failure it was, so a loop
+tells "would block" from "the peer has gone" without asking again. No
 `nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
 in a loop whose pass scope gives back what each pass builds, and prints `flat`
 when that moved the arena no further than one message did).
@@ -4052,6 +4056,16 @@ big-endian. So `127.0.0.1:8080` is ten zeros, `255 255`, `127 0 0 1`, `31 144`
 (`net_tcp_calls`). One form for both families, in memory the caller owns, so a
 server that accepts a million connections allocates nothing to learn who they
 are from. An array longer than 18 bytes is fine; the rest is not touched.
+
+**Both families on one socket.** `net_dual_stack` listens on `"::"`, and the
+`net_` block of `tests/run.js` connects to it from Node over `127.0.0.1` and
+then over `::1`: the first peer arrives as `::ffff:127.0.0.1` and the second as
+`::1`, each with Node's own port in the last two bytes, and both are echoed.
+Its UDP socket, bound to `"::"` too, sends itself a datagram with each ECN mark
+to its IPv4 address and to its IPv6 one, and reads every mark back from
+`meta[1]` over both. That needs a host with IPv6: where `::1` cannot be listened
+on, `"::"` is the IPv4 fallback above, and the check says so and passes rather
+than counting a skip. CI's `ubuntu-latest` has IPv6 and runs it.
 
 #### The client half
 
@@ -4084,7 +4098,7 @@ if (connectResult(fd) === 0) {
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
+| `udpBind(host: string, port: i32, flags: i32): i32` | a datagram socket, non-blocking and close-on-exec, bound to a numeric host and port the way `tcpListen`'s is, `"::"` and its IPv4 fallback included. Flag `1` is `SO_REUSEPORT`, so several sockets that all ask for it share a port and the kernel spreads the datagrams across them; flag `2` is `UDP_GRO`; any other bit is `-22`. Without flag `1` a port in use is `-98`. The ECN bits of every datagram are always read | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_dual_stack`; `reject_net_udp_wasm`, `reject_net_udp_parallel` |
 | `udpSendTo(fd: i32, buf: readonly u8[], off: i32, len: i32, to: readonly u8[], segment: i32, ecn: i32): i32` | `buf[off, off + len)` to the address `to` in one `sendmsg`: the bytes sent. A `segment` above `0` is **GSO**: the kernel cuts the payload into datagrams of `segment` bytes, the last one shorter, so one call sends many. `ecn` is the two ECN bits of the IP header (`0` not ECN-capable, `1` ECT(1), `2` ECT(0), `3` CE). A `to` shorter than 18 bytes, a `segment` outside `0..65535` or an `ecn` outside `0..3` is `-22`, and so is a payload the kernel will not cut (more segments than it takes in one call, or a segment the route cannot carry); `-11` when the send buffer is full. Not `willreturn`: on a blocking socket the program inherited it waits. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`; `reject_net_udp_send_element`, `reject_net_udp_arity`, `reject_net_udp_task` |
 | `udpRecvFrom(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]): i32` | the next datagram into `buf[off, off + len)`, cut to `len` if it is longer, in one `recvmsg`: its length, or `-11` when none is waiting. The sender's address goes into `from`, and two numbers into `meta`: `meta[0]` the **GRO** segment size, the size of each datagram the kernel coalesced into this one (`0` when it coalesced none), and `meta[1]` the ECN bits the datagram arrived with. A `from` shorter than 18 bytes or a `meta` shorter than 2 is `-22` before anything is taken. Not `willreturn`, as `udpSendTo`. The range is [checked](#bounds) | write | `net_udp_calls`, `net_udp_echo`, `net_udp_offload`, `net_udp_bounds`, `net_udp_unchecked`; `reject_net_udp_readonly`, `reject_net_udp_meta_readonly`, `reject_net_udp_meta_element`, `reject_net_udp_element`, `reject_net_udp_region` |
 
@@ -4115,7 +4129,10 @@ receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
 
 **Darwin has none of the three.** There `udpSendTo` with a `segment` or an
 `ecn` above `0`, and `udpBind` with flag `2`, answer `-95`, and `meta` is
-always `0, 0`. That branch is compiled by CI's Darwin rows and run by nothing.
+always `0, 0`. A `meta[1]` of `0` is also what a datagram that really is not
+ECN-capable reads as, so a receive on Darwin cannot say ECN is unsupported: a
+program learns that from the `-95` a send with an `ecn` above `0` answers, and
+on Darwin it reads every arrival as Not-ECT. That branch is compiled by CI's Darwin rows and run by nothing.
 On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
 there by `tcpAccept` on a datagram socket instead, above), so the Darwin
 answers are a statement about the code, not about a test.
@@ -4492,25 +4509,38 @@ it when it is:
   infers as the typed array (`reject_typed_push_inferred`), or `const u = t`;
 - **a field read** `o.f` whose field is declared with one of the names;
 - **a call** whose callee declares one of the names as its return type
-  (`reject_typed_pop_receivers` has one of each);
+  (`reject_typed_pop_receivers` has one of each). A field or a return type
+  written through a `type` alias carries it in every module that reads it,
+  including one that does not import the alias, because the declaring module
+  reads the spelling where its aliases are (`tests/link/reject_typed_push_alias`);
+- **a call of a generic function** whose return type is a type parameter —
+  or an array of one — that an argument binds to a receiver carrying it:
+  `first(rows)` with `first<T>(xs: T[]): T` and `rows: Float64Array[]`,
+  `same(new Int32Array(n))` with `same<T>(x: T): T`. The spelling is the
+  call's, not the instantiation's: `first(plain)` over an `f64[][]` is the
+  same instantiation and is not refused (`reject_typed_push_generic`);
+- **a value read out of a `Map`** whose value type is spelled with a name,
+  whether the `Map` is annotated `Map<string, Float64Array>`, made with
+  `new Map<string, Float64Array>()` or is a field so declared: `m.get(k)`
+  once narrowed, `m.get(k) ?? d`, and the variable of a `for...of` over
+  `m.values()` (`reject_typed_push_map`). A `Set` holds no arrays and a
+  `Map`'s keys are none, since an array is not a key;
 - **an element of an array spelled with a name**: `rows[i]` or a `for...of`
   variable over `rows`, where `rows` is any of the above spelled
   `Float64Array[]` or `Array<Float64Array>`, or is an array literal of
   receivers that carry it, `[new Float64Array(n)]`
   (`reject_typed_push_element`). The array itself is an ordinary array, and
   `rows.push(new Float64Array(n))` compiles;
-- **a ternary** either of whose branches carries it: `c ? xs : t` is
-  `number[] | Float64Array` to TypeScript, which has no `pop` either
+- **a ternary or a `??`** either of whose operands carries it: `c ? xs : t`
+  is `number[] | Float64Array` to TypeScript, which has no `pop` either
   (`reject_typed_push_ternary`).
 
-What does not carry it is narrower, and each is a program that compiles and
-pushes natively where the same source throws a `TypeError` under Node: a field
-or return type written through **another module's** `type` alias (a
-declaration in another module carries the spelling only when it writes the
-name itself, `[]` and `Array<>` included); a value read out of a `Map` or
-`Set` of typed arrays; and the `T` result of a generic function instantiated
-at one of the names. Declare such a value `f64[]` where it is bound, which is
-what TypeScript needs to accept the push as well.
+What does not carry it is a member of a generic **class** instantiated at
+one of the names: `new Box<Float64Array>(t).value` and a method of it that
+returns `T` still push natively where the same source throws a `TypeError`
+under Node, because a binding records one spelling and not one per type
+argument. Declare such a value `f64[]` where it is bound, which is what
+TypeScript needs to accept the push as well.
 
 **A typed array that flows into a binding spelled `T[]` may be pushed there**:
 `const a: f64[] = t; a.push(v)`, or a `Float64Array` passed to a parameter

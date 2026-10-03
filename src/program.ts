@@ -100,6 +100,14 @@ export class FunctionSig {
   lifted: boolean
   /** WP29: how many arrows have been lifted out of this function's body, for their symbols. */
   arrowCount: i32
+  /**
+   * WP33 R2: the typed-array name the return type is spelled with, or `""`
+   * (`annotationSpelling` in `src/arrays.ts`). It is read where the signature
+   * is collected, in the module that declares it, because that is the one
+   * module whose `type` aliases the annotation names: a caller in another
+   * module reads this rather than the annotation (#347).
+   */
+  returnSpelling: string
 
   /** Whether parameter `index` is a compile-time function parameter (WP29). */
   isCompileTime(index: i32): boolean {
@@ -178,6 +186,7 @@ export class FunctionSig {
     this.hidden = false
     this.lifted = false
     this.arrowCount = 0
+    this.returnSpelling = ""
   }
 }
 
@@ -642,6 +651,11 @@ export class FieldInfo {
    * so `index` does not move and `offset` is recomputed.
    */
   inlineCapacity: i32
+  /**
+   * WP33 R2: the typed-array name the field is declared with, or `""`, read
+   * in the declaring module for the reason `FunctionSig.returnSpelling` is.
+   */
+  spelling: string
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
@@ -652,6 +666,7 @@ export class FieldInfo {
     this.initializer = null
     this.decl = decl
     this.inlineCapacity = -1
+    this.spelling = ""
   }
 
   /** Whether the array this field holds lives inside the object (`inlineCapacity`). */
