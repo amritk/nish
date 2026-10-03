@@ -176,7 +176,8 @@ supplied by both runtimes. It touches more files than its size suggests, and
 before any program calls it, so take the list whole. The worked examples are `secureZero` (#417), one call to a new
 `nish_wipe` in `runtime/runtime.c`, and the owner builtins `lstatOwnerModeSync`,
 `geteuid` and `isExecutableSync` (#425), each one call to an RT-9 primitive
-`runtime/runtime-host.c` already carried.
+`runtime/runtime-host.c` already carried. #425 shows the whole list; #417
+predates #423's capabilities audit, so its `CAP_NONE` row came later.
 
 - **`src/builtins.ts`**: the name in `isBuiltinFunction`, and its rule in
   `checkBuiltinFunctionNamed` (arity, argument types, a statement position

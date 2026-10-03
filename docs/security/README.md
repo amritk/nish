@@ -46,12 +46,12 @@ the record that found it. The notes below the table name each such finding.
    record also lists, is counted once, under K1.
 4. RT-9 added the ownership primitives CLI-7 and CLI-9 need; it is counted as
    a fixed Low. RT-10, RT-11, RT-12 and RT-13 (Low) were left open by the
-   runtime stage and fixed by #405. The "CG-3 (rest)" row of that record is
-   CG-3 and is counted under codegen.
+   runtime stage and fixed by #405 (closes #387). The "CG-3 (rest)" row of
+   that record is CG-3 and is counted under codegen.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
-   was left open by the CLI stage and fixed by #425: the cache entry is named
-   by a SHA-256.
+   was left open by the CLI stage and fixed by #425 (for #386): the cache
+   entry is named by a SHA-256.
 6. SC-17 (Low) is accepted rather than open, and is not counted: `curl … | sh`
    runs `install.sh` unverified, and the record says why that stands.
 
