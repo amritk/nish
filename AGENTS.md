@@ -75,6 +75,7 @@ itself.
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
+| what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,

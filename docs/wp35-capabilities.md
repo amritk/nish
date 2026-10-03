@@ -29,21 +29,22 @@ so calling one *is* the `ffi` capability.
 
 ## 1. The set
 
-Eleven capabilities, each one bit of an `i32` (`src/capabilities.ts`), printed
-in this order everywhere:
+Eleven capabilities, each one bit of an `i32` (`src/capabilities.ts`). The
+bits are in alphabetical order, and every report prints a set in that order,
+so a reader finds a name where they expect it:
 
 | capability | what it means | why it is dangerous |
 | --- | --- | --- |
-| `fs.read` | reads the file system: contents, listings, path resolution, file kinds | an input that is not argv or stdin, and a way to read secrets |
-| `fs.write` | creates or changes files and directories | lasting effects outside the process |
-| `process.spawn` | starts another program | the child can do anything, unobserved by this analysis |
-| `net` | opens, reads or writes a socket, or waits on one | talks to other machines |
-| `env` | reads an environment variable | an input the caller may not know it is passing |
 | `clock` | reads a clock: the wall clock, the monotonic clock, a file's time | output that differs from run to run |
 | `entropy` | reads randomness | the same |
-| `signal` | receives operating-system signals | an asynchronous input |
+| `env` | reads an environment variable | an input the caller may not know it is passing |
 | `exit` | ends the process with a chosen status | skips the caller's remaining work |
-| `ffi` | calls a `declare function` | C can do everything above and more, invisibly |
+| `ffi` | calls a `declare function` | C can do everything else in this table, invisibly |
+| `fs.read` | reads the file system: contents, listings, path resolution, file kinds | an input that is not argv or stdin, and a way to read secrets |
+| `fs.write` | creates or changes files and directories | lasting effects outside the process |
+| `net` | opens, reads or writes a socket, or waits on one | talks to other machines |
+| `process.spawn` | starts another program | the child can do anything, unobserved by this analysis |
+| `signal` | receives operating-system signals | an asynchronous input |
 | `unsafe` | reserved | `nish:unsafe` has not landed; nothing carries this bit yet |
 
 **Ambient is none.** These are not capabilities, and say why:
@@ -135,7 +136,9 @@ Collected in **round 2 only** (the facts `analyzeFunctions` returns), in the
   `Map` lookup or a collection walk) is kept as an edge: the callee's symbol
   and the call node.
 
-Then `propagateCapabilities` relaxes over those edges to a fixpoint: a
+Then `propagateCapabilities` relaxes over those edges to a fixpoint, worked
+from a list of the functions whose witnesses just moved over the edges turned
+round, so only their callers are looked at again: a
 function's mask is the union of its callees', and for each bit its witness is
 the edge whose callee's witness is shortest, `dist + 1`. **Ties go to the
 earlier site in the function's source** (the call's byte offset; every site of
@@ -143,6 +146,10 @@ one function is in one file, the one its body is written in), so the chain is
 the shortest one and the report is byte-stable whatever order the program's
 modules were loaded in. It terminates because bits only grow and each
 `(dist, offset)` pair only shrinks, over a finite graph.
+
+The order the list is worked in cannot change the answer: a callee's offers
+only ever get shorter, so the smallest offer a caller holds at the end is the
+smallest of its callees' final ones.
 
 It is a relaxation of its own, run right after round 2's `propagate`, rather
 than more work inside `propagateCallee`, for two reasons. The attribute
@@ -165,6 +172,17 @@ a builtin (`dist` 0).
   `<root>`, the standard library `nish`, and a dependency by its name.
 - The **program**'s set is the entry's closure: `main`'s, or, for an entry with
   no `main`, the union over the entry module's exported functions.
+- A **parallel body** cannot reach a capability at all, which the brief's
+  "a `parallelMapInto` body that calls `Date.now()`" fixture runs into: every
+  builtin that carries a capability writes memory the runtime shares
+  (`RuntimeFunction.sharedWrite`), and the WP29 rule refuses a parallel body
+  that writes anything but its result, `Date.now`, `getenv`, `Math.random`,
+  `readFileSync`, `process.exit` and a `declare function` alike. So
+  `tests/link/caps_parallel` pins the instance and its body reaching nothing
+  while the caller's own capability is reported, and
+  `tests/cases/reject_caps_parallel_clock` pins the refusal the analysis relies
+  on. Should a capability that writes nothing shared ever arrive, it would flow
+  through the body's direct call like any other.
 
 ## 5. The report
 
@@ -220,6 +238,10 @@ The stability promise, which `tests/nish/cli.ts` checks byte for byte:
   (`std/threads.ts`), which is the name its diagnostics carry.
 - `at` is `path:line:column`, 1-based, at the start of the call.
 
+The report is laid out by `src/capability-report.ts`, which reads the masks
+and witnesses and decides nothing; the driver writes it after the IR, as it
+writes the interop sidecars.
+
 `nish run --capabilities main.ts` prints exactly one line on **stderr** before
 the program runs — `capabilities: clock, fs.read (not deterministic)`, or
 `capabilities: none (deterministic)` — and then runs it as usual, so stdout
@@ -229,9 +251,17 @@ the run-cache key. Without `run` the same line is printed after the compile.
 
 ## 6. Cost
 
-Measured as `src/`'s self-compile time; the figures are in the pull request and
-in its `Measured:` trailer. The walk adds one table lookup per builtin call and
-one edge per user call, and the relaxation is linear in the edges per round.
+Measured on the self-compile of `src/compile.ts` (all of `src/`), by
+instructions retired under callgrind, because wall time on the machine it was
+measured on varied by more than the difference. The counts themselves drift by
+about 0.3% from one batch of runs to the next, so each comparison is of
+binaries run side by side: 1,688,381,447 before and 1,691,910,149 after
+(+0.21%). The first version relaxed in whole passes over every edge until a
+pass changed nothing, and cost +1.10% against the same baseline
+(1,683,285,095 against 1,701,870,934); the worklist of §3 is what took it to a
+fifth of that. Wall time moved within its noise (a best of 0.631 s against
+0.636 s over eleven runs each). The walk adds one table lookup per builtin call
+and one edge per user call.
 
 ## 7. Out of scope
 

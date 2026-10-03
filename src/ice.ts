@@ -72,10 +72,26 @@ const ENV_DEBUG: string = "NISH_DEBUG"
  */
 const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
 
-/** Whether the run asked for a simulated internal error (`ENV_SIMULATE_ICE`). */
+/**
+ * The prefix that asks for a different broken invariant: `unlabelled:<name>`
+ * compiles as usual and treats the builtin `<name>` as missing from the
+ * capability audit (WP35, `Options.unlabelledBuiltin`), so the report comes
+ * from the walk that would meet a real one rather than from the driver.
+ */
+const UNLABELLED_PREFIX: string = "unlabelled:"
+
+/** Whether the run asked for a simulated internal error at the driver (`ENV_SIMULATE_ICE`). */
 export const simulatedInternalError = (): boolean => {
   const value = getenv(ENV_SIMULATE_ICE)
-  return value !== null && value.length > 0
+  return value !== null && value.length > 0 && !value.startsWith(UNLABELLED_PREFIX)
+}
+
+/** The builtin the run asked the capability audit to treat as unlabelled, or `""`. */
+export const simulatedUnlabelledBuiltin = (): string => {
+  const value = getenv(ENV_SIMULATE_ICE)
+  return value !== null && value.startsWith(UNLABELLED_PREFIX)
+    ? value.substring(UNLABELLED_PREFIX.length)
+    : ""
 }
 
 /** The sixteen digits a `\u00XX` escape spells a control character with. */

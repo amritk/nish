@@ -1468,7 +1468,12 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside `Map.get`), `?.`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
-9. If you are adding to this repository: `npm run check` and `npm test` green,
+9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
+   caps.json` lists every capability each function can reach — files, processes,
+   the network, the environment, the clock, entropy, signals, `exit`, C calls —
+   with the call chain that reaches it, and `nish run --capabilities file.ts`
+   prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
+10. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
    `CHANGELOG.md` line.

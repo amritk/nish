@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "entry": "caps_fnarg.ts",
+  "deterministic": false,
+  "capabilities": ["env"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["env"],
+      "modules": [
+        {
+          "path": "caps_fnarg.ts",
+          "capabilities": ["env"],
+          "functions": [
+            {
+              "name": "apply<(name) => ...>",
+              "exported": true,
+              "capabilities": ["env"],
+              "witnesses": {
+                "env": [
+                  { "function": "apply<(name) => ...>", "at": "caps_fnarg.ts:4:65", "calls": "(name) => ..." },
+                  { "function": "(name) => ...", "at": "caps_fnarg.ts:12:21", "calls": "getenv" }
+                ]
+              }
+            },
+            {
+              "name": "apply<lengthOf>",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["env"],
+              "witnesses": {
+                "env": [
+                  { "function": "main", "at": "caps_fnarg.ts:11:5", "calls": "apply<(name) => ...>" },
+                  { "function": "apply<(name) => ...>", "at": "caps_fnarg.ts:4:65", "calls": "(name) => ..." },
+                  { "function": "(name) => ...", "at": "caps_fnarg.ts:12:21", "calls": "getenv" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

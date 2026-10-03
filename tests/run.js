@@ -14,6 +14,8 @@
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *       <name>.portability  the `--warn-portability --json` portability objects, one
  *                    per line (WP33: the case is compiled a second time with the flag)
+ *       <name>.caps.json  the `--emit-capabilities` report, byte for byte (WP35: the
+ *                    case is compiled a second time with the flag)
  *     Every successfully compiled case is also assembled with llvm-as.
  *     Every case is compiled by stage1 -- `src/` built by the seed into
  *     `build/nish-test` once per run -- then compared, assembled, linked and
@@ -671,6 +673,33 @@ const runCase = async (name) => {
     expect(
       `${name}: --warn-portability changes no byte of the IR`,
       fs.existsSync(warnedLl) && fs.readFileSync(warnedLl, "utf8") === fs.readFileSync(outLl, "utf8"),
+      "the two .ll files differ"
+    )
+  }
+  if (fs.existsSync(side("caps.json"))) {
+    // WP35: the capability report, compiled a second time for the same reason
+    // the portability warnings are -- the flag is not in `.args`, because the
+    // tools that compile `tests/cases/` with the last release would refuse it.
+    // The report's paths are relative to the entry's directory, so the file is
+    // compared as it is, byte for byte: that it reads the same from any
+    // checkout is part of what it promises (docs/wp35-capabilities.md §5).
+    const capsLl = path.join(buildDir, `${name}.caps.ll`)
+    const capsJson = path.join(buildDir, `${name}.caps.json`)
+    const reported = await spawnAsync(NISH, [src, "-o", capsLl, ...args, "--emit-capabilities", capsJson], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const want = fs.readFileSync(side("caps.json"), "utf8")
+    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+    expect(
+      `${name}: --emit-capabilities matches .caps.json byte for byte`,
+      reported.status === 0 && got === want,
+      `--- expected\n${want}\n--- actual (exit ${reported.status})\n${got}\n${reported.stderr}`
+    )
+    // The report is read off the fixpoint and never written back into it.
+    expect(
+      `${name}: --emit-capabilities changes no byte of the IR`,
+      fs.existsSync(capsLl) && fs.readFileSync(capsLl, "utf8") === fs.readFileSync(outLl, "utf8"),
       "the two .ll files differ"
     )
   }
@@ -2970,6 +2999,7 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // (empty for now). Other optional files:
 //   expected.err   compile must fail and stderr must contain this text
 //   expected.ir    lines (substring match) that must appear in some emitted module
+//   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
 //   args           extra CLI flags (e.g. --strict-exports)
 //   <module>.ll    golden IR for that module (header stripped, like tests/cases)
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
@@ -3018,7 +3048,13 @@ for (const name of linkTests) {
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
   fs.rmSync(outDir, { recursive: true, force: true })
-  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args], { cwd: root })
+  // WP35: the report is written beside the modules by the same compile, since
+  // nothing here compares the IR of a second one.
+  const capsJson = path.join(outDir, "capabilities.json")
+  const capsArgs = fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
+    cwd: root,
+  })
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("expected.err"))) {
@@ -3102,6 +3138,16 @@ for (const name of linkTests) {
       `link/${name}: emitted IR contains every expected.ir line`,
       missing.length === 0,
       missing.map((l) => `missing: ${l}`).join("\n")
+    )
+  }
+
+  if (capsArgs.length > 0) {
+    const want = read("expected.caps.json")
+    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
+    check(
+      `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
+      got === want,
+      `--- expected\n${want}\n--- actual\n${got}`
     )
   }
 
@@ -10470,6 +10516,8 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--target",
     "--profile",
     "--warn-portability",
+    "--emit-capabilities",
+    "[--capabilities]",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
@@ -10615,6 +10663,228 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
       fs.existsSync(path.join(wp12Dir, "badbuild.modules", "main.ll")),
     badBuild.stderr
   )
+}
+
+// ---- WP35: the capability report ---------------------------------------------------
+// The golden reports are the `caps_*` cases' `.caps.json` and the `tests/link/caps_*`
+// programs' `expected.caps.json`; what is checked here is everything around them:
+// that the audit is total, that the walk refuses an unlabelled builtin with the
+// exit-70 report, the usage of both flags, and the one line `--capabilities` prints
+// (docs/wp35-capabilities.md).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const audit = spawnSync("node", [path.join(root, "tests", "capabilities.js")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    `capabilities: every builtin the checker accepts has exactly one label (${audit.stdout.trim()})`,
+    audit.status === 0,
+    audit.stdout + audit.stderr
+  )
+
+  // ...and the check refuses each way the table can stop being total. The four
+  // sources it reads are copied with one line changed, and the copy has to be
+  // refused with the problem named: a builtin added with no row, a row whose
+  // builtin was renamed away, and a builtin with two rows.
+  const auditFiles = ["builtins.ts", "nish-modules.ts", "result.ts", "capabilities.ts"]
+  const auditMutations = [
+    [
+      "a builtin with no row",
+      "builtins.ts",
+      (t) =>
+        t.replace('    name === "getenv" ||\n', '    name === "getenv" ||\n    name === "chmodSync" ||\n'),
+      "the builtin `chmodSync` has no row",
+    ],
+    [
+      "a row for a builtin that is gone",
+      "builtins.ts",
+      (t) => t.replace('    name === "getenv" ||\n', '    name === "getEnvironment" ||\n'),
+      "the row `getenv` names no builtin the checker accepts",
+    ],
+    [
+      "a builtin with two rows",
+      "capabilities.ts",
+      (t) => t.replace('  if (name === "getenv") {', '  if (name === "getenv" || name === "panic") {'),
+      "the builtin `panic` has 2 rows",
+    ],
+  ]
+  for (const [i, [what, file, mutate, words]] of auditMutations.entries()) {
+    const dir = path.join(buildDir, `caps-mutation-${i}`)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    for (const f of auditFiles) {
+      fs.copyFileSync(path.join(root, "src", f), path.join(dir, f))
+    }
+    const live = fs.readFileSync(path.join(dir, file), "utf8")
+    const mutated = mutate(live)
+    fs.writeFileSync(path.join(dir, file), mutated)
+    const r = spawnSync("node", [path.join(root, "tests", "capabilities.js"), "--src", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: the audit check refuses ${what}`,
+      mutated !== live && r.status === 1 && r.stderr.includes(words),
+      mutated === live ? "the mutation did not apply" : r.stdout + r.stderr
+    )
+  }
+
+  // The walk's half: a builtin with no row is a broken invariant, reported as
+  // one. `NISH_SIMULATE_ICE=unlabelled:<name>` makes the audit forget `<name>`,
+  // so the report is the one the walk itself makes, under --json too; a program
+  // that never calls the builtin compiles as usual, which is what shows it is
+  // the walk that refuses and not the driver.
+  const capsDir = path.join(buildDir, "caps")
+  fs.rmSync(capsDir, { recursive: true, force: true })
+  fs.mkdirSync(capsDir, { recursive: true })
+  const unlabelled = { ...process.env, NISH_SIMULATE_ICE: "unlabelled:readFileSync" }
+  const ice = spawnSync(NISH, [path.join(casesDir, "caps_fs_read.ts"), "-o", path.join(capsDir, "ice.ll")], {
+    cwd: root,
+    encoding: "utf8",
+    env: unlabelled,
+  })
+  check(
+    "capabilities: an unlabelled builtin is an internal compiler error, exit 70, naming the builtin",
+    ice.status === 70 &&
+      ice.stderr.includes("internal compiler error") &&
+      ice.stderr.includes("a builtin call has no capability label in src/capabilities.ts") &&
+      ice.stderr.includes("the builtin: `readFileSync`") &&
+      !fs.existsSync(path.join(capsDir, "ice.ll")),
+    shown(ice)
+  )
+  const iceJson = spawnSync(
+    NISH,
+    [path.join(casesDir, "caps_fs_read.ts"), "-o", path.join(capsDir, "ice.ll"), "--json"],
+    { cwd: root, encoding: "utf8", env: unlabelled }
+  )
+  const iceObjects = diagnosticsOf(iceJson.stdout)
+  check(
+    "capabilities: under --json the unlabelled builtin is one NL0003 object",
+    iceJson.status === 70 && iceObjects.length === 1 && iceObjects[0].code === "NL0003",
+    shown(iceJson)
+  )
+  const unaffected = spawnSync(
+    NISH,
+    [path.join(casesDir, "caps_pure.ts"), "-o", path.join(capsDir, "unaffected.ll")],
+    { cwd: root, encoding: "utf8", env: unlabelled }
+  )
+  check(
+    "capabilities: the hook is the walk's -- a program that calls no `readFileSync` compiles as usual",
+    unaffected.status === 0,
+    shown(unaffected)
+  )
+
+  // The flags. `--emit-capabilities` takes a file, as every sidecar does, and is
+  // a product `nish run` keeps to itself; `--capabilities` prints one line on
+  // stderr and leaves stdout alone.
+  const noFile = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--emit-capabilities"], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "capabilities: --emit-capabilities with no file is a usage error, exit 2",
+    noFile.status === 2 && noFile.stderr.includes("compile: --emit-capabilities needs a file"),
+    shown(noFile)
+  )
+  const inRun = spawnSync(
+    NISH,
+    ["run", "--emit-capabilities", path.join(capsDir, "run.json"), path.join(casesDir, "caps_pure.ts")],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `nish run` refuses --emit-capabilities, exit 2, and writes nothing",
+    inRun.status === 2 &&
+      inRun.stderr.includes("`--emit-capabilities` cannot be used with `nish run`") &&
+      !fs.existsSync(path.join(capsDir, "run.json")),
+    shown(inRun)
+  )
+  const summaryOf = (name) =>
+    spawnSync(
+      NISH,
+      [path.join(casesDir, `${name}.ts`), "-o", path.join(capsDir, `${name}.ll`), "--capabilities"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+  const quiet = summaryOf("caps_pure")
+  const loud = summaryOf("caps_fs_write")
+  const exits = summaryOf("caps_exit")
+  check(
+    "capabilities: --capabilities prints the program's set on stderr in the fixed order, and nothing on stdout",
+    quiet.status === 0 &&
+      loud.status === 0 &&
+      exits.status === 0 &&
+      quiet.stdout === "" &&
+      loud.stdout === "" &&
+      quiet.stderr.split("\n")[0] === "capabilities: none (deterministic)" &&
+      loud.stderr.split("\n")[0] === "capabilities: fs.read, fs.write (not deterministic)" &&
+      exits.stderr.split("\n")[0] === "capabilities: exit (deterministic)",
+    [quiet, loud, exits].map(shown).join("\n")
+  )
+  const withReport = spawnSync(
+    NISH,
+    [
+      path.join(casesDir, "caps_env.ts"),
+      "-o",
+      path.join(capsDir, "nested", "caps_env.ll"),
+      "--emit-capabilities",
+      path.join(capsDir, "nested", "deeper", "caps_env.json"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: --emit-capabilities makes the directories in its way and says `wrote` on stderr",
+    withReport.status === 0 &&
+      withReport.stdout === "" &&
+      withReport.stderr.includes(`wrote ${path.join(capsDir, "nested", "deeper", "caps_env.json")}`) &&
+      fs.existsSync(path.join(capsDir, "nested", "deeper", "caps_env.json")),
+    shown(withReport)
+  )
+
+  // The report the cookbook shows is the one the compiler writes, so the page
+  // cannot go stale while the IR beside it is regenerated.
+  const cookbookText = fs.readFileSync(path.join(root, "docs", "IR_COOKBOOK.md"), "utf8")
+  const shownReport = /<!-- capabilities-report builtin-capabilities -->\n```json\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const cookbookJson = path.join(capsDir, "cookbook.json")
+  const cookbookRun = spawnSync(
+    NISH,
+    [
+      path.join(root, "docs", "cookbook", "builtin-capabilities.ts"),
+      "-o",
+      path.join(capsDir, "cookbook") + path.sep,
+      "--emit-capabilities",
+      cookbookJson,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: the report docs/IR_COOKBOOK.md shows is the one --emit-capabilities writes for its snippet",
+    shownReport !== null &&
+      cookbookRun.status === 0 &&
+      fs.existsSync(cookbookJson) &&
+      fs.readFileSync(cookbookJson, "utf8") === shownReport[1],
+    shownReport === null ? "no capabilities-report block in docs/IR_COOKBOOK.md" : shown(cookbookRun)
+  )
+
+  // Under `run` the line comes before the program starts, and stdout is the
+  // program's alone.
+  if (!HAS_CLANG) {
+    skip("capabilities: clang not on PATH, so `nish run --capabilities` cannot link")
+  } else {
+    const ran = spawnSync(NISH, ["run", "--capabilities", path.join(casesDir, "caps_env.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(capsDir, "cache"), NISH_CAPS_SETTING: "on" },
+    })
+    check(
+      "capabilities: `nish run --capabilities` prints the one line on stderr and leaves the program's stdout alone",
+      ran.status === 0 && ran.stdout === "on\n" && ran.stderr === "capabilities: env (not deterministic)\n",
+      shown(ran)
+    )
+  }
 }
 
 // ---- `nish run`: a script built into a cache and started ----------------------------
