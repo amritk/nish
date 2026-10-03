@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 868 programs, 60637 dump lines.
+# 872 programs, 60750 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2047,14 +2047,14 @@ function Permute.constructor(this: Permute): void -> @Permute.constructor [const
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Permute.benchmark(this: Permute): i32 -> @Permute.benchmark [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 21:5
   calls: Permute.permute
   pointer this: size=56 writesThrough=true captured=false passedTo=Permute.permute#0
   stackSites=0 stackLocals=0
   callee 23:5 Permute.permute -> @Permute.permute
 function Permute.permute(this: Permute, n: i32): void -> @Permute.permute [method]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 28:5
   calls: Permute.permute Permute.swap
   pointer this: size=56 writesThrough=true captured=false passedTo=Permute.permute#0 Permute.swap#0 Permute.permute#0 Permute.swap#0
@@ -2073,7 +2073,7 @@ function Permute.swap(this: Permute, i: i32, j: i32): void -> @Permute.swap [met
   stackSites=0 stackLocals=0
   local 41:11 tmp: i32 (const)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: Permute.benchmark Permute.constructor nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=1 stackLocals=1
@@ -3721,7 +3721,7 @@ function apply<(name) => ...>(f: void, s: string): i32 -> @apply$fn.16.nish_main
 program tests/cases/caps_fs_read.ts
 module tests/cases/caps_fs_read.ts (entry)
 function sizeOf(path: string): i32 -> @sizeOf
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file
   calls: nish_arena_mark nish_arena_release nish_read_file
   stackSites=0 stackLocals=0
@@ -3739,12 +3739,12 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/caps_fs_write.ts
 module tests/cases/caps_fs_write.ts (entry)
 function save(path: string, text: string): void -> @save
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_write_file
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via save
   calls: nish_arena_mark nish_arena_release nish_print nish_read_file save
   stackSites=0 stackLocals=0
@@ -3756,14 +3756,14 @@ function double(n: i32): i32 -> @double
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function firstLine(path: string): string -> @firstLine
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file
   calls: nish_read_file nish_str_at nish_str_new
   stackSites=0 stackLocals=0
   local 11:9 text: string (const)
   local 12:9 end: i32 (const)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pick$i32$fn.6.double pick$str$fn.9.firstLine
   stackSites=0 stackLocals=0
@@ -3776,7 +3776,7 @@ function pick<i32, double>(x: i32, f: void): i32 -> @pick$i32$fn.6.double [expor
   stackSites=0 stackLocals=0
   callee 6:53 double -> @double
 function pick<string, firstLine>(x: string, f: void): string -> @pick$str$fn.9.firstLine [exported instance]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via firstLine
   escaping: x
   calls: firstLine
@@ -3914,14 +3914,14 @@ function fibIter(n: i32): i32 -> @fibIter
   local 4:12 i: i32 (let)
   local 5:11 t: i32 (const)
 function fibRec(n: i32): i32 -> @fibRec
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: fibRec
   stackSites=0 stackLocals=0
   callee 14:10 fibRec -> @fibRec
   callee 14:26 fibRec -> @fibRec
 function test(): i32 -> @test [exported]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: fibIter fibRec
   stackSites=0 stackLocals=0
   callee 18:10 fibIter -> @fibIter
@@ -4064,7 +4064,7 @@ function emit(n: i32): void -> @emit
   calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function walk(n: i32): void -> @walk
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emit
   escaping: n
   calls: emit walk
@@ -4072,7 +4072,7 @@ function walk(n: i32): void -> @walk
   callee 11:3 emit -> @emit
   callee 12:10 walk -> @walk
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walk
   calls: walk
   stackSites=0 stackLocals=0
@@ -4160,6 +4160,62 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 22:10 countDigits -> @countDigits
   callee 22:38 firstPowerOver -> @firstPowerOver
+program tests/cases/cg_sec_compound_grow.ts
+module tests/cases/cg_sec_compound_grow.ts (entry)
+function grow(xs: i32[]): i32 -> @grow
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 12:5
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 11:12 k: i32 (let)
+function shrink(zs: i32[]): i32 -> @shrink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 18:3
+  calls: nish_panic_index
+  pointer zs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function five(): i32 -> @five
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function bitwise(): i32 -> @bitwise [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via grow
+  calls: grow nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=1 stackLocals=1
+  local 25:9 xs: i32[] (const)
+  callee 26:12 grow -> @grow
+function shrunk(): i32 -> @shrunk [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via shrink
+  calls: nish_panic_index shrink
+  stackSites=1 stackLocals=1
+  local 31:9 zs: i32[] (const)
+  callee 32:12 shrink -> @shrink
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via grow
+  calls: five grow nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=2 stackLocals=2
+  local 37:9 xs: i32[] (const)
+  callee 38:12 grow -> @grow
+  local 39:9 ys: i32[] (const)
+  callee 40:12 five -> @five
+program tests/cases/cg_sec_file_willreturn.ts
+module tests/cases/cg_sec_file_willreturn.ts (entry)
+function save(path: string, text: string): void -> @save [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_write_file
+  calls: nish_append_file nish_write_file
+  stackSites=0 stackLocals=0
+function load(path: string): i32 -> @load [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file
+  calls: nish_arena_mark nish_arena_release nish_read_file
+  stackSites=0 stackLocals=0
+function bump(x: i32): i32 -> @bump [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 program tests/cases/cg_sec_new_array_guard.ts
 module tests/cases/cg_sec_new_array_guard.ts (entry)
 function test(): i32 -> @test [exported]
@@ -4175,6 +4231,25 @@ function test(): i32 -> @test [exported]
   local 12:9 c: i32[] (const)
   local 13:9 plain: i32[] (const)
   local 14:9 literal: u8[] (const)
+program tests/cases/cg_sec_new_array_negative.ts
+module tests/cases/cg_sec_new_array_negative.ts (entry)
+function bytes(): i32 -> @bytes [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number
+  stackSites=0 stackLocals=0
+  local 9:9 n: i32 (const)
+  local 10:9 a: u8[] (const)
+function doubles(): i32 -> @doubles [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number
+  stackSites=0 stackLocals=0
+  local 15:9 n: i32 (const)
+  local 16:9 a: f64[] (const)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_parse_number
+  stackSites=0 stackLocals=0
+  local 21:9 a: u8[] (const)
 program tests/cases/cg_sec_readdir_pass.ts
 module tests/cases/cg_sec_readdir_pass.ts (entry)
 function test(): i32 -> @test [exported]
@@ -4206,6 +4281,48 @@ function test(): i32 -> @test [exported]
   callee 20:13 first -> @first
   local 21:9 q: string (const)
   local 22:9 junk: string (const)
+program tests/cases/cg_sec_recursion_willreturn.ts
+module tests/cases/cg_sec_recursion_willreturn.ts (entry)
+function spin(x: i32): i32 -> @spin
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: spin
+  stackSites=0 stackLocals=0
+  callee 10:31 spin -> @spin
+function ping(x: i32): i32 -> @ping
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: pong
+  stackSites=0 stackLocals=0
+  callee 12:31 pong -> @pong
+function pong(x: i32): i32 -> @pong
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: ping
+  stackSites=0 stackLocals=0
+  callee 14:31 ping -> @ping
+function fib(n: i32): i32 -> @fib
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: fib
+  stackSites=0 stackLocals=0
+  callee 16:43 fib -> @fib
+  callee 16:56 fib -> @fib
+function selfCall(): i32 -> @selfCall [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_parse_number spin
+  stackSites=0 stackLocals=0
+  callee 19:3 spin -> @spin
+function mutualCall(): i32 -> @mutualCall [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.fptosi.sat.i32.f64 nish_parse_number ping
+  stackSites=0 stackLocals=0
+  callee 24:3 ping -> @ping
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: fib llvm.fptosi.sat.i32.f64 nish_parse_number
+  stackSites=0 stackLocals=0
+  callee 28:32 fib -> @fib
 program tests/cases/cls_compound_field.ts
 module tests/cases/cls_compound_field.ts (entry)
 struct Stats (class) size=12 align=4
@@ -4993,7 +5110,7 @@ function Account.withdraw(this: Account, amount: i32): boolean -> @Account.withd
   stackSites=0 stackLocals=0
   callee 19:5 Account.charge -> @Account.charge
 function Account.drain(this: Account, step: i32): i32 -> @Account.drain [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Account.withdraw
   escaping: step
   calls: Account.drain Account.withdraw
@@ -5007,7 +5124,7 @@ function Account.same(this: Account, other: Account): boolean -> @Account.same [
   pointer other: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: Account.constructor Account.drain Account.same Account.withdraw nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=2 stackLocals=1
@@ -12935,12 +13052,12 @@ function describe(n: i32): string -> @describe
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function sumTo(n: i32): i32 -> @sumTo
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: sumTo
   stackSites=0 stackLocals=0
   callee 13:50 sumTo -> @sumTo
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: describe double nish_arena_mark nish_arena_release nish_print nish_str_from_i32 sumTo
   stackSites=0 stackLocals=0
@@ -13045,24 +13162,24 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/fn_arrow_hoisting.ts
 module tests/cases/fn_arrow_hoisting.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: countdown isEven nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 10:15 isEven -> @isEven
   callee 11:18 countdown -> @countdown
 function isEven(n: i32): boolean -> @isEven
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isOdd
   stackSites=0 stackLocals=0
   callee 19:10 isOdd -> @isOdd
 function isOdd(n: i32): boolean -> @isOdd
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isEven
   stackSites=0 stackLocals=0
   callee 26:10 isEven -> @isEven
 function countdown(n: i32): i32 -> @countdown
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: countdown
   stackSites=0 stackLocals=0
   callee 31:54 countdown -> @countdown
@@ -13960,18 +14077,18 @@ function Box<Box<i32>>.get(this: Box<Box<i32>>): Box<i32> -> @Box$$Box$i32.get [
 program tests/cases/gen_recursive_ground.ts
 module tests/cases/gen_recursive_ground.ts (entry)
 function test(): i32 -> @test [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: countDown$str nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 14:15 countDown<string> -> @countDown$str
 function countDown<string>(x: string, n: i32): i32 -> @countDown$str [instance]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: countDown$i32
   stackSites=0 stackLocals=0
   callee 10:10 countDown<i32> -> @countDown$i32
 function countDown<i32>(x: i32, n: i32): i32 -> @countDown$i32 [instance]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: countDown$i32
   stackSites=0 stackLocals=0
   callee 10:10 countDown<i32> -> @countDown$i32
@@ -14270,7 +14387,7 @@ function test(): i32 -> @test [exported]
 program tests/cases/io_files.ts
 module tests/cases/io_files.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_append_file nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
@@ -14311,7 +14428,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/io_mkdir.ts
 module tests/cases/io_mkdir.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_mkdir nish_print nish_str_concat nish_write_file
   stackSites=0 stackLocals=0
@@ -14334,14 +14451,14 @@ import writeFileSync from "nish:fs" -> builtin writeFileSync
 import argv from "nish:process" -> builtin process.argv
 import write from "nish:io" -> builtin write
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_write nish_write_file
   stackSites=0 stackLocals=0
 program tests/cases/io_nish_import_global.ts
 module tests/cases/io_nish_import_global.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_write nish_write_file
   stackSites=0 stackLocals=0
@@ -14360,7 +14477,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/io_readdir.ts
 module tests/cases/io_readdir.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
   calls: nish_alloc_struct nish_arena_mark nish_arena_release nish_mkdir nish_print nish_readdir nish_str_concat nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
@@ -14370,7 +14487,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/io_readdir_null.ts
 module tests/cases/io_readdir_null.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
   calls: nish_arena_mark nish_arena_release nish_mkdir nish_print nish_readdir nish_str_concat nish_write_file
   stackSites=0 stackLocals=0
@@ -41622,7 +41739,7 @@ function Element.constructor(this: Element, v: i32): void -> @Element.constructo
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Element.length(this: Element): i32 -> @Element.length [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Element.length
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -41641,7 +41758,7 @@ function List.benchmark(this: List): i32 -> @List.benchmark [method]
   callee 31:68 List.makeList -> @List.makeList
   callee 35:12 Element.length -> @Element.length
 function List.makeList(this: List, length: i32): Element | null -> @List.makeList [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 43:5
   escaping: length
   calls: Element.constructor List.makeList nish_alloc_struct
@@ -42536,7 +42653,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/mem_read_bytes_scope.ts
 module tests/cases/mem_read_bytes_scope.ts (entry)
 function load(path: string): u8[] | null -> @load [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_print nish_read_file_bytes nish_str_concat
   stackSites=0 stackLocals=0
@@ -42546,13 +42663,13 @@ module tests/cases/mem_read_import_scope.ts (entry)
 import bytesOf from "nish:fs" -> builtin readFileBytesSync
 import textOf from "nish:fs" -> builtin readFileSyncOrNull
 function load(path: string): u8[] | null -> @load [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_print nish_read_file_bytes nish_str_concat
   stackSites=0 stackLocals=0
   local 10:9 label: string (const)
 function text(path: string): string | null -> @text [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_print nish_read_file_or_null nish_str_concat
   stackSites=0 stackLocals=0
@@ -42560,7 +42677,7 @@ function text(path: string): string | null -> @text [exported]
 program tests/cases/mem_read_or_null_scope.ts
 module tests/cases/mem_read_or_null_scope.ts (entry)
 function load(path: string): string | null -> @load [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_print nish_read_file_or_null nish_str_concat
   stackSites=0 stackLocals=0
@@ -42742,14 +42859,14 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/cases/mem_scope_tail_call.ts
 module tests/cases/mem_scope_tail_call.ts (entry)
 function sum(n: i32, acc: i32): i32 -> @sum
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: acc
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 sum
   stackSites=0 stackLocals=0
   local 12:9 label: string (const)
   callee 13:10 sum -> @sum
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 sum
   stackSites=0 stackLocals=0
@@ -42761,12 +42878,12 @@ struct Depth (class) size=4 align=4
   constructor -> @Depth.constructor
   method down -> @Depth.down
 function walk(n: i32, text: string): i32 -> @walk
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 walk
   stackSites=0 stackLocals=0
   callee 26:10 walk -> @walk
 function watch(n: i32, acc: i32): i32 -> @watch
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: acc
   calls: nish_arena_mark nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 watch
   stackSites=0 stackLocals=0
@@ -42774,7 +42891,7 @@ function watch(n: i32, acc: i32): i32 -> @watch
   local 32:9 bump: i64 (const)
   callee 33:10 watch -> @watch
 function after(n: i32): i32 -> @after
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: after nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   local 38:9 label: string (const)
@@ -42785,14 +42902,14 @@ function Depth.constructor(this: Depth, base: i32): void -> @Depth.constructor [
   pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Depth.down(this: Depth, n: i32, acc: i32): i32 -> @Depth.down [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: Depth.down nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   pointer this: size=4 writesThrough=false captured=false passedTo=Depth.down#0
   stackSites=0 stackLocals=0
   local 51:11 label: string (const)
   callee 52:12 Depth.down -> @Depth.down
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: Depth.constructor Depth.down after nish_arena_mark nish_arena_release nish_print nish_str_from_i32 walk watch
   stackSites=1 stackLocals=1
@@ -44053,7 +44170,7 @@ function typeOf(ownerMode: i64): i64 -> @typeOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_mkdir
   calls: nish_arena_mark nish_arena_release nish_euid nish_is_executable nish_lstat_owner_mode nish_mkdir nish_print nish_str_from_i64 nish_write_file ownerOf typeOf
   stackSites=0 stackLocals=0
@@ -50301,7 +50418,7 @@ function get(a: i32[], i: i32): i32 -> @get
 program docs/cookbook/builtin-capabilities.ts
 module docs/cookbook/builtin-capabilities.ts (entry)
 function load(path: string): string -> @load
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file
   calls: nish_read_file
   stackSites=0 stackLocals=0
@@ -50363,7 +50480,7 @@ function main(): i32 -> @nish_main [exported entry]
 program docs/cookbook/builtin-files.ts
 module docs/cookbook/builtin-files.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_append_file nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
@@ -50486,7 +50603,7 @@ import writeFileSync from "nish:fs" -> builtin writeFileSync
 import argv from "nish:process" -> builtin process.argv
 import write from "nish:io" -> builtin write
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_str_from_i32 nish_write nish_write_file
   stackSites=0 stackLocals=0
@@ -50521,7 +50638,7 @@ function coin(): boolean -> @coin
 program docs/cookbook/builtin-read-bytes.ts
 module docs/cookbook/builtin-read-bytes.ts (entry)
 function keyLength(path: string): i32 -> @keyLength [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_bytes
   calls: nish_arena_mark nish_arena_release nish_read_file_bytes
   stackSites=0 stackLocals=0
@@ -53091,20 +53208,20 @@ function nearest(x: i32): i32 -> @nearest
 program docs/cookbook/mem-tail-release.ts
 module docs/cookbook/mem-tail-release.ts (entry)
 function sum(n: i32, acc: i32): i32 -> @sum
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: acc
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32 sum
   stackSites=0 stackLocals=0
   local 11:9 label: string (const)
   callee 12:10 sum -> @sum
 function steps(n: i32, acc: i32): i32 -> @steps
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: acc
   calls: steps
   stackSites=0 stackLocals=0
   callee 22:10 steps -> @steps
 function joinTo(n: i32, text: string): i32 -> @joinTo
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: joinTo nish_arena_mark nish_arena_release nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 33:10 joinTo -> @joinTo
@@ -53883,7 +54000,7 @@ function Element.constructor(this: Element, v: i32): void -> @Element.constructo
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Element.length(this: Element): i32 -> @Element.length [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Element.length
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -53911,7 +54028,7 @@ function List.benchmark(this: List): i32 -> @List.benchmark [exported method]
   callee 32:68 List.makeList -> @List.makeList
   callee 36:12 Element.length -> @Element.length
 function List.makeList(this: List, length: i32): Element | null -> @List.makeList [exported method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 44:5
   escaping: length
   calls: Element.constructor List.makeList nish_alloc_struct
@@ -54312,14 +54429,14 @@ function main(): i32 -> @nish_main [exported entry]
 program bench/fib.ts
 module bench/fib.ts (entry)
 function fib(n: i32): i32 -> @fib
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: fib
   stackSites=0 stackLocals=0
   callee 7:10 fib -> @fib
   callee 7:23 fib -> @fib
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: fib nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
@@ -60834,7 +60951,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/differential/corpus/io_missing_file.ts
 module tests/differential/corpus/io_missing_file.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_from_i32
   stackSites=0 stackLocals=0
@@ -60862,7 +60979,7 @@ function lines(n: i32): string -> @lines
   local 3:7 s: string (let)
   local 4:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write_file
   calls: lines nish_append_file nish_arena_mark nish_arena_release nish_print nish_read_file nish_str_concat nish_str_eq nish_str_from_i32 nish_write_file
   stackSites=0 stackLocals=0
@@ -60876,7 +60993,7 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/differential/corpus/io_streams.ts
 module tests/differential/corpus/io_streams.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: nish_arena_mark nish_arena_release nish_print nish_read_file_or_null nish_str_at nish_str_concat nish_write
   stackSites=0 stackLocals=0
@@ -61114,14 +61231,14 @@ function main(): i32 -> @nish_main [exported entry]
 program tests/differential/corpus/recursion.ts --wrapping
 module tests/differential/corpus/recursion.ts (entry)
 function fib(n: i32): i32 -> @fib
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: fib
   stackSites=0 stackLocals=0
   callee 3:22 fib -> @fib
   callee 3:35 fib -> @fib
 function ackermann(m: i32, n: i32): i32 -> @ackermann
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: m
   calls: ackermann
   stackSites=0 stackLocals=0
@@ -61129,7 +61246,7 @@ function ackermann(m: i32, n: i32): i32 -> @ackermann
   callee 13:10 ackermann -> @ackermann
   callee 13:27 ackermann -> @ackermann
 function factorial(n: i32): i32 -> @factorial
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: factorial
   stackSites=0 stackLocals=0
   callee 17:27 factorial -> @factorial
@@ -61140,12 +61257,12 @@ function gcd(a: i32, b: i32): i32 -> @gcd
   stackSites=0 stackLocals=0
   callee 21:24 gcd -> @gcd
 function isEven(n: i32): boolean -> @isEven
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isOdd
   stackSites=0 stackLocals=0
   callee 25:27 isOdd -> @isOdd
 function isOdd(n: i32): boolean -> @isOdd
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isEven
   stackSites=0 stackLocals=0
   callee 29:28 isEven -> @isEven
@@ -61157,7 +61274,7 @@ function power(base: i32, exp: i32): i32 -> @power
   local 36:9 half: i32 (const)
   callee 36:16 power -> @power
 function sumTo(n: i32): i32 -> @sumTo
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: sumTo
   stackSites=0 stackLocals=0
   callee 44:14 sumTo -> @sumTo

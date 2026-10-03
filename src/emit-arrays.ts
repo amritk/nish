@@ -507,8 +507,9 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
 }
 
 /**
- * Whether anything `loop` does can move an array header, which is the whole of
- * what a hoisted `len` and `data` depend on.
+ * Whether anything `node` does can move an array header: a loop, which is the
+ * whole of what a hoisted `len` and `data` depend on, or the right side of
+ * `a[i] op= v`, which decides whether the store re-reads them.
  *
  * Two things can: a `push` or a `pop` written in the loop, and a call to a user
  * function the fixpoint says grows an array (`FunctionFacts.resizesArray`). A
@@ -520,7 +521,7 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  * A callee with no facts is treated as growing one, so an unanalysed program
  * hoists nothing rather than hoisting wrongly.
  */
-const loopMayResize = (emitter: Emitter, node: Node): boolean => {
+const mayResize = (emitter: Emitter, node: Node): boolean => {
   if (isResizeCall(emitter.program, emitter.table, node)) {
     return true
   }
@@ -534,7 +535,7 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
     }
   }
   for (const child of node.children) {
-    if (loopMayResize(emitter, child)) {
+    if (mayResize(emitter, child)) {
       return true
     }
   }
@@ -717,7 +718,7 @@ const pathIsShadowed = (expr: Node, names: string[]): boolean => {
 export const openHeaderScope = (emitter: Emitter, loop: Node): void => {
   const facts = emitter.current
   facts.hoistedScopeStarts.push(facts.hoistedHeaders.length)
-  if (!emitter.opts.optimizeAttributes || loopMayResize(emitter, loop)) {
+  if (!emitter.opts.optimizeAttributes || mayResize(emitter, loop)) {
     return
   }
   const uses: ArrayUse[] = []
@@ -1093,9 +1094,10 @@ const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string =
 /**
  * `new Array<T>(n)`: `n` zeroed elements, after the check
  * `newArrayLengthChecked` asks for. A negative `i32` `n` is not checked here:
- * it becomes a byte count past 2^63, and the inline allocator's rounding wraps
- * on it, so the memset faults rather than the arena refusing it
- * (docs/security/codegen.md, CG-2, open in `src/runtime.ts`).
+ * it becomes a byte count past 2^63, which the inline allocator hands to
+ * `nish_arena_grow` rather than bumping, and that fails it as out of memory
+ * before the memset runs (docs/security/codegen.md, CG-2, `inlineAllocator`
+ * in `src/runtime.ts`).
  * `new Int32Array(n)` and friends are the same lowering with `T` fixed by the
  * checker.
  */
@@ -1179,7 +1181,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   // happen once here, and the load and the store share the address. That is
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
   emitBoundsCheck(emitter, base, idx, target)
-  const slot = elementPointer(emitter, base, elem, idx)
+  let slot = elementPointer(emitter, base, elem, idx)
   const old = emitter.fn.emitValue(
     `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )
@@ -1193,6 +1195,17 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
   }
   emitRangedStore(emitter, expr, value)
+  // A right side that can move the array (`xs[0] += grow(xs)`) leaves the
+  // address above pointing into the old block, and one that shrinks it leaves
+  // the index past the new length; either way the store went where JavaScript
+  // does not put it (docs/security/codegen.md, CG-10). So the store re-reads
+  // `data` and checks the index again, against the length the right side
+  // left. `collectArrayFacts` in `src/attributes.ts` asks the same question,
+  // because the second check is a call to a `noreturn` panic.
+  if (mayResize(emitter, expr.children[1])) {
+    emitRangeCheck(emitter, idx, baseLength(emitter, base))
+    slot = elementPointer(emitter, base, elem, idx)
+  }
   emitter.fn.emit(
     `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )

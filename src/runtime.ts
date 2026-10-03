@@ -150,6 +150,10 @@ const intrinsic = (name: string, ret: string, params: string): RuntimeFunction =
 const plain = (name: string, signature: string, effect: i32): RuntimeFunction =>
   new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect)
 
+/** `nounwind` alone: a call that may wait forever or end the process instead of returning. */
+const unbounded = (name: string, signature: string, effect: i32): RuntimeFunction =>
+  new RuntimeFunction(name, signature, attrs1("nounwind"), effect)
+
 /**
  * The runtime ABI as one ordered table, with a name index beside it.
  *
@@ -231,8 +235,10 @@ export class RuntimeTable {
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
     // `nish_str_concat` can also exit, on a result past 2^31 - 1 bytes or out of
-    // memory, so its `willreturn` is the approximation docs/security/codegen.md
-    // records as CG-8: it holds on every path that returns. The fix is #382's.
+    // memory, as the allocator itself can. Its `willreturn` is kept as the
+    // allocator's is: an allocation that cannot be met ends the process
+    // wherever it happens, and dropping the attribute would cost every function
+    // that builds a string its own. docs/security/codegen.md (CG-8) records it.
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -335,31 +341,34 @@ export class RuntimeTable {
     )
     exit.noreturn = true
     this.add(exit)
-    // `nish_read_file`, `nish_write_file` and `nish_append_file` `_exit(1)` on a
-    // path they cannot read or write, and all four `open`s wait on a FIFO with
-    // no writer, so `willreturn` here is the approximation
-    // docs/security/codegen.md records as CG-8: it holds on every path that
-    // returns. No miscompile follows, because each call writes memory and LLVM
-    // cannot delete it; dropping the attribute is #382's.
+    // Not `willreturn` (docs/security/codegen.md, CG-8): `nish_read_file`,
+    // `nish_write_file` and `nish_append_file` `_exit(1)` on a path they cannot
+    // read or write, and every `open` here waits on a FIFO with no writer,
+    // which may be forever. Each call writes memory, so LLVM could not delete
+    // one anyway; what the attribute cost was the claim, carried to every caller.
     this.add(
-      plain(
+      unbounded(
         "nish_read_file",
         `declare noalias noundef nonnull align 8 i8* @nish_read_file(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     )
     this.add(
-      plain(
+      unbounded(
         "nish_read_file_or_null",
         `declare noalias noundef align 8 i8* @nish_read_file_or_null(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     )
     this.add(
-      plain("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+      unbounded("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
     )
     this.add(
-      plain("nish_append_file", `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+      unbounded(
+        "nish_append_file",
+        `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
     )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
@@ -476,7 +485,7 @@ export class RuntimeTable {
     // and the file is not memory LLVM tracks, so two reads either side of a
     // `writeFileSync` must not fold into one.
     this.add(
-      plain(
+      unbounded(
         "nish_read_file_bytes",
         `declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(${STR_NOCAP})`,
         EFFECT_WRITE
@@ -838,6 +847,9 @@ export class RuntimeTable {
   }
 }
 
+/** 2^62: the largest size the inline allocator bumps, and the most bytes `new Array` asks for. */
+const ALLOC_MAX: string = "4611686018427387904"
+
 export const inlineAllocatorAttrs = (): string[] => {
   const out: string[] = []
   out.push("alwaysinline")
@@ -850,6 +862,17 @@ export const inlineAllocatorAttrs = (): string[] => {
 /**
  * The inline bump allocator. `size` is rounded up to 8 bytes so every object
  * (and therefore every field of every struct) is 8-byte aligned.
+ *
+ * The fast path also asks that `size` be at most 2^62, the most bytes
+ * `new Array` asks for. A negative `n` in `new Array<T>(n)` is a size near
+ * 2^64 once it is sign-extended and multiplied, and without the bound
+ * `off + size` wrapped into a bump that "fit", moved the offset backwards and
+ * let the memset write until the process faulted (docs/security/codegen.md,
+ * CG-2). With it the sum cannot wrap, because `off` never passes `cap`, a
+ * chunk `malloc` gave, which is below 2^63. A constant size folds the bound
+ * away, so a `new C()` costs what it did; only a computed size pays the
+ * compare. A size past the bound is handed to `nish_arena_grow` as it is,
+ * past anything it can allocate, so it fails as out of memory.
  */
 export const inlineAllocator = (attrGroup: string): string => {
   const lines: string[] = []
@@ -868,7 +891,9 @@ export const inlineAllocator = (attrGroup: string): string => {
     "  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2"
   )
   lines.push("  %cap = load i64, i64* %cap.ptr, align 8")
-  lines.push("  %fits = icmp ule i64 %new.off, %cap")
+  lines.push("  %in.cap = icmp ule i64 %new.off, %cap")
+  lines.push(`  %bounded = icmp ule i64 %size, ${ALLOC_MAX}`)
+  lines.push("  %fits = and i1 %in.cap, %bounded")
   lines.push("  br i1 %fits, label %fast, label %slow")
   lines.push("")
   lines.push("fast:")
@@ -881,7 +906,8 @@ export const inlineAllocator = (attrGroup: string): string => {
   lines.push("  ret i8* %obj")
   lines.push("")
   lines.push("slow:")
-  lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)")
+  lines.push("  %request = select i1 %bounded, i64 %size.aligned, i64 %size")
+  lines.push("  %grown = call i8* @nish_arena_grow(i64 %request)")
   lines.push("  ret i8* %grown")
   lines.push("}")
   return lines.join("\n")

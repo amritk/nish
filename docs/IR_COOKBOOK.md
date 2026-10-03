@@ -864,7 +864,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -875,7 +877,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -1199,7 +1202,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -1210,7 +1215,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -1645,7 +1651,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -1656,7 +1664,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -3198,7 +3207,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -3209,7 +3220,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -4734,7 +4746,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -4745,7 +4759,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -7533,7 +7548,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -7544,7 +7561,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -9248,7 +9266,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -9259,7 +9279,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -9584,7 +9605,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -9595,7 +9618,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -9764,7 +9788,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -9775,7 +9801,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -10199,7 +10226,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -10210,7 +10239,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -10351,7 +10381,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -10362,7 +10394,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -10565,7 +10598,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -10576,7 +10611,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -10759,7 +10795,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -10770,7 +10808,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -11371,7 +11410,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -11382,7 +11423,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -11461,7 +11503,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -11472,7 +11516,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -11774,7 +11819,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -11785,7 +11832,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -11980,7 +12028,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -11991,7 +12041,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -12146,7 +12197,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -12157,7 +12210,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -12332,10 +12386,10 @@ const joinTo = (n: number, text: string): number => {
 ```llvm
 @.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"item \00" }, align 8
 
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 
 define internal noundef i32 @sum(i32 noundef %n, i32 noundef %acc) #0 {
 entry:
@@ -12400,8 +12454,9 @@ if.end:
   ret i32 %7
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind readnone }
+attributes #2 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem-tail-release -->
 
@@ -12599,7 +12654,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -12610,7 +12667,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -13349,7 +13407,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -13360,7 +13420,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -13981,7 +14042,7 @@ declare void @nish_arena_release(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_exit(i32 noundef) #2
-declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define internal void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
 entry:
@@ -14040,11 +14101,11 @@ export const main = (): number => {
 @.str.1 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"hello\0A\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"world\0A\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
@@ -14067,15 +14128,15 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-files -->
 
@@ -14125,7 +14186,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -14136,7 +14199,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -14368,7 +14432,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -14379,7 +14445,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -14655,8 +14722,8 @@ export const keyLength = (path: string): number => {
 ```llvm
 %struct.nish_array = type { i64, i64, i8* }
 
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #0
 
 define noundef i32 @keyLength(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
@@ -14682,7 +14749,8 @@ if.end:
   ret i32 %6
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -14785,12 +14853,12 @@ export const main = (): number => {
 ```llvm
 @.str.0 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"settings.txt\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 
 define internal noundef nonnull align 8 i8* @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
@@ -14799,7 +14867,7 @@ entry:
   ret i8* %0
 }
 
-define noundef i32 @lineCount(i8* noundef nonnull noalias readonly align 8 %path) #1 {
+define noundef i32 @lineCount(i8* noundef nonnull noalias readonly align 8 %path) #0 {
 entry:
   %text.addr = alloca i8*, align 8
   %lines.addr = alloca i32, align 4
@@ -14854,7 +14922,7 @@ for.end:
   ret i32 %21
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @lineCount(i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*))
@@ -14864,15 +14932,15 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-capabilities -->
 
@@ -14906,15 +14974,15 @@ export const main = (): number => {
 @nish_argv = external global %struct.nish_array*, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\0A\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #0
+declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #1
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -14932,7 +15000,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   call void @nish_argv_init(i32 %argc, i8** %argv)
   %0 = call i32 @nish_main()
@@ -14940,8 +15008,8 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -15143,10 +15211,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare noundef double @nish_random() #2
 declare void @nish_exit(i32 noundef) #4
-declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #5
+declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -15157,7 +15225,7 @@ declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull re
 declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #5
 declare double @nish_date_now() #2
 declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #5
 declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #2
@@ -15206,7 +15274,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -15217,7 +15287,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 

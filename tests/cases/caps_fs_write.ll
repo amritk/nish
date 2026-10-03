@@ -1,10 +1,10 @@
 @.str.0 = private unnamed_addr constant { i64, [29 x i8] } { i64 28, [29 x i8] c"build/test/caps_fs_write.txt\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"written\0A\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 
@@ -28,12 +28,12 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }

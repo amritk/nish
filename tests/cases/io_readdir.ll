@@ -18,16 +18,16 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #0
+declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
@@ -38,7 +38,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -49,7 +51,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 
@@ -198,16 +201,16 @@ if.end.1:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind willreturn }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}

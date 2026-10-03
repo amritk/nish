@@ -22,7 +22,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly n
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare i64 @llvm.smin.i64(i64, i64) #3
@@ -37,7 +37,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -48,7 +50,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 

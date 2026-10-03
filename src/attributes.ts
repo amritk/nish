@@ -1717,6 +1717,15 @@ class FactCollector {
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(node, node.children[0].children[0])
+      // Mirrors `emitElementAssignment`: `a[i] op= v` checks the index again,
+      // unproven, when `v` can move the array (CG-10).
+      if (
+        node.text !== "=" &&
+        !this.unit.program.uncheckedIndexing &&
+        bodyMayExtend(this.unit, table, node.children[1], this.known)
+      ) {
+        this.facts.callees.add("nish_panic_index")
+      }
     }
   }
 
@@ -2400,8 +2409,62 @@ const collectRound = (
   return facts
 }
 
+/**
+ * Clear `willReturn` on every function that is on a call-graph cycle or calls
+ * into one (docs/security/codegen.md, CG-4). The fixpoint below only ever
+ * clears the fact through a callee that has already lost it, so a cycle whose
+ * members are each `willreturn` on their own kept it: `spin(x)` calling
+ * itself was `willreturn readnone`, and `opt -O2` deleted a call that should
+ * never have returned. LLVM's own FunctionAttrs never infers `willreturn`
+ * through recursion either, and a recursion's termination is nothing this
+ * analysis proves.
+ *
+ * A function is settled once every user function it calls is settled, so a
+ * leaf settles first and a self-call or a cycle never does. What is left
+ * unsettled is the cycles and their callers, and the callers would lose the
+ * fact through `propagateCallee` anyway, so clearing all of them here gives
+ * the answer clearing only the cycles would. Each pass settles at least one
+ * more function or stops, as `propagate` does.
+ */
+const clearRecursiveWillReturn = (facts: FactsTable): void => {
+  const settled = new Array<boolean>(facts.list.length)
+  let moved = true
+  while (moved) {
+    moved = false
+    let i = 0
+    while (i < settled.length && i < facts.list.length) {
+      if (!settled[i] && calleesSettled(facts, facts.list[i], settled)) {
+        settled[i] = true
+        moved = true
+      }
+      i = i + 1
+    }
+  }
+  let j = 0
+  while (j < settled.length && j < facts.list.length) {
+    if (!settled[j]) {
+      facts.list[j].willReturn = false
+    }
+    j = j + 1
+  }
+}
+
+/** Whether every user function `f` calls is settled; a runtime callee has no facts and no body to recurse through. */
+const calleesSettled = (facts: FactsTable, f: FunctionFacts, settled: boolean[]): boolean => {
+  let c = 0
+  while (c < f.callees.size()) {
+    const at = facts.indexOf(f.callees.at(c))
+    if (at >= 0 && at < settled.length && !settled[at]) {
+      return false
+    }
+    c = c + 1
+  }
+  return true
+}
+
 /** Propagate effects, termination, pointer facts and allocation facts to a fixpoint. */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
+  clearRecursiveWillReturn(facts)
   let changed = true
   while (changed) {
     changed = false

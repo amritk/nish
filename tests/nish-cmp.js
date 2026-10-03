@@ -2238,6 +2238,11 @@ const DECLARED = [
     changelog: "the TLS 1.3 server handshake",
     why: "a new program: the extension, retry and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
   },
+  // Last, because it covers every program and the first entry that matches wins.
+  {
+    changelog: "Close CG-2, CG-4, CG-8 and CG-10",
+    why: "the inline allocator every allocating module defines compares the size with the room left rather than adding it to the offset (CG-2), a function on a call-graph cycle and its callers lose `willreturn` (CG-4), the file calls and their callers lose it too (CG-8), and `a[i] op= v` re-reads the array after a `v` that can move it (CG-10)",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

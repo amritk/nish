@@ -5588,7 +5588,12 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
-  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
+  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`),
+  and when `v` can move the array — a `push` or a `pop`, or a call to a
+  function that makes one — the store re-reads the array's storage and checks
+  `i` again against the length `v` left, so `xs[0] += grow(xs)` lands in the
+  array `grow` grew, and `zs[2] += shrink(zs)` panics where JavaScript would
+  write past the end (`tests/cases/cg_sec_compound_grow`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
   the target expression is evaluated **once** whichever `op=` it is, so
   `a[next()] |= 1` calls `next()` a single time and pays for a single bounds

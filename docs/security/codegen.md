@@ -89,11 +89,11 @@ the programmer's explicit opt-out of the bounds check. Neither is a finding.
 | CG-5 | High | `src/escape.ts:120` (`isAllocatingBuiltin`), `:467` (`visitCall`), `:1217` (`PassWalk.isOld`) | `readdirSync` answers an array whose element strings were bumped by the same call. The scope rules assume a pointer read out of memory was not allocated with it, so `const names = readdirSync(d); return names[0]` left `first` with an arena scope that released the name before the caller read it (`CORRUPTED`, length 1364283729), and `keep = names[0]` in a loop pass did the same through the per-pass scope | **Fixed.** A listing's elements now flow as the listing (`isListingCall`, the `listing` mode of `flowTarget`/`assignedLocal`), and a pass's element read of a listing it made is not old (`isPassListing`). No corpus program's IR moved. Tests: `tests/cases/cg_sec_readdir_return`, `cg_sec_readdir_pass` |
 | CG-6 | High | `src/emit-result.ts:538` (`emitOrReturn`, root); `src/parallel.ts` (`walkRegion`) | `r.orReturn()` inside a `scope()` block returned without joining it: the task stayed in the thread's list, and the next scope's join ran it, writing through a destination pointer into memory the first function's arena scope had released, which by then held another function's array (`1 5` where `1 5005` is right) | **Fixed by refusal.** `regionCallMessage` refuses a `Result`'s `orReturn` (`resultMethodName`) between a scope's first `spawn` and the end of its block (NL2394, the region rule). The emitter fix — `emitScopeJoins` before `emitScopeExit` in both propagate arms of `emitOrReturn` — is in `src/emit-result.ts`, outside this stage, and would let the refusal go. Test: `tests/cases/cg_sec_scope_or_return` |
 | CG-7 | Medium | `src/parallel.ts:1035` (`collectUses`) | A task argument read out of a variable (`s.spawn(sumPt, ps[0], out, 0)`) left `ps` private, so `ps[0] = { x: 100, y: 200 }` before the join was accepted. A record element is the address of its slot and the task reads it at the join, so the native answer was 300 where Node prints 3, and the two raced under `--threads` | **Fixed.** `handOnRoot` hands the root variable of such an argument on (through each arm of a `?:` or `??` too), and the region refuses the store. `tests/link/thread_scope_many_arrays` (`rows[k]` as an argument) still compiles. Test: `tests/cases/cg_sec_scope_record_arg` |
-| CG-2 | Medium | `src/runtime.ts:808` (`inlineAllocator`); `src/emit-arrays.ts:1017` | A negative `i32` `n` in `new Array<T>(n)` became a byte count past 2^63. The inline allocator adds 7 and adds the offset without an overflow check, so the bump "fits", moves the arena offset backwards, and the `memset` of ~2^64 bytes writes until it faults. The comment said the arena aborts; it does not. A crash on input (`new Array<u8>(parseInt(field))`) | **Open.** The fix is an overflow-safe fast path in the inline allocator (`src/runtime.ts`, every module's IR) paired with `nish_arena_grow` refusing a size past `SIZE_MAX`; checking `n` in `emitNewArray` instead moves the IR of every `new Array(n)` with an `i32` `n` in the corpus. The comment now says what happens |
-| CG-4 | Medium | `src/attributes.ts:439`, `:1813`, `propagateCallee` | `willReturn` starts true and only a non-returning callee clears it, so a function on a call-graph cycle kept `willreturn`: `spin(x)` calling itself with the same `x` was `willreturn readnone`, and `opt -O2` deleted the call, so a program that should hang printed `returned` and exited 0. Mutual recursion behaves the same. `docs/ARCHITECTURE.md` says unbounded recursion is allowed by LangRef; it is not | **Open.** The fix (a walk from each function over its user callees that clears `willReturn` when it reaches itself, before `propagate`, as LLVM's FunctionAttrs never infers `willreturn` through recursion) was written and fixes both reproducers, but it moves at least ten existing `tests/cases/*.ll` goldens (`cf_fib`, `fn_arrow`, `gen_recursive_ground`, `mem_scope_tail_call`, …) and the compiler's own IR, which this stage may not regenerate |
-| CG-8 | Low | `src/runtime.ts:337`, `:350`, `:353` | `nish_read_file`, `nish_write_file` and `nish_append_file` are declared `willreturn`, but `runtime-os.c` `_exit(1)`s on a missing or unwritable file and `open()` blocks on a FIFO with no writer; every caller inherits `willreturn`. The allocator's OOM exit is the same pattern, and so is `nish_array_grow`'s new refusal | **Open** (`src/runtime.ts`). No miscompile was observed: the calls write memory, so LLVM cannot delete them |
+| CG-2 | Medium | `src/runtime.ts:808` (`inlineAllocator`); `src/emit-arrays.ts:1017` | A negative `i32` `n` in `new Array<T>(n)` became a byte count past 2^63. The inline allocator adds 7 and adds the offset without an overflow check, so the bump "fits", moves the arena offset backwards, and the `memset` of ~2^64 bytes writes until it faults. The comment said the arena aborts; it does not. A crash on input (`new Array<u8>(parseInt(field))`) | **Open.** The fix is an overflow-safe fast path in the inline allocator (`src/runtime.ts`, every module's IR) paired with `nish_arena_grow` refusing a size past `SIZE_MAX`; checking `n` in `emitNewArray` instead moves the IR of every `new Array(n)` with an `i32` `n` in the corpus. The comment now says what happens. *Since fixed: see "Status after #382" below* |
+| CG-4 | Medium | `src/attributes.ts:439`, `:1813`, `propagateCallee` | `willReturn` starts true and only a non-returning callee clears it, so a function on a call-graph cycle kept `willreturn`: `spin(x)` calling itself with the same `x` was `willreturn readnone`, and `opt -O2` deleted the call, so a program that should hang printed `returned` and exited 0. Mutual recursion behaves the same. `docs/ARCHITECTURE.md` says unbounded recursion is allowed by LangRef; it is not | **Open.** The fix (a walk from each function over its user callees that clears `willReturn` when it reaches itself, before `propagate`, as LLVM's FunctionAttrs never infers `willreturn` through recursion) was written and fixes both reproducers, but it moves at least ten existing `tests/cases/*.ll` goldens (`cf_fib`, `fn_arrow`, `gen_recursive_ground`, `mem_scope_tail_call`, …) and the compiler's own IR, which this stage may not regenerate. *Since fixed: see "Status after #382" below* |
+| CG-8 | Low | `src/runtime.ts:337`, `:350`, `:353` | `nish_read_file`, `nish_write_file` and `nish_append_file` are declared `willreturn`, but `runtime-os.c` `_exit(1)`s on a missing or unwritable file and `open()` blocks on a FIFO with no writer; every caller inherits `willreturn`. The allocator's OOM exit is the same pattern, and so is `nish_array_grow`'s new refusal | **Open** (`src/runtime.ts`). No miscompile was observed: the calls write memory, so LLVM cannot delete them. *Since fixed for the file calls: see "Status after #382" below* |
 | CG-9 | Low | `runtime/runtime-wasm.c:61` | The wasm32 runtime's `nish_alloc_struct` rounds and adds without an overflow check, the same shape as CG-2 | **Open**, for the runtime stage. *Since fixed there as RT-7* (`docs/security/runtime.md`, `tests/link/rt_sec_wasm_arena`) |
-| CG-10 | Low | `src/emit-arrays.ts:1059` (`emitElementAssignment`) | `xs[0] += grow(xs)` computes the slot's address before evaluating the right side, so when `grow` pushes until `xs` moves, the store lands in the old block: 1 where JavaScript gives 6. `zs[2] += shrink(zs)` stores past the new length, inside the old capacity. Arena memory is not freed, so neither is a memory error | **Open.** Recomputing the address after the right side changes the IR of every compound element assignment and its goldens |
+| CG-10 | Low | `src/emit-arrays.ts:1059` (`emitElementAssignment`) | `xs[0] += grow(xs)` computes the slot's address before evaluating the right side, so when `grow` pushes until `xs` moves, the store lands in the old block: 1 where JavaScript gives 6. `zs[2] += shrink(zs)` stores past the new length, inside the old capacity. Arena memory is not freed, so neither is a memory error | **Open.** Recomputing the address after the right side changes the IR of every compound element assignment and its goldens. *Since fixed: see "Status after #382" below* |
 
 ## Status after the runtime stage
 
@@ -114,7 +114,65 @@ stage found and did; this section is what is true now.
   allocator always could, so their `willreturn` is the same approximation.
 
 CG-2, CG-3 (`join`), CG-4, CG-6's emitter half, CG-8 and CG-10 are tracked in
-#382.
+#382; the next section says which of them have since closed.
+
+## Status after #382
+
+The follow-up stage for #382 closed four of the findings it tracks. CG-3
+(`join`) and CG-6's emitter half are still open there.
+
+- **CG-2 is fixed.** The inline allocator's fast path also asks that `size`
+  be at most 2^62, the most bytes `new Array` asks for (`newArrayLimit`).
+  Since `off` never passes `cap`, a chunk `malloc` gave and so below 2^63,
+  `off + size` can no longer wrap into a bump that "fits". A larger size,
+  which is what a negative `n` becomes once it is sign-extended and
+  multiplied, takes the slow path and is handed to `nish_arena_grow` as it
+  is, past anything it can allocate, so it fails as out of memory (exit 1)
+  before the memset runs. A constant size folds the bound away, so a
+  `new C()` compiles to the instructions it did before; only a computed size
+  pays one compare. Measured with `bench/run.mjs --instructions` against the
+  base compiler: the seven bench programs and the seven AWFY ports execute
+  the same number of instructions to the unit, and the four map layout
+  prototypes and the three `Map` measurements between 154 and 118,334 more
+  (the most is map-proto-unordered's, +0.057%).
+  A first version that compared `size` with `cap - off` instead cost Storage
+  6.6%, one more x86 instruction per allocation, and was dropped. Test:
+  `tests/cases/cg_sec_new_array_negative` (a negative `i32` length for a
+  `u8[]` and an `f64[]`, each in a child: SIGSEGV on the base, `nish: out of
+  memory` and exit 1 now). The C runtime's own `nish_alloc_struct` in
+  `runtime/runtime.c` keeps the old sum; its callers pass sizes the runtime
+  computed itself.
+- **CG-4 is fixed.** `clearRecursiveWillReturn` in `src/attributes.ts` runs
+  before each fixpoint: a function settles once every user function it calls
+  has, and whatever never settles — a cycle, and every caller of one — loses
+  `willReturn`. Recursion that terminates loses it too (`fib`), because
+  termination is not something the analysis proves, which is the rule LLVM's
+  own FunctionAttrs keeps. Test: `tests/cases/cg_sec_recursion_willreturn`
+  (`spin` and `ping`/`pong`, each run in a child under a one-second alarm:
+  "returned 7" on the base, killed by SIGALRM now; the golden pins the
+  attributes).
+- **CG-8 is fixed for the file calls.** `nish_read_file`,
+  `nish_read_file_or_null`, `nish_read_file_bytes`, `nish_write_file` and
+  `nish_append_file` are declared `nounwind` alone, so neither they nor their
+  callers claim `willreturn`. Test: `tests/cases/cg_sec_file_willreturn`. The
+  allocation half stays as it was, deliberately: `nish_arena_grow`,
+  `nish_str_concat`, `nish_alloc_array` and `nish_array_grow` exit when an
+  allocation cannot be met, as the inline allocator can, and dropping
+  `willreturn` from them would take it from every function that allocates.
+  The comment beside each says so.
+- **CG-10 is fixed.** When the right side of `a[i] op= v` can move the array
+  (a `push` or `pop` in it, or a call to a function whose facts say it
+  resizes an array — the question the loop-header hoist already asks), the
+  store re-reads the array's `data` and checks `i` again against the length
+  `v` left; `collectArrayFacts` lists the second check's panic so
+  `willreturn` stays exact. Any other right side keeps one check and one
+  address, so no golden without such a call moved for this. Test:
+  `tests/cases/cg_sec_compound_grow` (`xs[0] += grow(xs)` is 6, `|=` is 7,
+  and `zs[2] += shrink(zs)` panics with `index out of range: 2 >= 2`; the
+  base gave 1, 2 and a silent store past the length).
+
+`docs/ARCHITECTURE.md`'s `willreturn` row still calls CG-4 open; it is outside
+the stage that fixed it, and is left for the next edit of that table.
 
 ## Properties verified
 

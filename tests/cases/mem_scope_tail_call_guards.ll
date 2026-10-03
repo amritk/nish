@@ -3,13 +3,13 @@
 @.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"item \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef i64 @nish_arena_used() #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef i64 @nish_arena_used() #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
 define internal noundef i32 @walk(i32 noundef %n, i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
 entry:
@@ -88,7 +88,7 @@ if.end:
   ret i32 %9
 }
 
-define internal void @Depth.constructor(%struct.Depth* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %base) #0 {
+define internal void @Depth.constructor(%struct.Depth* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %base) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Depth, %struct.Depth* %this, i32 0, i32 0
   store i32 %base, i32* %0, align 4, !tbaa !4
@@ -148,15 +148,15 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

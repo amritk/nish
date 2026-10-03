@@ -35,7 +35,9 @@ entry:
   %new.off = add i64 %off, %size.aligned
   %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
+  %in.cap = icmp ule i64 %new.off, %cap
+  %bounded = icmp ule i64 %size, 4611686018427387904
+  %fits = and i1 %in.cap, %bounded
   br i1 %fits, label %fast, label %slow
 
 fast:
@@ -46,7 +48,8 @@ fast:
   ret i8* %obj
 
 slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  %request = select i1 %bounded, i64 %size.aligned, i64 %size
+  %grown = call i8* @nish_arena_grow(i64 %request)
   ret i8* %grown
 }
 

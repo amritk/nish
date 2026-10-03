@@ -17,7 +17,7 @@ entry:
   ret void
 }
 
-define internal void @walk(i32 noundef %n) #0 {
+define internal void @walk(i32 noundef %n) #1 {
 entry:
   %0 = icmp eq i32 %n, 0
   br i1 %0, label %if.then, label %if.end
@@ -32,7 +32,7 @@ if.end:
   ret void
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   call void @walk(i32 2)
   ret i32 0
