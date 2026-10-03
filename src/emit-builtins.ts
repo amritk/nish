@@ -970,13 +970,10 @@ export const identifierBuiltinCalleesNamed = (
   // bitwise instructions and an empty asm (WP34 N6), and the `nish:unsafe`
   // functions are a load, a store or one instruction, with no panic behind
   // any of them. None calls anything.
-  if (
-    name === "f64ToBits" ||
-    name === "bitsToF64" ||
-    name === "ctSelect" ||
-    name === "ctEq" ||
-    isUnsafeExport(name)
-  ) {
+  if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+    return out
+  }
+  if (isUnsafeExport(name)) {
     return out
   }
   return out

@@ -5683,8 +5683,8 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
     { cwd: root, encoding: "utf8" }
   )
   check(
-    "performance: --unchecked-indexing keeps every NL9013 warning of perf_rng_loop",
-    unchecked.status === 0 && at(warned(unchecked.stderr)) === "14:31,16:31,18:43,20:5",
+    "performance: --unchecked-indexing keeps every NL9013 warning of perf_rng_loop, after its own deprecation",
+    unchecked.status === 0 && at(warned(unchecked.stderr)) === "1:1,14:31,16:31,18:43,20:5",
     unchecked.stderr
   )
 
