@@ -39,10 +39,11 @@
  * **Randomness is the caller's.** `accept` takes the 32-byte server random and
  * the 32-byte x25519 private key the handshake uses, as `TlsServer` does, so a
  * test replays RFC 8448's trace and a server draws them with
- * `crypto.getRandomValues`. `accept` copies the key into the slot and wipes
- * the caller's array, so one buffer refilled for every `accept` is safe; the
- * slot's copy is wiped once the ServerHello is written, when the handshake
- * fails, or when the slot is closed. **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs
+ * `crypto.getRandomValues`. `accept` copies both into the slot and wipes the
+ * caller's key array, so one buffer of each refilled for every `accept` is
+ * safe, and refuses either when it is not 32 bytes before taking a
+ * connection; the slot's copy of the key is wiped once the ServerHello is
+ * written, when the handshake fails, or when the slot is closed. **Signing is the caller's**, as `TlsServer`'s is: `signP256` signs
  * the CertificateVerify with a P-256 key the caller holds as a `Secret` and
  * borrows for the call, and `signatureInput` / `sign` hand the input out and
  * take any signature back.
@@ -78,7 +79,7 @@ const TLS_TCP_FREE: i32 = -1
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_TCP_FROM: i32 = 0
 
-/** An x25519 private key's length, which is what `TlsServer` takes. */
+/** The length of an x25519 private key and of a server random: what `TlsServer` takes for each. */
 const TLS_TCP_KEY_SIZE: i32 = 32
 
 /** The address form's length, from `nish:net`. */
@@ -105,6 +106,12 @@ export class TlsTcpServer {
    * can never reach an array the program has refilled for the next one.
    */
   keys: u8[][]
+  /**
+   * Each slot's own copy of its connection's server random, for the same
+   * reason: `TlsServer` keeps the array it is given and writes it into the
+   * ServerHello only once the ClientHello arrives.
+   */
+  randoms: u8[][]
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
 
@@ -118,6 +125,7 @@ export class TlsTcpServer {
     this.connections = []
     this.fds = []
     this.keys = []
+    this.randoms = []
     const none: u8[] = []
     // A placeholder handshake, refused by `TlsServer` for its empty
     // randomness, so each slot starts out failed until `accept` gives it one.
@@ -127,6 +135,7 @@ export class TlsTcpServer {
       this.connections.push(new TlsRecordServer(idle))
       this.fds.push(TLS_TCP_FREE)
       this.keys.push(new Array<u8>(TLS_TCP_KEY_SIZE))
+      this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
     }
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
@@ -171,15 +180,22 @@ export class TlsTcpServer {
   /**
    * Accepts the next waiting connection into a free slot and starts its
    * handshake with `serverRandom` and `ephemeralPrivate` (32 bytes each),
-   * and answers the slot. The peer's address is in `peer`. Answers -11 when
-   * no connection is waiting, `TLS_TCP_POOL_FULL` when one was but every slot
-   * is busy (it is closed), or `tcpAccept`'s own failure. The key is copied
-   * into the slot and the caller's array wiped, so the program may refill one
-   * buffer for every call; on any other answer both arrays are left as they
-   * were. A key that is not 32 bytes is handed on as it is, and `TlsServer`
-   * refuses it with `internal_error`.
+   * and answers the slot. The peer's address is in `peer`. Both arrays are
+   * copied into the slot, which reads them only when the ClientHello
+   * arrives, and the key's array is then wiped, so the program may refill
+   * one buffer of each for every call. Answers -11 when no connection is
+   * waiting, `TLS_TCP_POOL_FULL` when one was but every slot is busy (it is
+   * closed), or `tcpAccept`'s own failure; and `TLS_RECORD_INVALID` (-22),
+   * before any connection is taken, for a random or key that is not 32
+   * bytes. On any answer but a slot both arrays are left as they were.
    */
   accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32 {
+    if (
+      toI32(serverRandom.length) !== TLS_TCP_KEY_SIZE ||
+      toI32(ephemeralPrivate.length) !== TLS_TCP_KEY_SIZE
+    ) {
+      return TLS_RECORD_INVALID
+    }
     const fd: i32 = tcpAccept(this.listener, this.peer)
     if (fd < 0) {
       return fd
@@ -196,15 +212,24 @@ export class TlsTcpServer {
       return TLS_TCP_POOL_FULL
     }
     this.fds[slot] = fd
-    let key: u8[] = ephemeralPrivate
-    if (toI32(ephemeralPrivate.length) === TLS_TCP_KEY_SIZE) {
-      key = this.keys[slot]
-      for (let k: i32 = 0; k < toI32(key.length) && k < toI32(ephemeralPrivate.length); k++) {
-        key[k] = ephemeralPrivate[k]
-      }
-      secureZero(ephemeralPrivate)
+    const random: u8[] = this.randoms[slot]
+    const key: u8[] = this.keys[slot]
+    for (
+      let k: i32 = 0;
+      k < TLS_TCP_KEY_SIZE && k < toI32(random.length) && k < toI32(serverRandom.length);
+      k++
+    ) {
+      random[k] = serverRandom[k]
     }
-    this.connections[slot].start(new TlsServer(this.config, serverRandom, key))
+    for (
+      let k: i32 = 0;
+      k < TLS_TCP_KEY_SIZE && k < toI32(key.length) && k < toI32(ephemeralPrivate.length);
+      k++
+    ) {
+      key[k] = ephemeralPrivate[k]
+    }
+    secureZero(ephemeralPrivate)
+    this.connections[slot].start(new TlsServer(this.config, random, key))
     return slot
   }
 

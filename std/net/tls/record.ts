@@ -487,6 +487,8 @@ export class TlsRecordProtection {
       aes !== null
         ? aesGcmSeal(aes, nonce, aad, plaintext)
         : chacha20Poly1305Seal(this.key, nonce, aad, plaintext)
+    // The nonce is the IV under a public sequence number: wiped as the IV is.
+    secureZero(nonce)
     if (sealed === null || toI32(sealed.length) !== body) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
@@ -564,6 +566,7 @@ export class TlsRecordProtection {
     const aes: AesKey | null = this.aesForSuite()
     const inner: u8[] | null =
       aes !== null ? aesGcmOpen(aes, nonce, aad, sealed) : chacha20Poly1305Open(this.key, nonce, aad, sealed)
+    secureZero(nonce)
     if (inner === null) {
       return -TLS_ALERT_BAD_RECORD_MAC
     }

@@ -44,7 +44,7 @@ import {
   rfc8448ServerFlightRecord,
   rfc8448ServerHelloRecord,
 } from "../net_tls_record_rfc8448/records";
-import { Opened, ZERO, ascii, join, keyUpdateMessage, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { Opened, ZERO, ascii, filled, join, keyUpdateMessage, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 import { clearRecord, clientKeysFor, recordHello } from "../net_tls_record_common/client";
 import { Loopback, SIGN_BROKEN, SIGN_LEAF, SIGN_TRACE } from "./harness";
 
@@ -190,6 +190,38 @@ export const tcpChecks = (): i32 => {
   t.eqI32("every connection was accepted into a slot but the one shed", lb.accepted, toI32(4));
   t.eqI32("each accept copied the key into its slot and wiped the one buffer the program refills", lb.keysWiped, toI32(4));
 
+  // Two handshakes pending at once, their randoms drawn into the one buffer:
+  // each ServerHello must carry the random its own accept was handed.
+  const p: i32 = lb.connect();
+  const q: i32 = lb.connect();
+  lb.send(p, clearRecord(recordHello([suite], false, false)));
+  lb.send(q, clearRecord(recordHello([suite], false, false)));
+  const helloP: u8[] = nextRecord(lb, p);
+  const helloQ: u8[] = nextRecord(lb, q);
+  // The random follows the record header (5), the message header (4) and the version (2).
+  const randomP: u8[] = range(helloP, toI32(11), toI32(43));
+  const randomQ: u8[] = range(helloQ, toI32(11), toI32(43));
+  t.ok(
+    "two pending handshakes whose randoms the program drew into one buffer each send their own (the slot keeps a copy)",
+    toHex(randomP) === toHex(filled(32, toI32(0x44))) && toHex(randomQ) === toHex(filled(32, toI32(0x45)))
+  );
+  lb.hangUp(p);
+  lb.hangUp(q);
+  t.ok("and both are closed when their clients hang up", lb.awaitClosed(toI32(6)) && lb.server.busy() === 0);
+
+  const shortRandom: u8[] = filled(31, 7);
+  const fullKey: u8[] = filled(32, 9);
+  t.ok(
+    "a random of 31 bytes is refused with -22 before any connection is taken, and both arrays are left as they were",
+    lb.server.accept(shortRandom, fullKey) === TLS_RECORD_INVALID && toHex(fullKey) === toHex(filled(32, 9)) && toHex(shortRandom) === toHex(filled(31, 7))
+  );
+  const fullRandom: u8[] = filled(32, 7);
+  const shortKey: u8[] = filled(33, 9);
+  t.ok(
+    "so is a key of 33 bytes, which stays unwiped",
+    lb.server.accept(fullRandom, shortKey) === TLS_RECORD_INVALID && toHex(shortKey) === toHex(filled(33, 9))
+  );
+
   // --- 4. A broken signing key, and a free slot -----------------------------------------
   const free: i32 = 99;
   t.ok(
@@ -214,7 +246,7 @@ export const tcpChecks = (): i32 => {
   lb.shutdown();
 
   const orphan = new TlsTcpServer(tcpConfig([]), -1, 0);
-  t.ok("a pool of no slots has one; accept on a descriptor that is not a socket answers tcpAccept's -9", orphan.size() === 1 && orphan.accept(ascii("r"), ascii("k")) === -9);
+  t.ok("a pool of no slots has one; accept on a descriptor that is not a socket answers tcpAccept's -9", orphan.size() === 1 && orphan.accept(filled(32, 1), filled(32, 2)) === -9);
 
   const broken = new Loopback(tcpConfig([]), 1, SIGN_BROKEN);
   const g: i32 = broken.connect();

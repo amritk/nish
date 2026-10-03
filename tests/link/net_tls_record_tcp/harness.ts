@@ -30,7 +30,7 @@ import {
 } from "nish/net/tls/record-server";
 import { TLS_TCP_POOL_FULL, TlsTcpServer } from "nish/net/tls-tcp";
 import { rfc8448RsaPssSignature, rfc8448ServerPrivate, rfc8448ServerRandom } from "../net_tls_rfc8448/trace";
-import { leafPrivate, serverPrivate, serverRandom } from "../net_tls_common/server";
+import { leafPrivate, serverPrivate } from "../net_tls_common/server";
 import { ZERO, allZero, range } from "../net_tls_record_common/bytes";
 
 const WOULD_BLOCK: i32 = -11;
@@ -85,6 +85,12 @@ export class Loopback {
   keysWiped: i32 = 0;
   /** The one buffer every accept's ephemeral key is drawn into, as a server reusing it would. */
   keyBuffer: u8[];
+  /**
+   * The one buffer every accept's server random is drawn into. Off the
+   * trace, each accept fills it with one byte repeated, 0x40 plus the count of
+   * accepts so far, so a ServerHello says which accept its random came from.
+   */
+  randomBuffer: u8[];
   refused: i32 = 0;
   closed: i32 = 0;
   /** While set, how far the server's calls moved the arena, summed. */
@@ -107,6 +113,7 @@ export class Loopback {
     this.requests = [];
     this.buf = new Array<u8>(4096);
     this.keyBuffer = new Array<u8>(32);
+    this.randomBuffer = new Array<u8>(32);
     this.loop = pollCreate();
     this.listener = tcpListen("127.0.0.1", 0, 16);
     this.port = netLocalPort(this.listener);
@@ -212,16 +219,19 @@ export class Loopback {
   acceptAll(): void {
     let more: boolean = true;
     while (more) {
-      const random: u8[] = this.signing === SIGN_TRACE ? rfc8448ServerRandom() : serverRandom();
       const key: u8[] = this.signing === SIGN_TRACE ? rfc8448ServerPrivate() : serverPrivate();
+      const traceRandom: u8[] = rfc8448ServerRandom();
       for (let k: i32 = 0; k < toI32(this.keyBuffer.length) && k < toI32(key.length); k++) {
         this.keyBuffer[k] = key[k];
       }
+      for (let k: i32 = 0; k < toI32(this.randomBuffer.length) && k < toI32(traceRandom.length); k++) {
+        this.randomBuffer[k] = this.signing === SIGN_TRACE ? traceRandom[k] : toU8(0x40 + this.accepted);
+      }
       if (this.serving) {
-        crypto.getRandomValues(random);
+        crypto.getRandomValues(this.randomBuffer);
         crypto.getRandomValues(this.keyBuffer);
       }
-      const slot: i32 = this.server.accept(random, this.keyBuffer);
+      const slot: i32 = this.server.accept(this.randomBuffer, this.keyBuffer);
       if (slot >= 0) {
         this.accepted = this.accepted + 1;
         this.keysWiped = this.keysWiped + (allZero(this.keyBuffer) ? 1 : 0);
