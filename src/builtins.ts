@@ -152,6 +152,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "statMtimeSync" ||
     name === "signalFd" ||
     name === "readSignal" ||
+    name === "arena" ||
     name === "secureZero" ||
     isNetExport(name) ||
     isUnsafeExport(name)
@@ -831,6 +832,15 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   // only the difference between two reads means anything. Zero arguments, which
   // `checkBuiltinArity` words the way `Math.random` already does.
   if (name === "monotonicNanos") {
+    checkBuiltinArity(ctx, call, name, args, 0)
+    return T_I64
+  }
+  // `using a = arena()`: the arena's mark, taken where the block's arena opens
+  // and released to on every edge that leaves the block. The language spells
+  // its type `Disposable`, and nothing may read it (`arenaBindingMessage` in
+  // `src/parallel.ts`); here it is the `i64` the emitter keeps the mark in,
+  // and the binding's slot is where the block's exits load it from.
+  if (name === "arena") {
     checkBuiltinArity(ctx, call, name, args, 0)
     return T_I64
   }

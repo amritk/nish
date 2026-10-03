@@ -64,6 +64,7 @@ import {
   intrinsicType,
   isAssignmentOperator,
   isAssignmentTarget,
+  isArenaCall,
   isPushCall,
   builtinArgumentLetters,
   builtinNameOf,
@@ -372,6 +373,14 @@ export class FunctionFacts {
    * the position invalidates nothing, so it must not cost a function its scope.
    */
   readsArenaState: boolean
+  /**
+   * Opens a `using a = arena()` block, directly or through a callee
+   * (fixpoint). Kept apart from `readsArenaState` and `managesArena`, which
+   * read `nish_arena_mark` out of `callees`: the block's mark is the
+   * compiler's, checked like a pass's, so it costs no function its scopes. It
+   * is what refuses the block in a parallel body (`arenaMessage`).
+   */
+  opensArena: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -460,6 +469,7 @@ export class FunctionFacts {
     this.returnsAllocation = false
     this.usesArenaControl = false
     this.readsArenaState = false
+    this.opensArena = false
     this.callSites = []
     this.escapingNodes = []
     this.arenaNodes = []
@@ -1704,6 +1714,9 @@ class FactCollector {
     } else {
       this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node, unchecked))
     }
+    if (isArenaCall(this.unit.program, node)) {
+      this.facts.opensArena = true
+    }
     // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
     // are handed.
     this.noteWrittenArguments(node)
@@ -2321,6 +2334,10 @@ const propagateCallee = (
     }
     if (calleeFacts.readsArenaState && !f.readsArenaState) {
       f.readsArenaState = true
+      changed = true
+    }
+    if (calleeFacts.opensArena && !f.opensArena) {
+      f.opensArena = true
       changed = true
     }
   }

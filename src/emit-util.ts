@@ -196,6 +196,17 @@ export const isUncheckedAccess = (program: CheckedProgram, call: Node): boolean 
   return (name === "uncheckedGet" || name === "uncheckedSet") && call.children[1].children.length > 0
 }
 
+/**
+ * `arena()`, the builtin a `using a = arena()` block is opened with: a call of
+ * the plain name that no user function of that name won. It cannot be
+ * imported under another name, so the text is the whole test.
+ */
+export const isArenaCall = (program: CheckedProgram, call: Node): boolean =>
+  call.kind === N_CALL &&
+  call.children[0].kind === N_IDENT &&
+  call.children[0].text === "arena" &&
+  program.nodeCallees[call.id] === null
+
 /** `recv.push(v)` on an array receiver. */
 export const isPushCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean =>
   arrayMethodName(program, table, node) === "push"

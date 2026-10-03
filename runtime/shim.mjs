@@ -834,3 +834,7 @@ export function arenaUsed() { return 0; }
 export function arenaMark() { return 0; }
 export function arenaRelease() {}
 export function arenaReset() {}
+/** `using a = arena()`: a disposable whose disposal does nothing, because there is no arena to release. */
+export function arena() {
+  return { [Symbol.dispose]() {} };
+}
