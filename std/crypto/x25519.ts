@@ -57,10 +57,18 @@
  * the literal `10` or `32`, in range and drop their bounds checks. (A named
  * constant as the bound, or a `panic` as the guard, does not prove them.)
  *
+ * **Keys are `Secret`s** (`nish:secret`, docs/LANGUAGE.md "Secrets"). `x25519`
+ * takes the scalar as a `Secret<u8[]>` and answers the shared secret as one;
+ * `x25519Base` answers the public key as plain bytes. The ladder runs inside
+ * `exposeWith`, and the clamped copy and every ladder element are wiped before
+ * it returns (ECC-2, docs/security/crypto-ecc.md).
+ *
  * Private names carry the `f25519` / `x25519` prefix because a `std/` module's
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
+
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
 
 /** The length in bytes of a scalar, a u-coordinate and an X25519 output. */
 export const X25519_SIZE: i32 = 32
@@ -466,26 +474,32 @@ const x25519Ladder = (k: u8[], u: i64[]): u8[] => {
 
   f25519Invert(t, z2)
   f25519Mul(x2, x2, t)
-  return f25519Encode(x2)
+  const out: u8[] = f25519Encode(x2)
+  // ECC-2: every element the scalar's bits reached is zeroed before the
+  // ladder returns, with the store `nish:secret` keeps from the optimiser.
+  wipe(x2)
+  wipe(z2)
+  wipe(x3)
+  wipe(z3)
+  wipe(a)
+  wipe(aa)
+  wipe(b)
+  wipe(bb)
+  wipe(e)
+  wipe(c)
+  wipe(d)
+  wipe(da)
+  wipe(cb)
+  wipe(t)
+  return out
 }
 
 /**
- * X25519 (RFC 7748 §5): the u-coordinate of `scalar * u` on curve25519, as 32
- * little-endian bytes.
- *
- * `scalar` is clamped as §5 says — bits 0, 1, 2 and 255 cleared, bit 254 set —
- * on a copy, so the caller's array is not changed. The top bit of `u` is
- * ignored, and a `u` of p or more is taken modulo p. The answer is always
- * canonical (below p).
- *
- * Answers `null` unless both arguments are exactly `X25519_SIZE` bytes. An
- * all-zero answer is **returned, not refused**: it is what a low-order `u`
- * gives, and RFC 7748 §6.1 leaves checking for it to the protocol. Nothing in
- * this tree makes that check for you yet (TLS 1.3, WP34 T1, is planned to), so
- * every caller doing a key exchange must refuse an all-zero answer itself —
- * with `timingSafeEqual` against 32 zero bytes, since the answer is a secret.
+ * X25519 on the plain scalar `scalar`, for `exposeWith` to run: the clamped
+ * copy is wiped once the ladder has used it, and the answer is the shared
+ * secret's plain bytes, which `x25519` wraps again at once.
  */
-export const x25519 = (scalar: u8[], u: u8[]): u8[] | null => {
+const x25519Exposed = (scalar: u8[], u: u8[]): u8[] | null => {
   if (toI32(scalar.length) !== 32 || toI32(u.length) !== 32) {
     return null
   }
@@ -495,16 +509,42 @@ export const x25519 = (scalar: u8[], u: u8[]): u8[] | null => {
   }
   k[0] = k[0] & toU8(248)
   k[31] = (k[31] & toU8(127)) | toU8(64)
-  return x25519Ladder(k, f25519Decode(u))
+  const out: u8[] = x25519Ladder(k, f25519Decode(u))
+  wipe(k)
+  return out
+}
+
+/**
+ * X25519 (RFC 7748 §5): the u-coordinate of `scalar * u` on curve25519, as 32
+ * little-endian bytes, held as the `Secret` it is.
+ *
+ * `scalar` is clamped as §5 says — bits 0, 1, 2 and 255 cleared, bit 254 set —
+ * on a copy, which is wiped, so the caller's key is not changed. The top bit of
+ * `u` is ignored, and a `u` of p or more is taken modulo p. The answer is
+ * always canonical (below p).
+ *
+ * Answers `null` unless both arguments are exactly `X25519_SIZE` bytes. An
+ * all-zero answer is **returned, not refused**: it is what a low-order `u`
+ * gives, and RFC 7748 §6.1 leaves checking for it to the protocol. Nothing in
+ * this tree makes that check for you yet (TLS 1.3, WP34 T1, is planned to), so
+ * every caller doing a key exchange must refuse an all-zero answer itself —
+ * inside `expose`, with `timingSafeEqual` against 32 zero bytes.
+ */
+export const x25519 = (scalar: Secret<u8[]>, u: u8[]): Secret<u8[]> | null => {
+  const shared: u8[] | null = exposeWith(scalar, u, x25519Exposed)
+  if (shared === null) {
+    return null
+  }
+  return secret(shared)
 }
 
 /**
  * `x25519(scalar, 9)`: the public key for the private key `scalar`, since 9 is
- * curve25519's base point (RFC 7748 §4.1, §6.1). Answers `null` unless
- * `scalar` is `X25519_SIZE` bytes.
+ * curve25519's base point (RFC 7748 §4.1, §6.1), and public, so plain bytes.
+ * Answers `null` unless `scalar` is `X25519_SIZE` bytes.
  */
-export const x25519Base = (scalar: u8[]): u8[] | null => {
+export const x25519Base = (scalar: Secret<u8[]>): u8[] | null => {
   const base: u8[] = new Array<u8>(32)
   base[0] = toU8(9)
-  return x25519(scalar, base)
+  return exposeWith(scalar, base, x25519Exposed)
 }

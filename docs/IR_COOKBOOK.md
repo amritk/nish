@@ -13136,6 +13136,167 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-wipe -->
 
+### `nish:secret`: `secret`, `expose` and `wipe`
+
+A `Secret<u8[]>` is `std/secret.ts`'s generic class, laid out as any class is:
+one pointer to the array. `secret`, `expose` and `wipe` are instances of that
+module's templates, emitted `internal` into the module that uses them. `expose`
+is a direct call of the function it was given, and `wipe` is one volatile
+`llvm.memset` (`i1 true`) over the array's capacity, which no pass may remove
+however dead the bytes are; its parameter is not `readonly`, because the empty
+body the source gives it is not what runs
+([LANGUAGE.md](LANGUAGE.md#secrets-nishsecret)).
+
+<!-- cookbook:begin builtin-secret -->
+```ts
+// `nish:secret`: a key wrapped, read through `expose`, and wiped. The instance
+// of `wipe` is one `llvm.memset` with its volatile flag set, over the array's
+// whole capacity, and it is copied into this module rather than linked from
+// `std/secret.ts`, which writes no `.ll` of its own.
+import { Secret, expose, secret, wipe } from "nish:secret"
+
+const width = (k: u8[]): i32 => toI32(k.length)
+
+export const useKey = (n: i32): i32 => {
+  const k: Secret<u8[]> = secret(new Array<u8>(n))
+  const w: i32 = expose(k, width)
+  wipe(k)
+  return w
+}
+```
+
+```llvm
+%struct.Secret$arr.u8 = type { %struct.nish_array* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define hidden noundef i32 @width(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %k, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  ret i32 %2
+}
+
+define noundef i32 @useKey(i32 noundef %n) #1 {
+entry:
+  %k.addr = alloca %struct.Secret$arr.u8*, align 8
+  %w.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = sext i32 %n to i64
+  %1 = call i8* @nish_alloc_struct(i64 24)
+  %2 = bitcast i8* %1 to %struct.nish_array*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
+  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %5 = call i8* @nish_alloc_struct(i64 %0)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %5, i8 0, i64 %0, i1 false), !alias.scope !4, !noalias !3
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
+  store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %7 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %2)
+  store %struct.Secret$arr.u8* %7, %struct.Secret$arr.u8** %k.addr, align 8
+  %8 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
+  %9 = call i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$arr.u8* %8)
+  store i32 %9, i32* %w.addr, align 4
+  %10 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %10)
+  %11 = load i32, i32* %w.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %11
+}
+
+define internal void @nish.Secret$arr.u8.constructor(%struct.Secret$arr.u8* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %this, i32 0, i32 0
+  store %struct.nish_array* %value, %struct.nish_array** %0, align 8, !tbaa !15
+  ret void
+}
+
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %value) #2 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Secret$arr.u8*
+  call void @nish.Secret$arr.u8.constructor(%struct.Secret$arr.u8* %1, %struct.nish_array* %value)
+  ret %struct.Secret$arr.u8* %1
+}
+
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.5.width(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !15
+  %2 = call i32 @width(%struct.nish_array* %1)
+  ret i32 %2
+}
+
+define internal void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* noundef nonnull align 8 dereferenceable(8) nocapture %_target) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %_target, i32 0, i32 0
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i32 0, i32 1
+  %3 = load i64, i64* %2, align 8
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i32 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  call void @llvm.memset.p0i8.i64(i8* %5, i8 0, i64 %3, i1 true)
+  ret void
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"ptr", !6, i64 0}
+!14 = !{!"Secret$arr.u8", !13, i64 0}
+!15 = !{!14, !13, i64 0}
+```
+<!-- cookbook:end builtin-secret -->
+
 ### `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and `readSignal`
 
 The host (WP34 N3). Each is one call into `runtime/runtime-host.c`, declared
