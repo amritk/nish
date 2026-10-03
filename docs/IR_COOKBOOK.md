@@ -12313,7 +12313,7 @@ if.end:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
+attributes #1 = { nounwind readnone }
 attributes #2 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem-tail-release -->

@@ -426,6 +426,20 @@ const CG8_MOVED = [
   "tests/parser/names-operators.ts",
 ]
 
+/** CG-4: a function on a call-graph cycle, and every caller of one, is no longer `willreturn`. */
+const CG4_MOVED = [
+  "bench/fib.ts",
+  "tests/cases/arr_range_call.ts",
+  "tests/cases/cf_fib.ts",
+  "tests/cases/cg_sec_recursion_willreturn.ts",
+  "tests/cases/cls_this_method_call.ts",
+  "tests/cases/fn_arrow.ts",
+  "tests/cases/fn_arrow_hoisting.ts",
+  "tests/cases/gen_recursive_ground.ts",
+  "tests/cases/mem_callee_scope.ts",
+  "tests/link/tail_call_depth_debug/main.ts",
+]
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -2245,6 +2259,11 @@ const DECLARED = [
     CG8_MOVED,
     "CG-8",
     "a string concatenation, a file read or write, or a call that reaches one is no longer `willreturn`, because each can exit or block"
+  ),
+  ...declareMoved(
+    CG4_MOVED,
+    "CG-4",
+    "a recursive function, or a caller of one, is no longer `willreturn`: nothing proves that a recursion ends"
   ),
 ]
 

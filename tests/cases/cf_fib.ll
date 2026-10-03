@@ -36,7 +36,7 @@ for.end:
   ret i32 %9
 }
 
-define internal noundef i32 @fibRec(i32 noundef %n) #0 {
+define internal noundef i32 @fibRec(i32 noundef %n) #1 {
 entry:
   %0 = icmp slt i32 %n, 2
   br i1 %0, label %if.then, label %if.end
@@ -53,7 +53,7 @@ if.end:
   ret i32 %5
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %0 = call i32 @fibIter(i32 20)
   %1 = call i32 @fibRec(i32 15)
@@ -62,3 +62,4 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind readnone }
