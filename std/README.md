@@ -217,7 +217,7 @@ for byte. Neither has a clock: `now` is the caller's monotonic time in
 milliseconds, and `deadline()` says when to call `handleTimer(now)` next.
 Hand the connection every datagram the client sends;
 when `signatureInput()` answers bytes, sign them (`tlsSignEcdsaP256`) and hand
-the signature to `sign`; then send whatever `takeDatagram()` answers until it
+the signature to `sign`; then send whatever `takeDatagram(now)` answers until it
 answers `null`, to the address the datagram came from. `ownsConnectionId`
 says whether a datagram's DCID is the connection's, which is how a server
 with many routes them. Stream data comes out of `readStream()` in order per
