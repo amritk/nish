@@ -612,6 +612,14 @@ export const main = (): number => {
     )
     return 2
   }
+  // The panic sites are settled after the whole-program proofs, so they are a
+  // fact about a checked program too, and the file would never be written.
+  if (emitAst && opts.emitPanics.length > 0) {
+    console.error(
+      "compile: `--emit-panics` reports on a checked program, and --emit-ast stops before the check"
+    )
+    return 2
+  }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.
   //
@@ -736,6 +744,18 @@ export const main = (): number => {
     writeCapabilityReport(compilation, capabilitiesFile)
     console.error(`wrote ${capabilitiesFile}`)
   }
+  // The panic sites are read off the checked program, as the capabilities are,
+  // so they are written here, before the dump returns: `--emit-checked` with
+  // `--emit-panics` writes both. Not a WP8 sidecar: the file describes the
+  // checks rather than the ABI, so it does not change the build the way they
+  // do (`buildModeOf`), and it needs no external function list.
+  if (opts.emitPanics.length > 0) {
+    if (!makeDirectoryFor(opts.emitPanics)) {
+      return 1
+    }
+    writeFileSync(opts.emitPanics, compilation.panicsText())
+    console.error(`wrote ${opts.emitPanics}`)
+  }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {
@@ -794,16 +814,6 @@ export const main = (): number => {
   }
   if (anySidecar && !writeSidecars(compilation, fns)) {
     return 1
-  }
-  // Not a WP8 sidecar: it describes the checks rather than the ABI, so it
-  // does not change the build the way they do (`buildModeOf`), and it needs
-  // no external function list.
-  if (opts.emitPanics.length > 0) {
-    if (!makeDirectoryFor(opts.emitPanics)) {
-      return 1
-    }
-    writeFileSync(opts.emitPanics, compilation.panicsText())
-    console.error(`wrote ${opts.emitPanics}`)
   }
   if (link.length === 0) {
     return 0

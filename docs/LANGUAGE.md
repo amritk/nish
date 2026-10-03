@@ -6097,10 +6097,11 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   `"proven"` for a check, `"proven","callee"` for `parallel-length`,
   `"callee","via"` for `call` and `"allowed": true` for `oom`. Lines and
   columns are 1-based, in the units a diagnostic uses. The `wrote <file>` line
-  is on stderr, like the IR's. It is written by a compile that writes IR: a
-  program that does not compile writes none, and neither does a dump flag
-  (`--emit-ast`, `--emit-checked`), which answers instead of compiling; `nish
-  run` refuses the flag.
+  is on stderr, like the IR's. It is written once the program is checked: a
+  program that does not compile writes none, and `--emit-checked` writes it
+  beside its dump. `--emit-ast`, which stops before the check, refuses it with
+  a usage error (exit 2) rather than leaving the file unwritten, and so do
+  `nish run`, which keeps its build to itself, and `--fix`, which writes no IR.
 
 ## Forbidden constructs (Phase 0 validator)
 

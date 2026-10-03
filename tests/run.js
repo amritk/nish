@@ -11267,6 +11267,41 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       shown(withFix)
     )
   }
+  // `--emit-panics` is the same kind of report: refused where the program is
+  // not checked (`--emit-ast`, `--fix`), and written beside `--emit-checked`'s
+  // dump rather than dropped by it (docs/LANGUAGE.md, "Panic sites").
+  const panicsSource = path.join(casesDir, "panics_index.ts")
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-panics` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-panics` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `panics${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-panics", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `panic sites: --emit-panics with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 &&
+        refused.stdout === "" &&
+        refused.stderr.includes(refusal) &&
+        !fs.existsSync(file),
+      shown(refused)
+    )
+  }
+  const panicsChecked = path.join(capsDir, "panics-checked.json")
+  const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "panic sites: --emit-checked with --emit-panics prints the dump and writes the sites",
+    dumped.status === 0 &&
+      dumped.stdout.includes("panics_index.ts") &&
+      fs.existsSync(panicsChecked) &&
+      fs.readFileSync(panicsChecked, "utf8").startsWith('{"functions":['),
+    shown(dumped)
+  )
   // `--emit-checked` does stop after it, and both are answered before the dump.
   const withChecked = spawnSync(
     NISH,
