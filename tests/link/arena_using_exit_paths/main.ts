@@ -1,8 +1,9 @@
 // `using a = arena()` releases at every exit of the block that declares it —
 // its end, a `return` (after the returned value is computed), and a `break` or
 // `continue` that leaves it — and in the reverse of the order it opened in
-// with a `using s = scope()` inside it, a scoped loop pass around it, a
-// `switch` on either side of it, and a second arena in the same declaration.
+// with a `using s = scope()` inside it or before it, a scoped loop pass or a
+// function's own scope around it, a `switch` on either side of it, and a
+// second arena in the same declaration.
 // Every function here is one the compiler gives no automatic scope of its
 // own, so the block's release is the only one: each answers a pointer, or
 // manages the arena with `Arena.mark()`. Each line ends with how far the
@@ -149,6 +150,51 @@ const pair = (k: i32, t: Tally): Tally => {
 };
 
 /**
+ * A function the compiler gives an automatic scope of its own — it answers a
+ * number, and everything it allocates dies with it — that also opens a block.
+ * The block releases as it falls through; a `return` from inside it releases
+ * the function's mark, which is the lower and frees the block's too.
+ */
+const ownScope = (k: i32): i32 => {
+  const label = `k=${k}`;
+  {
+    using a = arena();
+    const xs = fill(k);
+    if (xs.length > k) {
+      return label.length;
+    }
+  }
+  return label.length + k;
+};
+
+/**
+ * `using s = scope()` and then `using a = arena()` in one block, with a task
+ * spawned before the arena line. A `return` joins the scope before its value
+ * is computed and releases the arena after; `break` and falling through
+ * release the arena first and then join the scope, the reverse of the order
+ * they opened in. The scope object and `res` are allocated before the arena
+ * line, so they are this function's to keep: what is pinned is that the arena
+ * grows by the same amount whatever `k` makes `fill` allocate.
+ */
+const scopeThenArena = (k: i32, t: Tally, mode: i32): Tally => {
+  const res: i32[] = [0, 0];
+  for (let i = 0; i < 2; i++) {
+    using s = scope();
+    s.spawn(triple, k + i, res, i);
+    using a = arena();
+    const xs = fill(k);
+    if (mode === 0 && xs.length > 0) {
+      return t;
+    }
+    if (mode === 1 && xs.length > 0) {
+      break;
+    }
+  }
+  t.n = t.n + res[0] + res[1];
+  return t;
+};
+
+/**
  * A scope inside the block joins first; a scoped pass around the block
  * releases after it. The destination is the scope's own fresh `const`, and
  * the copy of it this function hands back moves the arena by the same few
@@ -193,6 +239,20 @@ export const main = (): i32 => {
   const r10 = switched(1000, t, 2).n;
   const r11 = pair(1000, t).n;
   const d6 = Arena.used() - b6;
+  const b7 = Arena.used();
+  const r12 = ownScope(1000) + ownScope(2);
+  const d7 = Arena.used() - b7;
+  const u = new Tally();
+  const b8 = Arena.used();
+  const r13 = scopeThenArena(1000, u, 0).n;
+  const r14 = scopeThenArena(1000, u, 1).n;
+  const r15 = scopeThenArena(1000, u, 2).n;
+  const d8 = Arena.used() - b8;
+  const b9 = Arena.used();
+  scopeThenArena(1, u, 0);
+  scopeThenArena(1, u, 1);
+  scopeThenArena(1, u, 2);
+  const d9 = Arena.used() - b9;
   const b4 = Arena.used();
   const r6 = nested(1000);
   const d4 = Arena.used() - b4;
@@ -203,6 +263,8 @@ export const main = (): i32 => {
   console.log(`${r3} ${d2}`);
   console.log(`${r4} ${r5} ${d3}`);
   console.log(`${r8} ${r9} ${r10} ${r11} ${d6}`);
+  console.log(`${r12} ${d7}`);
+  console.log(`${r13} ${r14} ${r15} ${d8 === d9}`);
   console.log(`${r6[0]} ${r6[1]} ${r7[0]} ${r7[1]} ${d4 === d5}`);
   return 0;
 };

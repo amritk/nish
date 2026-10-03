@@ -4679,7 +4679,9 @@ const tally = (rows: string[]): i32 => {
   call `Arena.*` (`reject_using_arena_parallel`, NL2351).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
-  theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up.
+  theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
+  nothing about a call inside the block, whose leftovers the block releases
+  (`tests/cases/perf_arena_using`).
 
 ### `Map` and `Set`
 

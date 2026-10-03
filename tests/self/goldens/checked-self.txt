@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1253442 dump lines live, 76 distinct modules.
+# 76 programs, 1253526 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -16763,7 +16763,7 @@ function findArenaLoops(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1910:7
   escaping: head reason reclaimed
-  calls: ArenaFinding.constructor FactsTable.get diesWithPass findArenaLoops leavesGarbage loopScopeOf nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq passReason
+  calls: ArenaFinding.constructor FactsTable.get diesWithPass findArenaLoops isArenaUsing leavesGarbage loopScopeOf nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq passReason
   pointer unit: size=16 writesThrough=false captured=false passedTo=passReason#0 findArenaLoops#0 findArenaLoops#0 findArenaLoops#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 findArenaLoops#1 findArenaLoops#1 findArenaLoops#1
   pointer f: size=208 writesThrough=false captured=false passedTo=diesWithPass#0 loopScopeOf#0 findArenaLoops#2 findArenaLoops#2 findArenaLoops#2
@@ -16783,35 +16783,37 @@ function findArenaLoops(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts,
   local 1921:9 isLoop: boolean (const)
   local 1922:9 scope: LoopScope | null (const)
   callee 1922:44 loopScopeOf -> @loopScopeOf
-  local 1923:7 i: i32 (let)
-  local 1925:11 child: Node (const)
-  local 1927:11 once: boolean (const)
-  callee 1929:7 findArenaLoops -> @findArenaLoops
-  callee 1931:7 findArenaLoops -> @findArenaLoops
+  local 1925:7 released: boolean (let)
+  local 1926:7 i: i32 (let)
+  local 1928:11 child: Node (const)
+  callee 1929:54 isArenaUsing -> @isArenaUsing
+  local 1931:11 once: boolean (const)
   callee 1933:7 findArenaLoops -> @findArenaLoops
+  callee 1935:7 findArenaLoops -> @findArenaLoops
+  callee 1937:7 findArenaLoops -> @findArenaLoops
 function loopScopeOf(f: FunctionFacts, loop: Node): LoopScope | null -> @loopScopeOf
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer f: size=208 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1940:14 scope: LoopScope (const)
+  local 1944:14 scope: LoopScope (const)
 function passReason(unit: AnalysisUnit, loop: LoopScope): string -> @passReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer unit: size=16 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1950:9 at: Node | null (const)
-  local 1951:9 line: string (const)
-  callee 1951:38 SourceFile.lineOf -> @SourceFile.lineOf
-  local 1952:9 why: i32 (const)
+  local 1954:9 at: Node | null (const)
+  local 1955:9 line: string (const)
+  callee 1955:38 SourceFile.lineOf -> @SourceFile.lineOf
+  local 1956:9 why: i32 (const)
 function diesWithPass(f: FunctionFacts, g: FunctionFacts, call: Node): boolean -> @diesWithPass
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer f: size=208 writesThrough=false captured=false
   pointer g: size=208 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1987:14 site: CallSite (const)
+  local 1991:14 site: CallSite (const)
 function noScopeReason(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts): string -> @noScopeReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf calleeWhere nish_str_concat nish_str_from_i32
@@ -16819,12 +16821,12 @@ function noScopeReason(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
   pointer facts: size=16 writesThrough=false captured=false passedTo=calleeWhere#0 calleeWhere#0
   pointer f: size=208 writesThrough=false captured=false passedTo=calleeWhere#1 calleeWhere#1
   stackSites=0 stackLocals=0
-  local 2005:11 site: Node | null (const)
-  callee 2007:40 SourceFile.lineOf -> @SourceFile.lineOf
-  local 2009:11 leaky: FunctionFacts | null (const)
-  callee 2009:19 calleeWhere -> @calleeWhere
-  local 2015:11 control: FunctionFacts | null (const)
-  callee 2015:21 calleeWhere -> @calleeWhere
+  local 2009:11 site: Node | null (const)
+  callee 2011:40 SourceFile.lineOf -> @SourceFile.lineOf
+  local 2013:11 leaky: FunctionFacts | null (const)
+  callee 2013:19 calleeWhere -> @calleeWhere
+  local 2019:11 control: FunctionFacts | null (const)
+  callee 2019:21 calleeWhere -> @calleeWhere
 function leavesGarbage(g: FunctionFacts): boolean -> @leavesGarbage
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer g: size=208 writesThrough=false captured=false
@@ -16835,12 +16837,12 @@ function calleeWhere(facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer f: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2033:7 c: i32 (let)
-  callee 2034:14 StringSet.size -> @StringSet.size
-  local 2035:11 g: FunctionFacts | null (const)
-  callee 2035:15 FactsTable.get -> @FactsTable.get
-  callee 2035:25 StringSet.at -> @StringSet.at
-  callee 2040:37 leavesGarbage -> @leavesGarbage
+  local 2037:7 c: i32 (let)
+  callee 2038:14 StringSet.size -> @StringSet.size
+  local 2039:11 g: FunctionFacts | null (const)
+  callee 2039:15 FactsTable.get -> @FactsTable.get
+  callee 2039:25 StringSet.at -> @StringSet.at
+  callee 2044:37 leavesGarbage -> @leavesGarbage
 module src/emit-util.ts
 import isNetWrittenLetter from "./nish-modules" -> function @isNetWrittenLetter
 import netSignature from "./nish-modules" -> function @netSignature

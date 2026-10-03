@@ -1938,6 +1938,12 @@ const DECLARED = [
     why: "a new program: a tail call out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
   },
   {
+    program: "tests/cases/perf_arena_using.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: the arena-loop warning's shape with the loop body in a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
     program: "docs/cookbook/mem-using-arena.ts",
     file: "exit",
     changelog: "a checked arena bracket",

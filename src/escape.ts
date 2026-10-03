@@ -1920,13 +1920,17 @@ const findArenaLoops = (
   }
   const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
   const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  // What a block allocates after its `using a = arena()` is released when the
+  // block ends, on every pass that runs it (`arenaBlockFindings` proved it).
+  let released = reclaimed
   let i = 0
   while (i < node.children.length) {
     const child = node.children[i]
+    released = released || (node.kind === N_BLOCK && isArenaUsing(unit.program, child))
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1)
     if (scope === null || once) {
-      findArenaLoops(unit, facts, f, reason, child, loop, reclaimed, head, out)
+      findArenaLoops(unit, facts, f, reason, child, loop, released, head, out)
     } else if (child === scope.body) {
       findArenaLoops(unit, facts, f, reason, child, scope, reclaimed || scope.scoped, false, out)
     } else {

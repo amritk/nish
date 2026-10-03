@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 840 programs, 59226 dump lines.
+# 841 programs, 59255 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -43412,6 +43412,36 @@ function test(): i32 -> @test [exported]
   local 42:7 row: string (let)
   local 43:12 i: i32 (let)
   callee 48:46 build -> @build
+program tests/cases/perf_arena_using.ts
+module tests/cases/perf_arena_using.ts (entry)
+struct Log (class) size=16 align=8
+  field last: string index=0 offset=0 initialized
+  field total: i32 index=1 offset=8 initialized
+function build(n: i32): i32[] -> @build
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 14:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 12:9 xs: i32[] (const)
+  local 13:12 i: i32 (let)
+function collect(rounds: i32, log: Log): Log -> @collect
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  sharedWrite: 21:5
+  escaping: log
+  calls: build nish_arena_release nish_str_concat nish_str_from_i32
+  pointer log: size=16 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 20:12 i: i32 (let)
+  local 22:11 a: i64 (const)
+  local 23:11 xs: i32[] (const)
+  callee 23:16 build -> @build
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via collect
+  calls: collect nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 30:9 log: Log (const)
+  callee 30:15 collect -> @collect
 program tests/cases/perf_bounds_loop.ts
 module tests/cases/perf_bounds_loop.ts (entry)
 function test(): i32 -> @test [exported]

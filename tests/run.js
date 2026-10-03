@@ -2521,6 +2521,14 @@ if (!only || "performance".includes(only)) {
     arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
     arenaControl.stderr
   )
+  // A call inside a `using a = arena()` block leaves nothing behind once the
+  // block releases, whatever refused the pass and the function their scopes.
+  const arenaUsing = compile("perf_arena_using", "perf_arena_using_report.ll")
+  check(
+    "mem_loop_scope: no NL9011 for a call inside a `using a = arena()` block",
+    arenaUsing.status === 0 && summaries(arenaUsing.stderr).length === 0,
+    arenaUsing.stderr
+  )
 
   // #216's acceptance, as a peak resident set rather than as `Arena.used()`:
   // `mem_loop_scope_chunk`'s pointer-returning loop allocates more than an

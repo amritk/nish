@@ -216,6 +216,7 @@ cases/os_signal added after R6: no rewriter to freeze it with
 cases/os_signal_import added after R6: no rewriter to freeze it with
 cases/perf_arena_control added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
+cases/perf_arena_using added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_f64 added after R6: no rewriter to freeze it with
 cases/perf_bounds_toi32_loop added after R6: no rewriter to freeze it with
