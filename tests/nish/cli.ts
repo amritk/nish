@@ -68,6 +68,10 @@ const DEFAULT_CLI: string = "build/nish";
 const FIXTURE_OK: string = "ok.ts";
 /** A program with two errors in it, so "one object per diagnostic" is a countable claim. */
 const FIXTURE_BAD: string = "bad.ts";
+/** A loose equality, the diagnostic with a fix: `--fix` rewrites a copy of it, never this file. */
+const FIXTURE_FIX: string = "fix.ts";
+/** A `throw`, a diagnostic no fix is safe for. */
+const FIXTURE_NOFIX: string = "nofix.ts";
 /** A program that compiles and earns a WP15 §8 warning, which is a diagnostic on a program that is fine. */
 const FIXTURE_WARN: string = "warn.ts";
 
@@ -89,6 +93,7 @@ const advertisedFlags = (): string[] => [
   "--target",
   "--profile",
   "--warn-portability",
+  "--fix",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -248,7 +253,7 @@ class Cli {
 }
 
 /**
- * The three fixtures, written rather than pointed at: a check that asserts the
+ * The fixtures, written rather than pointed at: a check that asserts the
  * line a diagnostic names should own the file that line is in, and a corpus case
  * edited for its own reasons would move it.
  */
@@ -269,6 +274,15 @@ const writeFixtures = (): void => {
       "};",
       "",
     ].join("\n")
+  );
+  // `==` at line 2, columns 12 to 14: the fix's position is pinned to the column.
+  writeFileSync(
+    `${WORK}/${FIXTURE_FIX}`,
+    ["export const same = (a: i32, b: i32): boolean => {", "  return a == b;", "};", ""].join("\n")
+  );
+  writeFileSync(
+    `${WORK}/${FIXTURE_NOFIX}`,
+    ["export const fail = (): i32 => {", '  throw new Error("no");', "};", ""].join("\n")
   );
   // WP15 §8: a `new Array<T>(n)` whose length is not a literal cannot be an
   // alloca, so this loop bumps one out of the arena every pass and nothing keeps
@@ -501,6 +515,51 @@ const checkDeprecatedFlagObjects = (t: Suite, cli: Cli): void => {
   t.eqStr("a performance one", cliField(wrappingObjects[0], "severity"), "performance");
   t.eqStr("whose code is the --wrapping deprecation", cliField(wrappingObjects[0], "code"), "NL9015");
   t.eqI32("--no-warn-performance silences both", toI32(cliObjectLines(quiet.stdout).length), 0);
+};
+
+/**
+ * The machine-applicable fix: `fix` on the object, after `message`, with the
+ * exact span of the token it replaces — and no `fix` key at all, rather than an
+ * empty one, on a diagnostic no fix is safe for. Then `--fix` itself: it rewrites
+ * a copy of the file, answers like a clean compile, and refuses `-o`.
+ */
+const checkFixField = (t: Suite, cli: Cli): void => {
+  const loose = cli.plain("fix_json", [`${WORK}/${FIXTURE_FIX}`, "--json", "-o", `${WORK}/fix.ll`]);
+  t.eqI32("a loose equality is refused with exit 1", loose.status, 1);
+  const objects = cliObjectLines(loose.stdout);
+  if (t.eqI32("as one object", toI32(objects.length), 1)) {
+    t.eqStr(
+      "which carries `fix`: the span of `==` alone, replaced by `===`",
+      cliField(objects[0], "fix"),
+      '[{"line":2,"column":12,"endLine":2,"endColumn":14,"text":"==="}]'
+    );
+    t.eqBool("and `fix` is the last key, after `message`", objects[0].endsWith("]}"), true);
+  }
+
+  const thrown = cli.plain("nofix_json", [`${WORK}/${FIXTURE_NOFIX}`, "--json", "-o", `${WORK}/nofix.ll`]);
+  const thrownObjects = cliObjectLines(thrown.stdout);
+  if (t.eqI32("a `throw` is one object", toI32(thrownObjects.length), 1)) {
+    t.eqStr("with no `fix` key, rather than an empty one", cliField(thrownObjects[0], "fix"), "<absent>");
+  }
+
+  const copy = `${WORK}/fix_copy.ts`;
+  writeFileSync(copy, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const fixed = cli.plain("fix_apply", ["--fix", "--json", copy]);
+  t.eqI32("--fix exits 0 once every diagnostic is fixed", fixed.status, 0);
+  t.eqStr("and prints no object, because none is left", trim(fixed.stdout), "");
+  t.contains("and rewrote the file", readOrEmpty(copy), "return a === b;");
+
+  const withOutput = cli.plain("fix_output", ["--fix", copy, "-o", `${WORK}/fix_copy.ll`]);
+  t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
+  t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
+
+  // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
+  const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
+  t.eqI32("`nish run --fix` is a usage error, exit 2", underRun.status, 2);
+  t.eqBool("refused as a run, naming --fix", underRun.stderr.startsWith("run: `--fix` cannot be used"), true);
+  const underRunOutput = cli.plain("fix_run_output", ["run", "--fix", "-o", `${WORK}/fix_copy.ll`, copy]);
+  t.eqI32("`nish run --fix -o` is a usage error, exit 2", underRunOutput.status, 2);
+  t.eqBool("refused as a run too, not as a compile", underRunOutput.stderr.startsWith("run: "), true);
 };
 
 /**
@@ -1205,6 +1264,7 @@ export const main = (): number => {
   checkWarningObjects(t, cli);
   checkDeprecatedFlagObjects(t, cli);
   checkPortabilityObjects(t, cli);
+  checkFixField(t, cli);
   checkDumps(t, cli);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
