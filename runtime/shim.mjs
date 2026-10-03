@@ -757,6 +757,38 @@ export function statMtimeSync(path) {
 }
 
 /**
+ * The RT-9 owner checks (#386): `lstatOwnerModeSync(path)` is the owner's uid
+ * in the high 32 bits and `st_mode` in the low 32 of one `lstat`, so a
+ * symbolic link answers for itself, or -1 when the path does not resolve or
+ * holds a NUL; `geteuid()` is the effective uid; `isExecutableSync(path)` is
+ * `access(path, X_OK)`. Each answers what `runtime-host.c` answers, the two
+ * `i64`s as BigInts because that is how an `i64` is held on this side. Node's
+ * `fs` throws on a NUL in a path where the runtime names nothing, so the
+ * `catch` is what makes the two agree there too.
+ */
+export function lstatOwnerModeSync(path) {
+  try {
+    const st = fs.lstatSync(path);
+    return BigInt.asIntN(64, (BigInt(st.uid >>> 0) << 32n) | BigInt(st.mode >>> 0));
+  } catch {
+    return -1n;
+  }
+}
+
+export function geteuid() {
+  return BigInt(process.geteuid());
+}
+
+export function isExecutableSync(path) {
+  try {
+    fs.accessSync(path, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * `secureZero(bytes)` (#385): every element set to zero, which is what the
  * native `nish_wipe` leaves. Nothing here can drop a store to an array the
  * caller still holds, so a loop is the whole of it. What it cannot promise is

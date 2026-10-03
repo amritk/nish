@@ -154,6 +154,9 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "readSignal" ||
     name === "arena" ||
     name === "secureZero" ||
+    name === "lstatOwnerModeSync" ||
+    name === "geteuid" ||
+    name === "isExecutableSync" ||
     isNetExport(name) ||
     isUnsafeExport(name)
   )
@@ -914,6 +917,28 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     requireStatementPosition(ctx, call, name)
     return T_VOID
+  }
+  // #386, runtime-host.c (RT-9). Who owns a path and whether it runs, which a
+  // driver asks before it trusts a directory or a program it found on its own
+  // (docs/security/cli.md, CLI-7 and CLI-9). `lstatOwnerModeSync` is one
+  // `lstat`, so a symbolic link answers for itself: the owner's uid in the high
+  // 32 bits and `st_mode` in the low 32, one `i64` from one call so the two
+  // cannot come from different files, or -1 when the path does not resolve.
+  // `geteuid` is the uid to compare that owner with, and `isExecutableSync` is
+  // `access(X_OK)`. `i64` in either number mode, as `monotonicNanos` is: a uid
+  // is a `u32`, and the packed answer needs all 64 bits. Refused on wasm, as
+  // `statMtimeSync` is, because runtime-host.c is empty on a wasm build.
+  if (name === "lstatOwnerModeSync" || name === "isExecutableSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return name === "isExecutableSync" ? T_BOOL : T_I64
+  }
+  if (name === "geteuid") {
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnWasm(ctx, call, name)
+    }
+    return T_I64
   }
   if (isNetExport(name)) {
     return checkNet(ctx, call, scope, name)
