@@ -4558,8 +4558,12 @@ const tally = (rows: string[]): i32 => {
   `mem_using_arena_or_return`). It nests with everything else on the same
   stack, innermost first: a `using s = scope()` inside the block joins before
   the block releases, and a block inside a scoped loop pass or a function's
-  automatic scope releases before they do. `throw` and a panic end the
-  process. Statements of the block before the declaration are outside it.
+  automatic scope releases before they do; a `return` releases only the
+  outermost of them, whose mark is the lowest. A `return g(n)` whose
+  arguments are all numbers is a tail call with the release moved ahead of
+  it, unless `g` reads the arena (`mem_using_arena_tail`). `throw` and a
+  panic end the process. Statements of the block before the declaration are
+  outside it.
 - **Nothing allocated inside may outlive the block.** From the declaration to
   the end of the block, each of these is refused, naming the value and where
   it would go:

@@ -60,6 +60,38 @@ const passes = (k: i32, t: Tally): Tally => {
 };
 
 /**
+ * A `return` with a scoped pass and a block one inside the other releases
+ * the outer of the two, whose mark is the lower: the pass in `inPass`, where
+ * the block opens inside each pass, and the block in `aroundPass`, where the
+ * passes run inside the block.
+ */
+const inPass = (k: i32, t: Tally): Tally => {
+  for (let i = 0; i < 3; i++) {
+    const ys = fill(k);
+    using a = arena();
+    const zs = fill(ys.length);
+    if (i === 1) {
+      return t;
+    }
+    t.n = t.n + zs.length;
+  }
+  return t;
+};
+
+const aroundPass = (k: i32, t: Tally): Tally => {
+  using a = arena();
+  const xs = fill(k);
+  for (let i = 0; i < 3; i++) {
+    const zs = fill(xs.length);
+    if (i === 1) {
+      return t;
+    }
+    t.n = t.n + zs.length;
+  }
+  return t;
+};
+
+/**
  * A scope inside the block joins first; a scoped pass around the block
  * releases after it. The destination is the scope's own fresh `const`, and
  * the copy of it this function hands back moves the arena by the same few
@@ -94,6 +126,10 @@ export const main = (): i32 => {
   const b2 = Arena.used();
   const r3 = passes(1000, t).n;
   const d2 = Arena.used() - b2;
+  const b3 = Arena.used();
+  const r4 = inPass(1000, t).n;
+  const r5 = aroundPass(1000, t).n;
+  const d3 = Arena.used() - b3;
   const b4 = Arena.used();
   const r6 = nested(1000);
   const d4 = Arena.used() - b4;
@@ -102,6 +138,7 @@ export const main = (): i32 => {
   const d5 = Arena.used() - b5;
   console.log(`${r1} ${r2} ${d1}`);
   console.log(`${r3} ${d2}`);
+  console.log(`${r4} ${r5} ${d3}`);
   console.log(`${r6[0]} ${r6[1]} ${r7[0]} ${r7[1]} ${d4 === d5}`);
   return 0;
 };

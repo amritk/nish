@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 836 programs, 59095 dump lines.
+# 837 programs, 59136 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42353,6 +42353,48 @@ function main(): void -> @nish_main [exported entry]
   local 26:9 err: i32 (const)
   callee 26:15 propagate -> @propagate
   local 27:9 after: i64 (const)
+program tests/cases/mem_using_arena_tail.ts
+module tests/cases/mem_using_arena_tail.ts (entry)
+struct Tally (class) size=8 align=8
+  field label: string index=0 offset=0 initialized
+function fill(k: i32): i32[] -> @fill
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 15:5
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 13:9 xs: i32[] (const)
+  local 14:12 i: i32 (let)
+function report(base: i64): void -> @report
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_used nish_print
+  stackSites=0 stackLocals=0
+function quiet(n: i32): void -> @quiet
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+function run(t: Tally, k: i32, loud: boolean): void -> @run
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 29:3
+  escaping: k
+  calls: fill nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 quiet report
+  pointer t: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 30:9 base: i64 (const)
+  local 31:9 a: i64 (const)
+  local 32:9 xs: i32[] (const)
+  callee 32:14 fill -> @fill
+  callee 34:12 report -> @report
+  callee 36:10 quiet -> @quiet
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via run
+  calls: nish_arena_mark nish_arena_release nish_print run
+  stackSites=1 stackLocals=1
+  local 40:9 t: Tally (const)
+  callee 41:3 run -> @run
+  callee 42:3 run -> @run
 program tests/cases/neg_literal_i64_min.ts
 module tests/cases/neg_literal_i64_min.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

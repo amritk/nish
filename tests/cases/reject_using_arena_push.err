@@ -1,1 +1,2 @@
-`xs.push(1)` grows `xs` inside the `using arena()` block at 7:5, and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)
+`xs.push(1)` grows `xs` inside the `using arena()` block at 16:5, and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)
+`bag.xs.push(2)` grows an array inside the `using arena()` block at 20:5, and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)
