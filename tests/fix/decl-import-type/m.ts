@@ -1,0 +1,4 @@
+export interface Point {
+  x: i32
+  y: i32
+}
