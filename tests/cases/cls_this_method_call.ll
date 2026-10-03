@@ -48,7 +48,7 @@ if.end:
   ret i1 true
 }
 
-define internal noundef i32 @Account.drain(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
+define internal noundef i32 @Account.drain(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #1 {
 entry:
   %0 = call i1 @Account.withdraw(%struct.Account* %this, i32 %step)
   %1 = xor i1 %0, true
@@ -64,13 +64,13 @@ if.end:
   ret i32 %4
 }
 
-define internal noundef zeroext i1 @Account.same(%struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %other) #1 {
+define internal noundef zeroext i1 @Account.same(%struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %other) #2 {
 entry:
   %0 = icmp eq %struct.Account* %this, %other
   ret i1 %0
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %a.addr = alloca %struct.Account*, align 8
   %Account.obj = alloca %struct.Account, align 8
@@ -105,7 +105,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -113,8 +113,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

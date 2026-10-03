@@ -9,13 +9,13 @@
 @.str.8 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"not a directory\0A\00" }, align 8
 @.str.9 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c"over a file: \00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #0
+declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -49,12 +49,12 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }

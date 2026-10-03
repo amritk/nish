@@ -4,6 +4,11 @@
 // their bytes: a second spelling of them, which a strict decoder exists to
 // refuse. The text is 2^31 + 4 `A`s, built by joining 2^15 copies of a 2^16-
 // character piece. docs/security/crypto-k1.md, finding K1-3.
+//
+// Since CG-3 (docs/security/codegen.md) no string can pass 2^31 - 1 bytes,
+// so that join is refused as an allocation is (`nish: out of memory`, exit 1)
+// before either check runs, and nothing reaches stdout. The decoder's own
+// guard stays, for a text a C host hands in.
 import { base64urlDecode } from "nish/crypto/base64url";
 import { Suite } from "nish/testing";
 

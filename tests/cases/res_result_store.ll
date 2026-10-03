@@ -10,14 +10,14 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
@@ -98,7 +98,7 @@ cond.end:
   ret i8* %9
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %rs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -217,7 +217,7 @@ bounds.ok.1:
   ret i32 0
 }
 
-define internal void @Stack$res.i32.str.constructor(%struct.Stack$res.i32.str* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #0 {
+define internal void @Stack$res.i32.str.constructor(%struct.Stack$res.i32.str* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -232,7 +232,7 @@ entry:
   ret void
 }
 
-define internal void @Stack$res.i32.str.push(%struct.Stack$res.i32.str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.nish_result.i32.str* noundef nonnull align 8 dereferenceable(16) %item) #0 {
+define internal void @Stack$res.i32.str.push(%struct.Stack$res.i32.str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.nish_result.i32.str* noundef nonnull align 8 dereferenceable(16) %item) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Stack$res.i32.str, %struct.Stack$res.i32.str* %this, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -259,7 +259,7 @@ push.store:
   ret void
 }
 
-define internal void @Stack$res.i32.str.drop(%struct.Stack$res.i32.str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal void @Stack$res.i32.str.drop(%struct.Stack$res.i32.str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stack$res.i32.str, %struct.Stack$res.i32.str* %this, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -283,15 +283,15 @@ pop.ok:
   ret void
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
