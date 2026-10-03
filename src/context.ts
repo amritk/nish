@@ -7,7 +7,8 @@
 // a sentinel or stop. stage0's `src/` throws a `CompileError` from 292 sites and
 // catches it in six; every one of those catches becomes a status test here.
 
-import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
+import { Lexer } from "./lexer"
 import { StringMap, StringSet } from "./map"
 import { Node } from "./nodes"
 import {
@@ -230,6 +231,56 @@ export class CheckContext {
     }
     this.sink.report(this.source, start, end, message)
     this.errored = true
+  }
+
+  /**
+   * `error` with a machine-applicable fix (`Edit`, in `src/diagnostics.ts`):
+   * the same span, the same message and the same once-per-statement guard, so
+   * a fix is never reported for a statement that has already said something.
+   * Build the edits with `edit`, and attach them only when applying all of
+   * them keeps the program's meaning — when in doubt, call `error` instead.
+   */
+  errorFix(node: Node, message: string, edits: Edit[]): void {
+    if (this.errored) {
+      return
+    }
+    this.sink.reportFix(this.source, node.start, node.end, message, edits)
+    this.errored = true
+  }
+
+  /** `performance` with a machine-applicable fix, on the terms `errorFix` states. */
+  performanceFix(node: Node, message: string, edits: Edit[]): void {
+    this.sink.reportPerformanceFix(this.source, node.start, node.end, message, edits)
+  }
+
+  /**
+   * One edit of this module's source: replace the bytes `[start, end)` with
+   * `text`, or insert `text` at `start` when `end === start`. The offsets are
+   * the ones a `Node` carries, so a span is usually a node's or a piece of one.
+   */
+  edit(start: i32, end: i32, text: string): Edit {
+    return new Edit(start, end, text)
+  }
+
+  /**
+   * The byte offset of a binary node's operator token, or -1 when it cannot
+   * be found. The tree keeps the operator as `text` and no span for it, so a
+   * scratch lexer skips the trivia after the left operand — the parser's own
+   * rule for whitespace and comments — and the token it lands on has to be
+   * that text, before the right operand starts. A fix that rewrites the
+   * operator replaces `operatorStart(node)` to `+ node.text.length`.
+   */
+  operatorStart(node: Node): i32 {
+    if (node.children.length !== 2) {
+      return -1
+    }
+    const scan = new Lexer(this.source.text)
+    scan.pos = node.children[0].end
+    scan.skipTrivia()
+    const at = scan.pos
+    const op = node.text
+    const fits = at + op.length <= node.children[1].start
+    return fits && this.source.text.substring(at, at + op.length) === op ? at : -1
   }
 
   /**

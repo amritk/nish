@@ -28,6 +28,7 @@
 
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
+import { Edit } from "./diagnostics"
 import { unwrapParens } from "./emit-util"
 import {
   FLAG_ASYNC,
@@ -190,6 +191,26 @@ const forbiddenOperator = (operator: string): string => {
     return "`yield` is forbidden in " + LANGUAGE + " (no coroutine runtime)"
   }
   return ""
+}
+
+/**
+ * The fix for loose equality: `==` becomes `===` and `!=` becomes `!==`, the
+ * operator token and nothing else. It keeps the meaning because both operands
+ * already have to be one type in this language — the coercions that set `==`
+ * apart from `===` are exactly what the checker refuses — and TypeScript reads
+ * the strict operator the way it was plainly meant. Empty, so no fix, for any
+ * other operator, and when the token cannot be found between the operands.
+ */
+const strictEqualityFix = (ctx: CheckContext, node: Node): Edit[] => {
+  const edits: Edit[] = []
+  if (node.text !== "==" && node.text !== "!=") {
+    return edits
+  }
+  const at = ctx.operatorStart(node)
+  if (at >= 0) {
+    edits.push(ctx.edit(at, at + node.text.length, `${node.text}=`))
+  }
+  return edits
 }
 
 /** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
@@ -355,7 +376,7 @@ const visit = (ctx: CheckContext, node: Node, inTypePosition: boolean): void => 
     case N_BINARY: {
       const message = forbiddenOperator(node.text)
       if (message.length > 0) {
-        ctx.error(node, message)
+        ctx.errorFix(node, message, strictEqualityFix(ctx, node))
       }
       // WP32: `x === undefined` and `x !== undefined` are how a maybe is
       // tested, so `undefined` is let through as an operand of those two and

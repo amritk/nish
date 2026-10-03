@@ -35,6 +35,7 @@ and it is the only authority.
 
 ```bash
 nish program.ts --json            # one JSON object per diagnostic, on stdout
+nish --fix program.ts             # apply every machine-applicable fix, then report what is left
 nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
 nish run program.ts a b           # build into a cache, then run it with `a b`
@@ -68,6 +69,24 @@ exclusive:
   status after that.
 - Every failure is a `--json` object, toolchain and internal errors included,
   so you never have to parse stderr to find out why a run failed.
+
+Some diagnostics carry a **`fix`**: the edits that make the line compile,
+when the rewrite is mechanical and keeps the program's meaning. It comes last,
+and each edit is placed exactly as the diagnostic is — `text` replaces the span,
+and a span whose start equals its end is an insertion:
+
+```json
+{"file":"p.ts","line":2,"column":10,"endLine":2,"endColumn":16,"severity":"error","code":"NL1047","message":"Loose equality is forbidden; use === / !==","fix":[{"line":2,"column":12,"endLine":2,"endColumn":14,"text":"==="}]}
+```
+
+A diagnostic with no safe rewrite has no `fix` key at all. `nish --fix
+program.ts` applies every fix to the files named on its command line (never to
+an import from `std/` or `node_modules`), recompiles, and repeats until nothing
+changes or five rounds pass; then it reports what is left exactly as a plain
+run would, `--json` included, and exits with that run's code. It writes no IR,
+so it refuses `-o` and `--link`. It rewrites your files in place, with no
+backup, so run it on a committed or backed-up tree. Run it first, then read
+what remains.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both

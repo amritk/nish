@@ -3211,6 +3211,165 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     )
   } else {
     skip("deprecation: `nish run` needs clang")
+// ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
+// A diagnostic may carry `fix`, a list of edits that `nish --fix` applies
+// (`src/fix.ts`, AGENTS.md "Machine-readable surfaces"). Each case runs on a copy
+// in a directory of its own, because `--fix` rewrites the file it is given:
+// `<name>.ts` must come out as `<name>.fixed.ts` byte for byte and that must
+// compile clean, and `<name>.nofix.ts` must be reported with no `fix` key and
+// come out untouched. A directory is a case with more than one file, for what
+// the command line decides: which files are named, and which may be rewritten.
+// `tests/fix/README.md` is the table.
+{
+  const fixDir = path.join(root, "tests", "fix")
+  // Every file of a directory case, as paths relative to it, depth first.
+  const filesUnder = (dir, prefix = "") =>
+    fs
+      .readdirSync(path.join(dir, prefix), { withFileTypes: true })
+      .flatMap((e) =>
+        e.isDirectory() ? filesUnder(dir, path.join(prefix, e.name)) : [path.join(prefix, e.name)]
+      )
+      .sort()
+  // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
+  const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
+  const CONTROL = new Set(["argv", "exit", "rewrites", "same-as-plain"])
+  for (const name of fs.readdirSync(fixDir).sort()) {
+    const caseDir = path.join(fixDir, name)
+    if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const sources = filesUnder(caseDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    for (const rel of filesUnder(caseDir).filter((f) => !CONTROL.has(f) && !f.endsWith(".fixed.ts"))) {
+      fs.mkdirSync(path.dirname(path.join(work, workPath(rel))), { recursive: true })
+      fs.copyFileSync(path.join(caseDir, rel), path.join(work, workPath(rel)))
+    }
+    const argv = fs.readFileSync(path.join(caseDir, "argv"), "utf8").trim().split(/\s+/)
+    const exitFile = path.join(caseDir, "exit")
+    const wantExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : 0
+    // `same-as-plain`: what --fix finally reports is what a plain run reports
+    // about the files it leaves, byte for byte, which a plain run that stops at
+    // its first refused root may say before it reaches any fix.
+    const samePlain = fs.existsSync(path.join(caseDir, "same-as-plain"))
+    if (!samePlain) {
+      const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 &&
+          diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+    }
+    const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
+    // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
+    const wrong = sources.filter((rel) => {
+      const expectedFile = path.join(caseDir, rel.replace(/\.ts$/, ".fixed.ts"))
+      const expected = fs.readFileSync(fs.existsSync(expectedFile) ? expectedFile : path.join(caseDir, rel))
+      return !fs.readFileSync(path.join(work, workPath(rel))).equals(expected)
+    })
+    check(
+      `fix ${name}: --fix exits ${wantExit}, rewrites each file with a .fixed.ts to it and leaves every other byte-identical`,
+      fixed.status === wantExit && wrong.length === 0,
+      `${shown(fixed)}\nnot as expected: ${wrong.join(", ")}`
+    )
+    const rewritesFile = path.join(caseDir, "rewrites")
+    if (fs.existsSync(rewritesFile)) {
+      const want = Number(fs.readFileSync(rewritesFile, "utf8").trim())
+      const rewrites = fixed.stderr.split("\n").filter((l) => l.startsWith("fixed ")).length
+      check(`fix ${name}: --fix rewrites a file ${want} times`, rewrites === want, shown(fixed))
+    }
+    if (samePlain) {
+      const plainJson = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix --json reports what a plain --json run reports about the result, byte for byte`,
+        fixed.status === plainJson.status && fixed.stdout === plainJson.stdout,
+        `--fix:\n${shown(fixed)}\nplain:\n${shown(plainJson)}`
+      )
+      // The human report too, from a second --fix with nothing left to apply.
+      const again = spawnSync(NISH, ["--fix", ...argv], { cwd: work, encoding: "utf8" })
+      const plainHuman = spawnSync(NISH, [...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: --fix reports what a plain run reports about the result, byte for byte`,
+        again.status === plainHuman.status &&
+          again.stdout === plainHuman.stdout &&
+          again.stderr === plainHuman.stderr,
+        `--fix:\n${shown(again)}\nplain:\n${shown(plainHuman)}`
+      )
+    } else if (wantExit === 0) {
+      const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: the fixed program compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    } else {
+      // What --fix may not apply is still reported, fix and all.
+      check(
+        `fix ${name}: the fix --fix may not apply is still reported with it`,
+        diagnosticsOf(fixed.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(fixed)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+  const inputs = fs
+    .readdirSync(fixDir)
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    .sort()
+  for (const file of inputs) {
+    const noFix = file.endsWith(".nofix.ts")
+    const name = file.slice(0, -(noFix ? ".nofix.ts" : ".ts").length)
+    if (only && !name.includes(only) && !"fix".includes(only)) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const input = fs.readFileSync(path.join(fixDir, file))
+    fs.writeFileSync(path.join(work, file), input)
+    const plain = spawnSync(NISH, ["--json", file, "-o", "plain.ll"], { cwd: work, encoding: "utf8" })
+    const plainObjects = diagnosticsOf(plain.stdout)
+    const fixed = spawnSync(NISH, ["--fix", "--json", file], { cwd: work, encoding: "utf8" })
+    const after = fs.readFileSync(path.join(work, file))
+    if (noFix) {
+      check(
+        `fix ${name}: reported with no \`fix\` key`,
+        plain.status === 1 && plainObjects.length > 0 && plainObjects.every((d) => !("fix" in d)),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix leaves the file byte-identical and exits as the plain compile does`,
+        fixed.status === plain.status && after.equals(input) && fixed.stdout === plain.stdout,
+        shown(fixed)
+      )
+    } else {
+      const expected = fs.readFileSync(path.join(fixDir, `${name}.fixed.ts`))
+      check(
+        `fix ${name}: --json carries a \`fix\``,
+        plain.status === 1 && plainObjects.some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(plain)
+      )
+      check(
+        `fix ${name}: --fix exits 0 and writes ${name}.fixed.ts byte for byte`,
+        fixed.status === 0 && after.equals(expected),
+        `${shown(fixed)}\nwrote:\n${after}`
+      )
+      const roundsFile = path.join(fixDir, `${name}.rounds`)
+      if (fs.existsSync(roundsFile)) {
+        const want = Number(fs.readFileSync(roundsFile, "utf8").trim())
+        const rounds = fixed.stderr.split("\n").filter((l) => l.startsWith(`fixed ${file} `)).length
+        check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
+      }
+      fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+        cwd: work,
+        encoding: "utf8",
+      })
+      check(
+        `fix ${name}: ${name}.fixed.ts compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
   }
 }
 
@@ -10790,6 +10949,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--target",
     "--profile",
     "--warn-portability",
+    "--fix",
     "run [flags] <file.ts> [args ...]",
   ]
   const undocumented = documented.filter((f) => !help.stdout.includes(f))
