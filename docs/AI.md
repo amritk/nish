@@ -52,13 +52,15 @@ exclusive:
 
 - **Key on `code`, never on `message`.** A code is a promise: `NL2249` means
   the same rule next release. The prose may improve; the code may not.
-- **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
-  of either kind never changes the exit code — it is advice, not a rejection.
-  Portability warnings, the sites where the program's TypeScript reading
-  answers differently, print only under `--warn-portability`.
+- **`severity`** is `"error"`, `"performance"`, `"portability"` or
+  `"deprecation"`. A warning of any kind never changes the exit code — it is
+  advice, not a rejection. Portability warnings, the sites where the program's
+  TypeScript reading answers differently, print only under
+  `--warn-portability`; a deprecation warning names a call a later release
+  takes away and what to write instead, and always prints.
 - **Bands**: `NL1xxx` the Phase 0 forbidden-syntax sweep, `NL2xxx` the checker,
-  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL8xxx`
-  portability, `NL9xxx` performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
+  `NL3xxx` the driver and modules, `NL4xxx` the interop sidecars, `NL7xxx`
+  deprecation, `NL8xxx` portability, `NL9xxx` performance, `NL0001` syntax, `NL0002` toolchain, `NL0003` internal,
   `NL0000` a diagnostic with no rule yet.
 - **Exit codes**: `0` ok, `1` the program was rejected, `2` usage, `3` the C
   toolchain is unusable, `70` an internal compiler error — that last one is a
@@ -1314,8 +1316,8 @@ many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
 unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
 exists on a wasm target, and under Node each throws.
 
-**Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`,
-and `using a = arena()` — see below.
+**Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
+`Arena.release(m)` and `Arena.reset()` are deprecated (NL7001).
 
 ### Map and Set
 
@@ -1447,7 +1449,7 @@ it, and mostly you should not try:
 2. **Automatic arena scopes** for a function whose temporaries all die with it:
    a mark on entry, a release before every `ret`.
 3. **A reclaim at the call site** for a function that returns a string.
-4. **Explicit control** with the `Arena` builtins, for code that manages
+4. **Explicit control** with `using a = arena()`, for code that manages
    batches itself.
 
 **To free a batch, wrap it in a block with `using a = arena()`**: everything
@@ -1468,10 +1470,10 @@ for (const row of rows) {
 ```
 
 Everything else is bumped from the arena, which is released when `main`
-returns. **Safety rule**: `Arena.release` / `Arena.reset` while any object,
-array or string allocated after the mark is still referenced is undefined
-behaviour. Reach for `using a = arena()` instead; the explicit calls are for
-when you are deliberately managing a batch the compiler cannot see.
+returns. **Do not write `Arena.release` or `Arena.reset`**: releasing while
+anything allocated after the mark is still referenced is undefined behaviour
+the compiler does not check, so both are deprecated, and each call compiles
+with a `deprecation` warning (NL7001) pointing to `using a = arena()`.
 
 ## Recipes for what is missing
 

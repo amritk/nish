@@ -4904,12 +4904,17 @@ Explicit control of the arena the runtime allocates from
 The automatic placement described under [Memory model](#memory-model) makes
 these unnecessary for most programs; they exist for code that manages
 batches itself. All four are available in both number modes.
+**`Arena.release` and `Arena.reset` are deprecated** (NL7001, below): they
+still compile and run as they always did, and each call warns, pointing to
+[`using a = arena()`](#using-a--arena), the same release with the proof done
+by the compiler. `Arena.mark` and `Arena.used` are not deprecated: they free
+nothing, and the memory tests read the arena through them.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `Arena.mark(): i64` | the current bump address (`nish_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
-| `Arena.release(m: i64): void` | free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
-| `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
+| `Arena.release(m: i64): void` | **deprecated** (NL7001): free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
+| `Arena.reset(): void` | **deprecated** (NL7001): recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
 | `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
 
 `mark` and `used` only read the arena, but they are recorded as writes so
@@ -4922,6 +4927,12 @@ the mark is still referenced is undefined behaviour (the memory is reused by
 the next allocation). That undefined behaviour belongs to `Arena.release` and
 `Arena.reset` alone: [`using a = arena()`](#using-a--arena) below is the same
 release with the proof done by the compiler, and is the way to free a batch.
+So each call to either still compiles, exits 0 and warns:
+`` `Arena.release` is deprecated: releasing to a mark while anything allocated after it is still referenced is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it ``
+(`file:line:col: deprecation: …`, NL7001, `tests/cases/mem_arena_builtins`;
+`Arena.reset`'s reads "resetting the arena while anything allocated in it"
+where this one reads "releasing to a mark …"). Removing them, or refusing
+them, is a later breaking change.
 A function that calls `Arena.release` or `Arena.reset`
 itself, or through a callee, never gets an automatic arena scope, for the
 function or for a loop's pass, so the compiler's own marks are never
@@ -5856,8 +5867,8 @@ by the caller.
   - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
     declared inside a loop whose value never leaves the iteration. A
     dynamically sized array cannot be a stack slot, so the arena grows once per
-    pass; the hint is to hoist it above the loop or to bracket the loop body
-    with `Arena.mark()` / `Arena.release(m)`
+    pass; the hint is to hoist it above the loop or to open the loop body
+    with [`using a = arena()`](#using-a--arena)
     (`tests/cases/perf_alloc_loop`). Not reported for a `new C(...)`, an object
     or array literal, or a `new Array<T>(<literal>)`, all of which the escape
     analysis already turns into one entry-block alloca whose slot is reused
@@ -5870,8 +5881,8 @@ by the caller.
     what takes away the proof the automatic arena scope needs
     ([Memory model](#memory-model)), so the whole body's allocations live until
     the program exits. The hints are a `const` per value and, where the
-    assignment is the point, an explicit `Arena.mark()` / `Arena.release(m)`
-    bracket (`tests/cases/perf_arena_drop`). Not reported when the local was
+    assignment is the point, a block around the body that opens with
+    [`using a = arena()`](#using-a--arena) (`tests/cases/perf_arena_drop`). Not reported when the local was
     declared holding a literal and is then given its one value in a branch
     (`let what = "unbound"; if (...) what = \`long ${s}\`;`), which drops
     nothing and has no rewrite — that function still loses its arena scope and
@@ -5898,8 +5909,8 @@ by the caller.
     the pass allocated in a local declared outside the loop or grows an array
     older than the pass, or a callee that releases or resets the arena — and
     what refused the function its own, and the hints are to keep what a pass
-    allocates out of outer locals and older memory, or to bracket the loop
-    body with `Arena.mark()` / `Arena.release(m)`
+    allocates out of outer locals and older memory, or to open the loop body
+    with [`using a = arena()`](#using-a--arena)
     (`tests/cases/perf_arena_loop`). A call in a `for` loop's condition or
     update is outside the pass's bracket and is reported as such. It is found
     after the whole-program analysis rather than by the checker, because
@@ -6157,13 +6168,30 @@ by the caller.
   Every row but the retired NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
   `tests/wordings/`.
+- **Deprecation warnings are the third diagnostic that is not an error.** One
+  marks a call the language still compiles, to exactly the IR it always did,
+  and is going to take away in a later breaking release, naming what replaces
+  it: `file:line:col: deprecation: <text>`, with the excerpt, and
+  `"severity":"deprecation"` under `--json`. They are **on by default** with
+  no flag to silence them — `--no-warn-performance` does not, and `nish run`
+  prints them too — and **never change the exit code**. They print only for a
+  compilation that checked cleanly, **before** the performance warnings and on
+  the same streams, capped at 20 with `...and N more deprecation warnings` and
+  an `N deprecation warnings` line, in the order the other two reports use. A
+  call in a generic body warns once, however many instantiations check it. The
+  standard library and the examples call nothing deprecated, and `npm test`
+  fails the day one of them does. The rules, one code each in band NL7xxx:
+
+  | Code | What is deprecated | Its replacement | Test |
+  | --- | --- | --- | --- |
+  | NL7001 | `Arena.release(m)` and `Arena.reset()`: their undefined behaviour is the one the compiler does not check | [`using a = arena()`](#using-a--arena) | `tests/cases/mem_arena_builtins`, the deprecation block of `tests/run.js`, `tests/wordings/nl7001_arena_release` |
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
   `message`), nothing else on stdout and nothing on stderr, with the same exit
   code. `severity` is `"error"` for every error, `"performance"` for a
-  WP15 §8 warning and `"portability"` for a WP33 one, which is the field a tool
-  filters on; `code` is the stable
+  WP15 §8 warning, `"portability"` for a WP33 one and `"deprecation"` for a
+  deprecated call, which is the field a tool filters on; `code` is the stable
   identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
   failure with no source position — an unusable C toolchain, an internal

@@ -1,0 +1,1 @@
+`Arena.release` is deprecated: releasing to a mark while anything allocated after it is still referenced is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it

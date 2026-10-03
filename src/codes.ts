@@ -13,8 +13,9 @@
  * So numbers are only ever *appended*, and a retired rule keeps its entry, and
  * its number reserved. The bands follow the pipeline: NL0001 a syntax error,
  * NL1xxx Phase 0, NL2xxx the checker, NL3xxx the driver, NL4xxx the interop
- * sidecars, NL8xxx a WP33 portability warning, NL9xxx a WP15 section 8
- * performance warning, and NL0000 a diagnostic no rule matched yet.
+ * sidecars, NL7xxx a deprecation warning, NL8xxx a WP33 portability warning,
+ * NL9xxx a WP15 section 8 performance warning, and NL0000 a diagnostic no rule
+ * matched yet.
  *
  * Codes are carried in `--json` only. The human summary line
  * `file:line:col: error: <text>` is unchanged and stays byte-for-byte what it
@@ -48,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 575
+export const RULE_COUNT: i32 = 576
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -1227,6 +1228,16 @@ const performanceRules = (): string[] => [
   "NL9004",
 ]
 
+/**
+ * The deprecation rules, matched by substring against a `deprecation` message
+ * and against nothing else: a call the language still compiles and is going
+ * to take away. Each message opens with the name of what is deprecated.
+ */
+const deprecationRules = (): string[] => [
+  "is undefined behaviour the compiler does not check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it",
+  "NL7001",
+]
+
 /** The code of the first fragment of one table that `text` contains, or `UNCODED`. */
 const firstMatch = (rules: string[], text: string): string => {
   let i: i32 = 0
@@ -1241,8 +1252,8 @@ const firstMatch = (rules: string[], text: string): string => {
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
- * (`error`, `syntax error`, `performance`, `portability`) and `text` the message without
- * its location prefix.
+ * (`error`, `syntax error`, `performance`, `portability`, `deprecation`) and
+ * `text` the message without its location prefix.
  */
 export const codeFor = (kind: string, text: string): string => {
   if (kind === "syntax error") {
@@ -1253,6 +1264,9 @@ export const codeFor = (kind: string, text: string): string => {
   }
   if (kind === "portability") {
     return firstMatch(portabilityRules(), text)
+  }
+  if (kind === "deprecation") {
+    return firstMatch(deprecationRules(), text)
   }
   return firstMatch(diagnosticRules(), text)
 }

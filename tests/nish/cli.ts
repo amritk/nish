@@ -78,6 +78,8 @@ const FIXTURE_FIX: string = "fix.ts";
 const FIXTURE_NOFIX: string = "nofix.ts";
 /** A program that compiles and earns a WP15 §8 warning, which is a diagnostic on a program that is fine. */
 const FIXTURE_WARN: string = "warn.ts";
+/** A program that compiles and calls a deprecated builtin, which warns by default. */
+const FIXTURE_DEPRECATED: string = "deprecated.ts";
 
 /**
  * The flags `--help` has to name. A wrapper that reads the usage text to learn
@@ -314,6 +316,14 @@ const writeFixtures = (): void => {
       "};",
       "",
     ].join("\n")
+  );
+  // `Arena.release` still compiles, to the call it always did, and warns that
+  // `using a = arena()` replaces it (NL7001).
+  writeFileSync(
+    `${WORK}/${FIXTURE_DEPRECATED}`,
+    ["export const test = (): number => {", "  const m = Arena.mark();", "  Arena.release(m);", "  return 0;", "};", ""].join(
+      "\n"
+    )
   );
 };
 
@@ -595,6 +605,25 @@ const checkPortabilityObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is `portability`", cliField(objects[1], "severity"), "portability");
   t.eqStr("and whose code is the zero-fill row's", cliField(objects[1], "code"), "NL8005");
+};
+
+/**
+ * The deprecation warning, which is on with no flag: under `--json` it is one
+ * object with a `severity` of its own and its NL7xxx code, and the program
+ * still compiles.
+ */
+const checkDeprecationObjects = (t: Suite, cli: Cli): void => {
+  const run = cli.plain("deprecated_json", [`${WORK}/${FIXTURE_DEPRECATED}`, "--json", "-o", `${WORK}/deprecated.ll`]);
+  if (!t.eqI32("a deprecation warning does not refuse the program", run.status, 0)) {
+    return;
+  }
+  const objects = cliObjectLines(run.stdout);
+  if (!t.eqI32("and is an object on stdout", toI32(objects.length), 1)) {
+    return;
+  }
+  t.eqStr("whose severity is `deprecation`", cliField(objects[0], "severity"), "deprecation");
+  t.eqStr("and whose code is `Arena.release`'s", cliField(objects[0], "code"), "NL7001");
+  t.eqStr("on the line of the call", cliField(objects[0], "line"), "3");
 };
 
 /**
@@ -1425,6 +1454,7 @@ export const main = (): number => {
   checkWarningObjects(t, cli);
   checkDeprecatedFlagObjects(t, cli);
   checkPortabilityObjects(t, cli);
+  checkDeprecationObjects(t, cli);
   checkFixField(t, cli);
   checkDumps(t, cli);
   checkPanicSites(t, cli);
