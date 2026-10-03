@@ -14,11 +14,11 @@
 @.str.11 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"world\00" }, align 8
 @.str.12 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"d\00" }, align 8
 
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 
 define internal noundef nonnull align 8 i8* @build(i32 noundef %n) #0 {
 entry:
@@ -32,7 +32,7 @@ entry:
   ret i8* %3
 }
 
-define noundef i32 @test() #1 {
+define noundef i32 @test() #0 {
 entry:
   %a.addr = alloca i8*, align 8
   %b.addr = alloca i8*, align 8
@@ -166,8 +166,8 @@ for.end:
   ret i32 %70
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

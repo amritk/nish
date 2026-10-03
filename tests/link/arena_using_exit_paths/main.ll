@@ -16,7 +16,7 @@ declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noundef i64 @nish_arena_used() #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
@@ -568,7 +568,7 @@ if.end:
   ret %struct.Tally* %t
 }
 
-define internal noundef i32 @ownScope(i32 noundef %k) #1 {
+define internal noundef i32 @ownScope(i32 noundef %k) #2 {
 entry:
   %label.addr = alloca i8*, align 8
   %a.addr = alloca i64, align 8

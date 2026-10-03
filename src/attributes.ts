@@ -9,7 +9,8 @@
 //
 //   nounwind    The language has no exceptions.
 //   willreturn  Every loop is counted (`isCountedLoop`), the body has no
-//               `throw`, it cannot reach a `noreturn` runtime call, and every
+//               `throw`, it cannot reach a `noreturn` runtime call, it is on
+//               no call-graph cycle (`clearRecursiveWillReturn`), and every
 //               callee is itself willreturn (fixpoint over the call graph).
 //   readnone / readonly
 //               The body touches no memory it does not own, or only reads it,
@@ -453,6 +454,12 @@ export class FunctionFacts {
    */
   hoistedHeaders: HoistedHeader[]
   hoistedScopeStarts: i32[]
+  /** `clearRecursiveWillReturn`'s visit number, from 1; 0 until the walk reaches this function. */
+  cycleOrder: i32
+  /** The lowest visit number this function reaches back to, in the same walk. */
+  cycleLow: i32
+  /** On the walk's stack: in the component still being collected. */
+  onCycleStack: boolean
   // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
   /**
    * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
@@ -496,6 +503,9 @@ export class FunctionFacts {
     this.returnAlign = 8
     this.hoistedHeaders = []
     this.hoistedScopeStarts = []
+    this.cycleOrder = 0
+    this.cycleLow = 0
+    this.onCycleStack = false
     this.stackSites = new Array<boolean>(nodeCount)
     this.stackLocals = []
     this.stackParams = new StringSet()
@@ -1701,7 +1711,7 @@ class FactCollector {
       // function `willreturn` exactly where the check is in its IR.
       if (node.kind === N_NEW) {
         const length = node.children[2].children[0]
-        if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode)) {
+        if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode, table)) {
           const tail: string[] = []
           panicTailCallees(tail)
           this.addCallees(tail)
@@ -1717,6 +1727,20 @@ class FactCollector {
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(node, node.children[0].children[0])
+      // A compound store whose right side can resize the array checks its
+      // index again after it (`emitElementAssignment`, CG-10), even where the
+      // first check was proved away. The emitter asks the fixpoint which calls
+      // resize, which is not settled yet here, so any call or `new` counts:
+      // a function may lose `willreturn` for a check its IR turns out not to
+      // hold, and never keeps it past one its IR does.
+      if (
+        node.text !== "=" &&
+        !this.opts.uncheckedIndexing &&
+        program.nodeProvenIndex[node.children[0].id] &&
+        callsAnything(node.children[1])
+      ) {
+        this.facts.callees.add("nish_panic_index")
+      }
     }
   }
 
@@ -2400,8 +2424,106 @@ const collectRound = (
   return facts
 }
 
+/**
+ * Whether evaluating `node` can run a call or a constructor: a superset of
+ * `rightSideMayResize` in `src/emit-arrays.ts`, which the fixpoint narrows.
+ */
+const callsAnything = (node: Node): boolean => {
+  if (node.kind === N_CALL || node.kind === N_NEW) {
+    return true
+  }
+  for (const child of node.children) {
+    if (callsAnything(child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The state of one `clearRecursiveWillReturn` walk: the visit counter and Tarjan's stack. */
+class CycleWalk {
+  visited: i32
+  stack: FunctionFacts[]
+
+  constructor() {
+    this.visited = 0
+    this.stack = []
+  }
+}
+
+/**
+ * Tarjan's algorithm from `v` over the user call graph, keeping its state on
+ * the facts themselves (`cycleOrder`, `cycleLow`, `onCycleStack`). A function
+ * that calls itself, and every member of a component of two or more, loses
+ * `willReturn`. It recurses once per function on the call chain it is
+ * following, so its depth is bounded by the number of functions.
+ */
+const visitCycles = (walk: CycleWalk, facts: FactsTable, v: FunctionFacts): void => {
+  walk.visited = walk.visited + 1
+  v.cycleOrder = walk.visited
+  v.cycleLow = walk.visited
+  walk.stack.push(v)
+  v.onCycleStack = true
+  let c = 0
+  while (c < v.callees.size()) {
+    const w = facts.get(v.callees.at(c))
+    if (w !== null) {
+      if (w === v) {
+        v.willReturn = false
+      }
+      if (w.cycleOrder === 0) {
+        visitCycles(walk, facts, w)
+        if (w.cycleLow < v.cycleLow) {
+          v.cycleLow = w.cycleLow
+        }
+      } else if (w.onCycleStack && w.cycleOrder < v.cycleLow) {
+        v.cycleLow = w.cycleOrder
+      }
+    }
+    c = c + 1
+  }
+  if (v.cycleLow !== v.cycleOrder) {
+    return
+  }
+  // `v` roots a component: itself and everything pushed after it. The first
+  // one off the stack is `v` itself exactly when `v` is alone in it.
+  let cyclic = false
+  let more = true
+  while (more) {
+    // @ts-expect-error `pop` is `T` in Nish and `T | undefined` in lib.es5 (runtime/nish.d.ts).
+    const w: FunctionFacts = walk.stack.pop()
+    w.onCycleStack = false
+    more = w !== v
+    cyclic = cyclic || more
+    if (cyclic) {
+      w.willReturn = false
+    }
+  }
+}
+
+/**
+ * Take `willreturn` from every function on a call-graph cycle: one that calls
+ * itself, or calls something that leads back to it (docs/security/codegen.md,
+ * CG-4). `willReturn` starts true and only a callee that does not return
+ * clears it, so a cycle would otherwise keep it however deep it goes, and
+ * LangRef's `willreturn` promises the call comes back: `spin(x)` calling
+ * itself with the same `x` was `willreturn readnone` and `opt -O2` deleted the
+ * call. Nothing here tries to prove that a recursion ends, which is the line
+ * LLVM's own FunctionAttrs draws, and the fixpoint then carries the loss to
+ * every caller.
+ */
+const clearRecursiveWillReturn = (facts: FactsTable): void => {
+  const walk = new CycleWalk()
+  for (const f of facts.list) {
+    if (f.cycleOrder === 0) {
+      visitCycles(walk, facts, f)
+    }
+  }
+}
+
 /** Propagate effects, termination, pointer facts and allocation facts to a fixpoint. */
 const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
+  clearRecursiveWillReturn(facts)
   let changed = true
   while (changed) {
     changed = false
