@@ -17,9 +17,9 @@
  * The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
  * address is in use, -111 refused, -110 timed out, -22 a bad argument), so
- * `nish_net_err` translates
- * Darwin's; any other failure is the host's own `-errno`. Nothing here
- * allocates: the addresses a call reads or writes are the caller's `u8[]`.
+ * `nish_net_err` translates Darwin's; any other failure is the host's own
+ * `-errno`. Nothing here allocates: the addresses a call reads or writes are
+ * the caller's `u8[]`.
  *
  * An address is 18 bytes of that array: the 16 bytes of an IPv6 address, an
  * IPv4 one as `::ffff:a.b.c.d`, then the port, big-endian. An IPv4 address is
@@ -117,7 +117,8 @@ static int nish_net_parse(const nish_str *s, unsigned char a[16]) {
 /* `a` and `port` as a socket address of the family `v4` names. `noinline`:
    three calls share one body, which inlined into each was 42 bytes more of
    `.text` than the calls cost. */
-__attribute__((noinline)) static socklen_t nish_net_sockaddr(nish_sockaddr *s, const unsigned char a[16], int32_t port, int v4) {
+__attribute__((noinline)) static socklen_t nish_net_sockaddr(nish_sockaddr *s, const unsigned char a[16],
+                                                             int32_t port, int v4) {
   memset(s, 0, sizeof *s);
   if (v4) {
     s->v4.sin_family = AF_INET;

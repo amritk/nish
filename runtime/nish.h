@@ -381,10 +381,10 @@ bool nish_is_executable(const nish_str *path);
  * count, 0) and a negative errno otherwise, in Linux's numbering on every
  * platform for -11 (would block), -95 (unsupported), -32 (the peer is gone),
  * -104 (reset), -98 (address in use), -111 (refused), -110 (timed out) and
- * -22 (a bad argument). Every socket
- * is non-blocking and close-on-exec. An address is 18 bytes of a `u8[]`
- * (element type `uint8_t`): 16 of IPv6 address, IPv4 as `::ffff:a.b.c.d`,
- * then the port, big-endian; a shorter array is -22. Nothing allocates.
+ * -22 (a bad argument). Every socket is non-blocking and close-on-exec. An
+ * address is 18 bytes of a `u8[]` (element type `uint8_t`): 16 of IPv6
+ * address, IPv4 as `::ffff:a.b.c.d`, then the port, big-endian; a shorter
+ * array is -22. Nothing allocates.
  *
  * `nish_net_address(out, host, port)`: the form of a numeric `host`.
  * `nish_net_local_port(fd)`: the port a socket is bound to.

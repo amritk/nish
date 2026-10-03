@@ -252,9 +252,10 @@ declare function readSignal(fd: i32): i32;
 //
 // Every call answers an `i32`: `>= 0` on success, a negative errno otherwise, in
 // Linux's numbering on every platform for -11 (would block), -95, -32, -104,
-// -98, -111, -110 and -22. An address is 18 bytes of a `u8[]`: 16 of IPv6 address (IPv4 as
-// `::ffff:a.b.c.d`), then the port, big-endian. Every socket is non-blocking and
-// close-on-exec. No reading under Node, where each throws.
+// -98, -111 (refused), -110 (timed out) and -22. An address is 18 bytes of a
+// `u8[]`: 16 of IPv6 address (IPv4 as `::ffff:a.b.c.d`), then the port,
+// big-endian. Every socket is non-blocking and close-on-exec. No reading under
+// Node, where each throws.
 
 /** Write the address form of a numeric `host` and `port` into `out`: 0, or -22. */
 declare function netAddress(out: u8[], host: string, port: i32): i32;
