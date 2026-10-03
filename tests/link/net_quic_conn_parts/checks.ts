@@ -273,11 +273,18 @@ const partsCidChecks = (t: Suite): void => {
   t.eqI64("sequence 1 with another token is too", peer.addPeer(n64(1), n64(0), fromHex("bb"), c0), QUIC_ERROR_PROTOCOL_VIOLATION);
   t.eqI64("an ID under a second sequence number is too", peer.addPeer(n64(2), n64(0), fromHex("bb"), tok), QUIC_ERROR_PROTOCOL_VIOLATION);
   t.ok("two are active, and the oldest is the one sent to", peer.activePeer() === 2 && toHex(peer.currentPeer()) === "aa");
+  const sentTo: string = toHex(peer.currentPeer());
+  const owedBefore: i32 = toI32(peer.retirePending.length);
   t.eqI64(
     "a third active ID passes the limit of 2: CONNECTION_ID_LIMIT_ERROR",
     peer.addPeer(n64(2), n64(0), fromHex("dd"), tok),
     QUIC_ERROR_CONNECTION_ID_LIMIT
   );
+  t.ok(
+    "and the refused ID is not added: two are still active, with nothing more owed",
+    peer.activePeer() === 2 && toI32(peer.retirePending.length) === owedBefore
+  );
+  t.eqStr("and the ID sent to is unchanged", toHex(peer.currentPeer()), sentTo);
 
   const moving = new QuicCidTable(n64(2));
   moving.addPeer(n64(0), n64(0), fromHex("aa"), none);

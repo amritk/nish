@@ -68,6 +68,8 @@ PASS  sequence 1 with another token is too
 PASS  an ID under a second sequence number is too
 PASS  two are active, and the oldest is the one sent to
 PASS  a third active ID passes the limit of 2: CONNECTION_ID_LIMIT_ERROR
+PASS  and the refused ID is not added: two are still active, with nothing more owed
+PASS  and the ID sent to is unchanged
 PASS  Retire Prior To 2 retires both older IDs
 PASS  so only the new one is active and sent to
 PASS  and 0 then 1 are queued to retire
@@ -78,4 +80,4 @@ PASS  a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)
 PASS  and the refused frame leaves the table within its bounds
 PASS  with the ID sent to unchanged
 PASS  prune leaves it as it was
-quic connection parts: 80 passed, 0 failed, 0 skipped
+quic connection parts: 82 passed, 0 failed, 0 skipped
