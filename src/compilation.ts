@@ -53,6 +53,7 @@ import { arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
+import { codeFor } from "./codes"
 import { emitProgram } from "./emit"
 import { StringMap, StringSet } from "./map"
 import { isNishSpecifier, unsafeModule } from "./nish-modules"
@@ -274,6 +275,17 @@ export class EmittedModule {
     this.ir = ir
     this.name = name
   }
+}
+
+/**
+ * Whether a performance warning is a deprecated flag's (NL9014, NL9015;
+ * `Compilation.reportDeprecatedFlags`). `nish run` prints these and no other
+ * performance warning: the rest is advice about the IR, and a deprecation is
+ * about the command line the script is run with.
+ */
+export const isDeprecationWarning = (warning: Diagnostic): boolean => {
+  const code = codeFor("performance", warning.text)
+  return code === "NL9014" || code === "NL9015"
 }
 
 export class Compilation {

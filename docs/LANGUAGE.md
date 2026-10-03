@@ -3746,8 +3746,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   warning per compilation, at the top of the entry, naming its replacement —
   `` --unchecked-indexing is deprecated and reaches only the modules of the entry package `` (NL9014) and
   `` --wrapping is deprecated and reaches only the modules of the entry package `` (NL9015)
-  — which `--no-warn-performance` silences with the rest. The flags are removed
-  in a later release.
+  — which `--no-warn-performance` silences with the rest. `nish run`, which
+  prints no other performance warning, prints these two (`tests/nish/cli.ts`).
+  The flags are removed in a later release.
 
 ### Constant time: `ctSelect` and `ctEq`
 
