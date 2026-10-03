@@ -38,7 +38,7 @@ import {
   emitIntBinary,
   isBitwiseAssignment,
 } from "./emit-ops"
-import { isAssignmentOperator, unwrapParens } from "./emit-util"
+import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitSliceCheck } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
@@ -62,7 +62,7 @@ import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructI
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
-import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32 } from "./types"
+import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32, TypeTable } from "./types"
 
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"
@@ -72,6 +72,14 @@ const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64"
 const MEMMOVE: string = "llvm.memmove.p0i8.p0i8.i64"
 /** The longest array `length` can count under `--number-mode i32`. */
 const I32_MAX: i32 = 2147483647
+
+/**
+ * 2^62 bytes: a block no `malloc` can return, and small enough that the inline
+ * allocator's rounding and offset sum cannot wrap on it. `new Array` keeps its
+ * byte count under it (`newArrayLimit`), and a `join` too long to make asks for
+ * exactly this much, so that the allocator's slow path fails it.
+ */
+const allocRefusedBytes = (): i64 => toI64(1) << toI64(62)
 
 /**
  * WP15 section 2a: the record stored inline in this array's slots, or `null`
@@ -521,6 +529,19 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  * hoists nothing rather than hoisting wrongly.
  */
 const loopMayResize = (emitter: Emitter, node: Node): boolean => {
+  if (callMayResize(emitter, node)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (loopMayResize(emitter, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `node` itself, not its operands, is a `push`, a `pop` or a call the fixpoint says may grow an array. */
+const callMayResize = (emitter: Emitter, node: Node): boolean => {
   if (isResizeCall(emitter.program, emitter.table, node)) {
     return true
   }
@@ -533,8 +554,28 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
       }
     }
   }
+  return false
+}
+
+/**
+ * Whether the right side of a compound element assignment can move the array
+ * it stores into (CG-10): `loopMayResize`'s question, and a `new` of a class
+ * too, since a constructor is a call `nodeCallees` does not hold. The attribute
+ * pass answers a coarser form of it before the fixpoint exists
+ * (`callsAnything` in `src/attributes.ts`), and must stay a superset of this.
+ */
+const rightSideMayResize = (emitter: Emitter, node: Node): boolean => {
+  if (callMayResize(emitter, node)) {
+    return true
+  }
+  if (node.kind === N_NEW) {
+    const type = emitter.program.nodeTypes[node.id]
+    if (type >= 0 && emitter.table.isStruct(type)) {
+      return true
+    }
+  }
   for (const child of node.children) {
-    if (loopMayResize(emitter, child)) {
+    if (rightSideMayResize(emitter, child)) {
       return true
     }
   }
@@ -653,8 +694,10 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
-    const needsLen = !emitter.opts.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id]
+    const needsLen = !emitter.program.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id]
     noteArrayUse(emitter, node.children[0], needsLen, true, out)
+  } else if (isUncheckedAccess(emitter.program, node)) {
+    noteArrayUse(emitter, node.children[1].children[0], false, true, out)
   } else if (node.kind === N_MEMBER && node.text === "length") {
     noteArrayUse(emitter, node.children[0], true, false, out)
   }
@@ -896,7 +939,7 @@ export const emitNumberFromI64 = (emitter: Emitter, value: string, expr: Node): 
  * this one check, this one panic and this one message.
  */
 export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void => {
-  if (emitter.opts.uncheckedIndexing) {
+  if (emitter.program.uncheckedIndexing) {
     return
   }
   const fn = emitter.fn
@@ -921,7 +964,7 @@ export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void
  * safety is unchanged (WP15 §2.1/§2.2, `src/bounds.ts`).
  */
 const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: Node): void => {
-  if (emitter.opts.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
+  if (emitter.program.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
     return
   }
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
@@ -1023,19 +1066,37 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  *     which every bounds check then passed;
  *   - a float: `fptosi` of a NaN or of anything past 2^63 is poison;
  *   - a `u32` under `--number-mode i32`: above 2^31 - 1 it makes an array
- *     whose `length`, an `i32` there, reads back negative.
+ *     whose `length`, an `i32` there, reads back negative;
+ *   - an `i32`, or a ranged integer whose range reaches below zero: a negative
+ *     `n` sign-extends to a byte count past 2^63, the inline allocator's
+ *     rounding wraps on it, and the zero fill wrote until it faulted (CG-2).
+ *     The compare is the same unsigned one, so a negative `n` fails it.
  *
- * A `number` in i32 mode, a narrower unsigned and a ranged integer cannot
- * reach any of those. A literal is in range when it is at most 2^31 - 1.
+ * A narrower unsigned cannot reach any of those, and a literal is in range
+ * when it is at most 2^31 - 1. A ranged local is read as an `i32` (WP31), so
+ * it is checked as one whatever its range.
  * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
  * the check is a call to a `noreturn` panic.
  */
-export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32): boolean => {
+export const newArrayLengthChecked = (
+  length: Node,
+  type: i32,
+  numberMode: i32,
+  table: TypeTable
+): boolean => {
   const literal = unwrapParens(length)
   if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
     return false
   }
-  return isFloat(type) || intBits(type) === 64 || (type === T_U32 && numberMode === NUMBER_MODE_I32)
+  if (table.isRanged(type)) {
+    return table.rangeLo(type) < 0
+  }
+  return (
+    isFloat(type) ||
+    intBits(type) === 64 ||
+    type === T_I32 ||
+    (type === T_U32 && numberMode === NUMBER_MODE_I32)
+  )
 }
 
 /**
@@ -1047,7 +1108,7 @@ export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32):
  */
 const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
   const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(I32_MAX) : toI64(1) << toI64(53)
-  const fits: i64 = (toI64(1) << toI64(62)) / toI64(size)
+  const fits: i64 = allocRefusedBytes() / toI64(size)
   return fits < most ? fits : most
 }
 
@@ -1065,7 +1126,7 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
 /** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
 const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
   const type = emitter.typeOf(length)
-  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode)) {
+  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode, emitter.table)) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn
@@ -1090,10 +1151,8 @@ const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string =
 
 /**
  * `new Array<T>(n)`: `n` zeroed elements, after the check
- * `newArrayLengthChecked` asks for. A negative `i32` `n` is not checked here:
- * it becomes a byte count past 2^63, and the inline allocator's rounding wraps
- * on it, so the memset faults rather than the arena refusing it
- * (docs/security/codegen.md, CG-2, open in `src/runtime.ts`).
+ * `newArrayLengthChecked` asks for, a negative `i32` `n` included
+ * (docs/security/codegen.md, CG-2).
  * `new Int32Array(n)` and friends are the same lowering with `T` fixed by the
  * checker.
  */
@@ -1135,9 +1194,35 @@ export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
 }
 
 /**
+ * `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` from `nish:unsafe`: the
+ * load and the store `xs[i]` and `xs[i] = v` lower to, through the same base,
+ * index and slot, with the bounds check left out — no `len` load, no compare,
+ * no branch to the panic. Arguments are evaluated left to right, as every
+ * call's are. Answers the element, or `"void"` for the store.
+ */
+export const emitUncheckedElement = (emitter: Emitter, expr: Node, store: boolean): string => {
+  const args = expr.children[1].children
+  const elem = emitter.table.refOf(emitter.typeOf(args[0]))
+  emitter.declareType(ARRAY_TYPE)
+  const base = emitArrayBase(emitter, args[0])
+  const idx = emitIndex(emitter, args[1])
+  if (!store) {
+    return loadElement(emitter, base, elem, idx)
+  }
+  const value = emitter.emitExpression(args[2])
+  storeElement(emitter, elementPointer(emitter, base, elem, idx), elem, value)
+  return "void"
+}
+
+/**
  * `a[i] = v`: array, index, value, then the check and the store (the value is
  * the expression's result). `a[i] op= v`: array, index, check, load, value,
- * op, store, matching JavaScript's read-before-right-operand order.
+ * op, store, matching JavaScript's read-before-right-operand order. When the
+ * right side can push to or pop from the array, the store takes the slot's
+ * address again after it, and checks the index again against the length the
+ * right side left: JavaScript stores into the array as it is then, so
+ * `xs[0] += grow(xs)` writes the block `grow` moved the elements to rather
+ * than the one they left (docs/security/codegen.md, CG-10).
  */
 export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
@@ -1170,8 +1255,15 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
   }
   emitRangedStore(emitter, expr, value)
+  // A hoisted header is only hoisted out of a loop nothing in it resizes, and
+  // an inline field's slots never move, so only a plain base is taken again.
+  let store = slot
+  if (base.header === null && base.owner === null && rightSideMayResize(emitter, expr.children[1])) {
+    emitRangeCheck(emitter, idx, baseLength(emitter, base))
+    store = elementPointer(emitter, base, elem, idx)
+  }
   emitter.fn.emit(
-    `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
+    `store ${ty} ${value}, ${ty}* ${store}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )
   return value
 }
@@ -1238,7 +1330,7 @@ const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
   const fn = emitter.fn
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
-  if (!emitter.opts.uncheckedIndexing) {
+  if (!emitter.program.uncheckedIndexing) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`)
     const failBlock = fn.newBlock("pop.empty")
     const okBlock = fn.newBlock("pop.ok")
@@ -1358,9 +1450,17 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   fn.emit(`br label %${sumBlock.label}`)
 
   // One string of exactly that length: the 8-byte header, the bytes, the NUL.
+  // A total past 2^31 - 1 asks for 2^62 bytes instead, which the allocator's
+  // slow path cannot get and fails as every allocation does (`nish: out of
+  // memory`, exit 1), so a joined string is held to the length a concatenation
+  // is (RT-2) and its `length` never reads back negative under
+  // `--number-mode i32` (docs/security/codegen.md, CG-3). A `select` rather
+  // than a branch keeps the copy loop's blocks as they were.
   fn.placeBlock(copyBlock)
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
-  const bytes = fn.emitValue(`add i64 ${size}, 9`)
+  const tooLong = fn.emitValue(`icmp ugt i64 ${size}, ${I32_MAX}`)
+  const exact = fn.emitValue(`add i64 ${size}, 9`)
+  const bytes = fn.emitValue(`select i1 ${tooLong}, i64 ${allocRefusedBytes()}, i64 ${exact}`)
   const out = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
   const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`)
   fn.emit(`store i64 ${size}, i64* ${outHeader}${emitter.align8()}`)
@@ -1431,7 +1531,7 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
   const end = fn.emitValue(`add i64 ${at}, ${count}`)
-  if (!emitter.opts.uncheckedIndexing) {
+  if (!emitter.program.uncheckedIndexing) {
     emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
   }
   const size = elementSize(emitter, elem)

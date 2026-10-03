@@ -75,9 +75,9 @@ Three rules hold across the modules:
   copy *before* `digest` when the computation has to go on.
 - **An all-zero X25519 result is returned, not refused.** It is what a
   low-order `u` gives, and RFC 7748 §6.1 leaves the check to the protocol.
-  Nothing in this tree makes that check yet (TLS 1.3, WP34 T1, is planned to),
-  so every caller doing a key exchange must refuse an all-zero answer itself,
-  with `timingSafeEqual` against 32 zero bytes, since the answer is a secret.
+  `nish/net/tls` makes that check (below); every other caller doing a key
+  exchange must refuse an all-zero answer itself, with `timingSafeEqual`
+  against 32 zero bytes, since the answer is a secret.
 - **Constant time by construction, and verified where the check reaches.** No
   module branches on, or indexes by, a secret: comparisons OR the differences
   into one word and test it once, the ladder swaps with a mask and always runs
@@ -126,23 +126,56 @@ Three rules hold across the modules:
   whose one secret, a private key, is base64-decoded by range masks and
   otherwise only copied and handed to `crypto/p256.ts`.
 
-## `nish/net` — the protocols over `nish:net`
+## `nish/net` — the protocol stack
 
-The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, as modules a
-server imports. Each is **sans-IO**: it takes the bytes a socket gave it and
-answers events and the bytes to send, and never touches a socket itself, so a
-test feeds it the specification's own examples and the server that drives it
-over `nish:net` is a separate lane. State is a class and a `switch`, with no
-function values, and every limit is a number the caller passes.
+The protocol lanes of [WP34](../docs/wp34-hosting-cs.md) §5, written on
+`nish/crypto` (decision S2). Each module takes bytes and answers bytes:
+randomness is an argument and nothing reads a socket or a clock, so a test
+injects an RFC trace's values and replays it byte for byte. The carriers that
+put them on sockets come after.
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |
+| [`net/tls.ts`](./net/tls.ts) | The server side of a TLS 1.3 handshake, ClientHello through the client's Finished. `new TlsServer(config, serverRandom, x25519Private)`, then `receive(level, buf, off, len)` with what the client sent, `takeOutput(level)` for what to send, and `signatureInput()` / `sign(signature)` for the CertificateVerify hand-off (`tlsSignEcdsaP256` signs for a P-256 key, DER-encoded). A `TlsServerConfig` names the certificate chain, the signature scheme, the ALPN protocols, whether the carrier is QUIC, the server's transport parameters, and extensions to pass through in EncryptedExtensions. The suites are `TLS_AES_128_GCM_SHA256`, `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384` (in the client's order), the group x25519 (one HelloRetryRequest when the client offers it without a share), and `server_name`, ALPN and `quic_transport_parameters` are read; PSKs, 0-RTT, NewSessionTicket and client authentication are not. Every refusal is the alert to send — `receive` and `sign` answer 0 or a `TLS_ALERT_*` — never a panic, and a low-order x25519 share is refused | RFC 8446 §4, §7; RFC 8448 §3 byte for byte, and §5's transcript |
+| [`net/tls/codec.ts`](./net/tls/codec.ts) | The handshake messages as bytes: `tlsParseClientHello` into a `TlsClientHello` (structure checked, an alert on a malformed or duplicated field), and `tlsEncodeServerHello`, `tlsEncodeHelloRetryRequest`, `tlsEncodeEncryptedExtensions`, `tlsEncodeCertificate`, `tlsEncodeCertificateVerify`, `tlsEncodeFinished` and `tlsCertificateVerifyContent`. The wire's constants: handshake and extension types, versions, the x25519 group, the two signature schemes, and the `TLS_ALERT_*` descriptions | RFC 8446 §4, RFC 6066 §3, RFC 7301 §3.1, RFC 9001 §8.2 |
+| [`net/tls/schedule.ts`](./net/tls/schedule.ts) | The key schedule over SHA-256 or SHA-384: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsFinishedVerifyData`, and `tlsTrafficKey` / `tlsTrafficIv` for a record layer. `TlsTranscript` is the running transcript hash, with HelloRetryRequest's `message_hash` rule. The suite constants and `tlsSuiteHashLength` / `tlsSuiteKeyLength` | RFC 8446 §4.4.1, §7.1, §7.3 |
+| [`net/quic-packet.ts`](./net/quic-packet.ts) | QUIC version 1's packets (WP34 Q1). The variable-length integer (`quicVarintPush`, `quicVarintPushSized`, `quicVarintRead`, `quicVarintLength`, `quicVarintSize`); packet-number length choice and recovery (`quicPacketNumberLength`, `quicPacketNumberDecode`); the long and short headers (`quicLongHeader`, `quicShortHeader`, and `quicParseHeader` into a `QuicHeader`, whose `end` is where the next coalesced packet starts); the Initial secrets from the client's first DCID (`quicInitialSecrets`); the packet keys from a traffic secret (`quicKeys` into a `QuicKeys`, for AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305) and a key update, its secret (`quicKeyUpdateSecret`) and the next generation's keys with the header-protection key kept (`quicKeysUpdate`); packet and header protection (`quicSealPacket`, and `quicOpenPacket` or its two halves `quicRemoveHeaderProtection` and `quicDecryptPacket` into a `QuicPacket`); and the Retry integrity tag (`quicRetryIntegrityTag`, `quicRetryPacket`, `quicRetryVerify`). Every parse is bounds-checked against the datagram and answers a `QUIC_ERR_*` code rather than panicking: a truncated header, a clear fixed bit, another version (with its connection IDs read, for Version Negotiation), a connection ID over 20 bytes, a Length past the datagram, a packet too short to sample, a payload that does not authenticate, and reserved bits set in one that does; keys `quicKeys` did not make are `QUIC_ERR_KEYS`, a caller's error rather than a forgery. Long headers always carry a two-byte Length, so a header's size does not move with its payload, and `quicSealPacket` refuses a header whose Length or packet number disagrees with what it seals. The builders answer `null` for an argument out of range. Its Handshake and 1-RTT keys are not wiped yet ([QUIC-1](../docs/security/quic.md)) | RFC 9000 §16, §17 and Appendix A.1–A.3; RFC 9001 §5 and Appendix A.1–A.5 (client and server Initial, Retry, ChaCha20 short header) |
+| [`net/hpack.ts`](./net/hpack.ts) | HPACK, HTTP/2's header compression: `HpackEncoder` and `HpackDecoder`, one per direction of a connection, each with its `HpackTable`; and beneath them the §5.1 integer (`hpackEncodeInteger` / `hpackDecodeInteger`), the §5.2 string (`hpackEncodeString` / `hpackDecodeString`) and Appendix B's Huffman code (`HpackHuffman`, `hpackHuffmanEncode`, `hpackHuffmanDecode`, `hpackHuffmanLength`). Names and values are `u8[]`. The encoder takes the representation and the Huffman choice per field, and sends a never-indexed field as a literal even when a table holds it. The decoder answers a negative `HPACK_ERR_*` code, and stays spent, for a truncated block, an integer past 2^31 - 1, an index of zero or out of range, bad Huffman padding, EOS, a size update above the SETTINGS limit, after a field or missing when a lowered limit requires one; a header list past the caller's limit is decoded to the end, its excess dropped, and answered with `HPACK_LIST_TOO_LARGE`, which is not fatal. A window outside its buffer, a negative size or limit, and an integer prefix outside 1 to 8 bits are the program's mistakes and panic | RFC 7541 Appendix C (C.1–C.6, with the dynamic table after every step) and every code of Appendix B |
 | [`net/http1.ts`](./net/http1.ts) | `Http1Parser`, an incremental HTTP/1.1 request parser: `feed(buf, off, len)` any slice, then `next()` answers `HTTP1_NEED_MORE`, `HTTP1_HEAD` (`method`, `target`, `minor`, lowercased `names` beside `values`, `header(name)`, `contentLength` or `chunked`, `keepAlive`, `upgrade`), `HTTP1_BODY` (a window onto its buffer, de-chunked), `HTTP1_END`, or one of three final events: `HTTP1_UPGRADE` (`upgradeBytes()` and `declineUpgrade()`), `HTTP1_CLOSED` and `HTTP1_ERROR` with the `status` to answer. It refuses with 400 every request-smuggling shape — `Content-Length` with `Transfer-Encoding`, a repeated or non-digit `Content-Length`, an obs-fold, a bare LF, whitespace before a colon, a malformed chunk size or terminator — and with 413, 414, 431, 501 and 505 what those mean. The writer is `http1ResponseHead(status, reason, names, values, bodyLength)`, which adds the framing field itself and refuses (`null`) a CR, LF or other control character anywhere a caller's string lands, and `http1Chunk` and `http1LastChunk` for a chunked body | RFC 9112 §2–§7 and §9.3, RFC 9110 §5, §6.2, §7.2 and §7.8; a corpus fed at every split point (`tests/link/net_http1`) |
 | [`net/websocket.ts`](./net/websocket.ts) | `WsDecoder(expectMasked, maxMessage)`, the same `feed` and `next()` over WebSocket frames: `WS_MESSAGE` (fragments joined, text checked as UTF-8 fragment by fragment), `WS_PING`, `WS_PONG`, and the final `WS_CLOSE` and `WS_ERROR`, whose `closeCode` is the 1002, 1007 or 1009 to close with. `websocketFrame` encodes a frame with the mask key the caller supplies, `websocketClosePayload` a close frame's code and reason, and `websocketIsUtf8` checks a window. The handshake is `websocketRequestKey(parser)` over an `Http1Parser`'s head, `websocketAcceptKey`, `websocketKeyIsValid` and `websocketUpgradeResponse`, the 101 | RFC 6455 §1.3's accept key, the §5.7 example frames byte for byte, §5.5's control-frame rules, §7.4's close codes |
 
-Both run their checks again under `--number-mode f64` (`net_*_f64`). Neither
-module handles a secret, so neither is in the constant-time check, and
-neither has been through a security audit yet.
+**How a carrier drives `TlsServer`.** The server speaks in handshake
+*messages*, tagged by level: `TLS_LEVEL_INITIAL` (cleartext — ClientHello,
+HelloRetryRequest, ServerHello), `TLS_LEVEL_HANDSHAKE` (EncryptedExtensions
+through both Finished messages) and `TLS_LEVEL_APPLICATION`. A carrier hands
+`receive` the bytes it got at a level, in any split, and sends what
+`takeOutput(level)` answers under that level's keys: TLS over TCP (T2) in
+records, QUIC (Q2) in CRYPTO frames of the matching packet number space.
+`writeSecret(level)` and `readSecret(level)` answer the server's and the
+client's traffic secret for the Handshake and Application levels as soon as
+it is known (`null` before; the Initial level has none), `tlsTrafficKey` and
+`tlsTrafficIv` turn one into a record key, and `exporterSecret` is there for
+exporters. The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
+first flight is written, `TLS_STATE_WAIT_FINISHED` once it is signed,
+`TLS_STATE_CONNECTED` when the client's Finished verified, and
+`TLS_STATE_FAILED` with `alert` set after a refusal. Over QUIC, set `quic` in
+the configuration: ALPN becomes mandatory and the transport parameters go both
+ways (`clientTransportParameters` holds the client's).
+
+**Secrets.** The ECDHE secret, and the copy of the ephemeral key it is
+computed with, are `Secret`s wiped on every path, and `tlsSignEcdsaP256` takes
+its key as a `Secret`. What `TlsServer` keeps in its fields — the caller's
+ephemeral key bytes and the handshake, traffic and exporter secrets — is not
+wiped until `secureZero` ships in a release (TLS-1 in
+[`docs/security/tls.md`](../docs/security/tls.md), the record that also lists
+what each refusal is and the test that pins it).
+`tests/link/net_tls_*` are the module's programs, each also run under
+`--number-mode f64`.
+
+`net/http1.ts` and `net/websocket.ts` run their checks again under
+`--number-mode f64` (`net_http1_f64`, `net_websocket_f64`). Neither handles a
+secret, so neither is in the constant-time check, and neither has been
+through a security audit yet.
 
 ## How a program imports it
 

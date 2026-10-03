@@ -294,14 +294,32 @@ survey_ir() {
 # bytes wherever the executable landed.
 link_stage() {
   local by="$1" name="$2"
-  rm -rf "$work/stage" "$work/stage.modules"
-  "$by" src/compile.ts --link "$work/stage" --profile "$profile" >/dev/null
-  rm -rf "${work:?}/${name:?}" "${work:?}/${name:?}.modules"
-  mv "$work/stage" "$work/$name"
-  mv "$work/stage.modules" "$work/$name.modules"
+  rm -rf "$stages/stage" "$stages/stage.modules"
+  "$by" src/compile.ts --link "$stages/stage" --profile "$profile" >/dev/null
+  rm -rf "${stages:?}/${name:?}" "${stages:?}/${name:?}.modules"
+  mv "$stages/stage" "$stages/$name"
+  mv "$stages/stage.modules" "$stages/$name.modules"
 }
 
-mkdir -p "$work"
+# Each stage is a compiler that links the next, and a compiler finds
+# `scripts/build.sh`, `runtime/` and `std/` one level up from its own directory
+# (`packageRootCandidates` in src/compile.ts). So the stages live in
+# `$work/bin/`, and `$work` is given the checkout's three directories as
+# symbolic links by absolute path: every stage finds this checkout through its
+# own path, whatever `--work` names, and never through the working-directory
+# fallback, which is what let a stage at `build/selfhost/stage1` find it before
+# (docs/security/cli.md, CLI-9 and the bootstrap note). `ln -sfn` replaces a
+# link from an earlier run in place rather than following it.
+mkdir -p "$work/bin"
+stages="$work/bin"
+for dir in scripts runtime std; do
+  if [ -L "$work/$dir" ] || [ ! -e "$work/$dir" ]; then
+    ln -sfn "$PWD/$dir" "$work/$dir"
+  elif [ "$(cd "$work/$dir" && pwd -P)" != "$(cd "$dir" && pwd -P)" ]; then
+    echo "bootstrap: $work/$dir is in the way of the link to this checkout's $dir/" >&2
+    exit 1
+  fi
+done
 outdir=$(dirname "$out")
 [ "$outdir" = "" ] || mkdir -p "$outdir"
 
@@ -311,11 +329,11 @@ outdir=$(dirname "$out")
 # stage's IR in `<exe>.modules/`, which is where the equalities read it, and
 # means the chain exercises the same driver a user does.
 say "stage1: src/ compiled by $seed_label"
-rm -rf "$work/stage1.modules"
+rm -rf "$stages/stage1.modules"
 # This is the step the rolling freeze is enforced by, so it says so when it
 # fails rather than leaving a reader with the compiler's own diagnostic and no
 # idea which rule it just met.
-if ! run_seed src/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null; then
+if ! run_seed src/compile.ts --link "$stages/stage1" --profile "$profile" >/dev/null; then
   echo "bootstrap: $seed_label could not build stage1 from src/ (its output is above)" >&2
   echo "bootstrap: if it refused the source, that is the freeze doing its job: a construct" >&2
   echo "bootstrap: added in 0.N cannot be used by src/ until 0.(N+1) (docs/wp12-release.md," >&2
@@ -325,15 +343,15 @@ fi
 
 if [ "$build_to" -ge 2 ]; then
   say "stage2: src/ compiled by stage1"
-  link_stage "$work/stage1" stage2
+  link_stage "$stages/stage1" stage2
   # The seed equality, reported and not asserted.
-  [ "$verify" -eq 1 ] && survey_ir "$work/stage1.modules" "$work/stage2.modules"
+  [ "$verify" -eq 1 ] && survey_ir "$stages/stage1.modules" "$stages/stage2.modules"
 fi
 
 if [ "$build_to" -ge 3 ]; then
   say "stage3: src/ compiled by stage2"
-  link_stage "$work/stage2" stage3
-  [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
+  link_stage "$stages/stage2" stage3
+  [ "$verify" -eq 1 ] && compare_ir "$stages/stage2.modules" "$stages/stage3.modules" "IR(stage1) == IR(stage2)"
   # `stage3 == stage2`, in scripts/verify-binaries.sh: byte-identical, which
   # both stages being linked at one path is what buys on Mach-O as well. Under
   # that, on Darwin, it still asserts the size, strips debug information where
@@ -343,7 +361,7 @@ if [ "$build_to" -ge 3 ]; then
   # from one machine -- its header is where the reasoning is, and NISH_UNAME_S
   # is how the suite asks for the other platform's branch.
   if [ "$verify" -eq 1 ]; then
-    if verdict="$(bash scripts/verify-binaries.sh "$work/stage2" "$work/stage3" 2>&1)"; then
+    if verdict="$(bash scripts/verify-binaries.sh "$stages/stage2" "$stages/stage3" 2>&1)"; then
       printf '%s\n' "$verdict" | while IFS= read -r line; do say "  $line"; done
     else
       printf '%s\n' "$verdict" >&2
@@ -352,6 +370,6 @@ if [ "$build_to" -ge 3 ]; then
   fi
 fi
 
-cp "$work/stage$install" "$out"
+cp "$stages/stage$install" "$out"
 say "bootstrap: wrote $out ($(wc -c < "$out" | tr -d ' ') bytes, stage$install, $profile profile)"
 say "           it takes -o <file.ll>, -o <dir>/, --link <exe> and --profile"

@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport } from "./nish-modules"
+import { isNetExport, isUnsafeExport } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -180,13 +180,22 @@ export const builtinCapability = (name: string): i32 => {
   ) {
     return CAP_NONE
   }
+  // `nish:unsafe` reaches none of the world's capabilities: an unchecked
+  // element access and a wrapping operation are memory and arithmetic. The
+  // reserved `unsafe` bit is what they will answer once it is wired; until
+  // then they are a deliberate none rather than an unlabelled builtin.
+  if (isUnsafeExport(name)) {
+    return CAP_NONE
+  }
   if (
     name === "readFileSync" ||
     name === "readFileSyncOrNull" ||
     name === "readFileBytesSync" ||
     name === "readdirSync" ||
     name === "realpathSync" ||
-    name === "isDirectorySync"
+    name === "isDirectorySync" ||
+    name === "lstatOwnerModeSync" ||
+    name === "isExecutableSync"
   ) {
     return CAP_FS_READ
   }
@@ -202,6 +211,11 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_NET
   }
   if (name === "getenv") {
+    return CAP_ENV
+  }
+  // `geteuid` reads no file: the user the process runs as is part of the
+  // environment it was started in, as its variables are.
+  if (name === "geteuid") {
     return CAP_ENV
   }
   // `statMtimeSync` reads the file system, but what it answers is a time.

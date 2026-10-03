@@ -8,7 +8,7 @@
 @.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
@@ -16,9 +16,9 @@ declare noundef i64 @nish_arena_used() #0
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_exit(i32 noundef) #5
+declare void @nish_exit(i32 noundef) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -96,7 +96,7 @@ if.end:
   ret i32 %7
 }
 
-define internal noundef align 8 %struct.Element* @List.makeList(%struct.List* noundef nonnull readonly align 8 nocapture %this, i32 noundef %length) #0 {
+define internal noundef align 8 %struct.Element* @List.makeList(%struct.List* noundef nonnull readonly align 8 nocapture %this, i32 noundef %length) #2 {
 entry:
   %e.addr = alloca %struct.Element*, align 8
   %0 = icmp eq i32 %length, 0
@@ -119,7 +119,7 @@ if.end:
   ret %struct.Element* %7
 }
 
-define internal noundef zeroext i1 @List.isShorterThan(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y) #3 {
+define internal noundef zeroext i1 @List.isShorterThan(%struct.List* noundef nonnull readonly align 8 nocapture %this, %struct.Element* noundef align 8 %x, %struct.Element* noundef align 8 %y) #1 {
 entry:
   %xTail.addr = alloca %struct.Element*, align 8
   %yTail.addr = alloca %struct.Element*, align 8
@@ -266,12 +266,11 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
+attributes #1 = { nounwind readonly }
 attributes #2 = { nounwind }
-attributes #3 = { nounwind readonly }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { noreturn nounwind }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

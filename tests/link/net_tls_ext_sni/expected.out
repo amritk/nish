@@ -1,0 +1,12 @@
+PASS  a ClientHello naming example.com is accepted
+PASS  serverName is the host name
+PASS  EncryptedExtensions acknowledges it with an empty server_name
+PASS  without server_name, serverName is empty
+PASS  and nothing is acknowledged
+PASS  a name of another type before the host name is skipped
+PASS  and the host name is still read
+PASS  two host names are illegal_parameter
+PASS  a space in the host name is illegal_parameter
+PASS  an empty host name is decode_error
+PASS  an empty server_name list is decode_error
+tls sni: 11 passed, 0 failed, 0 skipped
