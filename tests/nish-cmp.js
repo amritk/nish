@@ -1932,6 +1932,12 @@ const DECLARED = [
     why: "a new program: `orReturn()` out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
   },
   {
+    program: "docs/cookbook/mem-using-arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new cookbook snippet: a `using a = arena()` block in a scoped loop pass, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
     program: "tests/link/arena_using_exit_paths/main.ts",
     file: "exit",
     changelog: "a checked arena bracket",
