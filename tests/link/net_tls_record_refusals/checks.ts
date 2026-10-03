@@ -519,11 +519,14 @@ export const refusalChecks = (): i32 => {
     spamWriter.install(SUITE, spamSecret);
     updates.push(join([update, sealOne(spamWriter, TLS_CONTENT_APPLICATION_DATA, ascii("k"), ZERO)]));
   }
-  // Arena.used() counts the current chunk, so a step that starts a new chunk
-  // reads negative and is left out of the measure.
+  // Arena.used() counts the current chunk, so before each step a filler that
+  // does not fit what is left of the chunk starts a new one, leaving the step
+  // at least 48 KB of room: no step is left out of the measure, and one that
+  // still crosses a chunk reads negative and fails the check.
   const sink: u8[] = new Array<u8>(8);
   let most: i64 = 0;
-  let measured: i32 = 0;
+  let crossed: i32 = 0;
+  let filled: i32 = 0;
   let answered: i32 = 0;
   let spamFed: i32 = 0;
   for (const u of updates) {
@@ -531,17 +534,20 @@ export const refusalChecks = (): i32 => {
       break;
     }
     spamFed = spamFed + 1;
+    if (Arena.used() > toI64(49152)) {
+      const filler: u8[] = new Array<u8>(16384);
+      filled = filled + toI32(filler.length);
+    }
     const before: i64 = Arena.used();
     feed(spam, u);
     answered = answered + (spam.outputEnd > spam.outputStart ? 1 : 0);
     spam.consume(spam.outputEnd - spam.outputStart);
     spam.read(sink, ZERO, toI32(sink.length));
     const step: i64 = Arena.used() - before;
-    if (step >= toI64(0)) {
-      measured = measured + 1;
-      if (step > most) {
-        most = step;
-      }
+    if (step < toI64(0)) {
+      crossed = crossed + 1;
+    } else if (step > most) {
+      most = step;
     }
   }
   t.ok(
@@ -549,14 +555,19 @@ export const refusalChecks = (): i32 => {
     answered === TLS_RECORD_MAX_KEY_UPDATES && spam.state === TLS_RECORD_STATE_OPEN && sink[0] === toU8(107)
   );
   t.ok(
-    `each answered KeyUpdate leaves at most 16 KB in the arena, so the cap bounds a connection's at ${TLS_RECORD_MAX_KEY_UPDATES * 16} KB`,
-    measured >= TLS_RECORD_MAX_KEY_UPDATES / 2 && most > toI64(0) && most <= toI64(16384)
+    `every answered KeyUpdate, all ${TLS_RECORD_MAX_KEY_UPDATES} measured, leaves at most 12 KB in the arena, a ceiling over the 10,496 bytes TLS-3 records`,
+    crossed === 0 && filled > 0 && most > toI64(0) && most <= toI64(12288)
   );
+  if (Arena.used() > toI64(49152)) {
+    const filler: u8[] = new Array<u8>(16384);
+    filled = filled + toI32(filler.length);
+  }
   const before65: i64 = Arena.used();
   feed(spam, updates[TLS_RECORD_MAX_KEY_UPDATES]);
+  const step65: i64 = Arena.used() - before65;
   t.eqStr(
     `the ${TLS_RECORD_MAX_KEY_UPDATES + 1}th is unexpected_message and fails the connection, deriving no key`,
-    `${spam.state}:${spam.alert}:${Arena.used() - before65 < toI64(4096)}`,
+    `${spam.state}:${spam.alert}:${step65 >= toI64(0) && step65 < toI64(4096)}`,
     `${TLS_RECORD_STATE_FAILED}:${TLS_ALERT_UNEXPECTED_MESSAGE}:true`
   );
 

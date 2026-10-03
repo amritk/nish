@@ -150,9 +150,11 @@ export const TLS_RECORD_IDLE_LIMIT: i32 = 16
 /**
  * How many KeyUpdates one connection takes from its client before refusing
  * the next with `unexpected_message`. Each costs a key derivation whose
- * temporaries stay in the arena (5,248 bytes, twice that when the server answers),
- * so the cap is what bounds that memory (TLS-3). A client that updates when
- * RFC 8446 §5.5 asks, once per 2^24 records, reaches it after 2^30 records.
+ * temporaries stay in the arena (5,248 bytes, twice that when the server
+ * answers), so the cap is what bounds that memory (TLS-3). A client that
+ * updates when RFC 8446 §5.5 asks, once per 2^24 records, reaches it after
+ * 2^30 records; §4.6.3 itself sets no limit, so one that updates on a clock of
+ * its own is cut off at the sixty-fifth, a trade-off TLS-3 records.
  */
 export const TLS_RECORD_MAX_KEY_UPDATES: i32 = 64
 
