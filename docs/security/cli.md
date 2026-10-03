@@ -110,7 +110,7 @@ this is what is true now.
   call them only once a release declares them, so both stay open until the
   release after the runtime stage, and then need the change in
   `src/compile.ts` that uses them.
-- CLI-8 is unchanged.
+- CLI-8 is unchanged. *Since fixed by #425 (the next section).*
 
 ## Status after the owner builtins (#386, phase 1)
 
