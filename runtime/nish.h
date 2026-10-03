@@ -371,8 +371,9 @@ double nish_stat_mtime(const nish_str *path);
  * or a read that fails. */
 int32_t nish_signal_fd(void);
 int32_t nish_read_signal(int32_t fd);
-/* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; no
- * builtin reaches these yet). `nish_lstat_owner_mode(path)`: `lstat`, so a
+/* Who owns a path, and whether it runs (docs/security/runtime.md, RT-9; the
+ * builtins `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`, #386).
+ * `nish_lstat_owner_mode(path)`: `lstat`, so a
  * symbolic link answers for itself, as the owner's uid in the high 32 bits
  * and `st_mode` in the low 32, or exactly -1 when the path does not resolve.
  * `nish_euid()`: the effective uid. `nish_is_executable(path)`:

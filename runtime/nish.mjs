@@ -177,6 +177,11 @@ provide("ctEq", shim.ctEq);
 // `secureZero` (#385): the bytes are zero afterwards here too, though what a
 // collector may have copied before is out of reach.
 provide("secureZero", shim.secureZero);
+// The RT-9 owner checks (#386): one `lstat`, the effective uid and
+// `access(X_OK)`, answered as `runtime-host.c` answers them.
+provide("lstatOwnerModeSync", shim.lstatOwnerModeSync);
+provide("geteuid", shim.geteuid);
+provide("isExecutableSync", shim.isExecutableSync);
 
 // `Result`. Everything works but `orReturn`, which needs the caller's control
 // flow and therefore the rewriter; see the header.

@@ -791,6 +791,22 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const fd = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
   }
+  // #386: runtime-host.c's RT-9 primitives, each one call whose answer is the
+  // language's as it is: the packed owner and mode and the uid are `i64` in
+  // either number mode, and `access(X_OK)` is a `bool`.
+  if (name === "lstatOwnerModeSync") {
+    return emitter.fn.emitValue(
+      `call i64 ${emitter.useRuntime("nish_lstat_owner_mode")}(${stringArgs(emitter, expr)})`
+    )
+  }
+  if (name === "geteuid") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_euid")}()`)
+  }
+  if (name === "isExecutableSync") {
+    return emitter.fn.emitValue(
+      `call zeroext i1 ${emitter.useRuntime("nish_is_executable")}(${stringArgs(emitter, expr)})`
+    )
+  }
   // #385: the header goes to the runtime as `crypto.getRandomValues`'s does,
   // and `nish_wipe` reads `len` and `data` from it.
   if (name === "secureZero") {
@@ -941,6 +957,18 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "secureZero") {
     out.push("nish_wipe")
+    return out
+  }
+  if (name === "lstatOwnerModeSync") {
+    out.push("nish_lstat_owner_mode")
+    return out
+  }
+  if (name === "geteuid") {
+    out.push("nish_euid")
+    return out
+  }
+  if (name === "isExecutableSync") {
+    out.push("nish_is_executable")
     return out
   }
   if (name === "write" || name === "writeError") {

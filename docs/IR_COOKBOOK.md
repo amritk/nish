@@ -12970,6 +12970,77 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-wipe -->
 
+### `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`
+
+The owner checks (#386), what a driver asks before it trusts a directory or a
+program it found on its own. Each is one call into `runtime/runtime-host.c`,
+declared `nounwind willreturn` and ordered with every other write, as
+`nish_stat_mtime` is: `lstat` and `access` read the file system, which is not
+memory LLVM tracks, and a failure stores `errno`. The owner and the mode come
+back packed in one `i64` from one `lstat`, so the two always describe the same
+file ([LANGUAGE.md](LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
+
+<!-- cookbook:begin builtin-owner -->
+```ts
+// #386: who owns a path, and whether it runs. Each is one call into
+// runtime-host.c, ordered with the file system as `statMtimeSync` is. A root is
+// trusted when this user owns it and no one else may write to it: the owner in
+// the high 32 bits of one `lstat`, and the group and other write bits, 0o022,
+// clear in the low ones.
+export const trusted = (root: string): boolean => {
+  const om = lstatOwnerModeSync(root)
+  return om !== -1 && om >> 32 === geteuid() && (om & 18) === 0
+}
+
+export const runs = (program: string): boolean => isExecutableSync(program)
+```
+
+```llvm
+declare i64 @nish_lstat_owner_mode(i8* noundef nonnull readonly align 8 nocapture) #0
+declare i64 @nish_euid() #0
+declare zeroext i1 @nish_is_executable(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef zeroext i1 @trusted(i8* noundef nonnull noalias readonly align 8 nocapture %root) #0 {
+entry:
+  %om.addr = alloca i64, align 8
+  %0 = call i64 @nish_lstat_owner_mode(i8* %root)
+  store i64 %0, i64* %om.addr, align 8
+  %1 = load i64, i64* %om.addr, align 8
+  %2 = icmp ne i64 %1, -1
+  br i1 %2, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %3 = load i64, i64* %om.addr, align 8
+  %4 = ashr i64 %3, 32
+  %5 = call i64 @nish_euid()
+  %6 = icmp eq i64 %4, %5
+  br label %land.end.1
+
+land.end.1:
+  %7 = phi i1 [ false, %entry ], [ %6, %land.rhs.1 ]
+  br i1 %7, label %land.rhs, label %land.end
+
+land.rhs:
+  %8 = load i64, i64* %om.addr, align 8
+  %9 = and i64 %8, 18
+  %10 = icmp eq i64 %9, 0
+  br label %land.end
+
+land.end:
+  %11 = phi i1 [ false, %land.end.1 ], [ %10, %land.rhs ]
+  ret i1 %11
+}
+
+define noundef zeroext i1 @runs(i8* noundef nonnull noalias readonly align 8 nocapture %program) #0 {
+entry:
+  %0 = call zeroext i1 @nish_is_executable(i8* %program)
+  ret i1 %0
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end builtin-owner -->
+
 ### `Date.now`, `crypto.getRandomValues`, `statMtimeSync`, `signalFd` and `readSignal`
 
 The host (WP34 N3). Each is one call into `runtime/runtime-host.c`, declared
@@ -14449,6 +14520,9 @@ declare double @nish_date_now() #2
 declare void @nish_random_fill(%struct.nish_array* noundef nonnull align 8 nocapture) #5
 declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare double @nish_stat_mtime(i8* noundef nonnull readonly align 8 nocapture) #2
+declare i64 @nish_lstat_owner_mode(i8* noundef nonnull readonly align 8 nocapture) #2
+declare i64 @nish_euid() #2
+declare zeroext i1 @nish_is_executable(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_signal_fd() #2
 declare noundef i32 @nish_read_signal(i32 noundef) #5
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2

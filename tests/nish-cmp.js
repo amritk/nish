@@ -1941,6 +1941,16 @@ const DECLARED = [
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
   },
+  {
+    program: "tests/cases/owner_checks.ts",
+    changelog: "for the owner checks, and a cryptographic run-cache name",
+    why: "it calls `geteuid`, `lstatOwnerModeSync` and `isExecutableSync`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers each to one call into runtime-host.c",
+  },
+  {
+    program: "docs/cookbook/builtin-owner.ts",
+    changelog: "for the owner checks, and a cryptographic run-cache name",
+    why: "the cookbook entry for the owner builtins, which this tree adds and the reference refuses with `Unknown function`",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
