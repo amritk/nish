@@ -734,7 +734,9 @@ const runCase = async (name) => {
   if (listed.status !== 0 || listedIr === null || listText === null) {
     expect(`${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
   } else {
-    const oracle = panicOracle(listedIr, JSON.parse(listText))
+    // The case is the program's only module that writes a `.ll`, so every
+    // function of its own must be found in it (`panicOracle`'s `module`).
+    const oracle = panicOracle(listedIr, JSON.parse(listText), src)
     done.panicFunctions = oracle.checked
     expect(
       `${name}: --emit-panics changes no byte of the IR, and agrees with it`,
@@ -834,10 +836,9 @@ const caseResults = caseRuns.map((run) => run.compiled)
 // refuse every one; and the same function with an unproven site, which it
 // must leave alone.
 {
-  const clean = {
-    functions: [{ name: "f", symbol: "f", panics: [{ kind: "oom" }, { kind: "index", proven: true }] }],
-  }
-  const unproven = { functions: [{ name: "f", symbol: "f", panics: [{ kind: "index", proven: false }] }] }
+  const fn = (panics) => ({ functions: [{ name: "f", symbol: "f", module: "m.ts", panics }] })
+  const clean = fn([{ kind: "oom" }, { kind: "index", proven: true }])
+  const unproven = fn([{ kind: "index", proven: false }])
   const define = (lines) => ["define internal i32 @f(i32 %x) {", ...lines, "  ret i32 0", "}"].join("\n")
   const paths = [
     "  call void @nish_panic_index(i64 %0, i64 %1)",
@@ -849,17 +850,27 @@ const caseResults = caseRuns.map((run) => run.compiled)
     "  call void @nish_random_fill(%struct.nish_array* %0)",
     "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
   ]
-  const missed = paths.filter((line) => panicOracle(define([line]), clean).failures.length !== 1)
-  const flagged = paths.filter((line) => panicOracle(define([line]), unproven).failures.length > 0)
+  const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
+  const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
   const quiet = [
     "  call void @nish_write(i8* %0, i32 2, i1 false)",
     "  %1 = call i8* @nish_read_file_or_null(i8* %0)",
     "  call void @nish_exit(i32 %0)",
-  ].filter((line) => panicOracle(define([line]), clean).failures.length > 0)
+  ].filter((line) => panicOracle(define([line]), clean, null).failures.length > 0)
   check(
     "--emit-panics: the IR oracle refuses each panic path in a clean function, and nothing else",
     missed.length === 0 && flagged.length === 0 && quiet.length === 0,
     `missed: ${missed.join(" | ")}\nflagged despite a site: ${flagged.join(" | ")}\nnot a panic: ${quiet.join(" | ")}`
+  )
+  // A listed function the IR does not define: a failure for the module the IR
+  // is the whole of, whatever its sites, and skipped for one of another module.
+  const absent = define([]).replace("@f(", "@g(")
+  const own = [clean, unproven].map((report) => panicOracle(absent, report, "m.ts").failures.length)
+  const other = [clean, unproven].map((report) => panicOracle(absent, report, "other.ts").failures.length)
+  check(
+    "--emit-panics: the IR oracle fails a listed function its own module's IR does not define",
+    own.every((n) => n === 1) && other.every((n) => n === 0),
+    `failures for the module's own function: ${own.join(", ")}; for another module's: ${other.join(", ")}`
   )
 }
 
@@ -3255,7 +3266,7 @@ for (const name of linkTests) {
       .filter((f) => f.endsWith(".ll"))
       .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
       .join("\n")
-    const oracle = panicOracle(ir, JSON.parse(listText))
+    const oracle = panicOracle(ir, JSON.parse(listText), null)
     check(
       `link/${name}: --emit-panics agrees with the IR of every module`,
       oracle.failures.length === 0,

@@ -59,19 +59,31 @@ const canPanic = (site) => site.kind !== "oom" && site.proven !== true
  * Hold `report` (a parsed `--emit-panics` file) against the IR text `ir`.
  * Answers `{ checked, failures }`: how many functions with nothing left that
  * can panic were found in this IR and read, and one line per such function
- * whose IR has a panic path anyway. A function not defined in `ir` — one of
- * another module's — is the other module's to answer for.
+ * whose IR has a panic path anyway.
+ *
+ * `module` is the path of the one module `ir` is the whole of, as it is for a
+ * one-module `tests/cases/` compile, or null when `ir` is part of a link. A
+ * function of that module with no `define` in `ir` is a failure: the report's
+ * `symbol` and the IR have drifted apart (a mangling change, an instantiation
+ * renamed), and skipping it would let the oracle pass having read nothing.
+ * A function of any other module is skipped when it is not there: it is
+ * another module's to answer for, or one of a library that writes no `.ll` of
+ * its own (`std/collections.ts`), whose functions are emitted only into the
+ * modules that call them.
  */
-export const panicOracle = (ir, report) => {
+export const panicOracle = (ir, report, module) => {
   const lines = ir.split("\n")
   const failures = []
   let checked = 0
   for (const fn of report.functions) {
-    if (fn.panics.some(canPanic)) {
-      continue
-    }
     const body = definitionOf(lines, fn.symbol)
     if (body === null) {
+      if (fn.module === module) {
+        failures.push(`${fn.name} (@${fn.symbol}) is listed, and the IR defines no such symbol`)
+      }
+      continue
+    }
+    if (fn.panics.some(canPanic)) {
       continue
     }
     checked++
