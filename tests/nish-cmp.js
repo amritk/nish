@@ -2836,6 +2836,54 @@ const DECLARED = [
     changelog: "Nish/net/quic-packet — QUIC packets, Initial secrets and header protection (WP34 Q1)",
     why: "a new program over the new `nish/net/quic-packet` module, which the released compiler's library does not have",
   },
+  {
+    program: "tests/link/net_quic_frame/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: every frame of RFC 9000 §19 read and written, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_frame_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: the frame checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn_parts/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: transport parameters, ACK ranges and the connection-ID table, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn_parts_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: the transport-parameter, ACK and connection-ID checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: the QUIC connection's handshakes, data path and refusals, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: the QUIC connection checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn_replay/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: an aioquic handshake and echo replayed over loopback, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
+  {
+    program: "tests/link/net_quic_conn_replay_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
+    why: "a new program: the aioquic replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
