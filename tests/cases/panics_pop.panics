@@ -1,4 +1,4 @@
 {"functions":[
-{"name":"last","symbol":"last","module":"tests/cases/panics_pop.ts","line":3,"panics":[{"kind":"pop","line":3,"column":34,"proven":false}]},
-{"name":"main","symbol":"nish_main","module":"tests/cases/panics_pop.ts","line":5,"panics":[{"kind":"oom","line":7,"column":3,"allowed":true},{"kind":"oom","line":8,"column":3,"allowed":true},{"kind":"oom","line":9,"column":3,"allowed":true},{"kind":"call","line":9,"column":15,"callee":"last","via":"pop"},{"kind":"oom","line":10,"column":3,"allowed":true}]}
+{"name":"dropLast","symbol":"dropLast","module":"tests/cases/panics_pop.ts","line":3,"panics":[{"kind":"pop","line":4,"column":3,"proven":false}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_pop.ts","line":7,"panics":[{"kind":"oom","line":9,"column":3,"allowed":true},{"kind":"oom","line":10,"column":3,"allowed":true},{"kind":"call","line":11,"column":3,"callee":"dropLast","via":"pop"},{"kind":"oom","line":12,"column":3,"allowed":true},{"kind":"oom","line":13,"column":3,"allowed":true},{"kind":"index","line":13,"column":15,"proven":false}]}
 ]}

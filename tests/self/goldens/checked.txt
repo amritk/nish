@@ -43314,19 +43314,19 @@ function main(): i32 -> @nish_main [exported entry]
   callee 11:15 checked -> @checked
 program tests/cases/panics_pop.ts
 module tests/cases/panics_pop.ts (entry)
-function last(xs: i32[]): i32 -> @last
+function dropLast(xs: i32[]): void -> @dropLast
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 3:34
+  sharedWrite: 4:3
   calls: nish_panic_index
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish_print
-  calls: last nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_from_i32
+  sharedWrite: via dropLast
+  calls: dropLast nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
   stackSites=1 stackLocals=1
-  local 6:9 xs: i32[] (const)
-  callee 9:15 last -> @last
+  local 8:9 xs: i32[] (const)
+  callee 11:3 dropLast -> @dropLast
 program tests/cases/panics_range.ts
 module tests/cases/panics_range.ts (entry)
 function digit(n: i32): integer<0, 9> -> @digit
