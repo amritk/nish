@@ -41,6 +41,7 @@ import {
 import {
   builtinNameOf,
   dottedName,
+  isArenaCall,
   intrinsicType,
   isAssignmentOperator,
   isJoinCall,
@@ -62,6 +63,7 @@ import {
   N_DEFAULT,
   N_DO,
   N_EMPTY,
+  FLAG_USING,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
@@ -78,6 +80,7 @@ import {
   N_STRING,
   N_SWITCH,
   N_THIS,
+  N_VAR,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -86,9 +89,10 @@ import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
 import { Options } from "./options"
+import { isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
-import { isNumeric, K_ENUM, T_BOOL, T_STRING, TypeTable } from "./types"
+import { isNumeric, K_ENUM, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 const STACK_ARRAY_BYTES: i32 = 4096
@@ -1183,6 +1187,12 @@ const LOOP_RETURN: i32 = 5
 const LOOP_CONTROL: i32 = 6
 /** A callee has no facts to read (`name`). */
 const LOOP_UNSEEN: i32 = 7
+/** A `using a = arena()` block stores what it allocated into a field (`at`). Blocks only, as are the two below. */
+const BLOCK_FIELD: i32 = 8
+/** A `using a = arena()` block stores what it allocated into an array element (`at`). */
+const BLOCK_ELEMENT: i32 = 9
+/** A `using a = arena()` block files a task on a scope declared outside it (`at`, `name`). */
+const BLOCK_SPAWN: i32 = 10
 
 /** The walk over one loop body that decides its `LoopScope`. */
 class PassWalk {
@@ -1195,10 +1205,19 @@ class PassWalk {
   /** The `const` variables of the `for...of` loops nested in the body, and the arrays they walk. */
   elementLocals: Local[]
   elementSources: Node[]
-  /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
-  allocates: boolean
   /** The body's own locals it binds to a `readdirSync` listing, whose elements are as new as it (CG-5). */
   listingLocals: Local[]
+  /** The pass bumps the arena, itself or through a callee that leaves memory behind. */
+  allocates: boolean
+  /**
+   * The walk is over a `using a = arena()` block rather than a loop's pass
+   * (`decideArenaBlock`): the release is the program's, so arena control and
+   * a task filed on an outer scope are refused here rather than for the whole
+   * function, and the stores the loop rule leaves to `escapingNodes` are named.
+   */
+  block: boolean
+  /** The function returns a `Result` packed into a register (WP17), which a block may hand back. */
+  returnsByValue: boolean
 
   constructor(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, scope: LoopScope) {
     this.unit = unit
@@ -1210,6 +1229,8 @@ class PassWalk {
     this.elementSources = []
     this.allocates = false
     this.listingLocals = []
+    this.block = false
+    this.returnsByValue = false
   }
 
   /** `receiver` is a listing this pass made: the call itself, or one of the body's locals bound to one. */
@@ -1301,6 +1322,18 @@ class PassWalk {
     if (g.netAllocates) {
       this.allocates = true
     }
+    if (this.block && g.usesArenaControl) {
+      this.refuse(LOOP_CONTROL, node, callee.sourceName)
+    }
+    // A task runs, and its answer is stored, when its scope joins: after this
+    // block has released, for a scope the block did not declare.
+    if (this.block && isSpawnEntry(callee) && node.children[0].kind === N_MEMBER) {
+      const receiver = unwrapParens(node.children[0].children[0])
+      const local: Local | null = receiver.kind === N_IDENT ? this.unit.program.nodeLocals[receiver.id] : null
+      if (local === null || !this.declaredInPass(local)) {
+        this.refuse(BLOCK_SPAWN, node, receiver.kind === N_IDENT ? receiver.text : "")
+      }
+    }
   }
 
   /** `xs.push(v)` grows `xs` in the arena: fine for an array this pass made, a leak into any other. */
@@ -1365,8 +1398,17 @@ class PassWalk {
       } else if (isPushCall(program, this.table, node)) {
         this.visitPush(node)
       } else if (resultMethodName(program, this.table, node) === "orReturn") {
-        this.scope.handsBack = true
-        this.refuse(LOOP_RETURN, node, "")
+        // A block's release follows the packing of a register `Result`, whose
+        // payloads are numbers; a pass's release does not wait for anything.
+        if (!this.block || !this.returnsByValue) {
+          this.scope.handsBack = true
+          this.refuse(LOOP_RETURN, node, "")
+        }
+      } else if (this.block && node.children[0].kind === N_MEMBER) {
+        const name = dottedName(node.children[0])
+        if (name === "Arena.release" || name === "Arena.reset") {
+          this.refuse(LOOP_CONTROL, node, name)
+        }
       }
     } else if (node.kind === N_NEW) {
       const ctor = constructorOf(program, this.table, intrinsicType(program, node))
@@ -1387,9 +1429,21 @@ class PassWalk {
       if (local !== null && this.declaredInPass(local) && this.isPassListing(node.children[1])) {
         this.listingLocals.push(local)
       }
+      if (this.block && (target.kind === N_MEMBER || target.kind === N_INDEX)) {
+        const type = program.nodeTypes[target.id]
+        if (
+          !(type >= 0 && isScalarArgument(this.table, type)) &&
+          (node.text !== "=" || !this.isOld(node.children[1]))
+        ) {
+          this.refuse(target.kind === N_MEMBER ? BLOCK_FIELD : BLOCK_ELEMENT, node, "")
+        }
+      }
     } else if (node.kind === N_RETURN) {
       const value = node.children[0]
-      if (value.kind !== N_EMPTY && !this.isOld(value)) {
+      // A block hands back nothing through a `void` call, and a register
+      // `Result` is packed before it releases (`emitReturnValue`).
+      const handsNothing = this.block && (this.returnsByValue || program.nodeTypes[value.id] === T_VOID)
+      if (value.kind !== N_EMPTY && !handsNothing && !this.isOld(value)) {
         this.scope.handsBack = true
         this.refuse(LOOP_RETURN, node, "")
       }
@@ -1506,6 +1560,260 @@ const decidePass = (
   scope.scoped = scope.why === LOOP_NOTHING && walk.allocates
 }
 
+// ---- `using a = arena()` ------------------------------------------------------------------
+//
+// A block that declares `using a = arena()` takes the mark at the declaration
+// and releases to it on every edge that leaves the block (`openScope` in
+// emit-parallel.ts). That is the per-pass bracket above written by the
+// program, and it is held to the same rule with the block as the pass: from
+// the declaration to the block's end, nothing allocated may become reachable
+// from a local declared outside, from memory older than the block, or from
+// what the function returns. What differs is the answer when the rule fails.
+// A loop that fails it only loses an optimisation; a block that fails it is
+// refused, naming the value and where it would escape to, because the release
+// is the program's and would free memory still in use.
+//
+// The block adds three refusals a pass leaves to the whole function. Arena
+// control inside it (`Arena.release`, `Arena.reset`, or a callee that reaches
+// one) is refused at the call, where for a loop it removes every pass's scope.
+// A `spawn` on a scope the block did not declare is refused, because that
+// task runs and stores its answer when its scope joins, after the release.
+// And a store into a field or an element is named as such, ahead of the
+// `escapingNodes` sweep that would also find it, so the message says where
+// the value went; the sweep stays as the rule, and catches what the syntax
+// does not show (a value handed to a callee that keeps it, an object literal
+// holding it).
+//
+// What the release does not need is a proof that the block allocates: an
+// empty bracket costs two runtime calls and is what the program wrote.
+
+/** Whether `stmt` is a `using` declaration that opens an arena: one of its initialisers is `arena()`. */
+const isArenaUsing = (program: CheckedProgram, stmt: Node): boolean => {
+  if (stmt.kind !== N_VAR || (stmt.flags & FLAG_USING) === 0) {
+    return false
+  }
+  for (const decl of stmt.children[0].children) {
+    if (isArenaCall(program, unwrapParens(decl.children[2]))) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Decide the block that `using` (statement `from` of `block`) opens: the
+ * walk the per-pass rule makes, over the statements from the declaration to
+ * the block's end. The record is a `LoopScope` whose `why`, `at` and `name`
+ * are the first refusal met, `LOOP_NOTHING` when the block passes.
+ */
+const decideArenaBlock = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  sig: FunctionSig,
+  f: FunctionFacts,
+  block: Node,
+  from: i32
+): LoopScope => {
+  const scope = new LoopScope(block, block)
+  const walk = new PassWalk(unit, table, facts, scope)
+  walk.block = true
+  walk.returnsByValue = table.resultByValue(sig.returnType)
+  let i = from
+  while (i < block.children.length) {
+    walk.visit(block.children[i])
+    i = i + 1
+  }
+  const start = block.children[from].start
+  for (const node of f.escapingNodes) {
+    if (node.start >= start && node.end <= block.end && !initialisesUsing(unit, node)) {
+      walk.refuse(LOOP_STORED, node, "")
+    }
+  }
+  return scope
+}
+
+/**
+ * `node` initialises a declarator of a `using` statement. Inside a block that
+ * is a `scope()` (an `arena()` allocates nothing), and the scope escapes only
+ * into its tasks, which have all run and been freed when it joins: at the end
+ * of its own block, which closes before any arena around it releases, and
+ * ahead of a `return`'s release on that edge (`emitScopeJoins`).
+ */
+const initialisesUsing = (unit: AnalysisUnit, node: Node): boolean => {
+  let at = node
+  let parent = unit.parents.parentOf(at)
+  while (parent !== null && parent.kind === N_PAREN) {
+    at = parent
+    parent = unit.parents.parentOf(at)
+  }
+  if (parent === null || parent.kind !== N_VAR_DECL || parent.children[2] !== at) {
+    return false
+  }
+  const list = unit.parents.parentOf(parent)
+  const stmt: Node | null = list === null ? null : unit.parents.parentOf(list)
+  return stmt !== null && stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0
+}
+
+/**
+ * The text of `node` as the program wrote it, quoted as code: in double
+ * backticks when it holds one itself, which a template literal does.
+ */
+const sourceText = (unit: AnalysisUnit, node: Node): string => {
+  const text = unit.program.source.text.substring(node.start, node.end)
+  return text.indexOf("`") >= 0 ? `\`\` ${text} \`\`` : `\`${text}\``
+}
+
+/** Why the block that `using` opens is refused, in words, or `""` when it passes. */
+const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): string => {
+  const source = unit.program.source
+  const block = `the \`using arena()\` block at ${source.lineOf(using.start)}:${source.columnOf(using.start)}`
+  const at = scope.at
+  const why = scope.why
+  if (at === null || why === LOOP_NOTHING) {
+    return ""
+  }
+  const value = at.kind === N_BINARY ? sourceText(unit, at.children[1]) : sourceText(unit, at)
+  const inside = `${value} may be allocated inside ${block}`
+  if (why === LOOP_OUTER_LOCAL) {
+    return (
+      `${inside} and is assigned to \`${scope.name}\`, which is declared outside the block: the block releases ` +
+      "what it allocated when it ends, and the local would outlive it pointing into freed memory"
+    )
+  }
+  if (why === BLOCK_FIELD) {
+    return (
+      `${inside} and is stored into a field of ${sourceText(unit, at.children[0].children[0])}: the block ` +
+      "releases what it allocated when it ends, and nothing proves the object it is stored into ends with it " +
+      "(allocate what must outlive the block before the block opens)"
+    )
+  }
+  if (why === BLOCK_ELEMENT) {
+    return (
+      `${inside} and is stored into an element of ${sourceText(unit, at.children[0].children[0])}: the block ` +
+      "releases what it allocated when it ends, and nothing proves the array it is stored into ends with it " +
+      "(allocate what must outlive the block before the block opens)"
+    )
+  }
+  if (why === LOOP_STORED) {
+    return (
+      `${inside} and is stored into memory — handed to a callee that keeps it, or held by an object or an array — ` +
+      "where this analysis stops following it, so nothing proves it is gone when the block releases"
+    )
+  }
+  if (why === LOOP_OUTER_PUSH) {
+    const array = scope.name.length > 0 ? `\`${scope.name}\`` : "an array"
+    return (
+      `${value} grows ${array} inside ${block}, and the array is older than the block: a \`push\` moves ` +
+      "the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block " +
+      "binds to a fresh array)"
+    )
+  }
+  if (why === LOOP_RETURN) {
+    const how = at.kind === N_RETURN ? "`return`" : "`orReturn()`"
+    const handed = at.kind === N_RETURN ? sourceText(unit, at.children[0]) : value
+    return (
+      `${handed} may be allocated inside ${block} and is handed back by ${how}: the block releases what it ` +
+      "allocated before the function returns, so the caller would be handed freed memory"
+    )
+  }
+  if (why === LOOP_CALLEE_STORES) {
+    return (
+      `\`${scope.name}\` is called inside ${block} and stores an allocation into memory, where this analysis stops ` +
+      "following it: what it stores may be the block's and outlive the release"
+    )
+  }
+  if (why === LOOP_UNSEEN) {
+    return (
+      `\`${scope.name}\` is called inside ${block}, and this analysis cannot see what it does with memory, so ` +
+      "nothing proves that what the block allocated is gone when it releases"
+    )
+  }
+  if (why === LOOP_CONTROL) {
+    return (
+      `\`${scope.name}\` releases or resets the arena inside ${block}: the block releases to the mark it took ` +
+      "when it opened, which a release or a reset in between has already moved the arena below"
+    )
+  }
+  if (why === BLOCK_SPAWN) {
+    return (
+      `${value} files a task on \`${scope.name}\` inside ${block}, and that scope is declared outside the block: ` +
+      "the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated"
+    )
+  }
+  return ""
+}
+
+/**
+ * Every `using a = arena()` block of `sig`'s body under `node`, refused or
+ * not. An arrow's body is another function's, and is walked with it.
+ */
+const findArenaBlocks = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable,
+  sig: FunctionSig,
+  f: FunctionFacts,
+  node: Node,
+  out: ArenaFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (node.kind === N_BLOCK) {
+    let i = 0
+    while (i < node.children.length) {
+      const stmt = node.children[i]
+      if (isArenaUsing(unit.program, stmt)) {
+        const scope = decideArenaBlock(unit, table, facts, sig, f, node, i)
+        const message = arenaBlockMessage(unit, scope, stmt)
+        const at = scope.at
+        if (at !== null && message.length > 0) {
+          out.push(new ArenaFinding(at, message))
+        }
+      }
+      i = i + 1
+    }
+  }
+  for (const child of node.children) {
+    findArenaBlocks(unit, table, facts, sig, f, child, out)
+  }
+}
+
+/**
+ * The refusals of every `using a = arena()` block in one module, judged once
+ * the whole-program facts are settled (`Compilation.checkScopes`). Each
+ * instantiation of a template is judged over its own tables, as its facts
+ * are its own; a lifted arrow is a function of its own and is judged as one.
+ */
+export const arenaBlockFindings = (
+  unit: AnalysisUnit,
+  table: TypeTable,
+  facts: FactsTable
+): ArenaFinding[] => {
+  const out: ArenaFinding[] = []
+  const program = unit.program
+  if (program.source.text.indexOf("arena") < 0) {
+    return out
+  }
+  for (const sig of program.functions) {
+    const body = sig.body()
+    const f = facts.get(sig.name)
+    if (body === null || f === null || !sig.definedIn(program.source)) {
+      continue
+    }
+    const instance = sig.instance
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    findArenaBlocks(unit, table, facts, sig, f, body, out)
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+  }
+  return out
+}
+
 // ---- The arena-loop diagnostic ------------------------------------------------------------
 //
 // A WP15 section 8 performance warning, and the one that needs the whole
@@ -1612,13 +1920,17 @@ const findArenaLoops = (
   }
   const isLoop = node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO
   const scope: LoopScope | null = isLoop ? loopScopeOf(f, node) : null
+  // What a block allocates after its `using a = arena()` is released when the
+  // block ends, on every pass that runs it (`arenaBlockFindings` proved it).
+  let released = reclaimed
   let i = 0
   while (i < node.children.length) {
     const child = node.children[i]
+    released = released || (node.kind === N_BLOCK && isArenaUsing(unit.program, child))
     // A `for` initialiser and a `for...of` iterable run once, before the first pass.
     const once = (node.kind === N_FOR && i === 0) || (node.kind === N_FOR_OF && i === 1)
     if (scope === null || once) {
-      findArenaLoops(unit, facts, f, reason, child, loop, reclaimed, head, out)
+      findArenaLoops(unit, facts, f, reason, child, loop, released, head, out)
     } else if (child === scope.body) {
       findArenaLoops(unit, facts, f, reason, child, scope, reclaimed || scope.scoped, false, out)
     } else {

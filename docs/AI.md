@@ -820,7 +820,8 @@ export const main = (): i32 => {
   you only index; never pass it on. Between the first `spawn` and the block's
   end, don't read a destination, and don't write memory a task could read (a
   store into an argument, a call that writes through its argument).
-- **`using` takes only `scope()`**, and `scope()` only comes from `using`.
+- **`using` takes only `scope()`** (or `arena()`, under [Memory](#memory)), and
+  `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
 - **The task is a named top-level function**, not an arrow, and it follows the
@@ -1255,8 +1256,8 @@ many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
 unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
 exists on a wasm target, and under Node each throws.
 
-**Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
-— see below.
+**Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`,
+and `using a = arena()` — see below.
 
 ### Map and Set
 
@@ -1391,10 +1392,28 @@ it, and mostly you should not try:
 4. **Explicit control** with the `Arena` builtins, for code that manages
    batches itself.
 
+**To free a batch, wrap it in a block with `using a = arena()`**: everything
+the block allocates after that line is released when the block ends, on every
+exit, and the compiler refuses the block if anything allocated in it could
+outlive it — so allocate what must outlive the block before it, and let only
+numbers, booleans and enums out. `arena()` is only ever a `using` initialiser,
+and `a` is never read.
+
+```ts nish:ok-body
+const rows: string[] = ["a", "bb"];
+let total = 0;
+for (const row of rows) {
+  using a = arena();
+  const line = `${row}: ${row.length}`;
+  total = total + line.length;
+}
+```
+
 Everything else is bumped from the arena, which is released when `main`
 returns. **Safety rule**: `Arena.release` / `Arena.reset` while any object,
 array or string allocated after the mark is still referenced is undefined
-behaviour. Reach for them only when you are deliberately managing a batch.
+behaviour. Reach for `using a = arena()` instead; the explicit calls are for
+when you are deliberately managing a batch the compiler cannot see.
 
 ## Recipes for what is missing
 

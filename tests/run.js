@@ -2560,6 +2560,14 @@ if (!only || "performance".includes(only)) {
     arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
     arenaControl.stderr
   )
+  // A call inside a `using a = arena()` block leaves nothing behind once the
+  // block releases, whatever refused the pass and the function their scopes.
+  const arenaUsing = compile("perf_arena_using", "perf_arena_using_report.ll")
+  check(
+    "mem_loop_scope: no NL9011 for a call inside a `using a = arena()` block",
+    arenaUsing.status === 0 && summaries(arenaUsing.stderr).length === 0,
+    arenaUsing.stderr
+  )
 
   // #216's acceptance, as a peak resident set rather than as `Arena.used()`:
   // `mem_loop_scope_chunk`'s pointer-returning loop allocates more than an
@@ -3391,7 +3399,13 @@ if (!only || "par_alloc".includes(only)) {
 // before the scope's block ends, so every scope program prints the same both
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
+//
+// `arena_using_exit_paths` is the `using a = arena()` program: its block's
+// disposal does nothing under Node and `Arena.*` answers zero there, so the
+// lines it prints, each of which ends with how far the arena moved, are the
+// native ones exactly when every exit released.
 for (const name of [
+  "arena_using_exit_paths",
   "par_map",
   "par_reduce",
   "thread_scope_basic",

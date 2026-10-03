@@ -1,0 +1,1 @@
+`parse(s).orReturn()` may be allocated inside the `using arena()` block at 7:3 and is handed back by `orReturn()`: the block releases what it allocated before the function returns, so the caller would be handed freed memory
