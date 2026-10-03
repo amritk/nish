@@ -1,0 +1,15 @@
+PASS  both sockets bind
+PASS  client datagram 1 reaches the server
+PASS  server datagram 1 reaches the client
+PASS  server datagram 1 is the recorded one, byte for byte
+PASS  client datagram 2 reaches the server
+PASS  server datagram 2 reaches the client
+PASS  server datagram 2 is the recorded one, byte for byte
+PASS  client datagram 3 reaches the server
+PASS  the server echoes stream 0: "hello from aioquic" fin
+PASS  server datagram 3 reaches the client
+PASS  server datagram 3 is the recorded one, byte for byte
+PASS  client datagram 4 reaches the server
+PASS  the client closed the connection with error 0
+PASS  the handshake chose the echo's ALPN
+quic replay against aioquic: 14 passed, 0 failed, 0 skipped

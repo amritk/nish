@@ -1,0 +1,148 @@
+PASS  A.2: the CRYPTO frame parses
+PASS  A.2: it is CRYPTO
+PASS  A.2: at offset 0
+PASS  A.2: 241 bytes of ClientHello, after the type, offset and two-byte length
+PASS  A.2: starting at byte 4
+PASS  A.2: the data is the ClientHello
+PASS  A.2: the frame ends at 245
+PASS  A.2: the PADDING after it parses
+PASS  A.2: as one PADDING frame
+PASS  A.2: running to the end of the payload
+PASS  A.3: the ACK frame parses
+PASS  A.3: it is ACK
+PASS  A.3: of packet 0
+PASS  A.3: with no delay
+PASS  A.3: one range
+PASS  A.3: [0, 0]
+PASS  A.3: five bytes
+PASS  A.3: the CRYPTO frame after it parses
+PASS  A.3: 90 bytes of ServerHello
+PASS  A.3: starting with its header
+PASS  A.3: to the end of the payload
+PASS  a reused QuicFrame keeps nothing of the frame before
+PASS  quicPushAck writes three ranges
+PASS  as largest 12, delay 9, two more ranges, first 2, gap 1 length 2, gap 1 length 2
+PASS  and reads back as written
+PASS  with every range
+PASS  ACK_ECN reads its three counts
+PASS  an ACK_ECN cut inside its counts is FRAME_ENCODING_ERROR
+PASS  quicPushAck writes forty ranges
+PASS  a frame of forty ranges keeps the first QUIC_FRAME_MAX_ACK_RANGES and counts them all
+PASS  no ranges are refused
+PASS  more ranges than the array holds are refused
+PASS  a delay no varint holds is refused
+PASS  touching ranges are refused
+PASS  a range whose smallest passes its largest is refused
+PASS  and nothing was appended
+PASS  an ACK cut inside its fields is FRAME_ENCODING_ERROR
+PASS  a first range below packet 0 is FRAME_ENCODING_ERROR
+PASS  a gap below packet 0 is FRAME_ENCODING_ERROR
+PASS  a range length below packet 0 is FRAME_ENCODING_ERROR
+PASS  a range count the frame does not carry is FRAME_ENCODING_ERROR
+PASS  quicPushCrypto writes a window
+PASS  as type, offset 1000, length 5 and the bytes
+PASS  quicCryptoOverhead is its header's size
+PASS  it reads back
+PASS  a window past the data is refused
+PASS  an end past 2^62 - 1 is refused
+PASS  a CRYPTO length past the packet is FRAME_ENCODING_ERROR
+PASS  a CRYPTO cut inside its offset is FRAME_ENCODING_ERROR
+PASS  a CRYPTO frame reaching past 2^62 - 1 is FRAME_ENCODING_ERROR
+PASS  quicPushStream writes stream 4 from offset 0 with FIN
+PASS  as type 0x0b (LEN and FIN, no OFF), the ID, the length and the bytes
+PASS  quicStreamOverhead leaves out a zero offset
+PASS  it reads back
+PASS  and from offset 300 without FIN
+PASS  as type 0x0e (OFF and LEN)
+PASS  quicStreamOverhead counts the offset
+PASS  it reads back
+PASS  a STREAM frame without LEN runs to the end of the packet
+PASS  a stream ID no varint holds is refused
+PASS  a STREAM window past the data is refused
+PASS  a STREAM end past 2^62 - 1 is refused
+PASS  nothing was appended
+PASS  a STREAM frame cut inside its ID is FRAME_ENCODING_ERROR
+PASS  a STREAM length past the packet is FRAME_ENCODING_ERROR
+PASS  a STREAM frame reaching past 2^62 - 1 is FRAME_ENCODING_ERROR
+PASS  each one-value frame writes and reads back 70000
+PASS  as type then a four-byte varint
+PASS  quicPushValue refuses a type that is not one-value
+PASS  and a value no varint holds
+PASS  and a stream count past 2^60
+PASS  a MAX_STREAMS past 2^60 is FRAME_ENCODING_ERROR
+PASS  a STREAMS_BLOCKED cut short is FRAME_ENCODING_ERROR
+PASS  a MAX_DATA cut short is FRAME_ENCODING_ERROR
+PASS  a DATA_BLOCKED cut short is FRAME_ENCODING_ERROR
+PASS  a RETIRE_CONNECTION_ID cut short is FRAME_ENCODING_ERROR
+PASS  quicPushStreamValue writes MAX_STREAM_DATA
+PASS  and STREAM_DATA_BLOCKED
+PASS  both
+PASS  MAX_STREAM_DATA reads back
+PASS  quicPushStreamValue refuses another type
+PASS  and a value no varint holds
+PASS  a MAX_STREAM_DATA cut short is FRAME_ENCODING_ERROR
+PASS  a STREAM_DATA_BLOCKED cut short is FRAME_ENCODING_ERROR
+PASS  quicPushStreamError writes RESET_STREAM
+PASS  and, with final size -1, STOP_SENDING
+PASS  both
+PASS  RESET_STREAM reads back
+PASS  STOP_SENDING reads back
+PASS  quicPushStreamError refuses a value no varint holds
+PASS  a RESET_STREAM cut short is FRAME_ENCODING_ERROR
+PASS  a STOP_SENDING cut short is FRAME_ENCODING_ERROR
+PASS  no refused write appended anything
+PASS  quicPushNewConnectionId writes one
+PASS  as sequence, Retire Prior To, the ID's length and bytes, and the token
+PASS  it reads back
+PASS  an empty connection ID is refused
+PASS  so is one of 21 bytes
+PASS  so is a 15-byte token
+PASS  so is a Retire Prior To above the sequence number
+PASS  a NEW_CONNECTION_ID with an empty ID is FRAME_ENCODING_ERROR
+PASS  one with a 21-byte ID is FRAME_ENCODING_ERROR
+PASS  one whose Retire Prior To passes its sequence number is FRAME_ENCODING_ERROR
+PASS  one cut inside its token is FRAME_ENCODING_ERROR
+PASS  one cut before its ID's length is FRAME_ENCODING_ERROR
+PASS  quicPushPathData writes PATH_CHALLENGE
+PASS  and PATH_RESPONSE
+PASS  each the type and eight bytes
+PASS  PATH_CHALLENGE reads back
+PASS  quicPushPathData refuses another type
+PASS  and a window past the data
+PASS  a PATH_CHALLENGE cut short is FRAME_ENCODING_ERROR
+PASS  a PATH_RESPONSE cut short is FRAME_ENCODING_ERROR
+PASS  quicPushConnectionClose writes the transport form
+PASS  and the application form
+PASS  0x1c with the frame type, 0x1d without
+PASS  the transport form reads back
+PASS  the application form reads back
+PASS  quicPushConnectionClose refuses a code no varint holds
+PASS  a CONNECTION_CLOSE whose reason runs past the packet is FRAME_ENCODING_ERROR
+PASS  so is an application close's
+PASS  quicPushNewToken writes a token
+PASS  behind its length
+PASS  it reads back
+PASS  an empty token is refused
+PASS  an empty NEW_TOKEN is FRAME_ENCODING_ERROR (RFC 9000 §19.7)
+PASS  a NEW_TOKEN cut short is FRAME_ENCODING_ERROR
+PASS  quicPushTypeOnly writes PING
+PASS  and HANDSHAKE_DONE
+PASS  one byte each
+PASS  HANDSHAKE_DONE reads back
+PASS  quicPushTypeOnly refuses a frame with a body
+PASS  padding of zero bytes appends nothing, and no refused write appended anything
+PASS  a window starting before the payload is INTERNAL_ERROR
+PASS  one ending past it is INTERNAL_ERROR
+PASS  an empty window is INTERNAL_ERROR
+PASS  frame type 0x1f, past RFC 9000's, is FRAME_ENCODING_ERROR
+PASS  a frame type cut inside its varint is FRAME_ENCODING_ERROR
+PASS  PING spelled in two bytes is PROTOCOL_VIOLATION (§12.4)
+PASS  a large frame type is FRAME_ENCODING_ERROR
+PASS  Initial and Handshake packets carry PADDING, PING, ACK, CRYPTO and the transport close
+PASS  but not STREAM, the application close, HANDSHAKE_DONE or NEW_TOKEN
+PASS  a 1-RTT packet carries anything
+PASS  a 0-RTT packet carries STREAM but not ACK, CRYPTO or HANDSHAKE_DONE
+PASS  a Retry carries no frames
+PASS  ACK, PADDING and both closes do not elicit an acknowledgement
+PASS  PING and STREAM do
+quic frames: 147 passed, 0 failed, 0 skipped
