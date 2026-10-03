@@ -198,6 +198,8 @@ cases/net_dual_stack added after R6: no rewriter to freeze it with
 cases/net_loop_calls added after R6: no rewriter to freeze it with
 cases/net_loop_two added after R6: no rewriter to freeze it with
 cases/net_tcp_calls added after R6: no rewriter to freeze it with
+cases/net_tcp_connect added after R6: no rewriter to freeze it with
+cases/net_tcp_connect_import added after R6: no rewriter to freeze it with
 cases/net_tcp_echo added after R6: no rewriter to freeze it with
 cases/net_tcp_import added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with

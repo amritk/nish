@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 841 programs, 59255 dump lines.
+# 843 programs, 59336 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -42613,6 +42613,89 @@ function main(): i32 -> @nish_main [exported entry]
   local 29:9 fd: i32 (const)
   local 30:9 port: i32 (const)
   local 41:9 both: i32 (const)
+program tests/cases/net_tcp_connect.ts
+module tests/cases/net_tcp_connect.ts (entry)
+const WOULD_BLOCK: i32 = -11
+const LISTENER: i32 = 1
+const CLIENT: i32 = 2
+const SERVER: i32 = 3
+const REFUSED: i32 = 4
+function waitFor(loop: i32, ready: i32[], token: i32): i32 -> @waitFor
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 20:15
+  calls: nish_panic_index nish_poll_wait
+  pointer ready: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 20:11 n: i32 (const)
+  local 24:14 i: i32 (let)
+function readAll(loop: i32, ready: i32[], token: i32, fd: i32, buf: u8[], len: i32): i32 -> @readAll
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 36:15
+  escaping: loop token
+  calls: nish_net_read nish_panic_slice waitFor
+  pointer ready: size=0 writesThrough=true captured=false passedTo=waitFor#1
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 34:7 got: i32 (let)
+  local 36:11 n: i32 (const)
+  callee 38:11 waitFor -> @waitFor
+function exchange(loop: i32, ready: i32[], listener: i32, addr: u8[], messages: i32, size: i32): i32 -> @exchange
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 84:7
+  escaping: loop size
+  calls: nish_arena_mark nish_arena_release nish_connect_result nish_net_close nish_net_read nish_net_write nish_panic_index nish_panic_slice nish_poll_add nish_poll_modify nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_tcp_accept nish_tcp_connect readAll waitFor
+  pointer ready: size=0 writesThrough=true captured=false passedTo=waitFor#1 waitFor#1 readAll#1 readAll#1 waitFor#1
+  pointer addr: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 56:9 client: i32 (const)
+  callee 61:7 waitFor -> @waitFor
+  local 64:9 made: i32 (const)
+  callee 68:7 waitFor -> @waitFor
+  local 71:9 peer: u8[] (const)
+  local 72:9 conn: i32 (const)
+  local 78:9 sent: u8[] (const)
+  local 79:9 relay: u8[] (const)
+  local 80:9 back: u8[] (const)
+  local 81:7 intact: i32 (let)
+  local 82:12 m: i32 (let)
+  local 83:14 k: i32 (let)
+  callee 88:7 readAll -> @readAll
+  callee 90:7 readAll -> @readAll
+  local 94:9 same: boolean (let)
+  local 95:14 k: i32 (let)
+  local 106:9 end: i32 (const)
+  callee 106:15 waitFor -> @waitFor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: exchange nish_arena_mark nish_arena_release nish_arena_used nish_connect_result nish_net_address nish_net_close nish_net_local_port nish_poll_add nish_poll_create nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_tcp_connect nish_tcp_listen waitFor
+  stackSites=3 stackLocals=3
+  local 113:9 short: u8[] (const)
+  local 117:9 loop: i32 (const)
+  local 118:9 ready: i32[] (const)
+  local 119:9 listener: i32 (const)
+  local 120:9 addr: u8[] (const)
+  local 124:9 before: i64 (const)
+  local 125:9 first: i32 (const)
+  callee 125:17 exchange -> @exchange
+  local 126:9 one: i64 (const)
+  local 127:9 second: i32 (const)
+  callee 127:18 exchange -> @exchange
+  local 128:9 many: i64 (const)
+  local 133:9 gone: i32 (const)
+  local 136:9 refused: i32 (const)
+  local 137:7 answer: i32 (let)
+  callee 140:14 waitFor -> @waitFor
+program tests/cases/net_tcp_connect_import.ts
+module tests/cases/net_tcp_connect_import.ts (entry)
+import connectResult from "nish:net" -> builtin connectResult
+import connectTo from "nish:net" -> builtin tcpConnect
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_connect_result nish_print nish_str_from_i32 nish_tcp_connect
+  stackSites=1 stackLocals=1
+  local 8:9 short: u8[] (const)
 program tests/cases/net_tcp_echo.ts
 module tests/cases/net_tcp_echo.ts (entry)
 import netClose from "nish:net" -> builtin netClose

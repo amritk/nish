@@ -77,7 +77,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+    return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   return "write, writeError, panic"
 }
@@ -90,15 +90,16 @@ export const nishModuleExports = (specifier: string): string => {
  * which.
  *
  * Each name is a global too, as every `nish:` export is, and each carries a
- * `net`, `tcp`, `udp` or `poll` prefix so that none of them collides with a
- * global that already exists (`write`). `pollCreate` takes nothing, so its
- * signature is the one empty answer that is an export (`isNetExport`).
+ * `net`, `tcp`, `udp`, `poll` or `connect` prefix so that none of them
+ * collides with a global that already exists (`write`). `pollCreate` takes
+ * nothing, so its signature is the one empty answer that is an export
+ * (`isNetExport`).
  */
 export const netSignature = (name: string): string => {
   if (name === "netAddress") {
     return "wsi"
   }
-  if (name === "netLocalPort" || name === "netClose") {
+  if (name === "netLocalPort" || name === "netClose" || name === "connectResult") {
     return "i"
   }
   if (name === "tcpListen") {
@@ -112,6 +113,9 @@ export const netSignature = (name: string): string => {
   }
   if (name === "netWrite") {
     return "irnn"
+  }
+  if (name === "tcpConnect") {
+    return "r"
   }
   if (name === "netShutdown") {
     return "ii"
