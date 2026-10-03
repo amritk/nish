@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_signal.ts",
+  "deterministic": true,
+  "capabilities": ["signal"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["signal"],
+      "modules": [
+        {
+          "path": "caps_signal.ts",
+          "capabilities": ["signal"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["signal"],
+              "witnesses": {
+                "signal": [
+                  { "function": "main", "at": "caps_signal.ts:7:15", "calls": "listen" },
+                  { "function": "listen", "at": "caps_signal.ts:4:27", "calls": "signalFd" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

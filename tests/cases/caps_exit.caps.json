@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_exit.ts",
+  "deterministic": true,
+  "capabilities": ["exit"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["exit"],
+      "modules": [
+        {
+          "path": "caps_exit.ts",
+          "capabilities": ["exit"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["exit"],
+              "witnesses": {
+                "exit": [
+                  { "function": "main", "at": "caps_exit.ts:12:3", "calls": "finish" },
+                  { "function": "finish", "at": "caps_exit.ts:7:3", "calls": "process.exit" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

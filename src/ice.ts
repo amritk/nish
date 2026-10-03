@@ -72,10 +72,39 @@ const ENV_DEBUG: string = "NISH_DEBUG"
  */
 const ENV_SIMULATE_ICE: string = "NISH_SIMULATE_ICE"
 
-/** Whether the run asked for a simulated internal error (`ENV_SIMULATE_ICE`). */
+/**
+ * The prefix that asks for a different broken invariant: `unlabelled:<name>`
+ * compiles as usual and treats the builtin `<name>` as missing from the
+ * capability audit (WP35, `Options.unlabelledBuiltin`), so the report comes
+ * from the walk that would meet a real one rather than from the driver.
+ */
+const UNLABELLED_PREFIX: string = "unlabelled:"
+
+/** Whether the run asked for a simulated internal error at the driver (`ENV_SIMULATE_ICE`). */
 export const simulatedInternalError = (): boolean => {
   const value = getenv(ENV_SIMULATE_ICE)
-  return value !== null && value.length > 0
+  return value !== null && value.length > 0 && !value.startsWith(UNLABELLED_PREFIX)
+}
+
+/** The builtin the run asked the capability audit to treat as unlabelled, or `""`. */
+export const simulatedUnlabelledBuiltin = (): string => {
+  const value = getenv(ENV_SIMULATE_ICE)
+  return value !== null && value.startsWith(UNLABELLED_PREFIX)
+    ? value.substring(UNLABELLED_PREFIX.length)
+    : ""
+}
+
+/**
+ * The lines every internal-error report ends with, and the status it answers.
+ * They name no message, so sharing them costs no report its frame.
+ */
+const reportFooter = (): i32 => {
+  console.error(
+    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
+  )
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
+  console.error("the command line at https://github.com/amritk/nish/issues")
+  return EXIT_INTERNAL
 }
 
 /** The sixteen digits a `\u00XX` escape spells a control character with. */
@@ -143,12 +172,32 @@ export const internalErrorFor = (message: string, json: boolean): i32 => {
   }
   console.error(`${CLI} ${VERSION}: internal compiler error`)
   console.error(`  ${message}`)
-  console.error(
-    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
-  )
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
-  console.error("the command line at https://github.com/amritk/nish/issues")
-  return EXIT_INTERNAL
+  return reportFooter()
+}
+
+/**
+ * WP35: the report for a builtin the capability audit has no row for
+ * (`noteBuiltin` in `src/attributes.ts`), with the builtin named in the
+ * `--json` object as well as on stderr.
+ *
+ * Its own function rather than `internalErrorFor` with a built message, for
+ * the reason given there: the name is written in pieces, and stays in the
+ * frame. It needs none of the escapes, because a builtin's name is an
+ * identifier, or two joined by a dot, and neither holds a byte JSON escapes.
+ */
+export const unlabelledBuiltinError = (name: string, json: boolean): i32 => {
+  if (json) {
+    write('{"severity":"error","code":"')
+    write(INTERNAL)
+    write(
+      '","message":"internal compiler error: a builtin call has no capability label in src/capabilities.ts: `'
+    )
+    write(name)
+    write('`"}\n')
+  }
+  console.error(`${CLI} ${VERSION}: internal compiler error`)
+  console.error(`  a builtin call has no capability label in src/capabilities.ts: \`${name}\``)
+  return reportFooter()
 }
 
 /**
@@ -161,10 +210,5 @@ export const internalErrorFor = (message: string, json: boolean): i32 => {
 export const internalError = (message: string): i32 => {
   console.error(`${CLI} ${VERSION}: internal compiler error`)
   console.error(`  ${message}`)
-  console.error(
-    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
-  )
-  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
-  console.error("the command line at https://github.com/amritk/nish/issues")
-  return EXIT_INTERNAL
+  return reportFooter()
 }
