@@ -21,7 +21,10 @@
                   { "function": "main", "at": "main.ts:10:63", "calls": "three" },
                   { "function": "three", "at": "node_modules/nish/src/index.ts:3:34", "calls": "getenv" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "main.ts:10:38", "callee": "trim", "via": "index" }
+              ]
             }
           ]
         }
@@ -43,7 +46,10 @@
                 "env": [
                   { "function": "three", "at": "node_modules/nish/src/index.ts:3:34", "calls": "getenv" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "node_modules/nish/src/index.ts:3:34", "allowed": true }
+              ]
             }
           ]
         }
@@ -61,49 +67,88 @@
               "name": "contains",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": []
             },
             {
               "name": "firstDifference",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/text.ts:187:9", "proven": true },
+                { "kind": "index", "at": "std/text.ts:187:21", "proven": true }
+              ]
             },
             {
               "name": "replaceAll",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "oom", "at": "std/text.ts:164:7", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:165:14", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:167:5", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:167:16", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:168:12", "allowed": true }
+              ]
             },
             {
               "name": "splitLines",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "oom", "at": "std/text.ts:59:27", "allowed": true },
+                { "kind": "index", "at": "std/text.ts:63:15", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:69:9", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:69:20", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:76:5", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:76:16", "allowed": true }
+              ]
             },
             {
               "name": "splitWhitespace",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "oom", "at": "std/text.ts:89:27", "allowed": true },
+                { "kind": "index", "at": "std/text.ts:93:31", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:97:9", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:97:20", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:106:5", "allowed": true },
+                { "kind": "oom", "at": "std/text.ts:106:16", "allowed": true }
+              ]
             },
             {
               "name": "trim",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/text.ts:131:47", "callee": "trimEnd", "via": "index" }
+              ]
             },
             {
               "name": "trimEnd",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/text.ts:124:43", "proven": false },
+                { "kind": "oom", "at": "std/text.ts:127:10", "allowed": true }
+              ]
             },
             {
               "name": "trimStart",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/text.ts:115:46", "proven": true },
+                { "kind": "oom", "at": "std/text.ts:118:10", "allowed": true }
+              ]
             }
           ]
         }

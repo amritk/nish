@@ -22,7 +22,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
-declare void @nish_panic_div(i1 noundef zeroext) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -69,49 +68,37 @@ for.body:
   %4 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
   %5 = load i32, i32* %i.addr, align 4
   %6 = mul nsw i32 %5, 31
-  %7 = icmp eq i32 97, 0
-  %8 = icmp eq i32 %6, -2147483648
-  %9 = icmp eq i32 97, -1
-  %10 = and i1 %8, %9
-  %11 = or i1 %7, %10
-  br i1 %11, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %7)
-  unreachable
-
-div.ok:
-  %12 = srem i32 %6, 97
-  %13 = call %struct.Set$i32* @nish.Set$i32.add(%struct.Set$i32* %4, i32 %12)
+  %7 = srem i32 %6, 97
+  %8 = call %struct.Set$i32* @nish.Set$i32.add(%struct.Set$i32* %4, i32 %7)
   br label %for.inc
 
 for.inc:
-  %14 = load i32, i32* %i.addr, align 4
-  %15 = add nsw i32 %14, 1
-  store i32 %15, i32* %i.addr, align 4
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = add nsw i32 %9, 1
+  store i32 %10, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
+  %11 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
+  %12 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %11, i32 0, i32 0
+  %13 = load i32, i32* %12, align 4, !tbaa !5
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  %15 = call i8* @nish_str_concat(i8* %14, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %16 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
-  %17 = getelementptr inbounds %struct.Set$i32, %struct.Set$i32* %16, i32 0, i32 0
-  %18 = load i32, i32* %17, align 4, !tbaa !5
-  %19 = call i8* @nish_str_from_i32(i32 %18)
+  %17 = call i1 @nish.Set$i32.has(%struct.Set$i32* %16, i32 0)
+  %18 = select i1 %17, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %19 = call i8* @nish_str_concat(i8* %15, i8* %18)
   %20 = call i8* @nish_str_concat(i8* %19, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %21 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
-  %22 = call i1 @nish.Set$i32.has(%struct.Set$i32* %21, i32 0)
+  %22 = call i1 @nish.Set$i32.has(%struct.Set$i32* %21, i32 96)
   %23 = select i1 %22, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
   %24 = call i8* @nish_str_concat(i8* %20, i8* %23)
   %25 = call i8* @nish_str_concat(i8* %24, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %26 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
-  %27 = call i1 @nish.Set$i32.has(%struct.Set$i32* %26, i32 96)
+  %27 = call i1 @nish.Set$i32.has(%struct.Set$i32* %26, i32 97)
   %28 = select i1 %27, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
   %29 = call i8* @nish_str_concat(i8* %25, i8* %28)
-  %30 = call i8* @nish_str_concat(i8* %29, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %31 = load %struct.Set$i32*, %struct.Set$i32** %s.addr, align 8
-  %32 = call i1 @nish.Set$i32.has(%struct.Set$i32* %31, i32 97)
-  %33 = select i1 %32, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %34 = call i8* @nish_str_concat(i8* %30, i8* %33)
-  call void @nish_print(i8* %34)
+  call void @nish_print(i8* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

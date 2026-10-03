@@ -436,28 +436,28 @@ export const reportDeniedPanics = (
 ): PanicSite[] => {
   const refused: PanicSite[] = []
   const scoped = new StringSet()
+  // The programs in scope, read once: `inScope` is in step with `units`.
+  const programs: CheckedProgram[] = []
   let k = 0
-  while (k < units.length && k < inScope.length) {
-    if (inScope[k]) {
-      for (const sig of units[k].program.functions) {
-        if (listedFacts(units[k].program, facts, sig) !== null) {
-          scoped.add(sig.name)
-        }
-      }
+  for (const unit of units) {
+    if (k < inScope.length && inScope[k]) {
+      programs.push(unit.program)
     }
     k = k + 1
   }
-  k = 0
-  while (k < units.length && k < inScope.length) {
-    if (inScope[k]) {
-      const program = units[k].program
-      for (const site of program.panicSites) {
-        if (refuseSite(program, facts, table, scoped, site, sink)) {
-          refused.push(site)
-        }
+  for (const program of programs) {
+    for (const sig of program.functions) {
+      if (listedFacts(program, facts, sig) !== null) {
+        scoped.add(sig.name)
       }
     }
-    k = k + 1
+  }
+  for (const program of programs) {
+    for (const site of program.panicSites) {
+      if (refuseSite(program, facts, table, scoped, site, sink)) {
+        refused.push(site)
+      }
+    }
   }
   return refused
 }

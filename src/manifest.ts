@@ -247,7 +247,7 @@ export const manifestNoPanic = (manifest: string, condition: string): NoPanicLis
   }
   const base = nishAt + listAt
   let i = manifestSkipBlank(manifest, base + 1)
-  while (i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACKET) {
+  while (i >= 0 && i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACKET) {
     const end = manifestEndOfValue(manifest, i)
     if (end <= i) {
       return out
@@ -255,7 +255,7 @@ export const manifestNoPanic = (manifest: string, condition: string): NoPanicLis
     out.entries.push(manifestUnquoted(manifest.substring(i, end)))
     out.offsets.push(i)
     i = manifestSkipBlank(manifest, end)
-    if (i < manifest.length && manifest.charCodeAt(i) === COMMA) {
+    if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
       i = manifestSkipBlank(manifest, i + 1)
     }
   }

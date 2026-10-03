@@ -2,7 +2,6 @@
 %struct.nish_array = type { i64, i64, i8* }
 
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
-declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define internal void @Acc.constructor(%struct.Acc* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
 entry:
@@ -70,45 +69,21 @@ bounds.ok:
   %25 = bitcast i8* %3 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 %24
   %27 = load i32, i32* %26, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %28 = icmp eq i32 2, 0
-  %29 = icmp eq i32 %27, -2147483648
-  %30 = icmp eq i32 2, -1
-  %31 = and i1 %29, %30
-  %32 = or i1 %28, %31
-  br i1 %32, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %28)
-  unreachable
-
-div.ok:
-  %33 = sdiv i32 %27, 2
-  %34 = sub i32 %22, %33
-  store i32 %34, i32* %21, align 4
+  %28 = sdiv i32 %27, 2
+  %29 = sub i32 %22, %28
+  store i32 %29, i32* %21, align 4
   br label %for.inc
 
 for.inc:
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = add i32 %35, 1
-  store i32 %36, i32* %i.addr, align 4
+  %30 = load i32, i32* %i.addr, align 4
+  %31 = add i32 %30, 1
+  store i32 %31, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %37 = load i32, i32* %s.addr, align 4
-  %38 = icmp eq i32 1000, 0
-  %39 = icmp eq i32 %37, -2147483648
-  %40 = icmp eq i32 1000, -1
-  %41 = and i1 %39, %40
-  %42 = or i1 %38, %41
-  br i1 %42, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %38)
-  unreachable
-
-div.ok.1:
-  %43 = srem i32 %37, 1000
-  ret i32 %43
+  %32 = load i32, i32* %s.addr, align 4
+  %33 = srem i32 %32, 1000
+  ret i32 %33
 }
 
 define internal noundef i32 @mix(i32 noundef %a, i32 noundef %b) #1 {

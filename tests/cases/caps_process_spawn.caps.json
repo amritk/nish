@@ -21,7 +21,10 @@
                   { "function": "main", "at": "caps_process_spawn.ts:6:15", "calls": "run" },
                   { "function": "run", "at": "caps_process_spawn.ts:3:41", "calls": "spawnSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_process_spawn.ts:6:3", "allowed": true }
+              ]
             }
           ]
         }

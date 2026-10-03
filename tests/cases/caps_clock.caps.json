@@ -21,7 +21,8 @@
                   { "function": "main", "at": "caps_clock.ts:7:17", "calls": "now" },
                   { "function": "now", "at": "caps_clock.ts:4:24", "calls": "monotonicNanos" }
                 ]
-              }
+              },
+              "panics": []
             }
           ]
         }

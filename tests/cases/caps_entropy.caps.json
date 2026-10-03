@@ -21,7 +21,8 @@
                   { "function": "main", "at": "caps_entropy.ts:7:13", "calls": "roll" },
                   { "function": "roll", "at": "caps_entropy.ts:4:25", "calls": "Math.random" }
                 ]
-              }
+              },
+              "panics": []
             }
           ]
         }

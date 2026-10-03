@@ -384,9 +384,9 @@ const pushPanics = (
   }
   out.push('              "panics": [\n')
   let k = 0
-  while (k < sites.length) {
+  for (const site of sites) {
     out.push("                ")
-    out.push(siteReportEntry(sites[k], path, facts))
+    out.push(siteReportEntry(site, path, facts))
     out.push(k < sites.length - 1 ? ",\n" : "\n")
     k = k + 1
   }

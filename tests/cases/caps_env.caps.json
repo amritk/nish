@@ -21,7 +21,8 @@
                   { "function": "main", "at": "caps_env.ts:9:15", "calls": "setting" },
                   { "function": "setting", "at": "caps_env.ts:4:17", "calls": "getenv" }
                 ]
-              }
+              },
+              "panics": []
             }
           ]
         }

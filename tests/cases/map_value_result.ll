@@ -37,7 +37,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_exit(i32 noundef) #5
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare void @nish_panic_div(i1 noundef zeroext) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -65,46 +64,34 @@ slow:
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @parse(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 3, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 3, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 3
-  %6 = icmp eq i32 %5, 0
-  br i1 %6, label %cond.true, label %cond.false
+  %0 = srem i32 %n, 3
+  %1 = icmp eq i32 %0, 0
+  br i1 %1, label %cond.true, label %cond.false
 
 cond.true:
-  %7 = call i8* @nish_str_from_i32(i32 %n)
-  %8 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* %7)
-  %9 = call i8* @nish_alloc_struct(i64 16)
-  %10 = bitcast i8* %9 to %struct.nish_result.i32.str*
-  %11 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 0
-  store i1 false, i1* %11, align 1
-  %12 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 2
-  store i8* %8, i8** %12, align 8
+  %2 = call i8* @nish_str_from_i32(i32 %n)
+  %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* %2)
+  %4 = call i8* @nish_alloc_struct(i64 16)
+  %5 = bitcast i8* %4 to %struct.nish_result.i32.str*
+  %6 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %5, i32 0, i32 0
+  store i1 false, i1* %6, align 1
+  %7 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %5, i32 0, i32 2
+  store i8* %3, i8** %7, align 8
   br label %cond.end
 
 cond.false:
-  %13 = mul nsw i32 %n, 10
-  %14 = call i8* @nish_alloc_struct(i64 16)
-  %15 = bitcast i8* %14 to %struct.nish_result.i32.str*
-  %16 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %15, i32 0, i32 0
-  store i1 true, i1* %16, align 1
-  %17 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %15, i32 0, i32 1
-  store i32 %13, i32* %17, align 4
+  %8 = mul nsw i32 %n, 10
+  %9 = call i8* @nish_alloc_struct(i64 16)
+  %10 = bitcast i8* %9 to %struct.nish_result.i32.str*
+  %11 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 0
+  store i1 true, i1* %11, align 1
+  %12 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 1
+  store i32 %8, i32* %12, align 4
   br label %cond.end
 
 cond.end:
-  %18 = phi %struct.nish_result.i32.str* [ %10, %cond.true ], [ %15, %cond.false ]
-  ret %struct.nish_result.i32.str* %18
+  %13 = phi %struct.nish_result.i32.str* [ %5, %cond.true ], [ %10, %cond.false ]
+  ret %struct.nish_result.i32.str* %13
 }
 
 define internal noundef nonnull align 8 i8* @show(%struct.Map$str$res.i32.str* noundef nonnull readonly align 8 dereferenceable(56) nocapture %m, i8* noundef nonnull noalias readonly align 8 %key) #0 {

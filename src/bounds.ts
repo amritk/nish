@@ -1317,6 +1317,12 @@ const provesDivisor = (walk: BoundsWalk, state: State, dividend: Node, divisor: 
  * and `emitIntBinary` leaves the check out.
  */
 const judgeDivision = (walk: BoundsWalk, state: State, node: Node): void => {
+  // Only pass 2 judges a divisor, as only it judges a range entry: the
+  // whole-program walks of `src/ranges.ts` revisit only the bodies an access
+  // keeps open, so a proof drawn there would depend on which those were.
+  if (walk.tables !== null) {
+    return
+  }
   const op = node.text
   if (op !== "/" && op !== "%" && op !== "/=" && op !== "%=") {
     return
@@ -1353,11 +1359,14 @@ const isArrayPop = (ctx: CheckContext, call: Node): boolean => {
 
 /**
  * Record the verdict for a `pop`: proven where its receiver is known to hold
- * an element, which `if (xs.length > 0)` says. Under `--unchecked-indexing`
+ * an element, which `if (xs.length > 0)` says. Pass 2 alone judges it. Under `--unchecked-indexing`
  * there is no check to leave out, and the site stays unproven
  * (`src/panics.ts`), as an index does.
  */
 const judgePop = (walk: BoundsWalk, state: State, call: Node): void => {
+  if (walk.tables !== null) {
+    return // pass 2 only, as `judgeDivision` says
+  }
   const holder = holderOf(walk, unwrapBoundsParens(call.children[0]).children[0])
   if (holder !== null && knownMinLength(state, holder, 1)) {
     noteProof(walk, call)

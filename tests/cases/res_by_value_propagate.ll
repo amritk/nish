@@ -10,7 +10,6 @@ declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 nou
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_exit(i32 noundef) #2
-declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define internal { i1, i32, i32 } @checkPort(i32 noundef %port) #0 {
 entry:
@@ -25,47 +24,23 @@ if.end:
   ret { i1, i32, i32 } { i1 true, i32 undef, i32 undef }
 }
 
-define internal { i1, i32, i32 } @firstHalf(i32 noundef %n) #1 {
+define internal { i1, i32, i32 } @firstHalf(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %n, 2
+  %1 = icmp ne i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
-  %7 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2
-  ret { i1, i32, i32 } %7
+  %2 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2
+  ret { i1, i32, i32 } %2
 
 if.end:
-  %8 = icmp eq i32 2, 0
-  %9 = icmp eq i32 %n, -2147483648
-  %10 = icmp eq i32 2, -1
-  %11 = and i1 %9, %10
-  %12 = or i1 %8, %11
-  br i1 %12, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %8)
-  unreachable
-
-div.ok.1:
-  %13 = sdiv i32 %n, 2
-  %14 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %13, 1
-  ret { i1, i32, i32 } %14
+  %3 = sdiv i32 %n, 2
+  %4 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %3, 1
+  ret { i1, i32, i32 } %4
 }
 
-define internal { i1, i32, i32 } @quarter(i32 noundef %n) #1 {
+define internal { i1, i32, i32 } @quarter(i32 noundef %n) #0 {
 entry:
   %h.addr = alloca i32, align 4
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
@@ -117,7 +92,7 @@ res.ok:
   ret { i1, i32, i32 } %30
 }
 
-define internal { i1, i32, i32 } @again(i32 noundef %n) #1 {
+define internal { i1, i32, i32 } @again(i32 noundef %n) #0 {
 entry:
   %r.addr = alloca %struct.nish_result.i32.i32*, align 8
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
@@ -145,7 +120,7 @@ entry:
   ret { i1, i32, i32 } %16
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %bad.addr = alloca %struct.nish_result.void.i32*, align 8
   %nish_result.void.i32.obj = alloca %struct.nish_result.void.i32, align 8
@@ -313,4 +288,3 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }

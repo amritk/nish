@@ -21,7 +21,10 @@
                   { "function": "main", "at": "caps_net.ts:11:15", "calls": "encode" },
                   { "function": "encode", "at": "caps_net.ts:7:36", "calls": "netAddress" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_net.ts:11:3", "allowed": true }
+              ]
             }
           ]
         }

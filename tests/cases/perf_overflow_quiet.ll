@@ -1,5 +1,3 @@
-declare void @nish_panic_div(i1 noundef zeroext) #1
-
 define noundef i32 @test() #0 {
 entry:
   %a.addr = alloca i32, align 4
@@ -25,31 +23,18 @@ entry:
   %8 = shl i32 1, 31
   store i32 %8, i32* %shifted.addr, align 4
   %9 = load i64, i64* %wide.addr, align 8
-  %10 = icmp eq i64 100000000, 0
-  %11 = icmp eq i64 %9, -9223372036854775808
-  %12 = icmp eq i64 100000000, -1
-  %13 = and i1 %11, %12
-  %14 = or i1 %10, %13
-  br i1 %14, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %10)
-  unreachable
-
-div.ok:
-  %15 = sdiv i64 %9, 100000000
-  %16 = trunc i64 %15 to i32
-  %17 = load i32, i32* %n.addr, align 4
-  %18 = add nsw i32 %16, %17
-  %19 = load i32, i32* %fits.addr, align 4
-  %20 = sub nsw i32 %19, 2147483646
-  %21 = add nsw i32 %18, %20
-  %22 = load i32, i32* %shifted.addr, align 4
-  %23 = load i32, i32* %shifted.addr, align 4
-  %24 = sub nsw i32 %22, %23
-  %25 = add nsw i32 %21, %24
-  ret i32 %25
+  %10 = sdiv i64 %9, 100000000
+  %11 = trunc i64 %10 to i32
+  %12 = load i32, i32* %n.addr, align 4
+  %13 = add nsw i32 %11, %12
+  %14 = load i32, i32* %fits.addr, align 4
+  %15 = sub nsw i32 %14, 2147483646
+  %16 = add nsw i32 %13, %15
+  %17 = load i32, i32* %shifted.addr, align 4
+  %18 = load i32, i32* %shifted.addr, align 4
+  %19 = sub nsw i32 %17, %18
+  %20 = add nsw i32 %16, %19
+  ret i32 %20
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn readnone }

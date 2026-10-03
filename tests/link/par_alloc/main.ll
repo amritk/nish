@@ -20,7 +20,6 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare void @nish_exit(i32 noundef) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare void @nish_panic_div(i1 noundef zeroext) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -51,35 +50,23 @@ entry:
   %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
   store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %s.addr, align 8
-  %0 = icmp eq i32 3, 0
-  %1 = icmp eq i32 %x, -2147483648
-  %2 = icmp eq i32 3, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %x, 3
-  %6 = icmp eq i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %x, 3
+  %1 = icmp eq i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
-  %7 = call i8* @nish_str_from_i32(i32 %x)
-  %8 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %7)
-  store i8* %8, i8** %s.addr, align 8
+  %2 = call i8* @nish_str_from_i32(i32 %x)
+  %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %2)
+  store i8* %3, i8** %s.addr, align 8
   br label %if.end
 
 if.end:
-  %9 = load i8*, i8** %s.addr, align 8
-  %10 = bitcast i8* %9 to i64*
-  %11 = load i64, i64* %10, align 8
-  %12 = trunc i64 %11 to i32
+  %4 = load i8*, i8** %s.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %12
+  ret i32 %7
 }
 
 define noundef i32 @nish_main() #0 {

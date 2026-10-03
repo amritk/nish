@@ -24,7 +24,12 @@
                   { "function": "main", "at": "caps_fs_write.ts:11:3", "calls": "save" },
                   { "function": "save", "at": "caps_fs_write.ts:6:3", "calls": "writeFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "caps_fs_write.ts:11:3", "callee": "save", "via": "io-exit" },
+                { "kind": "io-exit", "at": "caps_fs_write.ts:12:15", "proven": false },
+                { "kind": "oom", "at": "caps_fs_write.ts:12:15", "allowed": true }
+              ]
             }
           ]
         }

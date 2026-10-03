@@ -2,13 +2,12 @@
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 
-declare void @nish_free_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_panic_div(i1 noundef zeroext) #2
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 
 define internal noundef i32 @sumOdd(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
@@ -61,51 +60,39 @@ if.end:
   %18 = bitcast i8* %3 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 %17
   %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %21 = icmp eq i32 2, 0
-  %22 = icmp eq i32 %20, -2147483648
-  %23 = icmp eq i32 2, -1
-  %24 = and i1 %22, %23
-  %25 = or i1 %21, %24
-  br i1 %25, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %21)
-  unreachable
-
-div.ok:
-  %26 = srem i32 %20, 2
-  %27 = icmp eq i32 %26, 0
-  br i1 %27, label %if.then.1, label %if.end.1
+  %21 = srem i32 %20, 2
+  %22 = icmp eq i32 %21, 0
+  br i1 %22, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %for.inc
 
 if.end.1:
-  %28 = load i32, i32* %s.addr, align 4
-  %29 = load i32, i32* %i.addr, align 4
-  %30 = sext i32 %29 to i64
-  %31 = bitcast i8* %3 to i32*
-  %32 = getelementptr inbounds i32, i32* %31, i64 %30
-  %33 = load i32, i32* %32, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %34 = add nsw i32 %28, %33
-  store i32 %34, i32* %s.addr, align 4
+  %23 = load i32, i32* %s.addr, align 4
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = sext i32 %24 to i64
+  %26 = bitcast i8* %3 to i32*
+  %27 = getelementptr inbounds i32, i32* %26, i64 %25
+  %28 = load i32, i32* %27, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %29 = add nsw i32 %23, %28
+  store i32 %29, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = sext i32 %35 to i64
-  %37 = bitcast i8* %3 to i32*
-  %38 = getelementptr inbounds i32, i32* %37, i64 %36
-  %39 = load i32, i32* %38, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  store i32 %39, i32* %last.addr, align 4
+  %30 = load i32, i32* %i.addr, align 4
+  %31 = sext i32 %30 to i64
+  %32 = bitcast i8* %3 to i32*
+  %33 = getelementptr inbounds i32, i32* %32, i64 %31
+  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  store i32 %34, i32* %last.addr, align 4
   br label %for.cond
 
 for.end:
-  %40 = load i32, i32* %s.addr, align 4
-  %41 = load i32, i32* %last.addr, align 4
-  %42 = mul nsw i32 %41, 0
-  %43 = add nsw i32 %40, %42
-  ret i32 %43
+  %35 = load i32, i32* %s.addr, align 4
+  %36 = load i32, i32* %last.addr, align 4
+  %37 = mul nsw i32 %36, 0
+  %38 = add nsw i32 %35, %37
+  ret i32 %38
 }
 
 define internal noundef i32 @countOdd(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
@@ -147,46 +134,34 @@ if.end:
   %14 = bitcast i8* %3 to i32*
   %15 = getelementptr inbounds i32, i32* %14, i64 %13
   %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %17 = icmp eq i32 2, 0
-  %18 = icmp eq i32 %16, -2147483648
-  %19 = icmp eq i32 2, -1
-  %20 = and i1 %18, %19
-  %21 = or i1 %17, %20
-  br i1 %21, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %17)
-  unreachable
-
-div.ok:
-  %22 = srem i32 %16, 2
-  %23 = icmp eq i32 %22, 0
-  br i1 %23, label %if.then.1, label %if.end.1
+  %17 = srem i32 %16, 2
+  %18 = icmp eq i32 %17, 0
+  br i1 %18, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %do.cond
 
 if.end.1:
-  %24 = load i32, i32* %odd.addr, align 4
-  %25 = add nsw i32 %24, 1
-  store i32 %25, i32* %odd.addr, align 4
+  %19 = load i32, i32* %odd.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %odd.addr, align 4
   br label %do.cond
 
 do.cond:
-  %26 = load i32, i32* %i.addr, align 4
-  %27 = sext i32 %26 to i64
-  %28 = bitcast i8* %3 to i32*
-  %29 = getelementptr inbounds i32, i32* %28, i64 %27
-  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %31 = icmp sgt i32 %30, 0
-  br i1 %31, label %do.body, label %do.end
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = sext i32 %21 to i64
+  %23 = bitcast i8* %3 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %22
+  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %26 = icmp sgt i32 %25, 0
+  br i1 %26, label %do.body, label %do.end
 
 do.end:
-  %32 = load i32, i32* %odd.addr, align 4
-  ret i32 %32
+  %27 = load i32, i32* %odd.addr, align 4
+  ret i32 %27
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -228,16 +203,16 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

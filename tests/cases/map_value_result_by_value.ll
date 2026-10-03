@@ -17,18 +17,17 @@
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_exit(i32 noundef) #5
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare void @nish_panic_div(i1 noundef zeroext) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
@@ -58,52 +57,40 @@ define internal { i1, i32, i32 } @check(i32 noundef %n) #0 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp eq i32 %5, 0
-  br i1 %6, label %cond.true, label %cond.false
+  %0 = srem i32 %n, 2
+  %1 = icmp eq i32 %0, 0
+  br i1 %1, label %cond.true, label %cond.false
 
 cond.true:
-  %7 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
-  store i1 true, i1* %7, align 1
-  %8 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
-  store i32 %n, i32* %8, align 4
+  %2 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
+  store i1 true, i1* %2, align 1
+  %3 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
+  store i32 %n, i32* %3, align 4
   br label %cond.end
 
 cond.false:
-  %9 = sub nsw i32 0, %n
-  %10 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
-  store i1 false, i1* %10, align 1
-  %11 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
-  store i32 %9, i32* %11, align 4
+  %4 = sub nsw i32 0, %n
+  %5 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 false, i1* %5, align 1
+  %6 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %4, i32* %6, align 4
   br label %cond.end
 
 cond.end:
-  %12 = phi %struct.nish_result.i32.i32* [ %nish_result.i32.i32.obj, %cond.true ], [ %nish_result.i32.i32.obj.1, %cond.false ]
-  %13 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %12, i32 0, i32 0
-  %14 = load i1, i1* %13, align 1
-  %15 = insertvalue { i1, i32, i32 } undef, i1 %14, 0
-  %16 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %12, i32 0, i32 2
-  %17 = load i32, i32* %16, align 4
-  %18 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %12, i32 0, i32 1
-  %19 = load i32, i32* %18, align 4
-  %20 = insertvalue { i1, i32, i32 } %15, i32 %19, 1
-  %21 = insertvalue { i1, i32, i32 } %20, i32 %17, 2
-  ret { i1, i32, i32 } %21
+  %7 = phi %struct.nish_result.i32.i32* [ %nish_result.i32.i32.obj, %cond.true ], [ %nish_result.i32.i32.obj.1, %cond.false ]
+  %8 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %7, i32 0, i32 0
+  %9 = load i1, i1* %8, align 1
+  %10 = insertvalue { i1, i32, i32 } undef, i1 %9, 0
+  %11 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %7, i32 0, i32 2
+  %12 = load i32, i32* %11, align 4
+  %13 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %7, i32 0, i32 1
+  %14 = load i32, i32* %13, align 4
+  %15 = insertvalue { i1, i32, i32 } %10, i32 %14, 1
+  %16 = insertvalue { i1, i32, i32 } %15, i32 %12, 2
+  ret { i1, i32, i32 } %16
 }
 
-define internal noundef nonnull align 8 i8* @show({ i1, i32, i32 } %r) #0 {
+define internal noundef nonnull align 8 i8* @show({ i1, i32, i32 } %r) #1 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %0 = extractvalue { i1, i32, i32 } %r, 0
@@ -138,7 +125,7 @@ cond.end:
   ret i8* %16
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %m.addr = alloca %struct.Map$i32$res.i32.i32*, align 8
   %i.addr = alloca i32, align 4
@@ -786,14 +773,14 @@ join.end:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-define internal noundef i32 @nish.homeBucket(i32 noundef %h, i32 noundef %mask) #1 {
+define internal noundef i32 @nish.homeBucket(i32 noundef %h, i32 noundef %mask) #2 {
 entry:
   %0 = lshr i32 %h, 16
   %1 = xor i32 %h, %0
@@ -801,7 +788,7 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #1 {
+define internal noundef i32 @nish.slotWord(i32 noundef %h, i32 noundef %index) #2 {
 entry:
   %0 = lshr i32 %h, 24
   %1 = shl i32 %0, 24
@@ -810,7 +797,7 @@ entry:
   ret i32 %3
 }
 
-define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #1 {
+define internal noundef i64 @nish.foundAt(i32 noundef %bucket, i32 noundef %index) #2 {
 entry:
   %0 = sext i32 %bucket to i64
   %1 = shl i64 %0, 32
@@ -819,7 +806,7 @@ entry:
   ret i64 %3
 }
 
-define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #1 {
+define internal noundef i64 @nish.absentAt(i32 noundef %bucket, i32 noundef %h) #2 {
 entry:
   %0 = sext i32 -1 to i64
   %1 = sext i32 %bucket to i64
@@ -830,7 +817,7 @@ entry:
   ret i64 %5
 }
 
-define internal void @nish.fileEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %h, i32 noundef %index) #0 {
+define internal void @nish.fileEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %h, i32 noundef %index) #1 {
 entry:
   %word.addr = alloca i32, align 4
   %bucket.addr = alloca i32, align 4
@@ -888,7 +875,7 @@ while.end:
   ret void
 }
 
-define internal void @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #0 {
+define internal void @nish.compactHashes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes) #1 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
@@ -996,7 +983,7 @@ while.end:
   ret void
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %slots, i32 noundef %live, i32 noundef %used) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.rebuiltSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %slots, i32 noundef %live, i32 noundef %used) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
@@ -1038,7 +1025,7 @@ len.ok:
   ret %struct.nish_array* %10
 }
 
-define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 {
+define internal void @nish.refile(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #1 {
 entry:
   %mask.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -1092,7 +1079,7 @@ for.end:
   ret void
 }
 
-define internal void @nish.killEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes, i64 noundef %found) #2 {
+define internal void @nish.killEntry(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %hashes, i64 noundef %found) #0 {
 entry:
   %at.addr = alloca i32, align 4
   %bucket.addr = alloca i32, align 4
@@ -1158,7 +1145,7 @@ if.end.1:
   ret void
 }
 
-define internal void @nish.clearSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots) #0 {
+define internal void @nish.clearSlots(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots) #1 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
@@ -1243,7 +1230,7 @@ for.end:
   ret i32 -1
 }
 
-define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #0 {
+define internal void @nish.fileAppended(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %slots, i32 noundef %mask, i32 noundef %bucket, i32 noundef %h, i32 noundef %used) #1 {
 entry:
   %0 = icmp sge i32 %bucket, 0
   br i1 %0, label %land.rhs, label %land.end
@@ -1279,7 +1266,7 @@ if.end:
   ret void
 }
 
-define internal void @nish.Map$i32$res.i32.i32.constructor(%struct.Map$i32$res.i32.i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #0 {
+define internal void @nish.Map$i32$res.i32.i32.constructor(%struct.Map$i32$res.i32.i32* noundef nonnull noalias align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$res.i32.i32, %struct.Map$i32$res.i32.i32* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !18
@@ -1345,7 +1332,7 @@ len.ok:
   ret void
 }
 
-define internal noundef i64 @nish.Map$i32$res.i32.i32.probe(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %key) #0 {
+define internal noundef i64 @nish.Map$i32$res.i32.i32.probe(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %key) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$res.i32.i32, %struct.Map$i32$res.i32.i32* %this, i32 0, i32 1
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !24
@@ -1359,7 +1346,7 @@ entry:
   ret i64 %8
 }
 
-define internal noundef nonnull align 8 dereferenceable(56) %struct.Map$i32$res.i32.i32* @nish.Map$i32$res.i32.i32.set(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) %this, i32 noundef %key, i64 noundef %value) #0 {
+define internal noundef nonnull align 8 dereferenceable(56) %struct.Map$i32$res.i32.i32* @nish.Map$i32$res.i32.i32.set(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) %this, i32 noundef %key, i64 noundef %value) #1 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %found.addr = alloca i64, align 8
@@ -1417,7 +1404,7 @@ if.end:
   ret %struct.Map$i32$res.i32.i32* %this
 }
 
-define internal noundef zeroext i1 @nish.Map$i32$res.i32.i32.delete(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i32 noundef %key) #0 {
+define internal noundef zeroext i1 @nish.Map$i32$res.i32.i32.delete(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i32 noundef %key) #1 {
 entry:
   %found.addr = alloca i64, align 8
   %0 = call i64 @nish.Map$i32$res.i32.i32.probe(%struct.Map$i32$res.i32.i32* %this, i32 %key)
@@ -1449,7 +1436,7 @@ if.end:
   ret i1 true
 }
 
-define internal void @nish.Map$i32$res.i32.i32.walkOpen(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #2 {
+define internal void @nish.Map$i32$res.i32.i32.walkOpen(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$res.i32.i32, %struct.Map$i32$res.i32.i32* %this, i32 0, i32 7
   %1 = load i32, i32* %0, align 4, !tbaa !23
@@ -1467,7 +1454,7 @@ entry:
   ret i32 %2
 }
 
-define internal void @nish.Map$i32$res.i32.i32.walkClose(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #2 {
+define internal void @nish.Map$i32$res.i32.i32.walkClose(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Map$i32$res.i32.i32, %struct.Map$i32$res.i32.i32* %this, i32 0, i32 7
   %1 = load i32, i32* %0, align 4, !tbaa !23
@@ -1477,7 +1464,7 @@ entry:
   ret void
 }
 
-define internal noundef i64 @nish.Map$i32$res.i32.i32.valueAt(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #0 {
+define internal noundef i64 @nish.Map$i32$res.i32.i32.valueAt(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index) #1 {
 entry:
   %0 = icmp slt i32 %index, 0
   br i1 %0, label %lor.end, label %lor.rhs
@@ -1534,7 +1521,7 @@ bounds.ok:
   ret i64 %30
 }
 
-define internal void @nish.Map$i32$res.i32.i32.setValueAt(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i64 noundef %value) #2 {
+define internal void @nish.Map$i32$res.i32.i32.setValueAt(%struct.Map$i32$res.i32.i32* noundef nonnull readonly align 8 dereferenceable(56) nocapture %this, i32 noundef %index, i64 noundef %value) #0 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 12)
   %1 = bitcast i8* %0 to %struct.nish_result.i32.i32*
@@ -1578,7 +1565,7 @@ if.end:
   ret void
 }
 
-define internal void @nish.Map$i32$res.i32.i32.insertAt(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i64 noundef %absent, i32 noundef %key, i64 noundef %value) #0 {
+define internal void @nish.Map$i32$res.i32.i32.insertAt(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this, i64 noundef %absent, i32 noundef %key, i64 noundef %value) #1 {
 entry:
   %packed.addr = alloca i64, align 8
   %bucket.addr = alloca i32, align 4
@@ -1752,7 +1739,7 @@ if.end.2:
   ret void
 }
 
-define internal void @nish.Map$i32$res.i32.i32.rebuild(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
+define internal void @nish.Map$i32$res.i32.i32.rebuild(%struct.Map$i32$res.i32.i32* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %used.addr = alloca i32, align 4
   %walking.addr = alloca i1, align 1
@@ -1835,7 +1822,7 @@ if.end:
   ret void
 }
 
-define internal noundef i64 @nish.probeTable$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots, i32 noundef %mask, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %keys, i32 noundef %key) #0 {
+define internal noundef i64 @nish.probeTable$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots, i32 noundef %mask, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %keys, i32 noundef %key) #1 {
 entry:
   %h.addr = alloca i32, align 4
   %fingerprint.addr = alloca i32, align 4
@@ -1990,7 +1977,7 @@ while.end:
   unreachable
 }
 
-define internal void @nish.compactEntries$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 {
+define internal void @nish.compactEntries$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #1 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
@@ -2125,7 +2112,7 @@ while.end:
   ret void
 }
 
-define internal void @nish.compactEntries$res.i32.i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #0 {
+define internal void @nish.compactEntries$res.i32.i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %items, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %hashes) #1 {
 entry:
   %used.addr = alloca i32, align 4
   %to.addr = alloca i32, align 4
@@ -2260,9 +2247,9 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readnone }
 attributes #3 = { nounwind readonly }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { noreturn nounwind }

@@ -21,13 +21,15 @@
                   { "function": "apply<(name) => ...>", "at": "caps_fnarg.ts:4:65", "calls": "(name) => ..." },
                   { "function": "(name) => ...", "at": "caps_fnarg.ts:12:21", "calls": "getenv" }
                 ]
-              }
+              },
+              "panics": []
             },
             {
               "name": "apply<lengthOf>",
               "exported": true,
               "capabilities": [],
-              "witnesses": {}
+              "witnesses": {},
+              "panics": []
             },
             {
               "name": "main",
@@ -39,7 +41,11 @@
                   { "function": "apply<(name) => ...>", "at": "caps_fnarg.ts:4:65", "calls": "(name) => ..." },
                   { "function": "(name) => ...", "at": "caps_fnarg.ts:12:21", "calls": "getenv" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_fnarg.ts:9:3", "allowed": true },
+                { "kind": "oom", "at": "caps_fnarg.ts:10:3", "allowed": true }
+              ]
             }
           ]
         }

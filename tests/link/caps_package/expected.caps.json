@@ -22,7 +22,10 @@
                   { "function": "configSize", "at": "node_modules/pkg_caps/src/index.ts:5:50", "calls": "read" },
                   { "function": "read", "at": "node_modules/pkg_caps/src/index.ts:3:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "main.ts:9:32", "callee": "configSize", "via": "io-exit" }
+              ]
             }
           ]
         }
@@ -45,7 +48,10 @@
                   { "function": "configSize", "at": "node_modules/pkg_caps/src/index.ts:5:50", "calls": "read" },
                   { "function": "read", "at": "node_modules/pkg_caps/src/index.ts:3:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "node_modules/pkg_caps/src/index.ts:5:50", "callee": "read", "via": "io-exit" }
+              ]
             }
           ]
         }
