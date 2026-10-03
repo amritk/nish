@@ -72,14 +72,14 @@
 @.str.71 = private unnamed_addr constant { i64, [12 x i8] } { i64 11, [12 x i8] c"Number(big)\00" }, align 8
 @.str.72 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c"Number(n) / 5\00" }, align 8
 
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #0
-declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
+declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
 declare i32 @llvm.fptosi.sat.i32.f64(double) #2
 
 define internal void @show(i8* noundef nonnull noalias readonly align 8 nocapture %label, double noundef %v) #0 {
@@ -223,13 +223,13 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn readnone }

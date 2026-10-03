@@ -7,10 +7,10 @@
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"c\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -41,7 +41,7 @@ entry:
   ret void
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %xs.addr = alloca %struct.nish_array*, align 8
@@ -108,8 +108,9 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

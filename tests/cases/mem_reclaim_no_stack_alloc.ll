@@ -11,7 +11,7 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
@@ -48,7 +48,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @render(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
+define internal noundef nonnull align 8 i8* @render(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
@@ -63,7 +63,7 @@ entry:
   ret i8* %9
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %arena.mark = call i64 @nish_arena_mark()

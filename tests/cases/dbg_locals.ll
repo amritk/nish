@@ -9,7 +9,7 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
@@ -35,7 +35,7 @@ entry:
   ret i32 %4, !dbg !32
 }
 
-define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 !dbg !39 {
+define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #2 !dbg !39 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %p, metadata !41, metadata !DIExpression()), !dbg !40
   call void @llvm.dbg.value(metadata i8* %name, metadata !42, metadata !DIExpression()), !dbg !40
@@ -89,7 +89,7 @@ forof.end:
   ret i32 %14, !dbg !81
 }
 
-define noundef i32 @test() #0 !dbg !85 {
+define noundef i32 @test() #2 !dbg !85 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -184,6 +184,7 @@ if.end:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

@@ -4,7 +4,7 @@
 
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
-declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
 define noundef i32 @test() #0 {
