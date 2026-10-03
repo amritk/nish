@@ -72,6 +72,7 @@ itself.
 | --- | --- | --- |
 | what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
 | what is wrong with a program | `nish --json <files>` | one JSON object per line on **stdout**, which carries nothing else — the `wrote <file>` progress line and the human report are on stderr — exit unchanged |
+| fix what can be fixed mechanically | `nish --fix <files>` | the named files rewritten in place, then the remaining diagnostics as a plain run reports them, and its exit code |
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
@@ -79,7 +80,7 @@ itself.
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
-1-based, `endLine`/`endColumn` exclusive.
+1-based, `endLine`/`endColumn` exclusive, and a trailing `"fix"` when there is one.
 
 - **`severity`** is `"error"`, `"performance"` or `"portability"`. A warning
   never changes the exit code, and a portability warning prints only under
@@ -101,6 +102,32 @@ Every `--json` object is flat:
   is NL3028 (#193; it and NL3013, its generic spelling, preempt NL3022–NL3023,
   the shared constructor or method such classes used to be refused for), and `tests/nish/cli.ts` checks them
   from the `tests/link/` programs that provoke them.
+- **`fix`** is the one optional key, and it comes last, after `message`: a
+  list of edits that make the diagnostic go away,
+  `[{"line","column","endLine","endColumn","text"}]`. Each edit is placed as
+  the diagnostic is — 1-based, columns in UTF-16 code units, the end
+  exclusive — and replaces that span of the diagnostic's own file with `text`;
+  a span whose start equals its end is an insertion. The key is **absent**,
+  never an empty list, when the compiler knows no safe rewrite, so every line
+  without one is byte-identical to what it was before the key existed. A fix
+  is **behaviour-preserving**: it is attached only when the rewrite means what
+  the author plainly meant and the TypeScript reading is unchanged, and in
+  doubt there is none. A site reports one through `DiagnosticSink.reportFix`
+  (or `reportPerformanceFix`, `reportPortabilityFix`) and, in the checker,
+  `ctx.errorFix` / `ctx.performanceFix` with edits built by `ctx.edit`, and
+  every fix and every shape refused one has a case in
+  [`tests/fix/`](./tests/fix/README.md).
+- **`nish --fix <files> [flags]`** applies them (`src/fix.ts`): it compiles,
+  takes every fix in a file named on the command line (never one under
+  `node_modules`, the standard library or a `nish:` module), drops a fix that
+  overlaps one earlier in report order — the next round reports it again —
+  rewrites only a file that has an edit, and recompiles, until a round applies
+  nothing or five have. Then it reports the last compile exactly as a run
+  without `--fix` would, human or `--json`, and exits with its code; it writes
+  no IR, so `-o`, `--link` and the other product flags are a usage error
+  (exit 2). Each rewrite prints `fixed <file> (N edits)` on stderr. It
+  rewrites files **in place**, with no backup and no atomic swap, so run it on
+  a committed or backed-up tree.
 - A failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is still one JSON line,
   `{"severity","code","message"}`. Under `--json` you never have to read stderr
