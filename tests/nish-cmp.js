@@ -3854,6 +3854,7 @@ export {
   compare,
   corpus,
   packageRootOf,
+  pendingNotes,
   resolveCompiler,
   resolvePair,
   seedFromEnvironment,

@@ -168,7 +168,7 @@ are fixed (#382).
   read by `readFileBytesSync`, and a string read by `readFileSync` or built
   by `join`, still can, and under i32 mode its `length` is wrong (CG-3).
   *Since every source is bounded (#382), the caveat can go: nothing passes
-  2^31 − 1.*
+  2^31 − 1. Done: `std/README.md` now says so.*
 - `tests/nish-cmp.js`: this stage's IR changes (the eight `*_long_f64` crypto
   programs, whose `new Array(n)` takes a `number` `n` under f64 mode) are
   admitted today only by the existing every-program declaration about `!tbaa`

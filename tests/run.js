@@ -45,6 +45,7 @@ import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
+import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { panicOracle } from "./panics-oracle.js"
 import {
@@ -288,6 +289,20 @@ const check = (name, ok, detail) => {
 const has = (tool) => spawnSync("which", [tool]).status === 0
 const HAS_LLVM_AS = has("llvm-as")
 const HAS_CLANG = has("clang")
+
+/**
+ * The WASI sysroot the `wasi` profile links against, or undefined: wasi-sdk's,
+ * or the wasi-libc package's (`WASI_SYSROOT=/usr` on Debian and Ubuntu, which
+ * install it under /usr/lib/wasm32-wasi). The same places scripts/build.sh
+ * looks. Every wasi check asks this once, so a check that finds a sysroot and
+ * still cannot link fails rather than skipping as though there were none.
+ */
+const WASI_SYSROOT = [
+  process.env.WASI_SYSROOT,
+  "/usr/lib/wasi-sysroot",
+  "/opt/wasi-sdk/share/wasi-sysroot",
+  "/usr/share/wasi-sysroot",
+].find((d) => d && fs.existsSync(path.join(d, "lib")))
 
 /** `-g` end to end: the linked binary is read with the dumper when there is one. */
 const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump")
@@ -593,6 +608,42 @@ const inNativeLane = (job) => {
 }
 
 /**
+ * The bound on one native run of a case: a `tests/cases/` program with a `.out`
+ * and a `tests/link/` program. Without one, a program that never exits hangs
+ * the suite and the CI job with it until the job's own limit, and says nothing
+ * about which case it was; a deliberate mutation on #402 did exactly that.
+ * Measured over one whole `npm test` (742 runs): every case program finished in
+ * under 0.7 s, and the slowest link programs are the `crypto_*_long_f64` family
+ * at 10-12 s, `link/cg_sec_push_limit` (a 2 GiB array) at 13.2 s and
+ * `link/crypto_ct_long_f64` at 28.1 s. 120 s is four times that slowest run,
+ * room for a slower runner, and a hang is still named within two minutes.
+ * SIGKILL, because a program stuck in a loop may be one that ignores SIGTERM.
+ */
+const NATIVE_RUN_LIMIT = { timeout: 120_000, killSignal: "SIGKILL" }
+
+/**
+ * Run a case's native program under `limit`: spawn's `{ status, signal,
+ * stdout, stderr }`, and `death`, which is null when the program exited and
+ * otherwise the FAIL a caller reports instead of comparing output. A program
+ * that ran into the bound and one killed by a signal before it (the OOM killer,
+ * an abort) each fail under their own name, so neither reads as a wrong `.out`.
+ * `limit` is a parameter for the "native run limit" self-check, which holds
+ * this to its promise in under a second rather than in two minutes.
+ */
+const runNative = async (name, exe, argv, opts = {}, limit = NATIVE_RUN_LIMIT) => {
+  const started = Date.now()
+  const run = await spawnAsync(exe, argv, { ...opts, ...limit })
+  const ms = Date.now() - started
+  let death = null
+  if (run.signal === limit.killSignal && ms >= limit.timeout) {
+    death = `${name}: the native run was killed after ${limit.timeout / 1000} s without exiting (NATIVE_RUN_LIMIT)`
+  } else if (run.signal !== null) {
+    death = `${name}: the native run died on ${run.signal} after ${ms} ms`
+  }
+  return { ...run, death }
+}
+
+/**
  * One golden case from its compile to its native run, with what it found kept
  * as a list of steps rather than printed.
  *
@@ -816,7 +867,12 @@ const runCase = async (name) => {
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : []
-    const run = await inNativeLane(() => spawnAsync(exe, argv, { env: caseEnv(side("env")) }))
+    // Timed inside the lane, so the wait for a turn is not counted as the run.
+    const run = await inNativeLane(() => runNative(name, exe, argv, { env: caseEnv(side("env")) }))
+    if (run.death !== null) {
+      expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
+      return done
+    }
     const want = fs.readFileSync(side("out"), "utf8").trim()
     expect(
       `${name}: native output matches .out`,
@@ -857,6 +913,34 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
     reported++
   }
 })
+// The bound on native runs, held to what it promises with a bound of half a
+// second, because the real one takes two minutes to prove. `runNative` is the
+// helper both case loops run their programs through, so a change that drops
+// the limit, or turns a program that outlives it into a skip or a `.out`
+// mismatch, fails here in about a second rather than hanging the next run that
+// meets a loop. `sh -c 'kill -9 $$'` is a death before the bound: it must be
+// named by its signal, not reported as the timeout.
+if (!only || "native run limit".includes(only)) {
+  const limit = { ...NATIVE_RUN_LIMIT, timeout: 500 }
+  const started = Date.now()
+  const slept = await runNative("native run limit", "sleep", ["3"], {}, limit)
+  const ms = Date.now() - started
+  check(
+    "native run limit: a program that outlives the bound is killed at it and fails by name",
+    slept.death ===
+      "native run limit: the native run was killed after 0.5 s without exiting (NATIVE_RUN_LIMIT)" &&
+      ms < 2500,
+    `death: ${slept.death}\nreturned after ${ms} ms, status ${slept.status}, signal ${slept.signal}`
+  )
+  const killed = await runNative("native run limit", "sh", ["-c", "kill -9 $$"], {}, limit)
+  check(
+    "native run limit: a program killed by a signal before the bound fails naming the signal",
+    killed.death !== null &&
+      killed.death.startsWith("native run limit: the native run died on SIGKILL after "),
+    `death: ${killed.death}\nstatus ${killed.status}, signal ${killed.signal}`
+  )
+}
+
 /** Each selected case's own compile, in corpus order, for the checks below that read it again. */
 const caseResults = caseRuns.map((run) => run.compiled)
 
@@ -3740,10 +3824,21 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 // process exit code with `expected.code`; `expected.out` is the expected stdout
 // (empty for now). Other optional files:
 //   expected.err   compile must fail and stderr must contain this text
+//   expected.json  beside expected.err: the `--json` diagnostics of the refused compile,
+//                  one object per line and paths relative to the repository, compared
+//                  whole. One needle pins one diagnostic; this pins a program that has
+//                  to be refused at several sites (tests/nish/run.ts reads only the
+//                  needle, so expected.err keeps it)
 //   expected.ir    lines (substring match) that must appear in some emitted module
 //   expected.caps.json  the `--emit-capabilities` report, byte for byte (WP35)
 //   args           extra CLI flags (e.g. --strict-exports)
-//   <module>.ll    golden IR for that module (header stripped, like tests/cases)
+//   <module>.ll    golden IR for that module (header stripped, like tests/cases). Only a
+//                  module with a golden is compared, so there is no missing one to write;
+//                  `--update-link-goldens` rewrites each golden that differs from what
+//                  this run's compiler emitted, prints `WROTE link/<name>/<module>.ll`,
+//                  and compares again. Narrow it with a filter
+//                  (`node tests/run.js <name> --update-link-goldens`) and read the diff
+//                  before committing it, as for any regenerated golden.
 // Every positive test is also assembled (llvm-as), verified (opt -passes=verify),
 // and checked for cross-module attribute agreement: each `declare` of a user
 // function in an importer must match the exporter's `define` attribute for attribute.
@@ -3755,6 +3850,7 @@ const linkTests = fs.existsSync(linkDir)
       .sort()
   : []
 const HAS_OPT = has("opt")
+const UPDATE_LINK_GOLDENS = process.argv.includes("--update-link-goldens")
 
 /** Parse `define`/`declare` headers into { name -> { kind, sig, attrs } } with attribute groups resolved. */
 const functionHeaders = (ir) => {
@@ -3806,6 +3902,19 @@ for (const name of linkTests) {
       r.status === 1 && stderr.includes(needle),
       stderr || "(compiled successfully)"
     )
+    if (fs.existsSync(side("expected.json"))) {
+      const json = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const got = json.stdout.split(`${root}/`).join("").trim()
+      const want = read("expected.json").trim()
+      check(
+        `link/${name}: --json reports every diagnostic in expected.json, and no other`,
+        json.status === 1 && got === want,
+        `--- expected\n${want}\n--- actual (exit ${json.status})\n${got}\n${json.stderr}`
+      )
+    }
     continue
   }
   if (r.status !== 0) {
@@ -3820,8 +3929,12 @@ for (const name of linkTests) {
     .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
   for (const m of modules) {
     if (fs.existsSync(side(m.file))) {
-      const expected = read(m.file).trim()
       const actual = stripHeader(m.ir)
+      if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
+        fs.writeFileSync(side(m.file), `${actual}\n`)
+        console.log(`WROTE link/${name}/${m.file}`)
+      }
+      const expected = read(m.file).trim()
       check(
         `link/${name}: ${m.file} matches golden`,
         actual === expected,
@@ -3937,7 +4050,11 @@ for (const name of linkTests) {
     )
   }
 
-  const run = spawnSync(exe)
+  const run = await runNative(`link/${name}`, exe, [])
+  if (run.death !== null) {
+    check(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
+    continue
+  }
   const wantCode = Number(read("expected.code").trim())
   const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : ""
   check(
@@ -4046,6 +4163,103 @@ for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
     run.status === 0 && run.stdout === want,
     `--- native (.out)\n${want}--- node\n${shown(run)}`
   )
+}
+
+// RT-4 under Node (#405): `runtime/shim.mjs` opens what `writeFileSync`,
+// `appendFileSync` and `spawnSyncTo` write with `O_NOFOLLOW`, as runtime-os.c
+// does, so a symbolic link planted at the name is refused rather than followed
+// to the file it points at. The program is built natively and run under
+// `runtime/nish.mjs`, once per writer, through a link and then through a plain
+// path; both sides must answer alike, and the link's target must keep its bytes.
+// The plain path is the control: a probe that failed every write would agree
+// with itself through the link too.
+if (!only || "rt4_nofollow".includes(only) || "shim symlink".includes(only)) {
+  const dir = path.join(buildDir, "rt4_nofollow")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const probe = path.join(dir, "probe.ts")
+  fs.writeFileSync(
+    probe,
+    `export const main = (): number => {
+  if (process.argv.length < 3) {
+    return 2;
+  }
+  const mode = process.argv[1];
+  const target = process.argv[2];
+  if (mode === "spawn") {
+    console.log(\`spawn \${spawnSyncTo(["true"], target, "")}\`);
+    return 0;
+  }
+  if (mode === "append") {
+    appendFileSync(target, "through the link\\n");
+  } else {
+    writeFileSync(target, "through the link\\n");
+  }
+  console.log(\`\${mode} went through\`);
+  return 0;
+};
+`
+  )
+  const exe = path.join(dir, "probe")
+  const built = HAS_CLANG ? spawnSync(NISH, [probe, "--link", exe], { cwd: root, encoding: "utf8" }) : null
+  if (built === null) {
+    skip("skipped: rt4_nofollow: no clang, so the native side of the comparison cannot be built")
+  } else if (built.status !== 0) {
+    check("rt4_nofollow: the probe builds natively", false, built.stderr)
+  } else {
+    const target = path.join(dir, "target")
+    const link = path.join(dir, "link")
+    const original = "the target's own bytes\n"
+    const answer = (r) => `exit ${r.status}\nstdout: ${r.stdout}stderr: ${r.stderr}`
+    const native = (mode, at) => spawnSync(exe, [mode, at], { cwd: dir, encoding: "utf8" })
+    const node = (mode, at) =>
+      spawnSync(
+        "node",
+        [
+          "--experimental-strip-types",
+          "--no-warnings",
+          "--import",
+          path.join(root, "runtime", "nish.mjs"),
+          "-e",
+          `const m = await import(${JSON.stringify(probe)}); process.exit(m.main());`,
+          "probe",
+          mode,
+          at,
+        ],
+        { cwd: dir, encoding: "utf8" }
+      )
+    for (const [mode, refused] of [
+      ["write", "exit 1\nstdout: stderr: nish: cannot write link\n"],
+      ["append", "exit 1\nstdout: stderr: nish: cannot write link\n"],
+      ["spawn", "exit 0\nstdout: spawn -1\nstderr: "],
+    ]) {
+      const runs = []
+      for (const [side, run] of [
+        ["native", native],
+        ["node", node],
+      ]) {
+        fs.rmSync(link, { force: true })
+        fs.writeFileSync(target, original)
+        fs.symlinkSync("target", link)
+        const r = run(mode, "link")
+        runs.push(`${side}: ${answer(r)}target: ${JSON.stringify(fs.readFileSync(target, "utf8"))}`)
+        const plain = path.join(dir, `plain-${side}`)
+        fs.rmSync(plain, { force: true })
+        const p = run(mode, path.basename(plain))
+        runs.push(`${side}, plain path: ${answer(p)}written: ${fs.existsSync(plain)}`)
+      }
+      const want = [
+        `native: ${refused}target: ${JSON.stringify(original)}`,
+        `native, plain path: exit 0\nstdout: ${mode === "spawn" ? "spawn 0" : `${mode} went through`}\nstderr: written: true`,
+      ]
+      want.push(want[0].replace("native", "node"), want[1].replace("native", "node"))
+      check(
+        `rt4_nofollow: ${mode} through a symbolic link is refused under runtime/nish.mjs as natively, and the target keeps its bytes`,
+        runs.join("\n") === want.join("\n"),
+        `--- want\n${want.join("\n")}\n--- got\n${runs.join("\n")}`
+      )
+    }
+  }
 }
 
 // WP29: an allocating parallel body compiles with NL9012 at the call, which
@@ -5054,7 +5268,7 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
 // and keeps both checks. The `tests/link/` loop above has already built and run
 // the modes that link natively; the wasm and IR-only modes are built here, and
 // their IR is read whether or not a link was possible.
-if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
+if (!only || "range_export".includes(only) || only.startsWith("range_export") || "wasi".includes(only)) {
   const swapChecks = (file) =>
     fs.existsSync(file) ? panicCount(fs.readFileSync(file, "utf8"), "Permute\\.swap") : -1
   for (const [name, count, mode] of [
@@ -5143,6 +5357,8 @@ if (!only || "range_export".includes(only) || only.startsWith("range_export")) {
       run.status === 0 && run.stdout === "true\n8660\n",
       `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
     )
+  } else if (WASI_SYSROOT && has("wasm-ld")) {
+    check(`range_export: \`--profile wasi\` links against the sysroot at ${WASI_SYSROOT}`, false, wasi.stderr)
   } else {
     skip("skipped: range_export: `--profile wasi` did not link (no WASI sysroot), so its module is not run")
   }
@@ -6995,32 +7211,30 @@ if (!only) {
       String(w.stderr) + (host ? String(host.stderr) : "")
     )
   }
+}
 
-  // WP7: the wasi profile links runtime.c against wasi-libc, so string programs run under
-  // any WASI host; Node's own implementation runs it here. Needs a WASI sysroot (wasi-sdk
-  // or the wasi-libc package; WASI_SYSROOT overrides the default locations) and, with a
-  // distro clang, compiler-rt's wasm32 builtins (see scripts/build.sh); otherwise skipped.
-  const wasiSysroot = [
-    process.env.WASI_SYSROOT,
-    "/usr/lib/wasi-sysroot",
-    "/opt/wasi-sdk/share/wasi-sysroot",
-    "/usr/share/wasi-sysroot",
-  ].find((d) => d && fs.existsSync(path.join(d, "lib")))
-  if (wasiSysroot && has("wasm-ld")) {
+// ---- WP7: the wasi profile ----------------------------------------------------------
+// The wasi profile links runtime.c against wasi-libc, so string programs run under any
+// WASI host; Node's own implementation runs it here. Needs a WASI sysroot
+// (`WASI_SYSROOT`) and, with a distro clang, compiler-rt's wasm32 builtins (see
+// scripts/build.sh); otherwise skipped. A section of its own so that `node tests/run.js
+// wasi` runs these checks, as it runs range_export's `--profile wasi` ones above: no case
+// is named for the profile, and inside the unfiltered pipeline block the filter ran
+// nothing and reported 0 failed.
+if (!only || "wasi".includes(only)) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    // Compiled here rather than read from section A, which a filter may not have run.
+    const argvEchoLl = path.join(buildDir, "wasi_argv_echo.ll")
+    const compiled = spawnSync(NISH, [path.join(casesDir, "argv_echo.ts"), "-o", argvEchoLl], { cwd: root })
     const wasm = path.join(buildDir, "argv_echo.wasm")
-    const w = spawnSync(
-      "bash",
-      [
-        "scripts/build.sh",
-        path.join(buildDir, "argv_echo.ll"),
-        "runtime/runtime.c",
-        "-o",
-        wasm,
-        "--profile",
-        "wasi",
-      ],
-      { cwd: root }
-    )
+    const w =
+      compiled.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", argvEchoLl, "runtime/runtime.c", "-o", wasm, "--profile", "wasi"],
+            { cwd: root }
+          )
+        : compiled
     const argv = fs.readFileSync(path.join(casesDir, "argv_echo.argv"), "utf8").trim().split(/\s+/)
     const host =
       w.status === 0
@@ -7028,7 +7242,7 @@ if (!only) {
         : null
     const want = fs.readFileSync(path.join(casesDir, "argv_echo.out"), "utf8").trim()
     check(
-      `wasi profile (sysroot ${wasiSysroot}) builds argv_echo and Node's WASI runs it with the native output`,
+      `wasi profile (sysroot ${WASI_SYSROOT}) builds argv_echo and Node's WASI runs it with the native output`,
       host !== null && host.status === 0 && String(host.stdout).trim() === want,
       String(w.stderr) + (host ? String(host.stdout) + String(host.stderr) : "")
     )
@@ -10231,6 +10445,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     selfCheckNotes() === null,
     String(selfCheckNotes())
   )
+
+  // The fuzz run's declarations, by the same argument: an intended change to
+  // the IR is accepted only where an entry names the function and both
+  // attribute groups, and an entry nothing uses fails, but the run that
+  // applies them needs a seed. #438 is what an undeclared one costs: #427's
+  // CG-8 moved `nish_str_concat`'s group, and every seeded `npm test` went red.
+  for (const [label, failure] of fuzzDeclarations()) {
+    check(`fuzz --stage1: ${label} (fabricated modules)`, failure === null, String(failure))
+  }
 
   // The same equality on programs nobody wrote. The corpus is checked in and
   // therefore finite and adapted-to; the WP13 fuzzer generates random
