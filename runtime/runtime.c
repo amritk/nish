@@ -1220,6 +1220,20 @@ __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size
   a->cap = cap;
 }
 
+/* `secureZero(bytes)` (#385): every byte of the array set to zero, in stores
+ * no optimisation may remove. A `memset` here would be a dead store wherever
+ * the buffer's life ends straight after the call -- a key in a frame that
+ * returns, a block that is freed -- and links use `-flto`, which inlines this
+ * body into that caller and lets dead-store elimination see it. Each store goes
+ * through a `volatile` pointer, so each is behaviour the C standard keeps
+ * whatever the optimiser can see, and `noinline` keeps the call itself in the
+ * binary for a reader of the disassembly. A byte at a time, because a secret
+ * is a key or a scalar of tens of bytes, not a buffer worth a vector loop. */
+__attribute__((noinline)) void nish_wipe(nish_array *bytes) {
+  volatile char *p = bytes->data;
+  for (uint64_t i = 0; i < bytes->len; i++) p[i] = 0;
+}
+
 void nish_panic_index(uint64_t idx, uint64_t len) {
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
   _exit(1);
