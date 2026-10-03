@@ -1,7 +1,8 @@
 // `using a = arena()` releases at every exit of the block that declares it —
 // its end, a `return` (after the returned value is computed), and a `break` or
 // `continue` that leaves it — and in the reverse of the order it opened in
-// with a `using s = scope()` inside it and a scoped loop pass around it.
+// with a `using s = scope()` inside it, a scoped loop pass around it, a
+// `switch` on either side of it, and a second arena in the same declaration.
 // Every function here is one the compiler gives no automatic scope of its
 // own, so the block's release is the only one: each answers a pointer, or
 // manages the arena with `Arena.mark()`. Each line ends with how far the
@@ -92,6 +93,62 @@ const aroundPass = (k: i32, t: Tally): Tally => {
 };
 
 /**
+ * A `switch` inside the block, whose `break` stays in it and whose `return`
+ * leaves it, and a block inside a `case`, which the case's `break` leaves.
+ */
+const switched = (k: i32, t: Tally, pick: i32): Tally => {
+  {
+    using a = arena();
+    const xs = fill(k);
+    switch (pick) {
+      case 0:
+        t.n = t.n + xs.length;
+        break;
+      case 1:
+        return t;
+      default:
+        t.n = t.n + 1;
+    }
+  }
+  switch (pick) {
+    case 0: {
+      using b = arena();
+      const ys = fill(k);
+      if (ys.length > 0) {
+        break;
+      }
+      t.n = t.n + 1;
+      break;
+    }
+    default:
+      t.n = t.n + 2;
+  }
+  return t;
+};
+
+/**
+ * Two arenas in one declaration. Falling off the block releases the second
+ * and then the first; a `return` releases the first alone, whose mark is the
+ * lower, which frees both.
+ */
+const pair = (k: i32, t: Tally): Tally => {
+  {
+    using a = arena(),
+      b = arena();
+    const xs = fill(k);
+    t.n = t.n + xs.length;
+  }
+  using c = arena(),
+    d = arena();
+  const ys = fill(k);
+  if (ys.length > k) {
+    return t;
+  }
+  t.n = t.n + ys.length;
+  return t;
+};
+
+/**
  * A scope inside the block joins first; a scoped pass around the block
  * releases after it. The destination is the scope's own fresh `const`, and
  * the copy of it this function hands back moves the arena by the same few
@@ -130,6 +187,12 @@ export const main = (): i32 => {
   const r4 = inPass(1000, t).n;
   const r5 = aroundPass(1000, t).n;
   const d3 = Arena.used() - b3;
+  const b6 = Arena.used();
+  const r8 = switched(1000, t, 0).n;
+  const r9 = switched(1000, t, 1).n;
+  const r10 = switched(1000, t, 2).n;
+  const r11 = pair(1000, t).n;
+  const d6 = Arena.used() - b6;
   const b4 = Arena.used();
   const r6 = nested(1000);
   const d4 = Arena.used() - b4;
@@ -139,6 +202,7 @@ export const main = (): i32 => {
   console.log(`${r1} ${r2} ${d1}`);
   console.log(`${r3} ${d2}`);
   console.log(`${r4} ${r5} ${d3}`);
+  console.log(`${r8} ${r9} ${r10} ${r11} ${d6}`);
   console.log(`${r6[0]} ${r6[1]} ${r7[0]} ${r7[1]} ${d4 === d5}`);
   return 0;
 };
