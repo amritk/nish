@@ -333,11 +333,11 @@ export const spellAnnotation = (
     if (name === null) {
       return ""
     }
-    let bound = names.length - 1
-    while (bound >= 0 && names[bound] !== name.text) {
-      bound = bound - 1
+    let bound = 0
+    while (bound < names.length && names[bound] !== name.text) {
+      bound = bound + 1
     }
-    if (bound >= 0) {
+    if (bound < names.length && bound < spellings.length) {
       return levelled(spellings[bound], levels)
     }
     if (typedArrayElement(name.text) >= 0) {
@@ -404,7 +404,7 @@ const levelled = (name: string, levels: string[]): string => {
   }
   const parts: string[] = [name]
   let i = levels.length - 1
-  while (i >= 0) {
+  while (i >= 0 && i < levels.length) {
     parts.push(levels[i])
     i = i - 1
   }

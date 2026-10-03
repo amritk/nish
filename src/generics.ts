@@ -2505,15 +2505,20 @@ export const genericCallSpelling = (
   const args = call.children[1].children
   let i = 0
   while (i < params.length && i < args.length) {
+    // Read before the calls below, which drop what the loop test proved.
+    const param = params[i]
+    const arg = args[i]
     const levels: string[] = []
-    const at = annotationName(params[i].children[1], levels)
+    const at = annotationName(param.children[1], levels)
     const k = at === null ? -1 : indexOfName(names, at.text)
-    if (k >= 0 && spellings[k].length === 0) {
-      let spelled = typedArraySpelling(ctx, args[i], scope)
+    if (k >= 0 && k < spellings.length && spellings[k].length === 0) {
+      let spelled = typedArraySpelling(ctx, arg, scope)
       for (const level of levels) {
         spelled = peelSpelling(spelled, level)
       }
-      spellings[k] = spelled
+      if (k < spellings.length) {
+        spellings[k] = spelled
+      }
     }
     i = i + 1
   }
