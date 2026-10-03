@@ -174,6 +174,9 @@ provide("bitsToF64", shim.bitsToF64);
 // agree with a native run; the timing does not, and is not claimed here.
 provide("ctSelect", shim.ctSelect);
 provide("ctEq", shim.ctEq);
+// `secureZero` (#385): the bytes are zero afterwards here too, though what a
+// collector may have copied before is out of reach.
+provide("secureZero", shim.secureZero);
 
 // `nish:unsafe`. The element access is JavaScript's own, which never checks
 // anything; the wraps are the two's-complement ones the native instructions
