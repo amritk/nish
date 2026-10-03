@@ -213,7 +213,7 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
     /* ECN is always read. An IPv6 socket needs both: a datagram from an IPv4
        peer reports its TOS byte, one from an IPv6 peer its traffic class. */
     setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &one, sizeof one);
-    /* setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof one); */
+    setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof one);
 #endif
   }
   nish_sockaddr s;
