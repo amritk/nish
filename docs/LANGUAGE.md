@@ -2620,6 +2620,19 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (`tests/cases/reject_struct_field_empty_array`). A value of the wrong type
   is `` Field `code` of `IoError` expects a value of type i32, got f64 ``
   (`reject_struct_field_f64`).
+- A **nullable context** gives an object literal the struct inside it:
+  wherever one of the contexts above expects `E | null` — a declared local,
+  a `return`, an arrow's concise body, a ternary arm whose other arm is
+  `null`, a parameter, or a field — the literal is an `E`, checked against
+  `E`'s fields as above, and that `E` converts to `E | null` as any other
+  `E` value does, the same pointer with no wrapper
+  (`tests/cases/obj_lit_nullable_ternary`, `obj_lit_nullable_return`,
+  `obj_lit_nullable_arrow`, `obj_lit_nullable_local`,
+  `obj_lit_nullable_field`; `reject_obj_lit_nullable_field`). A ternary
+  with no declared type around it gives neither arm a struct, so
+  `const z = c ? { v: 7 } : null` is still
+  `Object literal needs a contextual class or interface type`
+  (`reject_obj_lit_nullable_context`).
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -5503,7 +5516,7 @@ by the caller.
   | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
   | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored, compared or combined with a number literal, or taken from a width (`width - s.length`); the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
-  | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that the bounds proof which folds a `substring` clamp does not place inside `[0, length]`; one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
+  | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that is placed inside `[0, length]` neither by the bounds proof which folds a `substring` clamp nor by the receiver's own text: an ASCII string literal, a `const` bound to one, a `const` copied from such a `const`, or a module constant that folds to one has a known length, and a bound no larger than it is quiet when it is a non-negative literal, or a local the same bounds proof holds between 0 and that length — a `const` or a `let` its initialiser bounds, or one a guard bounds — and, when the receiver's length is what proves either of two bounds, the first is known to be no larger than the second, from the largest the first can be and the smallest the second can be (`tests/cases/port_str_slice_literal_quiet`; past the end, a reversed pair such as `slice(5, 2)`, a pair nothing orders, a `let` receiver and a non-ASCII literal still warn, `port_str_slice_literal_past`); one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
   | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
   | NL8005 | zero-fill (3.3) | `new Array<T>(n)` of a number or a boolean, unless `n`'s value is zero, however it is spelled: `0x0`, `-0`, `0.0` or a `const` that folds to 0 (`tests/cases/port_array_zero_fill`; `[]`, a zero length and the typed arrays are silent, `port_array_quiet`, `port_array_quiet_f64`) | fills it with holes, which read back as `undefined` |
