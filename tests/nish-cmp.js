@@ -1919,6 +1919,22 @@ const DECLARED = [
     changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
+  {
+    program: "tests/cases/wipe_bytes.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",
+  },
+  {
+    program: "docs/cookbook/builtin-wipe.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
