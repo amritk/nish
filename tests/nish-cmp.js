@@ -1919,6 +1919,24 @@ const DECLARED = [
     changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
+  {
+    program: "tests/cases/mem_using_arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: a `using a = arena()` block whose allocations are released when it ends, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_using_arena_or_return.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: `orReturn()` out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/link/arena_using_exit_paths/main.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: every exit of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

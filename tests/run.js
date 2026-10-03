@@ -3067,7 +3067,13 @@ if (!only || "par_alloc".includes(only)) {
 // before the scope's block ends, so every scope program prints the same both
 // ways (docs/RUN_UNDER_NODE.md). `using` needs `--js-explicit-resource-management` on
 // Node 22, where the flag is otherwise harmless, and is native from Node 24.
+//
+// `arena_using_exit_paths` is the `using a = arena()` program: its block's
+// disposal does nothing under Node and `Arena.*` answers zero there, so the
+// lines it prints, each of which ends with how far the arena moved, are the
+// native ones exactly when every exit released.
 for (const name of [
+  "arena_using_exit_paths",
   "par_map",
   "par_reduce",
   "thread_scope_basic",

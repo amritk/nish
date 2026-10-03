@@ -1,0 +1,1 @@
+`xs.push(1)` grows `xs` inside the `using arena()` block at 7:5, and the array is older than the block: a `push` moves the array's storage into the arena, which the block releases when it ends (push only onto a `const` the block binds to a fresh array)
