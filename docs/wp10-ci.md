@@ -667,8 +667,9 @@ else on stdout and nothing on stderr, with the same exit code:
 
 `line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` was
 always `"error"` here; since WP15 §8 it is `"error"` for every error and
-`"performance"` for a performance warning, and since WP33 `"portability"` for a
-portability warning (`--warn-portability`), which is the field a tool filters
+`"performance"` for a performance warning, since WP33 `"portability"` for a
+portability warning (`--warn-portability`), and `"deprecation"` for a call the
+language is going to take away, which is the field a tool filters
 on. Syntax errors keep the `syntax error: ` prefix in `message`.
 
 ### `code`
@@ -701,6 +702,7 @@ The band says which phase refused the program:
 | `NL2xxx` | the checker: signatures, bodies, types |
 | `NL3xxx` | the driver and module loading |
 | `NL4xxx` | the interop sidecar generators |
+| `NL7xxx` | a deprecation warning: a call that still compiles and that a later breaking release removes ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)) |
 | `NL8xxx` | a WP33 portability warning, under `--warn-portability` ([wp33-round-trip.md](wp33-round-trip.md) §5.2) |
 | `NL9xxx` | a WP15 §8 performance warning |
 
@@ -746,6 +748,7 @@ fails the same way.
 | What | Held to | Read from |
 | --- | --- | --- |
 | every `std/*.ts`, `examples/*.ts` and `examples/*/main.ts`, discovered from the directory | **zero**, in both number modes where the program compiles | `--json`, `severity` `"performance"`; a failure names `file:line:col` and the `NL9xxx` code |
+| the same programs | **zero** deprecation warnings | `--json`, `severity` `"deprecation"`; a failure names `file:line:col` and the `NL7xxx` code |
 | `src/compile.ts` | `tests/perf-baseline.json`, per file and per code — 85 on 72a4b16 (NL9007 65, NL9010 11, NL9009 4, NL9002 3, NL9003 2), 89 once constrained type parameters (#157) added four NL9007 in `src/generics.ts` | the `--json` of the compile the self-hosting section already makes |
 
 **Lowering the baseline.** When a change proves a `src/` warning away, the

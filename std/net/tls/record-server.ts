@@ -35,10 +35,11 @@
  * **Fixed buffers.** The record being read, the bytes to send and the
  * application data waiting for the caller each live in an array allocated
  * once, in the constructor, so a connection that has finished its handshake
- * allocates nothing that outlives a record — a KeyUpdate included, since the
- * keys are rewritten in the arrays they already have — and a slot can be
- * handed the next connection with `start`. When the caller leaves application data unread
- * for long enough to fill its buffer, records stay in the reader and
+ * allocates nothing that outlives a record, and a slot can be handed the
+ * next connection with `start`. A KeyUpdate does leave memory: deriving the
+ * next keys leaves about 5 KB per direction behind, so a connection takes at
+ * most `TLS_RECORD_MAX_KEY_UPDATES` from its client. When the caller leaves
+ * application data unread for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
  * The handshake is the exception: `TlsServer` allocates what it keeps, about
  * 52 KB per handshake, and that stays until the arena is reset (TLS-3 in
@@ -146,6 +147,15 @@ const TLS_SESSION_ID_ECHO_AT: i32 = 38
  */
 export const TLS_RECORD_IDLE_LIMIT: i32 = 16
 
+/**
+ * How many KeyUpdates one connection takes from its client before refusing
+ * the next with `unexpected_message`. Each costs a key derivation whose
+ * temporaries stay in the arena (5,248 bytes, twice that when the server answers),
+ * so the cap is what bounds that memory (TLS-3). A client that updates when
+ * RFC 8446 §5.5 asks, once per 2^24 records, reaches it after 2^30 records.
+ */
+export const TLS_RECORD_MAX_KEY_UPDATES: i32 = 64
+
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_SERVER_FROM: i32 = 0
 
@@ -217,6 +227,8 @@ export class TlsRecordServer {
   postHandshakeLength: i32 = 0
   /** Records in a row that carried nothing for the caller, against `TLS_RECORD_IDLE_LIMIT`. */
   idleRecords: i32 = 0
+  /** KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. */
+  keyUpdates: i32 = 0
   peerClosed: boolean = false
   /** The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed. */
   ended: boolean = false
@@ -278,6 +290,7 @@ export class TlsRecordServer {
     this.started = false
     this.postHandshakeLength = 0
     this.idleRecords = 0
+    this.keyUpdates = 0
     if (tls.state === TLS_STATE_FAILED) {
       this.fail(tls.alert)
     }
@@ -622,6 +635,10 @@ export class TlsRecordServer {
           return TLS_ALERT_UNEXPECTED_MESSAGE
         }
         this.postHandshakeLength = 0
+        if (this.keyUpdates >= TLS_RECORD_MAX_KEY_UPDATES) {
+          return TLS_ALERT_UNEXPECTED_MESSAGE
+        }
+        this.keyUpdates = this.keyUpdates + 1
         return this.updateReadKeys(request === 1)
       }
     }

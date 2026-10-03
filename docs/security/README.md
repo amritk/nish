@@ -61,7 +61,7 @@ only.
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
 | CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. Not established as a leak or as an artefact | #378 |
-| TLS-3 | Medium | `std/net/tls.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | Each handshake leaves about 52 KB of arena memory behind until the arena is reset, so a long-running server grows with every connection a client opens. Everything after the handshake allocates nothing that outlives a record or a KeyUpdate | — |
+| TLS-3 | Medium | `std/net/tls.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | Each handshake leaves about 52 KB of arena memory behind until the arena is reset, so a long-running server grows with every connection a client opens. A KeyUpdate leaves its key derivation, 10,496 bytes when answered, bounded by a cap of 64 a connection (671,744 bytes); a record allocates nothing that outlives it | — |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-8 | Low | `src/run-cache.ts` (`fnv1a64Hex`) | The cache entry is named by a 64-bit FNV-1a, not a cryptographic hash | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |

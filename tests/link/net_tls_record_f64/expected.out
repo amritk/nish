@@ -171,8 +171,9 @@ PASS  and is under its next secret
 PASS  keyUpdate(true) sends one asking the client back
 PASS  whose request byte is 1
 PASS  after recordLimit records the writer sends a KeyUpdate of its own before the next
-PASS  a hundred KeyUpdates asking for one back, each followed by data, are each answered, and move the arena not at all (0 bytes)
-PASS  and the hundred-and-first key reads the next record
+PASS  the 64th KeyUpdate asking for one back, like each before it, is answered and its data read
+PASS  each answered KeyUpdate leaves at most 16 KB in the arena, so the cap bounds a connection's at 1024 KB
+PASS  the 65th is unexpected_message and fails the connection, deriving no key
 PASS  seventeen KeyUpdates, empty data records or user_canceled warnings in a row are unexpected_message
 PASS  and so are seventeen change_cipher_specs
 PASS  a read secret that installs no keys fails the client's KeyUpdate with internal_error
@@ -225,4 +226,4 @@ PASS  a 50 KB flight is held back and sealed as the output drains
 PASS  in records of at most 2^14 bytes, four in all
 PASS  which join into its four messages
 PASS  and the client that read it finishes the handshake
-tls records refusals: 169 passed, 0 failed, 0 skipped
+tls records refusals: 170 passed, 0 failed, 0 skipped

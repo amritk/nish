@@ -328,8 +328,8 @@ export class TlsRecordProtection {
    *
    * The key, the IV and the AES key schedule are written into the arrays this
    * direction already has, which are allocated only the first time a key of
-   * their size is installed, so a connection that updates its keys a million
-   * times allocates nothing that outlives an update.
+   * their size is installed; what `derive` allocates on the way stays behind
+   * (TLS-3).
    */
   install(suite: i32, secret: u8[]): boolean {
     this.clear()
@@ -364,15 +364,13 @@ export class TlsRecordProtection {
    * the schedule `aesKey` answered is zeroed, which the optimiser may drop
    * since nothing reads it again (TLS-2).
    *
-   * Everything it allocates is released before it returns, by hand: HKDF's
-   * HMAC keeps its hash state in objects of its own, which the compiler's
-   * automatic scopes do not follow, so without the release each key update
-   * would leave a few kilobytes behind. It is sound because nothing made
-   * after the mark is reachable when it returns: only numbers are copied out,
-   * into arrays `reserve` allocated before it.
+   * What the derivation allocates on the way — about 5 KB, HKDF's HMAC
+   * state and the schedule `aesKey` answers — stays in the arena: HMAC keeps
+   * its hash state in objects of its own, which neither the automatic scopes
+   * nor a `using a = arena()` block follow (NL2424). A connection's key
+   * installs are bounded, by `TLS_RECORD_MAX_KEY_UPDATES` (TLS-3).
    */
   derive(suite: i32, secret: u8[]): void {
-    const mark: i64 = Arena.mark()
     const key: u8[] = tlsTrafficKey(suite, secret)
     const iv: u8[] = tlsTrafficIv(suite, secret)
     for (let k: i32 = 0; k < toI32(this.key.length) && k < toI32(key.length); k++) {
@@ -393,7 +391,6 @@ export class TlsRecordProtection {
     }
     secureZero(key)
     secureZero(iv)
-    Arena.release(mark)
   }
 
   /**
@@ -408,20 +405,17 @@ export class TlsRecordProtection {
   /**
    * Moves this direction to the next traffic secret (§7.2), the KeyUpdate
    * step: `secret`, the current one, is overwritten in place by the next,
-   * and the keys are installed from it. What the derivation allocates is
-   * released by hand, as `derive` releases its own: only bytes are copied
-   * out, into `secret`, which is older than the mark. False, as `install`
-   * answers, when the keys do not install.
+   * and the keys are installed from it; the next secret's own copy is wiped.
+   * What the derivation allocates stays in the arena, as `derive`'s does.
+   * False, as `install` answers, when the keys do not install.
    */
   advance(secret: u8[]): boolean {
     const suite: i32 = this.suite
-    const mark: i64 = Arena.mark()
     const next: u8[] = tlsNextTrafficSecret(tlsSuiteHashLength(suite), secret)
     for (let k: i32 = 0; k < toI32(secret.length) && k < toI32(next.length); k++) {
       secret[k] = next[k]
     }
     secureZero(next)
-    Arena.release(mark)
     return this.install(suite, secret)
   }
 

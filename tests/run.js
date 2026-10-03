@@ -46,6 +46,7 @@ import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typechec
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { panicOracle } from "./panics-oracle.js"
 import {
   packageRootOf,
   selfCheckNotes,
@@ -620,7 +621,7 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps }
+  const done = { compiled: r, steps, panicFunctions: 0 }
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -745,6 +746,43 @@ const runCase = async (name) => {
     expect(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
   }
 
+  // `--emit-panics`: every golden compiles a second time with the flag, which
+  // must change no byte of the IR, and the sites it writes are held against
+  // that IR (`tests/panics-oracle.js`). A `<name>.panics` file is the golden
+  // of the list itself, paths taken back to the repository's. The flag is not
+  // written into `.args`, for the reason `.portability`'s is not: the tools
+  // that compile `tests/cases/` with the last release would refuse it.
+  const panicsLl = path.join(buildDir, `${name}.panics.ll`)
+  const panicsFile = path.join(buildDir, `${name}.panics.json`)
+  const listed = await spawnAsync(NISH, [src, "-o", panicsLl, ...args, "--emit-panics", panicsFile], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const listedIr = fs.existsSync(panicsLl) ? fs.readFileSync(panicsLl, "utf8") : null
+  const listText = fs.existsSync(panicsFile) ? fs.readFileSync(panicsFile, "utf8") : null
+  if (listed.status !== 0 || listedIr === null || listText === null) {
+    expect(`${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+  } else {
+    // The case is the program's only module that writes a `.ll`, so every
+    // function of its own must be found in it (`panicOracle`'s `module`).
+    const oracle = panicOracle(listedIr, JSON.parse(listText), src)
+    done.panicFunctions = oracle.checked
+    expect(
+      `${name}: --emit-panics changes no byte of the IR, and agrees with it`,
+      listedIr === fs.readFileSync(outLl, "utf8") && oracle.failures.length === 0,
+      oracle.failures.length > 0 ? oracle.failures.join("\n") : "the two .ll files differ"
+    )
+    if (fs.existsSync(side("panics"))) {
+      const want = fs.readFileSync(side("panics"), "utf8").trim()
+      const got = listText.split(`${root}/`).join("").trim()
+      expect(
+        `${name}: --emit-panics matches .panics`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
+  }
+
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
@@ -821,6 +859,63 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
 })
 /** Each selected case's own compile, in corpus order, for the checks below that read it again. */
 const caseResults = caseRuns.map((run) => run.compiled)
+
+// The oracle is only as good as its reading of the IR, so it is handed each
+// panic path it claims to recognise, in a function listed as clean, and must
+// refuse every one; and the same function with an unproven site, which it
+// must leave alone.
+{
+  const fn = (panics) => ({ functions: [{ name: "f", symbol: "f", module: "m.ts", panics }] })
+  const clean = fn([{ kind: "oom" }, { kind: "index", proven: true }])
+  const unproven = fn([{ kind: "index", proven: false }])
+  const define = (lines) => ["define internal i32 @f(i32 %x) {", ...lines, "  ret i32 0", "}"].join("\n")
+  const paths = [
+    "  call void @nish_panic_index(i64 %0, i64 %1)",
+    "  call void @nish_panic_slice(i64 %0, i64 %1, i64 %2)",
+    "  call void @nish_panic_div(i1 zeroext %0)",
+    "  %1 = call i8* @nish_read_file(i8* %0)",
+    "  call void @nish_write_file(i8* %0, i8* %1)",
+    "  call void @nish_append_file(i8* %0, i8* %1)",
+    "  call void @nish_random_fill(%struct.nish_array* %0)",
+    "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
+  ]
+  const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
+  const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
+  const quiet = [
+    "  call void @nish_write(i8* %0, i32 2, i1 false)",
+    "  %1 = call i8* @nish_read_file_or_null(i8* %0)",
+    "  call void @nish_exit(i32 %0)",
+  ].filter((line) => panicOracle(define([line]), clean, null).failures.length > 0)
+  check(
+    "--emit-panics: the IR oracle refuses each panic path in a clean function, and nothing else",
+    missed.length === 0 && flagged.length === 0 && quiet.length === 0,
+    `missed: ${missed.join(" | ")}\nflagged despite a site: ${flagged.join(" | ")}\nnot a panic: ${quiet.join(" | ")}`
+  )
+  // A listed function the IR does not define: a failure for the module whose
+  // IR is in hand, whatever its sites, and skipped for one of another module;
+  // and the count of the module's own functions the link check asserts on.
+  const absent = define([]).replace("@f(", "@g(")
+  const own = [clean, unproven].map((report) => panicOracle(absent, report, "m.ts").failures.length)
+  const other = [clean, unproven].map((report) => panicOracle(absent, report, "other.ts").failures.length)
+  const counted = [panicOracle(absent, clean, "m.ts").own, panicOracle(absent, clean, "other.ts").own]
+  check(
+    "--emit-panics: the IR oracle fails a listed function its own module's IR does not define",
+    own.every((n) => n === 1) && other.every((n) => n === 0) && counted[0] === 1 && counted[1] === 0,
+    `failures for the module's own function: ${own.join(", ")}; for another module's: ${other.join(", ")}; own counted: ${counted.join(", ")}`
+  )
+}
+
+// The oracle above passes vacuously on a function it never finds, so the run
+// says how many it read: every golden with a clean function contributes, and
+// a symbol spelling the oracle stopped recognising would take this to zero.
+if (only === undefined) {
+  const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  check(
+    `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
+    read >= 500,
+    "fewer than 500: the oracle is no longer finding the functions it is handed"
+  )
+}
 
 // ---- Programs the world answers, built and run by the blocks below -----------------
 
@@ -2044,6 +2139,22 @@ if (!only || "diagnostics".includes(only)) {
     ],
     ["a gap in the NL8xxx codes", "portabilityRules", (t) => t.replace('"NL8006",', '"NL8012",')],
     [
+      "a stray fragment in deprecationRules",
+      "deprecationRules",
+      (t) => t.replace("const deprecationRules = (): string[] => [\n", (open) => open + codesStray),
+    ],
+    ["a gap in the NL7xxx codes", "deprecationRules", (t) => t.replace('"NL7001",', '"NL7002",')],
+    [
+      "a deprecation code outside deprecationRules",
+      "diagnosticRules",
+      (t) => t.replace('"NL2186",', '"NL7002",'),
+    ],
+    [
+      "a non-deprecation code inside deprecationRules",
+      "deprecationRules",
+      (t) => t.replace('"NL7001",', '"NL2186",'),
+    ],
+    [
       "a portability code outside portabilityRules",
       "diagnosticRules",
       (t) => t.replace('"NL2186",', '"NL8012",'),
@@ -2487,7 +2598,7 @@ if (!only || "performance".includes(only)) {
         ":10:11: performance: `row` allocates a dynamically sized array on every iteration of this loop"
       ) &&
       allocLines[0].includes(
-        "hoist the allocation above the loop and reuse it, or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
+        "hoist the allocation above the loop and reuse it, or open the loop body with `using a = arena()`"
       ),
     alloc.stderr
   )
@@ -2506,7 +2617,7 @@ if (!only || "performance".includes(only)) {
         "`p` already holds an allocation and this one drops it: nothing can reach the old value from here and " +
           "nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
           "memory at all, so both allocations live until the program exits. Give each value its own `const`, or " +
-          "bracket the body with `Arena.mark()` and `Arena.release(m)`"
+          "bracket the body in a block that opens with `using a = arena()`"
       ) &&
       dropLines[1].includes("`xs` already holds an allocation") &&
       dropLines[2].includes("`s` already holds an allocation"),
@@ -2992,6 +3103,20 @@ if (!only || "performance".includes(only)) {
     )
   }
 
+  // What ships calls nothing deprecated either: a deprecation in `std/` would
+  // reach every program that imports the module, and one in an example is
+  // what a reader copies.
+  const deprecated = gateRuns.flatMap(({ source, mode }, at) =>
+    diagnosticsOf(gateResults[at].stdout)
+      .filter((d) => d.severity === "deprecation")
+      .map((d) => `${diagnosticLine(d)} (--number-mode ${mode}, ${source})`)
+  )
+  check(
+    `performance gate: none of the ${gateSources.length} std/ modules and examples calls anything deprecated`,
+    gateSources.length > 0 && deprecated.length === 0,
+    deprecated.join("\n")
+  )
+
   // The flag decides what is printed and nothing else.
   const off = compile("perf_str_concat_loop", "perf_str_off.ll", ["--no-warn-performance"])
   check(
@@ -3236,6 +3361,206 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+}
+
+// ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------
+// A call the language still compiles, to the bytes it always did, and is going
+// to take away: `Arena.release` and `Arena.reset`, whose undefined behaviour
+// `using a = arena()` replaces with a check. On by default with no flag to turn
+// it off, printed `file:line:col: deprecation: <text>` with the usual excerpt,
+// or with `"severity":"deprecation"` and its NL7xxx code under `--json`, ahead
+// of the other two warning classes and on the same streams. It never changes
+// the exit code, and a program with an error prints none.
+if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)) {
+  const compile = (source, out, extra = []) =>
+    spawnSync(NISH, [source, "-o", path.join(buildDir, out), ...extra], { cwd: root, encoding: "utf8" })
+  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: deprecation: /.test(l))
+  const builtins = path.join(casesDir, "mem_arena_builtins.ts")
+  const tail =
+    "is still referenced is undefined behaviour the compiler does not check. Bracket the work with " +
+    "`using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it"
+
+  // The human form: one summary per call, the excerpt under it, and the count,
+  // and the program still compiles, to the IR its golden pins.
+  const warned = compile(builtins, "deprecation_builtins.ll")
+  const warnedLines = warned.stderr.split("\n")
+  check(
+    "deprecation: Arena.release and Arena.reset each warn `file:line:col: deprecation: <text>`, with an excerpt and a count, and exit 0",
+    warned.status === 0 &&
+      summaries(warned.stderr).length === 2 &&
+      warnedLines[0] ===
+        `${builtins}:27:3: deprecation: \`Arena.release\` is deprecated: releasing to a mark while anything allocated after it ${tail}` &&
+      warnedLines[1] === "  27 |   Arena.release(m);" &&
+      warnedLines[2] === "     |   ^~~~~~~~~~~~~~~~" &&
+      warnedLines[3] ===
+        `${builtins}:31:3: deprecation: \`Arena.reset\` is deprecated: resetting the arena while anything allocated in it ${tail}` &&
+      warned.stderr.includes("\n2 deprecation warnings\n") &&
+      stripHeader(fs.readFileSync(path.join(buildDir, "deprecation_builtins.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(casesDir, "mem_arena_builtins.ll"), "utf8")),
+    warned.stderr
+  )
+
+  // --json: one object per call on stdout, keyed by its code and severity.
+  const json = compile(builtins, "deprecation_builtins_json.ll", ["--json"])
+  const jsonObjects = diagnosticsOf(json.stdout)
+  check(
+    "deprecation: under --json each call is one object with code NL7001 and severity `deprecation`, and exit 0",
+    json.status === 0 &&
+      jsonObjects.length === 2 &&
+      jsonObjects.every((o) => o.code === "NL7001" && o.severity === "deprecation") &&
+      jsonObjects.map((o) => `${o.line}:${o.column}-${o.endLine}:${o.endColumn}`).join(",") ===
+        "27:3-27:19,31:3-31:16" &&
+      jsonObjects[0].message.startsWith("`Arena.release` is deprecated: ") &&
+      jsonObjects[1].message.startsWith("`Arena.reset` is deprecated: ") &&
+      summaries(json.stderr).length === 0,
+    json.stdout + json.stderr
+  )
+
+  // `Arena.mark` and `Arena.used` are not deprecated: they read the arena and
+  // free nothing.
+  const readsSrc = path.join(buildDir, "deprecation_reads.ts")
+  fs.writeFileSync(
+    readsSrc,
+    "export const main = (): i32 => {\n  const m = Arena.mark();\n  return Arena.used() >= m ? 0 : 1;\n};\n"
+  )
+  const reads = compile(readsSrc, "deprecation_reads.ll")
+  const readsJson = compile(readsSrc, "deprecation_reads_json.ll", ["--json"])
+  check(
+    "deprecation: Arena.mark and Arena.used alone print nothing, in either form",
+    reads.status === 0 &&
+      summaries(reads.stderr).length === 0 &&
+      readsJson.status === 0 &&
+      diagnosticsOf(readsJson.stdout).length === 0,
+    reads.stderr + readsJson.stdout
+  )
+
+  // A program with an error gets the error report and nothing else.
+  const brokenSrc = path.join(buildDir, "deprecation_error.ts")
+  fs.writeFileSync(
+    brokenSrc,
+    "export const main = (): i32 => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return m + true;\n};\n"
+  )
+  const broken = compile(brokenSrc, "deprecation_error.ll")
+  const brokenJson = compile(brokenSrc, "deprecation_error_json.ll", ["--json"])
+  check(
+    "deprecation: a program with an error prints no deprecation warning, in either form",
+    broken.status === 1 &&
+      broken.stderr.includes(": error: ") &&
+      !broken.stderr.includes(": deprecation: ") &&
+      brokenJson.status === 1 &&
+      diagnosticsOf(brokenJson.stdout).length > 0 &&
+      diagnosticsOf(brokenJson.stdout).every((d) => d.severity === "error"),
+    broken.stderr + brokenJson.stdout
+  )
+
+  // A generic body is checked once per instantiation, and the call it holds is
+  // still one call in the source: it warns once.
+  const genericSrc = path.join(buildDir, "deprecation_generic.ts")
+  fs.writeFileSync(
+    genericSrc,
+    "const keep = <T>(x: T): T => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return x;\n};\n\n" +
+      'export const main = (): i32 => {\n  const s = keep("ab");\n  return keep(s.length);\n};\n'
+  )
+  const generic = compile(genericSrc, "deprecation_generic.ll", ["--json"])
+  check(
+    "deprecation: a call in a generic body instantiated twice warns once",
+    generic.status === 0 &&
+      diagnosticsOf(generic.stdout)
+        .filter((o) => o.severity === "deprecation")
+        .map((o) => `${o.code} ${o.line}:${o.column}`)
+        .join(",") === "NL7001 3:3",
+    generic.stdout + generic.stderr
+  )
+
+  // Independent of the performance class in both directions, and printed
+  // before it. The program has one of each: a string rebuilt in a loop
+  // (NL9002) and an `Arena.reset()`.
+  const bothSrc = path.join(buildDir, "deprecation_both.ts")
+  fs.writeFileSync(
+    bothSrc,
+    'export const main = (): number => {\n  let s = "";\n  for (let i = 0; i < 3; i = i + 1) {\n    s = s + "x";\n  }\n  const n = s.length;\n  Arena.reset();\n  return n;\n};\n'
+  )
+  const both = compile(bothSrc, "deprecation_both.ll")
+  const bothJson = compile(bothSrc, "deprecation_both_json.ll", ["--json"])
+  const quietPerf = compile(bothSrc, "deprecation_quiet_perf.ll", ["--no-warn-performance"])
+  check(
+    "deprecation: printed before the performance warnings, on stderr, and as objects on stdout under --json",
+    both.status === 0 &&
+      both.stderr.indexOf(": deprecation: ") >= 0 &&
+      both.stderr.indexOf(": deprecation: ") < both.stderr.indexOf(": performance: ") &&
+      bothJson.status === 0 &&
+      diagnosticsOf(bothJson.stdout)
+        .map((d) => `${d.severity} ${d.code}`)
+        .join(",") === "deprecation NL7001,performance NL9002",
+    both.stderr + bothJson.stdout + bothJson.stderr
+  )
+  check(
+    "deprecation: --no-warn-performance does not silence it",
+    quietPerf.status === 0 &&
+      summaries(quietPerf.stderr).length === 1 &&
+      !quietPerf.stderr.includes(": performance: "),
+    quietPerf.stderr
+  )
+
+  // The cap the other reports have, with the class's own words.
+  const manySrc = path.join(buildDir, "deprecation_many.ts")
+  fs.writeFileSync(
+    manySrc,
+    Array.from({ length: 25 }, (_, i) => `export const f${i} = (): void => {\n  Arena.reset();\n};`).join(
+      "\n"
+    ) + "\n"
+  )
+  const many = compile(manySrc, "deprecation_many.ll")
+  check(
+    "deprecation: 25 warnings print 20, then `...and 5 more deprecation warnings` and `25 deprecation warnings`",
+    many.status === 0 &&
+      summaries(many.stderr).length === 20 &&
+      many.stderr.includes("\n...and 5 more deprecation warnings\n25 deprecation warnings"),
+    many.stderr
+  )
+
+  // `--fix` answers what is left as a plain run would, warnings included: no
+  // fix applies to a deprecated call, so the file stays as it is and each call
+  // still warns, in either form.
+  const fixDir = path.join(buildDir, "deprecation-fix")
+  fs.rmSync(fixDir, { recursive: true, force: true })
+  fs.mkdirSync(fixDir, { recursive: true })
+  const fixSrc = path.join(fixDir, "mem_arena_builtins.ts")
+  fs.copyFileSync(builtins, fixSrc)
+  const fixed = spawnSync(NISH, ["--fix", fixSrc], { cwd: root, encoding: "utf8" })
+  const fixedJson = spawnSync(NISH, ["--fix", "--json", fixSrc], { cwd: root, encoding: "utf8" })
+  check(
+    "deprecation: --fix leaves Arena.release and Arena.reset as written and still warns for each, in either form, and exits 0",
+    fixed.status === 0 &&
+      summaries(fixed.stderr).length === 2 &&
+      fixed.stderr.includes(`${fixSrc}:27:3: deprecation: \`Arena.release\` is deprecated: `) &&
+      fixed.stderr.includes(`${fixSrc}:31:3: deprecation: \`Arena.reset\` is deprecated: `) &&
+      fixedJson.status === 0 &&
+      diagnosticsOf(fixedJson.stdout)
+        .map((d) => `${d.severity} ${d.code} ${d.line}:${d.column}`)
+        .join(",") === "deprecation NL7001 27:3,deprecation NL7001 31:3" &&
+      fs.readFileSync(fixSrc, "utf8") === fs.readFileSync(builtins, "utf8"),
+    fixed.stderr + fixedJson.stdout + fixedJson.stderr
+  )
+
+  // `nish run` prints it too, ahead of the program's own output: the author
+  // of a script is the reader who has to hear it.
+  if (HAS_CLANG) {
+    const ran = spawnSync(NISH, ["run", builtins], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(buildDir, "deprecation-run-cache") },
+    })
+    check(
+      "deprecation: `nish run` prints the warnings on stderr and runs the program, whose stdout is its own",
+      ran.status === 0 &&
+        summaries(ran.stderr).length === 2 &&
+        ran.stdout === fs.readFileSync(path.join(casesDir, "mem_arena_builtins.out"), "utf8"),
+      ran.stdout + ran.stderr
+    )
+  } else {
+    skip("deprecation: `nish run` needs clang")
+  }
 }
 
 // ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
@@ -3549,6 +3874,50 @@ for (const name of linkTests) {
       missing.length === 0,
       missing.map((l) => `missing: ${l}`).join("\n")
     )
+  }
+
+  // `--emit-panics` over the whole program, std/ and dependency modules
+  // included, held against the IR of every module the same compile wrote
+  // (`tests/panics-oracle.js`), and against `expected.panics` where the
+  // program has one. Without `--link`, so the program is not linked twice:
+  // the list and the IR come from one compile, which is all the oracle needs.
+  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+  fs.rmSync(panicsDir, { recursive: true, force: true })
+  const panicsFile = path.join(panicsDir, "panics.json")
+  const listed = spawnSync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
+    check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+  } else {
+    const listText = fs.readFileSync(panicsFile, "utf8")
+    const ir = fs
+      .readdirSync(panicsDir)
+      .filter((f) => f.endsWith(".ll"))
+      .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
+      .join("\n")
+    // The entry is named by the path it was given, `side("main.ts")`, and its
+    // `.ll` is among those joined above, so its own functions are held to the
+    // drift check too; a module of a library that writes no `.ll` of its own
+    // stays skipped (`panicOracle`'s `module`).
+    const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
+    check(
+      `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
+      oracle.failures.length === 0 && oracle.own > 0,
+      oracle.own > 0
+        ? oracle.failures.join("\n")
+        : `no listed function names ${side("main.ts")} as its module`
+    )
+    if (fs.existsSync(side("expected.panics"))) {
+      const want = read("expected.panics").trim()
+      const got = listText.split(`${root}/`).join("").trim()
+      check(
+        `link/${name}: --emit-panics matches expected.panics`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
   }
 
   if (capsArgs.length > 0) {
@@ -11068,6 +11437,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-dts",
     "--emit-napi",
     "--emit-napi-async",
+    "--emit-panics",
     "--target",
     "--profile",
     "--warn-portability",
@@ -11406,6 +11776,41 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       shown(withFix)
     )
   }
+  // `--emit-panics` is the same kind of report: refused where the program is
+  // not checked (`--emit-ast`, `--fix`), and written beside `--emit-checked`'s
+  // dump rather than dropped by it (docs/LANGUAGE.md, "Panic sites").
+  const panicsSource = path.join(casesDir, "panics_index.ts")
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-panics` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-panics` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `panics${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-panics", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `panic sites: --emit-panics with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 &&
+        refused.stdout === "" &&
+        refused.stderr.includes(refusal) &&
+        !fs.existsSync(file),
+      shown(refused)
+    )
+  }
+  const panicsChecked = path.join(capsDir, "panics-checked.json")
+  const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "panic sites: --emit-checked with --emit-panics prints the dump and writes the sites",
+    dumped.status === 0 &&
+      dumped.stdout.includes("panics_index.ts") &&
+      fs.existsSync(panicsChecked) &&
+      fs.readFileSync(panicsChecked, "utf8").startsWith('{"functions":['),
+    shown(dumped)
+  )
   // `--emit-checked` does stop after it, and both are answered before the dump.
   const withChecked = spawnSync(
     NISH,
@@ -11681,6 +12086,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["--link", "x"],
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
+      ["--emit-panics", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {

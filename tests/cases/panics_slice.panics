@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"middle","symbol":"middle","module":"tests/cases/panics_slice.ts","line":4,"panics":[{"kind":"slice","line":4,"column":39,"proven":false},{"kind":"oom","line":4,"column":39,"allowed":true}]},
+{"name":"clamped","symbol":"clamped","module":"tests/cases/panics_slice.ts","line":6,"panics":[{"kind":"oom","line":6,"column":40,"allowed":true}]},
+{"name":"copyInto","symbol":"copyInto","module":"tests/cases/panics_slice.ts","line":8,"panics":[{"kind":"slice","line":9,"column":3,"proven":false}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_slice.ts","line":12,"panics":[{"kind":"call","line":13,"column":15,"callee":"middle","via":"slice"},{"kind":"call","line":17,"column":3,"callee":"copyInto","via":"slice"},{"kind":"oom","line":18,"column":3,"allowed":true},{"kind":"index","line":18,"column":15,"proven":false},{"kind":"index","line":18,"column":24,"proven":false}]}
+]}

@@ -118,9 +118,9 @@ import {
   Node,
 } from "./nodes"
 import { Options } from "./options"
-import { isParallelEntry, isSpawnEntry, parallelBodyOf, recyclesPerElement } from "./parallel"
+import { isParallelEntry, isSpawnEntry, parallelBodyOf, parallelRoleOf, recyclesPerElement } from "./parallel"
 import { ParentTable } from "./parents"
-import { CheckedProgram, FunctionSig, inlineElementStruct, ROLE_CONSTRUCTOR } from "./program"
+import { CheckedProgram, FunctionSig, inlineElementStruct, PAR_MAP, ROLE_CONSTRUCTOR } from "./program"
 import {
   EFFECT_NONE,
   EFFECT_READ,
@@ -146,6 +146,19 @@ import {
   TypeTable,
 } from "./types"
 import { fusedCalleesOf, isMapRoute, routeCalleesOf, valueReaderOf, walkMethodsOf } from "./emit-map"
+import {
+  builtinPanicKind,
+  PANIC_ARRAY_LENGTH,
+  PANIC_CALL,
+  PANIC_DIVIDE,
+  PANIC_EXPECT,
+  PANIC_INDEX,
+  PANIC_PARALLEL_LENGTH,
+  PANIC_POP,
+  PANIC_RANGE,
+  PANIC_SLICE,
+  PanicSite,
+} from "./panics"
 
 /** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24
@@ -454,6 +467,13 @@ export class FunctionFacts {
    */
   hoistedHeaders: HoistedHeader[]
   hoistedScopeStarts: i32[]
+  /**
+   * The panic sites of this body as the walk met them, calls included as
+   * candidates (`src/panics.ts`); `resolvePanicSites` settles them. Recorded
+   * beside the callee each one adds, so the two cannot disagree, and only when
+   * the build asks for them (`Options.recordsPanics`).
+   */
+  panicSites: PanicSite[]
   /** `clearRecursiveWillReturn`'s visit number, from 1; 0 until the walk reaches this function. */
   cycleOrder: i32
   /** The lowest visit number this function reaches back to, in the same walk. */
@@ -503,6 +523,7 @@ export class FunctionFacts {
     this.returnAlign = 8
     this.hoistedHeaders = []
     this.hoistedScopeStarts = []
+    this.panicSites = []
     this.cycleOrder = 0
     this.cycleLow = 0
     this.onCycleStack = false
@@ -1268,6 +1289,27 @@ class FactCollector {
     return ""
   }
 
+  /** A panic site of this body (`src/panics.ts`), when the build reads them. */
+  noteSite(node: Node, kind: i32, proven: boolean, callee: string): void {
+    if (this.opts.recordsPanics()) {
+      this.facts.panicSites.push(new PanicSite(node, kind, this.sig.name, proven, callee))
+    }
+  }
+
+  /**
+   * A call into `callee`, a candidate `call` site the resolution keeps when
+   * the callee may panic; a `parallelMapInto` instance's is the length check
+   * its body makes before it divides the work.
+   */
+  noteCall(node: Node, callee: FunctionSig): void {
+    this.noteSite(
+      node,
+      parallelRoleOf(callee) === PAR_MAP ? PANIC_PARALLEL_LENGTH : PANIC_CALL,
+      false,
+      callee.name
+    )
+  }
+
   noteUse(name: string, ref: Node): void {
     const found = classifyUse(this.unit, this.table, ref)
     const pointer = this.facts.pointerParam(name)
@@ -1361,11 +1403,13 @@ class FactCollector {
     if (fused !== null) {
       for (const sig of fused) {
         this.addUserCallee(sig.name, node)
+        this.noteCall(node, sig)
       }
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
         this.addCallee(callee, node)
+        this.noteCall(node, callee)
       }
       // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
       // finds the key, that table's `valueAt` (`checkMapGet`).
@@ -1373,6 +1417,7 @@ class FactCollector {
         callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null
       if (reads !== null) {
         this.addUserCallee(reads.name, node)
+        this.noteCall(node, reads)
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
@@ -1382,6 +1427,7 @@ class FactCollector {
       if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
           this.addUserCallee(sig.name, node)
+          this.noteCall(node, sig)
         }
       }
     }
@@ -1504,6 +1550,7 @@ class FactCollector {
       if (this.known !== null) {
         this.noteBuiltin(name, node, true)
       }
+      this.noteBuiltinSite(node, name)
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
       this.noteWrittenArguments(node)
@@ -1522,13 +1569,15 @@ class FactCollector {
       // The byte methods all read the string's bytes; `substring` and `slice`
       // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
       this.facts.readsMemory = true
+      const name = node.children[0].text
       this.addCallees(
-        stringConstructCallees(
-          node.children[0].text,
-          this.unit.program.uncheckedIndexing,
-          program.nodeProvenIndex[node.id]
-        )
+        stringConstructCallees(name, this.unit.program.uncheckedIndexing, program.nodeProvenIndex[node.id])
       )
+      if (name === "charCodeAt") {
+        this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
+      } else if (name === "slice") {
+        this.noteSite(node, PANIC_SLICE, false, "")
+      }
       return
     }
     if (node.kind === N_MEMBER && program.nodeTypes[node.children[0].id] === T_STRING) {
@@ -1597,6 +1646,7 @@ class FactCollector {
       const ctor = constructorOf(program, table, intrinsicType(program, node))
       if (ctor !== null) {
         this.addUserCallee(ctor.name, node)
+        this.noteCall(node, ctor)
       }
       return
     }
@@ -1635,6 +1685,11 @@ class FactCollector {
       }
       const method = resultMethodName(program, table, node)
       if (method.length > 0) {
+        // Before the stack test below: the panic tail is emitted whoever owns
+        // the `Result` (`emitExpect`).
+        if (method === "expect") {
+          this.noteSite(node, PANIC_EXPECT, false, "")
+        }
         if (this.isStackOwned(node.children[0].children[0])) {
           return // own alloca (WP6)
         }
@@ -1693,6 +1748,7 @@ class FactCollector {
       if (!this.unit.program.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
         this.facts.callees.add("nish_panic_index")
       }
+      this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
       return
     }
     if (node.kind === N_MEMBER && this.isArrayValued(node.children[0])) {
@@ -1715,6 +1771,7 @@ class FactCollector {
           const tail: string[] = []
           panicTailCallees(tail)
           this.addCallees(tail)
+          this.noteSite(node, PANIC_ARRAY_LENGTH, false, "")
         }
       }
       return
@@ -1735,11 +1792,15 @@ class FactCollector {
       // hold, and never keeps it past one its IR does.
       if (
         node.text !== "=" &&
-        !this.opts.uncheckedIndexing &&
         program.nodeProvenIndex[node.children[0].id] &&
         callsAnything(node.children[1])
       ) {
-        this.facts.callees.add("nish_panic_index")
+        if (!this.opts.uncheckedIndexing) {
+          this.facts.callees.add("nish_panic_index")
+        }
+        // The check after the right side is a panic site of its own, and an
+        // unproven one: the first check's proof does not survive the call.
+        this.noteSite(node, PANIC_INDEX, false, "")
       }
     }
   }
@@ -1766,6 +1827,7 @@ class FactCollector {
       if (!this.unit.program.uncheckedIndexing) {
         this.facts.callees.add("nish_panic_index")
       }
+      this.noteSite(call, PANIC_POP, false, "")
       return
     }
     if (method === "join") {
@@ -1784,6 +1846,7 @@ class FactCollector {
         if (!this.unit.program.uncheckedIndexing) {
           this.facts.callees.add("nish_panic_slice")
         }
+        this.noteSite(call, PANIC_SLICE, false, "")
       }
       return
     }
@@ -1812,6 +1875,7 @@ class FactCollector {
     const left = this.unit.program.nodeTypes[node.children[0].id]
     if (left >= 0 && isInteger(this.table.baseOf(left))) {
       this.facts.callees.add("nish_panic_div")
+      this.noteSite(node, PANIC_DIVIDE, false, "")
     }
   }
 
@@ -1826,15 +1890,19 @@ class FactCollector {
     const program = this.unit.program
     const from = program.nodeCoercions[node.id]
     const to = program.nodeTypes[node.id]
-    const entered =
-      from >= 0 &&
-      this.table.isRanged(to) &&
-      !this.table.entryIsFree(from, to) &&
-      !program.nodeProvenRange[node.id]
-    if (entered || rangedStoreOf(program, this.table, node) >= 0) {
+    const checked = from >= 0 && this.table.isRanged(to) && !this.table.entryIsFree(from, to)
+    const entered = checked && !program.nodeProvenRange[node.id]
+    const stored = rangedStoreOf(program, this.table, node) >= 0
+    if (entered || stored) {
       const tail: string[] = []
       panicTailCallees(tail)
       this.addCallees(tail)
+    }
+    if (checked) {
+      this.noteSite(node, PANIC_RANGE, program.nodeProvenRange[node.id], "")
+    }
+    if (stored) {
+      this.noteSite(node, PANIC_RANGE, false, "")
     }
   }
 
@@ -1870,6 +1938,18 @@ class FactCollector {
     }
   }
 
+  /**
+   * The site a builtin call is, by the name the analysis resolved it to: the
+   * kind does not depend on `--unchecked-indexing`, which drops the net range
+   * check without proving it (`builtinPanicKind`).
+   */
+  noteBuiltinSite(call: Node, name: string): void {
+    const kind = builtinPanicKind(name)
+    if (kind >= 0) {
+      this.noteSite(call, kind, false, "")
+    }
+  }
+
   /** Every array a builtin call writes the elements of (`builtinArgumentLetters`), each a write of its own. */
   noteWrittenArguments(call: Node): void {
     const letters = builtinArgumentLetters(this.unit.program, call)
@@ -1896,6 +1976,7 @@ class FactCollector {
     // it has not earned.
     const unchecked = this.unit.program.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
+    this.noteBuiltinSite(node, imported.length > 0 ? imported : node.children[0].text)
     if (this.known !== null) {
       this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
     }
@@ -2024,6 +2105,11 @@ const collectFacts = (
     const tail: string[] = []
     panicTailCallees(tail)
     collector.addCallees(tail)
+    for (const type of sig.paramTypes) {
+      if (table.isRanged(type)) {
+        collector.noteSite(sig.decl, PANIC_RANGE, false, "")
+      }
+    }
   }
 
   // The two arena builtins that report the bump position. Read here rather

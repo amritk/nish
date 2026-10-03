@@ -38,6 +38,7 @@ import {
   TLS_RECORD_DATA,
   TLS_RECORD_DONE,
   TLS_RECORD_INVALID,
+  TLS_RECORD_MAX_KEY_UPDATES,
   TLS_RECORD_PIPE,
   TLS_RECORD_RESET,
   TLS_RECORD_STATE_CLOSED,
@@ -505,35 +506,59 @@ export const refusalChecks = (): i32 => {
     "23:7469636b 23:7469636b 22:1800000100 23:7469636b"
   );
 
-  // A client may ask for KeyUpdates as often as it sends data: each one, and
-  // the server's answer, is written into arrays the connection already has.
+  // A client may ask for KeyUpdates, each answered, up to
+  // TLS_RECORD_MAX_KEY_UPDATES; each key install leaves its derivation's
+  // temporaries in the arena, so the cap is what bounds them (TLS-3).
   const spam = traceOpen();
   const spamWriter = clientWriter();
   let spamSecret: u8[] = rfc8448ClientApplicationTraffic();
   const updates: u8[][] = [];
-  for (let k: i32 = 0; k < 100; k++) {
+  for (let k: i32 = 0; k <= TLS_RECORD_MAX_KEY_UPDATES; k++) {
     const update: u8[] = sealOne(spamWriter, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(1), ZERO);
     spamSecret = tlsNextTrafficSecret(32, spamSecret);
     spamWriter.install(SUITE, spamSecret);
     updates.push(join([update, sealOne(spamWriter, TLS_CONTENT_APPLICATION_DATA, ascii("k"), ZERO)]));
   }
+  // Arena.used() counts the current chunk, so a step that starts a new chunk
+  // reads negative and is left out of the measure.
   const sink: u8[] = new Array<u8>(8);
-  let moved: i64 = 0;
+  let most: i64 = 0;
+  let measured: i32 = 0;
   let answered: i32 = 0;
+  let spamFed: i32 = 0;
   for (const u of updates) {
+    if (spamFed >= TLS_RECORD_MAX_KEY_UPDATES) {
+      break;
+    }
+    spamFed = spamFed + 1;
     const before: i64 = Arena.used();
     feed(spam, u);
     answered = answered + (spam.outputEnd > spam.outputStart ? 1 : 0);
     spam.consume(spam.outputEnd - spam.outputStart);
     spam.read(sink, ZERO, toI32(sink.length));
-    moved = moved + (Arena.used() - before);
+    const step: i64 = Arena.used() - before;
+    if (step >= toI64(0)) {
+      measured = measured + 1;
+      if (step > most) {
+        most = step;
+      }
+    }
   }
   t.ok(
-    `a hundred KeyUpdates asking for one back, each followed by data, are each answered, and move the arena not at all (${moved} bytes)`,
-    answered === 100 && moved === toI64(0) && spam.state === TLS_RECORD_STATE_OPEN
+    `the ${TLS_RECORD_MAX_KEY_UPDATES}th KeyUpdate asking for one back, like each before it, is answered and its data read`,
+    answered === TLS_RECORD_MAX_KEY_UPDATES && spam.state === TLS_RECORD_STATE_OPEN && sink[0] === toU8(107)
   );
-  feed(spam, sealOne(spamWriter, TLS_CONTENT_APPLICATION_DATA, ascii("still here"), ZERO));
-  t.eqStr("and the hundred-and-first key reads the next record", toHex(readAll(spam)), toHex(ascii("still here")));
+  t.ok(
+    `each answered KeyUpdate leaves at most 16 KB in the arena, so the cap bounds a connection's at ${TLS_RECORD_MAX_KEY_UPDATES * 16} KB`,
+    measured >= TLS_RECORD_MAX_KEY_UPDATES / 2 && most > toI64(0) && most <= toI64(16384)
+  );
+  const before65: i64 = Arena.used();
+  feed(spam, updates[TLS_RECORD_MAX_KEY_UPDATES]);
+  t.eqStr(
+    `the ${TLS_RECORD_MAX_KEY_UPDATES + 1}th is unexpected_message and fails the connection, deriving no key`,
+    `${spam.state}:${spam.alert}:${Arena.used() - before65 < toI64(4096)}`,
+    `${TLS_RECORD_STATE_FAILED}:${TLS_ALERT_UNEXPECTED_MESSAGE}:true`
+  );
 
   // Records that carry nothing for the caller are refused after sixteen in a row.
   const idleKinds: string[] = [];
