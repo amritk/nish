@@ -51,8 +51,10 @@
  * one `rm -f` takes a file away so that "no IR was written" is a claim that can
  * fail rather than one an earlier run has already satisfied.
  */
+import { sha256 } from "../../std/crypto/sha256";
 import { jsonField } from "../../std/json";
 import { VERSION } from "../../src/branding";
+import { hexDigitLower } from "../../src/strings";
 import { Suite } from "../../std/testing";
 import { contains, splitLines, trim } from "../../std/text";
 
@@ -1110,6 +1112,17 @@ const modeLine = (path: string): string => {
   return readOrEmpty(`${WORK}/ls.out`);
 };
 
+/** `bytes` as lowercase hex, two digits a byte. */
+const hexOf = (bytes: u8[]): string => {
+  const out: string[] = [];
+  for (const b of bytes) {
+    const v = toI32(b);
+    out.push(hexDigitLower(v >> 4));
+    out.push(hexDigitLower(v));
+  }
+  return out.join("");
+};
+
 /** A program that says it ran and answers 7, so a run of the wrong binary cannot pass for it. */
 const writeRunFixture = (path: string): void => {
   writeFileSync(
@@ -1228,6 +1241,15 @@ const checkRunCache = (t: Suite, cli: Cli, env: boolean): void => {
   const path = getenv("PATH");
   if (entries !== null && t.eqI32("there is one entry to tamper with", toI32(entries.length), 1)) {
     const entry = `${tamperCache}/nish/run/${entries[0]}`;
+    // CLI-8: the entry is named by the SHA-256 of the key it holds, checked
+    // against `std/crypto`'s, which is a second implementation of the hash:
+    // sixty-four hex digits, where a 64-bit FNV-1a gave sixteen.
+    const keyBytes = readFileBytesSync(`${entry}/key`);
+    t.eqStr(
+      "CLI-8: the entry is named by the SHA-256 of its key",
+      entries[0],
+      keyBytes === null ? "(no key)" : hexOf(sha256(keyBytes))
+    );
     writeFileSync(`${entry}/key`, "nish 0.0.0\nrun sec-tamper\nnot this run's key\n");
     writeExecutable(`${entry}/sec-tamper`, "#!/bin/sh\necho PLANTED\nexit 0\n");
     const relinked = cli.run("sec_relink", [`XDG_CACHE_HOME=${tamperCache}`], ["run", tamper]);

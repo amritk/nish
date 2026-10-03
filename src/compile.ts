@@ -77,7 +77,7 @@ import { Diagnostic, formatList } from "./diagnostics"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
-import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
+import { runBinaryName, runCacheKey, runCacheRoot, sha256Hex } from "./run-cache"
 
 const usageText = (): string =>
   `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
@@ -1023,7 +1023,7 @@ const runProgram = (
   }
   const file = runBinaryName(name)
   const key = runCacheKey(emitted, file, packageRoot(), profile, debugInfo, threads, cCompiler())
-  const cacheEntry = `${cacheRoot}/${fnv1a64Hex(key)}`
+  const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
@@ -1078,10 +1078,12 @@ const runProgram = (
  * stay a read and a spawn, and every entry is made on a miss.
  *
  * Whatever key the entry holds is emptied before the new binary is moved in.
- * The entry's name is a 64-bit hash, so another key can name it, and a run
- * that stopped between the `mv` and the caller's write of the new key would
- * otherwise leave the old key beside a binary that is not its program. An empty
- * key never equals one, because every key starts with the compiler's name.
+ * The entry's name is a SHA-256 of the key (CLI-8), so no other key is
+ * expected to name it; but an entry left by a compiler that named entries
+ * otherwise, or edited by hand, can hold one, and a run that stopped between
+ * the `mv` and the caller's write of the new key would then leave the old key
+ * beside a binary that is not its program (CLI-5). An empty key never equals
+ * one, because every key starts with the compiler's name.
  */
 const buildIntoCache = (
   emitted: EmittedModule[],

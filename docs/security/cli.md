@@ -76,7 +76,7 @@ and read what the victim's cache holds.
 | CLI-5 | Low | `src/compile.ts:929` `buildIntoCache` | The entry is named by a 64-bit FNV-1a, which is not collision resistant, so two programs' keys can name one entry. A run that moved its binary in and then died before writing its key left the other program's key beside it, and that program's next run was a hit that started the wrong binary. | **Fixed.** The entry's key is emptied before the new binary is moved in; an empty key never equals a real one. Test: `CLI-5: a run killed after its binary is moved in leaves no other program's key beside it` |
 | CLI-6 | Medium | `runtime/runtime-os.c:127` `nish_put_file`, used by `src/compile.ts:688` and `writeSidecars` | Every output (`.ll`, sidecars, the cache key) is opened with `O_CREAT|O_TRUNC` and no `O_NOFOLLOW`. A source compiled with no `-o` writes `<module>.ll` beside it, and a symlink at that name redirects the write to whatever file it names. The author of a checkout controls every name in it, so they need no race and no world-writable directory: they ship the source and a symlink at `<module>.ll`, and the victim's plain `nish file.ts` deterministically truncates and overwrites any file the victim can write. Linux's `fs.protected_symlinks` only applies in sticky world-writable directories such as `/tmp`, so it does not help in a checkout or any other shared directory. A destructive write triggered by attacker input, hence Medium; not High, because there is no memory corruption and the attacker does not choose the content written. | **Fixed** in the runtime as RT-4 ([#383](https://github.com/amritk/nish/pull/383), [runtime.md](runtime.md)): `writeFileSync`, `appendFileSync` and `spawnSyncTo` open with `O_NOFOLLOW` and refuse a symbolic link as the last component. Its regression test, RT-4 in `tests/runtime-test.c`, fails on the base `882857d` and passes after. This stage left it open, outside its Owns, needing exactly that primitive. |
 | CLI-7 | Low | `src/compile.ts:863` `runProgram` | A **hit** reads the key and starts the binary without checking who owns the cache root, because that check has to stay cheap and the language has no `lstat`. CLI-4's `chmod` covers every root a miss reaches, so the gap is a root that another user created at the victim's cache path (only possible when that path is under a directory they can write) and filled with a key and binary for a program whose IR they can predict. | **Open.** Needs a runtime primitive returning a path's owner uid and mode without following a symlink (`lstat`), in `runtime/runtime-os.c`, so every run can refuse a root it does not own or that is group- or world-writable. |
-| CLI-8 | Low | `src/run-cache.ts` `fnv1a64Hex` | The entry name is a 64-bit FNV-1a. A hit still compares the full key, so a collision alone only costs a relink, and CLI-5 closes the crash window, but two colliding programs started at the same moment can still interleave `mv` and the key write. Both programs are the victim's own runs. | **Open.** A cryptographic name (SHA-256 of the key) would close it; `src/` does not import the standard library today. |
+| CLI-8 | Low | `src/run-cache.ts` `fnv1a64Hex` | The entry name is a 64-bit FNV-1a. A hit still compares the full key, so a collision alone only costs a relink, and CLI-5 closes the crash window, but two colliding programs started at the same moment can still interleave `mv` and the key write. Both programs are the victim's own runs. | **Fixed** (#386). `sha256Hex` in `src/run-cache.ts`, FIPS 180-4 written in plain Nish because `src/` reads nothing from `std/`, names every entry and fingerprints every runtime file in the key; `fnv1a64Hex` is gone. Checked against `sha256sum` at every padding boundary (0, 1, 55, 56, 57, 63, 64, 65, 119, 120, 128 bytes, a source file and 20 MB of random bytes). Test: `CLI-8: the entry is named by the SHA-256 of its key` in `tests/nish/cli.ts`, against `std/crypto/sha256`, which fails on the base (`expected "f1e0…97a9", got "a4b2492e51146f75"`) |
 | CLI-9 | Low | `src/compile.ts:726` `programOnPath`, `:798` `packageRootCandidates` | The package root is the parent of the compiler's directory, so a compiler kept at `/tmp/x/nish` trusts `/tmp/scripts/build.sh`, which any user can create. And `programOnPath` takes the first *readable* `nish` on `PATH`, where the shell took the first *executable* one, so the two can disagree. | **Open** (documentation). Install the compiler in its package layout, in a directory whose parent only you can write. Checking either in code needs a runtime primitive: owner and mode (`lstat`) or `access(X_OK)`. |
 | CLI-10 | Low | `src/compile.ts:960` `buildIntoCache` | The cache root's `mkdir` and its `chmod 700` shared one condition and one message, and `||` short-circuits, so a root that could not be created (`EACCES`, `ENOTDIR`, a regular file at the path) was reported as `cannot make <root> private to this user (chmod 700 failed)`, a chmod that never ran. The user was pointed at the wrong cause. A wrong diagnostic, not a wrong action: the run was still refused. | **Fixed.** The two failures are reported apart: `run: cannot create <root>` for the `mkdir`, the chmod message for the `chmod`, both exit 3 under the toolchain code. Tests: `CLI-10: a cache root that cannot be made is refused with the toolchain band`, `CLI-10: and says it could not be created`, `CLI-10: not that chmod failed` |
 
@@ -112,6 +112,25 @@ this is what is true now.
   `src/compile.ts` that uses them.
 - CLI-8 is unchanged.
 
+## Status after the owner builtins (#386, phase 1)
+
+- **The RT-9 primitives are builtins**: `lstatOwnerModeSync(path): i64`,
+  `geteuid(): i64` and `isExecutableSync(path): boolean`
+  ([LANGUAGE.md](../LANGUAGE.md#who-owns-a-path-lstatownermodesync-geteuid-and-isexecutablesync)).
+  `src/` may call them once a release ships them (the rolling freeze), so
+  **CLI-7 and CLI-9 stay open** for the release after this one: a hit that
+  refuses a cache root it does not own or that is group- or world-writable,
+  and a `programOnPath` that takes the first *executable* `nish`.
+- **CLI-8 is fixed**: the entry is named by a SHA-256 of its key (the row
+  above).
+- **`scripts/bootstrap.sh` no longer needs the working-directory fallback.**
+  Its stages live in `<work>/bin/`, and `<work>` holds `scripts`, `runtime`
+  and `std` as symbolic links to the checkout by absolute path, so each stage
+  finds the checkout through its own path. On the base, a `--work` outside the
+  checkout failed at stage2 with `--link: cannot find scripts/build.sh`; it
+  now builds and verifies. The `.` candidate in `packageRootCandidates` is
+  still there, and can go with CLI-9's change.
+
 ## Doc corrections for the security-policy stage
 
 - `docs/INSTALL.md`, the `nish run` section: "It needs `HOME` or
@@ -127,4 +146,4 @@ this is what is true now.
 - The supply-chain stage owns `scripts/bootstrap.sh`: its intermediate stage at
   `build/selfhost/stage` still finds the checkout only through the narrowed
   `.` fallback. Building that stage one level below the checkout's root, or
-  passing the root explicitly, would let the fallback go entirely.
+  passing the root explicitly, would let the fallback go entirely. (Done in #386 phase 1: see "Status after the owner builtins".)
