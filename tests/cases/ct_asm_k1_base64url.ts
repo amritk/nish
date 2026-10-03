@@ -4,7 +4,8 @@
 // table, so that no load is ever addressed by a secret. That promise is about
 // the machine code — LLVM turns a `switch` or a chain of compares into a
 // lookup table when it likes — so the maps are copied here verbatim from
-// std/crypto/base64url.ts, `export` aside, and read after `clang -O2`.
+// std/crypto/base64url.ts, `export` and the indexing aside, and read after
+// `clang -O2`.
 //
 // A golden case compiles to one module, so it cannot import the library.
 // Beside the maps, one group each way: `base64urlEncodeGroup` is the encoder's
@@ -18,14 +19,16 @@
 // byte is stored, never used as an address). Here a character is a byte of a
 // `u8[]`, since a `string` does not arrive in a register.
 //
-// Every value below is secret. Indexing is unchecked (ct_asm_k1_base64url.args),
-// since a bounds check is a branch. tests/link/crypto_base64url_k1_copies holds
+// Every value below is secret. Every index is an `uncheckedGet` or
+// `uncheckedSet` from `nish:unsafe`, since a bounds check is a branch. tests/link/crypto_base64url_k1_copies holds
 // each function to the module on every sextet, every byte and generated groups,
 // so a copy that drifts from std/crypto/base64url.ts fails there.
 // ct-check: base64urlCharOf secret=v
 // ct-check: base64urlSextetOf secret=c
 // ct-check: base64urlEncodeGroup secret=contents
 // ct-check: base64urlDecodeGroup secret=contents
+
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
 
 // Verbatim: `base64urlRangeMask`.
 const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 => ((lo - 1 - c) & (c - hi - 1)) >> 31
@@ -58,11 +61,11 @@ export const base64urlEncodeGroup = (data: u8[], out: u8[]): void => {
   let bits: i32 = 0
   let j: i32 = 0
   for (let k: i32 = 0; k < 3; k++) {
-    acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    acc = ((acc << 8) | toI32(uncheckedGet(data, k))) & 0xfff
     bits += 8
     while (bits >= 6) {
       bits -= 6
-      out[j] = toU8(base64urlCharOf((acc >> bits) & 63))
+      uncheckedSet(out, j, toU8(base64urlCharOf((acc >> bits) & 63)));
       j++
     }
   }
@@ -78,20 +81,20 @@ export const base64urlEncodeGroup = (data: u8[], out: u8[]): void => {
 export const base64urlDecodeGroup = (text: u8[], out: u8[]): i32 => {
   let bad: i32 = 0
   let acc: i32 = 0
-  const v0: i32 = base64urlSextetOf(toI32(text[0]))
+  const v0: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 0)))
   bad = bad | (v0 >> 31)
   acc = ((acc << 6) | (v0 & 63)) & 0xfff
-  const v1: i32 = base64urlSextetOf(toI32(text[1]))
+  const v1: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 1)))
   bad = bad | (v1 >> 31)
   acc = ((acc << 6) | (v1 & 63)) & 0xfff
-  out[0] = toU8((acc >> 4) & 255)
-  const v2: i32 = base64urlSextetOf(toI32(text[2]))
+  uncheckedSet(out, 0, toU8((acc >> 4) & 255));
+  const v2: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 2)))
   bad = bad | (v2 >> 31)
   acc = ((acc << 6) | (v2 & 63)) & 0xfff
-  out[1] = toU8((acc >> 2) & 255)
-  const v3: i32 = base64urlSextetOf(toI32(text[3]))
+  uncheckedSet(out, 1, toU8((acc >> 2) & 255));
+  const v3: i32 = base64urlSextetOf(toI32(uncheckedGet(text, 3)))
   bad = bad | (v3 >> 31)
   acc = ((acc << 6) | (v3 & 63)) & 0xfff
-  out[2] = toU8(acc & 255)
+  uncheckedSet(out, 2, toU8(acc & 255));
   return bad
 }

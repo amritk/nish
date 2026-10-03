@@ -1,0 +1,15 @@
+PASS  over QUIC a client with parameters and h3 is accepted
+PASS  its parameters are exposed as they were sent
+PASS  h3 is chosen
+PASS  the handshake is signed
+PASS  EncryptedExtensions carries ALPN h3, then the server's parameters: 0039 0003 010203
+PASS  the client verifies the flight
+PASS  and the server its Finished
+PASS  a QUIC handshake completes
+PASS  over QUIC a client without transport parameters is missing_extension
+PASS  over QUIC a client without ALPN is no_application_protocol
+PASS  a QUIC server configured with no ALPN refuses even a client offering some
+PASS  over TCP a client sending transport parameters is accepted
+PASS  but they are not exposed
+PASS  and none are sent
+tls quic transport parameters: 14 passed, 0 failed, 0 skipped

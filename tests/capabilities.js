@@ -21,6 +21,7 @@
  *   - `checkNamespaceProperty`, the namespace properties (`Math.PI`, `process.argv`);
  *   - `isResultConstructor` (`src/result.ts`), `Ok` and `Err`;
  *   - `netSignature` and `isNetExport` (`src/nish-modules.ts`), every `nish:net` export;
+ *   - `isUnsafeExport`, every `nish:unsafe` export;
  *   - `nishModuleExports`, every `nish:` export, by the builtin it renames.
  *
  * A shape this cannot read is a failure rather than an empty list, so a
@@ -70,6 +71,12 @@ if (!declaration(builtins, "isBuiltinFunction", "builtins.ts").includes("isNetEx
     "builtins.ts: `isBuiltinFunction` no longer admits `isNetExport(name)`; read its new shape here"
   )
 }
+const unsafeExports = comparedNames(declaration(modules, "isUnsafeExport", "nish-modules.ts"))
+if (!declaration(builtins, "isBuiltinFunction", "builtins.ts").includes("isUnsafeExport(name)")) {
+  problems.push(
+    "builtins.ts: `isBuiltinFunction` no longer admits `isUnsafeExport(name)`; read its new shape here"
+  )
+}
 const supported = /const SUPPORTED_BUILTINS: string =\s*((?:"[^"]*"\s*\+?\s*)+)/.exec(builtins)
 // One string split over several literals, so the pieces are joined first.
 const dotted =
@@ -96,7 +103,14 @@ if (properties.length === 0) {
 }
 const constructors = comparedNames(declaration(results, "isResultConstructor", "result.ts"))
 
-const accepted = new Set([...plain, ...netExports, ...dotted, ...properties, ...constructors])
+const accepted = new Set([
+  ...plain,
+  ...netExports,
+  ...unsafeExports,
+  ...dotted,
+  ...properties,
+  ...constructors,
+])
 
 // Every `nish:` export renames a builtin: itself when it is a plain one, and
 // the `process.` one of its name otherwise (`exit`, `argv`, ...).
@@ -114,12 +128,14 @@ for (const list of exportLists) {
   }
 }
 
-// The table: each row once, `isNetExport(name)` standing for every `nish:net` export.
+// The table: each row once, `isNetExport(name)` standing for every `nish:net`
+// export and `isUnsafeExport(name)` for every `nish:unsafe` one.
 const capability = declaration(table, "builtinCapability", "capabilities.ts")
 const rows = comparedNames(capability)
 const viaNet = capability.includes("isNetExport(name)")
+const viaUnsafe = capability.includes("isUnsafeExport(name)")
 const labelled = new Map()
-for (const row of [...rows, ...(viaNet ? netExports : [])]) {
+for (const row of [...rows, ...(viaNet ? netExports : []), ...(viaUnsafe ? unsafeExports : [])]) {
   labelled.set(row, (labelled.get(row) ?? 0) + 1)
 }
 for (const name of [...accepted].sort()) {
