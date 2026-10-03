@@ -53,9 +53,10 @@ import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
+import { codeFor } from "./codes"
 import { emitProgram } from "./emit"
 import { StringMap, StringSet } from "./map"
-import { isBuiltinSpecifier, isNishSourceModule, SECRET_SPECIFIER } from "./nish-modules"
+import { isBuiltinSpecifier, isNishSourceModule, SECRET_SPECIFIER, unsafeModule } from "./nish-modules"
 import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
@@ -276,6 +277,17 @@ export class EmittedModule {
     this.ir = ir
     this.name = name
   }
+}
+
+/**
+ * Whether a performance warning is a deprecated flag's (NL9014, NL9015;
+ * `Compilation.reportDeprecatedFlags`). `nish run` prints these and no other
+ * performance warning: the rest is advice about the IR, and a deprecation is
+ * about the command line the script is run with.
+ */
+export const isDeprecationWarning = (warning: Diagnostic): boolean => {
+  const code = codeFor("performance", warning.text)
+  return code === "NL9014" || code === "NL9015"
 }
 
 export class Compilation {
@@ -621,6 +633,12 @@ export class Compilation {
       this.rootPackageDir = packageDirOf(name)
     }
     const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
+    // `--unchecked-indexing` and `--wrapping` reach the entry package and
+    // nothing else: a dependency, and the `nish/` library, which is package
+    // `nish` wherever it is installed, keep every check and every `nsw` their
+    // authors compiled them with. What a program means to leave unchecked
+    // beyond its own modules it says at the call, through `nish:unsafe`.
+    const ownPackage = packageName === ROOT_PACKAGE
     const checker = new Checker(
       this.table,
       source,
@@ -629,8 +647,8 @@ export class Compilation {
       parser.nodeCount,
       this.sink,
       this.opts.numberMode,
-      !this.opts.nsw,
-      this.opts.uncheckedIndexing,
+      !this.opts.nsw && ownPackage,
+      this.opts.uncheckedIndexing && ownPackage,
       this.opts.strictExports,
       packageName
     )
@@ -1096,6 +1114,7 @@ export class Compilation {
     layoutInlineArrays(contexts, mode)
     proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
     this.reportArenaLoops()
+    this.reportDeprecatedFlags()
     this.checkParallel()
     this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
@@ -1277,6 +1296,40 @@ export class Compilation {
           }
         }
       }
+    }
+  }
+
+  /**
+   * `--unchecked-indexing` and `--wrapping` are deprecated: each still reaches
+   * the entry package's own modules (`discover`), and each says so once per
+   * compilation, at the top of the entry module, naming the `nish:unsafe`
+   * functions that state the same decision at the site it is about. A
+   * performance warning rather than a portability one, because that class is
+   * on by default, so the deprecation is read by whoever still passes the flag;
+   * `--no-warn-performance` silences it with the rest.
+   */
+  reportDeprecatedFlags(): void {
+    if (this.modules.length === 0) {
+      return
+    }
+    const entry = this.modules[0].source
+    const reach =
+      "is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call"
+    if (this.opts.uncheckedIndexing) {
+      this.sink.reportPerformance(
+        entry,
+        0,
+        0,
+        `--unchecked-indexing ${reach} \`uncheckedGet\` and \`uncheckedSet\` from \`${unsafeModule()}\` where an index is meant to go unchecked`
+      )
+    }
+    if (!this.opts.nsw) {
+      this.sink.reportPerformance(
+        entry,
+        0,
+        0,
+        `--wrapping ${reach} \`wrappingAdd\`, \`wrappingSub\` and \`wrappingMul\` from \`${unsafeModule()}\` where an operation is meant to wrap`
+      )
     }
   }
 

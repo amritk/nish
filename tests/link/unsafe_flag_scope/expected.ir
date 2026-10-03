@@ -1,0 +1,5 @@
+define noundef i32 @wrapped(i32 noundef %a, i32 noundef %b)
+%0 = add i32 %a, %b
+define noundef i32 @checked_dep.sum(i32 noundef %a, i32 noundef %b)
+%0 = add nsw i32 %a, %b
+call void @nish_panic_index(i64 %0, i64 %2)

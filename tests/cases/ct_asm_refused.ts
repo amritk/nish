@@ -11,11 +11,13 @@
 // ct-check: tailLeak secret=secret expect=load via=leakyRow
 // ct-check: secretDivide secret=secret expect=latency
 
+import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+
 // The comparison `===` gives: it stops at the first differing byte, so its
 // running time says how many leading bytes matched.
 export const naiveEqual = (a: u8[], b: u8[]): u32 => {
   for (let i: i32 = 0; i < 32; i++) {
-    if (a[i] !== b[i]) {
+    if (uncheckedGet(a, i) !== uncheckedGet(b, i)) {
       return 0;
     }
   }
@@ -23,11 +25,11 @@ export const naiveEqual = (a: u8[], b: u8[]): u32 => {
 };
 
 // A table indexed by a secret: which cache line is read says which entry.
-export const indexedLookup = (table: u32[], secret: u32): u32 => table[toI32(secret & 15)];
+export const indexedLookup = (table: u32[], secret: u32): u32 => uncheckedGet(table, toI32(secret & 15));
 
 // The same for a write: which cache line is written says which entry.
 export const indexedStore = (table: u32[], secret: u32): void => {
-  table[toI32(secret & 15)] = 1;
+  uncheckedSet(table, toI32(secret & 15), 1);
 };
 
 // Two calls into the runtime (the arena's mark and the number's text), which
@@ -48,18 +50,18 @@ export const secretText = (secret: u32): string => `${secret}`;
 // without following anything.
 export const leakyRow = (table: u32[], secret: u32): u32 => {
   let acc: u32 = secret;
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32(acc & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 1) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 2) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 3) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 4) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 5) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 6) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 7) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 8) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 9) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 10) & 15)];
-  acc = (acc * 2654435761) ^ (acc >> 13) ^ table[toI32((acc + 11) & 15)];
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32(acc & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 1) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 2) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 3) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 4) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 5) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 6) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 7) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 8) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 9) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 10) & 15));
+  acc = (acc * 2654435761) ^ (acc >> 13) ^ uncheckedGet(table, toI32((acc + 11) & 15));
   return acc;
 };
 
