@@ -801,24 +801,35 @@ const takesTypeParamOnce = (template: TemplateInfo): boolean => {
 }
 
 /**
- * Whether `arg` is something inference types as the type named `name` without
- * checking it: a local of that declared type, or a literal of it. An integer
- * literal is `number`, which is `i32` or `f64` as the compilation lowers it.
+ * Whether `arg` is something inference types as the type named `name`, which
+ * `typeUnchecked` says without checking it. An integer literal is `number`,
+ * which is `i32` or `f64` as the compilation lowers it.
  */
 const inferredAs = (ctx: CheckContext, arg: Node, name: string, scope: Scope): boolean => {
-  const number = ctx.table.typeName(ctx.numberType())
-  const wanted = name === "number" ? number : name
-  if (arg.kind === N_IDENT) {
-    const local = scope.lookup(arg.text)
-    return local !== null && ctx.table.typeName(scope.typeOf(local)) === wanted
+  const type = typeUnchecked(ctx, arg, scope)
+  const wanted = name === "number" ? ctx.table.typeName(ctx.numberType()) : name
+  return type >= 0 && ctx.table.typeName(type) === wanted
+}
+
+/**
+ * The type of `expr` where it can be read off without checking it, or -1: a
+ * local's declared (or narrowed) type, an integer literal's `number`, a
+ * string literal and `true` / `false`. The sites that ask have refused the
+ * expression around `expr` and never checked `expr` itself, and checking it
+ * now could report a second diagnostic on a statement that already has one.
+ */
+const typeUnchecked = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
+  if (expr.kind === N_IDENT) {
+    const local = scope.lookup(expr.text)
+    return local === null ? -1 : scope.typeOf(local)
   }
-  if (arg.kind === N_NUMBER) {
-    return !isFractional(arg.text) && wanted === number
+  if (expr.kind === N_NUMBER) {
+    return isFractional(expr.text) ? -1 : ctx.numberType()
   }
-  if (arg.kind === N_STRING) {
-    return wanted === "string"
+  if (expr.kind === N_STRING) {
+    return T_STRING
   }
-  return (arg.kind === N_TRUE || arg.kind === N_FALSE) && wanted === "boolean"
+  return expr.kind === N_TRUE || expr.kind === N_FALSE ? T_BOOL : -1
 }
 
 /**
@@ -1751,11 +1762,18 @@ export const assignInto = (
  * `String(x)` to `` `${x}` ``, which `tsc` reads as the same string for every
  * `x`. Only the global `String` with one argument: `String()` is `""`, a
  * second argument is ignored by JavaScript and would be lost, and a local
- * named `String` is not the global at all.
+ * named `String` is not the global at all. And only for an `x` a template
+ * hole takes — a number, a boolean or a string — which the argument has to
+ * show without being checked (`typeUnchecked`), since this call never checks it.
  */
-const stringCallFix = (ctx: CheckContext, call: Node, global: boolean): Edit[] => {
+const stringCallFix = (ctx: CheckContext, call: Node, global: boolean, scope: Scope): Edit[] => {
   const args = call.children[1].children
   if (!global || call.children[0].text !== "String" || args.length !== 1) {
+    const none: Edit[] = []
+    return none
+  }
+  const type = typeUnchecked(ctx, unwrapParens(args[0]), scope)
+  if (!(isNumeric(type) || type === T_BOOL || type === T_STRING)) {
     const none: Edit[] = []
     return none
   }
@@ -1870,7 +1888,11 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     if (callee.text === "Date" && local === null) {
       return ctx.errorType(expr, dateRefusal("Date()"))
     }
-    ctx.errorFix(callee, `Unknown function \`${callee.text}\``, stringCallFix(ctx, expr, local === null))
+    ctx.errorFix(
+      callee,
+      `Unknown function \`${callee.text}\``,
+      stringCallFix(ctx, expr, local === null, scope)
+    )
     return T_ERROR
   }
   const args = expr.children[1]
