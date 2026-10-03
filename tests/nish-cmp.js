@@ -1920,6 +1920,42 @@ const DECLARED = [
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
   {
+    program: "tests/cases/mem_using_arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: a `using a = arena()` block whose allocations are released when it ends, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_using_arena_or_return.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: `orReturn()` out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_using_arena_tail.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: a tail call out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/perf_arena_using.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: the arena-loop warning's shape with the loop body in a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "docs/cookbook/mem-using-arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new cookbook snippet: a `using a = arena()` block in a scoped loop pass, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/link/arena_using_exit_paths/main.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: every exit of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
     program: "tests/link/reject_typed_push_alias/main.ts",
     file: "exit",
     changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
@@ -1936,10 +1972,28 @@ const DECLARED = [
     why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
   },
   {
+    program: "tests/cases/net_tcp_connect.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: a Nish client and server in one loop through `tcpConnect` and `connectResult`, which the reference compiler refuses because it has neither builtin",
+  },
+  {
+    program: "tests/cases/net_tcp_connect_import.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: `tcpConnect` and `connectResult` imported from `nish:net`, which the reference compiler refuses because the module exports neither",
+  },
+  {
     program: "docs/cookbook/runtime-prelude.ts",
     file: "runtime-prelude.ll",
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_tcp_connect` and `nish_connect_result` after `nish_net_close`, which moves every declaration after them",
   },
 ]
 
