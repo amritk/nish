@@ -47,6 +47,9 @@ const waitFor = (loop: i32, token: i32): boolean => {
   return false;
 };
 
+/** Milliseconds since `start`, a `monotonicNanos` reading: the live server's clock. */
+export const millisSince = (start: i64): i64 => (monotonicNanos() - start) / toI64(1000000);
+
 /** The live server for `record.sh`: serves one connection on `port`, printing the transcript. */
 export const live = (port: i32): i32 => {
   const fd: i32 = udpBind("127.0.0.1", port, 0);
@@ -60,14 +63,16 @@ export const live = (port: i32): i32 => {
   const buf: u8[] = new Array<u8>(65536);
   const from: u8[] = new Array<u8>(18);
   const meta: i32[] = new Array<i32>(2);
+  const start: i64 = monotonicNanos();
   while (waitFor(loop, SERVER)) {
     const n: i32 = udpRecvFrom(fd, buf, 0, toI32(buf.length), from, meta);
     if (n <= 0) {
       continue;
     }
     const datagram: u8[] = head(buf, n);
-    console.log(`c ${toHex(datagram)}`);
-    const served: Served = serveDatagram(conn, datagram);
+    const now: i64 = millisSince(start);
+    console.log(`c ${now} ${toHex(datagram)}`);
+    const served: Served = serveDatagram(conn, datagram, now);
     for (const line of served.echoed) {
       console.log(`e ${line}`);
     }
@@ -109,14 +114,16 @@ export const replay = (): i32 => {
     const kind: string = line.substring(0, 1);
     const rest: string = line.substring(2);
     if (kind === "c") {
-      const datagram: u8[] = fromHex(rest);
+      const space: i32 = toI32(rest.indexOf(" "));
+      const now: i64 = toI64(parseInt(rest.substring(0, space)));
+      const datagram: u8[] = fromHex(rest.substring(space + 1));
       udpSendTo(client, datagram, 0, toI32(datagram.length), serverAddr, 0, 0);
       sent++;
       if (!t.ok(`client datagram ${sent} reaches the server`, waitFor(loop, SERVER))) {
         return t.done();
       }
       const n: i32 = udpRecvFrom(server, buf, 0, toI32(buf.length), from, meta);
-      const served: Served = serveDatagram(conn, head(buf, n));
+      const served: Served = serveDatagram(conn, head(buf, n), now);
       echoed = served.echoed;
       echoAt = 0;
       for (const out of served.out) {

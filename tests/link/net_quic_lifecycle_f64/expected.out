@@ -1,0 +1,118 @@
+PASS  a 1200-byte datagram in version 2 gets Version Negotiation
+PASS  its first byte has the long-header and fixed bits set (§17.2.1)
+PASS  then version 0, the client's SCID as the DCID, its DCID as the SCID, and version 1 alone
+PASS  so does a reserved version (§6.3)
+PASS  a 30-byte DCID, too long for version 1, is echoed all the same: version 1's rules decide nothing here
+PASS  a 1199-byte datagram is dropped (§5.2.2)
+PASS  and Version Negotiation is never answered with one (§6.1)
+PASS  with Retry on, a client's first Initial gets a Retry
+PASS  which parses as one
+PASS  and whose integrity tag holds for the client's original DCID (RFC 9001 §5.8)
+PASS  it goes to the client's SCID
+PASS  from a new 8-byte ID
+PASS  with a 34-byte token: a marker, the time, the original DCID and a 16-byte MAC
+PASS  far smaller than the 1200 bytes it answers
+PASS  the Initial that returns the token is accepted
+PASS  as a retried connection, naming the original DCID and the Retry's SCID
+PASS  the connection takes them
+PASS  the token validated the client's address, so the server is not held to three times what it received (§8.1)
+PASS  and its whole flight leaves at once: five datagrams, where Q2a's unvalidated client got three
+PASS  the client accepts the flight
+PASS  and the handshake completes
+PASS  original_destination_connection_id is the DCID before the Retry (§7.3)
+PASS  retry_source_connection_id is the Retry's SCID
+PASS  and initial_source_connection_id the server's own
+PASS  a connection that has started takes no Retry
+PASS  nor does one handed an ID over 20 bytes
+PASS  with Retry off, a first Initial is accepted as it is
+PASS  though a valid token still counts there
+PASS  a token returned just inside its lifetime is accepted
+PASS  one returned a lifetime after it was issued is INVALID_TOKEN, in an Initial the client reads
+PASS  one issued later than now, by a clock ahead of this one, is too
+PASS  so is one returned from another address or port (§8.1.4)
+PASS  one with a changed MAC byte
+PASS  one with a changed time
+PASS  one cut short
+PASS  one whose DCID length runs past it
+PASS  and one sent to an ID other than the Retry's, which the MAC binds
+PASS  an Initial that does not authenticate gets no close, only silence
+PASS  a token without this server's marker, another server's, is no token: a Retry again (§8.1.3)
+PASS  and, with Retry off, an unvalidated accept
+PASS  an Initial in a datagram under 1200 bytes is dropped (§14.1)
+PASS  so is one to a DCID under 8 bytes (§7.2)
+PASS  and a datagram that does not parse
+PASS  and a Handshake packet no connection owns (§5.2.2)
+PASS  a key of the wrong length, or a lifetime outside 1 to 60000 ms, makes a listener that drops everything
+PASS  so does entropy of the wrong length
+PASS  the caller's entropy is wiped once it is copied
+PASS  a reset token is HMAC-SHA256 of the connection ID under the static key, cut to 16 bytes (§10.3.2)
+PASS  the server's transport parameters carry the token for its first ID (§18.2)
+PASS  and each NEW_CONNECTION_ID carries the token the static key gives its ID
+PASS  a packet for a connection the server lost gets a stateless reset
+PASS  ending in the token the server gave for that ID
+PASS  shaped as a short header: 01 in the top bits
+PASS  and shorter than the packet it answers (§10.3.3)
+PASS  one sent to a later ID ends in that ID's token
+PASS  the rest of a reset is unpredictable: the same packet twice gets different bytes, the same token
+PASS  a 21-byte datagram gets none: a reset of 21 bytes or more would not be shorter (§10.3)
+PASS  22 bytes get 21, 30 get 29, 43 get 42: one byte shorter
+PASS  44 bytes get 43, the shortest past that
+PASS  a large datagram gets between 43 and 1200 bytes, never three times what came in
+PASS  a long-header packet no connection owns gets no reset
+PASS  at once, the burst of resets goes out and the rest are held back
+PASS  each one counted
+PASS  99 ms later there is still none
+PASS  100 ms later there is one
+PASS  and a quiet minute fills the budget again, no further
+PASS  so many have gone in all
+PASS  a connection that has read nothing has no deadline
+PASS  connected at 1000 ms
+PASS  with only the server's 30 s advertised, the deadline is 30 s after the last packet
+PASS  a millisecond before it, the connection is alive
+PASS  at it, the connection has timed out
+PASS  silently: nothing goes out, not even a CONNECTION_CLOSE (§10.1)
+PASS  its keys are discarded and wiped
+PASS  and nothing is timed any more
+PASS  a packet after that is ignored
+PASS  the client's 5 s, smaller, wins (§10.1)
+PASS  a 1 s timeout is raised to three probe timeouts
+PASS  with the server's 0, the client's 8 s alone
+PASS  with neither advertising one there is no timeout at all
+PASS  a packet received restarts the timer
+PASS  time handed in out of order does not run the clock backwards
+PASS  the stream data restarts it, and the bare ACK the server answers with does not
+PASS  the server's first ack-eliciting packet since restarts it
+PASS  its second does not (§10.1)
+PASS  a datagram handed in at the deadline finds the connection timed out, and is not read
+PASS  a handshake the client abandons
+PASS  times out too
+PASS  a connection still in its handshake cannot start an update
+PASS  once connected, both phases are 0 and the next read keys are ready (RFC 9001 §6.3)
+PASS  the server may not start an update before the client acknowledges a 1-RTT packet (§6.1)
+PASS  a packet with the Key Phase bit flipped, under the next keys, is the client updating
+PASS  the server's write keys follow at once (§6.2)
+PASS  and the packet's data is read
+PASS  the old write key and IV are wiped; the header-protection key, which every generation shares, is not
+PASS  the answer does not open under the old keys
+PASS  it opens under the next ones, with the Key Phase bit set
+PASS  a packet the network delayed, under the previous keys and numbered below the update, is still read (§6.5)
+PASS  the server may not start an update while it keeps the previous keys
+PASS  a probe timeout later the previous keys are wiped and the next derived
+PASS  but until the client acknowledges a packet of the new phase, still not
+PASS  once it has, the server starts an update (§6.1)
+PASS  its write phase moves on, its read phase waits for the client
+PASS  and it cannot start another until the client answers
+PASS  the server's next packet opens under the generation after, with the bit clear
+PASS  the client answers under its next keys, and the server reads it
+PASS  an update the server started does not count against the client's
+PASS  release() wipes the 1-RTT secrets the next generations come from
+PASS  a packet under the previous keys numbered above one under the newer is KEY_UPDATE_ERROR (§6.4)
+PASS  so is one under the next keys numbered below one under the current
+PASS  and the close says so
+PASS  a flipped Key Phase bit under the current keys is dropped, changing nothing
+PASS  and derives nothing: under 2 KB of the arena, the cost of reading any packet
+PASS  under ChaCha20-Poly1305 a client's update is followed too
+PASS  all 64 of the client's updates are followed
+PASS  each, its packet read and the next keys derived, leaves at most 12 KB in the arena, a ceiling over what QUIC-4 records
+PASS  the 65th is KEY_UPDATE_ERROR, deriving no key
+quic lifecycle: 117 passed, 0 failed, 0 skipped

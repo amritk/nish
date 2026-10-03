@@ -7,7 +7,7 @@
 import { Secret, secret, wipe } from "nish:secret";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
-import { QUIC_CONN_ENTROPY_SIZE, QuicConnection, QuicServerConfig, QuicStreamData } from "nish/net/quic";
+import { QUIC_CONN_ENTROPY_SIZE, QUIC_CONN_STATIC_KEY_SIZE, QuicConnection, QuicServerConfig, QuicStreamData } from "nish/net/quic";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
 import { textOf } from "../crypto_x509/hex";
 
@@ -23,6 +23,21 @@ export const fixedEntropy = (): u8[] => {
   return out;
 };
 
+/** `QUIC_CONN_STATIC_KEY_SIZE` bytes counting up from `first`: a static key a recording can be replayed under. */
+const fixedKey = (first: i32): u8[] => {
+  const out: u8[] = [];
+  for (let k: i32 = 0; k < QUIC_CONN_STATIC_KEY_SIZE; k++) {
+    out.push(toU8(first + k));
+  }
+  return out;
+};
+
+/** The stateless reset key every recorded server holds: 0xa0, 0xa1, … */
+export const resetKey = (): u8[] => fixedKey(0xa0);
+
+/** The Retry token key every recorded server holds: 0x10, 0x11, … */
+export const tokenKey = (): u8[] => fixedKey(0x10);
+
 /** The configuration: the P-256 leaf, the echo's ALPN, and room for a few short streams. */
 export const echoConfig = (): QuicServerConfig => {
   const chain: u8[][] = [leafCertificate()];
@@ -35,6 +50,10 @@ export const echoConfig = (): QuicServerConfig => {
     maxStreamsBidi: toI64(4),
     maxIdleTimeout: toI64(30000),
     activeConnectionIdLimit: toI64(4),
+    statelessResetKey: resetKey(),
+    retryTokenKey: tokenKey(),
+    retry: false,
+    retryTokenLifetime: toI64(10000),
   };
 };
 
@@ -53,12 +72,13 @@ export class Served {
 }
 
 /**
- * Hands `datagram` to `conn`, signs when the handshake asks, echoes every run
- * of stream data, and collects every datagram the server then sends.
+ * Hands `datagram` to `conn` at `now` (milliseconds), signs when the
+ * handshake asks, echoes every run of stream data, and collects every
+ * datagram the server then sends.
  */
-export const serveDatagram = (conn: QuicConnection, datagram: u8[]): Served => {
+export const serveDatagram = (conn: QuicConnection, datagram: u8[], now: i64): Served => {
   const served = new Served();
-  conn.receive(datagram);
+  conn.receive(datagram, now);
   const input: u8[] | null = conn.signatureInput();
   if (input !== null) {
     const key: Secret<u8[]> = secret(leafPrivate());
@@ -74,10 +94,10 @@ export const serveDatagram = (conn: QuicConnection, datagram: u8[]): Served => {
     conn.writeStream(data.streamId, data.data, data.fin);
     data = conn.readStream();
   }
-  let out: u8[] | null = conn.takeDatagram();
+  let out: u8[] | null = conn.takeDatagram(now);
   while (out !== null) {
     served.out.push(out);
-    out = conn.takeDatagram();
+    out = conn.takeDatagram(now);
   }
   return served;
 };

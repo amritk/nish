@@ -9,7 +9,7 @@ import { QuicConnection, QuicServerConfig } from "nish/net/quic";
 import { leafCertificate } from "../net_tls_common/server";
 import { fromHex } from "../crypto_x509/hex";
 import { n64 } from "../net_quic_frame/typed";
-import { fixedEntropy } from "../net_quic_conn_replay/server";
+import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
 import { CLIENT_SCID, QcClient, qcConnect, qcHello, qcParams } from "./client";
 
 /** A configuration for the echo's ALPN with the given limits. */
@@ -24,6 +24,10 @@ export const qcConfig = (maxData: i64, maxStreamData: i64, maxStreams: i64, cidL
     maxStreamsBidi: maxStreams,
     maxIdleTimeout: n64(30000),
     activeConnectionIdLimit: cidLimit,
+    statelessResetKey: resetKey(),
+    retryTokenKey: tokenKey(),
+    retry: false,
+    retryTokenLifetime: n64(10000),
   };
 };
 

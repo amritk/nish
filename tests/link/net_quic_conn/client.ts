@@ -67,11 +67,15 @@ import { n32, n64 } from "../net_quic_frame/typed";
 export const CLIENT_ODCID: string = "0001020304050607";
 /** The SCID every test client uses unless a case says otherwise. */
 export const CLIENT_SCID: string = "c0c1c2c3c4c5c6c7";
+/** The time, in milliseconds, every check runs at unless it moves a client's clock. */
+export const QC_T0: i64 = 1000;
 
 /** One test client's state: its keys per level, its packet numbers, and what the server sent it. */
 export class QcClient {
   suite: i32 = 0;
   hashLength: i32 = 0;
+  /** The time the client hands the server with each datagram, in milliseconds; a check moves it to drive the server's timers. */
+  now: i64 = 1000;
   initialPn: i64 = 0;
   handshakePn: i64 = 0;
   appPn: i64 = 0;
@@ -88,6 +92,11 @@ export class QcClient {
   handshakeRead: QuicKeys | null = null;
   appWrite: QuicKeys | null = null;
   appRead: QuicKeys | null = null;
+  /** The 1-RTT traffic secrets the client writes and reads under, which a key update starts from. */
+  appWriteSecret: u8[];
+  appReadSecret: u8[];
+  /** The token a Retry gave, which every Initial after it carries (RFC 9000 §8.1.2). */
+  token: u8[];
   /** Every message of the transcript before the ServerHello, as `clientFinish` takes it. */
   before: u8[];
   /** The server's CRYPTO bytes at the Initial and the Handshake level, in order. */
@@ -113,6 +122,9 @@ export class QcClient {
     this.appPayloads = [];
     this.longPayloads = [];
     this.datagrams = [];
+    this.appWriteSecret = [];
+    this.appReadSecret = [];
+    this.token = [];
     this.view = new ClientView();
     const secrets: QuicInitialSecrets | null = quicInitialSecrets(this.odcid);
     if (secrets !== null) {
@@ -190,17 +202,16 @@ const qcLongDcid = (c: QcClient): u8[] => (toI32(c.serverScid.length) > 0 ? c.se
  * a datagram of `padTo` bytes (0 for no padding).
  */
 export const qcInitial = (c: QcClient, payload: u8[], padTo: i32): u8[] => {
-  const none: u8[] = [];
   const pnLength: i32 = 4;
   // The header's size does not move with the payload's: Length is always two bytes.
-  const probe: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, qcLongDcid(c), c.scid, none, c.initialPn, pnLength, n32(0));
+  const probe: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, qcLongDcid(c), c.scid, c.token, c.initialPn, pnLength, n32(0));
   const headerLength: i32 = probe === null ? 0 : toI32(probe.length);
   const body: u8[] = cat([payload]);
   const pad: i32 = padTo - headerLength - toI32(body.length) - 16;
   if (pad > 0) {
     quicPushPadding(body, pad);
   }
-  const header: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, qcLongDcid(c), c.scid, none, c.initialPn, pnLength, toI32(body.length));
+  const header: u8[] | null = quicLongHeader(QUIC_PACKET_INITIAL, qcLongDcid(c), c.scid, c.token, c.initialPn, pnLength, toI32(body.length));
   const packet: u8[] = qcSeal(c.initialWrite, header, c.initialPn, body);
   c.initialPn = c.initialPn + 1;
   return packet;
@@ -224,6 +235,26 @@ export const qcShortTo = (c: QcClient, dcid: u8[], payload: u8[], firstBits: i32
   const packet: u8[] = qcSeal(c.appWrite, header, c.appPn, payload);
   c.appPn = c.appPn + 1;
   return packet;
+};
+
+/**
+ * What a client does with a Retry (RFC 9000 §17.2.5.2): its Initials now go
+ * to `retryScid`, under the Initial keys of that ID, and carry `token`.
+ */
+export const qcRetried = (c: QcClient, retryScid: u8[], token: u8[]): void => {
+  c.odcid = retryScid;
+  c.token = token;
+  const secrets: QuicInitialSecrets | null = quicInitialSecrets(retryScid);
+  if (secrets !== null) {
+    c.initialWrite = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client);
+    c.initialRead = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server);
+  }
+};
+
+/** A 1-RTT packet of `payload` under `keys`, with the Key Phase bit `keyPhase` and packet number `pn`, to the server's first ID. */
+export const qcShortWith = (c: QcClient, keys: QuicKeys | null, keyPhase: boolean, pn: i64, payload: u8[]): u8[] => {
+  const header: u8[] | null = quicShortHeader(c.serverScid, false, keyPhase, pn, n32(4));
+  return qcSeal(keys, header, pn, payload);
 };
 
 /** A 1-RTT packet of `payload` to the server's first ID. */
@@ -303,7 +334,7 @@ export const qcReceive = (c: QcClient, datagram: u8[]): i32 => {
  * opens every datagram the server answers. Answers how many it answered.
  */
 export const qcExchange = (conn: QuicConnection, c: QcClient, datagram: u8[]): i32 => {
-  conn.receive(datagram);
+  conn.receive(datagram, c.now);
   const input: u8[] | null = conn.signatureInput();
   if (input !== null) {
     const key: Secret<u8[]> = secret(leafPrivate());
@@ -319,12 +350,12 @@ export const qcExchange = (conn: QuicConnection, c: QcClient, datagram: u8[]): i
 /** Takes every datagram the server has to send and opens it. Answers how many there were. */
 export const qcDrain = (conn: QuicConnection, c: QcClient): i32 => {
   let n: i32 = 0;
-  let out: u8[] | null = conn.takeDatagram();
+  let out: u8[] | null = conn.takeDatagram(c.now);
   while (out !== null) {
     c.datagrams.push(out);
     qcReceive(c, out);
     n++;
-    out = conn.takeDatagram();
+    out = conn.takeDatagram(c.now);
   }
   return n;
 };
@@ -353,8 +384,10 @@ export const qcFinish = (c: QcClient, serverHello: u8[]): void => {
   const handshakeSecret: u8[] = tlsHandshakeSecret(h, tlsEarlySecret(h), shared === null ? none : shared);
   const master: u8[] = tlsMasterSecret(h, handshakeSecret);
   const th: u8[] = transcriptHash(h, cat([c.before, serverHello, c.cryptoHandshake]));
-  c.appWrite = quicKeys(qcAead(c.suite), tlsDeriveSecret(h, master, "c ap traffic", th));
-  c.appRead = quicKeys(qcAead(c.suite), tlsDeriveSecret(h, master, "s ap traffic", th));
+  c.appWriteSecret = tlsDeriveSecret(h, master, "c ap traffic", th);
+  c.appReadSecret = tlsDeriveSecret(h, master, "s ap traffic", th);
+  c.appWrite = quicKeys(qcAead(c.suite), c.appWriteSecret);
+  c.appRead = quicKeys(qcAead(c.suite), c.appReadSecret);
 };
 
 /** The client's Finished in a Handshake packet. */
