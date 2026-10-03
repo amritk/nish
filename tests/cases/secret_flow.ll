@@ -19,8 +19,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare void @nish_exit(i32 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #6
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -238,71 +240,80 @@ for.body:
   %12 = load i32, i32* %seen.addr, align 4
   %13 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
   %14 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %13)
-  %15 = add nsw i32 %12, %14
-  store i32 %15, i32* %seen.addr, align 4
-  %16 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
-  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %16)
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %14)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %16, i32* %seen.addr, align 4
+  %18 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr, align 8
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %18)
   br label %for.inc
 
 for.inc:
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = add nsw i32 %17, 1
-  store i32 %18, i32* %i.addr, align 4
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %19 = load i32, i32* %seen.addr, align 4
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  call void @nish_print(i8* %20)
-  %21 = call %struct.Secret$arr.u8* @make(i32 2)
-  store %struct.Secret$arr.u8* %21, %struct.Secret$arr.u8** %k.addr.1, align 8
-  %22 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr.1, align 8
-  store %struct.Secret$arr.u8* %22, %struct.Secret$arr.u8** %j.addr, align 8
-  %23 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %j.addr, align 8
-  %24 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %23)
-  %25 = call i8* @nish_str_from_i32(i32 %24)
-  call void @nish_print(i8* %25)
-  %26 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %j.addr, align 8
-  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %26)
-  %27 = call %struct.nish_array* @bytes(i32 3)
-  store %struct.nish_array* %27, %struct.nish_array** %raw.addr, align 8
-  %28 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 0
-  %30 = load i64, i64* %29, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %31 = icmp ult i64 0, %30
-  br i1 %31, label %bounds.ok, label %bounds.fail
+  %21 = load i32, i32* %seen.addr, align 4
+  %22 = call i8* @nish_str_from_i32(i32 %21)
+  call void @nish_print(i8* %22)
+  %23 = call %struct.Secret$arr.u8* @make(i32 2)
+  store %struct.Secret$arr.u8* %23, %struct.Secret$arr.u8** %k.addr.1, align 8
+  %24 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %k.addr.1, align 8
+  store %struct.Secret$arr.u8* %24, %struct.Secret$arr.u8** %j.addr, align 8
+  %25 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %j.addr, align 8
+  %26 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %25)
+  %27 = call i8* @nish_str_from_i32(i32 %26)
+  call void @nish_print(i8* %27)
+  %28 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %j.addr, align 8
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %28)
+  %29 = call %struct.nish_array* @bytes(i32 3)
+  store %struct.nish_array* %29, %struct.nish_array** %raw.addr, align 8
+  %30 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 0
+  %32 = load i64, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %33 = icmp ult i64 0, %32
+  br i1 %33, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %30)
+  call void @nish_panic_index(i64 0, i64 %32)
   unreachable
 
 bounds.ok:
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 2
-  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %34 = bitcast i8* %33 to i8*
-  %35 = getelementptr inbounds i8, i8* %34, i64 0
-  store i8 9, i8* %35, align 1, !alias.scope !4, !noalias !3, !tbaa !14
-  %36 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
-  %37 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %36)
-  store %struct.Secret$arr.u8* %37, %struct.Secret$arr.u8** %moved.addr, align 8
-  %38 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
-  %39 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %38)
-  %40 = call i8* @nish_str_from_i32(i32 %39)
-  call void @nish_print(i8* %40)
-  %41 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
-  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %41)
-  %42 = call %struct.Pair* @pairOf(i32 2, i32 40)
-  %43 = call %struct.Secret$$Pair* @nish.secret$$Pair(%struct.Pair* %42)
-  store %struct.Secret$$Pair* %43, %struct.Secret$$Pair** %pair.addr, align 8
-  %44 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
-  %45 = call i32 @nish.expose$$Pair$u32$fn.5.total(%struct.Secret$$Pair* %44)
-  %46 = zext i32 %45 to i64
-  %47 = call i8* @nish_str_from_u64(i64 %46)
-  call void @nish_print(i8* %47)
-  %48 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
-  call void @nish.wipe$$Secret$$Pair(%struct.Secret$$Pair* %48)
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %36 = bitcast i8* %35 to i8*
+  %37 = getelementptr inbounds i8, i8* %36, i64 0
+  store i8 9, i8* %37, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %38 = load %struct.nish_array*, %struct.nish_array** %raw.addr, align 8
+  %39 = call %struct.Secret$arr.u8* @nish.secret$arr.u8(%struct.nish_array* %38)
+  store %struct.Secret$arr.u8* %39, %struct.Secret$arr.u8** %moved.addr, align 8
+  %40 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
+  %41 = call i32 @nish.expose$arr.u8$i32$fn.6.length(%struct.Secret$arr.u8* %40)
+  %42 = call i8* @nish_str_from_i32(i32 %41)
+  call void @nish_print(i8* %42)
+  %43 = load %struct.Secret$arr.u8*, %struct.Secret$arr.u8** %moved.addr, align 8
+  call void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* %43)
+  %44 = call %struct.Pair* @pairOf(i32 2, i32 40)
+  %45 = call %struct.Secret$$Pair* @nish.secret$$Pair(%struct.Pair* %44)
+  store %struct.Secret$$Pair* %45, %struct.Secret$$Pair** %pair.addr, align 8
+  %46 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
+  %47 = call i32 @nish.expose$$Pair$u32$fn.5.total(%struct.Secret$$Pair* %46)
+  %48 = zext i32 %47 to i64
+  %49 = call i8* @nish_str_from_u64(i64 %48)
+  call void @nish_print(i8* %49)
+  %50 = load %struct.Secret$$Pair*, %struct.Secret$$Pair** %pair.addr, align 8
+  call void @nish.wipe$$Secret$$Pair(%struct.Secret$$Pair* %50)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -385,7 +396,8 @@ attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { noreturn nounwind }
 attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #6 = { nounwind willreturn readnone }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

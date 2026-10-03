@@ -9,6 +9,9 @@ declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef no
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
 define internal noundef nonnull align 8 i8* @cut(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %from, i32 noundef %to) #0 {
 entry:
@@ -105,70 +108,116 @@ if.end:
 
 if.then.1:
   %26 = load i32, i32* %flags.addr, align 4
-  %27 = add nsw i32 %26, 2
-  store i32 %27, i32* %flags.addr, align 4
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %26, i32 2)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %28, i32* %flags.addr, align 4
   br label %if.end.1
 
 if.end.1:
-  %28 = load i8*, i8** %empty.addr, align 8
-  %29 = call zeroext i1 @nish_str_eq(i8* %28, i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*))
-  br i1 %29, label %if.then.2, label %if.end.2
+  %30 = load i8*, i8** %empty.addr, align 8
+  %31 = call zeroext i1 @nish_str_eq(i8* %30, i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*))
+  br i1 %31, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %30 = load i32, i32* %flags.addr, align 4
-  %31 = add nsw i32 %30, 4
-  store i32 %31, i32* %flags.addr, align 4
+  %32 = load i32, i32* %flags.addr, align 4
+  %33 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %32, i32 4)
+  %34 = extractvalue { i32, i1 } %33, 0
+  %35 = extractvalue { i32, i1 } %33, 1
+  br i1 %35, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %34, i32* %flags.addr, align 4
   br label %if.end.2
 
 if.end.2:
-  %32 = load i8*, i8** %whole.addr, align 8
-  %33 = load i8*, i8** %s.addr, align 8
-  %34 = call zeroext i1 @nish_str_eq(i8* %32, i8* %33)
-  br i1 %34, label %if.then.3, label %if.end.3
+  %36 = load i8*, i8** %whole.addr, align 8
+  %37 = load i8*, i8** %s.addr, align 8
+  %38 = call zeroext i1 @nish_str_eq(i8* %36, i8* %37)
+  br i1 %38, label %if.then.3, label %if.end.3
 
 if.then.3:
-  %35 = load i32, i32* %flags.addr, align 4
-  %36 = add nsw i32 %35, 8
-  store i32 %36, i32* %flags.addr, align 4
+  %39 = load i32, i32* %flags.addr, align 4
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %39, i32 8)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %41, i32* %flags.addr, align 4
   br label %if.end.3
 
 if.end.3:
-  %37 = load i8*, i8** %s.addr, align 8
-  %38 = load i8*, i8** %s.addr, align 8
-  %39 = bitcast i8* %38 to i64*
-  %40 = load i64, i64* %39, align 8
-  %41 = trunc i64 %40 to i32
-  %42 = call i64 @nish_arena_mark()
-  %43 = call i8* @rest(i8* %37, i32 %41)
-  %44 = call i8* @nish_arena_keep(i64 %42, i8* %43)
-  %45 = call zeroext i1 @nish_str_eq(i8* %44, i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*))
-  br i1 %45, label %if.then.4, label %if.end.4
+  %43 = load i8*, i8** %s.addr, align 8
+  %44 = load i8*, i8** %s.addr, align 8
+  %45 = bitcast i8* %44 to i64*
+  %46 = load i64, i64* %45, align 8
+  %47 = trunc i64 %46 to i32
+  %48 = call i64 @nish_arena_mark()
+  %49 = call i8* @rest(i8* %43, i32 %47)
+  %50 = call i8* @nish_arena_keep(i64 %48, i8* %49)
+  %51 = call zeroext i1 @nish_str_eq(i8* %50, i8* bitcast ({ i64, [1 x i8] }* @.str.3 to i8*))
+  br i1 %51, label %if.then.4, label %if.end.4
 
 if.then.4:
-  %46 = load i32, i32* %flags.addr, align 4
-  %47 = add nsw i32 %46, 16
-  store i32 %47, i32* %flags.addr, align 4
+  %52 = load i32, i32* %flags.addr, align 4
+  %53 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %52, i32 16)
+  %54 = extractvalue { i32, i1 } %53, 0
+  %55 = extractvalue { i32, i1 } %53, 1
+  br i1 %55, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  store i32 %54, i32* %flags.addr, align 4
   br label %if.end.4
 
 if.end.4:
-  %48 = load i8*, i8** %head.addr, align 8
-  %49 = bitcast i8* %48 to i64*
-  %50 = load i64, i64* %49, align 8
-  %51 = trunc i64 %50 to i32
-  %52 = mul nsw i32 %51, 1000
-  %53 = load i8*, i8** %tail.addr, align 8
-  %54 = bitcast i8* %53 to i64*
-  %55 = load i64, i64* %54, align 8
-  %56 = trunc i64 %55 to i32
-  %57 = mul nsw i32 %56, 100
-  %58 = add nsw i32 %52, %57
-  %59 = load i32, i32* %flags.addr, align 4
-  %60 = add nsw i32 %58, %59
+  %56 = load i8*, i8** %head.addr, align 8
+  %57 = bitcast i8* %56 to i64*
+  %58 = load i64, i64* %57, align 8
+  %59 = trunc i64 %58 to i32
+  %60 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %59, i32 1000)
+  %61 = extractvalue { i32, i1 } %60, 0
+  %62 = extractvalue { i32, i1 } %60, 1
+  br i1 %62, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  %63 = load i8*, i8** %tail.addr, align 8
+  %64 = bitcast i8* %63 to i64*
+  %65 = load i64, i64* %64, align 8
+  %66 = trunc i64 %65 to i32
+  %67 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %66, i32 100)
+  %68 = extractvalue { i32, i1 } %67, 0
+  %69 = extractvalue { i32, i1 } %67, 1
+  br i1 %69, label %ovf.fail, label %ovf.ok.5
+
+ovf.ok.5:
+  %70 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %61, i32 %68)
+  %71 = extractvalue { i32, i1 } %70, 0
+  %72 = extractvalue { i32, i1 } %70, 1
+  br i1 %72, label %ovf.fail, label %ovf.ok.6
+
+ovf.ok.6:
+  %73 = load i32, i32* %flags.addr, align 4
+  %74 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %71, i32 %73)
+  %75 = extractvalue { i32, i1 } %74, 0
+  %76 = extractvalue { i32, i1 } %74, 1
+  br i1 %76, label %ovf.fail, label %ovf.ok.7
+
+ovf.ok.7:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %60
+  ret i32 %75
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %if.then.1 ], [ 0, %if.then.2 ], [ 0, %if.then.3 ], [ 0, %if.then.4 ], [ 2, %if.end.4 ], [ 2, %ovf.ok.4 ], [ 0, %ovf.ok.5 ], [ 0, %ovf.ok.6 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn memory(argmem: read) }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }

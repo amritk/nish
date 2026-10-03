@@ -6,6 +6,10 @@ declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_div(i1 noundef zeroext) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define internal void @Stats.constructor(%struct.Stats* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this) #0 {
 entry:
@@ -18,19 +22,33 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Stats.add(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %this, i32 noundef %v) #0 {
+define internal noundef i32 @Stats.add(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %this, i32 noundef %v) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 2
   %1 = load i32, i32* %0, align 4
-  %2 = add nsw i32 %1, 1
-  store i32 %2, i32* %0, align 4
-  %3 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
-  %4 = load i32, i32* %3, align 4
-  %5 = add nsw i32 %4, %v
-  store i32 %5, i32* %3, align 4
-  %6 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4, !tbaa !5
-  ret i32 %7
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %3, i32* %0, align 4
+  %5 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
+  %6 = load i32, i32* %5, align 4
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %v)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %8, i32* %5, align 4
+  %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
+  %11 = load i32, i32* %10, align 4, !tbaa !5
+  ret i32 %11
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #1 {
@@ -68,9 +86,18 @@ div.fail.1:
 
 div.ok.1:
   %17 = srem i32 %11, 2
-  %18 = sub nsw i32 %9, %17
-  store i32 %18, i32* %8, align 4
+  %18 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %9, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %19, i32* %8, align 4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define noundef i32 @nish_main() #1 {
@@ -87,27 +114,36 @@ entry:
   %4 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   %5 = getelementptr inbounds %struct.Stats, %struct.Stats* %4, i32 0, i32 0
   %6 = load i32, i32* %5, align 4
-  %7 = mul nsw i32 %6, 3
-  store i32 %7, i32* %5, align 4
-  %8 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
-  call void @halve(%struct.Stats* %8)
-  %9 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
-  %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %9, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4, !tbaa !5
-  %12 = call i8* @nish_str_from_i32(i32 %11)
-  call void @nish_print(i8* %12)
-  %13 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
-  %14 = getelementptr inbounds %struct.Stats, %struct.Stats* %13, i32 0, i32 2
-  %15 = load i32, i32* %14, align 4, !tbaa !4
-  %16 = call i8* @nish_str_from_i32(i32 %15)
-  call void @nish_print(i8* %16)
-  %17 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
-  %18 = getelementptr inbounds %struct.Stats, %struct.Stats* %17, i32 0, i32 1
-  %19 = load i32, i32* %18, align 4, !tbaa !6
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  call void @nish_print(i8* %20)
+  %7 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %6, i32 3)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %8, i32* %5, align 4
+  %10 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
+  call void @halve(%struct.Stats* %10)
+  %11 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
+  %12 = getelementptr inbounds %struct.Stats, %struct.Stats* %11, i32 0, i32 0
+  %13 = load i32, i32* %12, align 4, !tbaa !5
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  call void @nish_print(i8* %14)
+  %15 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
+  %16 = getelementptr inbounds %struct.Stats, %struct.Stats* %15, i32 0, i32 2
+  %17 = load i32, i32* %16, align 4, !tbaa !4
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  call void @nish_print(i8* %18)
+  %19 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
+  %20 = getelementptr inbounds %struct.Stats, %struct.Stats* %19, i32 0, i32 1
+  %21 = load i32, i32* %20, align 4, !tbaa !6
+  %22 = call i8* @nish_str_from_i32(i32 %21)
+  call void @nish_print(i8* %22)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -120,6 +156,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

@@ -11,8 +11,10 @@ declare void @nish_arena_release(i64 noundef) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -113,43 +115,62 @@ if.end:
   %8 = load i32, i32* %total.addr, align 4
   %9 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %r.addr, align 8
   %10 = call i32 @take(%struct.nish_result.i32.str* %9)
-  %11 = add nsw i32 %8, %10
-  store i32 %11, i32* %total.addr, align 4
-  %12 = call %struct.nish_result.i32.str* @parse(i32 -3)
-  store %struct.nish_result.i32.str* %12, %struct.nish_result.i32.str** %s.addr, align 8
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %12, i32* %total.addr, align 4
+  %14 = call %struct.nish_result.i32.str* @parse(i32 -3)
+  store %struct.nish_result.i32.str* %14, %struct.nish_result.i32.str** %s.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %while.cond
 
 while.cond:
-  %13 = load i32, i32* %i.addr, align 4
-  %14 = icmp slt i32 %13, 3
-  br i1 %14, label %while.body, label %while.end
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = icmp slt i32 %15, 3
+  br i1 %16, label %while.body, label %while.end
 
 while.body:
-  %15 = load i32, i32* %total.addr, align 4
-  %16 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
-  %17 = call i32 @take(%struct.nish_result.i32.str* %16)
-  %18 = add nsw i32 %15, %17
-  store i32 %18, i32* %total.addr, align 4
-  %19 = load i32, i32* %i.addr, align 4
-  %20 = call %struct.nish_result.i32.str* @parse(i32 %19)
-  store %struct.nish_result.i32.str* %20, %struct.nish_result.i32.str** %s.addr, align 8
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = add nsw i32 %21, 1
-  store i32 %22, i32* %i.addr, align 4
+  %17 = load i32, i32* %total.addr, align 4
+  %18 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
+  %19 = call i32 @take(%struct.nish_result.i32.str* %18)
+  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %19)
+  %21 = extractvalue { i32, i1 } %20, 0
+  %22 = extractvalue { i32, i1 } %20, 1
+  br i1 %22, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %21, i32* %total.addr, align 4
+  %23 = load i32, i32* %i.addr, align 4
+  %24 = call %struct.nish_result.i32.str* @parse(i32 %23)
+  store %struct.nish_result.i32.str* %24, %struct.nish_result.i32.str** %s.addr, align 8
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = add nsw i32 %25, 1
+  store i32 %26, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %23 = load i32, i32* %total.addr, align 4
-  %24 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
-  %25 = call i32 @take(%struct.nish_result.i32.str* %24)
-  %26 = add nsw i32 %23, %25
-  store i32 %26, i32* %total.addr, align 4
   %27 = load i32, i32* %total.addr, align 4
-  %28 = call i8* @nish_str_from_i32(i32 %27)
-  call void @nish_print(i8* %28)
+  %28 = load %struct.nish_result.i32.str*, %struct.nish_result.i32.str** %s.addr, align 8
+  %29 = call i32 @take(%struct.nish_result.i32.str* %28)
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %31, i32* %total.addr, align 4
+  %33 = load i32, i32* %total.addr, align 4
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -163,4 +184,6 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }

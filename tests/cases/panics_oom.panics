@@ -1,6 +1,6 @@
 {"functions":[
 {"name":"Point.constructor","symbol":"Point.constructor","module":"tests/cases/panics_oom.ts","line":7,"panics":[]},
-{"name":"make","symbol":"make","module":"tests/cases/panics_oom.ts","line":13,"panics":[{"kind":"oom","line":13,"column":33,"allowed":true}]},
+{"name":"make","symbol":"make","module":"tests/cases/panics_oom.ts","line":13,"panics":[{"kind":"oom","line":13,"column":33,"allowed":true},{"kind":"overflow","line":13,"column":46,"proven":true}]},
 {"name":"caller","symbol":"caller","module":"tests/cases/panics_oom.ts","line":15,"panics":[]},
 {"name":"main","symbol":"nish_main","module":"tests/cases/panics_oom.ts","line":17,"panics":[{"kind":"oom","line":18,"column":3,"allowed":true}]}
 ]}

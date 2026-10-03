@@ -2453,7 +2453,7 @@ if (!only || "performance".includes(only)) {
       positions(orderLines) === "26:5,36:5,44:41,44:41" &&
       orderLines[0].includes("performance: `s` is rebuilt from its own value") &&
       orderLines[1].includes("performance: `out` is rebuilt from its own value") &&
-      orderLines[2].includes("performance: this `*` is computed in i32 and wraps") &&
+      orderLines[2].includes("performance: this `*` is computed in i32 and can overflow it") &&
       orderLines[3].includes("performance: this computes with overflow"),
     order.stderr
   )
@@ -2634,8 +2634,8 @@ if (!only || "performance".includes(only)) {
     over.status === 0 &&
       overLines.length === 2 &&
       overLines[0].includes(
-        "this `*` is computed in i32 and wraps before `toI64` widens the result, so the conversion cannot recover " +
-          "an overflow that has already happened: convert the operands first, as `toI64(a) * toI64(b)`"
+        "this `*` is computed in i32 and can overflow it before `toI64` widens the result, so the conversion " +
+          "never sees the product the line was written for: convert the operands first, as `toI64(a) * toI64(b)`"
       ) &&
       overLines[1].includes(
         "the shift count 32 is at or beyond the 32 bits of the operand, so it is masked to 0 and this shifts by that instead"
@@ -2655,7 +2655,7 @@ if (!only || "performance".includes(only)) {
       positions(constLines) === "8:15,9:19,12:18" &&
       constLines[0].includes(
         "this computes with overflow: the result 2147483648 does not fit in i32 (the range is -2147483648 to " +
-          "2147483647), and signed overflow is undefined behaviour rather than a wrap: widen the operands with " +
+          "2147483647), and signed overflow panics when it runs rather than wrapping: widen the operands with " +
           "`toI64` first, or use --wrapping for two's-complement arithmetic"
       ) &&
       constLines[2].includes("the result 10000000000 does not fit in i32"),
@@ -2668,7 +2668,7 @@ if (!only || "performance".includes(only)) {
   const wrapped = compile("perf_overflow_wrapping", "perf_overflow_wrapping.ll", ["--wrapping"])
   const wrappedLines = summaries(wrapped.stderr)
   check(
-    "performance: --wrapping silences the constant-overflow warning, which is only about undefined behaviour, and says once that it is deprecated",
+    "performance: --wrapping silences the constant-overflow warning, which is only about the panic, and says once that it is deprecated",
     wrapped.status === 0 &&
       wrappedLines.length === 1 &&
       wrappedLines[0].includes(":1:1: performance: --wrapping is deprecated") &&
@@ -2804,8 +2804,14 @@ if (!only || "performance".includes(only)) {
   // for the message's two rewrites to change, which is what makes a warning
   // here a warning about a cost nobody is paying.
   const foreignDefault = compile("perf_inline_foreign", "perf_inline_foreign_default.ll")
+  // The foreign ones: the runtime's and LLVM's own declarations follow what the
+  // module calls, and under the flag an exported function proves less of its
+  // arithmetic, so more of it is checked (src/ranges.ts takes no entry facts in
+  // an open build).
   const declaresIn = (f) =>
-    (fs.readFileSync(path.join(buildDir, f), "utf8").match(/^declare .*$/gm) ?? []).join("\n")
+    (fs.readFileSync(path.join(buildDir, f), "utf8").match(/^declare .*$/gm) ?? [])
+      .filter((line) => !/@(llvm\.|nish_)/.test(line))
+      .join("\n")
   check(
     "performance: --no-strict-exports leaves a `declare function` byte for byte as the default emits it",
     inlineForeign.status === 0 &&
@@ -4346,6 +4352,8 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
+// The case is compiled with `--wrapping` (its .args): a reduction that can pass INT_MAX
+// is checked by default, and a loop with an overflow exit is not vectorised.
 const sumLoopLl = path.join(buildDir, "cf_sum_loop.ll")
 if (has("opt") && fs.existsSync(sumLoopLl)) {
   const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", sumLoopLl])
@@ -4355,6 +4363,25 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
     o.status === 0 && /<(4|8) x i32>/.test(out),
     o.status === 0 ? out : String(o.stderr)
   )
+  // The same loop under the checked default (cf_sum_loop_checked): `sum` keeps its
+  // check through `opt -O2`, so the loop has an overflow exit and stays scalar, and
+  // `i++` under `i < n` was proven, so the step is the `nuw nsw` an induction
+  // variable needs. This is the shape the default build ships; the case above pins
+  // what `--wrapping` buys back.
+  const checkedSumLl = path.join(buildDir, "cf_sum_loop_checked.ll")
+  if (fs.existsSync(checkedSumLl)) {
+    const c = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedSumLl])
+    const body = String(c.stdout).match(/define[^\n]*@sumTo\b[\s\S]*?\n}/)?.[0] ?? ""
+    check(
+      "cf_sum_loop_checked: opt -O2 keeps the overflow check in the loop, steps `i` by `add nuw nsw` and does not vectorise",
+      c.status === 0 &&
+        /call \{ i32, i1 \} @llvm\.sadd\.with\.overflow\.i32\(/.test(body) &&
+        /call void @nish_panic_overflow\(i32 0\)/.test(body) &&
+        /= add nuw nsw i32 %i\./.test(body) &&
+        !/<(4|8) x i32>/.test(body),
+      c.status === 0 ? body : String(c.stderr)
+    )
+  }
   // Control-flow modules must satisfy the IR verifier (dominance, terminators, phis), not just the assembler.
   for (const name of cases.filter((c) => c.startsWith("cf_") && (!only || c.includes(only)))) {
     const ll = path.join(buildDir, `${name}.ll`)
@@ -5442,6 +5469,9 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     )
   }
 
+  // (arr_alias_domains is compiled with `--wrapping`, its .args: `src[i] * 2` is
+  // unbounded, and the checked default's overflow exit would take the single trip
+  // count and the vectoriser below with it, by design rather than by regression.)
   // WP15: the array header and the element buffer are separate alias domains, so an
   // element store cannot be read as a clobber of a header. The consequence a golden
   // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
@@ -5492,6 +5522,28 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     check(
       "arr_alias_domains: opt -O2 collapses the two lengths into one trip count (llvm.umin)",
       o.status === 0 && /call i64 @llvm\.umin\.i64\(/.test(body),
+      o.status === 0 ? body : String(o.stderr)
+    )
+  }
+
+  // The same loop under the checked default (arr_alias_domains_checked): the
+  // multiply keeps its overflow check, so the loop is neither collapsed to one trip
+  // count nor vectorised, but the alias domains do not depend on the mode, and every
+  // header load must still be hoisted out of it.
+  const aliasCheckedLl = path.join(buildDir, "arr_alias_domains_checked.ll")
+  if (has("opt") && fs.existsSync(aliasCheckedLl)) {
+    const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", aliasCheckedLl])
+    const body = String(o.stdout).match(/define[^\n]*@scale\b[\s\S]*?\n}/)?.[0] ?? ""
+    const loop = body.slice(body.indexOf("\nwhile.body:"))
+    const reloads = (loop.match(/load (i64|ptr),/g) ?? []).join(" ")
+    check(
+      "arr_alias_domains_checked: opt -O2 hoists every array header load out of the checked loop",
+      o.status === 0 && body !== "" && loop !== "" && reloads === "",
+      o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
+    )
+    check(
+      "arr_alias_domains_checked: opt -O2 keeps the multiply's overflow check in the loop",
+      o.status === 0 && /call void @nish_panic_overflow\(i32 2\)/.test(loop),
       o.status === 0 ? body : String(o.stderr)
     )
   }
@@ -6444,6 +6496,63 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
   }
 }
 
+// ---- Checked signed arithmetic ---------------------------------------------------
+// A signed `+ - *`, negation or step that leaves its type panics (exit 1) with Rust's
+// words instead of wrapping or being undefined. ovf_matrix pushes one operation over
+// per run — every operator at i32 and i64, on locals, elements and fields — and must
+// stop before its "after" line; ovf_repro is the program that showed the old default
+// folding `x + 1 > x` to true, built at `--profile speed`, where the fold happened.
+if (!only || "overflow".includes(only) || only.startsWith("ovf")) {
+  const matrixLl = path.join(buildDir, "ovf_matrix.ll")
+  const matrixExe = path.join(buildDir, "ovf_matrix")
+  const matrix = fs.existsSync(matrixLl) ? linkNative(matrixExe, matrixLl) : null
+  if (matrix !== null && matrix.status === 0) {
+    const words = [
+      "add",
+      "add",
+      "add",
+      "subtract",
+      "subtract",
+      "subtract",
+      "multiply",
+      "multiply",
+      "multiply",
+    ]
+    words.push("negate", "negate", "negate", "add", "subtract", "add", "add", "add", "subtract")
+    words.push("subtract", "subtract", "multiply", "multiply", "multiply")
+    const failed = []
+    for (let k = 0; k < 2 * words.length; k++) {
+      const needle = `attempt to ${words[k % words.length]} with overflow`
+      const run = spawnSync(matrixExe, [String(k)], { encoding: "utf8" })
+      if (run.status !== 1 || !run.stderr.includes(needle) || run.stdout !== "") {
+        failed.push(`case ${k}: want "${needle}", got ${shown(run)}`)
+      }
+    }
+    check(
+      `ovf_matrix: each of the ${2 * words.length} operations exits 1 with its own "attempt to ... with overflow" and prints nothing`,
+      failed.length === 0,
+      failed.join("\n")
+    )
+  } else if (matrix !== null) {
+    check("ovf_matrix: links", false, String(matrix.stderr))
+  }
+  const repro = path.join(buildDir, "ovf_repro_speed")
+  const built = spawnSync(
+    NISH,
+    [path.join(casesDir, "ovf_repro.ts"), "-o", `${repro}.ll`, "--link", repro, "--profile", "speed"],
+    { cwd: root, encoding: "utf8" }
+  )
+  const ran = built.status === 0 ? spawnSync(repro, [], { encoding: "utf8" }) : null
+  check(
+    'ovf_repro: at --profile speed `x + 1` on INT_MAX exits 1 with "attempt to add with overflow" and prints nothing',
+    ran !== null &&
+      ran.status === 1 &&
+      ran.stderr.includes("attempt to add with overflow") &&
+      ran.stdout === "",
+    ran === null ? built.stderr : shown(ran)
+  )
+}
+
 // ---- Ranged integers (WP31) ------------------------------------------------------
 // A value that leaves `integer<Lo, Hi>` at an entry panics (exit 1) with the range
 // on stderr, before the line after it prints. The f64 twin is the one the
@@ -7013,8 +7122,12 @@ const sizeFailure = (cc, sz, sections, total, breakdown, budget, constant) => {
  * 3,583 before it and 3,604 with it on 2026-10-03 with clang 18.1.3 on linux-x64. Every
  * other unit was as close to its own ceiling, and the wipe is no system call, so it is here,
  * and the raise is the measured size of what was added and nothing more.
+ *
+ * Raised by 1 more, to 3,606, by checked signed arithmetic: `nish_panic_overflow` sits
+ * beside the division panic and the two share one table of messages, which measured 3,606
+ * against 3,604 the same day (docs/wp7-runtime.md, "Checked arithmetic").
  */
-const RUNTIME_TEXT_BUDGET = 3605
+const RUNTIME_TEXT_BUDGET = 3606
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -7690,15 +7803,19 @@ if (!only || "interop".includes(only)) {
           'import { createRequire } from "node:module";',
           `const addon = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
           `const { instance } = await WebAssembly.instantiate(readFileSync(${JSON.stringify(wasm)}), {});`,
-          "const pairs = [[2, 3], [40, 2], [-7, 7], [2147483647, 1]];",
+          "const pairs = [[2, 3], [40, 2], [-7, 7], [2147483646, 1], [-2147483647, -1]];",
           "const same = pairs.every(([a, b]) => addon.add(a, b) === instance.exports.add(a, b));",
           'console.log(same ? pairs.map(([a, b]) => addon.add(a, b)).join(" ") : "mismatch");',
+          // One past INT_MAX is a checked overflow: the addon would exit the process with
+          // the panic's message, and the wasm module, which links no runtime, traps through
+          // the stub wasm-ld writes for the weak `nish_panic_overflow`.
+          "try { instance.exports.add(2147483647, 1); console.log('no trap'); } catch (e) { console.log(e.constructor.name); }",
         ].join("\n")
         const cmp =
           w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null
         check(
-          "the .node and .wasm builds of add.ts return identical results (i32 wrap included)",
-          cmp !== null && String(cmp.stdout).trim() === "5 42 0 -2147483648",
+          "the .node and .wasm builds of add.ts return identical results up to INT_MAX and INT_MIN, and the wasm one traps one past",
+          cmp !== null && String(cmp.stdout).trim() === "5 42 0 2147483647 -2147483648\nRuntimeError",
           String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : "")
         )
       }
@@ -11057,7 +11174,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // ---- WP9: bench --------------------------------------------------------------------
 // The benchmark programs in bench/ must keep printing identical checksums across
 // Nish, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
-// every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
+// every variant (speed, --wrapping, size profile, C, Rust, Rust native) at a small size and
 // compares the outputs; nothing is timed. The Are We Fast Yet ports in bench/awfy/
 // have no twins, so `awfy` builds their harness and runs each one once, which panics
 // when a port's own `verifyResult` fails. `maps` builds the four WP32 map layout
@@ -11066,8 +11183,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 // what their Node twins print, lines of that same output. Those three are held
 // to the performance gate's zero warnings, and map-vs-stringmap's copy of
 // `StringMap` to being a verbatim part of src/map.ts. Also: `--target host` pins a module to a
-// data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
-// every user-level integer add/sub/mul but nothing else.
+// data layout, so `opt -O2` vectorises it without `-mtriple`, and every user-level signed
+// add/sub/mul is proven `nsw` or checked, and nothing else is.
 if (!only || "bench".includes(only) || "wp9".includes(only)) {
   // The Nish side is built by the compiler under test, where the bench's own
   // default is build/nish.
@@ -11274,9 +11391,13 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       bad.stderr.includes("x86_64-unknown-linux-gnu"),
     bad.stderr
   )
-  // WP15 §3: `nsw` is the default, and `opt_nsw.ll` pins exactly which operations
-  // carry it. Signedness is not in the LLVM type — a `u32` is an `i32` — so the
-  // check is per function: `mix` is the case's unsigned one and must be clean.
+  // Checked signed arithmetic is the default, and `opt_nsw.ll` pins exactly how
+  // each operation is written: a signed `i32` add/sub/mul is either `nsw`
+  // because `src/bounds.ts` proved it fits, or a `llvm.s*.with.overflow` call
+  // and a branch to the panic — never a plain, unflagged instruction, which
+  // would be a silent wrap. Signedness is not in the LLVM type — a `u32` is an
+  // `i32` — so the check is per function: `mix` is the case's unsigned one and
+  // must be plain and unchecked.
   const nswLl = path.join(buildDir, "opt_nsw.ll")
   if (fs.existsSync(nswLl)) {
     const ir = fs.readFileSync(nswLl, "utf8")
@@ -11288,28 +11409,33 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     const signed = ["poly", "sum", "test"].map((n) => bodyOf(ir, n)).join("\n")
     const unsigned = bodyOf(ir, "mix")
     const userOps = [...signed.matchAll(/= (add|sub|mul)( nsw)? i32 /g)]
+    const checkedOps = [
+      ...signed.matchAll(/= call \{ i32, i1 \} @llvm\.s(add|sub|mul)\.with\.overflow\.i32\(/g),
+    ]
     const unsignedOps = [...unsigned.matchAll(/= (add|sub|mul)( nsw| nuw)? i32 /g)]
     const internalOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i64 /g)]
     check(
-      `opt_nsw: every user-level signed i32 add/sub/mul carries nsw (${userOps.length} ops), no unsigned one does (${unsignedOps.length} ops), and no internal i64 op does (${internalOps.length} ops)`,
+      `opt_nsw: every user-level signed i32 add/sub/mul is proven nsw (${userOps.length} ops) or checked (${checkedOps.length} ops), no unsigned one is either (${unsignedOps.length} ops), and no internal i64 op is flagged (${internalOps.length} ops)`,
       // Since WP6 stack-allocates the case's arrays there may be no internal i64 arithmetic at all.
-      userOps.length >= 10 &&
+      userOps.length > 0 &&
         userOps.every((m) => m[2] === " nsw") &&
+        checkedOps.length >= 8 &&
         unsignedOps.length >= 3 &&
         unsignedOps.every((m) => m[2] === undefined) &&
+        !unsigned.includes("with.overflow") &&
         internalOps.every((m) => m[2] === undefined),
       ir
     )
-    // The opt-out: the same source under --wrapping, which must differ in the
-    // flags and in nothing else *the flag does not reach*. Since WP15 §2 it
+    // The opt-out: the same source under --wrapping, where every one of those
+    // operations is the plain instruction — no flag and no check — and the
+    // arithmetic is otherwise the same: as many instructions as the default
+    // build has proven and checked ones together. Since WP15 §2 the flag
     // reaches one more thing, and honestly: the bounds proof may not carry a
     // lower bound across `i = i + 1` when the wrap is *defined*, because the
-    // increment that passes `INT_MAX` then lands on `INT_MIN` rather than being
-    // undefined behaviour the compiler may assume away
-    // (stage0's `src/checker/bounds.ts`). So the counted loop in `sum` keeps the checks
-    // the default build proves away, and the two IRs are compared with the
-    // checks out of the picture on both sides — where the only difference left
-    // is the flag itself.
+    // increment that passes `INT_MAX` then lands on `INT_MIN` rather than
+    // panicking. So the counted loop in `sum` keeps the checks the default
+    // build proves away, and the two IRs are compared with the bounds checks
+    // out of the picture on both sides.
     const wrapLl = path.join(buildDir, "opt_wrapping.ll")
     if (fs.existsSync(wrapLl)) {
       const src = (name) => path.join(casesDir, `${name}.ts`)
@@ -11323,10 +11449,17 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       }
       const nswBare = buildUnchecked("opt_nsw", "opt_nsw_unchecked.ll", [])
       const wrapBare = buildUnchecked("opt_wrapping", "opt_wrapping_unchecked.ll", ["--wrapping"])
+      const arithmetic = (text) => [...text.matchAll(/= (add|sub|mul)( nsw)? i(32|64) /g)].length
+      const checks = (text) =>
+        [...text.matchAll(/= call \{ i(32|64), i1 \} @llvm\.s(add|sub|mul)\.with\.overflow\./g)].length
       check(
-        "--wrapping removes every nsw and, with the bounds checks out of both builds, changes nothing else",
-        !wrapBare.includes("nsw") && !wrapBare.includes("nuw") && wrapBare === nswBare.split(" nsw").join(""),
-        wrapBare
+        "--wrapping removes every nsw and every overflow check, and writes one plain instruction for each",
+        !wrapBare.includes("nsw") &&
+          !wrapBare.includes("nuw") &&
+          !wrapBare.includes("with.overflow") &&
+          !wrapBare.includes("nish_panic_overflow") &&
+          arithmetic(wrapBare) === arithmetic(nswBare) + checks(nswBare),
+        `wrapping: ${arithmetic(wrapBare)} ops; default: ${arithmetic(nswBare)} ops and ${checks(nswBare)} checks\n${wrapBare}`
       )
       // The second half of the same story, stated rather than left implicit:
       // the checked `--wrapping` build *does* keep the checks, and the checked

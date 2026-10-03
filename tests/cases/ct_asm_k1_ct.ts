@@ -13,7 +13,8 @@
 //
 // The bytes are secret; `aOff` and `bOff` are public, as the module says.
 // Every index is an `uncheckedGet` from `nish:unsafe`, since a bounds check is
-// a branch.
+// a branch. The offsets are `u16` here, so `aOff + k` is proven to fit and
+// carries no overflow check, which would be a branch as well.
 // tests/link/crypto_ct_k1_copies holds each function to the module on
 // generated inputs, so a copy that drifts from std/crypto/ct.ts fails there.
 // ct-check: timingSafeEqual32 secret=contents
@@ -41,10 +42,10 @@ export const timingSafeEqual48 = (a: u8[], b: u8[]): boolean => {
 }
 
 // `timingSafeEqualAt`'s loop and answer, for a 16-byte window of each array.
-export const timingSafeEqualAt16 = (a: u8[], aOff: i32, b: u8[], bOff: i32): boolean => {
+export const timingSafeEqualAt16 = (a: u8[], aOff: u16, b: u8[], bOff: u16): boolean => {
   let diff: i32 = 0
   for (let k: i32 = 0; k < 16; k++) {
-    diff = diff | toI32(uncheckedGet(a, aOff + k) ^ uncheckedGet(b, bOff + k))
+    diff = diff | toI32(uncheckedGet(a, toI32(aOff) + k) ^ uncheckedGet(b, toI32(bOff) + k))
   }
   return diff === 0
 }

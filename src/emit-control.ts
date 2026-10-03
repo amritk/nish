@@ -19,7 +19,6 @@ import {
   compoundFloatOpcode,
   compoundIntegerOpcode,
   emitIntBinary,
-  intOpcode,
   loadLocal,
   storeLocal,
   targetLocal,
@@ -393,7 +392,7 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
     ? emitter.fn.emitValue(
         `${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`
       )
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs)
+    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs, expr)
   emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value
@@ -402,16 +401,14 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
 /** `++x`/`x++`/`--x`/`x--`: postfix yields the old value, prefix the new one. */
 export const emitIncDec = (emitter: Emitter, expr: Node): string => {
   const local = targetLocal(emitter, expr.children[0])
-  const float = isFloat(local.type)
   const increment = expr.text === "++"
-  let opcode = increment ? "fadd" : "fsub"
-  if (!float) {
-    opcode = intOpcode(emitter, increment ? "add" : "sub", local.type)
-  }
-  // `1.0` in LLVM's hex form; the same 64-bit pattern serves `float` and `double`.
-  const one = float ? "0x3FF0000000000000" : "1"
   const old = loadLocal(emitter, local)
-  const value = emitter.fn.emitValue(`${opcode} ${emitter.llvm(local.type)} ${old}, ${one}`)
+  // `1.0` in LLVM's hex form; the same 64-bit pattern serves `float` and `double`.
+  const value = isFloat(local.type)
+    ? emitter.fn.emitValue(
+        `${increment ? "fadd" : "fsub"} ${emitter.llvm(local.type)} ${old}, 0x3FF0000000000000`
+      )
+    : emitIntBinary(emitter, increment ? "add" : "sub", local.type, old, "1", expr)
   emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return expr.flags === FLAG_POSTFIX ? old : value

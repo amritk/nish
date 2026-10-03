@@ -5,6 +5,8 @@
 declare void @nish_free_arena() #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noundef i32 @at(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %i) #0 {
 entry:
@@ -65,19 +67,28 @@ for.body:
   %4 = load i32, i32* %i.addr, align 4
   %5 = add nsw i32 %4, 5
   %6 = call i32 @at(i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*), i32 %5)
-  %7 = add nsw i32 %3, %6
-  store i32 %7, i32* %t.addr, align 4
+  %7 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %3, i32 %6)
+  %8 = extractvalue { i32, i1 } %7, 0
+  %9 = extractvalue { i32, i1 } %7, 1
+  br i1 %9, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %8, i32* %t.addr, align 4
   br label %for.inc
 
 for.inc:
-  %8 = load i32, i32* %i.addr, align 4
-  %9 = add nsw i32 %8, 1
-  store i32 %9, i32* %i.addr, align 4
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = add nsw i32 %10, 1
+  store i32 %11, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %10 = load i32, i32* %t.addr, align 4
-  ret i32 %10
+  %12 = load i32, i32* %t.addr, align 4
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -91,3 +102,4 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }

@@ -4,14 +4,17 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -81,27 +84,42 @@ forof.body:
   store i32 %17, i32* %w.addr, align 4
   %18 = load i32, i32* %total.addr, align 4
   %19 = load i32, i32* %w.addr, align 4
-  %20 = add nsw i32 %18, %19
-  store i32 %20, i32* %total.addr, align 4
+  %20 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %19)
+  %21 = extractvalue { i32, i1 } %20, 0
+  %22 = extractvalue { i32, i1 } %20, 1
+  br i1 %22, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %21, i32* %total.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %21 = load i64, i64* %forof.idx, align 8
-  %22 = add i64 %21, 1
-  store i64 %22, i64* %forof.idx, align 8
+  %23 = load i64, i64* %forof.idx, align 8
+  %24 = add i64 %23, 1
+  store i64 %24, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %23 = load i32, i32* %total.addr, align 4
-  %24 = load %struct.nish_array*, %struct.nish_array** %ws.addr, align 8
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %24, i64 0, i32 0
-  %26 = load i64, i64* %25, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %27 = trunc i64 %26 to i32
-  %28 = mul nsw i32 %23, %27
-  ret i32 %28
+  %25 = load i32, i32* %total.addr, align 4
+  %26 = load %struct.nish_array*, %struct.nish_array** %ws.addr, align 8
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
+  %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %29 = trunc i64 %28 to i32
+  %30 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %25, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %31
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %forof.body ], [ 2, %forof.end ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
-define internal noundef i32 @zeroed() #1 {
+define internal noundef i32 @zeroed() #0 {
 entry:
   %zs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -134,11 +152,20 @@ entry:
   %19 = bitcast i8* %18 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 2
   %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %22 = add nsw i32 %15, %21
-  ret i32 %22
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 %21)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %23
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef i32 @grown() #2 {
+define internal noundef i32 @grown() #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -240,9 +267,18 @@ bounds.ok:
   %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %52, i64 0, i32 0
   %54 = load i64, i64* %53, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %55 = trunc i64 %54 to i32
-  %56 = add nsw i32 %51, %55
+  %56 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %51, i32 %55)
+  %57 = extractvalue { i32, i1 } %56, 0
+  %58 = extractvalue { i32, i1 } %56, 1
+  br i1 %58, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %56
+  ret i32 %57
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @escaped() #1 {
@@ -264,7 +300,7 @@ entry:
   ret %struct.nish_array* %1
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @weights()
@@ -298,18 +334,18 @@ bounds.ok:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}

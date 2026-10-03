@@ -131,6 +131,7 @@ import {
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
+import { checksOverflow } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
 import {
@@ -153,6 +154,7 @@ import {
   PANIC_DIVIDE,
   PANIC_EXPECT,
   PANIC_INDEX,
+  PANIC_OVERFLOW,
   PANIC_PARALLEL_LENGTH,
   PANIC_POP,
   PANIC_RANGE,
@@ -1440,6 +1442,7 @@ class FactCollector {
     this.collectResultFacts(node)
     this.collectArrayFacts(node)
     this.collectDivisionFacts(node)
+    this.collectOverflowFacts(node)
     this.collectRangeFacts(node)
     this.collectNamespacePropertyFacts(node)
     this.collectIdentifierBuiltinFacts(node)
@@ -1877,6 +1880,26 @@ class FactCollector {
       this.facts.callees.add("nish_panic_div")
       this.noteSite(node, PANIC_DIVIDE, false, "")
     }
+  }
+
+  /**
+   * Every checked signed `+ - *`, negation and step may call the noreturn
+   * overflow panic, as a division may call its own, and is an `overflow` site.
+   * One the bounds walk proved fits (`nodeProvenNoOverflow`) is a plain
+   * `add nsw` and calls nothing, so its site is proven; under `--wrapping`
+   * none is checked and none is a site. The question is `checksOverflow`'s,
+   * the one `emitIntBinary` is reached on, so the two cannot drift apart.
+   */
+  collectOverflowFacts(node: Node): void {
+    const program = this.unit.program
+    if (program.wrapping || !checksOverflow(program, this.table, node)) {
+      return
+    }
+    const proven = program.nodeProvenNoOverflow[node.id]
+    if (!proven) {
+      this.facts.callees.add("nish_panic_overflow")
+    }
+    this.noteSite(node, PANIC_OVERFLOW, proven, "")
   }
 
   /**

@@ -23,9 +23,11 @@
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Stack overflow
-// and signed overflow are not sites at all — the first has no runtime handler
-// and the second is `nsw`, undefined rather than checked, until checked
-// overflow lands.
+// is not a site at all: it has no runtime handler and no check in the IR.
+// Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
+// step, proven where the bounds walk proved the result fits and the emitter
+// writes `nsw` instead of the check; under `--wrapping`, and for the
+// `nish:unsafe` `wrapping*` calls, nothing is checked and nothing is listed.
 
 import { AnalysisUnit, FactsTable, FunctionFacts } from "./attributes"
 import { StringSet } from "./map"
@@ -34,8 +36,9 @@ import { Node } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { addJsonQuoted, StringBuilder } from "./strings"
 
-// The kinds, in the order docs/LANGUAGE.md lists them. The number is internal;
-// the name `panicKindName` answers is the contract `--emit-panics` writes.
+// The kinds. The number is internal and never reused, so a kind added later
+// takes the next one wherever docs/LANGUAGE.md lists it; the name
+// `panicKindName` answers is the contract `--emit-panics` writes.
 export const PANIC_INDEX: i32 = 0
 export const PANIC_POP: i32 = 1
 export const PANIC_SLICE: i32 = 2
@@ -48,6 +51,7 @@ const PANIC_IO_EXIT: i32 = 8
 export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
+export const PANIC_OVERFLOW: i32 = 12
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -74,6 +78,8 @@ const panicKindName = (kind: i32): string => {
       return "parallel-length"
     case PANIC_CALL:
       return "call"
+    case PANIC_OVERFLOW:
+      return "overflow"
     default:
       return "oom"
   }

@@ -1,6 +1,9 @@
 %struct.Header = type { i1, double }
 %struct.Entry = type { i1, double, double, i32, i1 }
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @test() #0 {
 entry:
   %e.addr = alloca %struct.Entry*, align 8
@@ -39,11 +42,16 @@ cond.false:
 
 cond.end:
   %15 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %16 = add nsw i32 %11, %15
-  %17 = load %struct.Entry*, %struct.Entry** %e.addr, align 8
-  %18 = getelementptr inbounds %struct.Entry, %struct.Entry* %17, i32 0, i32 4
-  %19 = load i1, i1* %18, align 1
-  br i1 %19, label %cond.true.1, label %cond.false.1
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %11, i32 %15)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %19 = load %struct.Entry*, %struct.Entry** %e.addr, align 8
+  %20 = getelementptr inbounds %struct.Entry, %struct.Entry* %19, i32 0, i32 4
+  %21 = load i1, i1* %20, align 1
+  br i1 %21, label %cond.true.1, label %cond.false.1
 
 cond.true.1:
   br label %cond.end.1
@@ -52,9 +60,20 @@ cond.false.1:
   br label %cond.end.1
 
 cond.end.1:
-  %20 = phi i32 [ 1, %cond.true.1 ], [ 0, %cond.false.1 ]
-  %21 = add nsw i32 %16, %20
-  ret i32 %21
+  %22 = phi i32 [ 1, %cond.true.1 ], [ 0, %cond.false.1 ]
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %24
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

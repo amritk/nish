@@ -17,20 +17,22 @@
 // ct-check: ctPoly1305Finish secret=contents
 // ct-check: ctChacha20Poly1305TagMatch secret=contents
 
-import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
 
-const ctChacha20Word = (buf: u8[], at: i32): u32 =>
-  toU32(uncheckedGet(buf, at)) | (toU32(uncheckedGet(buf, at + 1)) << 8) | (toU32(uncheckedGet(buf, at + 2)) << 16) | (toU32(uncheckedGet(buf, at + 3)) << 24)
+const ctChacha20Word = (buf: u8[], at: i32): u32 => {
+  return toU32(uncheckedGet(buf, at)) | (toU32(uncheckedGet(buf, wrappingAdd(at, 1))) << 8) | (toU32(uncheckedGet(buf, wrappingAdd(at, 2))) << 16) | (toU32(uncheckedGet(buf, wrappingAdd(at, 3))) << 24)
+}
 
-const ctPoly1305Le64 = (buf: u8[], at: i32): u64 =>
-  toU64(uncheckedGet(buf, at)) |
-  (toU64(uncheckedGet(buf, at + 1)) << 8) |
-  (toU64(uncheckedGet(buf, at + 2)) << 16) |
-  (toU64(uncheckedGet(buf, at + 3)) << 24) |
-  (toU64(uncheckedGet(buf, at + 4)) << 32) |
-  (toU64(uncheckedGet(buf, at + 5)) << 40) |
-  (toU64(uncheckedGet(buf, at + 6)) << 48) |
-  (toU64(uncheckedGet(buf, at + 7)) << 56)
+const ctPoly1305Le64 = (buf: u8[], at: i32): u64 => {
+  return toU64(uncheckedGet(buf, at)) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 1))) << 8) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 2))) << 16) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 3))) << 24) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 4))) << 32) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 5))) << 40) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 6))) << 48) |
+    (toU64(uncheckedGet(buf, wrappingAdd(at, 7))) << 56)
+}
 
 export const ctPoly1305Clamp = (key: u8[], r: u64[]): void => {
   const lo: u64 = ctPoly1305Le64(key, 0) & ((toU64(0x0ffffffc) << 32) | 0x0fffffff)
@@ -44,7 +46,7 @@ export const ctPoly1305Clamp = (key: u8[], r: u64[]): void => {
 
 export const ctPoly1305Block = (h: u64[], r: u64[], m: u8[], at: i32, high: u64): void => {
   const lo: u64 = ctPoly1305Le64(m, at)
-  const hi: u64 = ctPoly1305Le64(m, at + 8)
+  const hi: u64 = ctPoly1305Le64(m, wrappingAdd(at, 8))
   const h0: u64 = uncheckedGet(h, 0) + (lo & 0x3ffffff)
   const h1: u64 = uncheckedGet(h, 1) + ((lo >>> 26) & 0x3ffffff)
   const h2: u64 = uncheckedGet(h, 2) + (((lo >>> 52) | (hi << 12)) & 0x3ffffff)
@@ -142,20 +144,20 @@ export const ctPoly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
 export const ctChacha20Poly1305TagMatch = (tag: u8[], sealed: u8[], at: i32): u32 => {
   const diff: u32 =
     toU32(uncheckedGet(tag, 0) ^ uncheckedGet(sealed, at)) |
-    toU32(uncheckedGet(tag, 1) ^ uncheckedGet(sealed, at + 1)) |
-    toU32(uncheckedGet(tag, 2) ^ uncheckedGet(sealed, at + 2)) |
-    toU32(uncheckedGet(tag, 3) ^ uncheckedGet(sealed, at + 3)) |
-    toU32(uncheckedGet(tag, 4) ^ uncheckedGet(sealed, at + 4)) |
-    toU32(uncheckedGet(tag, 5) ^ uncheckedGet(sealed, at + 5)) |
-    toU32(uncheckedGet(tag, 6) ^ uncheckedGet(sealed, at + 6)) |
-    toU32(uncheckedGet(tag, 7) ^ uncheckedGet(sealed, at + 7)) |
-    toU32(uncheckedGet(tag, 8) ^ uncheckedGet(sealed, at + 8)) |
-    toU32(uncheckedGet(tag, 9) ^ uncheckedGet(sealed, at + 9)) |
-    toU32(uncheckedGet(tag, 10) ^ uncheckedGet(sealed, at + 10)) |
-    toU32(uncheckedGet(tag, 11) ^ uncheckedGet(sealed, at + 11)) |
-    toU32(uncheckedGet(tag, 12) ^ uncheckedGet(sealed, at + 12)) |
-    toU32(uncheckedGet(tag, 13) ^ uncheckedGet(sealed, at + 13)) |
-    toU32(uncheckedGet(tag, 14) ^ uncheckedGet(sealed, at + 14)) |
-    toU32(uncheckedGet(tag, 15) ^ uncheckedGet(sealed, at + 15))
+    toU32(uncheckedGet(tag, 1) ^ uncheckedGet(sealed, wrappingAdd(at, 1))) |
+    toU32(uncheckedGet(tag, 2) ^ uncheckedGet(sealed, wrappingAdd(at, 2))) |
+    toU32(uncheckedGet(tag, 3) ^ uncheckedGet(sealed, wrappingAdd(at, 3))) |
+    toU32(uncheckedGet(tag, 4) ^ uncheckedGet(sealed, wrappingAdd(at, 4))) |
+    toU32(uncheckedGet(tag, 5) ^ uncheckedGet(sealed, wrappingAdd(at, 5))) |
+    toU32(uncheckedGet(tag, 6) ^ uncheckedGet(sealed, wrappingAdd(at, 6))) |
+    toU32(uncheckedGet(tag, 7) ^ uncheckedGet(sealed, wrappingAdd(at, 7))) |
+    toU32(uncheckedGet(tag, 8) ^ uncheckedGet(sealed, wrappingAdd(at, 8))) |
+    toU32(uncheckedGet(tag, 9) ^ uncheckedGet(sealed, wrappingAdd(at, 9))) |
+    toU32(uncheckedGet(tag, 10) ^ uncheckedGet(sealed, wrappingAdd(at, 10))) |
+    toU32(uncheckedGet(tag, 11) ^ uncheckedGet(sealed, wrappingAdd(at, 11))) |
+    toU32(uncheckedGet(tag, 12) ^ uncheckedGet(sealed, wrappingAdd(at, 12))) |
+    toU32(uncheckedGet(tag, 13) ^ uncheckedGet(sealed, wrappingAdd(at, 13))) |
+    toU32(uncheckedGet(tag, 14) ^ uncheckedGet(sealed, wrappingAdd(at, 14))) |
+    toU32(uncheckedGet(tag, 15) ^ uncheckedGet(sealed, wrappingAdd(at, 15)))
   return ctEq(diff, 0)
 }

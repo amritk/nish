@@ -64,8 +64,9 @@ const nishc = compilerFrom(process.argv)
 
 /**
  * `integer` marks the benchmarks whose hot loop is integer arithmetic, where
- * `--nsw` gets a column. `extraC` lists further C sources that print the same
- * checksum (the naive malloc/free string builder).
+ * `--wrapping` gets a column: what the overflow checks the default build keeps
+ * cost. `extraC` lists further C sources that print the same checksum (the
+ * naive malloc/free string builder).
  *
  * The compiler flags a benchmark needs are not listed here: they live in
  * `bench/<name>.args`, the sidecar `tests/cases` uses, so that the stage1
@@ -352,7 +353,7 @@ const build = (bench) => {
   }
   nish("nish", "Nish", [], "speed", true)
   if (bench.integer) {
-    nish("nish-nsw", "Nish --nsw", ["--nsw"], "speed", true)
+    nish("nish-wrapping", "Nish --wrapping", ["--wrapping"], "speed", true)
   }
   nish("nish-size", "Nish (size profile)", [], "size", false)
 
@@ -1154,7 +1155,7 @@ if (opts.validate) {
 
 const columns = [
   ["nish", "Nish"],
-  ["nish-nsw", "Nish `--nsw`"],
+  ["nish-wrapping", "Nish `--wrapping`"],
   ["c", "C `-O3`"],
   ["c-naive", "C `-O3` naive"],
   ["go", "Go"],

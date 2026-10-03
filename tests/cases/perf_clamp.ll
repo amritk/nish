@@ -6,8 +6,10 @@
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare i64 @llvm.smin.i64(i64, i64) #2
-declare i64 @llvm.smax.i64(i64, i64) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare i64 @llvm.smin.i64(i64, i64) #3
+declare i64 @llvm.smax.i64(i64, i64) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @test() #0 {
 entry:
@@ -58,36 +60,46 @@ while.body:
   %27 = bitcast i8* %26 to i64*
   %28 = load i64, i64* %27, align 8
   %29 = trunc i64 %28 to i32
-  %30 = add nsw i32 %9, %29
-  store i32 %30, i32* %total.addr, align 4
-  %31 = load i32, i32* %step.addr, align 4
-  %32 = add nsw i32 %31, 1
-  store i32 %32, i32* %step.addr, align 4
-  %33 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %34 = load i8*, i8** %33, align 8
-  %35 = icmp eq i8* %34, %3
-  br i1 %35, label %pass.rewind, label %pass.free
+  %30 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %29)
+  %31 = extractvalue { i32, i1 } %30, 0
+  %32 = extractvalue { i32, i1 } %30, 1
+  br i1 %32, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %31, i32* %total.addr, align 4
+  %33 = load i32, i32* %step.addr, align 4
+  %34 = add nsw i32 %33, 1
+  store i32 %34, i32* %step.addr, align 4
+  %35 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %36 = load i8*, i8** %35, align 8
+  %37 = icmp eq i8* %36, %3
+  br i1 %37, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %36 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %5, i64* %36, align 8
+  %38 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %38, align 8
   br label %pass.done
 
 pass.free:
-  %37 = ptrtoint i8* %3 to i64
-  %38 = add i64 %37, %5
-  call void @nish_arena_release(i64 %38)
+  %39 = ptrtoint i8* %3 to i64
+  %40 = add i64 %39, %5
+  call void @nish_arena_release(i64 %40)
   br label %pass.done
 
 pass.done:
   br label %while.cond
 
 while.end:
-  %39 = load i32, i32* %total.addr, align 4
+  %41 = load i32, i32* %total.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %39
+  ret i32 %41
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

@@ -9,8 +9,10 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -98,19 +100,35 @@ entry:
   %31 = bitcast i8* %30 to i32*
   %32 = getelementptr inbounds i32, i32* %31, i64 0
   %33 = load i32, i32* %32, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %34 = add nsw i32 %27, %33
-  %35 = load i8*, i8** %s.addr, align 8
-  %36 = bitcast i8* %35 to i64*
-  %37 = load i64, i64* %36, align 8
-  %38 = trunc i64 %37 to i32
-  %39 = add nsw i32 %34, %38
-  ret i32 %39
+  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %33)
+  %35 = extractvalue { i32, i1 } %34, 0
+  %36 = extractvalue { i32, i1 } %34, 1
+  br i1 %36, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %37 = load i8*, i8** %s.addr, align 8
+  %38 = bitcast i8* %37 to i64*
+  %39 = load i64, i64* %38, align 8
+  %40 = trunc i64 %39 to i32
+  %41 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 %40)
+  %42 = extractvalue { i32, i1 } %41, 0
+  %43 = extractvalue { i32, i1 } %41, 1
+  br i1 %43, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %42
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

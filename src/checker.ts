@@ -2433,8 +2433,8 @@ const perfOverflowsItsType = (ctx: CheckContext, expr: Node): boolean => {
  * would not tell the reader anything new.
  *
  * Silent under `--wrapping`, where the wrap is the defined answer rather than
- * undefined behaviour and the warning would be arguing with a flag the author
- * passed on purpose.
+ * a panic and the warning would be arguing with a flag the author passed on
+ * purpose.
  */
 const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
   if (walk.ctx.wrapping) {
@@ -2457,15 +2457,16 @@ const checkConstantOverflow = (walk: PerfWalk, expr: Node): void => {
   ctx.performance(
     expr,
     `this computes with overflow: the result ${folded.value} does not fit in i32 (the range is ${I32_MIN} to ` +
-      `${I32_MAX}), and signed overflow is undefined behaviour rather than a wrap: widen the operands with ` +
+      `${I32_MAX}), and signed overflow panics when it runs rather than wrapping: widen the operands with ` +
       `\`toI64\` first, or use --wrapping for two's-complement arithmetic`
   )
 }
 
 /**
  * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
- * done in `i32` and has already overflowed by the time the conversion widens
- * the result, so the wider type never sees the value the reader expects. The
+ * done in `i32`, where a product past its range panics (or wraps, under
+ * `--wrapping`) before the conversion widens it, so the wider type never sees
+ * the value the reader expects. The
  * rewrite is mechanical, which is what earns this one its place under the §8
  * bar.
  *
@@ -2498,8 +2499,8 @@ const checkWideningConversion = (walk: PerfWalk, call: Node): void => {
   }
   ctx.performance(
     arg,
-    `this \`${arg.text}\` is computed in i32 and wraps before \`${callee.text}\` widens the result, so the ` +
-      "conversion cannot recover an overflow that has already happened: convert the operands first, as " +
+    `this \`${arg.text}\` is computed in i32 and can overflow it before \`${callee.text}\` widens the result, ` +
+      "so the conversion never sees the product the line was written for: convert the operands first, as " +
       `\`${callee.text}(a) ${arg.text} ${callee.text}(b)\``
   )
 }

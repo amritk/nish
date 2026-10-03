@@ -11,7 +11,8 @@
 //
 // A panic path is one of three shapes in unoptimised IR:
 //
-//   - a call to `nish_panic_index`, `nish_panic_slice` or `nish_panic_div`;
+//   - a call to `nish_panic_index`, `nish_panic_slice`, `nish_panic_div` or
+//     `nish_panic_overflow`;
 //   - the panic tail (`emitPanicTail`): the message on fd 2 with a newline,
 //     then `nish_exit(1)` on the next line. `console.error(s)` followed by a
 //     literal `process.exit(1)` is the same two lines and would be read as
@@ -19,7 +20,7 @@
 //   - a call to a runtime function that exits on failure: `nish_read_file`,
 //     `nish_write_file`, `nish_append_file`, `nish_random_fill`.
 
-const PANIC_CALL = /call void @nish_panic_(?:index|slice|div)\(/
+const PANIC_CALL = /call void @nish_panic_(?:index|slice|div|overflow)\(/
 const EXITING_CALL = /@nish_(?:read_file|write_file|append_file|random_fill)\(/
 const TAIL_WRITE = /call void @nish_write\(i8\* [^,]+, i32 2, i1 true\)/
 const TAIL_EXIT = /^\s*call void @nish_exit\(i32 1\)/

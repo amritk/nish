@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"parity","symbol":"parity","module":"tests/cases/panics_overflow_proven.ts","line":4,"panics":[{"kind":"overflow","line":6,"column":39,"proven":true}]},
+{"name":"word","symbol":"word","module":"tests/cases/panics_overflow_proven.ts","line":12,"panics":[{"kind":"overflow","line":12,"column":39,"proven":true},{"kind":"overflow","line":12,"column":39,"proven":true}]},
+{"name":"main","symbol":"nish_main","module":"tests/cases/panics_overflow_proven.ts","line":14,"panics":[{"kind":"oom","line":15,"column":3,"allowed":true},{"kind":"oom","line":16,"column":3,"allowed":true}]}
+]}

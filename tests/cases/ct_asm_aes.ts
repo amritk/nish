@@ -17,7 +17,7 @@
 // ct-check: ghashMultiply secret=contents,hHi,hLo
 // ct-check: aesGcmTagMask secret=tagHi,tagLo,gotHi,gotLo
 
-import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
 
 // Mirrors `aesLanes` in std/crypto/aes.ts.
 const aesLanes = (pattern: u64): u64 => {
@@ -230,13 +230,13 @@ const aesMixColumns = (q: u64[]): void => {
 // Mirrors `aesAddRoundKey` in std/crypto/aes.ts.
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
   uncheckedSet(q, 0, uncheckedGet(q, 0) ^ uncheckedGet(rk, at));
-  uncheckedSet(q, 1, uncheckedGet(q, 1) ^ uncheckedGet(rk, at + 1));
-  uncheckedSet(q, 2, uncheckedGet(q, 2) ^ uncheckedGet(rk, at + 2));
-  uncheckedSet(q, 3, uncheckedGet(q, 3) ^ uncheckedGet(rk, at + 3));
-  uncheckedSet(q, 4, uncheckedGet(q, 4) ^ uncheckedGet(rk, at + 4));
-  uncheckedSet(q, 5, uncheckedGet(q, 5) ^ uncheckedGet(rk, at + 5));
-  uncheckedSet(q, 6, uncheckedGet(q, 6) ^ uncheckedGet(rk, at + 6));
-  uncheckedSet(q, 7, uncheckedGet(q, 7) ^ uncheckedGet(rk, at + 7));
+  uncheckedSet(q, 1, uncheckedGet(q, 1) ^ uncheckedGet(rk, wrappingAdd(at, 1)));
+  uncheckedSet(q, 2, uncheckedGet(q, 2) ^ uncheckedGet(rk, wrappingAdd(at, 2)));
+  uncheckedSet(q, 3, uncheckedGet(q, 3) ^ uncheckedGet(rk, wrappingAdd(at, 3)));
+  uncheckedSet(q, 4, uncheckedGet(q, 4) ^ uncheckedGet(rk, wrappingAdd(at, 4)));
+  uncheckedSet(q, 5, uncheckedGet(q, 5) ^ uncheckedGet(rk, wrappingAdd(at, 5)));
+  uncheckedSet(q, 6, uncheckedGet(q, 6) ^ uncheckedGet(rk, wrappingAdd(at, 6)));
+  uncheckedSet(q, 7, uncheckedGet(q, 7) ^ uncheckedGet(rk, wrappingAdd(at, 7)));
 }
 
 // Mirrors `aesBitslicedRound` in std/crypto/aes.ts.

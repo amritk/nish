@@ -2,6 +2,8 @@
 %struct.nish_array = type { i64, i64, i8* }
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
 define noundef i32 @test() #0 {
 entry:
@@ -67,26 +69,42 @@ forof.body:
   %31 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %32 = getelementptr inbounds %struct.Point, %struct.Point* %31, i32 0, i32 0
   %33 = load i32, i32* %32, align 4
-  %34 = add nsw i32 %30, %33
-  %35 = load %struct.Point*, %struct.Point** %p.addr, align 8
-  %36 = getelementptr inbounds %struct.Point, %struct.Point* %35, i32 0, i32 1
-  %37 = load i32, i32* %36, align 4
-  %38 = add nsw i32 %34, %37
-  store i32 %38, i32* %sum.addr, align 4
+  %34 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %30, i32 %33)
+  %35 = extractvalue { i32, i1 } %34, 0
+  %36 = extractvalue { i32, i1 } %34, 1
+  br i1 %36, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %37 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %38 = getelementptr inbounds %struct.Point, %struct.Point* %37, i32 0, i32 1
+  %39 = load i32, i32* %38, align 4
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %35, i32 %39)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %41, i32* %sum.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %39 = load i64, i64* %forof.idx, align 8
-  %40 = add i64 %39, 1
-  store i64 %40, i64* %forof.idx, align 8
+  %43 = load i64, i64* %forof.idx, align 8
+  %44 = add i64 %43, 1
+  store i64 %44, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %41 = load i32, i32* %sum.addr, align 4
-  ret i32 %41
+  %45 = load i32, i32* %sum.addr, align 4
+  ret i32 %45
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

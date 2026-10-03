@@ -10,6 +10,8 @@ declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef no
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @next(i32 noundef %entry.param) #0 !dbg !7 {
 entry:
@@ -118,17 +120,26 @@ entry:
   ret void, !dbg !67
 }
 
-define internal noundef i32 @Tally.plus(%struct.Tally* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %entry.param) #2 !dbg !79 {
+define internal noundef i32 @Tally.plus(%struct.Tally* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %entry.param) #3 !dbg !79 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Tally* %this, metadata !81, metadata !DIExpression()), !dbg !80
   call void @llvm.dbg.value(metadata i32 %entry.param, metadata !82, metadata !DIExpression()), !dbg !80
   %0 = getelementptr inbounds %struct.Tally, %struct.Tally* %this, i32 0, i32 0, !dbg !84
   %1 = load i32, i32* %0, align 4, !tbaa !76, !dbg !84
-  %2 = add nsw i32 %1, %entry.param, !dbg !84
-  ret i32 %2, !dbg !83
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %entry.param), !dbg !84
+  %3 = extractvalue { i32, i1 } %2, 0, !dbg !84
+  %4 = extractvalue { i32, i1 } %2, 1, !dbg !84
+  br i1 %4, label %ovf.fail, label %ovf.ok, !dbg !84
+
+ovf.ok:
+  ret i32 %3, !dbg !83
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !84
+  unreachable
 }
 
-define noundef i32 @nish_main() #1 !dbg !86 {
+define noundef i32 @nish_main() #3 !dbg !86 {
 entry:
   %nish_result.i32.bool.obj = alloca %struct.nish_result.i32.bool, align 8
   %Tally.obj = alloca %struct.Tally, align 8
@@ -186,6 +197,7 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind }
+attributes #4 = { nounwind noreturn cold }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

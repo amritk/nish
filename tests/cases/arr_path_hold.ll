@@ -9,12 +9,14 @@
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -131,7 +133,7 @@ while.end:
   ret i1 false
 }
 
-define internal noundef i32 @Finder.sumCodes(%struct.Finder* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #2 {
+define internal noundef i32 @Finder.sumCodes(%struct.Finder* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #1 {
 entry:
   %s.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -159,16 +161,25 @@ while.body:
   %13 = getelementptr inbounds i8, i8* %12, i64 %11
   %14 = load i8, i8* %13, align 1
   %15 = zext i8 %14 to i32
-  %16 = add nsw i32 %7, %15
-  store i32 %16, i32* %s.addr, align 4
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = add nsw i32 %17, 1
-  store i32 %18, i32* %i.addr, align 4
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %15)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %17, i32* %s.addr, align 4
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %19 = load i32, i32* %s.addr, align 4
-  ret i32 %19
+  %21 = load i32, i32* %s.addr, align 4
+  ret i32 %21
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @hoisted(%struct.State* noundef nonnull align 8 dereferenceable(24) nocapture %h) #1 {
@@ -199,28 +210,42 @@ while.cond:
 while.body:
   %12 = getelementptr inbounds %struct.State, %struct.State* %h, i32 0, i32 2
   %13 = load i32, i32* %12, align 4, !tbaa !7
-  %14 = add nsw i32 %13, 1
-  %15 = getelementptr inbounds %struct.State, %struct.State* %h, i32 0, i32 2
-  store i32 %14, i32* %15, align 4, !tbaa !7
-  %16 = load i32, i32* %s.addr, align 4
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = sext i32 %17 to i64
-  %19 = bitcast i8* %8 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 %18
-  %21 = load i32, i32* %20, align 4, !alias.scope !15, !noalias !14, !tbaa !22
-  %22 = add nsw i32 %16, %21
-  store i32 %22, i32* %s.addr, align 4
-  %23 = load i32, i32* %i.addr, align 4
-  %24 = add nsw i32 %23, 1
-  store i32 %24, i32* %i.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %13, i32 1)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %17 = getelementptr inbounds %struct.State, %struct.State* %h, i32 0, i32 2
+  store i32 %15, i32* %17, align 4, !tbaa !7
+  %18 = load i32, i32* %s.addr, align 4
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = sext i32 %19 to i64
+  %21 = bitcast i8* %8 to i32*
+  %22 = getelementptr inbounds i32, i32* %21, i64 %20
+  %23 = load i32, i32* %22, align 4, !alias.scope !15, !noalias !14, !tbaa !22
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %25, i32* %s.addr, align 4
+  %27 = load i32, i32* %i.addr, align 4
+  %28 = add nsw i32 %27, 1
+  store i32 %28, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %25 = load i32, i32* %s.addr, align 4
-  ret i32 %25
+  %29 = load i32, i32* %s.addr, align 4
+  ret i32 %29
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @third(%struct.State* noundef nonnull readonly align 8 dereferenceable(24) nocapture %h) #3 {
+define noundef i32 @third(%struct.State* noundef nonnull readonly align 8 dereferenceable(24) nocapture %h) #2 {
 entry:
   %0 = getelementptr inbounds %struct.State, %struct.State* %h, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !5
@@ -357,10 +382,10 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn readonly }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}

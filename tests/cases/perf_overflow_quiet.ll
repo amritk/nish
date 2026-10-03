@@ -1,4 +1,7 @@
 declare void @nish_panic_div(i1 noundef zeroext) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
 
 define noundef i32 @test() #0 {
 entry:
@@ -40,16 +43,42 @@ div.ok:
   %15 = sdiv i64 %9, 100000000
   %16 = trunc i64 %15 to i32
   %17 = load i32, i32* %n.addr, align 4
-  %18 = add nsw i32 %16, %17
-  %19 = load i32, i32* %fits.addr, align 4
-  %20 = sub nsw i32 %19, 2147483646
-  %21 = add nsw i32 %18, %20
-  %22 = load i32, i32* %shifted.addr, align 4
-  %23 = load i32, i32* %shifted.addr, align 4
-  %24 = sub nsw i32 %22, %23
-  %25 = add nsw i32 %21, %24
-  ret i32 %25
+  %18 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %21 = load i32, i32* %fits.addr, align 4
+  %22 = sub nsw i32 %21, 2147483646
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %26 = load i32, i32* %shifted.addr, align 4
+  %27 = load i32, i32* %shifted.addr, align 4
+  %28 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %26, i32 %27)
+  %29 = extractvalue { i32, i1 } %28, 0
+  %30 = extractvalue { i32, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %31 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 %29)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  ret i32 %32
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %div.ok ], [ 0, %ovf.ok ], [ 1, %ovf.ok.1 ], [ 0, %ovf.ok.2 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

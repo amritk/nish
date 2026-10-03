@@ -6,6 +6,8 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -57,7 +59,7 @@ if.end:
   ret i1 %2
 }
 
-define internal noundef i32 @countdown(i32 noundef %n) #1 {
+define internal noundef i32 @countdown(i32 noundef %n) #0 {
 entry:
   %0 = icmp sle i32 %n, 0
   br i1 %0, label %cond.true, label %cond.false
@@ -68,12 +70,21 @@ cond.true:
 cond.false:
   %1 = sub nsw i32 %n, 1
   %2 = call i32 @countdown(i32 %1)
-  %3 = add nsw i32 %n, %2
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 %2)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
   br label %cond.end
 
 cond.end:
-  %4 = phi i32 [ 0, %cond.true ], [ %3, %cond.false ]
-  ret i32 %4
+  %6 = phi i32 [ 0, %cond.true ], [ %4, %ovf.ok ]
+  ret i32 %6
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -86,3 +97,5 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }

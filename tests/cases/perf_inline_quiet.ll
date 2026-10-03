@@ -1,21 +1,48 @@
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @exported(i32 noundef %n) #0 {
 entry:
-  %0 = mul nsw i32 %n, 2
-  %1 = add nsw i32 %0, 1
-  ret i32 %1
+  %0 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %n, i32 2)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 1)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %4
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @internalHelper(i32 noundef %n) #0 {
 entry:
-  %0 = add nsw i32 %n, 1
-  ret i32 %0
+  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %n, i32 1)
+  %1 = extractvalue { i32, i1 } %0, 0
+  %2 = extractvalue { i32, i1 } %0, 1
+  br i1 %2, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %1
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @test() #1 {
+define noundef i32 @test() #0 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -34,32 +61,52 @@ while.body:
   %2 = load i32, i32* %total.addr, align 4
   %3 = load i32, i32* %i.addr, align 4
   %4 = call i32 @exported(i32 %3)
-  %5 = add nsw i32 %2, %4
-  store i32 %5, i32* %total.addr, align 4
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = add nsw i32 %6, 1
-  store i32 %7, i32* %i.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %4)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %total.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = add nsw i32 %8, 1
+  store i32 %9, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %8 = load i32, i32* %total.addr, align 4
-  %9 = load i32, i32* %total.addr, align 4
-  %10 = call i32 @internalHelper(i32 %9)
-  %11 = add nsw i32 %8, %10
-  store i32 %11, i32* %total.addr, align 4
-  %12 = load i32, i32* %total.addr, align 4
-  %13 = call i8* @nish_str_from_i32(i32 %12)
-  store i8* %13, i8** %s.addr, align 8
-  %14 = load i32, i32* %total.addr, align 4
-  %15 = load i8*, i8** %s.addr, align 8
-  %16 = bitcast i8* %15 to i64*
-  %17 = load i64, i64* %16, align 8
-  %18 = trunc i64 %17 to i32
-  %19 = add nsw i32 %14, %18
+  %10 = load i32, i32* %total.addr, align 4
+  %11 = load i32, i32* %total.addr, align 4
+  %12 = call i32 @internalHelper(i32 %11)
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %12)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %14, i32* %total.addr, align 4
+  %16 = load i32, i32* %total.addr, align 4
+  %17 = call i8* @nish_str_from_i32(i32 %16)
+  store i8* %17, i8** %s.addr, align 8
+  %18 = load i32, i32* %total.addr, align 4
+  %19 = load i8*, i8** %s.addr, align 8
+  %20 = bitcast i8* %19 to i64*
+  %21 = load i64, i64* %20, align 8
+  %22 = trunc i64 %21 to i32
+  %23 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %18, i32 %22)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %19
+  ret i32 %24
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

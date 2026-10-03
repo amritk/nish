@@ -24,6 +24,8 @@ declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef n
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @receive(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, i32 noundef %off, i32 noundef %len, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %from, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %meta) #0 {
 entry:
@@ -609,40 +611,64 @@ land.end.2:
   %307 = call i32 @nish_net_close(i32 %306)
   %308 = load i32, i32* %b.addr, align 4
   %309 = call i32 @nish_net_close(i32 %308)
-  %310 = add nsw i32 %307, %309
-  %311 = load i32, i32* %shared.addr, align 4
-  %312 = call i32 @nish_net_close(i32 %311)
-  %313 = add nsw i32 %310, %312
-  %314 = load i32, i32* %again.addr, align 4
-  %315 = call i32 @nish_net_close(i32 %314)
-  %316 = add nsw i32 %313, %315
-  %317 = load i32, i32* %both.addr, align 4
-  %318 = call i32 @nish_net_close(i32 %317)
-  %319 = add nsw i32 %316, %318
-  %320 = call i8* @nish_str_from_i32(i32 %319)
-  call void @nish_print(i8* %320)
-  %321 = load i32, i32* %a.addr, align 4
-  %322 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %323 = load %struct.nish_array*, %struct.nish_array** %from.addr, align 8
-  %324 = load %struct.nish_array*, %struct.nish_array** %meta.addr, align 8
-  %325 = add i64 0, 8
-  %326 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %322, i64 0, i32 0
-  %327 = load i64, i64* %326, align 8
-  %328 = icmp ule i64 0, %325
-  %329 = icmp ule i64 %325, %327
-  %330 = and i1 %328, %329
-  br i1 %330, label %net.ok.6, label %net.fail.6
+  %310 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %307, i32 %309)
+  %311 = extractvalue { i32, i1 } %310, 0
+  %312 = extractvalue { i32, i1 } %310, 1
+  br i1 %312, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %313 = load i32, i32* %shared.addr, align 4
+  %314 = call i32 @nish_net_close(i32 %313)
+  %315 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %311, i32 %314)
+  %316 = extractvalue { i32, i1 } %315, 0
+  %317 = extractvalue { i32, i1 } %315, 1
+  br i1 %317, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %318 = load i32, i32* %again.addr, align 4
+  %319 = call i32 @nish_net_close(i32 %318)
+  %320 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %316, i32 %319)
+  %321 = extractvalue { i32, i1 } %320, 0
+  %322 = extractvalue { i32, i1 } %320, 1
+  br i1 %322, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %323 = load i32, i32* %both.addr, align 4
+  %324 = call i32 @nish_net_close(i32 %323)
+  %325 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %321, i32 %324)
+  %326 = extractvalue { i32, i1 } %325, 0
+  %327 = extractvalue { i32, i1 } %325, 1
+  br i1 %327, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %328 = call i8* @nish_str_from_i32(i32 %326)
+  call void @nish_print(i8* %328)
+  %329 = load i32, i32* %a.addr, align 4
+  %330 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %331 = load %struct.nish_array*, %struct.nish_array** %from.addr, align 8
+  %332 = load %struct.nish_array*, %struct.nish_array** %meta.addr, align 8
+  %333 = add i64 0, 8
+  %334 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %330, i64 0, i32 0
+  %335 = load i64, i64* %334, align 8
+  %336 = icmp ule i64 0, %333
+  %337 = icmp ule i64 %333, %335
+  %338 = and i1 %336, %337
+  br i1 %338, label %net.ok.6, label %net.fail.6
 
 net.fail.6:
-  call void @nish_panic_slice(i64 0, i64 %325, i64 %327)
+  call void @nish_panic_slice(i64 0, i64 %333, i64 %335)
   unreachable
 
 net.ok.6:
-  %331 = call i32 @nish_udp_recv_from(i32 %321, %struct.nish_array* %322, i64 0, i64 8, %struct.nish_array* %323, %struct.nish_array* %324)
-  %332 = call i8* @nish_str_from_i32(i32 %331)
-  call void @nish_print(i8* %332)
+  %339 = call i32 @nish_udp_recv_from(i32 %329, %struct.nish_array* %330, i64 0, i64 8, %struct.nish_array* %331, %struct.nish_array* %332)
+  %340 = call i8* @nish_str_from_i32(i32 %339)
+  call void @nish_print(i8* %340)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -655,6 +681,7 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

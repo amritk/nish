@@ -80,7 +80,9 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
-declare i32 @llvm.fptosi.sat.i32.f64(double) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare i32 @llvm.fptosi.sat.i32.f64(double) #3
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #3
 
 define internal void @show(i8* noundef nonnull noalias readonly align 8 nocapture %label, double noundef %v) #0 {
 entry:
@@ -202,25 +204,34 @@ entry:
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.65 to i8*), double %65)
   store i64 9007199254740992, i64* %big.addr, align 8
   %66 = load i64, i64* %big.addr, align 8
-  %67 = add nsw i64 %66, 1
-  store i64 %67, i64* %big.addr, align 8
-  %68 = uitofp i1 true to double
-  call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.67 to i8*), double %68)
-  %69 = uitofp i1 false to double
-  call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.68 to i8*), double %69)
+  %67 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %66, i64 1)
+  %68 = extractvalue { i64, i1 } %67, 0
+  %69 = extractvalue { i64, i1 } %67, 1
+  br i1 %69, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i64 %68, i64* %big.addr, align 8
+  %70 = uitofp i1 true to double
+  call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.67 to i8*), double %70)
+  %71 = uitofp i1 false to double
+  call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.68 to i8*), double %71)
   call void @show(i8* bitcast ({ i64, [10 x i8] }* @.str.69 to i8*), double 0x401C000000000000)
-  %70 = fneg double 0x4004000000000000
-  call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.70 to i8*), double %70)
-  %71 = load i64, i64* %big.addr, align 8
-  %72 = sitofp i64 %71 to double
-  call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.71 to i8*), double %72)
+  %72 = fneg double 0x4004000000000000
+  call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.70 to i8*), double %72)
+  %73 = load i64, i64* %big.addr, align 8
+  %74 = sitofp i64 %73 to double
+  call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.71 to i8*), double %74)
   store i32 12, i32* %n.addr, align 4
-  %73 = load i32, i32* %n.addr, align 4
-  %74 = sitofp i32 %73 to double
-  %75 = fdiv double %74, 0x4014000000000000
-  call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.72 to i8*), double %75)
+  %75 = load i32, i32* %n.addr, align 4
+  %76 = sitofp i32 %75 to double
+  %77 = fdiv double %76, 0x4014000000000000
+  call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.72 to i8*), double %77)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -232,4 +243,5 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

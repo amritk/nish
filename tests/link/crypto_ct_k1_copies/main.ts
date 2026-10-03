@@ -81,13 +81,13 @@ const windowDisagree = (state: u32[], rounds: i32): i32 => {
     for (let k: i32 = 0; k < 16; k++) {
       b[bOff + k] = a[aOff + k];
     }
-    const mine: boolean = timingSafeEqualAt16(a, aOff, b, bOff);
+    const mine: boolean = timingSafeEqualAt16(a, toU16(aOff), b, toU16(bOff));
     if (mine !== timingSafeEqualAt(a, aOff, b, bOff, 16) || !mine) {
       differ++;
     }
     for (let at: i32 = 0; at < 16; at++) {
       const c: u8[] = flipped(b, bOff + at, (at + r) & 7);
-      const copy: boolean = timingSafeEqualAt16(a, aOff, c, bOff);
+      const copy: boolean = timingSafeEqualAt16(a, toU16(aOff), c, toU16(bOff));
       if (copy !== timingSafeEqualAt(a, aOff, c, bOff, 16) || copy) {
         differ++;
       }

@@ -8,6 +8,8 @@ declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef no
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @next(i32 noundef %entry.param) #0 {
 entry:
@@ -109,15 +111,24 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Tally.plus(%struct.Tally* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %entry.param) #2 {
+define internal noundef i32 @Tally.plus(%struct.Tally* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %entry.param) #3 {
 entry:
   %0 = getelementptr inbounds %struct.Tally, %struct.Tally* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
-  %2 = add nsw i32 %1, %entry.param
-  ret i32 %2
+  %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %entry.param)
+  %3 = extractvalue { i32, i1 } %2, 0
+  %4 = extractvalue { i32, i1 } %2, 1
+  br i1 %4, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %3
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #3 {
 entry:
   %nish_result.i32.bool.obj = alloca %struct.nish_result.i32.bool, align 8
   %Tally.obj = alloca %struct.Tally, align 8
@@ -175,6 +186,7 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind }
+attributes #4 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

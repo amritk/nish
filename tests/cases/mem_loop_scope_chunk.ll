@@ -19,7 +19,9 @@ declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #0
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare void @nish_panic_div(i1 noundef zeroext) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare i32 @llvm.fptosi.sat.i32.f64(double) #5
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -110,21 +112,30 @@ for.body:
   %24 = load i32, i32* %i.addr, align 4
   %25 = sext i32 %24 to i64
   %26 = load i32, i32* %i.addr, align 4
-  %27 = add nsw i32 %26, %n
-  %28 = bitcast i8* %20 to i32*
-  %29 = getelementptr inbounds i32, i32* %28, i64 %25
-  store i32 %27, i32* %29, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %26, i32 %n)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %30 = bitcast i8* %20 to i32*
+  %31 = getelementptr inbounds i32, i32* %30, i64 %25
+  store i32 %28, i32* %31, align 4, !alias.scope !9, !noalias !8, !tbaa !17
   br label %for.inc
 
 for.inc:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = add nsw i32 %30, 1
-  store i32 %31, i32* %i.addr, align 4
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = add nsw i32 %32, 1
+  store i32 %33, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %32 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  ret %struct.nish_array* %32
+  %34 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  ret %struct.nish_array* %34
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef nonnull align 8 dereferenceable(4) %struct.Box* @summarise(i32 noundef %rounds) #1 {
@@ -172,40 +183,49 @@ bounds.ok:
   %21 = bitcast i8* %20 to i32*
   %22 = getelementptr inbounds i32, i32* %21, i64 %15
   %23 = load i32, i32* %22, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %24 = add nsw i32 %8, %23
-  %25 = and i32 %24, 1048575
-  store i32 %25, i32* %total.addr, align 4
-  %26 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %27 = load i8*, i8** %26, align 8
-  %28 = icmp eq i8* %27, %3
-  br i1 %28, label %pass.rewind, label %pass.free
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %27 = and i32 %25, 1048575
+  store i32 %27, i32* %total.addr, align 4
+  %28 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %29 = load i8*, i8** %28, align 8
+  %30 = icmp eq i8* %29, %3
+  br i1 %30, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %29 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %5, i64* %29, align 8
+  %31 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %31, align 8
   br label %pass.done
 
 pass.free:
-  %30 = ptrtoint i8* %3 to i64
-  %31 = add i64 %30, %5
-  call void @nish_arena_release(i64 %31)
+  %32 = ptrtoint i8* %3 to i64
+  %33 = add i64 %32, %5
+  call void @nish_arena_release(i64 %33)
   br label %pass.done
 
 pass.done:
   br label %for.inc
 
 for.inc:
-  %32 = load i32, i32* %i.addr, align 4
-  %33 = add nsw i32 %32, 1
-  store i32 %33, i32* %i.addr, align 4
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = add nsw i32 %34, 1
+  store i32 %35, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %34 = call i8* @nish_alloc_struct(i64 4)
-  %35 = bitcast i8* %34 to %struct.Box*
-  %36 = load i32, i32* %total.addr, align 4
-  call void @Box.constructor(%struct.Box* %35, i32 %36)
-  ret %struct.Box* %35
+  %36 = call i8* @nish_alloc_struct(i64 4)
+  %37 = bitcast i8* %36 to %struct.Box*
+  %38 = load i32, i32* %total.addr, align 4
+  call void @Box.constructor(%struct.Box* %37, i32 %38)
+  ret %struct.Box* %37
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define void @nish_main() #1 {

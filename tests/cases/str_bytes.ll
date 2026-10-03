@@ -5,8 +5,11 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare i64 @llvm.smin.i64(i64, i64) #3
 declare i64 @llvm.smax.i64(i64, i64) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
@@ -60,27 +63,57 @@ entry:
   %7 = bitcast i8* %6 to i64*
   %8 = load i64, i64* %7, align 8
   %9 = trunc i64 %8 to i32
-  %10 = mul nsw i32 %9, 1000
-  %11 = add nsw i32 %5, %10
-  %12 = load i8*, i8** %s.addr, align 8
-  %13 = call i64 @nish_arena_mark()
-  %14 = call i8* @head(i8* %12, i32 99)
-  %15 = call i8* @nish_arena_keep(i64 %13, i8* %14)
-  %16 = bitcast i8* %15 to i64*
-  %17 = load i64, i64* %16, align 8
-  %18 = trunc i64 %17 to i32
-  %19 = mul nsw i32 %18, 100000
-  %20 = add nsw i32 %11, %19
-  %21 = load i8*, i8** %s.addr, align 8
-  %22 = call i64 @nish_arena_mark()
-  %23 = call i8* @head(i8* %21, i32 -4)
-  %24 = call i8* @nish_arena_keep(i64 %22, i8* %23)
-  %25 = bitcast i8* %24 to i64*
-  %26 = load i64, i64* %25, align 8
-  %27 = trunc i64 %26 to i32
-  %28 = add nsw i32 %20, %27
+  %10 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %9, i32 1000)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %11)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %16 = load i8*, i8** %s.addr, align 8
+  %17 = call i64 @nish_arena_mark()
+  %18 = call i8* @head(i8* %16, i32 99)
+  %19 = call i8* @nish_arena_keep(i64 %17, i8* %18)
+  %20 = bitcast i8* %19 to i64*
+  %21 = load i64, i64* %20, align 8
+  %22 = trunc i64 %21 to i32
+  %23 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %22, i32 100000)
+  %24 = extractvalue { i32, i1 } %23, 0
+  %25 = extractvalue { i32, i1 } %23, 1
+  br i1 %25, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 %24)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %29 = load i8*, i8** %s.addr, align 8
+  %30 = call i64 @nish_arena_mark()
+  %31 = call i8* @head(i8* %29, i32 -4)
+  %32 = call i8* @nish_arena_keep(i64 %30, i8* %31)
+  %33 = bitcast i8* %32 to i64*
+  %34 = load i64, i64* %33, align 8
+  %35 = trunc i64 %34 to i32
+  %36 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %35)
+  %37 = extractvalue { i32, i1 } %36, 0
+  %38 = extractvalue { i32, i1 } %36, 1
+  br i1 %38, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %28
+  ret i32 %37
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ], [ 2, %ovf.ok.1 ], [ 0, %ovf.ok.2 ], [ 0, %ovf.ok.3 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind }

@@ -5,6 +5,8 @@ declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @doubled(i32 noundef %n) #0 {
 entry:
@@ -30,25 +32,35 @@ for.body:
   %2 = load i32, i32* %total.addr, align 4
   %3 = load i32, i32* %i.addr, align 4
   %4 = call i32 @doubled(i32 %3)
-  %5 = add nsw i32 %2, %4
-  store i32 %5, i32* %total.addr, align 4
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %4)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = add nsw i32 %6, 1
-  store i32 %7, i32* %i.addr, align 4
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = add nsw i32 %8, 1
+  store i32 %9, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %8 = load i32, i32* %total.addr, align 4
-  %9 = call i8* @nish_str_from_i32(i32 %8)
-  %10 = call i8* @nish_str_concat(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*), i8* %9)
-  call void @nish_print(i8* %10)
+  %10 = load i32, i32* %total.addr, align 4
+  %11 = call i8* @nish_str_from_i32(i32 %10)
+  %12 = call i8* @nish_str_concat(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*), i8* %11)
+  call void @nish_print(i8* %12)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

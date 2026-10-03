@@ -7,17 +7,20 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @llvm.memmove.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_exit(i32 noundef) #5
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
+declare void @nish_exit(i32 noundef) #3
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -92,22 +95,31 @@ for.body:
   %11 = getelementptr inbounds i8, i8* %10, i64 %9
   %12 = load i8, i8* %11, align 1, !alias.scope !4, !noalias !3, !tbaa !14
   %13 = zext i8 %12 to i32
-  %14 = add nsw i32 %7, %13
-  store i32 %14, i32* %total.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %7, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %15, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = add nsw i32 %15, 1
-  store i32 %16, i32* %i.addr, align 4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %17 = load i32, i32* %total.addr, align 4
-  ret i32 %17
+  %19 = load i32, i32* %total.addr, align 4
+  ret i32 %19
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define hidden noundef i32 @wipedSum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #2 {
+define hidden noundef i32 @wipedSum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %k) #1 {
 entry:
   %copy.addr = alloca %struct.nish_array*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -168,7 +180,7 @@ set.ok:
   ret i32 %30
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %k.addr = alloca %struct.Secret$arr.u8*, align 8
   %arena.mark = call i64 @nish_arena_mark()
@@ -193,16 +205,25 @@ entry:
   ret i32 0
 }
 
-define hidden noundef i32 @nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %v, i32 noundef %scale) #3 {
+define hidden noundef i32 @nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %v, i32 noundef %scale) #1 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %v, i64 0, i32 0
   %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %2 = trunc i64 %1 to i32
-  %3 = mul nsw i32 %2, %scale
-  ret i32 %3
+  %3 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %2, i32 %scale)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %4
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -216,7 +237,7 @@ entry:
   ret void
 }
 
-define internal void @nish.wipe$arr.u8(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %_target) #2 {
+define internal void @nish.wipe$arr.u8(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %_target) #1 {
 entry:
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %_target, i32 0, i32 1
   %1 = load i64, i64* %0, align 8
@@ -242,7 +263,7 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.exposeWith$arr.u8$i32$i32$fn.16.nish_main$arrow0(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s, i32 noundef %arg) #3 {
+define internal noundef i32 @nish.exposeWith$arr.u8$i32$i32$fn.16.nish_main$arrow0(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s, i32 noundef %arg) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -250,7 +271,7 @@ entry:
   ret i32 %2
 }
 
-define internal noundef i32 @nish.expose$arr.u8$i32$fn.8.wipedSum(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #2 {
+define internal noundef i32 @nish.expose$arr.u8$i32$fn.8.wipedSum(%struct.Secret$arr.u8* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %s, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !17
@@ -258,7 +279,7 @@ entry:
   ret i32 %2
 }
 
-define internal void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* noundef nonnull align 8 dereferenceable(8) nocapture %_target) #2 {
+define internal void @nish.wipe$$Secret$arr.u8(%struct.Secret$arr.u8* noundef nonnull align 8 dereferenceable(8) nocapture %_target) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Secret$arr.u8, %struct.Secret$arr.u8* %_target, i32 0, i32 0
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8
@@ -271,13 +292,12 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn readonly }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

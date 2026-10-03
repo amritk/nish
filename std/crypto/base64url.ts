@@ -29,9 +29,14 @@
 
 /**
  * All ones when `lo <= c <= hi`, else zero, without a branch. `c` is a byte or
- * a sextet, so neither subtraction can overflow.
+ * a sextet, so neither subtraction could leave `i32`; they are written in
+ * `u32`, which wraps by definition, because a signed one would be checked for
+ * an overflow it cannot have, and the check is a branch on the secret. The
+ * sign bit `>> 31` reads is the same either way. `base64urlCharOf` and
+ * `base64urlSextetOf` do their sums in `u32` for the same reason.
  */
-const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 => ((lo - 1 - c) & (c - hi - 1)) >> 31
+const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
+  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
 
 /**
  * The URL-alphabet character for the sextet `v` (`0 <= v <= 63`).
@@ -41,12 +46,14 @@ const base64urlRangeMask = (c: i32, lo: i32, hi: i32): i32 => ((lo - 1 - c) & (c
  * on `0`, 62 on `-` and 63 on `_`.
  */
 const base64urlCharOf = (v: i32): i32 =>
-  65 +
-  v +
-  (base64urlRangeMask(v, 26, 63) & 6) -
-  (base64urlRangeMask(v, 52, 63) & 75) -
-  (base64urlRangeMask(v, 62, 63) & 13) +
-  (base64urlRangeMask(v, 63, 63) & 49)
+  toI32(
+    65 +
+      toU32(v) +
+      toU32(base64urlRangeMask(v, 26, 63) & 6) -
+      toU32(base64urlRangeMask(v, 52, 63) & 75) -
+      toU32(base64urlRangeMask(v, 62, 63) & 13) +
+      toU32(base64urlRangeMask(v, 63, 63) & 49)
+  )
 
 /**
  * The sextet the byte `c` stands for, or `-1` when `c` is not in the alphabet.
@@ -60,7 +67,11 @@ const base64urlSextetOf = (c: i32): i32 => {
   const dash: i32 = base64urlRangeMask(c, 45, 45)
   const underscore: i32 = base64urlRangeMask(c, 95, 95)
   const value: i32 =
-    (upper & (c - 65)) | (lower & (c - 71)) | (digit & (c + 4)) | (dash & 62) | (underscore & 63)
+    (upper & toI32(toU32(c) - 65)) |
+    (lower & toI32(toU32(c) - 71)) |
+    (digit & toI32(toU32(c) + 4)) |
+    (dash & 62) |
+    (underscore & 63)
   return value | ~(upper | lower | digit | dash | underscore)
 }
 
@@ -81,7 +92,9 @@ export const base64urlEncode = (data: u8[]): string => {
   }
   const parts: string[] = []
   let acc: i32 = 0
-  let bits: i32 = 0
+  // Unsigned, so that counting bits in and out is never checked for an
+  // overflow: it is never more than twelve.
+  let bits: u32 = 0
   for (let k: i32 = 0; k < toI32(data.length); k++) {
     // At most four bits wait from the bytes before, so twelve are live here;
     // the mask keeps the accumulator from growing without bound.
@@ -89,13 +102,13 @@ export const base64urlEncode = (data: u8[]): string => {
     bits += 8
     while (bits >= 6) {
       bits -= 6
-      parts.push(String.fromCharCode(base64urlCharOf((acc >> bits) & 63)))
+      parts.push(String.fromCharCode(base64urlCharOf((acc >> toI32(bits)) & 63)))
     }
   }
   // Two or four bits of a final byte are left: they go out as the high bits of
   // one more sextet, filled out with zeros.
   if (bits > 0) {
-    parts.push(String.fromCharCode(base64urlCharOf((acc << (6 - bits)) & 63)))
+    parts.push(String.fromCharCode(base64urlCharOf((acc << toI32(6 - bits)) & 63)))
   }
   return parts.join("")
 }

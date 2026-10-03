@@ -73,26 +73,64 @@ export const constantText = (emitter: Emitter, info: ConstInfo): string => {
 
 // ---- Integer arithmetic -----------------------------------------------------------
 
+/** The `nish_panic_overflow` argument for each checked operator, in runtime/runtime.c's order. */
+const OVERFLOW_ADD: i32 = 0
+const OVERFLOW_SUB: i32 = 1
+const OVERFLOW_MUL: i32 = 2
+const OVERFLOW_NEG: i32 = 3
+
+/** `add` / `sub` / `mul`: the three instructions signed overflow is checked on. */
+const isOverflowOpcode = (opcode: string): boolean => opcode === "add" || opcode === "sub" || opcode === "mul"
+
 /**
- * The instruction for `add` / `sub` / `mul`, which carries `nsw` by default
- * (WP15 §3): signed overflow becomes poison (C semantics) instead of
- * wrapping, and `--wrapping` turns that back off.
+ * `add` / `sub` / `mul` on a signed type, where the result may not fit (the
+ * Rust rule: an overflow is a panic, never a wrap and never undefined).
  *
- * An unsigned type never gets a flag in either mode. `u8`/`u16`/`u32`/`u64`
- * are defined as wrapping, which is what hashing and bit-packing are written
- * against, so `nuw` would be a claim the language does not make; and `nsw` on
- * an unsigned value that has merely passed 2^31 would poison an ordinary
- * result. The proof under the attribute is "the checker recorded a signed
- * type", and `isUnsigned` is where that proof is read.
+ * - **Proven** — `nodeProvenNoOverflow`, written by `src/bounds.ts` — is the
+ *   plain instruction with `nsw`. The flag is the proof restated for LLVM, and
+ *   it is what lets the loop passes treat a counter as an induction variable.
+ * - **Unproven** is `llvm.s<op>.with.overflow` and a branch on its flag to
+ *   the function's `ovf.fail` block (one per `-g` location), which calls the cold, noreturn
+ *   `nish_panic_overflow` (`IRFunction.branchOnOverflow`). `panicCode` names
+ *   the operator the message reports, which for `-x` (a `sub` from zero) is
+ *   negate.
+ * - **`--wrapping`** is the plain instruction with no flag: a defined
+ *   two's-complement wrap, and no check.
+ *
+ * An unsigned type never gets here: `u8`..`u64` are defined as wrapping,
+ * which is what hashing and bit-packing are written against.
  */
-export const intOpcode = (emitter: Emitter, opcode: string, type: i32): string => {
-  if (emitter.program.wrapping || isUnsigned(type)) {
-    return opcode
+const emitSignedArith = (
+  emitter: Emitter,
+  opcode: string,
+  ty: string,
+  lhs: string,
+  rhs: string,
+  node: Node,
+  panicCode: i32
+): string => {
+  const fn = emitter.fn
+  if (emitter.program.wrapping) {
+    return fn.emitValue(`${opcode} ${ty} ${lhs}, ${rhs}`)
   }
-  if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") {
-    return opcode
+  if (emitter.program.nodeProvenNoOverflow[node.id]) {
+    return fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
   }
-  return `${opcode} nsw`
+  const pair = fn.emitValue(
+    `call { ${ty}, i1 } ${emitter.useRuntime(`llvm.s${opcode}.with.overflow.${ty}`)}(${ty} ${lhs}, ${ty} ${rhs})`
+  )
+  const value = fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 0`)
+  const overflow = fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 1`)
+  fn.branchOnOverflow(overflow, panicCode, emitter.useRuntime("nish_panic_overflow"))
+  return value
+}
+
+/** Which message an overflowing `add` / `sub` / `mul` panics with. */
+const overflowCode = (opcode: string): i32 => {
+  if (opcode === "add") {
+    return OVERFLOW_ADD
+  }
+  return opcode === "sub" ? OVERFLOW_SUB : OVERFLOW_MUL
 }
 
 /**
@@ -150,21 +188,28 @@ const intMin = (ty: string): string => (ty === "i32" ? "-2147483648" : "-9223372
 
 /**
  * `<opcode> <ty> lhs, rhs` for an integer type, with the checked division
- * described above. `opcode` is the *signed* spelling; the unsigned form is
- * selected from `type`, so every caller names one opcode per operator.
+ * described above and the checked signed arithmetic of `emitSignedArith`.
+ * `opcode` is the *signed* spelling; the unsigned form is selected from
+ * `type`, so every caller names one opcode per operator. `node` is the
+ * operator's own node — the binary expression, the compound assignment or the
+ * increment — whose `nodeProvenNoOverflow` verdict decides the check.
  */
 export const emitIntBinary = (
   emitter: Emitter,
   opcode: string,
   type: i32,
   lhs: string,
-  rhs: string
+  rhs: string,
+  node: Node
 ): string => {
   const ty = emitter.llvm(type)
   const op = signedOpcode(opcode, type)
   const fn = emitter.fn
+  if (isOverflowOpcode(op) && !isUnsigned(type)) {
+    return emitSignedArith(emitter, op, ty, lhs, rhs, node, overflowCode(op))
+  }
   if (!isDivision(op)) {
-    return fn.emitValue(`${intOpcode(emitter, op, type)} ${ty} ${lhs}, ${rhs}`)
+    return fn.emitValue(`${op} ${ty} ${lhs}, ${rhs}`)
   }
   const byZero = fn.emitValue(`icmp eq ${ty} ${rhs}, 0`)
   // Unsigned division cannot overflow: there is no value whose negation is out
@@ -382,7 +427,7 @@ export const emitBinary = (emitter: Emitter, expr: Node): string => {
   const lhs = emitter.emitExpression(expr.children[0])
   const rhs = emitter.emitExpression(expr.children[1])
   if (isInteger(type)) {
-    return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs)
+    return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs, expr)
   }
   return emitter.fn.emitValue(`${floatOpcode(op, emitter.opts.json)} ${emitter.llvm(type)} ${lhs}, ${rhs}`)
 }
@@ -399,8 +444,8 @@ const emitBitwise = (emitter: Emitter, expr: Node, type: i32): string => {
 
 /**
  * `-<literal>` at an integer type, as the constant it is rather than a
- * `sub nsw <ty> 0, <literal>`: for `-2147483648` in `i32`, whose literal
- * already truncates to `INT_MIN`, that instruction is poison under LangRef.
+ * checked `sub <ty> 0, <literal>`: for `-2147483648` in `i32`, whose literal
+ * already truncates to `INT_MIN`, that negation would overflow and panic.
  * The negation is done in `u64`, where it wraps, and sign-extended back from
  * the type's width, so every minimum spells itself and an unsigned `-(1)` is
  * all ones.
@@ -425,8 +470,12 @@ export const emitUnary = (emitter: Emitter, expr: Node): string => {
     }
     const value = emitter.emitExpression(operand)
     const ty = emitter.llvm(type)
+    if (isInteger(type) && isUnsigned(type)) {
+      return emitter.fn.emitValue(`sub ${ty} 0, ${value}`)
+    }
     if (isInteger(type)) {
-      return emitter.fn.emitValue(`${intOpcode(emitter, "sub", type)} ${ty} 0, ${value}`)
+      // `-x` overflows for `INT_MIN` alone, and says so as a negation.
+      return emitSignedArith(emitter, "sub", ty, "0", value, expr, OVERFLOW_NEG)
     }
     return emitter.fn.emitValue(`fneg ${ty} ${value}`)
   }

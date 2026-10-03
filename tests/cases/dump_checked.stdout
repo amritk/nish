@@ -13,17 +13,19 @@ function Counter.constructor(this: Counter, step: i32): void -> @Counter.constru
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Counter.tick(this: Counter): i32 -> @Counter.tick [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 15:5
+  calls: nish_panic_overflow
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function dot(a: Vec, b: Vec): i32 -> @dot
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
   pointer a: size=8 writesThrough=false captured=false
   pointer b: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function run(n: i32): i32 -> @run [exported]
-  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Counter.tick
   calls: Counter.constructor Counter.tick dot
   stackSites=2 stackLocals=2

@@ -9,6 +9,9 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #3
+declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -40,33 +43,48 @@ entry:
   %20 = call i8* @nish_str_concat(i8* %15, i8* %19)
   call void @nish_print(i8* %20)
   %21 = load i64, i64* %big.addr, align 8
-  %22 = mul nsw i64 -1, %21
-  %23 = call i8* @nish_str_from_i64(i64 %22)
-  %24 = call i8* @nish_str_concat(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %25 = load i64, i64* %big.addr, align 8
-  %26 = add nsw i64 -1, %25
-  %27 = call i8* @nish_str_from_i64(i64 %26)
-  %28 = call i8* @nish_str_concat(i8* %24, i8* %27)
-  call void @nish_print(i8* %28)
-  %29 = fneg double 0x3FF0000000000000
-  %30 = load double, double* %z.addr, align 8
-  %31 = fcmp olt double %29, %30
-  %32 = select i1 %31, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %33 = call i8* @nish_str_concat(i8* %32, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %34 = fneg double 0x3FF0000000000000
-  %35 = load double, double* %z.addr, align 8
-  %36 = fcmp oeq double %34, %35
-  %37 = select i1 %36, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %38 = call i8* @nish_str_concat(i8* %33, i8* %37)
-  %39 = call i8* @nish_str_concat(i8* %38, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %40 = fneg double 0x4000000000000000
-  %41 = load double, double* %z.addr, align 8
-  %42 = fcmp oge double %40, %41
-  %43 = select i1 %42, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  %44 = call i8* @nish_str_concat(i8* %39, i8* %43)
-  call void @nish_print(i8* %44)
+  %22 = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 -1, i64 %21)
+  %23 = extractvalue { i64, i1 } %22, 0
+  %24 = extractvalue { i64, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %25 = call i8* @nish_str_from_i64(i64 %23)
+  %26 = call i8* @nish_str_concat(i8* %25, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %27 = load i64, i64* %big.addr, align 8
+  %28 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 -1, i64 %27)
+  %29 = extractvalue { i64, i1 } %28, 0
+  %30 = extractvalue { i64, i1 } %28, 1
+  br i1 %30, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %31 = call i8* @nish_str_from_i64(i64 %29)
+  %32 = call i8* @nish_str_concat(i8* %26, i8* %31)
+  call void @nish_print(i8* %32)
+  %33 = fneg double 0x3FF0000000000000
+  %34 = load double, double* %z.addr, align 8
+  %35 = fcmp olt double %33, %34
+  %36 = select i1 %35, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %37 = call i8* @nish_str_concat(i8* %36, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %38 = fneg double 0x3FF0000000000000
+  %39 = load double, double* %z.addr, align 8
+  %40 = fcmp oeq double %38, %39
+  %41 = select i1 %40, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %42 = call i8* @nish_str_concat(i8* %37, i8* %41)
+  %43 = call i8* @nish_str_concat(i8* %42, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %44 = fneg double 0x4000000000000000
+  %45 = load double, double* %z.addr, align 8
+  %46 = fcmp oge double %44, %45
+  %47 = select i1 %46, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  %48 = call i8* @nish_str_concat(i8* %43, i8* %47)
+  call void @nish_print(i8* %48)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -78,3 +96,5 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

@@ -1,4 +1,7 @@
 declare void @nish_panic_div(i1 noundef zeroext) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define internal noundef i32 @countPairs(i32 noundef %n) #0 {
 entry:
@@ -47,31 +50,40 @@ div.ok:
 
 if.then:
   %16 = load i32, i32* %count.addr, align 4
-  %17 = add nsw i32 %16, 1
-  store i32 %17, i32* %count.addr, align 4
+  %17 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 1)
+  %18 = extractvalue { i32, i1 } %17, 0
+  %19 = extractvalue { i32, i1 } %17, 1
+  br i1 %19, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %18, i32* %count.addr, align 4
   br label %if.end
 
 if.end:
   br label %for.inc.1
 
 for.inc.1:
-  %18 = load i32, i32* %j.addr, align 4
-  %19 = add nsw i32 %18, 1
-  store i32 %19, i32* %j.addr, align 4
+  %20 = load i32, i32* %j.addr, align 4
+  %21 = add nsw i32 %20, 1
+  store i32 %21, i32* %j.addr, align 4
   br label %for.cond.1
 
 for.end.1:
   br label %for.inc
 
 for.inc:
-  %20 = load i32, i32* %i.addr, align 4
-  %21 = add nsw i32 %20, 1
-  store i32 %21, i32* %i.addr, align 4
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = add nsw i32 %22, 1
+  store i32 %23, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %22 = load i32, i32* %count.addr, align 4
-  ret i32 %22
+  %24 = load i32, i32* %count.addr, align 4
+  ret i32 %24
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @search(i32 noundef %limit) #0 {
@@ -121,14 +133,24 @@ while.cond.1:
 
 while.body.1:
   %12 = load i32, i32* %j.addr, align 4
-  %13 = add nsw i32 %12, 1
-  store i32 %13, i32* %j.addr, align 4
-  %14 = load i32, i32* %j.addr, align 4
-  %15 = load i32, i32* %j.addr, align 4
-  %16 = mul nsw i32 %14, %15
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = icmp sgt i32 %16, %17
-  br i1 %18, label %if.then.1, label %if.end.1
+  %13 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 1)
+  %14 = extractvalue { i32, i1 } %13, 0
+  %15 = extractvalue { i32, i1 } %13, 1
+  br i1 %15, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %14, i32* %j.addr, align 4
+  %16 = load i32, i32* %j.addr, align 4
+  %17 = load i32, i32* %j.addr, align 4
+  %18 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %16, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = icmp sgt i32 %19, %21
+  br i1 %22, label %if.then.1, label %if.end.1
 
 if.then.1:
   br label %while.end.1
@@ -137,25 +159,51 @@ if.end.1:
   br label %while.cond.1
 
 while.end.1:
-  %19 = load i32, i32* %found.addr, align 4
-  %20 = load i32, i32* %j.addr, align 4
-  %21 = add nsw i32 %19, %20
-  store i32 %21, i32* %found.addr, align 4
+  %23 = load i32, i32* %found.addr, align 4
+  %24 = load i32, i32* %j.addr, align 4
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %23, i32 %24)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %26, i32* %found.addr, align 4
   br label %while.cond
 
 while.end:
-  %22 = load i32, i32* %found.addr, align 4
-  ret i32 %22
+  %28 = load i32, i32* %found.addr, align 4
+  ret i32 %28
+
+ovf.fail:
+  %ovf.op = phi i32 [ 0, %while.body.1 ], [ 2, %ovf.ok ], [ 0, %while.end.1 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @test() #0 {
 entry:
   %0 = call i32 @countPairs(i32 6)
-  %1 = mul nsw i32 %0, 100
-  %2 = call i32 @search(i32 5)
-  %3 = add nsw i32 %1, %2
-  ret i32 %3
+  %1 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %0, i32 100)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %4 = call i32 @search(i32 5)
+  %5 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %4)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %6
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %ovf.ok ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

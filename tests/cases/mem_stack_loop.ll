@@ -9,7 +9,10 @@ declare void @nish_arena_release(i64 noundef) #0
 declare noundef i64 @nish_arena_used() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_div(i1 noundef zeroext) #3
+declare void @nish_panic_div(i1 noundef zeroext) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #3
 
 define internal void @Vec.constructor(%struct.Vec* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
@@ -26,17 +29,37 @@ entry:
   %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Vec, %struct.Vec* %o, i32 0, i32 0
   %3 = load i32, i32* %2, align 4, !tbaa !4
-  %4 = mul nsw i32 %1, %3
-  %5 = getelementptr inbounds %struct.Vec, %struct.Vec* %this, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4, !tbaa !5
-  %7 = getelementptr inbounds %struct.Vec, %struct.Vec* %o, i32 0, i32 1
+  %4 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = getelementptr inbounds %struct.Vec, %struct.Vec* %this, i32 0, i32 1
   %8 = load i32, i32* %7, align 4, !tbaa !5
-  %9 = mul nsw i32 %6, %8
-  %10 = add nsw i32 %4, %9
-  ret i32 %10
+  %9 = getelementptr inbounds %struct.Vec, %struct.Vec* %o, i32 0, i32 1
+  %10 = load i32, i32* %9, align 4, !tbaa !5
+  %11 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %8, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %5, i32 %12)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  ret i32 %15
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 2, %ovf.ok ], [ 0, %ovf.ok.1 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
-define internal noundef i32 @accumulate(i32 noundef %n) #2 {
+define internal noundef i32 @accumulate(i32 noundef %n) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -77,22 +100,31 @@ div.fail:
 
 div.ok:
   %13 = srem i32 %7, 7
-  %14 = add nsw i32 %4, %13
-  store i32 %14, i32* %total.addr, align 4
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %4, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %15, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = add nsw i32 %15, 1
-  store i32 %16, i32* %i.addr, align 4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %17 = load i32, i32* %total.addr, align 4
-  ret i32 %17
+  %19 = load i32, i32* %total.addr, align 4
+  ret i32 %19
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %before.addr = alloca i64, align 8
   %total.addr = alloca i32, align 4
@@ -116,7 +148,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -124,9 +156,9 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind noreturn cold }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
