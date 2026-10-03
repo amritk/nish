@@ -1,2 +1,2 @@
-has no export `tcpConnect`
+has no export `dnsLookup`
 netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose

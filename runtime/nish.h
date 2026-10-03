@@ -386,10 +386,11 @@ bool nish_is_executable(const nish_str *path);
  * Every call answers an `int32_t`: `>= 0` on success (a descriptor, a byte
  * count, 0) and a negative errno otherwise, in Linux's numbering on every
  * platform for -11 (would block), -95 (unsupported), -32 (the peer is gone),
- * -104 (reset), -98 (address in use) and -22 (a bad argument). Every socket
- * is non-blocking and close-on-exec. An address is 18 bytes of a `u8[]`
- * (element type `uint8_t`): 16 of IPv6 address, IPv4 as `::ffff:a.b.c.d`,
- * then the port, big-endian; a shorter array is -22. Nothing allocates.
+ * -104 (reset), -98 (address in use), -111 (refused), -110 (timed out) and
+ * -22 (a bad argument). Every socket is non-blocking and close-on-exec. An
+ * address is 18 bytes of a `u8[]` (element type `uint8_t`): 16 of IPv6
+ * address, IPv4 as `::ffff:a.b.c.d`, then the port, big-endian; a shorter
+ * array is -22. Nothing allocates.
  *
  * `nish_net_address(out, host, port)`: the form of a numeric `host`.
  * `nish_net_local_port(fd)`: the port a socket is bound to.
@@ -400,6 +401,10 @@ bool nish_is_executable(const nish_str *path);
  * len)` of `buf`, which the compiled call has range-checked; a write to a
  * gone peer is -32, never SIGPIPE. `nish_net_shutdown(fd, how)`: 0 read, 1
  * write, 2 both. `nish_net_close(fd)`.
+ * `nish_tcp_connect(addr)`: a new socket connecting to `addr`, answered at
+ * once; its `EINPROGRESS` is not a failure, and any other closes it.
+ * `nish_connect_result(fd)`: `SO_ERROR` once the socket is writable, 0 when
+ * the connection is made.
  *
  * UDP: `nish_udp_bind(host, port, flags)` binds a datagram socket, flag 1
  * `SO_REUSEPORT` and flag 2 `UDP_GRO` (-95 on Darwin). `nish_udp_send_to(fd,
@@ -429,6 +434,8 @@ int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_shutdown(int32_t fd, int32_t how);
 int32_t nish_net_close(int32_t fd);
+int32_t nish_tcp_connect(const nish_array *addr);
+int32_t nish_connect_result(int32_t fd);
 int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags);
 int32_t nish_udp_send_to(int32_t fd, const nish_array *buf, int64_t off, int64_t len, const nish_array *to,
                          int32_t segment, int32_t ecn);

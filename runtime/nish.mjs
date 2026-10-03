@@ -109,6 +109,8 @@ for (const name of [
   "netWrite",
   "netShutdown",
   "netClose",
+  "tcpConnect",
+  "connectResult",
   "udpBind",
   "udpSendTo",
   "udpRecvFrom",
@@ -208,6 +210,9 @@ provide("Arena", {
   reset: shim.arenaReset,
   used: shim.arenaUsed,
 });
+// `using a = arena()` releases nothing here either: what the block allocated
+// is the garbage collector's, and the disposal is a no-op.
+provide("arena", shim.arena);
 
 // The standard library. A program imports it as `nish/<module>`, which the
 // compiler resolves to `std/<module>.ts` beside itself; this does the same for

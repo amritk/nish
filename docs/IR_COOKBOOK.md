@@ -12583,6 +12583,172 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end mem-arena-builtins -->
 
+### `using a = arena()`
+
+A block that declares `using a = arena()` calls `nish_arena_mark` where the
+declaration stands, keeps the answer in the binding's slot, and calls
+`nish_arena_release` of it on every edge that leaves the block: here the
+`break` and the fall-through before the back-edge. The checker has already
+refused any block whose allocations could outlive it
+([LANGUAGE.md](LANGUAGE.md#using-a--arena)), so nothing the release frees is
+read again. It composes with the scopes the compiler adds itself, innermost
+first: the loop's pass is scoped too, so each edge releases the block and then
+rewinds the pass, and the function's own scope releases before the `ret`.
+
+<!-- cookbook:begin mem-using-arena -->
+```ts
+const longest = (rows: i32, keep: string): string => {
+  let best = 0
+  for (let i = 0; i < rows; i++) {
+    using a = arena()
+    const label = `row ${i}`
+    if (label.length > 8) {
+      break
+    }
+    best = label.length > best ? label.length : best
+  }
+  return best > 4 ? keep : "short"
+}
+```
+
+```llvm
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"row \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"short\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define internal noundef nonnull align 8 i8* @longest(i32 noundef %rows, i8* noundef nonnull noalias readonly align 8 %keep) #0 {
+entry:
+  %best.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %a.addr = alloca i64, align 8
+  %label.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 0, i32* %best.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %rows
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %3 = load i8*, i8** %2, align 8
+  %4 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8
+  %6 = call i64 @nish_arena_mark()
+  store i64 %6, i64* %a.addr, align 8
+  %7 = load i64, i64* %a.addr, align 8
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = call i8* @nish_str_from_i32(i32 %8)
+  %10 = call i8* @nish_str_concat(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* %9)
+  store i8* %10, i8** %label.addr, align 8
+  %11 = load i8*, i8** %label.addr, align 8
+  %12 = bitcast i8* %11 to i64*
+  %13 = load i64, i64* %12, align 8
+  %14 = trunc i64 %13 to i32
+  %15 = icmp sgt i32 %14, 8
+  br i1 %15, label %if.then, label %if.end
+
+if.then:
+  call void @nish_arena_release(i64 %7)
+  %16 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %17 = load i8*, i8** %16, align 8
+  %18 = icmp eq i8* %17, %3
+  br i1 %18, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %19 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %19, align 8
+  br label %pass.done
+
+pass.free:
+  %20 = ptrtoint i8* %3 to i64
+  %21 = add i64 %20, %5
+  call void @nish_arena_release(i64 %21)
+  br label %pass.done
+
+pass.done:
+  br label %for.end
+
+if.end:
+  %22 = load i8*, i8** %label.addr, align 8
+  %23 = bitcast i8* %22 to i64*
+  %24 = load i64, i64* %23, align 8
+  %25 = trunc i64 %24 to i32
+  %26 = load i32, i32* %best.addr, align 4
+  %27 = icmp sgt i32 %25, %26
+  br i1 %27, label %cond.true, label %cond.false
+
+cond.true:
+  %28 = load i8*, i8** %label.addr, align 8
+  %29 = bitcast i8* %28 to i64*
+  %30 = load i64, i64* %29, align 8
+  %31 = trunc i64 %30 to i32
+  br label %cond.end
+
+cond.false:
+  %32 = load i32, i32* %best.addr, align 4
+  br label %cond.end
+
+cond.end:
+  %33 = phi i32 [ %31, %cond.true ], [ %32, %cond.false ]
+  store i32 %33, i32* %best.addr, align 4
+  call void @nish_arena_release(i64 %7)
+  %34 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %35 = load i8*, i8** %34, align 8
+  %36 = icmp eq i8* %35, %3
+  br i1 %36, label %pass.rewind.1, label %pass.free.1
+
+pass.rewind.1:
+  %37 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %5, i64* %37, align 8
+  br label %pass.done.1
+
+pass.free.1:
+  %38 = ptrtoint i8* %3 to i64
+  %39 = add i64 %38, %5
+  call void @nish_arena_release(i64 %39)
+  br label %pass.done.1
+
+pass.done.1:
+  br label %for.inc
+
+for.inc:
+  %40 = load i32, i32* %i.addr, align 4
+  %41 = add nsw i32 %40, 1
+  store i32 %41, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %42 = load i32, i32* %best.addr, align 4
+  %43 = icmp sgt i32 %42, 4
+  br i1 %43, label %cond.true.1, label %cond.false.1
+
+cond.true.1:
+  br label %cond.end.1
+
+cond.false.1:
+  br label %cond.end.1
+
+cond.end.1:
+  %44 = phi i8* [ %keep, %cond.true.1 ], [ bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), %cond.false.1 ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i8* %44
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end mem-using-arena -->
+
 ### `T | null` and narrowing
 
 A nullable value is the same pointer type as `T`; `null` is the constant
@@ -14533,6 +14699,8 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #5
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #5
+declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
+declare noundef i32 @nish_connect_result(i32 noundef) #2
 declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #5
 declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #5

@@ -605,6 +605,16 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // The client half. `tcpConnect` makes a non-blocking socket and starts a
+    // `connect`, which on such a socket never waits, and `connectResult` is
+    // one `getsockopt`: both are `willreturn` as `tcpListen` is. The address
+    // is only read, so it keeps `readonly`.
+    this.add(
+      plain("nish_tcp_connect", `declare noundef i32 @nish_tcp_connect(${NET_BUFFER} readonly)`, EFFECT_WRITE)
+    )
+    this.add(
+      plain("nish_connect_result", "declare noundef i32 @nish_connect_result(i32 noundef)", EFFECT_WRITE)
+    )
     // UDP. `udpBind` makes a socket, sets options and binds, none of which
     // waits, so it is `willreturn` as `tcpListen` is. `sendmsg` and `recvmsg`
     // wait on a blocking socket, as `send` and `recv` do, so the other two are

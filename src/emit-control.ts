@@ -295,8 +295,8 @@ const targetOf = (bodies: (IRBlock | null)[], endBlock: IRBlock, from: i32): IRB
 export const emitBreak = (emitter: Emitter): void => {
   const target = emitter.loops[emitter.loops.length - 1]
   target.hasBreak = true
-  // WP29 P2: the scopes opened inside the target join first, inside its pass.
-  emitScopeJoins(emitter, emitter.loops.length)
+  // WP29 P2: the scopes and arenas opened inside the target close first, inside its pass.
+  emitScopeJoins(emitter, emitter.loops.length, true)
   if (target.scopesPass()) {
     emitter.releasePass(target)
   }
@@ -310,7 +310,7 @@ export const emitContinue = (emitter: Emitter): void => {
     const loop = emitter.loops[i]
     const target = loop.continueBlock
     if (target !== null) {
-      emitScopeJoins(emitter, i + 1) // WP29 P2, as for `break`
+      emitScopeJoins(emitter, i + 1, true) // WP29 P2, as for `break`
       if (loop.scopesPass()) {
         emitter.releasePass(loop)
       }
