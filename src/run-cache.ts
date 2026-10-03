@@ -124,9 +124,9 @@ export const sha256Hex = (text: string): string => {
     while (t < 16) {
       const at = block + t * 4
       let word: u32 = 0
-      // `at >= 0` and `text.length` rather than `n` are for the bounds proof,
-      // which then drops the check on every `charCodeAt` here.
-      if (at >= 0 && at + 4 <= text.length) {
+      // Only `at + 4 <= n` matters; the rest is what the bounds proof needs to
+      // drop the check on every `charCodeAt` here, `at` itself included.
+      if (at >= 0 && at < text.length && at + 4 <= text.length) {
         word =
           (toU32(text.charCodeAt(at)) << 24) |
           (toU32(text.charCodeAt(at + 1)) << 16) |
