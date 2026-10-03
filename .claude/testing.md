@@ -76,6 +76,18 @@ test is **data, not code**: a source file next to the output it must produce.
   A discrepancy that is a deliberate semantic difference (documented in
   `docs/wp13-differential.md`) goes in `known-failures.txt`; anything else is a
   bug.
+- **An intended change to emitted IR is declared wherever HEAD is compared
+  with the released seed**, and there are two such places: `tests/nish-cmp.js`'s
+  `DECLARED` for the corpus, and `DECLARED` in `tests/differential/fuzz.js` for
+  generated programs, which names the function and its attribute group's text
+  on each side. Each entry carries the `changelog` subject that made the change
+  and a `why`; a declared difference is reported, an undeclared one fails, and
+  an entry that matches nothing fails as stale, so the reseed after the release
+  retires it. Declare only what the comparison reaches. The example is #427:
+  CG-8 took `willreturn` from `nish_str_concat`, nish-cmp's list named the
+  programs it moved, the fuzzer had no list, and every seeded `npm test` failed
+  until #438 gave it one. CI's `nish-cmp` job runs both against the seed, since
+  the `test` job has none.
 - **Minimize mocking.** There is nothing to mock: the compiler is a pure
   function from source to IR, and the runtime is exercised by running real
   binaries. Prefer a smaller golden to a stub.

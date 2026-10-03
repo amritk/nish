@@ -27,6 +27,19 @@
  * to exactly what the checked-in one is. The pair is the seed release
  * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run.
  *
+ * **An intended change is declared, not waved through.** HEAD is meant to
+ * differ from the seed when a release changes what the emitter writes, and
+ * such a change shows up in random programs exactly as it does in the
+ * corpus. `DECLARED` below is this mode's counterpart of `tests/nish-cmp.js`'s
+ * list, narrowed to what a generated program can reach: one function's
+ * attribute group, keyed by the group's text on each side rather than by its
+ * `#N`, because the numbers are assigned in order of first use and say nothing
+ * about what changed. A difference an entry covers is reported and passes;
+ * anything else still fails; and an entry that covers nothing in a run fails
+ * as stale, so that the reseed after the release that ships the change is
+ * what retires it. `explainDifference` decides, and `selfCheckDeclarations`
+ * drives it over fabricated modules on every `npm test`.
+ *
  * There used to be a second, default mode that ran each program natively and
  * under Node through the live rewrite. The rewriter was stage0's checker and
  * went with it (R6), and a generated program has nothing a frozen store could
@@ -483,6 +496,160 @@ const generateProgram = (seed, opts = {}) => {
 }
 
 /**
+ * The seed-against-HEAD differences this mode accepts, one per function and
+ * attribute group. An entry reads:
+ *
+ *   {
+ *     function: "nish_str_concat",       // the `@name` on a `declare` or `define` line
+ *     seed: "{ nounwind willreturn }",   // its attribute group's text in the seed's IR
+ *     head: "{ nounwind }",              // and in HEAD's
+ *     changelog: "the subject of the commit that made the change",
+ *     why: "one sentence somebody is willing to sign",
+ *   }
+ *
+ * The list is for one release: once the seed is a release that carries the
+ * change, the entry covers nothing and the run fails until it is deleted.
+ * Only reachable functions belong here. #427's CG-8 also took `willreturn`
+ * from `nish_read_file`, `nish_write_file`, `nish_append_file`,
+ * `nish_alloc_array`, `nish_read_file_or_null` and `nish_read_file_bytes`,
+ * but a generated program reads no file and builds no array, and 200
+ * programs from seed 7000 differ only at `nish_str_concat`, so declaring them
+ * would only be an entry nothing can make stale.
+ */
+const DECLARED = [
+  {
+    function: "nish_str_concat",
+    seed: "{ nounwind willreturn }",
+    head: "{ nounwind }",
+    changelog: "fix(codegen): close CG-2, CG-3, CG-4, CG-8 and CG-10",
+    why: "CG-8: a concatenation past 2^31 - 1 bytes exits, so `nish_str_concat` is no longer `willreturn`",
+  },
+]
+
+const ATTRIBUTE_GROUP = /^attributes #(\d+) = (.*)$/
+const GROUP_REFERENCE = / #(\d+)(?=$| )/g
+const FUNCTION_LINE = /^(?:declare|define) [^@]*@("[^"]+"|[^\s(]+)\(/
+
+/** One module's lines apart from its attribute groups, and the groups as `number -> text`. */
+const splitGroups = (text) => {
+  const groups = new Map()
+  const body = []
+  for (const line of text.split("\n")) {
+    const group = ATTRIBUTE_GROUP.exec(line)
+    if (group === null) {
+      body.push(line)
+    } else {
+      groups.set(group[1], group[2])
+    }
+  }
+  return { groups, body }
+}
+
+/**
+ * Whether one differing module is the declared change and nothing else.
+ * `reference` and `candidate` are the two texts of one `.ll`, and
+ * `declarations` is the list to judge them by (`DECLARED`, or the fabricated
+ * lists of `selfCheckDeclarations`).
+ *
+ * Every line but the attribute groups must be the same once each `#N` is read
+ * as its group's text. A line whose group text still differs must be a
+ * function's `declare` or `define`, and a declaration must name that function
+ * with exactly those two texts. Renumbered groups alone, with no declared
+ * change behind them, are still a difference: they are bytes the seed did not
+ * write, and nothing has said why.
+ *
+ * Returns `{ covered, undeclared }`: the entries the module used, and the
+ * reason it is not explained (null when it is).
+ */
+const explainDifference = (reference, candidate, declarations) => {
+  const a = splitGroups(reference)
+  const b = splitGroups(candidate)
+  const covered = new Set()
+  if (a.body.length !== b.body.length) {
+    return { covered, undeclared: "the modules differ in more than their attribute groups" }
+  }
+  const resolve = (line, groups) => line.replace(GROUP_REFERENCE, (ref, n) => ` #${groups.get(n) ?? ref}`)
+  for (let i = 0; i < a.body.length; i++) {
+    const want = a.body[i]
+    const got = b.body[i]
+    if (want === got) {
+      continue
+    }
+    if (want.replace(GROUP_REFERENCE, " #") !== got.replace(GROUP_REFERENCE, " #")) {
+      return { covered, undeclared: `line ${i + 1} differs in more than its attribute group` }
+    }
+    const seed = resolve(want, a.groups)
+    const head = resolve(got, b.groups)
+    if (seed === head) {
+      continue // renumbered: the same group under another number
+    }
+    const fn = FUNCTION_LINE.exec(want)?.[1]
+    const groupOf = (line, groups) => groups.get([...line.matchAll(GROUP_REFERENCE)].pop()?.[1] ?? "")
+    const from = groupOf(want, a.groups)
+    const to = groupOf(got, b.groups)
+    const entry = declarations.find((d) => d.function === fn && d.seed === from && d.head === to)
+    if (fn === undefined || entry === undefined) {
+      return {
+        covered,
+        undeclared: `line ${i + 1}: ${fn === undefined ? "a non-function line" : `@${fn}`}'s attributes go from ${from} to ${to}, and no declaration names it`,
+      }
+    }
+    covered.add(entry)
+  }
+  if (covered.size === 0) {
+    return { covered, undeclared: "the attribute groups differ and no declared change explains it" }
+  }
+  return { covered, undeclared: null }
+}
+
+/**
+ * `explainDifference` and the stale rule over modules no compiler wrote, for
+ * the reason `tests/nish-cmp.js`'s `selfCheckRoots` gives: this decides
+ * whether a difference is excused, and the run that uses it only happens with
+ * a seed. Returns `[label, reason it failed or null]` per property.
+ */
+const selfCheckDeclarations = () => {
+  const module = (concat, groups) =>
+    [
+      "define i32 @main() #0 {",
+      "  ret i32 0",
+      "}",
+      `declare i8* @nish_str_concat(i8*, i8*) #${concat}`,
+      "declare void @nish_print(i8*) #1",
+      ...groups.map((g, n) => `attributes #${n} = ${g}`),
+      "",
+    ].join("\n")
+  const seed = module(1, ["{ nounwind }", "{ nounwind willreturn }"])
+  const head = module(0, ["{ nounwind }", "{ nounwind willreturn }"])
+  const entry = { function: "nish_str_concat", seed: "{ nounwind willreturn }", head: "{ nounwind }" }
+  const other = { function: "nish_print", seed: "{ nounwind willreturn }", head: "{ nounwind }" }
+  const undeclared = explainDifference(seed, head, [other])
+  const declared = explainDifference(seed, head, [entry])
+  const extra = explainDifference(seed, head.replace("ret i32 0", "ret i32 1"), [entry])
+  const stale = staleDeclarations([entry, other], declared.covered)
+  let declaredFailure = null
+  if (declared.undeclared !== null || !declared.covered.has(entry)) {
+    declaredFailure = `it was not explained: ${declared.undeclared}`
+  } else if (extra.undeclared === null) {
+    declaredFailure = "a module that also differs in an instruction was explained"
+  }
+  return [
+    [
+      "an undeclared attribute-group difference fails",
+      undeclared.undeclared === null ? "it was explained by a declaration for another function" : null,
+    ],
+    ["a declared attribute-group difference passes, and only that", declaredFailure],
+    [
+      "a declaration that matches nothing fails as stale",
+      stale.length === 1 && stale[0] === other ? null : `stale: ${JSON.stringify(stale)}`,
+    ],
+  ]
+}
+
+/** The declarations no difference in a run used, each of which fails it. */
+const staleDeclarations = (declarations, used) => declarations.filter((d) => !used.has(d))
+
+/**
  * The reference and the candidate this mode compares, resolved the way
  * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
  * `NISH_BOOTSTRAP` naming the seed. With no seed there is nothing to compare
@@ -508,6 +675,45 @@ const stage1Pair = ({ reference = null, candidate = null } = {}) => {
 }
 
 /**
+ * Whether every difference `compare` reported for one program is a declared
+ * one. `compare` leaves the two compilers' output in `<work>/reference` and
+ * `<work>/candidate` until its next call, so the texts are read from there,
+ * with each side's own root and version removed as `compare` removes them. A
+ * refusal, a missing module or a file that is not IR is never declared.
+ *
+ * Returns `{ covered, undeclared }`, as `explainDifference` does, over all of
+ * the program's modules.
+ */
+const explainAll = (pair, work, differences) => {
+  const covered = new Set()
+  for (const difference of differences) {
+    const read = (side) => {
+      const file = path.join(work, side, difference.surface)
+      return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null
+    }
+    const reference = read("reference")
+    const candidate = read("candidate")
+    if (!difference.surface.endsWith(".ll") || reference === null || candidate === null) {
+      return { covered, undeclared: `${difference.surface}: only IR both compilers wrote can be declared` }
+    }
+    const normal = (text, compiler) =>
+      cmp.withoutOwnVersion(cmp.withoutOwnRoot(text, compiler.packageRoot), compiler.version)
+    const one = explainDifference(
+      normal(reference, pair.reference),
+      normal(candidate, pair.candidate),
+      DECLARED
+    )
+    if (one.undeclared !== null) {
+      return { covered, undeclared: `${difference.surface}: ${one.undeclared}` }
+    }
+    for (const d of one.covered) {
+      covered.add(d)
+    }
+  }
+  return { covered, undeclared: null }
+}
+
+/**
  * The stage1 mode: generate `count` programs and require `IR(reference, p) ==
  * IR(candidate, p)` for each, byte for byte and module set included — the same
  * equality `tests/nish-cmp.js` asserts over the checked-in corpus, on programs
@@ -521,9 +727,11 @@ const stage1Pair = ({ reference = null, candidate = null } = {}) => {
  * mode is for is the emitter on shapes nobody wrote, and the WP8 generators
  * read the same checked program the corpus run already puts them through.
  *
- * Returns `{ seed, count, pair, agreed, files, lines, disagreements }`, where a
- * disagreement is `{ seed, verdict, detail, file }` and `file` is the saved
- * reproducer. `pair === null` means a compiler was missing or would not link
+ * Returns `{ seed, count, pair, agreed, declared, stale, files, lines,
+ * disagreements }`, where `declared` counts the programs whose only
+ * differences `DECLARED` names, `stale` lists the entries none of them used,
+ * and a disagreement is `{ seed, verdict, detail, file }` with `file` the
+ * saved reproducer. `pair === null` means a compiler was missing or would not link
  * and nothing was compared.
  */
 const stage1Run = ({
@@ -536,13 +744,26 @@ const stage1Run = ({
 } = {}) => {
   const pair = stage1Pair({ reference, candidate })
   if (pair.error !== undefined) {
-    return { seed, count, pair: null, error: pair.error, agreed: 0, files: 0, lines: 0, disagreements: [] }
+    return {
+      seed,
+      count,
+      pair: null,
+      error: pair.error,
+      agreed: 0,
+      declared: 0,
+      stale: [],
+      files: 0,
+      lines: 0,
+      disagreements: [],
+    }
   }
   const dir = path.join(lib.buildDir, "fuzz")
   fs.mkdirSync(dir, { recursive: true })
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fuzz-ir-"))
   const disagreements = []
+  const used = new Set()
   let agreed = 0
+  let declared = 0
   let files = 0
   let lines = 0
   for (let i = 0; i < count; i++) {
@@ -555,10 +776,18 @@ const stage1Run = ({
     // none of the outcomes below can happen for a benign reason: every verdict
     // other than an agreement is a failure worth saving.
     const entry = { seed: s, name: `fuzz/${s}`, verdict: "agree", detail: "", ms: Date.now() - t0, file }
-    if (result.differences !== undefined) {
+    const explained = result.differences === undefined ? null : explainAll(pair, work, result.differences)
+    if (explained?.undeclared === null) {
+      entry.verdict = "declared"
+      entry.detail = [...explained.covered].map((d) => `@${d.function} ${d.seed} -> ${d.head}`).join(", ")
+      for (const d of explained.covered) {
+        used.add(d)
+      }
+      declared++
+    } else if (result.differences !== undefined) {
       const first = result.differences[0]
       entry.verdict = first.surface === "exit" ? "refusal-differs" : "ir-mismatch"
-      entry.detail = `${first.surface}: ${first.detail}`
+      entry.detail = `${first.surface}: ${first.detail}\n${explained.undeclared}`
     } else if (result.refused !== undefined) {
       entry.verdict = "refused-by-both"
       entry.detail = result.refused
@@ -567,7 +796,7 @@ const stage1Run = ({
       files += result.files
       lines += result.lines
     }
-    if (entry.verdict !== "agree") {
+    if (entry.verdict !== "agree" && entry.verdict !== "declared") {
       const failFile = path.join(lib.buildDir, `fuzz-stage1-fail-${s}.ts`)
       fs.copyFileSync(file, failFile)
       entry.file = failFile
@@ -576,10 +805,11 @@ const stage1Run = ({
     log(entry)
   }
   fs.rmSync(work, { recursive: true, force: true })
-  return { seed, count, pair, agreed, files, lines, disagreements }
+  const stale = staleDeclarations(DECLARED, used)
+  return { seed, count, pair, agreed, declared, stale, files, lines, disagreements }
 }
 
-export { generateProgram, stage1Run }
+export { generateProgram, selfCheckDeclarations, stage1Run }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
@@ -629,7 +859,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     reference,
     candidate,
     log: (e) => {
-      const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase()
+      const tag = { agree: "ok  ", declared: "decl" }[e.verdict] ?? e.verdict.toUpperCase()
       // The detail is a bounded diff excerpt and therefore several lines;
       // indenting its continuations keeps one program to one visual block.
       const detail = e.detail ? `  ${e.detail.replace(/\n/g, "\n      ")}` : ""
@@ -641,7 +871,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   console.log(
-    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
+    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} declared=${res.declared} disagreements=${res.disagreements.length} stale=${res.stale.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
   )
   // The pair is part of the reproduction now that it is a parameter: a
   // failure against one seed release says nothing about another, and the
@@ -653,5 +883,18 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`      ${d.detail.replace(/\n/g, "\n      ")}`)
     console.log(`      reproduce: node tests/differential/fuzz.js --seed ${d.seed} --count 1${pairArgs}`)
   }
-  process.exit(res.disagreements.length === 0 ? 0 : 1)
+  for (const d of DECLARED) {
+    if (!res.stale.includes(d)) {
+      console.log(`  declared: @${d.function} ${d.seed} -> ${d.head} (${d.changelog}): ${d.why}`)
+    }
+  }
+  // A stale entry fails even a one-program reproduction that does not reach
+  // it; the line says which, so it does not read as the program's own fault.
+  for (const d of res.stale) {
+    console.log(
+      `  STALE: no program differs at @${d.function} ${d.seed} -> ${d.head}; the seed carries the change ` +
+        "or the generator no longer reaches it, so the declaration goes"
+    )
+  }
+  process.exit(res.disagreements.length === 0 && res.stale.length === 0 ? 0 : 1)
 }
