@@ -4989,7 +4989,9 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
   prints one line on stderr, `capabilities: fs.read (not deterministic)` or
   `capabilities: none (deterministic)`, before the program runs, and leaves its
   stdout alone. `--emit-capabilities` without a file is a usage error, exit 2,
-  and `nish run` refuses it as it refuses every product it keeps to itself.
+  and so is either flag with `--emit-ast`, which stops before the checker;
+  with `--emit-checked` both are answered beside the dump. `nish run` refuses
+  `--emit-capabilities` as it refuses every product it keeps to itself.
 
 ## Semantics decisions
 

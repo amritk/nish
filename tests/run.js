@@ -10747,8 +10747,7 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     "capabilities: an unlabelled builtin is an internal compiler error, exit 70, naming the builtin",
     ice.status === 70 &&
       ice.stderr.includes("internal compiler error") &&
-      ice.stderr.includes("a builtin call has no capability label in src/capabilities.ts") &&
-      ice.stderr.includes("the builtin: `readFileSync`") &&
+      ice.stderr.includes("a builtin call has no capability label in src/capabilities.ts: `readFileSync`") &&
       !fs.existsSync(path.join(capsDir, "ice.ll")),
     shown(ice)
   )
@@ -10759,8 +10758,12 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   )
   const iceObjects = diagnosticsOf(iceJson.stdout)
   check(
-    "capabilities: under --json the unlabelled builtin is one NL0003 object",
-    iceJson.status === 70 && iceObjects.length === 1 && iceObjects[0].code === "NL0003",
+    "capabilities: under --json the unlabelled builtin is one NL0003 object, and it names the builtin",
+    iceJson.status === 70 &&
+      iceObjects.length === 1 &&
+      iceObjects[0].code === "NL0003" &&
+      iceObjects[0].message ===
+        "internal compiler error: a builtin call has no capability label in src/capabilities.ts: `readFileSync`",
     shown(iceJson)
   )
   const unaffected = spawnSync(
@@ -10797,6 +10800,42 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       inRun.stderr.includes("`--emit-capabilities` cannot be used with `nish run`") &&
       !fs.existsSync(path.join(capsDir, "run.json")),
     shown(inRun)
+  )
+  // `--emit-ast` stops before the checker, so it has no capabilities to report.
+  for (const flag of [["--capabilities"], ["--emit-capabilities", path.join(capsDir, "ast.json")]]) {
+    const withAst = spawnSync(NISH, [path.join(casesDir, "caps_pure.ts"), "--emit-ast", ...flag], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `capabilities: ${flag[0]} with --emit-ast is a usage error, exit 2, and prints no tree`,
+      withAst.status === 2 &&
+        withAst.stdout === "" &&
+        withAst.stderr.includes(
+          `\`${flag[0]}\` reports on a checked program, and --emit-ast stops before the check`
+        ),
+      shown(withAst)
+    )
+  }
+  // `--emit-checked` does stop after it, and both are answered before the dump.
+  const withChecked = spawnSync(
+    NISH,
+    [
+      path.join(casesDir, "caps_env.ts"),
+      "--emit-checked",
+      "--capabilities",
+      "--emit-capabilities",
+      path.join(capsDir, "checked.json"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capabilities: with --emit-checked the line and the report still come, beside the dump",
+    withChecked.status === 0 &&
+      withChecked.stdout.includes("caps_env.ts") &&
+      withChecked.stderr.startsWith("capabilities: env (not deterministic)\n") &&
+      fs.existsSync(path.join(capsDir, "checked.json")),
+    shown(withChecked)
   )
   const summaryOf = (name) =>
     spawnSync(

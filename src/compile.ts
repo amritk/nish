@@ -534,6 +534,14 @@ export const main = (): number => {
     console.error(usageText())
     return 2
   }
+  // `--emit-ast` answers before the checker runs, and a capability is a fact
+  // about a checked program, so the two would otherwise meet in silence.
+  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine)) {
+    console.error(
+      `compile: \`${capabilitiesLine ? "--capabilities" : "--emit-capabilities"}\` reports on a checked program, and --emit-ast stops before the check`
+    )
+    return 2
+  }
   if (runMode) {
     if (notForRun.length > 0) {
       console.error(
@@ -645,6 +653,19 @@ export const main = (): number => {
   }
   reportPerformance(compilation, warnPerformance, json)
   reportPortability(compilation, json)
+  // WP35: read off the checked program, so answered here, before the dump
+  // returns and before `run` starts the program -- the line is the last
+  // thing on stderr before the program's own output.
+  if (capabilitiesLine) {
+    console.error(capabilitySummary(compilation))
+  }
+  if (capabilitiesFile.length > 0) {
+    if (!makeDirectoryFor(capabilitiesFile)) {
+      return 1
+    }
+    writeCapabilityReport(compilation, capabilitiesFile)
+    console.error(`wrote ${capabilitiesFile}`)
+  }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {
@@ -674,9 +695,6 @@ export const main = (): number => {
     return 1
   }
   const emitted = compilation.emit()
-  if (capabilitiesLine) {
-    console.error(capabilitySummary(compilation))
-  }
   if (runMode) {
     return runProgram(
       emitted,
@@ -715,13 +733,6 @@ export const main = (): number => {
   }
   if (anySidecar && !writeSidecars(compilation, fns)) {
     return 1
-  }
-  if (capabilitiesFile.length > 0) {
-    if (!makeDirectoryFor(capabilitiesFile)) {
-      return 1
-    }
-    writeCapabilityReport(compilation, capabilitiesFile)
-    console.error(`wrote ${capabilitiesFile}`)
   }
   if (link.length === 0) {
     return 0

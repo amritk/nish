@@ -44,11 +44,12 @@ import {
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
+import { isBuiltinFunction } from "./builtins"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
-import { internalErrorFor } from "./ice"
+import { unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -126,7 +127,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
-import { resultLayout } from "./result"
+import { isResultConstructor, resultLayout } from "./result"
 import {
   isInteger,
   K_ARRAY,
@@ -1316,23 +1317,20 @@ class FactCollector {
     const fused: FunctionSig[] | null =
       node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
-      this.addSigs(fused)
       for (const sig of fused) {
-        this.noteEdge(sig.name, node)
+        this.addUserCallee(sig.name, node)
       }
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
-        this.facts.callees.add(callee.name)
-        this.noteCallCapability(callee, node)
+        this.addCallee(callee, node)
       }
       // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
       // finds the key, that table's `valueAt` (`checkMapGet`).
       const reads: FunctionSig | null =
         callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null
       if (reads !== null) {
-        this.facts.callees.add(reads.name)
-        this.noteEdge(reads.name, node)
+        this.addUserCallee(reads.name, node)
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
@@ -1341,8 +1339,7 @@ class FactCollector {
       const read = program.nodeCallees[node.id]
       if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
-          this.facts.callees.add(sig.name)
-          this.noteEdge(sig.name, node)
+          this.addUserCallee(sig.name, node)
         }
       }
     }
@@ -1364,10 +1361,12 @@ class FactCollector {
   }
 
   /**
-   * WP35: a call to a user function is an edge a capability can arrive along.
-   * Round 2 only, as every capability fact is (`FunctionFacts.caps`).
+   * A call to a user function: a callee for the attribute fixpoint and, in
+   * round 2, an edge a capability can arrive along (WP35). One helper for
+   * both, so that no kind of call can reach the first and miss the second.
    */
-  noteEdge(callee: string, site: Node): void {
+  addUserCallee(callee: string, site: Node): void {
+    this.facts.callees.add(callee)
     if (this.known !== null) {
       this.facts.capCallees.push(callee)
       this.facts.capSites.push(site)
@@ -1375,52 +1374,36 @@ class FactCollector {
   }
 
   /**
-   * WP35: a call whose callee has a signature. A `declare function`'s body is
-   * C, so the call is where `ffi` is exercised and the chain ends there, named
-   * by the declaration as written; any other callee is an edge.
+   * A call whose callee has a signature. A `declare function`'s body is C, so
+   * the call is where `ffi` is exercised and the chain ends there, named by the
+   * declaration as written (WP35); any other callee is a user one.
    */
-  noteCallCapability(callee: FunctionSig, call: Node): void {
-    if (this.known === null) {
+  addCallee(callee: FunctionSig, call: Node): void {
+    if (!callee.foreign()) {
+      this.addUserCallee(callee.name, call)
       return
     }
-    if (callee.foreign()) {
+    this.facts.callees.add(callee.name)
+    if (this.known !== null) {
       this.facts.offerCapability(capabilityIndex(CAP_FFI), callee.sourceName, call, 0)
-    } else {
-      this.noteEdge(callee.name, call)
     }
   }
 
   /**
    * WP35: a builtin call, by the name the checker knows it by, seeds its one
-   * label (`builtinCapability`). A builtin with no row is a broken invariant
-   * rather than a program error — the table is meant to be total, and
-   * `tests/capabilities.js` holds it to that — so it ends the compile with the
-   * exit-70 report. `Options.unlabelledBuiltin` is the suite's way of
+   * label (`builtinCapability`); round 2 only, which its callers check. A
+   * builtin with no row is a broken invariant rather than a program error --
+   * the table is meant to be total, and `tests/capabilities.js` holds it to
+   * that -- so it ends the compile with the exit-70 report. `Options.unlabelledBuiltin` is the suite's way of
    * provoking that path (`NISH_SIMULATE_ICE=unlabelled:<name>`).
    */
   noteBuiltin(name: string, call: Node): void {
-    if (this.known === null) {
-      return
-    }
     const label = name === this.opts.unlabelledBuiltin ? CAP_UNLABELLED : builtinCapability(name)
     if (label === CAP_UNLABELLED) {
-      // The message is a literal and the name goes to stderr on its own, so
-      // no string built here is handed to a user function (see `internalErrorFor`).
-      const status = internalErrorFor(
-        "a builtin call has no capability label in src/capabilities.ts",
-        this.opts.json
-      )
-      console.error(`  the builtin: \`${name}\``)
-      process.exit(status)
+      process.exit(unlabelledBuiltinError(name, this.opts.json))
     }
     if (label !== CAP_NONE) {
       this.facts.offerCapability(capabilityIndex(label), name, call, 0)
-    }
-  }
-
-  addSigs(sigs: FunctionSig[]): void {
-    for (const sig of sigs) {
-      this.facts.callees.add(sig.name)
     }
   }
 
@@ -1444,7 +1427,10 @@ class FactCollector {
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       this.addCallees(builtinCallees(program, table, node))
-      this.noteBuiltin(`${node.children[0].children[0].text}.${node.children[0].text}`, node)
+      if (this.known !== null) {
+        // The name `builtinCallees` dispatches on, spelled the same way.
+        this.noteBuiltin(`${node.children[0].children[0].text}.${node.children[0].text}`, node)
+      }
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
       this.noteWrittenArguments(node)
@@ -1537,8 +1523,7 @@ class FactCollector {
       }
       const ctor = constructorOf(program, table, intrinsicType(program, node))
       if (ctor !== null) {
-        this.facts.callees.add(ctor.name)
-        this.noteEdge(ctor.name, node)
+        this.addUserCallee(ctor.name, node)
       }
       return
     }
@@ -1820,7 +1805,15 @@ class FactCollector {
     // it has not earned.
     const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
-    this.noteBuiltin(imported.length > 0 ? imported : node.children[0].text, node)
+    // Only a name the checker accepts as a builtin is audited: anything else
+    // with no recorded callee is no call this table speaks for.
+    const name = imported.length > 0 ? imported : node.children[0].text
+    if (
+      this.known !== null &&
+      (imported.length > 0 || isBuiltinFunction(name) || isResultConstructor(name))
+    ) {
+      this.noteBuiltin(name, node)
+    }
     if (imported.length > 0) {
       this.addCallees(
         imported.indexOf(".") < 0
@@ -1948,7 +1941,7 @@ const collectFacts = (
     // are this instance's, arriving at the declaration (no call names them).
     if (known !== null) {
       for (const callee of routeCalleesOf(table, sig)) {
-        collector.noteEdge(callee.name, sig.decl)
+        collector.addUserCallee(callee.name, sig.decl)
       }
     }
   }

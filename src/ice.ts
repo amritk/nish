@@ -168,6 +168,36 @@ export const internalErrorFor = (message: string, json: boolean): i32 => {
 }
 
 /**
+ * WP35: the report for a builtin the capability audit has no row for
+ * (`noteBuiltin` in `src/attributes.ts`), with the builtin named in the
+ * `--json` object as well as on stderr.
+ *
+ * Its own function rather than `internalErrorFor` with a built message, for
+ * the reason given there: the name is written in pieces, and stays in the
+ * frame. It needs none of the escapes, because a builtin's name is an
+ * identifier, or two joined by a dot, and neither holds a byte JSON escapes.
+ */
+export const unlabelledBuiltinError = (name: string, json: boolean): i32 => {
+  if (json) {
+    write('{"severity":"error","code":"')
+    write(INTERNAL)
+    write(
+      '","message":"internal compiler error: a builtin call has no capability label in src/capabilities.ts: `'
+    )
+    write(name)
+    write('`"}\n')
+  }
+  console.error(`${CLI} ${VERSION}: internal compiler error`)
+  console.error(`  a builtin call has no capability label in src/capabilities.ts: \`${name}\``)
+  console.error(
+    `  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`
+  )
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`)
+  console.error("the command line at https://github.com/amritk/nish/issues")
+  return EXIT_INTERNAL
+}
+
+/**
  * The same report for a caller with no command line to answer to. Its lines
  * are `internalErrorFor`'s written out again rather than a call to it, for the
  * reason given there -- passing `message` on would make it escape here -- and

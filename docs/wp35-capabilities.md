@@ -113,7 +113,8 @@ Three rows deserve their reason:
 **Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
 bit, `CAP_NONE` (0, the deliberate none) or `CAP_UNLABELLED` (-1). The walk in
 `src/attributes.ts` that meets a builtin call answering `CAP_UNLABELLED` is an
-internal compiler error (exit 70, `src/ice.ts`), and `tests/capabilities.js`
+internal compiler error (exit 70, `src/ice.ts`'s
+`unlabelledBuiltinError`, which names the builtin under `--json` too), and `tests/capabilities.js`
 enumerates every name the checker accepts — the plain callees of
 `isBuiltinFunction`, the conversions, the `nish:net` exports, the dotted list
 the checker's refusal names, the namespace properties, the `Result`
@@ -237,6 +238,9 @@ The stability promise, which `tests/nish/cli.ts` checks byte for byte:
   path. A standard-library module keeps its package-relative name
   (`std/threads.ts`), which is the name its diagnostics carry.
 - `at` is `path:line:column`, 1-based, at the start of the call.
+- `exported` is `true` in every entry of version 1, since only exported
+  functions and their instantiations are listed; it is there so that a later
+  version can list private functions without changing the shape.
 
 The report is laid out by `src/capability-report.ts`, which reads the masks
 and witnesses and decides nothing; the driver writes it after the IR, as it
@@ -247,7 +251,11 @@ the program runs — `capabilities: clock, fs.read (not deterministic)`, or
 `capabilities: none (deterministic)` — and then runs it as usual, so stdout
 stays the program's. The line is computed from the compile every run already
 does, because the IR is what names the cache entry, so the flag is not part of
-the run-cache key. Without `run` the same line is printed after the compile.
+the run-cache key. Without `run` the same line is printed once the program
+has checked. Both flags are answered there, after the checker and before the
+emitter, so `--emit-checked` still gets them; `--emit-ast` stops before the
+checker, and either flag beside it is a usage error rather than a report
+silently not written.
 
 ## 6. Cost
 
