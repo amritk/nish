@@ -62,7 +62,7 @@ import { elementLLVMType, elementStride, FieldInfo, inlineElementStruct, StructI
 import { Local, STORAGE_PARAM } from "./symbols"
 import { ARRAY_TYPE, EFFECT_WRITE } from "./runtime"
 import { elementTbaa, headerTbaa } from "./tbaa"
-import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32 } from "./types"
+import { ARRAY_STRUCT, intBits, isFloat, isUnsigned, T_F64, T_I32, T_STRING, T_U32, TypeTable } from "./types"
 
 const HEADER: string = ARRAY_STRUCT
 const HEADER_PTR: string = "%struct.nish_array*"
@@ -1023,19 +1023,36 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  *     which every bounds check then passed;
  *   - a float: `fptosi` of a NaN or of anything past 2^63 is poison;
  *   - a `u32` under `--number-mode i32`: above 2^31 - 1 it makes an array
- *     whose `length`, an `i32` there, reads back negative.
+ *     whose `length`, an `i32` there, reads back negative;
+ *   - an `i32`, or a ranged integer whose range reaches below zero: a negative
+ *     `n` sign-extends to a byte count past 2^63, the inline allocator's
+ *     rounding wraps on it, and the zero fill wrote until it faulted (CG-2).
+ *     The compare is the same unsigned one, so a negative `n` fails it.
  *
- * A `number` in i32 mode, a narrower unsigned and a ranged integer cannot
- * reach any of those. A literal is in range when it is at most 2^31 - 1.
+ * A narrower unsigned and a range that starts at zero or above cannot reach
+ * any of those. A literal is in range when it is at most 2^31 - 1.
  * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
  * the check is a call to a `noreturn` panic.
  */
-export const newArrayLengthChecked = (length: Node, type: i32, numberMode: i32): boolean => {
+export const newArrayLengthChecked = (
+  length: Node,
+  type: i32,
+  numberMode: i32,
+  table: TypeTable
+): boolean => {
   const literal = unwrapParens(length)
   if (literal.kind === N_NUMBER && numericLiteralValue(literal.text) <= toF64(I32_MAX)) {
     return false
   }
-  return isFloat(type) || intBits(type) === 64 || (type === T_U32 && numberMode === NUMBER_MODE_I32)
+  if (table.isRanged(type)) {
+    return table.rangeLo(type) < 0
+  }
+  return (
+    isFloat(type) ||
+    intBits(type) === 64 ||
+    type === T_I32 ||
+    (type === T_U32 && numberMode === NUMBER_MODE_I32)
+  )
 }
 
 /**
@@ -1065,7 +1082,7 @@ const emitLengthCheck = (emitter: Emitter, ok: string): void => {
 /** `n` of `new Array<T>(n)` as an `i64`, checked when `newArrayLengthChecked` says it must be. */
 const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string => {
   const type = emitter.typeOf(length)
-  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode)) {
+  if (!newArrayLengthChecked(length, type, emitter.opts.numberMode, emitter.table)) {
     return emitIndex(emitter, length)
   }
   const fn = emitter.fn
@@ -1090,10 +1107,8 @@ const emitNewArrayLength = (emitter: Emitter, length: Node, size: i32): string =
 
 /**
  * `new Array<T>(n)`: `n` zeroed elements, after the check
- * `newArrayLengthChecked` asks for. A negative `i32` `n` is not checked here:
- * it becomes a byte count past 2^63, and the inline allocator's rounding wraps
- * on it, so the memset faults rather than the arena refusing it
- * (docs/security/codegen.md, CG-2, open in `src/runtime.ts`).
+ * `newArrayLengthChecked` asks for, a negative `i32` `n` included
+ * (docs/security/codegen.md, CG-2).
  * `new Int32Array(n)` and friends are the same lowering with `T` fixed by the
  * checker.
  */

@@ -1526,7 +1526,7 @@ class FactCollector {
       // function `willreturn` exactly where the check is in its IR.
       if (node.kind === N_NEW) {
         const length = node.children[2].children[0]
-        if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode)) {
+        if (newArrayLengthChecked(length, program.nodeTypes[length.id], this.opts.numberMode, table)) {
           const tail: string[] = []
           panicTailCallees(tail)
           this.addCallees(tail)

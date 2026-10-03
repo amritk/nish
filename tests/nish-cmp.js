@@ -440,6 +440,32 @@ const CG4_MOVED = [
   "tests/link/tail_call_depth_debug/main.ts",
 ]
 
+/** CG-2: `new Array(n)` checks an `i32` `n`, and a ranged one that reaches below zero, before it allocates. */
+const CG2_MOVED = [
+  "bench/sieve.ts",
+  "docs/cookbook/arr-new.ts",
+  "docs/cookbook/arr-range-call.ts",
+  "examples/arrays.ts",
+  "tests/cases/arr_new_zeroed.ts",
+  "tests/cases/arr_repeat_check.ts",
+  "tests/cases/arr_sum.ts",
+  "tests/cases/arr_typed_views.ts",
+  "tests/cases/cg_sec_new_array_negative.ts",
+  "tests/cases/cg_sec_new_array_negative_f64.ts",
+  "tests/cases/map_fused_no_two_gets.ts",
+  "tests/cases/mem_loop_scope_chunk.ts",
+  "tests/cases/mem_scope_dynamic_array.ts",
+  "tests/cases/port_array_quiet.ts",
+  "tests/cases/port_array_zero_fill.ts",
+  "tests/link/cg_sec_new_array_negative/main.ts",
+  "tests/link/crypto_hmac_sha256_window/main.ts",
+  "tests/link/crypto_hmac_sha384_window/main.ts",
+  "tests/link/crypto_sha256_window/main.ts",
+  "tests/link/crypto_sha256_window_wrap/main.ts",
+  "tests/link/crypto_sha512_window/main.ts",
+  "tests/link/crypto_sha512_window_wrap/main.ts",
+]
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -2264,6 +2290,11 @@ const DECLARED = [
     CG4_MOVED,
     "CG-4",
     "a recursive function, or a caller of one, is no longer `willreturn`: nothing proves that a recursion ends"
+  ),
+  ...declareMoved(
+    CG2_MOVED,
+    "CG-2",
+    "its `new Array(n)` takes an `i32` `n`, which is now compared against the length limit, so a negative one panics with `array length out of range`"
   ),
 ]
 
