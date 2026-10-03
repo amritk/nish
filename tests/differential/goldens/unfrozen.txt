@@ -244,6 +244,7 @@ cases/panics_io_exit added after R6: no rewriter to freeze it with
 cases/panics_oom added after R6: no rewriter to freeze it with
 cases/panics_overflow added after R6: no rewriter to freeze it with
 cases/panics_overflow_proven added after R6: no rewriter to freeze it with
+cases/panics_overflow_via added after R6: no rewriter to freeze it with
 cases/panics_overflow_wrapping added after R6: no rewriter to freeze it with
 cases/panics_panic added after R6: no rewriter to freeze it with
 cases/panics_pop added after R6: no rewriter to freeze it with
