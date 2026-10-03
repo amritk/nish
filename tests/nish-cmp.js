@@ -1974,6 +1974,142 @@ const DECLARED = [
     changelog: "HKDF-Expand-Label for TLS 1.3 and QUIC",
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
+  {
+    program: "tests/cases/mem_using_arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: a `using a = arena()` block whose allocations are released when it ends, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_using_arena_or_return.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: `orReturn()` out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/mem_using_arena_tail.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: a tail call out of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/cases/perf_arena_using.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: the arena-loop warning's shape with the loop body in a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "docs/cookbook/mem-using-arena.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new cookbook snippet: a `using a = arena()` block in a scoped loop pass, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/link/arena_using_exit_paths/main.ts",
+    file: "exit",
+    changelog: "a checked arena bracket",
+    why: "a new program: every exit of a `using a = arena()` block, which the reference compiler refuses because it has no `arena()` builtin",
+  },
+  {
+    program: "tests/link/reject_typed_push_alias/main.ts",
+    file: "exit",
+    changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
+    why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
+  },
+  {
+    program: "tests/cases/secret_wipe.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: `nish:secret`'s `secret`, `expose`, `exposeWith` and `wipe`, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/cases/secret_flow.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: the ownership shapes `nish:secret` accepts, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/cases/secret_wipe_o2.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new program: a `wipe` of bytes nothing reads again, whose volatile store survives `opt -O2`; the reference compiler refuses it because it has no `nish:secret`",
+  },
+  {
+    program: "docs/cookbook/builtin-secret.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "a new cookbook entry for `nish:secret`, which the reference compiler refuses because it has no `nish:secret`",
+  },
+  {
+    program: "tests/link/crypto_p256/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_p256_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x25519/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x25519_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_audit/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_f64/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/link/crypto_x509_malformed/main.ts",
+    changelog: "key material the checker keeps in and wipes",
+    why: "std/crypto's private keys are `Secret<u8[]>` now, so the program reaches the module through an adapter that imports `nish:secret`, which the reference compiler refuses because it has no `nish:secret`; the vectors and the answers are unchanged",
+  },
+  {
+    program: "tests/cases/wipe_bytes.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",
+  },
+  {
+    program: "docs/cookbook/builtin-wipe.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
+  },
+  {
+    program: "tests/cases/net_tcp_connect.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: a Nish client and server in one loop through `tcpConnect` and `connectResult`, which the reference compiler refuses because it has neither builtin",
+  },
+  {
+    program: "tests/cases/net_tcp_connect_import.ts",
+    file: "exit",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "a new program: `tcpConnect` and `connectResult` imported from `nish:net`, which the reference compiler refuses because the module exports neither",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "Nish:net tcpConnect — the client half of TCP",
+    why: "`--runtime-decls` declares every runtime function in table order, and the table gains `nish_tcp_connect` and `nish_connect_result` after `nish_net_close`, which moves every declaration after them",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

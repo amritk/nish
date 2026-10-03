@@ -1,0 +1,2 @@
+reject_wipe_region.ts:19:5
+`secureZero` writes memory a task of `s` may read, before the scope joins

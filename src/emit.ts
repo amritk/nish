@@ -30,6 +30,8 @@
 //     parameters at `emitFunction`, the `!dbg` location around every statement
 //     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
+import { emitWipeBody } from "./emit-secret"
+import { SECRET_WIPE, secretRoleOf } from "./secret"
 import {
   functionAttributes,
   paramAttributes,
@@ -229,10 +231,13 @@ export class Emitter {
    * WP29 P2: each scope a `using` declaration opened and its block has not
    * yet closed, innermost last, as the `i8*` its tasks are filed under, and
    * how many loops enclosed it — which is how a `break` or `continue` knows
-   * which scopes it leaves (`emitScopeJoins`).
+   * which scopes it leaves (`emitScopeJoins`). An entry of `openScopeArenas`
+   * is true for a `using a = arena()` instead, whose value is the `i64` mark
+   * its block releases to.
    */
   openScopes: string[]
   openScopeLoops: i32[]
+  openScopeArenas: boolean[]
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[]
   slotNames: string[]
@@ -255,11 +260,13 @@ export class Emitter {
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
   /**
-   * WP32: `std/collections.ts`, whose functions this module's code reaches are
-   * emitted into this module as `internal` copies (`src/emit-map.ts`), or
-   * `null` when the program never named `Map` or `Set`.
+   * WP32: the libraries whose functions this module's code reaches are emitted
+   * into this module as `internal` copies (`src/emit-map.ts`):
+   * `std/collections.ts` when the program named `Map` or `Set`, and
+   * `std/secret.ts` when it imported `nish:secret`. Either writes no `.ll` of
+   * its own.
    */
-  library: CheckedProgram | null
+  libraries: CheckedProgram[]
 
   constructor(
     unit: AnalysisUnit,
@@ -267,7 +274,7 @@ export class Emitter {
     opts: Options,
     runtime: RuntimeTable,
     facts: FactsTable,
-    library: AnalysisUnit | null
+    libraries: AnalysisUnit[]
   ) {
     this.program = unit.program
     this.table = table
@@ -284,6 +291,7 @@ export class Emitter {
     this.loops = []
     this.openScopes = []
     this.openScopeLoops = []
+    this.openScopeArenas = []
     this.slotLocals = []
     this.slotNames = []
     this.maybeLocals = []
@@ -296,7 +304,10 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
-    this.library = library === null ? null : library.program
+    this.libraries = []
+    for (const library of libraries) {
+      this.libraries.push(library.program)
+    }
     if (opts.debugInfo) {
       this.debug = new DebugInfo(this.module, this.program, table)
     }
@@ -343,9 +354,8 @@ export class Emitter {
     if (entry !== null) {
       this.module.addFunction(this.emitEntryWrapper(entry))
     }
-    // WP32: what this module's code reaches of `std/collections.ts`.
-    const library = this.library
-    if (library !== null) {
+    // WP32: what this module's code reaches of `std/collections.ts`, and of `std/secret.ts`.
+    for (const library of this.libraries) {
       emitLibraryCopies(this, library, libraryReach(this, library))
     }
     this.emitImportDeclarations()
@@ -440,6 +450,7 @@ export class Emitter {
     this.loops = []
     this.openScopes = []
     this.openScopeLoops = []
+    this.openScopeArenas = []
     this.current = facts
     this.currentSig = sig
     this.tailCallId = -1
@@ -482,8 +493,11 @@ export class Emitter {
       emitConstructorPrologue(this, sig)
     }
     const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3]
-    // A concise arrow body is the one `return` it means.
-    if (body.kind === N_BLOCK) {
+    // A concise arrow body is the one `return` it means; `nish:secret`'s
+    // `wipe` has a body only the emitter can write (`src/emit-secret.ts`).
+    if (secretRoleOf(sig) === SECRET_WIPE) {
+      emitWipeBody(this, sig)
+    } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {
       this.emitReturnValue(body)
@@ -559,10 +573,15 @@ export class Emitter {
       return false
     }
     // The release a tail call sinks ahead of itself is a pass's too, inside a
-    // scoped loop, and the callee reading the bump position is what
-    // `marksTailCall` refuses for the function's scope.
+    // scoped loop, and a `using a = arena()` block's inside one, and the
+    // callee reading the bump position is what `marksTailCall` refuses for
+    // the function's scope.
     const g = this.facts.get(callee.name)
-    if (this.outermostPass() !== null && g !== null && g.readsArenaState) {
+    if (
+      (this.outermostPass() !== null || this.outermostArenaBlock() >= 0) &&
+      g !== null &&
+      g.readsArenaState
+    ) {
       return false
     }
     this.tailCallId = inner.id
@@ -592,10 +611,33 @@ export class Emitter {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return
     }
-    const pass = this.outermostPass()
-    if (pass !== null) {
-      this.releasePass(pass)
+    // The outermost `using a = arena()` is the lowest mark unless a scoped
+    // pass encloses it: a pass's mark is taken at the top of its body, so a
+    // block opened under fewer loops than the pass's own depth is inside it.
+    const block = this.outermostArenaBlock()
+    let depth = 0
+    while (depth < this.loops.length && !this.loops[depth].scopesPass()) {
+      depth = depth + 1
     }
+    if (block >= 0 && depth >= this.openScopeLoops[block]) {
+      this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 ${this.openScopes[block]})`)
+      return
+    }
+    if (depth < this.loops.length) {
+      this.releasePass(this.loops[depth])
+    }
+  }
+
+  /** The index of the outermost open `using a = arena()` among `openScopes`, or -1. */
+  outermostArenaBlock(): i32 {
+    let i = 0
+    while (i < this.openScopeArenas.length) {
+      if (this.openScopeArenas[i]) {
+        return i
+      }
+      i = i + 1
+    }
+    return -1
   }
 
   /**
@@ -702,10 +744,14 @@ export class Emitter {
     }
   }
 
-  /** WP32: whether `sig` is a function of `std/collections.ts`, which this module copies rather than links against. */
+  /** WP32: whether `sig` is a function of a library this module copies rather than links against. */
   isLibraryCopy(sig: FunctionSig): boolean {
-    const library = this.library
-    return library !== null && sig.definedIn(library.source)
+    for (const library of this.libraries) {
+      if (sig.definedIn(library.source)) {
+        return true
+      }
+    }
+    return false
   }
 
   declareAll(sigs: FunctionSig[], seen: StringSet): void {
@@ -1005,8 +1051,9 @@ export class Emitter {
   emitReturn(stmt: Node): void {
     // WP29 P2: every scope open here joins before the value is computed, so
     // the value may read what the tasks stored, and inside every arena scope
-    // the exit is about to release.
-    emitScopeJoins(this, 0)
+    // the exit is about to release. A `using a = arena()` releases after the
+    // value, in `emitScopeExit`, because the value may read what it allocated.
+    emitScopeJoins(this, 0, false)
     const value = stmt.children[0]
     if (value.kind === N_EMPTY) {
       this.emitScopeExit()
@@ -1425,8 +1472,8 @@ export const emitProgram = (
   opts: Options,
   runtime: RuntimeTable,
   facts: FactsTable,
-  library: AnalysisUnit | null
+  libraries: AnalysisUnit[]
 ): string => {
-  const emitter = new Emitter(unit, table, opts, runtime, facts, library)
+  const emitter = new Emitter(unit, table, opts, runtime, facts, libraries)
   return emitter.emitModule()
 }

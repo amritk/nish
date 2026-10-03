@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entry": "caps_fs_write.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read", "fs.write"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read", "fs.write"],
+      "modules": [
+        {
+          "path": "caps_fs_write.ts",
+          "capabilities": ["fs.read", "fs.write"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read", "fs.write"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "caps_fs_write.ts:12:15", "calls": "readFileSync" }
+                ],
+                "fs.write": [
+                  { "function": "main", "at": "caps_fs_write.ts:11:3", "calls": "save" },
+                  { "function": "save", "at": "caps_fs_write.ts:6:3", "calls": "writeFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

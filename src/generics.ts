@@ -25,6 +25,7 @@
 //     and it is refused by name. The caps are the backstop for anything the
 //     rule does not see, and they say they are a limit rather than a rule.
 
+import { isNishSourceModule } from "./nish-modules"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer } from "./annotations"
@@ -33,9 +34,26 @@ import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
-import { annotationSpelling } from "./arrays"
+import {
+  annotationName,
+  annotationSpelling,
+  peelSpelling,
+  spellAnnotation,
+  typedArraySpelling,
+} from "./arrays"
 import { StringMap, StringSet } from "./map"
 import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
+import {
+  isSecretPayload,
+  isSecretTemplate,
+  recordExposeCall,
+  SECRET_EXPOSE,
+  SECRET_EXPOSE_WITH,
+  secretArgumentRefusal,
+  secretArgumentShapeMessage,
+  secretRoleOf,
+  secretShapeMessage,
+} from "./secret"
 import {
   collectMethodSignature,
   collectStructMembers,
@@ -702,7 +720,13 @@ export const deferInstantiation = (ctx: CheckContext, imp: ImportBinding, writte
     }
   }
   ctx.program.deferredInstances.push(new DeferredInstance(imp, args, at))
-  return instanceStructType(ctx.table, imp.importedName, args)
+  const type = instanceStructType(ctx.table, imp.importedName, args)
+  // `nish:secret`: the id is a `Secret` from the moment it is written, so a
+  // signature's `Secret<u8[]>[]` is refused before the request is answered.
+  if (isNishSourceModule(imp.specifier) && imp.importedName === "Secret" && args.length === 1) {
+    ctx.table.markSecret(type, args[0])
+  }
+  return type
 }
 
 /**
@@ -917,6 +941,20 @@ const instantiateStructHere = (
       return null
     }
   }
+  // `nish:secret`: what a `Secret` may hold, and that no other class may hold
+  // one, are both asked of the arguments where the type was written.
+  if (isSecretTemplate(template)) {
+    if (args.length === 1 && args[0] !== T_ERROR && !isSecretPayload(site.asker, args[0])) {
+      site.asker.error(at, secretShapeMessage(ctx.table, args[0]))
+      return null
+    }
+  } else {
+    const holding = secretArgumentRefusal(ctx.table, template.sourceName, args)
+    if (holding.length > 0) {
+      site.asker.error(at, holding)
+      return null
+    }
+  }
   adoptArgumentLayouts(ctx, args, site)
   // WP18 G6: before the tuple is looked up, so every request is held to the
   // constraint where it was written, not only the first one to name the tuple.
@@ -1000,6 +1038,9 @@ const instantiateStructHere = (
   info.exported = template.exported
   const instance = new StructInstantiation(template, args, info, bindings)
   instance.from = site.fromStruct
+  if (isSecretTemplate(template) && args.length === 1) {
+    ctx.table.markSecret(type, args[0])
+  }
   template.count = template.count + 1
   // Registered before the members are collected, so a field that mentions the
   // struct's own instantiation (`next: Node<i32> | null`) finds it rather than
@@ -1381,6 +1422,12 @@ export const checkGenericCall = (
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }
+  // `nish:secret`: what `secret` may wrap and what `wipe` can zero, said at the
+  // argument rather than inside the instance the call would have made.
+  const secretRefusal = secretArgumentShapeMessage(ctx, template, tuple)
+  if (secretRefusal.length > 0) {
+    return ctx.errorType(args.children[0], secretRefusal)
+  }
   const sig = instantiate(ctx, template, tuple, functions, expr)
   if (sig === null) {
     return T_ERROR
@@ -1409,6 +1456,11 @@ export const checkGenericCall = (
   // question about the whole program, so it is asked once the fixpoint has an
   // answer (`Compilation.checkParallel`); the call is where it will be told.
   recordParallelCall(ctx.program, expr, sig)
+  // `nish:secret`: an `expose` is judged once the facts are in (`Compilation.checkSecrets`).
+  const role = secretRoleOf(sig)
+  if (role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH) {
+    recordExposeCall(ctx.program, expr, sig)
+  }
   return sig.returnType
 }
 
@@ -1859,6 +1911,7 @@ const liftArrow = (
   fn.role = ROLE_FUNCTION
   fn.lifted = true
   fn.returnType = returnType < 0 ? T_ERROR : returnType
+  fn.returnSpelling = annotationSpelling(ctx, true, arrow.children[2])
   const scope = new Scope(null)
   let k = 0
   for (const param of arrow.children[1].children) {
@@ -2468,8 +2521,64 @@ export const isParameterValue = (ctx: CheckContext, expr: Node, scope: Scope): b
   return isBareName(node) && ctx.typeBindings.has(node.text)
 }
 
+/**
+ * WP33 R2 (#347): the typed-array name a call of a generic function gives
+ * its result, or `""`: the return type is spelled with each type parameter
+ * standing for the spelling of the argument that binds it, so `first(rows)`
+ * over `rows: Float64Array[]`, with `first<T>(xs: T[]): T`, is a
+ * `Float64Array` to TypeScript and has no `pop`. It is the call site's
+ * spelling, not the instantiation's, because a `Float64Array[]` and an
+ * `f64[][]` argument are one type and so share one instantiation. A
+ * parameter whose annotation is not a bare `T` behind its levels binds
+ * nothing here, which leaves its `T` unspelled.
+ */
+export const genericCallSpelling = (
+  ctx: CheckContext,
+  call: Node,
+  callee: FunctionSig,
+  scope: Scope
+): string => {
+  const decl = callee.decl
+  if (callee.instance === null || decl.kind === N_CONSTRUCTOR) {
+    return ""
+  }
+  const names = collectTypeParamNames(decl)
+  // A return type that is not a type parameter behind its levels has no
+  // spelling to bind, so its arguments are not worth spelling.
+  const returned = annotationName(decl.children[2], [])
+  if (returned === null || indexOfName(names, returned.text) < 0) {
+    return ""
+  }
+  const spellings: string[] = []
+  while (spellings.length < names.length) {
+    spellings.push("")
+  }
+  const params = decl.children[1].children
+  const args = call.children[1].children
+  let i = 0
+  while (i < params.length && i < args.length) {
+    // Read before the calls below, which drop what the loop test proved.
+    const param = params[i]
+    const arg = args[i]
+    const levels: string[] = []
+    const at = annotationName(param.children[1], levels)
+    const k = at === null ? -1 : indexOfName(names, at.text)
+    if (k >= 0 && k < spellings.length && spellings[k].length === 0) {
+      let spelled = typedArraySpelling(ctx, arg, scope)
+      for (const level of levels) {
+        spelled = peelSpelling(spelled, level)
+      }
+      if (k < spellings.length) {
+        spellings[k] = spelled
+      }
+    }
+    i = i + 1
+  }
+  return spellAnnotation(ctx, null, decl.children[2], names, spellings)
+}
+
 /** The position of `name` in `names`, or -1. */
-const indexOfName = (names: string[], name: string): i32 => {
+export const indexOfName = (names: string[], name: string): i32 => {
   let i = 0
   while (i < names.length) {
     if (names[i] === name) {

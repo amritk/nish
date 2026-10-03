@@ -1,0 +1,1 @@
+`stamp` is called inside the `using arena()` block at 15:5 and stores an allocation into memory, where this analysis stops following it: what it stores may be the block's and outlive the release

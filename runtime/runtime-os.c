@@ -34,6 +34,7 @@
    the LEGACY symbol, for which a NULL second argument is undefined. */
 #define _XOPEN_SOURCE 700
 #include <dirent.h>
+#include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -58,6 +59,11 @@ extern char **environ;
    (<sys/fcntl.h>: 0x00000100). Linux and WASI declare it at POSIX 2008. */
 #if defined(__APPLE__) && !defined(O_NOFOLLOW)
 #define O_NOFOLLOW 0x00000100
+#endif
+/* `O_CLOEXEC` is POSIX 2008 and declared at that level everywhere; the
+   fallback is for an older Darwin SDK, with its value from the same header. */
+#if defined(__APPLE__) && !defined(O_CLOEXEC)
+#define O_CLOEXEC 0x01000000
 #endif
 
 /* The same spelling runtime.c uses for its own cold paths: a function that
@@ -96,9 +102,16 @@ static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
  * narrower guard would have made it `null` here and split the two compilers
  * again for the entry a command line can name. `fstat` on the descriptor
  * rather than `stat` on the path, so the answer is about the file that was
- * opened and not about whatever the name means a moment later. */
+ * opened and not about whatever the name means a moment later.
+ *
+ * The descriptor is `O_CLOEXEC` (docs/security/runtime.md, RT-12): a child
+ * that a `scope()` task spawns while another task reads would otherwise
+ * inherit it. A `pread` that a signal interrupts before it moves a byte is
+ * retried rather than taken for the end of the file (RT-13). A local disk
+ * never interrupts one, but FUSE and NFS can, and stopping there would hand
+ * back the bytes so far as the whole file. */
 nish_str *nish_read_file_or_null(const nish_str *path) {
-  int fd = open(nish_cpath(path), O_RDONLY);
+  int fd = open(nish_cpath(path), O_RDONLY | O_CLOEXEC);
   if (fd < 0) return 0;
   struct stat st;
   off_t len = fstat(fd, &st) == 0 && !S_ISDIR(st.st_mode) ? lseek(fd, 0, SEEK_END) : -1;
@@ -114,7 +127,13 @@ nish_str *nish_read_file_or_null(const nish_str *path) {
   nish_str *s = nish_alloc_struct(8 + len + 1);
   uint64_t got = 0;
   ssize_t n;
-  while ((n = pread(fd, s->data + got, len - got, got)) > 0) got += n;
+  while ((n = pread(fd, s->data + got, len - got, got)) != 0) {
+    if (n > 0) {
+      got += n;
+    } else if (errno != EINTR) {
+      break;
+    }
+  }
   close(fd);
   s->len = got;
   s->data[got] = 0;
@@ -147,14 +166,21 @@ nish_str *nish_read_file(const nish_str *path) {
    followed to whatever file it names. `nish file.ts` writes `file.ll` beside
    its source, so a link planted at that name in a checkout would otherwise
    truncate any file the user can write. A link among the directories on the
-   way is still followed. */
+   way is still followed.
+
+   `O_CLOEXEC` for the reason the read has it (RT-12), and `EINTR` is retried
+   as the read retries it (RT-13): a write cut short is finished, and one that
+   fails is `cannot write`, never a silently short file. */
 static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
-  int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | flags, 0644);
+  int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, 0644);
   if (fd < 0) nish_io_fail("write ", path);
   for (uint64_t done = 0; done < data->len;) {
     ssize_t n = write(fd, data->data + done, data->len - done);
-    if (n <= 0) nish_io_fail("write ", path);
-    done += n;
+    if (n > 0) {
+      done += n;
+    } else if (n == 0 || errno != EINTR) {
+      nish_io_fail("write ", path);
+    }
   }
   close(fd);
 }
@@ -214,24 +240,22 @@ static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, cons
     if (v[i] != s[i]->data) return -1;
   }
   v[i] = 0;
+  /* One list of file actions whether or not a stream is redirected: an empty
+     list is the same spawn as none, and one path through is less code than
+     creating the list only when a stream needs it. */
   posix_spawn_file_actions_t fa;
-  posix_spawn_file_actions_t *fap = 0;
+  if (posix_spawn_file_actions_init(&fa)) return -1;
   const nish_str *to[2] = { out, err };
   for (int k = 0; k < 2; k++) {
-    if (!to[k]) continue;
-    if (!fap) {
-      if (posix_spawn_file_actions_init(&fa)) return -1;
-      fap = &fa;
-    }
     /* The child opens the file, not this process: a redirect that this process
        performed would have to be undone afterwards, and a failed open would
        leave its own stdout pointing at the file. */
-    posix_spawn_file_actions_addopen(fap, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+    if (to[k]) posix_spawn_file_actions_addopen(&fa, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
   pid_t pid;
   int status;
-  int failed = posix_spawnp(&pid, v[0], fap, 0, v, environ);
-  if (fap) posix_spawn_file_actions_destroy(fap);
+  int failed = posix_spawnp(&pid, v[0], &fa, 0, v, environ);
+  posix_spawn_file_actions_destroy(&fa);
   if (failed) return -1;
   if (waitpid(pid, &status, 0) < 0) return -1;
   return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
@@ -329,6 +353,10 @@ int64_t nish_monotonic_nanos(void) {
   return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
+/* A C string copied into the arena, or NULL for NULL: the shape of every
+   answer libc hands back by pointer, `getenv`'s here and `realpath`'s below. */
+static nish_str *nish_str_or_null(const char *v) { return v ? nish_str_new(v, strlen(v)) : 0; }
+
 /* ---- The environment (WP19 R1): `getenv(name)`, the one environment read the
    language has. A driver needs it to honour `CC` the way `scripts/build.sh`
    does before it spawns that script, which is the whole reason it exists.
@@ -340,8 +368,7 @@ int64_t nish_monotonic_nanos(void) {
    string with the lifetime every other one has. NULL for an unset variable,
    which is the language's `string | null`. Contract: nish.h. */
 nish_str *nish_getenv(const nish_str *name) {
-  const char *v = getenv(nish_cpath(name));
-  return v ? nish_str_new(v, strlen(v)) : 0;
+  return nish_str_or_null(getenv(nish_cpath(name)));
 }
 
 /* ---- Symlinks (WP19 §5a item 4): `realpathSync(path)`, the one path
@@ -380,7 +407,7 @@ nish_str *nish_realpath(const nish_str *path) {
   return 0;
 #else
   char buf[PATH_MAX];
-  return realpath(nish_cpath(path), buf) ? nish_str_new(buf, strlen(buf)) : 0;
+  return nish_str_or_null(realpath(nish_cpath(path), buf));
 #endif
 }
 

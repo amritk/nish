@@ -68,6 +68,10 @@ const DEFAULT_CLI: string = "build/nish";
 const FIXTURE_OK: string = "ok.ts";
 /** A program with two errors in it, so "one object per diagnostic" is a countable claim. */
 const FIXTURE_BAD: string = "bad.ts";
+/** A loose equality, the diagnostic with a fix: `--fix` rewrites a copy of it, never this file. */
+const FIXTURE_FIX: string = "fix.ts";
+/** A `throw`, a diagnostic no fix is safe for. */
+const FIXTURE_NOFIX: string = "nofix.ts";
 /** A program that compiles and earns a WP15 §8 warning, which is a diagnostic on a program that is fine. */
 const FIXTURE_WARN: string = "warn.ts";
 
@@ -89,6 +93,9 @@ const advertisedFlags = (): string[] => [
   "--target",
   "--profile",
   "--warn-portability",
+  "--fix",
+  "--emit-capabilities",
+  "[--capabilities]",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -248,7 +255,7 @@ class Cli {
 }
 
 /**
- * The three fixtures, written rather than pointed at: a check that asserts the
+ * The fixtures, written rather than pointed at: a check that asserts the
  * line a diagnostic names should own the file that line is in, and a corpus case
  * edited for its own reasons would move it.
  */
@@ -269,6 +276,15 @@ const writeFixtures = (): void => {
       "};",
       "",
     ].join("\n")
+  );
+  // `==` at line 2, columns 12 to 14: the fix's position is pinned to the column.
+  writeFileSync(
+    `${WORK}/${FIXTURE_FIX}`,
+    ["export const same = (a: i32, b: i32): boolean => {", "  return a == b;", "};", ""].join("\n")
+  );
+  writeFileSync(
+    `${WORK}/${FIXTURE_NOFIX}`,
+    ["export const fail = (): i32 => {", '  throw new Error("no");', "};", ""].join("\n")
   );
   // WP15 §8: a `new Array<T>(n)` whose length is not a literal cannot be an
   // alloca, so this loop bumps one out of the arena every pass and nothing keeps
@@ -465,6 +481,51 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
 };
 
 /**
+ * The machine-applicable fix: `fix` on the object, after `message`, with the
+ * exact span of the token it replaces — and no `fix` key at all, rather than an
+ * empty one, on a diagnostic no fix is safe for. Then `--fix` itself: it rewrites
+ * a copy of the file, answers like a clean compile, and refuses `-o`.
+ */
+const checkFixField = (t: Suite, cli: Cli): void => {
+  const loose = cli.plain("fix_json", [`${WORK}/${FIXTURE_FIX}`, "--json", "-o", `${WORK}/fix.ll`]);
+  t.eqI32("a loose equality is refused with exit 1", loose.status, 1);
+  const objects = cliObjectLines(loose.stdout);
+  if (t.eqI32("as one object", toI32(objects.length), 1)) {
+    t.eqStr(
+      "which carries `fix`: the span of `==` alone, replaced by `===`",
+      cliField(objects[0], "fix"),
+      '[{"line":2,"column":12,"endLine":2,"endColumn":14,"text":"==="}]'
+    );
+    t.eqBool("and `fix` is the last key, after `message`", objects[0].endsWith("]}"), true);
+  }
+
+  const thrown = cli.plain("nofix_json", [`${WORK}/${FIXTURE_NOFIX}`, "--json", "-o", `${WORK}/nofix.ll`]);
+  const thrownObjects = cliObjectLines(thrown.stdout);
+  if (t.eqI32("a `throw` is one object", toI32(thrownObjects.length), 1)) {
+    t.eqStr("with no `fix` key, rather than an empty one", cliField(thrownObjects[0], "fix"), "<absent>");
+  }
+
+  const copy = `${WORK}/fix_copy.ts`;
+  writeFileSync(copy, readOrEmpty(`${WORK}/${FIXTURE_FIX}`));
+  const fixed = cli.plain("fix_apply", ["--fix", "--json", copy]);
+  t.eqI32("--fix exits 0 once every diagnostic is fixed", fixed.status, 0);
+  t.eqStr("and prints no object, because none is left", trim(fixed.stdout), "");
+  t.contains("and rewrote the file", readOrEmpty(copy), "return a === b;");
+
+  const withOutput = cli.plain("fix_output", ["--fix", copy, "-o", `${WORK}/fix_copy.ll`]);
+  t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
+  t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
+
+  // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
+  const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
+  t.eqI32("`nish run --fix` is a usage error, exit 2", underRun.status, 2);
+  t.eqBool("refused as a run, naming --fix", underRun.stderr.startsWith("run: `--fix` cannot be used"), true);
+  const underRunOutput = cli.plain("fix_run_output", ["run", "--fix", "-o", `${WORK}/fix_copy.ll`, copy]);
+  t.eqI32("`nish run --fix -o` is a usage error, exit 2", underRunOutput.status, 2);
+  t.eqBool("refused as a run too, not as a compile", underRunOutput.stderr.startsWith("run: "), true);
+};
+
+/**
  * The WP33 portability warning, which is off unless asked for: under
  * `--warn-portability --json` it is one more object, after the performance
  * warning, with a `severity` of its own — and the program still compiles.
@@ -488,6 +549,86 @@ const checkPortabilityObjects = (t: Suite, cli: Cli): void => {
   }
   t.eqStr("whose severity is `portability`", cliField(objects[1], "severity"), "portability");
   t.eqStr("and whose code is the zero-fill row's", cliField(objects[1], "code"), "NL8005");
+};
+
+/**
+ * WP35, the capability report: the one surface this file pins byte for byte,
+ * because its stability is the promise (docs/wp35-capabilities.md §5). A tool
+ * diffs it in CI, so the key order, the sorted arrays, the relative paths and
+ * the trailing newline are the contract and not its wording. The golden is the
+ * corpus case's own, `tests/cases/caps_generic.caps.json`, compiled here from
+ * the same path, and the paths in it are relative to the entry's directory, so
+ * where this file sits does not move a byte.
+ *
+ * The summary line `--capabilities` prints is pinned exactly too, on stderr
+ * with stdout untouched, in a compile and before a `nish run` starts the
+ * program; the run is one counted skip without env(1) or a C compiler.
+ */
+const checkCapabilities = (t: Suite, cli: Cli, env: boolean): void => {
+  const source = "tests/cases/caps_generic.ts";
+  const report = `${WORK}/caps.json`;
+  const noFile = cli.plain("caps_no_file", [source, "--emit-capabilities"]);
+  t.eqI32("--emit-capabilities with no file is a usage error, exit 2", noFile.status, 2);
+  t.contains("and names the flag", noFile.stderr, "--emit-capabilities needs a file");
+  t.eqStr("and says nothing on stdout", trim(noFile.stdout), "");
+
+  removeTree(report);
+  const run = cli.plain("caps_report", [source, "-o", `${WORK}/caps.ll`, "--emit-capabilities", report]);
+  if (!t.eqI32("--emit-capabilities exits 0", run.status, 0)) {
+    return;
+  }
+  t.eqStr("and leaves stdout empty", trim(run.stdout), "");
+  t.contains("and says on stderr where it wrote the report", run.stderr, `wrote ${report}`);
+  const got = readOrEmpty(report);
+  const want = readOrEmpty("tests/cases/caps_generic.caps.json");
+  t.eqLines("the report is the golden, line for line", splitLines(got), splitLines(want));
+  t.eqBool("and byte for byte, the trailing newline included", got === want && got.endsWith("}\n"), true);
+  t.eqStr("its version is 1", jsonFieldOr(got, "version"), "1");
+  t.eqStr("its entry is named from its own directory", jsonFieldOr(got, "entry"), "caps_generic.ts");
+
+  const pure = cli.plain("caps_line_pure", ["tests/cases/caps_pure.ts", "-o", `${WORK}/caps.ll`, "--capabilities"]);
+  t.eqStr(
+    "--capabilities prints `none (deterministic)` for a program that reaches nothing",
+    firstLine(pure.stderr),
+    "capabilities: none (deterministic)"
+  );
+  t.eqStr("and nothing on stdout", trim(pure.stdout), "");
+  const loud = cli.plain("caps_line_loud", [source, "-o", `${WORK}/caps.ll`, "--capabilities"]);
+  t.eqStr(
+    "--capabilities names the program's set, in the fixed order",
+    firstLine(loud.stderr),
+    "capabilities: fs.read (not deterministic)"
+  );
+
+  if (!env) {
+    t.skip("nish run --capabilities", "needs env(1) to set XDG_CACHE_HOME, and the probe did not find one");
+    return;
+  }
+  const abs = realpathSync(WORK);
+  if (abs === null) {
+    t.fail("nish run --capabilities", `cannot resolve ${WORK}`);
+    return;
+  }
+  const ran = cli.run("caps_run", [`XDG_CACHE_HOME=${abs}/caps-cache`], ["run", "--capabilities", "tests/cases/caps_pure.ts"]);
+  if (ran.status === 3 && contains(ran.stderr, "no usable C compiler")) {
+    t.skip("nish run --capabilities", "no C compiler, so nothing can be linked");
+    return;
+  }
+  t.eqI32("nish run --capabilities runs the program, and answers its status", ran.status, 0);
+  t.eqStr("and prints exactly the one line on stderr", ran.stderr, "capabilities: none (deterministic)\n");
+  t.eqStr("and leaves the program's stdout alone", ran.stdout, "true\n6\n3.5\n");
+};
+
+/** The first line of a captured stream, without its newline. */
+const firstLine = (text: string): string => {
+  const lines = splitLines(text);
+  return lines.length > 0 ? lines[0] : "";
+};
+
+/** A top-level field of a JSON object, as written, or `""` when it is missing. */
+const jsonFieldOr = (object: string, name: string): string => {
+  const value = jsonField(object, name);
+  return value === null ? "" : value;
 };
 
 /**
@@ -1122,7 +1263,9 @@ export const main = (): number => {
   checkErrorObjects(t, cli);
   checkWarningObjects(t, cli);
   checkPortabilityObjects(t, cli);
+  checkFixField(t, cli);
   checkDumps(t, cli);
+  checkCapabilities(t, cli, env);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);

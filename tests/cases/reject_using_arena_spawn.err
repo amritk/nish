@@ -1,0 +1,1 @@
+`s.spawn(triple, 2, out, 0)` files a task on `s` inside the `using arena()` block at 11:5, and that scope is declared outside the block: the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated
