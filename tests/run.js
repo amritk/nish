@@ -3528,6 +3528,62 @@ if (has("opt") && fs.existsSync(fillZeroLl)) {
   )
 }
 
+// `nish:secret`: the wipe survives `-O2`, as CLAUDE.md requires of every wipe in
+// `std/crypto`. `secret_wipe_o2` wipes a stack array nothing reads again, which is
+// the store an optimiser deletes, and `secret_wipe_o2_plain` zeroes the same array
+// with `fill(0)`: after `opt -O2` the twin's `main` must hold no store at all, which
+// is what shows the deletion happens, and the wiped one must still hold a volatile
+// store of zero for every byte of the array (SROA splits the volatile `llvm.memset`
+// into one per byte; a volatile memset left whole counts as all eight). Both are
+// compiled here, fresh, so a filtered run cannot read a `.ll` another section wrote
+// (.claude/testing.md, the `existsSync` trap).
+if (!only || "secret wipe survives -O2".includes(only)) {
+  if (!has("opt")) {
+    skip("nish:secret: no opt to show the wipe survives -O2")
+  } else {
+    const o2Dir = path.join(buildDir, "secret-o2")
+    fs.rmSync(o2Dir, { recursive: true, force: true })
+    fs.mkdirSync(o2Dir, { recursive: true })
+    /** `main` of `name` after `opt -O2`, or the failure to get it. */
+    const optimisedMain = (name) => {
+      const ll = path.join(o2Dir, `${name}.ll`)
+      const c = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "-o", ll], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      if (c.status !== 0) {
+        return { ok: false, text: c.stderr }
+      }
+      const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", ll], { encoding: "utf8" })
+      const body = o.status === 0 ? o.stdout.match(/define[^\n]*@nish_main\([\s\S]*?\n\}/) : null
+      return body === null ? { ok: false, text: o.stderr || o.stdout } : { ok: true, text: body[0] }
+    }
+    const wiped = optimisedMain("secret_wipe_o2")
+    const plain = optimisedMain("secret_wipe_o2_plain")
+    const volatileZeros = wiped.ok ? (wiped.text.match(/store volatile i8 0,/g) || []).length : 0
+    const volatileMemset = wiped.ok && /call void @llvm\.memset[^\n]*i64 8, i1 true\)/.test(wiped.text)
+    const plainStores = plain.ok ? (plain.text.match(/\bstore\b|@llvm\.memset/g) || []).length : -1
+    check(
+      "nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted",
+      wiped.ok && plain.ok && (volatileZeros === 8 || volatileMemset) && plainStores === 0,
+      `wiped: ${volatileZeros} volatile zero stores, volatile memset ${volatileMemset}\n${wiped.text}\n--- plain: ${plainStores} stores\n${plain.text}`
+    )
+  }
+}
+
+// `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
+// `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
+// the native binary prints.
+if (!only || "secret_wipe under the prelude".includes(only)) {
+  const r = runCaseUnderPrelude("secret_wipe", [])
+  const want = fs.readFileSync(path.join(casesDir, "secret_wipe.out"), "utf8")
+  check(
+    "nish:secret: secret_wipe under runtime/nish.mjs prints secret_wipe.out",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
 // WP34 N2: under `runtime/nish.mjs` an `i64` or `u64` is a bigint, and a bigint offset
 // of `set` or `fill` throws a `TypeError`, as `docs/LANGUAGE.md` says. `fill` is
 // `Array.prototype.fill`, which throws by itself; `set` is the prelude's own, and a

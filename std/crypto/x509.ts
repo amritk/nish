@@ -7,12 +7,14 @@
  *     import { x509MintSelfSigned, x509CertificateHash, derToPem } from "nish/crypto/x509";
  *
  *     // Both secrets come from the kernel's CSPRNG; a predictable key or serial is the caller's bug.
- *     const priv: u8[] = new Array<u8>(32);
- *     crypto.getRandomValues(priv);          // p256PublicKey(priv) === null: draw again (odds 2^-32)
+ *     const drawn: u8[] = new Array<u8>(32);
+ *     crypto.getRandomValues(drawn);
+ *     const priv: Secret<u8[]> = secret(drawn); // nish:secret; p256PublicKey(priv) === null: draw again (odds 2^-32)
  *     const serial: u8[] = new Array<u8>(16);
  *     crypto.getRandomValues(serial);
  *     serial[0] = serial[0] & toU8(0x7f);   // positive, so it stays 16 octets
  *     const der: u8[] | null = x509MintSelfSigned(priv, "localhost", toI64(Date.now()), 14, serial);
+ *     wipe(priv);
  *     // x509CertificateHash(der) is what serverCertificateHashes names;
  *     // derToPem(der, "CERTIFICATE") is the file a TLS stack loads.
  *
@@ -70,10 +72,18 @@
  * public key stored beside it compares public values. None of this is under
  * the disassembly check; it is discipline.
  *
+ * **The private key is a `Secret`** (`nish:secret`, docs/LANGUAGE.md
+ * "Secrets"). `x509ParseP256PrivateKey` answers one and `x509MintSelfSigned`
+ * takes one; the scalar is copied out of its DER once, into the `Secret`, and
+ * every block decoded from the PEM is wiped before the parse returns (X509-7,
+ * docs/security/crypto-x509.md). The PEM text is the caller's string, which
+ * nothing in the language can wipe.
+ *
  * Private names carry the `x509` prefix because a `std/` module's private
  * functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
+import { Secret, secret, wipe } from "nish:secret"
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
 import { sha256 } from "nish/crypto/sha256"
 
@@ -892,7 +902,7 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
  * optional `[1]` public key, which must be the key's own. `null` otherwise,
  * or when the scalar is 0 or not below n.
  */
-const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] | null => {
+const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): Secret<u8[]> | null => {
   const seq: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_SEQUENCE)
   if (seq === null || seq.end !== end) {
     return null
@@ -905,7 +915,6 @@ const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] 
   if (key === null || key.end - key.start !== 32) {
     return null
   }
-  const priv: u8[] = x509DerSlice(der, key.start, key.end)
   let at: i32 = key.end
   let curve: boolean = false
   let stored: u8[] | null = null
@@ -935,12 +944,13 @@ const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] 
   if (at !== seq.end || (needCurve && !curve)) {
     return null
   }
-  // Refuses 0 and n and above, and gives the point to hold `stored` against.
+  // The scalar is copied out of the DER only once the structure is known to
+  // be sound, straight into the `Secret` that owns it (X509-7). The check
+  // refuses 0 and n and above, and gives the point to hold `stored` against.
+  const priv: Secret<u8[]> = secret(x509DerSlice(der, key.start, key.end))
   const pub: u8[] | null = p256PublicKey(priv)
-  if (pub === null) {
-    return null
-  }
-  if (stored !== null && !x509BytesEqual(stored, pub)) {
+  if (pub === null || (stored !== null && !x509BytesEqual(stored, pub))) {
+    wipe(priv)
     return null
   }
   return priv
@@ -954,7 +964,7 @@ const x509Sec1Key = (der: u8[], start: i32, end: i32, needCurve: boolean): u8[] 
  * optional `[1]` public key, which must be a BIT STRING of the key's own point
  * (X509-8 in docs/security/crypto-x509.md).
  */
-const x509Pkcs8Key = (der: u8[]): u8[] | null => {
+const x509Pkcs8Key = (der: u8[]): Secret<u8[]> | null => {
   const total: i32 = toI32(der.length)
   const seq: X509DerElement | null = x509DerExpect(der, 0, total, X509_TAG_SEQUENCE)
   if (seq === null || seq.end !== total) {
@@ -1002,34 +1012,54 @@ const x509Pkcs8Key = (der: u8[]): u8[] | null => {
   if (at !== seq.end) {
     return null
   }
-  const priv: u8[] | null = x509Sec1Key(der, key.start, key.end, false)
+  const priv: Secret<u8[]> | null = x509Sec1Key(der, key.start, key.end, false)
   if (priv === null || stored === null) {
     return priv
   }
   // The same rule as the SEC1 key's own `[1]`: the stored point is the key's.
   const pub: u8[] | null = p256PublicKey(priv)
-  return pub !== null && x509BytesEqual(stored, pub) ? priv : null
+  if (pub === null || !x509BytesEqual(stored, pub)) {
+    wipe(priv)
+    return null
+  }
+  return priv
+}
+
+/** Zero every block `pemToDer` decoded: a private key's DER is key material, refused or not. */
+const x509WipeBlocks = (blocks: u8[][] | null): void => {
+  if (blocks === null) {
+    return
+  }
+  for (const block of blocks) {
+    wipe(block)
+  }
 }
 
 /**
- * The 32-byte P-256 private key in `pem`: one `EC PRIVATE KEY` block (SEC1,
- * RFC 5915, which must name its curve) or one `PRIVATE KEY` block (unencrypted
- * PKCS#8, RFC 5208 or RFC 5958), and not both. `null` for no such block or
- * more than one, for any curve but P-256, for a scalar of 0 or n or more, for
- * a stored public key that is not the key's own, and for anything malformed.
- * An `ENCRYPTED PRIVATE KEY` is a different label, and answers `null`.
+ * The 32-byte P-256 private key in `pem`, as the `Secret` it is: one `EC
+ * PRIVATE KEY` block (SEC1, RFC 5915, which must name its curve) or one
+ * `PRIVATE KEY` block (unencrypted PKCS#8, RFC 5208 or RFC 5958), and not both.
+ * `null` for no such block or more than one, for any curve but P-256, for a
+ * scalar of 0 or n or more, for a stored public key that is not the key's own,
+ * and for anything malformed. An `ENCRYPTED PRIVATE KEY` is a different label,
+ * and answers `null`. Every block decoded from `pem` is wiped before this
+ * returns, whichever answer it gives; `pem` itself is the caller's string,
+ * which nothing can wipe (X509-7 in docs/security/crypto-x509.md).
  */
-export const x509ParseP256PrivateKey = (pem: string): u8[] | null => {
+export const x509ParseP256PrivateKey = (pem: string): Secret<u8[]> | null => {
   const sec1: u8[][] | null = pemToDer(pem, "EC PRIVATE KEY")
   const pkcs8: u8[][] | null = pemToDer(pem, "PRIVATE KEY")
+  let key: Secret<u8[]> | null = null
   if (sec1 !== null && pkcs8 === null && toI32(sec1.length) === 1) {
     const der: u8[] = sec1[0]
-    return x509Sec1Key(der, 0, toI32(der.length), true)
+    key = x509Sec1Key(der, 0, toI32(der.length), true)
+  } else if (pkcs8 !== null && sec1 === null && toI32(pkcs8.length) === 1) {
+    key = x509Pkcs8Key(pkcs8[0])
   }
-  if (pkcs8 !== null && sec1 === null && toI32(pkcs8.length) === 1) {
-    return x509Pkcs8Key(pkcs8[0])
-  }
-  return null
+  // X509-7: the decoded DER holds the scalar too, whichever block it was.
+  x509WipeBlocks(sec1)
+  x509WipeBlocks(pkcs8)
+  return key
 }
 
 // ---------------------------------------------------------------------------
@@ -1254,7 +1284,7 @@ export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certifica
  * bit of 20 random bytes, or use fewer).
  */
 export const x509MintSelfSigned = (
-  priv: u8[],
+  priv: Secret<u8[]>,
   commonName: string,
   notBeforeMs: i64,
   days: i32,
