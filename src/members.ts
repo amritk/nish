@@ -27,6 +27,7 @@ import {
 import { checkBuiltinArity, checkNamespaceProperty, dateRefusal } from "./builtins"
 import { checkResultMethod, checkResultProperty } from "./result"
 import { CheckContext } from "./context"
+import { Edit } from "./diagnostics"
 import { internalErrorFor } from "./ice"
 import { unwrapParens } from "./emit-util"
 import {
@@ -37,7 +38,7 @@ import {
   isCollectionTemplate,
   refuseParameterMember,
 } from "./generics"
-import { assignInto, checkExpression, linkedParent } from "./expressions"
+import { assignInto, checkExpression, linkedParent, templateFix } from "./expressions"
 import { recordUpdateFusion } from "./fusion"
 import {
   N_ARRAY,
@@ -209,6 +210,21 @@ export const isGlobalMapType = (ctx: CheckContext, type: i32): boolean => {
   return info !== null && isMapOwner(info) && isCollectionStruct(info)
 }
 
+/**
+ * `n.toString()` to `` `${n}` `` on a number or a boolean, where `tsc` prints
+ * the same text both ways. With an argument there is none: a radix changes
+ * the digits, and a template literal has no way to ask for one.
+ */
+const toStringFix = (ctx: CheckContext, call: Node, receiver: i32): Edit[] => {
+  const access = call.children[0]
+  const printable = isNumeric(receiver) || receiver === T_BOOL
+  if (access.text !== "toString" || call.children[1].children.length > 0 || !printable) {
+    const none: Edit[] = []
+    return none
+  }
+  return templateFix(ctx, call, access.children[0])
+}
+
 /** `receiver.method(args)` where `receiver` is a value. */
 export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const access = expr.children[0]
@@ -242,7 +258,11 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return checkArrayMethod(ctx, expr, access, args, receiver, scope)
   }
   if (!ctx.table.isStruct(receiver)) {
-    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`)
+    // Against the method name, as `errorAtProperty` reports it, so that the
+    // fix can carry the whole call.
+    const name = new Node(N_IDENT, access.end - access.text.length, access.end)
+    const message = `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`
+    ctx.errorFix(name, message, toStringFix(ctx, expr, receiver))
     return T_ERROR
   }
   const info = structOf(ctx, receiver)
