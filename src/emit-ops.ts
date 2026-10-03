@@ -86,13 +86,27 @@ export const constantText = (emitter: Emitter, info: ConstInfo): string => {
  * type", and `isUnsigned` is where that proof is read.
  */
 export const intOpcode = (emitter: Emitter, opcode: string, type: i32): string => {
-  if (!emitter.opts.nsw || isUnsigned(type)) {
+  if (emitter.program.wrapping || isUnsigned(type)) {
     return opcode
   }
   if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") {
     return opcode
   }
   return `${opcode} nsw`
+}
+
+/**
+ * `wrappingAdd(a, b)`, `wrappingSub(a, b)` and `wrappingMul(a, b)` from
+ * `nish:unsafe`: the instruction with no flag, whatever `--wrapping` says, so
+ * the answer is the two's-complement wrap at the operands' width. The checker
+ * made both operands one type, `i32` or `i64`.
+ */
+export const emitWrapping = (emitter: Emitter, expr: Node, opcode: string): string => {
+  const args = expr.children[1].children
+  const ty = emitter.llvm(emitter.typeOf(expr))
+  const a = emitter.emitExpression(args[0])
+  const b = emitter.emitExpression(args[1])
+  return emitter.fn.emitValue(`${opcode} ${ty} ${a}, ${b}`)
 }
 
 /**

@@ -215,8 +215,9 @@ const sha256Compress = (h: u32[], w: u32[], src: u8[], at: i32): void => {
   // early exit, because that is the shape that proves the plain `w[t]` and
   // `h[i]` indices in range and drops their bounds checks. The computed ones —
   // the byte reads in `sha256LoadWord` and `w[t - 2]` and its kin — keep a
-  // check each; measured, removing every check with `--unchecked-indexing`
-  // moved the 1 MiB time by less than the run-to-run noise.
+  // check each; measured, removing every check (with `--unchecked-indexing`,
+  // which no longer reaches a `nish/` module at all) moved the 1 MiB time by
+  // less than the run-to-run noise.
   if (toI32(h.length) >= 8 && toI32(w.length) >= 64 && at >= 0 && at <= toI32(src.length) - SHA256_BLOCK) {
     // Step 1: the message schedule.
     for (let t: i32 = 0; t < 16; t += 1) {
