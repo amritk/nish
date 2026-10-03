@@ -1017,6 +1017,27 @@ export class ImportBinding {
 }
 
 /**
+ * One call of a `nish:unsafe` function, as the checker met it: the site a
+ * capability report names when it says where a program gives up a check or
+ * defines a wrap. `name` is the function's own name, whatever the import
+ * renamed it to locally.
+ */
+export class UnsafeCall {
+  /** The `N_CALL` node's id. */
+  node: i32
+  line: i32
+  column: i32
+  name: string
+
+  constructor(node: i32, line: i32, column: i32, name: string) {
+    this.node = node
+    this.line = line
+    this.column = column
+    this.name = name
+  }
+}
+
+/**
  * Every class and interface declared anywhere in the program, by name.
  *
  * A struct name is already a program-wide symbol (`%struct.<name>` and
@@ -1193,6 +1214,26 @@ export class CheckedProgram {
   entryMain: FunctionSig | null
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
   usesArgv: boolean
+  /**
+   * Whether `--unchecked-indexing` and `--wrapping` reach this module. Each
+   * flag is the command line's answer for the modules of the entry package and
+   * `false` for every other module — a `node_modules` dependency and the
+   * `nish/` standard library — so a flag written for one program cannot take
+   * a check out of code its author did not write (`Compilation.discover`).
+   * Every reader of either flag reads it here, per module, and never off the
+   * options.
+   */
+  uncheckedIndexing: boolean
+  wrapping: boolean
+  /**
+   * The `nish:unsafe` imports of this module, in source order, and every call
+   * of one of its functions, in the order the checker met them (each once,
+   * however many instantiations check the body it is in). Nothing in the
+   * compiler reads them yet: they are the facts `--emit-checked` prints, so a
+   * report of where a program opts out of a check only has to print them.
+   */
+  unsafeImports: ImportBinding[]
+  unsafeCalls: UnsafeCall[]
   /** WP29 P1: the data-parallel calls this module's bodies make, judged after the fixpoint. */
   parallelCalls: ParallelCall[]
   /** WP29 P2: every `spawn` call, judged with the facts as `parallelCalls` is (`Compilation.checkParallel`). */
@@ -1364,6 +1405,10 @@ export class CheckedProgram {
     this.collectionsLibrary = isCollectionsModule(packageName, source.path)
     this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
     this.usesArgv = false
+    this.uncheckedIndexing = false
+    this.wrapping = false
+    this.unsafeImports = []
+    this.unsafeCalls = []
     this.nodeTypes = new Array<i32>(nodeCount)
     this.nodeLocals = new Array<Local | null>(nodeCount)
     this.nodeConstants = new Array<ConstInfo | null>(nodeCount)
@@ -1495,6 +1540,18 @@ export class CheckedProgram {
   builtinImport(name: string): BuiltinExport | null {
     const at = this.builtinImports.get(name, -1)
     return at < 0 ? null : this.builtinImportList[at]
+  }
+
+  /** Record a call of a `nish:unsafe` function, once per call site. */
+  noteUnsafeCall(call: Node, name: string): void {
+    for (const seen of this.unsafeCalls) {
+      if (seen.node === call.id) {
+        return // another instantiation of the same body
+      }
+    }
+    this.unsafeCalls.push(
+      new UnsafeCall(call.id, this.source.lineOf(call.start), this.source.columnOf(call.start), name)
+    )
   }
 
   /** Register `info` under the name it is used by; the caller has checked for a clash. */

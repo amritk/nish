@@ -21,9 +21,10 @@
  *   subtraction needs no bias and a carry is a floor division that works the
  *   same on a negative limb.
  *
- * Signed `i64` overflow is undefined behaviour in this language unless a
- * program is compiled with `--wrapping`, so the limb bounds below are not a
- * nicety: each function states what it accepts and what it answers, and
+ * Signed `i64` overflow is undefined behaviour in this language, and
+ * `--wrapping` does not reach a `nish/` module (only `wrappingAdd`,
+ * `wrappingSub` and `wrappingMul` from `nish:unsafe` define a wrap, at the
+ * site that calls one), so the limb bounds below are not a nicety: each function states what it accepts and what it answers, and
  * `f25519Mul` says why its sums fit.
  *
  * **Constant time, by construction, and in part by disassembly.** Nothing

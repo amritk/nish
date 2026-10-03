@@ -56,7 +56,7 @@ sentence each:
 | `align 4` / `align 8` on `alloca`, `load`, `store` | The natural alignment of the type, as clang and rustc emit. |
 | `inbounds` on `getelementptr` | The computed address stays inside the object (field or element access on a valid pointer). |
 | `immarg` | The operand must be a constant (the `isvolatile` flag of `llvm.memset`). |
-| `nsw` (flag on `add`/`sub`/`mul`) | On every user-level **signed** integer add/sub/mul by default: signed overflow is undefined, so LLVM may assume it never happens. `--wrapping` removes it. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
+| `nsw` (flag on `add`/`sub`/`mul`) | On every user-level **signed** integer add/sub/mul by default: signed overflow is undefined, so LLVM may assume it never happens. `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` are the same instructions without it; the deprecated `--wrapping` removes it from the entry package's modules. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
 
 `--plain` drops every attribute and alignment hint and produces the bare
 form shown under [Functions](#functions).
@@ -6019,8 +6019,8 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 ### `i64` and the explicit conversions
 
-`i64` arithmetic overflows like `i32` — undefined by default, wrapping under
-`--wrapping`; `toI32` on an `i64` is a `trunc`, which wraps either way.
+`i64` arithmetic overflows like `i32` — undefined by default, wrapping through
+the `nish:unsafe` `wrapping*` calls (or the deprecated `--wrapping`); `toI32` on an `i64` is a `trunc`, which wraps either way.
 
 <!-- cookbook:begin types-i64 -->
 ```ts
@@ -10026,12 +10026,102 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end cls-inline-array -->
 
-### `--unchecked-indexing`
+### `uncheckedGet` from `nish:unsafe`
 
-The compare, the branch and the panic block disappear; `get` regains
-`willreturn` and becomes `readonly`. Out-of-range is then undefined
-behaviour. Unlike the proof above, this is a promise the *program* makes:
-an out-of-range index is undefined behaviour rather than a panic.
+`a[i]` and `uncheckedGet(a, i)` side by side: the same `sext`, header load,
+GEP and element load, and `uncheckedGet` has no `len` load, no `icmp`, no
+branch and no panic block. `unchecked` keeps `willreturn` and `checked` does
+not, because only `checked` can reach the `noreturn` panic. Out-of-range is
+undefined behaviour at that one site, which is the promise the import at the
+top of the module makes visible
+([LANGUAGE.md](LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
+`uncheckedSet(a, i, v)` is the store twin.
+
+<!-- cookbook:begin unsafe-unchecked-get -->
+```ts
+import { uncheckedGet } from "nish:unsafe"
+
+const checked = (a: i32[], i: i32): i32 => a[i]
+
+const unchecked = (a: i32[], i: i32): i32 => uncheckedGet(a, i)
+
+export const both = (a: i32[], i: i32): i32 => checked(a, i) + unchecked(a, i)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+
+define internal noundef i32 @checked(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %8
+}
+
+define internal noundef i32 @unchecked(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #1 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %3 = bitcast i8* %2 to i32*
+  %4 = getelementptr inbounds i32, i32* %3, i64 %0
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  ret i32 %5
+}
+
+define noundef i32 @both(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
+entry:
+  %0 = call i32 @checked(%struct.nish_array* %a, i32 %i)
+  %1 = call i32 @unchecked(%struct.nish_array* %a, i32 %i)
+  %2 = add nsw i32 %0, %1
+  ret i32 %2
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end unsafe-unchecked-get -->
+
+### `--unchecked-indexing` (deprecated)
+
+The compare, the branch and the panic block disappear from every index of the
+entry package's modules; `get` regains `willreturn` and becomes `readonly`.
+Out-of-range is then undefined behaviour. Unlike the proof above, this is a
+promise the *program* makes: an out-of-range index is undefined behaviour
+rather than a panic. The flag prints NL9014 and never reaches a dependency or
+a `nish/` module; `uncheckedGet` above says the same thing at one site.
 
 <!-- cookbook:begin arr-unchecked -->
 Compiled with `--unchecked-indexing`.
@@ -14290,10 +14380,54 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end opt-nsw -->
 
-`--wrapping` turns the flag off for the whole compilation and gives back
-two's-complement wrapping, so `2147483647 + 1` is `-2147483648`. It is what a
-hash, a linear congruential generator or a wrap-around counter needs; the same
-source, one flag, and no `nsw` anywhere:
+A wrap the program means is a call: `wrappingAdd`, `wrappingSub` and
+`wrappingMul` from `nish:unsafe` are the same instruction with no flag,
+whatever the command line says, so `wrappingAdd(2147483647, 1)` is
+`-2147483648`. It is what a hash, a linear congruential generator or a
+wrap-around counter needs. Beside it, the same step written with operators
+keeps `nsw`:
+
+<!-- cookbook:begin unsafe-wrapping -->
+```ts
+import { wrappingAdd, wrappingMul } from "nish:unsafe"
+
+const hashStep = (h: i32, c: i32): i32 => wrappingAdd(wrappingMul(h, 31), c)
+
+const plainStep = (h: i32, c: i32): i32 => h * 31 + c
+
+export const both = (h: i32, c: i32): i32 => hashStep(h, c) ^ plainStep(h, c)
+```
+
+```llvm
+define internal noundef i32 @hashStep(i32 noundef %h, i32 noundef %c) #0 {
+entry:
+  %0 = mul i32 %h, 31
+  %1 = add i32 %0, %c
+  ret i32 %1
+}
+
+define internal noundef i32 @plainStep(i32 noundef %h, i32 noundef %c) #0 {
+entry:
+  %0 = mul nsw i32 %h, 31
+  %1 = add nsw i32 %0, %c
+  ret i32 %1
+}
+
+define noundef i32 @both(i32 noundef %h, i32 noundef %c) #0 {
+entry:
+  %0 = call i32 @hashStep(i32 %h, i32 %c)
+  %1 = call i32 @plainStep(i32 %h, i32 %c)
+  %2 = xor i32 %0, %1
+  ret i32 %2
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end unsafe-wrapping -->
+
+The deprecated `--wrapping` turns the flag off for every operator of the entry
+package's modules (never a dependency's or a `nish/` module's) and prints
+NL9015; the same source, one flag, and no `nsw` anywhere:
 
 <!-- cookbook:begin opt-wrapping -->
 Compiled with `--wrapping`.
@@ -14320,7 +14454,8 @@ attributes #0 = { nounwind willreturn readnone }
 A module constant follows the same rule, because a fold has to agree with the
 instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
 `` attempt to compute with overflow in a constant `` by default, and
-`-2147483648` under `--wrapping`.
+`-2147483648` under `--wrapping`; `const OVER: i32 = wrappingAdd(2147483647, 1)`
+folds to `-2147483648` in every build.
 
 ### `--target`
 

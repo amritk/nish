@@ -2297,11 +2297,16 @@ if (!only || "performance".includes(only)) {
   )
 
   // `--wrapping` makes the wrap the defined answer, so the constant rule has
-  // nothing left to say and must not argue with the flag.
+  // nothing left to say and must not argue with the flag. What is left is the
+  // flag's own deprecation (NL9015), once, at the top of the entry.
   const wrapped = compile("perf_overflow_wrapping", "perf_overflow_wrapping.ll", ["--wrapping"])
+  const wrappedLines = summaries(wrapped.stderr)
   check(
-    "performance: --wrapping silences the constant-overflow warning, which is only about undefined behaviour",
-    wrapped.status === 0 && summaries(wrapped.stderr).length === 0,
+    "performance: --wrapping silences the constant-overflow warning, which is only about undefined behaviour, and says once that it is deprecated",
+    wrapped.status === 0 &&
+      wrappedLines.length === 1 &&
+      wrappedLines[0].includes(":1:1: performance: --wrapping is deprecated") &&
+      wrappedLines[0].includes("`wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`"),
     wrapped.stderr
   )
 
@@ -2346,12 +2351,16 @@ if (!only || "performance".includes(only)) {
   )
 
   // The clamp is the semantics, not a check, so the flag that removes every
-  // bounds check must leave both the clamp and its warning exactly as they were.
+  // bounds check must leave both the clamp and its warning exactly as they were;
+  // the only line it adds is its own deprecation (NL9014).
   const clampUnchecked = compile("perf_clamp", "perf_clamp_unchecked.ll", ["--unchecked-indexing"])
+  const clampUncheckedLines = summaries(clampUnchecked.stderr)
   check(
     "performance: --unchecked-indexing changes neither the substring clamp nor its warning",
     clampUnchecked.status === 0 &&
-      summaries(clampUnchecked.stderr).length === 2 &&
+      clampUncheckedLines.length === 3 &&
+      clampUncheckedLines[0].includes(":1:1: performance: --unchecked-indexing is deprecated") &&
+      clampUncheckedLines.slice(1).join("\n") === clampLines.join("\n") &&
       stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp_unchecked.ll"), "utf8")) ===
         stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp.ll"), "utf8")),
     clampUnchecked.stderr
@@ -2440,11 +2449,16 @@ if (!only || "performance".includes(only)) {
     `flagged:\n${declaresIn("perf_inline_foreign.ll")}\ndefault:\n${declaresIn("perf_inline_foreign_default.ll")}`
   )
 
-  // The flag removes every check, so there is no surviving one to report.
+  // The flag removes every check, so there is no surviving one to report; what
+  // is left is the flag's own deprecation (NL9014), once, at the top of the entry.
   const boundsOff = compile("perf_bounds_loop", "perf_bounds_off.ll", ["--unchecked-indexing"])
+  const boundsOffLines = summaries(boundsOff.stderr)
   check(
-    "performance: --unchecked-indexing leaves no bounds check to warn about",
-    boundsOff.status === 0 && summaries(boundsOff.stderr).length === 0,
+    "performance: --unchecked-indexing leaves no bounds check to warn about, and says once that it is deprecated",
+    boundsOff.status === 0 &&
+      boundsOffLines.length === 1 &&
+      boundsOffLines[0].includes(":1:1: performance: --unchecked-indexing is deprecated") &&
+      boundsOffLines[0].includes("`uncheckedGet` and `uncheckedSet` from `nish:unsafe`"),
     boundsOff.stderr
   )
 
@@ -3136,6 +3150,83 @@ if (!only || "par_dst_short".includes(only)) {
       String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
       String(run.stdout).trim() === "before",
     run !== null ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : missing
+  )
+}
+
+// `--unchecked-indexing` and `--wrapping` reach the entry package and nothing else.
+// The link loop above built `tests/link/unsafe_flag_scope` under both flags (its
+// `args`); here it is compiled again without them, and every module but the entry's
+// must be the same bytes either way -- the dependency under `node_modules/` and
+// `nish/text` alike -- while the entry's own module must move. The panic the
+// dependency keeps is read on stderr, which the link loop does not compare.
+if (!only || "unsafe_flag_scope".includes(only)) {
+  const fixture = linkTests.includes("unsafe_flag_scope")
+  const entry = path.join(linkDir, "unsafe_flag_scope", "main.ts")
+  const scopeDir = path.join(buildDir, "unsafe-flag-scope")
+  const flagged = path.join(scopeDir, "flagged") + path.sep
+  const plain = path.join(scopeDir, "plain") + path.sep
+  fs.rmSync(scopeDir, { recursive: true, force: true })
+  const compileTo = (dir, flags) =>
+    spawnSync(NISH, [entry, "-o", dir, ...flags], { cwd: root, encoding: "utf8" })
+  const a = fixture ? compileTo(flagged, ["--unchecked-indexing", "--wrapping"]) : null
+  const b = fixture ? compileTo(plain, []) : null
+  const compiled = a !== null && b !== null && a.status === 0 && b.status === 0
+  const modules = compiled
+    ? fs
+        .readdirSync(plain)
+        .filter((f) => f.endsWith(".ll"))
+        .sort()
+    : []
+  const same = (f) =>
+    fs.readFileSync(path.join(flagged, f), "utf8") === fs.readFileSync(path.join(plain, f), "utf8")
+  let why = "no such fixture: tests/link/unsafe_flag_scope"
+  if (a !== null && b !== null) {
+    why = compiled ? `modules: ${modules.join(" ")}` : `${a.stderr}\n${b.stderr}`
+  }
+  // One deprecation per flag per compilation, however many modules it compiled.
+  const deprecations =
+    a !== null ? (String(a.stderr).match(/: performance: --[a-z-]+ is deprecated/g) ?? []) : []
+  check(
+    "unsafe_flag_scope: a three-module compile says each flag is deprecated once, and nothing else",
+    a !== null &&
+      a.status === 0 &&
+      deprecations.length === 2 &&
+      /\n2 performance warnings\n/.test(`\n${a.stderr}`),
+    a !== null ? String(a.stderr) : "no such fixture: tests/link/unsafe_flag_scope"
+  )
+  check(
+    "unsafe_flag_scope: --unchecked-indexing and --wrapping leave the dependency's and nish/text's IR as it was, byte for byte, and move the entry's",
+    compiled &&
+      modules.join(" ") === "index.ll main.ll text.ll" &&
+      same("index.ll") &&
+      same("text.ll") &&
+      !same("main.ll"),
+    why
+  )
+  const exe = path.join(buildDir, "link", "unsafe_flag_scope", "app")
+  const run = fixture && fs.existsSync(exe) ? spawnSync(exe, { encoding: "utf8" }) : null
+  check(
+    "link/unsafe_flag_scope: under --unchecked-indexing the dependency's index keeps its check and panics with the bounds message",
+    run !== null && run.status === 1 && run.stderr.includes("index out of range: 5 >= 3"),
+    run !== null ? shown(run) : `no such binary: ${exe}`
+  )
+}
+
+// `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
+// five functions, so `unsafe_get_set` and `unsafe_wrapping` run unmodified and must
+// print the `.out` the native round trip in section A is held to -- the wraps at
+// INT_MAX and INT_MIN included, at `i32` through `| 0` and `Math.imul` and at `i64`
+// through `BigInt.asIntN`.
+for (const name of ["unsafe_get_set", "unsafe_wrapping"]) {
+  if (only && !name.includes(only) && !"nish:unsafe node".includes(only)) {
+    continue
+  }
+  const want = fs.readFileSync(path.join(casesDir, `${name}.out`), "utf8")
+  const run = runCaseUnderPrelude(name, [])
+  check(
+    `${name}: runs under runtime/nish.mjs and prints the native .out`,
+    run.status === 0 && run.stdout === want,
+    `--- native (.out)\n${want}--- node\n${shown(run)}`
   )
 }
 

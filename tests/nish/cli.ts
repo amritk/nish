@@ -465,6 +465,45 @@ const checkWarningObjects = (t: Suite, cli: Cli): void => {
 };
 
 /**
+ * The two deprecated flags: each is one performance object under `--json`, on a
+ * program that is otherwise quiet, and its code names the flag, so a wrapper can
+ * tell which one a build still passes. `--no-warn-performance` silences both.
+ */
+const checkDeprecatedFlagObjects = (t: Suite, cli: Cli): void => {
+  const source = `${WORK}/${FIXTURE_OK}`;
+  const unchecked = cli.plain("unchecked_json", [source, "--unchecked-indexing", "--json", "-o", `${WORK}/unchecked.ll`]);
+  const wrapping = cli.plain("wrapping_json", [source, "--wrapping", "--json", "-o", `${WORK}/wrapping.ll`]);
+  const quiet = cli.plain("deprecated_quiet", [
+    source,
+    "--unchecked-indexing",
+    "--wrapping",
+    "--no-warn-performance",
+    "--json",
+    "-o",
+    `${WORK}/deprecated-quiet.ll`,
+  ]);
+  const uncheckedObjects = cliObjectLines(unchecked.stdout);
+  const wrappingObjects = cliObjectLines(wrapping.stdout);
+  if (
+    !t.eqI32("--unchecked-indexing compiles", unchecked.status, 0) ||
+    !t.eqI32("and is one object on stdout", toI32(uncheckedObjects.length), 1)
+  ) {
+    return;
+  }
+  t.eqStr("a performance one", cliField(uncheckedObjects[0], "severity"), "performance");
+  t.eqStr("whose code is the --unchecked-indexing deprecation", cliField(uncheckedObjects[0], "code"), "NL9014");
+  if (
+    !t.eqI32("--wrapping compiles", wrapping.status, 0) ||
+    !t.eqI32("and is one object on stdout", toI32(wrappingObjects.length), 1)
+  ) {
+    return;
+  }
+  t.eqStr("a performance one", cliField(wrappingObjects[0], "severity"), "performance");
+  t.eqStr("whose code is the --wrapping deprecation", cliField(wrappingObjects[0], "code"), "NL9015");
+  t.eqI32("--no-warn-performance silences both", toI32(cliObjectLines(quiet.stdout).length), 0);
+};
+
+/**
  * The WP33 portability warning, which is off unless asked for: under
  * `--warn-portability --json` it is one more object, after the performance
  * warning, with a `severity` of its own — and the program still compiles.
@@ -1121,6 +1160,7 @@ export const main = (): number => {
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
   checkWarningObjects(t, cli);
+  checkDeprecatedFlagObjects(t, cli);
   checkPortabilityObjects(t, cli);
   checkDumps(t, cli);
   checkMissingInput(t, cli);

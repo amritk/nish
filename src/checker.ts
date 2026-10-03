@@ -16,7 +16,14 @@ import { checkExpression } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
 import { CheckContext } from "./context"
-import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModuleNames } from "./nish-modules"
+import {
+  isNishModule,
+  isNishSpecifier,
+  nishExport,
+  nishModuleExports,
+  nishModuleNames,
+  unsafeModule,
+} from "./nish-modules"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
 import {
@@ -139,6 +146,8 @@ export class Checker {
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName)
+    this.program.wrapping = wrapping
+    this.program.uncheckedIndexing = uncheckedIndexing
     this.declared = []
     this.ctx = new CheckContext(
       table,
@@ -1057,6 +1066,9 @@ export class Checker {
     }
     imp.builtin = exported
     this.program.addBuiltinImport(imp.localName, exported)
+    if (imp.specifier === unsafeModule()) {
+      this.program.unsafeImports.push(imp)
+    }
   }
 
   bindImport(index: i32, target: CheckedProgram): void {

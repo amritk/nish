@@ -57,16 +57,35 @@ export class BuiltinExport {
  */
 export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME)
 
+/**
+ * `nish:unsafe`: the functions whose behaviour depends on the program being
+ * right, where every other builtin checks. An unchecked element access is
+ * undefined behaviour out of range, and a wrapping operation is defined where
+ * the operator it replaces is not, so a call to either has to be visible where
+ * it is written: the five are reached only through an import of this module
+ * (`isUnsafeExport`, and `checkBuiltinFunction` for the global spelling).
+ */
+export const unsafeModule = (): string => `${BUILTIN_SCHEME}unsafe`
+
+/** Whether `nish:unsafe` exports `name`. */
+export const isUnsafeExport = (name: string): boolean =>
+  name === "uncheckedGet" ||
+  name === "uncheckedSet" ||
+  name === "wrappingAdd" ||
+  name === "wrappingSub" ||
+  name === "wrappingMul"
+
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
   specifier === `${BUILTIN_SCHEME}io` ||
-  specifier === `${BUILTIN_SCHEME}net`
+  specifier === `${BUILTIN_SCHEME}net` ||
+  specifier === unsafeModule()
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${unsafeModule()}`
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
@@ -78,6 +97,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+  }
+  if (specifier === unsafeModule()) {
+    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul"
   }
   return "write, writeError, panic"
 }
@@ -240,6 +262,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return isNetExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === unsafeModule()) {
+    return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }

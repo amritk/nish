@@ -329,6 +329,18 @@ const dumpModule = (unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
     }
     out.push(`import ${imp.localName} from ${jsonQuote(imp.specifier)} -> ${what}`)
   }
+  // The `nish:unsafe` facts (`CheckedProgram.unsafeImports`, `unsafeCalls`):
+  // where the module opts out of a check or into a wrap, printed only where it
+  // does, so a module that imports nothing from there dumps as it always has.
+  for (const imp of program.unsafeImports) {
+    const local = imp.localName === imp.importedName ? "" : ` as ${imp.localName}`
+    out.push(
+      `unsafe import ${position(source, imp.node.start)} ${imp.importedName}${local} from ${jsonQuote(imp.specifier)}`
+    )
+  }
+  for (const call of program.unsafeCalls) {
+    out.push(`unsafe call ${call.line}:${call.column} ${call.name} (node ${call.node})`)
+  }
   for (const info of program.constantList) {
     if (info.origin !== source) {
       continue // imported: listed by its own module
