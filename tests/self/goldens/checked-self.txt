@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 81 programs, 1472448 dump lines live, 81 distinct modules.
+# 81 programs, 1473428 dump lines live, 81 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/arrays.ts src/expressions.ts src/constants.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/debug.ts src/branding.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/ice.ts src/ir.ts src/nodes.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/result.ts src/builtins.ts src/expressions.ts src/constants.ts src/annotations.ts src/generics.ts src/checker.ts src/assignment.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/statements.ts src/members.ts src/fusion.ts src/parents.ts src/structs.ts src/target.ts src/capabilities.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -9457,14 +9457,14 @@ function isBuiltinFunction(name: string): boolean -> @isBuiltinFunction [exporte
   calls: conversionTarget isNetExport isUnsafeExport nish_str_eq
   stackSites=0 stackLocals=0
   callee 125:7 conversionTarget -> @conversionTarget
-  callee 157:5 isNetExport -> @isNetExport
-  callee 158:5 isUnsafeExport -> @isUnsafeExport
+  callee 160:5 isNetExport -> @isNetExport
+  callee 161:5 isUnsafeExport -> @isUnsafeExport
 function isStringifiable(type: i32): boolean -> @isStringifiable
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: isNumeric
   stackSites=0 stackLocals=0
-  callee 163:49 isNumeric -> @isNumeric
+  callee 166:49 isNumeric -> @isNumeric
 function checkBuiltinArity(ctx: CheckContext, call: Node, name: string, args: Node, arity: i32): boolean -> @checkBuiltinArity [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -9473,8 +9473,8 @@ function checkBuiltinArity(ctx: CheckContext, call: Node, name: string, args: No
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer args: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 180:9 plural: string (const)
-  callee 181:3 CheckContext.error -> @CheckContext.error
+  local 183:9 plural: string (const)
+  callee 184:3 CheckContext.error -> @CheckContext.error
 function requireStatementPosition(ctx: CheckContext, call: Node, name: string): void -> @requireStatementPosition [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -9482,8 +9482,8 @@ function requireStatementPosition(ctx: CheckContext, call: Node, name: string): 
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 187:9 statement: Node | null (const)
-  callee 189:5 CheckContext.error -> @CheckContext.error
+  local 190:9 statement: Node | null (const)
+  callee 192:5 CheckContext.error -> @CheckContext.error
 function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void -> @checkArgumentType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9493,11 +9493,11 @@ function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: str
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 194:9 got: i32 (const)
-  callee 194:15 checkExpression -> @checkExpression
-  callee 199:5 CheckContext.error -> @CheckContext.error
-  callee 201:50 TypeTable.typeName -> @TypeTable.typeName
-  callee 201:83 TypeTable.typeName -> @TypeTable.typeName
+  local 197:9 got: i32 (const)
+  callee 197:15 checkExpression -> @checkExpression
+  callee 202:5 CheckContext.error -> @CheckContext.error
+  callee 204:50 TypeTable.typeName -> @TypeTable.typeName
+  callee 204:83 TypeTable.typeName -> @TypeTable.typeName
 function checkConstantTime(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 -> @checkConstantTime
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkOneWordType
@@ -9508,7 +9508,7 @@ function checkConstantTime(ctx: CheckContext, call: Node, scope: Scope, name: st
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkOneWordType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkOneWordType#4
   stackSites=0 stackLocals=0
-  callee 215:3 checkOneWordType -> @checkOneWordType
+  callee 218:3 checkOneWordType -> @checkOneWordType
 function checkWrapping(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 -> @checkWrapping
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkOneWordType
@@ -9519,7 +9519,7 @@ function checkWrapping(ctx: CheckContext, call: Node, scope: Scope, name: string
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkOneWordType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkOneWordType#4
   stackSites=0 stackLocals=0
-  callee 235:3 checkOneWordType -> @checkOneWordType
+  callee 238:3 checkOneWordType -> @checkOneWordType
 function checkOneWordType(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node, arity: i32, narrow: i32, wide: i32, takes: string): i32 -> @checkOneWordType
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -9530,23 +9530,23 @@ function checkOneWordType(ctx: CheckContext, call: Node, scope: Scope, name: str
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
-  callee 266:8 checkBuiltinArity -> @checkBuiltinArity
-  local 269:7 lead: i32 (let)
-  callee 270:30 literalOperand -> @literalOperand
-  local 273:9 type: i32 (const)
-  callee 273:16 checkExpression -> @checkExpression
-  local 280:9 admitted: boolean (const)
-  callee 282:5 CheckContext.error -> @CheckContext.error
-  callee 282:71 TypeTable.typeName -> @TypeTable.typeName
-  local 284:7 other: i32 (let)
-  local 285:7 failed: boolean (let)
-  local 286:12 i: i32 (let)
-  callee 287:37 literalOperand -> @literalOperand
-  local 288:13 got: i32 (const)
-  callee 288:19 checkExpression -> @checkExpression
-  callee 300:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 302:59 TypeTable.typeName -> @TypeTable.typeName
-  callee 302:91 TypeTable.typeName -> @TypeTable.typeName
+  callee 269:8 checkBuiltinArity -> @checkBuiltinArity
+  local 272:7 lead: i32 (let)
+  callee 273:30 literalOperand -> @literalOperand
+  local 276:9 type: i32 (const)
+  callee 276:16 checkExpression -> @checkExpression
+  local 283:9 admitted: boolean (const)
+  callee 285:5 CheckContext.error -> @CheckContext.error
+  callee 285:71 TypeTable.typeName -> @TypeTable.typeName
+  local 287:7 other: i32 (let)
+  local 288:7 failed: boolean (let)
+  local 289:12 i: i32 (let)
+  callee 290:37 literalOperand -> @literalOperand
+  local 291:13 got: i32 (const)
+  callee 291:19 checkExpression -> @checkExpression
+  callee 303:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 305:59 TypeTable.typeName -> @TypeTable.typeName
+  callee 305:91 TypeTable.typeName -> @TypeTable.typeName
 function checkUncheckedAccess(ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 -> @checkUncheckedAccess
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -9557,48 +9557,48 @@ function checkUncheckedAccess(ctx: CheckContext, call: Node, scope: Scope, name:
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkArgumentType#2 checkExpression#2 checkArgumentType#2
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
-  local 321:9 store: boolean (const)
-  callee 322:8 checkBuiltinArity -> @checkBuiltinArity
-  local 325:9 receiver: Node (const)
-  local 326:9 array: i32 (const)
-  callee 326:17 checkExpression -> @checkExpression
-  local 327:7 elem: i32 (let)
-  callee 329:10 TypeTable.isArray -> @TypeTable.isArray
-  callee 329:39 isNumeric -> @isNumeric
-  callee 329:49 TypeTable.refOf -> @TypeTable.refOf
-  callee 330:7 CheckContext.error -> @CheckContext.error
-  callee 332:97 TypeTable.typeName -> @TypeTable.typeName
-  callee 334:25 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee 335:7 CheckContext.error -> @CheckContext.error
-  callee 335:27 readonlyWriteMessage -> @readonlyWriteMessage
-  callee 337:14 TypeTable.refOf -> @TypeTable.refOf
-  callee 340:3 checkArgumentType -> @checkArgumentType
-  callee 345:5 checkExpression -> @checkExpression
-  callee 347:5 checkArgumentType -> @checkArgumentType
-  callee 349:3 requireStatementPosition -> @requireStatementPosition
+  local 324:9 store: boolean (const)
+  callee 325:8 checkBuiltinArity -> @checkBuiltinArity
+  local 328:9 receiver: Node (const)
+  local 329:9 array: i32 (const)
+  callee 329:17 checkExpression -> @checkExpression
+  local 330:7 elem: i32 (let)
+  callee 332:10 TypeTable.isArray -> @TypeTable.isArray
+  callee 332:39 isNumeric -> @isNumeric
+  callee 332:49 TypeTable.refOf -> @TypeTable.refOf
+  callee 333:7 CheckContext.error -> @CheckContext.error
+  callee 335:97 TypeTable.typeName -> @TypeTable.typeName
+  callee 337:25 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 338:7 CheckContext.error -> @CheckContext.error
+  callee 338:27 readonlyWriteMessage -> @readonlyWriteMessage
+  callee 340:14 TypeTable.refOf -> @TypeTable.refOf
+  callee 343:3 checkArgumentType -> @checkArgumentType
+  callee 348:5 checkExpression -> @checkExpression
+  callee 350:5 checkArgumentType -> @checkArgumentType
+  callee 352:3 requireStatementPosition -> @requireStatementPosition
 function unsafeImportMessage(name: string): string -> @unsafeImportMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat unsafeModule
   stackSites=0 stackLocals=0
-  callee 361:25 unsafeModule -> @unsafeModule
-  callee 361:209 unsafeModule -> @unsafeModule
+  callee 364:25 unsafeModule -> @unsafeModule
+  callee 364:209 unsafeModule -> @unsafeModule
 function checkNamespaceProperty(ctx: CheckContext, expr: Node, namespace: string, member: string): i32 -> @checkNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 382:5
+  sharedWrite: 385:5
   escaping: namespace
   calls: CheckContext.errorType TypeTable.arrayOf cryptoRefusal dateRefusal isNamespace nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  callee 377:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 383:12 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 395:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 395:32 dateRefusal -> @dateRefusal
+  callee 380:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 386:12 TypeTable.arrayOf -> @TypeTable.arrayOf
   callee 398:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 398:32 cryptoRefusal -> @cryptoRefusal
-  callee 400:8 isNamespace -> @isNamespace
+  callee 398:32 dateRefusal -> @dateRefusal
   callee 401:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 403:10 CheckContext.errorType -> @CheckContext.errorType
+  callee 401:32 cryptoRefusal -> @cryptoRefusal
+  callee 403:8 isNamespace -> @isNamespace
+  callee 404:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 406:10 CheckContext.errorType -> @CheckContext.errorType
 function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 -> @unknownBuiltin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9606,7 +9606,7 @@ function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 -> @unkn
   pointer ctx: size=192 writesThrough=true captured=false passedTo=CheckContext.errorType#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  callee 427:3 CheckContext.errorType -> @CheckContext.errorType
+  callee 430:3 CheckContext.errorType -> @CheckContext.errorType
 function checkImportedDottedBuiltin(ctx: CheckContext, call: Node, scope: Scope, namespace: string, member: string): i32 -> @checkImportedDottedBuiltin [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkProcess
@@ -9616,7 +9616,7 @@ function checkImportedDottedBuiltin(ctx: CheckContext, call: Node, scope: Scope,
   pointer call: size=40 writesThrough=false captured=false passedTo=checkProcess#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkProcess#5
   stackSites=0 stackLocals=0
-  callee 440:11 checkProcess -> @checkProcess
+  callee 443:11 checkProcess -> @checkProcess
 function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 -> @checkBuiltinCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9625,29 +9625,29 @@ function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 -> @
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkConsole#1 checkMath#1 checkProcess#1 checkArena#1 checkDate#1 checkCrypto#1 checkBuiltinArity#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkConsole#5 checkMath#5 checkProcess#5 checkArena#5 checkCrypto#5 checkExpression#2
   stackSites=0 stackLocals=0
-  local 443:9 access: Node (const)
-  local 444:9 receiver: Node (const)
-  local 445:9 args: Node (const)
-  callee 447:12 CheckContext.errorType -> @CheckContext.errorType
-  local 449:9 namespace: string (const)
-  local 450:9 member: string (const)
-  local 451:9 name: string (const)
-  callee 452:8 isNamespace -> @isNamespace
-  callee 455:12 unknownBuiltin -> @unknownBuiltin
-  callee 458:12 checkConsole -> @checkConsole
-  callee 461:12 checkMath -> @checkMath
-  callee 464:12 checkProcess -> @checkProcess
-  callee 467:12 checkArena -> @checkArena
-  callee 470:12 checkDate -> @checkDate
-  callee 473:12 checkCrypto -> @checkCrypto
-  callee 476:9 checkBuiltinArity -> @checkBuiltinArity
-  local 477:13 got: i32 (const)
-  callee 477:19 checkExpression -> @checkExpression
-  callee 477:65 CheckContext.numberType -> @CheckContext.numberType
-  callee 478:31 isNumeric -> @isNumeric
-  callee 479:9 CheckContext.error -> @CheckContext.error
-  callee 481:66 TypeTable.typeName -> @TypeTable.typeName
-  callee 487:10 unknownBuiltin -> @unknownBuiltin
+  local 446:9 access: Node (const)
+  local 447:9 receiver: Node (const)
+  local 448:9 args: Node (const)
+  callee 450:12 CheckContext.errorType -> @CheckContext.errorType
+  local 452:9 namespace: string (const)
+  local 453:9 member: string (const)
+  local 454:9 name: string (const)
+  callee 455:8 isNamespace -> @isNamespace
+  callee 458:12 unknownBuiltin -> @unknownBuiltin
+  callee 461:12 checkConsole -> @checkConsole
+  callee 464:12 checkMath -> @checkMath
+  callee 467:12 checkProcess -> @checkProcess
+  callee 470:12 checkArena -> @checkArena
+  callee 473:12 checkDate -> @checkDate
+  callee 476:12 checkCrypto -> @checkCrypto
+  callee 479:9 checkBuiltinArity -> @checkBuiltinArity
+  local 480:13 got: i32 (const)
+  callee 480:19 checkExpression -> @checkExpression
+  callee 480:65 CheckContext.numberType -> @CheckContext.numberType
+  callee 481:31 isNumeric -> @isNumeric
+  callee 482:9 CheckContext.error -> @CheckContext.error
+  callee 484:66 TypeTable.typeName -> @TypeTable.typeName
+  callee 490:10 unknownBuiltin -> @unknownBuiltin
 function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkConsole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via unknownBuiltin
@@ -9658,14 +9658,14 @@ function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, m
   pointer args: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  callee 499:12 unknownBuiltin -> @unknownBuiltin
-  callee 502:12 CheckContext.errorType -> @CheckContext.errorType
-  local 504:9 got: i32 (const)
-  callee 504:15 checkExpression -> @checkExpression
-  callee 505:27 isStringifiable -> @isStringifiable
-  callee 506:5 CheckContext.error -> @CheckContext.error
-  callee 508:62 TypeTable.typeName -> @TypeTable.typeName
-  callee 511:3 requireStatementPosition -> @requireStatementPosition
+  callee 502:12 unknownBuiltin -> @unknownBuiltin
+  callee 505:12 CheckContext.errorType -> @CheckContext.errorType
+  local 507:9 got: i32 (const)
+  callee 507:15 checkExpression -> @checkExpression
+  callee 508:27 isStringifiable -> @isStringifiable
+  callee 509:5 CheckContext.error -> @CheckContext.error
+  callee 511:62 TypeTable.typeName -> @TypeTable.typeName
+  callee 514:3 requireStatementPosition -> @requireStatementPosition
 function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkMath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -9676,30 +9676,30 @@ function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, memb
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2
   stackSites=0 stackLocals=0
-  callee 523:7 isF64Unary -> @isF64Unary
-  local 524:11 arity: i32 (const)
-  callee 525:9 checkBuiltinArity -> @checkBuiltinArity
-  local 526:18 arg: Node (const)
-  callee 527:9 requireF64 -> @requireF64
-  callee 533:10 checkBuiltinArity -> @checkBuiltinArity
-  local 536:11 got: i32 (const)
-  callee 536:17 checkExpression -> @checkExpression
-  callee 536:63 CheckContext.numberType -> @CheckContext.numberType
-  callee 537:29 isNumeric -> @isNumeric
-  callee 538:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 538:84 TypeTable.typeName -> @TypeTable.typeName
-  callee 543:10 checkBuiltinArity -> @checkBuiltinArity
-  local 546:11 a: i32 (const)
-  callee 546:15 checkExpression -> @checkExpression
-  local 547:11 b: i32 (const)
-  callee 547:15 checkExpression -> @checkExpression
-  callee 551:10 isNumeric -> @isNumeric
-  local 552:13 x: string (const)
-  callee 552:17 TypeTable.typeName -> @TypeTable.typeName
-  callee 553:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 555:85 TypeTable.typeName -> @TypeTable.typeName
-  callee 561:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 564:10 unknownBuiltin -> @unknownBuiltin
+  callee 526:7 isF64Unary -> @isF64Unary
+  local 527:11 arity: i32 (const)
+  callee 528:9 checkBuiltinArity -> @checkBuiltinArity
+  local 529:18 arg: Node (const)
+  callee 530:9 requireF64 -> @requireF64
+  callee 536:10 checkBuiltinArity -> @checkBuiltinArity
+  local 539:11 got: i32 (const)
+  callee 539:17 checkExpression -> @checkExpression
+  callee 539:63 CheckContext.numberType -> @CheckContext.numberType
+  callee 540:29 isNumeric -> @isNumeric
+  callee 541:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 541:84 TypeTable.typeName -> @TypeTable.typeName
+  callee 546:10 checkBuiltinArity -> @checkBuiltinArity
+  local 549:11 a: i32 (const)
+  callee 549:15 checkExpression -> @checkExpression
+  local 550:11 b: i32 (const)
+  callee 550:15 checkExpression -> @checkExpression
+  callee 554:10 isNumeric -> @isNumeric
+  local 555:13 x: string (const)
+  callee 555:17 TypeTable.typeName -> @TypeTable.typeName
+  callee 556:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 558:85 TypeTable.typeName -> @TypeTable.typeName
+  callee 564:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 567:10 unknownBuiltin -> @unknownBuiltin
 function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void -> @requireF64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -9708,13 +9708,13 @@ function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): v
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 568:9 got: i32 (const)
-  callee 568:15 checkExpression -> @checkExpression
-  callee 572:7 isNumeric -> @isNumeric
-  callee 573:5 CheckContext.error -> @CheckContext.error
-  callee 575:52 TypeTable.typeName -> @TypeTable.typeName
-  callee 579:3 CheckContext.error -> @CheckContext.error
-  callee 579:50 TypeTable.typeName -> @TypeTable.typeName
+  local 571:9 got: i32 (const)
+  callee 571:15 checkExpression -> @checkExpression
+  callee 575:7 isNumeric -> @isNumeric
+  callee 576:5 CheckContext.error -> @CheckContext.error
+  callee 578:52 TypeTable.typeName -> @TypeTable.typeName
+  callee 582:3 CheckContext.error -> @CheckContext.error
+  callee 582:50 TypeTable.typeName -> @TypeTable.typeName
 function checkProcess(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkProcess
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via unknownBuiltin
@@ -9725,10 +9725,10 @@ function checkProcess(ctx: CheckContext, call: Node, args: Node, name: string, m
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkArgumentType#2
   stackSites=0 stackLocals=0
-  callee 591:12 unknownBuiltin -> @unknownBuiltin
-  callee 593:7 checkBuiltinArity -> @checkBuiltinArity
-  callee 594:5 checkArgumentType -> @checkArgumentType
-  callee 596:3 requireStatementPosition -> @requireStatementPosition
+  callee 594:12 unknownBuiltin -> @unknownBuiltin
+  callee 596:7 checkBuiltinArity -> @checkBuiltinArity
+  callee 597:5 checkArgumentType -> @checkArgumentType
+  callee 599:3 requireStatementPosition -> @requireStatementPosition
 function checkArena(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkArena
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -9739,13 +9739,13 @@ function checkArena(ctx: CheckContext, call: Node, args: Node, name: string, mem
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkArgumentType#2
   stackSites=0 stackLocals=0
-  callee 609:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 613:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 614:5 requireStatementPosition -> @requireStatementPosition
-  callee 618:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 619:7 checkArgumentType -> @checkArgumentType
-  callee 621:5 requireStatementPosition -> @requireStatementPosition
-  callee 624:10 unknownBuiltin -> @unknownBuiltin
+  callee 612:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 616:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 617:5 requireStatementPosition -> @requireStatementPosition
+  callee 621:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 622:7 checkArgumentType -> @checkArgumentType
+  callee 624:5 requireStatementPosition -> @requireStatementPosition
+  callee 627:10 unknownBuiltin -> @unknownBuiltin
 function checkDate(ctx: CheckContext, call: Node, args: Node, name: string, member: string): i32 -> @checkDate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9755,10 +9755,10 @@ function checkDate(ctx: CheckContext, call: Node, args: Node, name: string, memb
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   stackSites=0 stackLocals=0
-  callee 635:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 635:44 dateRefusal -> @dateRefusal
-  callee 637:7 checkBuiltinArity -> @checkBuiltinArity
-  callee 638:5 refuseOnWasm -> @refuseOnWasm
+  callee 638:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 638:44 dateRefusal -> @dateRefusal
+  callee 640:7 checkBuiltinArity -> @checkBuiltinArity
+  callee 641:5 refuseOnWasm -> @refuseOnWasm
 function checkCrypto(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkCrypto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9769,12 +9769,12 @@ function checkCrypto(ctx: CheckContext, call: Node, args: Node, name: string, me
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkBuffer#2
   stackSites=0 stackLocals=0
-  callee 661:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 661:44 cryptoRefusal -> @cryptoRefusal
-  callee 663:7 checkBuiltinArity -> @checkBuiltinArity
-  callee 663:55 refuseOnWasm -> @refuseOnWasm
-  callee 664:5 checkBuffer -> @checkBuffer
-  callee 666:3 requireStatementPosition -> @requireStatementPosition
+  callee 664:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 664:44 cryptoRefusal -> @cryptoRefusal
+  callee 666:7 checkBuiltinArity -> @checkBuiltinArity
+  callee 666:55 refuseOnWasm -> @refuseOnWasm
+  callee 667:5 checkBuffer -> @checkBuffer
+  callee 669:3 requireStatementPosition -> @requireStatementPosition
 function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope): i32 -> @checkBuiltinFunction [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -9783,106 +9783,111 @@ function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope): i32 
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinFunctionNamed#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkBuiltinFunctionNamed#2
   stackSites=0 stackLocals=0
-  local 674:9 name: string (const)
-  callee 675:7 isUnsafeExport -> @isUnsafeExport
-  callee 676:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 676:44 unsafeImportMessage -> @unsafeImportMessage
-  callee 678:10 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
+  local 677:9 name: string (const)
+  callee 678:7 isUnsafeExport -> @isUnsafeExport
+  callee 679:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 679:44 unsafeImportMessage -> @unsafeImportMessage
+  callee 681:10 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
 function checkBuiltinFunctionNamed(ctx: CheckContext, call: Node, scope: Scope, name: string): i32 -> @checkBuiltinFunctionNamed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   escaping: name
   calls: CheckContext.error CheckContext.errorType CheckContext.numberType CheckedProgram.noteUnsafeCall TypeTable.arrayOf TypeTable.nullableOf TypeTable.typeName checkArgumentType checkBuffer checkBuiltinArity checkConstantTime checkExpression checkNet checkUncheckedAccess checkWrapping conversionTarget isNetExport isNumeric isStringifiable isUnsafeExport nish_panic_index nish_str_concat nish_str_eq refuseOnWasm requireStatementPosition
-  pointer ctx: size=192 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkConstantTime#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkNet#0 CheckContext.errorType#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkConstantTime#1 CheckedProgram.noteUnsafeCall#1 checkUncheckedAccess#1 checkWrapping#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 requireStatementPosition#1 checkNet#1
-  pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkArgumentType#2 checkConstantTime#2 checkUncheckedAccess#2 checkWrapping#2 checkExpression#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkNet#2
+  pointer ctx: size=192 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkConstantTime#0 checkUncheckedAccess#0 checkWrapping#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 requireStatementPosition#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkArgumentType#0 checkArgumentType#0 CheckContext.numberType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 checkBuffer#0 requireStatementPosition#0 checkBuiltinArity#0 refuseOnWasm#0 checkArgumentType#0 checkBuiltinArity#0 refuseOnWasm#0 checkNet#0 CheckContext.errorType#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkConstantTime#1 CheckedProgram.noteUnsafeCall#1 checkUncheckedAccess#1 checkWrapping#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 requireStatementPosition#1 checkBuiltinArity#1 refuseOnWasm#1 checkBuiltinArity#1 refuseOnWasm#1 checkNet#1
+  pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkArgumentType#2 checkConstantTime#2 checkUncheckedAccess#2 checkWrapping#2 checkExpression#2 checkExpression#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkArgumentType#2 checkBuffer#2 checkArgumentType#2 checkNet#2
   stackSites=0 stackLocals=0
-  local 688:9 args: Node (const)
-  local 690:9 target: i32 (const)
-  callee 690:18 conversionTarget -> @conversionTarget
-  callee 692:9 checkBuiltinArity -> @checkBuiltinArity
-  local 695:13 literal: i32 (const)
-  local 696:13 got: i32 (const)
-  callee 696:19 checkExpression -> @checkExpression
-  callee 697:31 isNumeric -> @isNumeric
-  callee 698:9 CheckContext.error -> @CheckContext.error
-  callee 700:91 TypeTable.typeName -> @TypeTable.typeName
-  local 707:11 from: i32 (const)
-  callee 708:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 709:7 checkArgumentType -> @checkArgumentType
-  callee 714:12 checkConstantTime -> @checkConstantTime
-  callee 719:7 isUnsafeExport -> @isUnsafeExport
-  callee 720:5 CheckedProgram.noteUnsafeCall -> @CheckedProgram.noteUnsafeCall
-  callee 722:9 checkUncheckedAccess -> @checkUncheckedAccess
-  callee 723:9 checkWrapping -> @checkWrapping
-  callee 726:9 checkBuiltinArity -> @checkBuiltinArity
-  local 727:13 got: i32 (const)
-  callee 727:19 checkExpression -> @checkExpression
-  callee 729:9 CheckContext.error -> @CheckContext.error
-  callee 729:74 TypeTable.typeName -> @TypeTable.typeName
-  callee 735:9 checkBuiltinArity -> @checkBuiltinArity
-  local 736:13 got: i32 (const)
-  callee 736:19 checkExpression -> @checkExpression
-  callee 737:31 isStringifiable -> @isStringifiable
-  callee 738:9 CheckContext.error -> @CheckContext.error
-  callee 740:67 TypeTable.typeName -> @TypeTable.typeName
-  callee 747:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 748:7 checkArgumentType -> @checkArgumentType
-  callee 750:49 TypeTable.nullableOf -> @TypeTable.nullableOf
-  callee 757:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 758:7 checkArgumentType -> @checkArgumentType
-  callee 760:12 TypeTable.nullableOf -> @TypeTable.nullableOf
-  callee 760:33 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 763:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 764:7 checkArgumentType -> @checkArgumentType
-  callee 765:7 checkArgumentType -> @checkArgumentType
-  callee 767:5 requireStatementPosition -> @requireStatementPosition
-  callee 771:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 772:7 checkArgumentType -> @checkArgumentType
-  callee 774:5 requireStatementPosition -> @requireStatementPosition
-  callee 778:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 779:7 checkArgumentType -> @checkArgumentType
-  callee 781:5 requireStatementPosition -> @requireStatementPosition
-  callee 788:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 789:7 checkArgumentType -> @checkArgumentType
-  callee 797:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 798:7 checkArgumentType -> @checkArgumentType
-  callee 798:61 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 800:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 809:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 810:7 checkArgumentType -> @checkArgumentType
-  callee 810:61 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 811:7 checkArgumentType -> @checkArgumentType
-  callee 812:7 checkArgumentType -> @checkArgumentType
-  callee 814:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 823:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 824:7 checkArgumentType -> @checkArgumentType
-  callee 826:12 TypeTable.nullableOf -> @TypeTable.nullableOf
-  callee 826:33 TypeTable.arrayOf -> @TypeTable.arrayOf
-  callee 835:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 844:5 checkBuiltinArity -> @checkBuiltinArity
-  callee 851:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 852:7 checkArgumentType -> @checkArgumentType
-  callee 862:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 863:7 checkArgumentType -> @checkArgumentType
-  callee 865:12 TypeTable.nullableOf -> @TypeTable.nullableOf
-  callee 872:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 873:7 checkArgumentType -> @checkArgumentType
-  callee 875:12 TypeTable.nullableOf -> @TypeTable.nullableOf
-  callee 883:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 883:57 refuseOnWasm -> @refuseOnWasm
-  callee 884:7 checkArgumentType -> @checkArgumentType
-  callee 893:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 894:7 refuseOnWasm -> @refuseOnWasm
-  callee 899:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 899:57 refuseOnWasm -> @refuseOnWasm
-  callee 900:7 checkArgumentType -> @checkArgumentType
-  callee 912:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 913:7 checkBuffer -> @checkBuffer
-  callee 915:5 requireStatementPosition -> @requireStatementPosition
-  callee 918:7 isNetExport -> @isNetExport
-  callee 919:12 checkNet -> @checkNet
-  callee 921:10 CheckContext.errorType -> @CheckContext.errorType
+  local 691:9 args: Node (const)
+  local 693:9 target: i32 (const)
+  callee 693:18 conversionTarget -> @conversionTarget
+  callee 695:9 checkBuiltinArity -> @checkBuiltinArity
+  local 698:13 literal: i32 (const)
+  local 699:13 got: i32 (const)
+  callee 699:19 checkExpression -> @checkExpression
+  callee 700:31 isNumeric -> @isNumeric
+  callee 701:9 CheckContext.error -> @CheckContext.error
+  callee 703:91 TypeTable.typeName -> @TypeTable.typeName
+  local 710:11 from: i32 (const)
+  callee 711:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 712:7 checkArgumentType -> @checkArgumentType
+  callee 717:12 checkConstantTime -> @checkConstantTime
+  callee 722:7 isUnsafeExport -> @isUnsafeExport
+  callee 723:5 CheckedProgram.noteUnsafeCall -> @CheckedProgram.noteUnsafeCall
+  callee 725:9 checkUncheckedAccess -> @checkUncheckedAccess
+  callee 726:9 checkWrapping -> @checkWrapping
+  callee 729:9 checkBuiltinArity -> @checkBuiltinArity
+  local 730:13 got: i32 (const)
+  callee 730:19 checkExpression -> @checkExpression
+  callee 732:9 CheckContext.error -> @CheckContext.error
+  callee 732:74 TypeTable.typeName -> @TypeTable.typeName
+  callee 738:9 checkBuiltinArity -> @checkBuiltinArity
+  local 739:13 got: i32 (const)
+  callee 739:19 checkExpression -> @checkExpression
+  callee 740:31 isStringifiable -> @isStringifiable
+  callee 741:9 CheckContext.error -> @CheckContext.error
+  callee 743:67 TypeTable.typeName -> @TypeTable.typeName
+  callee 750:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 751:7 checkArgumentType -> @checkArgumentType
+  callee 753:49 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee 760:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 761:7 checkArgumentType -> @checkArgumentType
+  callee 763:12 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee 763:33 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 766:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 767:7 checkArgumentType -> @checkArgumentType
+  callee 768:7 checkArgumentType -> @checkArgumentType
+  callee 770:5 requireStatementPosition -> @requireStatementPosition
+  callee 774:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 775:7 checkArgumentType -> @checkArgumentType
+  callee 777:5 requireStatementPosition -> @requireStatementPosition
+  callee 781:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 782:7 checkArgumentType -> @checkArgumentType
+  callee 784:5 requireStatementPosition -> @requireStatementPosition
+  callee 791:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 792:7 checkArgumentType -> @checkArgumentType
+  callee 800:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 801:7 checkArgumentType -> @checkArgumentType
+  callee 801:61 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 803:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 812:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 813:7 checkArgumentType -> @checkArgumentType
+  callee 813:61 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 814:7 checkArgumentType -> @checkArgumentType
+  callee 815:7 checkArgumentType -> @checkArgumentType
+  callee 817:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 826:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 827:7 checkArgumentType -> @checkArgumentType
+  callee 829:12 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee 829:33 TypeTable.arrayOf -> @TypeTable.arrayOf
+  callee 838:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 847:5 checkBuiltinArity -> @checkBuiltinArity
+  callee 854:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 855:7 checkArgumentType -> @checkArgumentType
+  callee 865:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 866:7 checkArgumentType -> @checkArgumentType
+  callee 868:12 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee 875:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 876:7 checkArgumentType -> @checkArgumentType
+  callee 878:12 TypeTable.nullableOf -> @TypeTable.nullableOf
+  callee 886:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 886:57 refuseOnWasm -> @refuseOnWasm
+  callee 887:7 checkArgumentType -> @checkArgumentType
+  callee 896:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 897:7 refuseOnWasm -> @refuseOnWasm
+  callee 902:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 902:57 refuseOnWasm -> @refuseOnWasm
+  callee 903:7 checkArgumentType -> @checkArgumentType
+  callee 915:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 916:7 checkBuffer -> @checkBuffer
+  callee 918:5 requireStatementPosition -> @requireStatementPosition
+  callee 932:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 932:57 refuseOnWasm -> @refuseOnWasm
+  callee 933:7 checkArgumentType -> @checkArgumentType
+  callee 938:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 939:7 refuseOnWasm -> @refuseOnWasm
+  callee 943:7 isNetExport -> @isNetExport
+  callee 944:12 checkNet -> @checkNet
+  callee 946:10 CheckContext.errorType -> @CheckContext.errorType
 function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i32 -> @checkNet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -9892,18 +9897,18 @@ function checkNet(ctx: CheckContext, call: Node, scope: Scope, name: string): i3
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 refuseOnWasm#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkBuffer#2 checkArgumentType#2
   stackSites=0 stackLocals=0
-  local 932:9 params: string (const)
-  callee 932:18 netSignature -> @netSignature
-  local 933:9 args: Node (const)
-  callee 934:7 checkBuiltinArity -> @checkBuiltinArity
-  callee 934:67 refuseOnWasm -> @refuseOnWasm
-  local 935:14 i: i32 (let)
-  local 936:13 param: i32 (const)
-  local 937:13 arg: Node (const)
-  callee 938:11 isNetBufferLetter -> @isNetBufferLetter
-  callee 939:9 checkBuffer -> @checkBuffer
-  callee 939:80 isNetWrittenLetter -> @isNetWrittenLetter
-  callee 941:9 checkArgumentType -> @checkArgumentType
+  local 957:9 params: string (const)
+  callee 957:18 netSignature -> @netSignature
+  local 958:9 args: Node (const)
+  callee 959:7 checkBuiltinArity -> @checkBuiltinArity
+  callee 959:67 refuseOnWasm -> @refuseOnWasm
+  local 960:14 i: i32 (let)
+  local 961:13 param: i32 (const)
+  local 962:13 arg: Node (const)
+  callee 963:11 isNetBufferLetter -> @isNetBufferLetter
+  callee 964:9 checkBuffer -> @checkBuffer
+  callee 964:80 isNetWrittenLetter -> @isNetWrittenLetter
+  callee 966:9 checkArgumentType -> @checkArgumentType
 function checkBuffer(ctx: CheckContext, arg: Node, scope: Scope, name: string, element: i32, written: boolean): void -> @checkBuffer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.arrayOf
@@ -9913,28 +9918,28 @@ function checkBuffer(ctx: CheckContext, arg: Node, scope: Scope, name: string, e
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 965:9 want: i32 (const)
-  callee 965:16 TypeTable.arrayOf -> @TypeTable.arrayOf
-  local 966:9 got: i32 (const)
-  callee 966:15 checkExpression -> @checkExpression
-  local 970:9 readonlyWant: boolean (const)
-  callee 970:24 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
-  callee 970:58 TypeTable.refOf -> @TypeTable.refOf
-  callee 972:5 CheckContext.error -> @CheckContext.error
-  callee 972:20 readonlyWriteMessage -> @readonlyWriteMessage
-  local 974:9 what: string (let)
-  callee 978:5 CheckContext.error -> @CheckContext.error
-  callee 978:48 TypeTable.typeName -> @TypeTable.typeName
+  local 990:9 want: i32 (const)
+  callee 990:16 TypeTable.arrayOf -> @TypeTable.arrayOf
+  local 991:9 got: i32 (const)
+  callee 991:15 checkExpression -> @checkExpression
+  local 995:9 readonlyWant: boolean (const)
+  callee 995:24 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 995:58 TypeTable.refOf -> @TypeTable.refOf
+  callee 997:5 CheckContext.error -> @CheckContext.error
+  callee 997:20 readonlyWriteMessage -> @readonlyWriteMessage
+  local 999:9 what: string (let)
+  callee 1003:5 CheckContext.error -> @CheckContext.error
+  callee 1003:48 TypeTable.typeName -> @TypeTable.typeName
 function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean -> @terminatesControlFlow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.signature CheckedProgram.builtinImport nish_panic_index nish_str_eq
   pointer ctx: size=192 writesThrough=false captured=false passedTo=CheckContext.signature#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 991:9 callee: Node (const)
-  local 996:11 imported: BuiltinExport | null (const)
-  callee 996:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 1000:39 CheckContext.signature -> @CheckContext.signature
+  local 1016:9 callee: Node (const)
+  local 1021:11 imported: BuiltinExport | null (const)
+  callee 1021:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 1025:39 CheckContext.signature -> @CheckContext.signature
 function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean -> @isArgvExpression [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr
@@ -9943,13 +9948,13 @@ function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean 
   pointer expr: size=40 writesThrough=true captured=true
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.lookup#0
   stackSites=0 stackLocals=0
-  local 1017:7 inner: Node (let)
-  local 1025:11 imported: BuiltinExport | null (const)
-  callee 1025:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 1026:74 Scope.lookup -> @Scope.lookup
-  local 1031:9 receiver: Node (const)
-  callee 1036:10 Scope.lookup -> @Scope.lookup
-  callee 1036:46 CheckedProgram.constant -> @CheckedProgram.constant
+  local 1042:7 inner: Node (let)
+  local 1050:11 imported: BuiltinExport | null (const)
+  callee 1050:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 1051:74 Scope.lookup -> @Scope.lookup
+  local 1056:9 receiver: Node (const)
+  callee 1061:10 Scope.lookup -> @Scope.lookup
+  callee 1061:46 CheckedProgram.constant -> @CheckedProgram.constant
 module src/arrays.ts
 import secretContainerMessage from "./secret" -> function @containerMessage
 import secretIndexMessage from "./secret" -> function @indexMessage
@@ -22275,8 +22280,8 @@ function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): 
   sharedWrite: via emitConversion
   escaping: name
   calls: Emitter.declareType Emitter.emitExpression Emitter.typeOf Emitter.useRuntime IRFunction.emit IRFunction.emitValue builtinConversionTarget callIntrinsic emitConversion emitCtEq emitCtSelect emitNetCall emitPanic emitParseCall emitStreamWrite emitUncheckedElement emitWrapping firstArgument internalErrorFor isNetExport nish_exit nish_panic_index nish_str_concat nish_str_eq stringArgs
-  pointer emitter: size=208 writesThrough=false captured=false passedTo=emitConversion#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitCtSelect#0 emitCtEq#0 emitUncheckedElement#0 emitWrapping#0 emitWrapping#0 emitWrapping#0 emitParseCall#0 Emitter.emitExpression#0 callIntrinsic#0 emitParseCall#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 emitParseCall#0 emitConversion#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitStreamWrite#0 emitStreamWrite#0 emitPanic#0 emitNetCall#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0 firstArgument#0 firstArgument#0 emitCtSelect#1 emitCtEq#1 emitUncheckedElement#1 emitWrapping#1 emitWrapping#1 emitWrapping#1 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 Emitter.typeOf#1 Emitter.typeOf#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 firstArgument#0 emitStreamWrite#1 emitStreamWrite#1 emitPanic#1 emitNetCall#1
+  pointer emitter: size=208 writesThrough=false captured=false passedTo=emitConversion#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitCtSelect#0 emitCtEq#0 emitUncheckedElement#0 emitWrapping#0 emitWrapping#0 emitWrapping#0 emitParseCall#0 Emitter.emitExpression#0 callIntrinsic#0 emitParseCall#0 Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.emitExpression#0 emitParseCall#0 emitConversion#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.typeOf#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringArgs#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0 emitStreamWrite#0 emitStreamWrite#0 emitPanic#0 emitNetCall#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0 firstArgument#0 firstArgument#0 emitCtSelect#1 emitCtEq#1 emitUncheckedElement#1 emitWrapping#1 emitWrapping#1 emitWrapping#1 firstArgument#0 firstArgument#0 firstArgument#0 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 Emitter.typeOf#1 Emitter.typeOf#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 stringArgs#1 firstArgument#0 stringArgs#1 stringArgs#1 firstArgument#0 emitStreamWrite#1 emitStreamWrite#1 emitPanic#1 emitNetCall#1
   stackSites=0 stackLocals=0
   local 645:9 target: i32 (const)
   callee 645:18 builtinConversionTarget -> @builtinConversionTarget
@@ -22382,25 +22387,33 @@ function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: string): 
   callee 804:39 firstArgument -> @firstArgument
   callee 805:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee 805:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 810:5 Emitter.declareType -> @Emitter.declareType
-  local 811:11 bytes: string (const)
-  callee 811:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 811:42 firstArgument -> @firstArgument
-  callee 812:5 IRFunction.emit -> @IRFunction.emit
-  callee 812:34 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 816:12 emitStreamWrite -> @emitStreamWrite
-  callee 819:12 emitStreamWrite -> @emitStreamWrite
-  callee 822:12 emitPanic -> @emitPanic
-  callee 824:7 isNetExport -> @isNetExport
-  callee 825:12 emitNetCall -> @emitNetCall
-  callee 827:16 internalErrorFor -> @internalErrorFor
+  callee 811:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 812:19 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 812:66 stringArgs -> @stringArgs
+  callee 816:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 816:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 819:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 820:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 820:70 stringArgs -> @stringArgs
+  callee 826:5 Emitter.declareType -> @Emitter.declareType
+  local 827:11 bytes: string (const)
+  callee 827:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 827:42 firstArgument -> @firstArgument
+  callee 828:5 IRFunction.emit -> @IRFunction.emit
+  callee 828:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 832:12 emitStreamWrite -> @emitStreamWrite
+  callee 835:12 emitStreamWrite -> @emitStreamWrite
+  callee 838:12 emitPanic -> @emitPanic
+  callee 840:7 isNetExport -> @isNetExport
+  callee 841:12 emitNetCall -> @emitNetCall
+  callee 843:16 internalErrorFor -> @internalErrorFor
 function isSpawnCall(program: CheckedProgram, call: Node): boolean -> @isSpawnCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
   pointer program: size=584 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 840:9 callee: Node (const)
+  local 856:9 callee: Node (const)
 function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, call: Node, uncheckedIndexing: boolean): string[] -> @identifierBuiltinCallees [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via identifierBuiltinCalleesNamed
@@ -22410,29 +22423,29 @@ function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, cal
   pointer table: size=80 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#1
   pointer call: size=40 writesThrough=false captured=false passedTo=identifierBuiltinCalleesNamed#2
   stackSites=0 stackLocals=0
-  callee 852:16 identifierBuiltinCalleesNamed -> @identifierBuiltinCalleesNamed
+  callee 868:16 identifierBuiltinCalleesNamed -> @identifierBuiltinCalleesNamed
 function identifierBuiltinCalleesNamed(program: CheckedProgram, table: TypeTable, call: Node, name: string, uncheckedIndexing: boolean): string[] -> @identifierBuiltinCalleesNamed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 872:7
+  sharedWrite: 888:7
   escaping: name
   calls: builtinConversionTarget conversionIntrinsic isBuiltinFunction isNetExport isUnsafeExport netRangeBuffer netSymbol nish_array_grow nish_panic_index nish_str_eq panicTailCallees
   pointer program: size=584 writesThrough=false captured=false
   pointer table: size=80 writesThrough=false captured=false passedTo=conversionIntrinsic#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 862:9 out: string[] (const)
-  callee 863:8 isBuiltinFunction -> @isBuiltinFunction
-  local 866:9 args: Node (const)
-  local 867:9 firstType: i32 (const)
-  local 868:9 target: i32 (const)
-  callee 868:18 builtinConversionTarget -> @builtinConversionTarget
-  local 870:11 intrinsic: string (const)
-  callee 870:40 conversionIntrinsic -> @conversionIntrinsic
-  callee 973:5 panicTailCallees -> @panicTailCallees
-  callee 979:7 isNetExport -> @isNetExport
-  callee 980:14 netSymbol -> @netSymbol
-  callee 981:9 netRangeBuffer -> @netRangeBuffer
-  callee 994:7 isUnsafeExport -> @isUnsafeExport
+  local 878:9 out: string[] (const)
+  callee 879:8 isBuiltinFunction -> @isBuiltinFunction
+  local 882:9 args: Node (const)
+  local 883:9 firstType: i32 (const)
+  local 884:9 target: i32 (const)
+  callee 884:18 builtinConversionTarget -> @builtinConversionTarget
+  local 886:11 intrinsic: string (const)
+  callee 886:40 conversionIntrinsic -> @conversionIntrinsic
+  callee 1001:5 panicTailCallees -> @panicTailCallees
+  callee 1007:7 isNetExport -> @isNetExport
+  callee 1008:14 netSymbol -> @netSymbol
+  callee 1009:9 netRangeBuffer -> @netRangeBuffer
+  callee 1022:7 isUnsafeExport -> @isUnsafeExport
 function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emitNetCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIndex
@@ -22441,50 +22454,50 @@ function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emi
   pointer emitter: size=208 writesThrough=false captured=false passedTo=emitIndex#0 Emitter.emitExpression#0 Emitter.declareType#0 Emitter.align8#0 emitSliceCheck#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=2
-  local 1020:9 fn: IRFunction (const)
-  local 1021:9 params: string (const)
-  callee 1021:18 netSignature -> @netSignature
-  local 1022:9 args: Node[] (const)
-  local 1023:9 values: string[] (const)
-  local 1024:9 parts: string[] (const)
-  local 1025:7 buffers: boolean (let)
-  local 1027:12 i: i32 (let)
-  local 1028:11 param: i32 (const)
-  local 1030:13 value: string (const)
-  callee 1030:21 emitIndex -> @emitIndex
-  local 1034:13 value: string (const)
-  callee 1034:21 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1047:5 Emitter.declareType -> @Emitter.declareType
-  local 1049:9 at: i32 (const)
-  callee 1049:14 netRangeBuffer -> @netRangeBuffer
-  local 1051:11 end: string (const)
-  callee 1051:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1052:11 field: string (const)
-  callee 1052:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1055:11 size: string (const)
-  callee 1055:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1055:57 Emitter.align8 -> @Emitter.align8
-  callee 1056:5 emitSliceCheck -> @emitSliceCheck
-  callee 1058:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1058:35 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1058:54 netSymbol -> @netSymbol
+  local 1048:9 fn: IRFunction (const)
+  local 1049:9 params: string (const)
+  callee 1049:18 netSignature -> @netSignature
+  local 1050:9 args: Node[] (const)
+  local 1051:9 values: string[] (const)
+  local 1052:9 parts: string[] (const)
+  local 1053:7 buffers: boolean (let)
+  local 1055:12 i: i32 (let)
+  local 1056:11 param: i32 (const)
+  local 1058:13 value: string (const)
+  callee 1058:21 emitIndex -> @emitIndex
+  local 1062:13 value: string (const)
+  callee 1062:21 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 1075:5 Emitter.declareType -> @Emitter.declareType
+  local 1077:9 at: i32 (const)
+  callee 1077:14 netRangeBuffer -> @netRangeBuffer
+  local 1079:11 end: string (const)
+  callee 1079:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1080:11 field: string (const)
+  callee 1080:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1083:11 size: string (const)
+  callee 1083:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1083:57 Emitter.align8 -> @Emitter.align8
+  callee 1084:5 emitSliceCheck -> @emitSliceCheck
+  callee 1086:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1086:35 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1086:54 netSymbol -> @netSymbol
 function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via f64Hex
   calls: Emitter.declareGlobal Emitter.declareType Emitter.useRuntime IRFunction.emitValue f64Hex internalErrorFor nish_exit nish_str_concat nish_str_eq
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  callee 1066:12 f64Hex -> @f64Hex
-  callee 1069:12 f64Hex -> @f64Hex
-  callee 1073:5 Emitter.declareType -> @Emitter.declareType
-  callee 1074:5 Emitter.declareGlobal -> @Emitter.declareGlobal
-  local 1075:11 align: string (const)
-  callee 1076:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1082:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1082:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1085:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1085:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1087:16 internalErrorFor -> @internalErrorFor
+  callee 1094:12 f64Hex -> @f64Hex
+  callee 1097:12 f64Hex -> @f64Hex
+  callee 1101:5 Emitter.declareType -> @Emitter.declareType
+  callee 1102:5 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local 1103:11 align: string (const)
+  callee 1104:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1110:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1110:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1113:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1113:45 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1115:16 internalErrorFor -> @internalErrorFor
 module src/emit-strings.ts
 import Emitter from "./emit" -> struct Emitter
 import emitIndex from "./emit-arrays" -> function @emitIndex
@@ -25173,7 +25186,7 @@ function RuntimeTable.build(this: RuntimeTable): void -> @RuntimeTable.build [ex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 348:5
   calls: RuntimeFunction.constructor RuntimeTable.add RuntimeTable.addWrites RuntimeTable.buildIntrinsics attrs1 attrs2 attrs3 mayNotReturn nish_alloc_struct nish_str_concat plain
-  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.buildIntrinsics#0
+  pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.addWrites#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.add#0 RuntimeTable.addWrites#0 RuntimeTable.buildIntrinsics#0
   stackSites=0 stackLocals=0
   local 205:11 grow: RuntimeFunction (const)
   callee 205:18 new RuntimeFunction -> @RuntimeFunction.constructor
@@ -25265,127 +25278,133 @@ function RuntimeTable.build(this: RuntimeTable): void -> @RuntimeTable.build [ex
   callee 528:7 plain -> @plain
   callee 537:5 RuntimeTable.add -> @RuntimeTable.add
   callee 537:14 plain -> @plain
-  callee 540:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 540:14 plain -> @plain
-  callee 542:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 543:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 546:9 attrs1 -> @attrs1
-  callee 560:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 561:7 plain -> @plain
-  callee 567:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 568:7 plain -> @plain
-  callee 570:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 571:7 plain -> @plain
-  callee 577:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 578:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 581:9 attrs1 -> @attrs1
-  callee 585:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 586:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 589:9 attrs1 -> @attrs1
-  callee 593:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 594:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 597:9 attrs1 -> @attrs1
-  callee 601:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 602:7 plain -> @plain
-  callee 608:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 609:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 612:9 attrs1 -> @attrs1
-  callee 620:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 621:7 plain -> @plain
-  callee 623:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 624:7 plain -> @plain
+  callee 544:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 544:14 plain -> @plain
+  callee 545:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 545:14 plain -> @plain
+  callee 546:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 547:7 plain -> @plain
+  callee 551:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 551:14 plain -> @plain
+  callee 553:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 554:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 557:9 attrs1 -> @attrs1
+  callee 571:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 572:7 plain -> @plain
+  callee 578:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 579:7 plain -> @plain
+  callee 581:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 582:7 plain -> @plain
+  callee 588:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 589:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 592:9 attrs1 -> @attrs1
+  callee 596:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 597:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 600:9 attrs1 -> @attrs1
+  callee 604:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 605:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 608:9 attrs1 -> @attrs1
+  callee 612:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 613:7 plain -> @plain
+  callee 619:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 620:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 623:9 attrs1 -> @attrs1
   callee 631:5 RuntimeTable.add -> @RuntimeTable.add
   callee 632:7 plain -> @plain
-  callee 638:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 639:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 642:9 attrs1 -> @attrs1
-  callee 646:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 647:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 650:9 attrs1 -> @attrs1
-  callee 660:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 660:14 plain -> @plain
-  callee 661:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 662:7 plain -> @plain
-  callee 668:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 669:7 plain -> @plain
-  callee 675:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 676:7 plain -> @plain
-  callee 682:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 683:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 686:9 attrs1 -> @attrs1
-  callee 697:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 698:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 701:9 attrs3 -> @attrs3
-  callee 705:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 706:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 709:9 attrs3 -> @attrs3
-  callee 718:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee 720:7 plain -> @plain
-  callee 731:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee 733:7 mayNotReturn -> @mayNotReturn
-  local 740:11 panicIndex: RuntimeFunction (const)
-  callee 740:24 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 743:7 attrs3 -> @attrs3
-  callee 747:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local 752:11 panicSlice: RuntimeFunction (const)
-  callee 752:24 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 755:7 attrs3 -> @attrs3
-  callee 759:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  local 761:11 panicDiv: RuntimeFunction (const)
-  callee 761:22 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 764:7 attrs3 -> @attrs3
-  callee 768:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee 775:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 776:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 779:9 attrs1 -> @attrs1
-  callee 788:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 789:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 792:9 attrs1 -> @attrs1
-  callee 796:5 RuntimeTable.add -> @RuntimeTable.add
-  callee 797:7 new RuntimeFunction -> @RuntimeFunction.constructor
-  callee 800:9 attrs1 -> @attrs1
-  callee 807:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
-  callee 809:7 plain -> @plain
-  callee 811:5 RuntimeTable.buildIntrinsics -> @RuntimeTable.buildIntrinsics
+  callee 634:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 635:7 plain -> @plain
+  callee 642:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 643:7 plain -> @plain
+  callee 649:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 650:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 653:9 attrs1 -> @attrs1
+  callee 657:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 658:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 661:9 attrs1 -> @attrs1
+  callee 671:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 671:14 plain -> @plain
+  callee 672:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 673:7 plain -> @plain
+  callee 679:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 680:7 plain -> @plain
+  callee 686:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 687:7 plain -> @plain
+  callee 693:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 694:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 697:9 attrs1 -> @attrs1
+  callee 708:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 709:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 712:9 attrs3 -> @attrs3
+  callee 716:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 717:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 720:9 attrs3 -> @attrs3
+  callee 729:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee 731:7 plain -> @plain
+  callee 742:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee 744:7 mayNotReturn -> @mayNotReturn
+  local 751:11 panicIndex: RuntimeFunction (const)
+  callee 751:24 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 754:7 attrs3 -> @attrs3
+  callee 758:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local 763:11 panicSlice: RuntimeFunction (const)
+  callee 763:24 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 766:7 attrs3 -> @attrs3
+  callee 770:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  local 772:11 panicDiv: RuntimeFunction (const)
+  callee 772:22 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 775:7 attrs3 -> @attrs3
+  callee 779:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee 786:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 787:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 790:9 attrs1 -> @attrs1
+  callee 799:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 800:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 803:9 attrs1 -> @attrs1
+  callee 807:5 RuntimeTable.add -> @RuntimeTable.add
+  callee 808:7 new RuntimeFunction -> @RuntimeFunction.constructor
+  callee 811:9 attrs1 -> @attrs1
+  callee 818:5 RuntimeTable.addWrites -> @RuntimeTable.addWrites
+  callee 820:7 plain -> @plain
+  callee 822:5 RuntimeTable.buildIntrinsics -> @RuntimeTable.buildIntrinsics
 function RuntimeTable.buildIntrinsics(this: RuntimeTable): void -> @RuntimeTable.buildIntrinsics [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RuntimeTable.addIntrinsic
   calls: RuntimeTable.addIntrinsic nish_str_concat
   pointer this: size=16 writesThrough=false captured=false passedTo=RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0 RuntimeTable.addIntrinsic#0
   stackSites=4 stackLocals=4
-  local 816:11 unary: string[] (const)
-  local 817:16 f: string (const)
-  callee 818:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  local 820:11 binary: string[] (const)
-  local 821:16 f: string (const)
-  callee 822:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  local 824:11 signed: string[] (const)
-  local 825:16 t: string (const)
-  callee 826:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 827:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 828:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local 827:11 unary: string[] (const)
+  local 828:16 f: string (const)
   callee 829:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  local 833:11 widths: string[] (const)
-  local 834:16 t: string (const)
-  callee 835:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 836:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local 831:11 binary: string[] (const)
+  local 832:16 f: string (const)
+  callee 833:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local 835:11 signed: string[] (const)
+  local 836:16 t: string (const)
   callee 837:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 838:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
   callee 839:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
   callee 840:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 844:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 845:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
-  callee 846:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  local 844:11 widths: string[] (const)
+  local 845:16 t: string (const)
+  callee 846:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 847:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 848:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 850:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 851:7 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 855:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 856:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
+  callee 857:5 RuntimeTable.addIntrinsic -> @RuntimeTable.addIntrinsic
 function inlineAllocatorAttrs(): string[] -> @inlineAllocatorAttrs [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 852:3
+  sharedWrite: 863:3
   calls: nish_array_grow
   stackSites=0 stackLocals=0
-  local 851:9 out: string[] (const)
+  local 862:9 out: string[] (const)
 function inlineAllocator(attrGroup: string): string -> @inlineAllocator [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_alloc_struct nish_array_grow nish_str_concat
   stackSites=1 stackLocals=1
-  local 864:9 lines: string[] (const)
+  local 875:9 lines: string[] (const)
 module src/emit-map.ts
 import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
@@ -28633,7 +28652,7 @@ function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   calls: isNetExport isUnsafeExport nish_str_eq
   stackSites=0 stackLocals=0
   callee 187:7 isUnsafeExport -> @isUnsafeExport
-  callee 208:7 isNetExport -> @isNetExport
+  callee 210:7 isNetExport -> @isNetExport
 module src/ast-text.ts
 import FLAG_ABSTRACT from "./nodes" -> const FLAG_ABSTRACT
 import FLAG_ACCESSOR from "./nodes" -> const FLAG_ACCESSOR
@@ -35573,10 +35592,10 @@ import simulatedInternalError from "./ice" -> function @simulatedInternalError
 import simulatedUnlabelledBuiltin from "./ice" -> function @simulatedUnlabelledBuiltin
 import resolveTarget from "./target" -> function @resolveTarget
 import supportedTargets from "./target" -> function @supportedTargets
-import fnv1a64Hex from "./run-cache" -> function @fnv1a64Hex
 import runBinaryName from "./run-cache" -> function @runBinaryName
 import runCacheKey from "./run-cache" -> function @runCacheKey
 import runCacheRoot from "./run-cache" -> function @runCacheRoot
+import sha256Hex from "./run-cache" -> function @sha256Hex
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 const COLON: i32 = 58
 function usageText(): string -> @usageText
@@ -35862,7 +35881,7 @@ function runProgram(emitted: EmittedModule[], name: string, profile: string, deb
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1021:3
   escaping: argsFrom debugInfo json name profile threads
-  calls: buildIntoCache cCompiler fnv1a64Hex nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file packageRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot
+  calls: buildIntoCache cCompiler nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file packageRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex
   pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
   stackSites=0 stackLocals=0
   local 988:9 cacheRoot: string (const)
@@ -35875,7 +35894,7 @@ function runProgram(emitted: EmittedModule[], name: string, profile: string, deb
   callee 997:42 packageRoot -> @packageRoot
   callee 997:86 cCompiler -> @cCompiler
   local 998:9 cacheEntry: string (const)
-  callee 998:38 fnv1a64Hex -> @fnv1a64Hex
+  callee 998:38 sha256Hex -> @sha256Hex
   local 999:9 binary: string (const)
   local 1000:9 keyFile: string (const)
   local 1001:9 stored: string | null (const)
@@ -35892,56 +35911,56 @@ function buildIntoCache(emitted: EmittedModule[], cacheRoot: string, cacheEntry:
   calls: hexOfI64 linkProgram makeDirectory missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_spawn_to nish_str_concat nish_write nish_write_file reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1069:9 problem: string (const)
-  callee 1069:19 missingToolchain -> @missingToolchain
-  callee 1071:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1074:8 makeDirectory -> @makeDirectory
-  callee 1075:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1078:9 privateRoot: string[] (const)
-  callee 1080:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1083:9 work: string (const)
-  callee 1083:37 hexOfI64 -> @hexOfI64
-  callee 1084:8 makeDirectory -> @makeDirectory
-  local 1088:9 outputs: string[] (const)
-  local 1089:14 module: EmittedModule (const)
-  local 1090:11 file: string (const)
-  local 1094:9 built: string (const)
-  local 1095:7 status: i32 (let)
-  callee 1095:16 linkProgram -> @linkProgram
-  local 1098:11 move: string[] (const)
-  callee 1100:7 reportToolchainFailure -> @reportToolchainFailure
-  local 1104:9 clean: string[] (const)
+  local 1071:9 problem: string (const)
+  callee 1071:19 missingToolchain -> @missingToolchain
+  callee 1073:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1076:8 makeDirectory -> @makeDirectory
+  callee 1077:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1080:9 privateRoot: string[] (const)
+  callee 1082:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1085:9 work: string (const)
+  callee 1085:37 hexOfI64 -> @hexOfI64
+  callee 1086:8 makeDirectory -> @makeDirectory
+  local 1090:9 outputs: string[] (const)
+  local 1091:14 module: EmittedModule (const)
+  local 1092:11 file: string (const)
+  local 1096:9 built: string (const)
+  local 1097:7 status: i32 (let)
+  callee 1097:16 linkProgram -> @linkProgram
+  local 1100:11 move: string[] (const)
+  callee 1102:7 reportToolchainFailure -> @reportToolchainFailure
+  local 1106:9 clean: string[] (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1148:3
+  sharedWrite: 1150:3
   escaping: json link profile
   calls: makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot packageRootCandidates reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1132:9 root: string (const)
-  callee 1132:16 packageRoot -> @packageRoot
-  callee 1134:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 1135:58 packageRootCandidates -> @packageRootCandidates
-  callee 1140:8 makeDirectoryFor -> @makeDirectoryFor
-  local 1143:9 script: string (const)
-  local 1147:9 argv: string[] (const)
-  local 1154:14 file: string (const)
-  local 1174:9 status: i32 (const)
-  local 1176:11 why: string (const)
-  callee 1177:5 reportToolchainFailure -> @reportToolchainFailure
-  local 1183:9 binary: string | null (const)
+  local 1134:9 root: string (const)
+  callee 1134:16 packageRoot -> @packageRoot
+  callee 1136:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 1137:58 packageRootCandidates -> @packageRootCandidates
+  callee 1142:8 makeDirectoryFor -> @makeDirectoryFor
+  local 1145:9 script: string (const)
+  local 1149:9 argv: string[] (const)
+  local 1156:14 file: string (const)
+  local 1176:9 status: i32 (const)
+  local 1178:11 why: string (const)
+  callee 1179:5 reportToolchainFailure -> @reportToolchainFailure
+  local 1185:9 binary: string | null (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1206:7
+  sharedWrite: 1208:7
   escaping: fns
   calls: napiBridges nish_array_grow
   pointer compilation: size=112 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1196:9 opts: Options (const)
-  local 1203:9 out: ExternalFunction[] (const)
-  local 1204:14 fn: ExternalFunction (const)
-  callee 1205:9 napiBridges -> @napiBridges
+  local 1198:9 opts: Options (const)
+  local 1205:9 out: ExternalFunction[] (const)
+  local 1206:14 fn: ExternalFunction (const)
+  callee 1207:9 napiBridges -> @napiBridges
 function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
@@ -35949,18 +35968,18 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   pointer compilation: size=112 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
-  local 1225:9 opts: Options (const)
-  callee 1227:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1230:36 generateHeader -> @generateHeader
-  callee 1234:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1237:33 generateDts -> @generateDts
-  local 1239:11 loader: string (const)
-  callee 1239:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 1240:27 generateWasmLoader -> @generateWasmLoader
-  callee 1244:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1247:34 generateNapiShim -> @generateNapiShim
-  callee 1251:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 1254:39 generateNapiShim -> @generateNapiShim
+  local 1227:9 opts: Options (const)
+  callee 1229:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1232:36 generateHeader -> @generateHeader
+  callee 1236:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1239:33 generateDts -> @generateDts
+  local 1241:11 loader: string (const)
+  callee 1241:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 1242:27 generateWasmLoader -> @generateWasmLoader
+  callee 1246:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1249:34 generateNapiShim -> @generateNapiShim
+  callee 1253:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 1256:39 generateNapiShim -> @generateNapiShim
 module src/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -38027,68 +38046,118 @@ function runCacheRoot(): string -> @runCacheRoot [exported]
   sharedWrite: via nish_getenv
   calls: nish_getenv nish_str_at nish_str_concat
   stackSites=0 stackLocals=0
-  local 39:9 xdg: string | null (const)
-  local 43:9 home: string | null (const)
+  local 41:9 xdg: string | null (const)
+  local 45:9 home: string | null (const)
 function runBinaryName(name: string): string -> @runBinaryName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: nish_str_at nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-function fnv1a64Hex(text: string): string -> @fnv1a64Hex [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringBuilder.add
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText hexDigitLower
-  stackSites=1 stackLocals=1
-  local 70:9 high: u64 (const)
-  local 71:9 low: u64 (const)
-  local 72:9 prime: u64 (const)
-  local 73:9 thirtyTwo: u64 (const)
-  local 74:7 hash: u64 (let)
-  local 75:9 n: i32 (const)
-  local 76:7 i: i32 (let)
-  local 82:9 out: StringBuilder (const)
-  callee 82:15 new StringBuilder -> @StringBuilder.constructor
-  local 83:7 shift: i32 (let)
-  callee 85:5 StringBuilder.add -> @StringBuilder.add
-  callee 85:13 hexDigitLower -> @hexDigitLower
-  callee 88:10 StringBuilder.toText -> @StringBuilder.toText
-function fileFingerprint(path: string): string -> @fileFingerprint
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_read_file_or_null
-  calls: fnv1a64Hex nish_read_file_or_null
+function sha256Constants(): u32[] -> @sha256Constants
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 98:9 text: string | null (const)
-  callee 99:32 fnv1a64Hex -> @fnv1a64Hex
+function rotr(x: u32, n: u32): u32 -> @rotr
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function paddedByte(text: string, j: i32, padded: i32): u32 -> @paddedByte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  stackSites=0 stackLocals=0
+  local 90:9 n: i32 (const)
+  local 97:9 fromEnd: i32 (const)
+  local 101:9 bits: u64 (const)
+function sha256Hex(text: string): string -> @sha256Hex [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringBuilder.add
+  escaping: text
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText hexDigitLower nish_panic_index paddedByte rotr sha256Constants
+  stackSites=3 stackLocals=3
+  local 113:9 k: u32[] (const)
+  callee 113:13 sha256Constants -> @sha256Constants
+  local 114:9 h: u32[] (const)
+  local 117:9 w: u32[] (const)
+  local 118:9 n: i32 (const)
+  local 120:9 padded: i32 (const)
+  local 121:7 block: i32 (let)
+  local 123:9 t: i32 (let)
+  local 125:13 at: i32 (const)
+  local 126:11 word: u32 (let)
+  callee 137:12 paddedByte -> @paddedByte
+  callee 138:12 paddedByte -> @paddedByte
+  callee 139:12 paddedByte -> @paddedByte
+  callee 140:11 paddedByte -> @paddedByte
+  local 146:13 w15: u32 (const)
+  local 147:13 w2: u32 (const)
+  local 148:13 s0: u32 (const)
+  callee 148:18 rotr -> @rotr
+  callee 148:33 rotr -> @rotr
+  local 149:13 s1: u32 (const)
+  callee 149:18 rotr -> @rotr
+  callee 149:33 rotr -> @rotr
+  local 153:9 a: u32 (let)
+  local 154:9 b: u32 (let)
+  local 155:9 c: u32 (let)
+  local 156:9 d: u32 (let)
+  local 157:9 e: u32 (let)
+  local 158:9 f: u32 (let)
+  local 159:9 g: u32 (let)
+  local 160:9 hh: u32 (let)
+  local 164:13 big1: u32 (const)
+  callee 164:20 rotr -> @rotr
+  callee 164:33 rotr -> @rotr
+  callee 164:47 rotr -> @rotr
+  local 165:13 choose: u32 (const)
+  local 166:13 t1: u32 (const)
+  local 167:13 big0: u32 (const)
+  callee 167:20 rotr -> @rotr
+  callee 167:33 rotr -> @rotr
+  callee 167:47 rotr -> @rotr
+  local 168:13 majority: u32 (const)
+  local 169:13 t2: u32 (const)
+  local 190:9 out: StringBuilder (const)
+  callee 190:15 new StringBuilder -> @StringBuilder.constructor
+  local 191:14 word: u32 (const)
+  local 192:9 shift: i32 (let)
+  callee 194:7 StringBuilder.add -> @StringBuilder.add
+  callee 194:15 hexDigitLower -> @hexDigitLower
+  callee 198:10 StringBuilder.toText -> @StringBuilder.toText
+function fileFingerprint(path: string): string -> @fileFingerprint
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file_or_null
+  calls: nish_read_file_or_null sha256Hex
+  stackSites=0 stackLocals=0
+  local 208:9 text: string | null (const)
+  callee 209:32 sha256Hex -> @sha256Hex
 function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, debugInfo: boolean, threads: boolean, cc: string): string -> @runCacheKey [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 121:9 key: StringBuilder (const)
-  callee 121:15 new StringBuilder -> @StringBuilder.constructor
-  callee 122:3 StringBuilder.add -> @StringBuilder.add
-  callee 123:3 StringBuilder.add -> @StringBuilder.add
-  callee 124:3 StringBuilder.add -> @StringBuilder.add
-  callee 125:3 StringBuilder.add -> @StringBuilder.add
-  callee 126:3 StringBuilder.add -> @StringBuilder.add
-  callee 126:23 fileFingerprint -> @fileFingerprint
-  callee 127:3 StringBuilder.add -> @StringBuilder.add
-  callee 127:24 fileFingerprint -> @fileFingerprint
-  callee 128:3 StringBuilder.add -> @StringBuilder.add
-  callee 128:27 fileFingerprint -> @fileFingerprint
-  callee 129:3 StringBuilder.add -> @StringBuilder.add
-  callee 129:33 fileFingerprint -> @fileFingerprint
-  callee 130:3 StringBuilder.add -> @StringBuilder.add
-  callee 130:29 fileFingerprint -> @fileFingerprint
-  callee 131:3 StringBuilder.add -> @StringBuilder.add
-  callee 131:28 fileFingerprint -> @fileFingerprint
-  callee 132:3 StringBuilder.add -> @StringBuilder.add
-  callee 132:32 fileFingerprint -> @fileFingerprint
-  local 133:14 module: EmittedModule (const)
-  callee 134:5 StringBuilder.add -> @StringBuilder.add
-  callee 135:5 StringBuilder.add -> @StringBuilder.add
-  callee 137:10 StringBuilder.toText -> @StringBuilder.toText
+  local 231:9 key: StringBuilder (const)
+  callee 231:15 new StringBuilder -> @StringBuilder.constructor
+  callee 232:3 StringBuilder.add -> @StringBuilder.add
+  callee 233:3 StringBuilder.add -> @StringBuilder.add
+  callee 234:3 StringBuilder.add -> @StringBuilder.add
+  callee 235:3 StringBuilder.add -> @StringBuilder.add
+  callee 236:3 StringBuilder.add -> @StringBuilder.add
+  callee 236:23 fileFingerprint -> @fileFingerprint
+  callee 237:3 StringBuilder.add -> @StringBuilder.add
+  callee 237:24 fileFingerprint -> @fileFingerprint
+  callee 238:3 StringBuilder.add -> @StringBuilder.add
+  callee 238:27 fileFingerprint -> @fileFingerprint
+  callee 239:3 StringBuilder.add -> @StringBuilder.add
+  callee 239:33 fileFingerprint -> @fileFingerprint
+  callee 240:3 StringBuilder.add -> @StringBuilder.add
+  callee 240:29 fileFingerprint -> @fileFingerprint
+  callee 241:3 StringBuilder.add -> @StringBuilder.add
+  callee 241:28 fileFingerprint -> @fileFingerprint
+  callee 242:3 StringBuilder.add -> @StringBuilder.add
+  callee 242:32 fileFingerprint -> @fileFingerprint
+  local 243:14 module: EmittedModule (const)
+  callee 244:5 StringBuilder.add -> @StringBuilder.add
+  callee 245:5 StringBuilder.add -> @StringBuilder.add
+  callee 247:10 StringBuilder.toText -> @StringBuilder.toText
 module src/dump-ast.ts
 import astLines from "./ast-text" -> function @astLines
 import SourceFile from "./diagnostics" -> struct SourceFile

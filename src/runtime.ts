@@ -535,6 +535,17 @@ export class RuntimeTable {
     // not memory LLVM tracks, so two reads either side of a `writeFileSync`
     // must not fold, and a failed `stat` stores `errno`.
     this.add(plain("nish_stat_mtime", `declare double @nish_stat_mtime(${STR_NOCAP})`, EFFECT_WRITE))
+    // #386, runtime-host.c (RT-9): `nish_stat_mtime`'s shape and for its
+    // reasons. `lstat` and `access` read the file system, which is not memory
+    // LLVM tracks, and a failure stores `errno`, so neither may fold across a
+    // `writeFileSync`. `geteuid` cannot fail, but it is a system call whose
+    // answer a caller compares with the file system's, and it costs nothing to
+    // order it with them.
+    this.add(plain("nish_lstat_owner_mode", `declare i64 @nish_lstat_owner_mode(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(plain("nish_euid", "declare i64 @nish_euid()", EFFECT_WRITE))
+    this.add(
+      plain("nish_is_executable", `declare zeroext i1 @nish_is_executable(${STR_NOCAP})`, EFFECT_WRITE)
+    )
     // Changes the process's signal mask and dispositions once, and answers
     // the same descriptor after: a write, and `willreturn`.
     this.add(plain("nish_signal_fd", "declare noundef i32 @nish_signal_fd()", EFFECT_WRITE))

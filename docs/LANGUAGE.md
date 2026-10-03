@@ -3919,6 +3919,58 @@ to zero, and `wipe_bytes` prints the same lines under the prelude as natively.
 What Node cannot promise is the native build's stronger claim, because a
 collector that moved the array may have left the old bytes behind.
 
+### Who owns a path: `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`
+
+What a driver asks before it trusts a directory or a program it found on its
+own: who owns this path, may anyone else write to it, and will the shell run
+it (#386; [security/cli.md](security/cli.md), CLI-7 and CLI-9).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `lstatOwnerModeSync(path: string): i64` | one `lstat` of `path`: the owner's uid in the high 32 bits and `st_mode` (the file type and the permission bits) in the low 32, or **-1** when the path does not resolve or holds a NUL. A symbolic link answers for **itself**, not for what it names | write | `owner_checks`; `reject_owner_arity`, `reject_owner_i32`, `reject_owner_wasm` |
+| `geteuid(): i64` | the effective user id, the one to compare an owner with | write | `owner_checks`; `reject_owner_euid_arity`, `reject_owner_euid_wasm` |
+| `isExecutableSync(path: string): boolean` | `access(path, X_OK)`: whether the real user may run `path`. `false` for a path that does not resolve or holds a NUL | write | `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm` |
+
+- **The owner and the mode are one answer.** Both come out of one `lstat`, so
+  they describe the same file however the path changes in between; two calls
+  could describe two. Take them apart with `(om >> 32) & 0xffffffff` (the
+  owner) and `om & 0xfff` (the permission bits) or `om & 0xf000` (the type:
+  `0x8000` a regular file, `0x4000` a directory, `0xa000` a symbolic link).
+  The mask is not optional: a uid is unsigned and one of 2^31 or more fills
+  bit 63, which `>>` on an `i64` copies down, so `om >> 32` alone answers a
+  negative owner for a file such a user owns and never equals their
+  `geteuid()`. `>>>` would say the same natively, but a BigInt has no `>>>`, so
+  the mask is the spelling that reads the same under Node (`owner_checks`). A uid fills
+  32 bits, so the answer is an `i64` in both number modes, as `geteuid`'s is,
+  and an `i32` is refused rather than truncated
+  (`` Cannot initialize i32 variable `om` with i64 ``, `reject_owner_i32`).
+- **Not following a link is the point.** A directory that is a symbolic link
+  to one this user owns is not a directory this user owns, and the test of a
+  path that has to be trusted is of the path as written. That a link answers
+  for itself is pinned by RT-9 in `tests/runtime-test.c`, since a program
+  cannot make one.
+- **`isExecutableSync` is the shell's question,** asked for the real user as
+  `access` asks it: a file with no execute bit is not executable, root
+  included, and a readable file is not the same answer.
+- **Refused on a wasm32 build,** as `statMtimeSync` is: there is no file system
+  and no user there, so each is
+  `` `lstatOwnerModeSync` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_owner_wasm`, `reject_owner_euid_wasm`, `reject_owner_exec_wasm`).
+  Each takes exactly its arguments (NL2061, `reject_owner_arity`,
+  `reject_owner_euid_arity`), and a path is a `string`
+  (`reject_owner_type`).
+- **The lowering is one call each,** `call i64 @nish_lstat_owner_mode(i8* %p)`,
+  `call i64 @nish_euid()` and `call zeroext i1 @nish_is_executable(i8* %p)`,
+  declared `nounwind willreturn` and ordered with every write, because the file
+  system is not memory LLVM tracks and a failure stores `errno`
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#lstatownermodesync-geteuid-and-isexecutablesync)).
+- **Globals, and not in a `nish:` module** yet, as `secureZero` is.
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
+**class A**: `runtime/nish.mjs` supplies `fs.lstatSync`'s `uid` and `mode`
+packed the same way as a BigInt, `process.geteuid()`, and `fs.accessSync` with
+`X_OK`, and `owner_checks` prints the same lines under the prelude as natively.
+
 ### Secrets: `nish:secret`
 
 Key material is a `Secret<T>`: an opaque value that the checker keeps from
@@ -5349,10 +5401,10 @@ one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 | --- | --- |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
 | `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
-| `env` | `getenv` (`caps_env`) |
+| `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync` (`caps_fs_read`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
