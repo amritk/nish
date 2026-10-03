@@ -1920,7 +1920,12 @@ const DECLARED = [
     why: "a new program: a SHA-256 secret handed to `hkdfExpandLabelSha384`'s panic, which the reference compiler refuses because its std/crypto/hkdf.ts has no HKDF-Expand-Label",
   },
   {
-<<<<<<< HEAD
+    program: "tests/link/reject_typed_push_alias/main.ts",
+    file: "exit",
+    changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
+    why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
+  },
+  {
     program: "tests/cases/wipe_bytes.ts",
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",
@@ -1935,12 +1940,6 @@ const DECLARED = [
     file: "runtime-prelude.ll",
     changelog: "A secure-wipe builtin the optimiser cannot drop",
     why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
-=======
-    program: "tests/link/reject_typed_push_alias/main.ts",
-    file: "exit",
-    changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
-    why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
->>>>>>> origin/main
   },
 ]
 
