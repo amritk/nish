@@ -62,9 +62,14 @@ export const timingSafeEqualAt = (a: u8[], aOff: i32, b: u8[], bOff: i32, len: i
   if (aOff < 0 || bOff < 0 || len < 0 || aOff > aLen - len || bOff > bLen - len) {
     return false
   }
+  // The offsets are summed in `u32`, which wraps by definition, rather than
+  // as checked `i32` sums: the test above already put every `off + k` inside
+  // its array, so neither can wrap, and a check would only add a branch.
+  const aAt: u32 = toU32(aOff)
+  const bAt: u32 = toU32(bOff)
   let diff: i32 = 0
   for (let k: i32 = 0; k < len; k++) {
-    diff = diff | toI32(a[aOff + k] ^ b[bOff + k])
+    diff = diff | toI32(a[aAt + toU32(k)] ^ b[bAt + toU32(k)])
   }
   return diff === 0
 }

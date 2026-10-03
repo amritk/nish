@@ -6,6 +6,8 @@ declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -86,22 +88,31 @@ bounds.ok:
   %23 = getelementptr inbounds i8, i8* %22, i64 %18
   %24 = load i8, i8* %23, align 1
   %25 = zext i8 %24 to i32
-  %26 = add nsw i32 %15, %25
-  store i32 %26, i32* %t.addr, align 4
+  %26 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 %25)
+  %27 = extractvalue { i32, i1 } %26, 0
+  %28 = extractvalue { i32, i1 } %26, 1
+  br i1 %28, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %27, i32* %t.addr, align 4
   br label %for.inc.1
 
 for.inc.1:
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = add nsw i32 %27, 1
-  store i32 %28, i32* %i.addr, align 4
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = add nsw i32 %29, 1
+  store i32 %30, i32* %i.addr, align 4
   br label %for.cond.1
 
 for.end.1:
-  %29 = load i32, i32* %t.addr, align 4
-  %30 = call i8* @nish_str_from_i32(i32 %29)
-  call void @nish_print(i8* %30)
+  %31 = load i32, i32* %t.addr, align 4
+  %32 = call i8* @nish_str_from_i32(i32 %31)
+  call void @nish_print(i8* %32)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -114,3 +125,4 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

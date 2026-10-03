@@ -203,7 +203,7 @@ compatible only when their types are identical.
 | Type | Is | Notes |
 | --- | --- | --- |
 | `number` | `i32`, or `f64` under `--number-mode f64` | the mode's default width |
-| `i32`, `i64` | signed integers | signed overflow is undefined; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
+| `i32`, `i64` | signed integers | overflow **panics** (exit 1) unless proven to fit; `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` wrap |
 | `u8`, `u16`, `u32`, `u64` | unsigned integers | arithmetic **always** wraps; `>>` is logical |
 | `f32`, `f64` | IEEE-754 | `f32` is never the lowering of `number` |
 | `boolean` | `i1` | no truthiness anywhere |
@@ -239,6 +239,27 @@ export const hash = (bytes: u8[]): i32 => {
 **Mixing widths is an error, always.** `f32 + f64`, `i64 + number`, even
 `u32 + i32` (same LLVM type, different signedness) are rejected. Convert
 explicitly: `toI32` `toI64` `toU8` `toU16` `toU32` `toU64` `toF32` `toF64`.
+
+**Signed overflow panics.** `+ - *`, unary `-`, `++`, `--` and `op=` on an
+`i32` or `i64` stop the program with `attempt to add with overflow` (or
+`subtract`, `multiply`, `negate`) and exit 1 when the result leaves the type;
+it is never a silent wrap and never undefined. The compiler drops the check
+where it can prove the result fits — a loop counter under `i < n`, a byte
+widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
+that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
+which always wrap and are never checked; convert back with `toI32` (free).
+`--wrapping` makes every signed operation wrap instead, for a whole build.
+
+```ts nish:ok
+// FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
+export const fnv1a = (bytes: u8[]): u32 => {
+  let h: u32 = 2166136261;
+  for (const b of bytes) {
+    h = (h ^ toU32(b)) * 16777619;
+  }
+  return h;
+};
+```
 
 ```ts nish:err NL2231
 const bad = (a: i32, b: i64): i64 => {

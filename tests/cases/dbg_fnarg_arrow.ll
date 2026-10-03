@@ -1,9 +1,11 @@
 declare void @llvm.dbg.value(metadata, metadata, metadata)
-declare void @nish_free_arena() #0
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @nish_main() #0 !dbg !7 {
 entry:
@@ -15,30 +17,40 @@ entry:
   ret i32 0, !dbg !13
 }
 
-define internal noundef i32 @nish_main$arrow0(i32 noundef %x) #1 !dbg !17 {
+define internal noundef i32 @nish_main$arrow0(i32 noundef %x) #0 !dbg !17 {
 entry:
   call void @llvm.dbg.value(metadata i32 %x, metadata !19, metadata !DIExpression()), !dbg !18
-  %0 = add nsw i32 %x, 1, !dbg !20
-  ret i32 %0, !dbg !18
+  %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %x, i32 1), !dbg !20
+  %1 = extractvalue { i32, i1 } %0, 0, !dbg !20
+  %2 = extractvalue { i32, i1 } %0, 1, !dbg !20
+  br i1 %2, label %ovf.fail, label %ovf.ok, !dbg !20
+
+ovf.ok:
+  ret i32 %1, !dbg !18
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0), !dbg !20
+  unreachable
 }
 
-define internal noundef i32 @apply$fn.16.nish_main$arrow0(i32 noundef %x) #1 !dbg !22 {
+define internal noundef i32 @apply$fn.16.nish_main$arrow0(i32 noundef %x) #0 !dbg !22 {
 entry:
   call void @llvm.dbg.value(metadata i32 %x, metadata !24, metadata !DIExpression()), !dbg !23
   %0 = tail call i32 @nish_main$arrow0(i32 %x), !dbg !25
   ret i32 %0, !dbg !23
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 !dbg !27 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 !dbg !27 {
 entry:
   %0 = call i32 @nish_main(), !dbg !28
   call void @nish_free_arena(), !dbg !28
   ret i32 %0, !dbg !28
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

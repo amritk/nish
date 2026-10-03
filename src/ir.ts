@@ -162,6 +162,25 @@ export class IRFunction {
    * expression begins and restores the previous one afterwards.
    */
   dbgLocation: string
+  /**
+   * The blocks the failed overflow checks of this function branch to, laid
+   * out after the body, one per `-g` location: without debug info every check
+   * shares the one block, and with it each source location keeps a call of its
+   * own, so a panic is reported where it happened. One block rather than one
+   * per check because each `call` to the panic counts against inlining the
+   * function, and a small function whose few checks each cost a call stopped
+   * being inlined into its loop (AWFY Queens' `getRowColumn`).
+   * `overflowLocations` is each block's location, `overflowEdges` the blocks
+   * that branch to one, `overflowOwners` which block each edge goes to,
+   * `overflowCodes` what each one reports (a `phi` when a block's differ), and
+   * `overflowCallee` the panic as the module spells it.
+   */
+  overflowFails: IRBlock[]
+  overflowLocations: string[]
+  overflowEdges: string[]
+  overflowOwners: i32[]
+  overflowCodes: i32[]
+  overflowCallee: string
 
   constructor(name: string, params: IRParam[], returnType: string) {
     this.name = name
@@ -178,6 +197,82 @@ export class IRFunction {
     this.linkage = ""
     this.subprogram = ""
     this.dbgLocation = ""
+    this.overflowFails = []
+    this.overflowLocations = []
+    this.overflowEdges = []
+    this.overflowOwners = []
+    this.overflowCodes = []
+    this.overflowCallee = ""
+  }
+
+  /**
+   * End the current block with a branch to the overflow block for the
+   * current `-g` location when `flag` is set, reporting `code`, and continue
+   * in a fresh block. `callee` is the panic as the module spells it
+   * (`useRuntime`).
+   */
+  branchOnOverflow(flag: string, code: i32, callee: string): void {
+    const owner = this.overflowFailAt(this.dbgLocation)
+    const fail = this.overflowFails[owner]
+    const ok = this.newBlock("ovf.ok")
+    this.overflowCallee = callee
+    this.overflowEdges.push(this.current.label)
+    this.overflowOwners.push(owner)
+    this.overflowCodes.push(code)
+    this.emit(`br i1 ${flag}, label %${fail.label}, label %${ok.label}`)
+    this.placeBlock(ok)
+  }
+
+  /** The index of the overflow block for `location`, reserved at the first check there. */
+  overflowFailAt(location: string): i32 {
+    let k = 0
+    while (k < this.overflowLocations.length) {
+      if (this.overflowLocations[k] === location) {
+        return k
+      }
+      k = k + 1
+    }
+    this.overflowFails.push(this.newBlock("ovf.fail"))
+    this.overflowLocations.push(location)
+    return this.overflowLocations.length - 1
+  }
+
+  /** The overflow blocks' text, or "" when no check was emitted. */
+  overflowFailText(): string {
+    const out = new StringBuilder()
+    let owner = 0
+    while (owner < this.overflowFails.length) {
+      const incoming: string[] = []
+      const codes: i32[] = []
+      let k = 0
+      while (k < this.overflowEdges.length) {
+        if (this.overflowOwners[k] === owner) {
+          incoming.push(`[ ${this.overflowCodes[k]}, %${this.overflowEdges[k]} ]`)
+          codes.push(this.overflowCodes[k])
+        }
+        k = k + 1
+      }
+      let same = true
+      for (const code of codes) {
+        if (code !== codes[0]) {
+          same = false
+        }
+      }
+      const block = new IRBlock(this.overflowFails[owner].label)
+      let argument = `${codes[0]}`
+      if (!same) {
+        argument = owner === 0 ? "%ovf.op" : `%ovf.op.${owner}`
+        block.instructions.push(`${argument} = phi i32 ${incoming.join(", ")}`)
+      }
+      const location = this.overflowLocations[owner]
+      const dbg = location.length > 0 ? `, !dbg ${location}` : ""
+      block.instructions.push(`call void ${this.overflowCallee}(i32 ${argument})${dbg}`)
+      block.instructions.push("unreachable")
+      out.add(owner === 0 ? "" : "\n\n")
+      out.add(block.toText())
+      owner = owner + 1
+    }
+    return out.toText()
   }
 
   /** Allocate the next unnamed SSA temporary: `%0`, `%1`, ... */
@@ -291,6 +386,11 @@ export class IRFunction {
         out.add(block.toText())
       }
       i = i + 1
+    }
+    const fail = this.overflowFailText()
+    if (fail.length > 0) {
+      out.add("\n\n")
+      out.add(fail)
     }
     out.add("\n}")
     return out.toText()

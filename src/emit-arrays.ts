@@ -1252,7 +1252,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
     const rhs = emitter.emitExpression(expr.children[1])
     value = isFloat(elem)
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs, expr)
   }
   emitRangedStore(emitter, expr, value)
   // A hoisted header is only hoisted out of a loop nothing in it resizes, and

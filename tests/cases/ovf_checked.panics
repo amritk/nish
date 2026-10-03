@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"mix","symbol":"mix","module":"tests/cases/ovf_checked.ts","line":8,"panics":[{"kind":"overflow","line":9,"column":15,"proven":false},{"kind":"overflow","line":10,"column":16,"proven":false},{"kind":"overflow","line":11,"column":25,"proven":false},{"kind":"overflow","line":12,"column":10,"proven":false},{"kind":"overflow","line":12,"column":12,"proven":false}]},
+{"name":"wraps","symbol":"wraps","module":"tests/cases/ovf_checked.ts","line":15,"panics":[]},
+{"name":"test","symbol":"test","module":"tests/cases/ovf_checked.ts","line":17,"panics":[{"kind":"overflow","line":17,"column":35,"proven":false},{"kind":"call","line":17,"column":41,"callee":"mix","via":"overflow"}]}
+]}

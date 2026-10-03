@@ -1,4 +1,7 @@
 declare void @nish_panic_div(i1 noundef zeroext) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define internal noundef i32 @collatzSteps(i32 noundef %n) #0 {
 entry:
@@ -51,20 +54,40 @@ div.ok.1:
 
 if.else:
   %17 = load i32, i32* %x.addr, align 4
-  %18 = mul nsw i32 3, %17
-  %19 = add nsw i32 %18, 1
-  store i32 %19, i32* %x.addr, align 4
+  %18 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 3, i32 %17)
+  %19 = extractvalue { i32, i1 } %18, 0
+  %20 = extractvalue { i32, i1 } %18, 1
+  br i1 %20, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 1)
+  %22 = extractvalue { i32, i1 } %21, 0
+  %23 = extractvalue { i32, i1 } %21, 1
+  br i1 %23, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %22, i32* %x.addr, align 4
   br label %if.end
 
 if.end:
-  %20 = load i32, i32* %steps.addr, align 4
-  %21 = add nsw i32 %20, 1
-  store i32 %21, i32* %steps.addr, align 4
+  %24 = load i32, i32* %steps.addr, align 4
+  %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %24, i32 1)
+  %26 = extractvalue { i32, i1 } %25, 0
+  %27 = extractvalue { i32, i1 } %25, 1
+  br i1 %27, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %26, i32* %steps.addr, align 4
   br label %while.cond
 
 while.end:
-  %22 = load i32, i32* %steps.addr, align 4
-  ret i32 %22
+  %28 = load i32, i32* %steps.addr, align 4
+  ret i32 %28
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %if.else ], [ 0, %ovf.ok ], [ 0, %if.end ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @test() #0 {
@@ -75,3 +98,4 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }

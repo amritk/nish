@@ -114,6 +114,23 @@ fail instead of passing without following anything.
 because no Nish source reliably compiles to either; they are held by the
 hand-written corners in `tests/ct-asm.js` (`STACK_CORNERS`, `AUDIT_CORNERS`).
 
+## Checked arithmetic and the fixtures
+
+Signed `+ - *` became a checked panic after this record was written
+(`docs/LANGUAGE.md`, "Semantics decisions"), and the check is a conditional
+branch, on a secret when the operands are secret. So the constant-time code
+does its arithmetic where nothing is checked: secret sums and products in
+`u32` or `u64`, which wrap by definition and have the bits the old signed
+arithmetic had wherever it did not overflow — `base64urlRangeMask` and
+`x509RangeMask`, the character maps beside them, and x25519's limbs through
+`f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module
+already proves in its comments — and the public offsets of the loads and
+stores the fixtures read (`at + k`) in `u32` too, so that a fixture compiled
+with `--unchecked-indexing` has no check left to branch on. Every fixture's
+copy changed with its module, and each still passes its link test against the
+module. A check the compiler proves away — a loop counter, a masked value —
+is no branch at all, and the fixtures rely on that too.
+
 ## Functions still held by discipline only
 
 The assembly check reads a function only if a fixture names it, and it

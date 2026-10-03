@@ -9,8 +9,10 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -64,18 +66,27 @@ entry:
   %5 = load %struct.Point*, %struct.Point** %4, align 8, !tbaa !8
   %6 = getelementptr inbounds %struct.Point, %struct.Point* %5, i32 0, i32 0
   %7 = load i32, i32* %6, align 4, !tbaa !4
-  %8 = sub nsw i32 %3, %7
-  ret i32 %8
+  %8 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %3, i32 %7)
+  %9 = extractvalue { i32, i1 } %8, 0
+  %10 = extractvalue { i32, i1 } %8, 1
+  br i1 %10, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %9
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @endpoint(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %s) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @endpoint(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %s) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %s, i32 0, i32 1
   %1 = load %struct.Point*, %struct.Point** %0, align 8, !tbaa !9
   ret %struct.Point* %1
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %s.addr = alloca %struct.Segment*, align 8
   %Segment.obj = alloca %struct.Segment, align 8
@@ -116,7 +127,7 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -124,10 +135,12 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

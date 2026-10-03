@@ -51,7 +51,11 @@
 // reached body under its current entry facts, collects its call sites, and
 // recomputes every entry as the join of the sites seen. An entry can only get
 // weaker once it is set, since a new caller adds a site to the join and a
-// weaker entry proves less at every site below it, so the rounds end. The last
+// weaker entry proves less at every site below it, so the rounds end — as long
+// as a chain of weakenings is short. A bound an argument computes
+// (`walk(depth + 1)`) weakens by one per round for as long as the recursion is
+// unbounded, so a parameter whose floor or bound has moved more than sixteen
+// times is dropped from its entry (`widenEntryFacts`), which ends it. The last
 // round's entries are an invariant of every call the program makes: each
 // holds on entry to the first call from outside the candidate set, and each
 // site proves it for the next. Only then is a proof recorded: a walk in the
@@ -62,8 +66,9 @@
 // What keeps the cost to what can pay, none of it at the price of a proof
 // (docs/ARCHITECTURE.md, the call-site ranges row, has the argument):
 //
-//   - only a candidate with an access some walk could prove (`isOpenAccess`),
-//     or one that calls such a candidate, takes part (`narrowCandidates`), and
+//   - only a candidate with an access some walk could prove (`isOpenAccess`)
+//     or signed arithmetic pass 2 left checked (`noteOpenArithmetic`), or one
+//     that calls such a candidate, takes part (`narrowCandidates`), and
 //     a body is walked again after the rounds only when it has such an access
 //     and a call with a summary, or entry facts;
 //   - a round joins again only the entries its walks can have moved, and an
@@ -73,6 +78,27 @@
 //     walked for its sites; and a body with nothing open stops walking once it
 //     has noted a site for every call to a candidate it makes.
 //
+// **What a function returns.** A plain function returning an `i32` or an
+// `i64`, or a `Result` with one in its `Ok` arm, gathers a `ReturnSummary` as
+// it is walked: the join of every return's range in the state that return
+// starts in (`noteReturn` in bounds.ts), its `Err` returns adding nothing,
+// plus each `Result` parameter whose `Ok` payload a `return r.value` hands
+// back, for a call site to put a range on from its argument. A call's range
+// is then its callee's summary (`callRange`), so `acc + combine(half(n))` is
+// proven once `half` is only entered with a bounded `n`. Only judging an
+// operation and gathering another summary read one — no fact, entry or index
+// proof rests on a summary, so entries still only weaken. Only a function a
+// body with something open calls, directly or through another such
+// function, gathers one (`markSummaries`), and a method never does, since a
+// call to one may be dispatched to another body. A summary starts unknown and
+// is replaced by each walk of its body; a change sends every caller back to
+// be walked under the new one, and one that has changed sixteen times is given
+// up, which ends a recursion whose range keeps growing. The summary a settled
+// fixpoint leaves was gathered by the last walk of its body, under the entry
+// that body settled on, and every walk that read it ran after it last
+// changed; a fixpoint that does not settle forgets them all. Never under
+// `--wrapping`, where a sum is not cut to its type's range.
+//
 // `--range-reference` (`Options.rangeReference`) runs the pass without any of
 // that, by the rule #222 shipped, and `tests/run.js` requires the same proofs
 // both ways over `src/` and AWFY.
@@ -81,8 +107,9 @@
 // cannot be assigned, and a path fact is dropped by a store to a field on it,
 // a whole-record store that reaches it, and a call whose summary says either.
 //
-// `--unchecked-indexing` has no check to remove, so the pass does not run and
-// the output is what it was. `--threads` changes nothing here. The one thing
+// `--unchecked-indexing` has no index check to remove, but its signed
+// arithmetic is checked, so the pass runs for that unless the build is
+// `--wrapping` too. `--threads` changes nothing here. The one thing
 // in the language that runs code on other threads is a `nish/threads` region
 // (`src/parallel.ts`): its body is called from an instantiation, so it is
 // entered knowing nothing; it is held to writing nothing its caller can see,
@@ -102,7 +129,9 @@ import {
   RangeSite,
   RangeTables,
   callsNothing,
+  checksOverflow,
   commitProofs,
+  gatheredReturn,
   isBoundsAssignment,
   isInertBuiltin,
   isOpenAccess,
@@ -110,14 +139,17 @@ import {
   parameterLocals,
   recordStoreType,
   sameEntryFacts,
+  sameReturn,
   unwrapBoundsParens,
+  widenEntryFacts,
   walkWithRanges,
 } from "./bounds"
 import { CheckContext } from "./context"
 import { Diagnostic } from "./diagnostics"
 import { N_ARROW, N_BINARY, N_CALL, N_INDEX, N_MEMBER, N_NEW, N_UNARY, Node } from "./nodes"
-import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR } from "./program"
+import { CheckedProgram, FunctionSig, Instantiation, ROLE_CONSTRUCTOR, ROLE_FUNCTION } from "./program"
 import { Local } from "./symbols"
+import { T_I32, T_I64 } from "./types"
 import { BuildMode, hostVisible } from "./visibility"
 
 /**
@@ -155,10 +187,23 @@ class RangeBody {
   stale: boolean
   /** Called from a place with no state to judge the call in, so entered knowing nothing. */
   forced: boolean
+  /**
+   * Whether its walks gather a summary of what it returns (`markSummaries`),
+   * and how often that summary has changed: past `RETURN_MOVES` it is given
+   * up for good, which is what ends a recursion whose range keeps growing.
+   */
+  summarising: boolean
+  returnMoves: i32
   /** Its program's callee table (`RangeTables.calleesOf`). */
   callees: i32[]
   /** Its parameters' locals (`parameterLocals`), found the first time an entry is seeded. */
   params: (Local | null)[] | null
+  /** How many times each parameter's floor or bound has moved (`widenEntryFacts`). */
+  moves: i32[]
+  /** The bodies that call it, by index, for a changed summary to send back to their walks. */
+  callers: i32[]
+  /** Its parameters' locals, found once, for a summary to name the ones whose payload it returns. */
+  returnParams: (Local | null)[] | null
 
   constructor(
     ctx: CheckContext,
@@ -171,6 +216,12 @@ class RangeBody {
     this.ctx = ctx
     this.callees = callees
     this.params = null
+    this.moves = []
+    let k = 0
+    while (k < sig.paramNames.length) {
+      this.moves.push(0)
+      k = k + 1
+    }
     this.sig = sig
     this.body = body
     this.instance = instance
@@ -182,7 +233,117 @@ class RangeBody {
     this.candidate = false
     this.stale = true
     this.forced = false
+    this.summarising = false
+    this.returnMoves = 0
+    this.callers = []
+    this.returnParams = null
   }
+}
+
+/** How many times a return summary may change before the fixpoint gives it up. */
+const RETURN_MOVES: i32 = 16
+
+/**
+ * Whether what `sig` returns is a range a caller can use: an `i32` or an
+ * `i64`, or a `Result` with one in its `Ok` arm. Only a plain function's: a
+ * method may be dispatched to another body, and a constructor returns nothing.
+ * Never under `--wrapping`, where a sum is not cut to its type's range.
+ */
+const returnsRange = (ctx: CheckContext, sig: FunctionSig): boolean => {
+  if (sig.role !== ROLE_FUNCTION || ctx.wrapping) {
+    return false
+  }
+  const table = ctx.table
+  const type = table.isResult(sig.returnType) ? table.okOf(sig.returnType) : sig.returnType
+  const base = table.baseOf(type)
+  return base === T_I32 || base === T_I64
+}
+
+/**
+ * Mark the bodies whose return summary could prove something: one returning
+ * a range (`returnsRange`) that a body with something open calls, or that a
+ * body marked already calls, since its summary can then feed that one's.
+ */
+const markSummaries = (bodies: RangeBody[], reference: boolean): void => {
+  let at = 0
+  for (const body of bodies) {
+    for (const callee of body.scan.callees) {
+      if (callee >= 0 && callee < bodies.length) {
+        const callers = bodies[callee].callers
+        if (callers.indexOf(at) < 0) {
+          callers.push(at)
+        }
+      }
+    }
+    at = at + 1
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const body of bodies) {
+      if (body.summarising || !returnsRange(body.ctx, body.sig)) {
+        continue
+      }
+      for (const caller of body.callers) {
+        const from: RangeBody | null = caller >= 0 && caller < bodies.length ? bodies[caller] : null
+        if (from !== null && (isOpen(from.scan, reference) || from.summarising)) {
+          body.summarising = true
+          changed = true
+          break
+        }
+      }
+    }
+  }
+}
+
+/** The return type a walk of `body` gathers a summary for, or -1 for none. */
+const summaryType = (body: RangeBody): i32 => (body.summarising ? body.sig.returnType : -1)
+
+/** The parameters a summary of `body` names, found the first time a walk gathers one. */
+const returnParamsOf = (body: RangeBody): (Local | null)[] => {
+  const known = body.returnParams
+  if (known !== null) {
+    return known
+  }
+  if (!body.summarising) {
+    return []
+  }
+  const params = parameterLocals(body.ctx.program, body.sig, body.body)
+  body.returnParams = params
+  return params
+}
+
+/**
+ * Keep what the walk of the body at `at` gathered as its return summary. A
+ * change sends every caller back to be walked again, since what it proved may
+ * have rested on the old summary, and answers `true`; a summary that has
+ * changed `RETURN_MOVES` times is dropped for good.
+ */
+const keepReturn = (tables: RangeTables, bodies: RangeBody[], at: i32, walk: BoundsWalk): boolean => {
+  if (at < 0 || at >= bodies.length) {
+    return false
+  }
+  const body = bodies[at]
+  if (!body.summarising) {
+    return false
+  }
+  let next = gatheredReturn(walk)
+  if (sameReturn(tables.returnOf(at), next)) {
+    return false
+  }
+  body.returnMoves = body.returnMoves + 1
+  if (body.returnMoves > RETURN_MOVES) {
+    // Given up: nothing is known, and the body gathers no more.
+    next = null
+    body.summarising = false
+  }
+  tables.setReturn(at, next)
+  for (const caller of body.callers) {
+    if (caller >= 0 && caller < bodies.length) {
+      bodies[caller].stale = true
+    }
+  }
+  return true
 }
 
 /**
@@ -222,12 +383,15 @@ const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
  * side tables, and before the attribute analysis, which reads the proofs.
  */
 export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, reference: boolean): void => {
-  // Nothing to prove when no module checks an index. A module that does not
-  // is still walked beside the ones that do: its body records no passed check
-  // (`recordPassedCheck`), so what it tells its callees is only ever less.
+  // Nothing to prove when no module checks an index or its signed
+  // arithmetic: `--unchecked-indexing` alone still leaves every `+` checked
+  // and proven from what callers pass (`judgeOverflow`). A module that checks
+  // neither is still walked beside the ones that do: its body records no
+  // passed check (`recordPassedCheck`), so what it tells its callees is only
+  // ever less.
   let checked = false
   for (const ctx of contexts) {
-    checked = checked || !ctx.uncheckedIndexing
+    checked = checked || !ctx.uncheckedIndexing || !ctx.wrapping
   }
   if (!checked) {
     return
@@ -264,6 +428,7 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, r
     }
   }
   const order = summarise(tables, bodies)
+  markSummaries(bodies, reference)
   narrowCandidates(tables, bodies, order, reference)
 
   // A call from a body with no state to judge it in gives its callee nothing.
@@ -275,6 +440,10 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, r
   }
 
   const settled = settleEntries(tables, bodies, reference)
+  if (!settled) {
+    // A summary from rounds that never settled is not known to hold.
+    tables.clearReturns()
+  }
 
   // The entries are settled, and a body's last walk was the one under its
   // settled entry, since every change to an entry marks its body for another
@@ -302,7 +471,9 @@ export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, r
       body.callees,
       entering,
       true,
-      -1
+      -1,
+      -1,
+      []
     )
     retractWarnings(body.ctx, walk.proved)
   }
@@ -324,7 +495,8 @@ const narrowCandidates = (
 ): void => {
   const useful: boolean[] = []
   for (const body of bodies) {
-    useful.push(body.candidate && isOpen(body.scan, reference))
+    // A body whose return summary is wanted needs its entry to state it.
+    useful.push(body.candidate && (isOpen(body.scan, reference) || body.summarising))
   }
   // Usefulness runs from a callee to its callers, so callees go first.
   let changed = true
@@ -392,18 +564,28 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[], reference: bool
       return false
     }
     changed = false
+    let walkedAt = 0
     for (const body of bodies) {
-      // A body that calls no candidate has no site to find, so the fixpoint
-      // never needs to walk it.
+      // A body that calls no candidate has no site to find, and one that
+      // gathers no return summary has none to give, so the fixpoint never
+      // needs to walk a body that does neither.
       const reached = !body.candidate || body.entering !== null
-      if (reached && body.stale && body.scan.callsCandidate && !reference && !feedsEntry(bodies, body)) {
+      const walks = body.scan.callsCandidate || body.summarising
+      if (
+        reached &&
+        body.stale &&
+        body.scan.callsCandidate &&
+        !body.summarising &&
+        !reference &&
+        !feedsEntry(bodies, body)
+      ) {
         // Every candidate it calls is entered knowing nothing already, and
         // an empty entry stays empty, so no site of this body can move one.
         // Its own proofs are left to the walk after the rounds, under the
         // entry it settles on: the last walk it had was under an older one.
         body.stale = false
         body.last = null
-      } else if (reached && body.stale && body.scan.callsCandidate) {
+      } else if (reached && body.stale && walks) {
         const walk = walkWithRanges(
           body.ctx,
           paramsOf(body, body.entering),
@@ -412,7 +594,9 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[], reference: bool
           body.callees,
           body.entering,
           false,
-          reference || body.scan.open ? -1 : candidateCalls(bodies, body)
+          reference || body.scan.open ? -1 : candidateCalls(bodies, body),
+          summaryType(body),
+          returnParamsOf(body)
         )
         touchCallees(touched, body.sites)
         touchCallees(touched, walk.sites)
@@ -420,7 +604,11 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[], reference: bool
         body.last = walk
         forceUnseen(bodies, body, walk.sites, touched)
         body.stale = false
+        if (keepReturn(tables, bodies, walkedAt, walk)) {
+          changed = true
+        }
       }
+      walkedAt = walkedAt + 1
     }
     let at = 0
     for (const body of bodies) {
@@ -467,6 +655,9 @@ const settleEntries = (tables: RangeTables, bodies: RangeBody[], reference: bool
         next = new EntryFacts(body.sig.paramNames.length)
       }
       const now = body.entering
+      if (now !== null && next !== null) {
+        next = widenEntryFacts(now, next, body.moves)
+      }
       const same = now !== null && next !== null && sameEntryFacts(now, next)
       if (!same && !(now === null && next === null)) {
         body.entering = next
@@ -780,10 +971,12 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
     if (isBoundsAssignment(node.text)) {
       noteStore(program, ctx, node.children[0], scan)
     }
+    noteOpenArithmetic(node, scan, inArrow)
   } else if (kind === N_UNARY) {
     if (node.text === "++" || node.text === "--") {
       noteStore(program, ctx, node.children[0], scan)
     }
+    noteOpenArithmetic(node, scan, inArrow)
   } else if (kind === N_INDEX) {
     if (!program.nodeProvenIndex[node.id]) {
       scan.openAny = true
@@ -811,6 +1004,22 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
     if (child.children.length > 0) {
       scanStores(child, scan, arrow)
     }
+  }
+}
+
+/**
+ * Signed arithmetic pass 2 left checked is open the way an unproven access
+ * is: what a caller knows about a parameter — `n < 10000001` from a literal —
+ * is what proves `i + 1` in a loop bounded by it (`judgeOverflow`).
+ */
+const noteOpenArithmetic = (node: Node, scan: StoreScan, inArrow: boolean): void => {
+  const ctx = scan.ctx
+  if (scan.open || inArrow || ctx.wrapping || ctx.program.nodeProvenNoOverflow[node.id]) {
+    return
+  }
+  if (checksOverflow(ctx.program, ctx.table, node)) {
+    scan.open = true
+    scan.openAny = true
   }
 }
 

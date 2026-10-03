@@ -227,7 +227,7 @@ hash-table code the gate holds, so a codegen regression in a probe loop, or in
 | Column | Build |
 | --- | --- |
 | Nish | `nish <src> [--number-mode f64] --link <exe> --profile speed` |
-| Nish `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
+| Nish `--wrapping` | as above plus `--wrapping` (integer benchmarks only): signed arithmetic wraps with no overflow check, so the column against Nish is what the checks the compiler could not prove away cost |
 | Nish (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
 | C `-O3` naive | `strbuild-naive.c` only |

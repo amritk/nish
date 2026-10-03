@@ -1,6 +1,9 @@
 %struct.Mixed = type { i1, double, i32 }
 %struct.Row = type { i1, double, i32 }
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @test() #0 {
 entry:
   %m.addr = alloca %struct.Mixed*, align 8
@@ -30,11 +33,16 @@ entry:
   %11 = load %struct.Row*, %struct.Row** %r.addr, align 8
   %12 = getelementptr inbounds %struct.Row, %struct.Row* %11, i32 0, i32 2
   %13 = load i32, i32* %12, align 4
-  %14 = add nsw i32 %10, %13
-  %15 = load %struct.Row*, %struct.Row** %r.addr, align 8
-  %16 = getelementptr inbounds %struct.Row, %struct.Row* %15, i32 0, i32 0
-  %17 = load i1, i1* %16, align 1
-  br i1 %17, label %cond.true, label %cond.false
+  %14 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %13)
+  %15 = extractvalue { i32, i1 } %14, 0
+  %16 = extractvalue { i32, i1 } %14, 1
+  br i1 %16, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %17 = load %struct.Row*, %struct.Row** %r.addr, align 8
+  %18 = getelementptr inbounds %struct.Row, %struct.Row* %17, i32 0, i32 0
+  %19 = load i1, i1* %18, align 1
+  br i1 %19, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -43,12 +51,23 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %18 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %19 = add nsw i32 %14, %18
-  ret i32 %19
+  %20 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %21 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 %20)
+  %22 = extractvalue { i32, i1 } %21, 0
+  %23 = extractvalue { i32, i1 } %21, 1
+  br i1 %23, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %22
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

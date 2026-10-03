@@ -7,9 +7,11 @@
 @.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
-declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic_div(i1 noundef zeroext) #5
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @nish_panic_div(i1 noundef zeroext) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -125,7 +127,7 @@ if.end:
   ret %struct.nish_result.i32.$IoError* %11
 }
 
-define noundef i32 @describe(i64 noundef %r) #2 {
+define noundef i32 @describe(i64 noundef %r) #0 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %0 = trunc i64 %r to i1
@@ -145,19 +147,28 @@ entry:
 if.then:
   %9 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
   %10 = load i32, i32* %9, align 4
-  %11 = sub nsw i32 0, %10
-  ret i32 %11
+  %11 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %12
 
 if.end:
-  %12 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
-  %13 = load i32, i32* %12, align 4
-  ret i32 %13
+  %14 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
+  %15 = load i32, i32* %14, align 4
+  ret i32 %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 3)
+  unreachable
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn memory(argmem: read) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }

@@ -11,8 +11,8 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noundef i32 @add(i32 noundef, i32 noundef) #0
-declare noundef i32 @nish_main$arrow0(i32 noundef, i32 noundef) #0
+declare noundef i32 @add(i32 noundef, i32 noundef) #1
+declare noundef i32 @nish_main$arrow0(i32 noundef, i32 noundef) #1
 declare noundef double @nish_main$arrow1(double noundef, double noundef) #0
 declare noundef double @nish_main$arrow2(double noundef, double noundef) #0
 declare noundef i32 @nish_main$arrow3(i32 noundef, i32 noundef) #0
@@ -1226,7 +1226,7 @@ for.end:
   ret void
 }
 
-define internal noundef i32 @nish.reduceRange$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #3 {
+define internal noundef i32 @nish.reduceRange$i32$fn.3.add(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %acc.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -1284,7 +1284,7 @@ for.end:
   ret i32 %22
 }
 
-define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #3 {
+define internal noundef i32 @nish.reduceRange$i32$fn.16.nish_main$arrow0(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %src, i32 noundef %identity, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %acc.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

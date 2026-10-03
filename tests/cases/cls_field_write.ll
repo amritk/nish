@@ -5,6 +5,8 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal void @Counter.constructor(%struct.Counter* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
 entry:
@@ -15,19 +17,28 @@ entry:
   ret void
 }
 
-define internal void @bump(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
+define internal void @bump(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 1
   %3 = load i32, i32* %2, align 4, !tbaa !5
-  %4 = add nsw i32 %1, %3
-  %5 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
-  store i32 %4, i32* %5, align 4, !tbaa !4
+  %4 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
+  store i32 %5, i32* %7, align 4, !tbaa !4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define internal noundef i32 @bumpTwice(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
+define internal noundef i32 @bumpTwice(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #1 {
 entry:
   call void @bump(%struct.Counter* %c)
   call void @bump(%struct.Counter* %c)
@@ -36,7 +47,7 @@ entry:
   ret i32 %1
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %c.addr = alloca %struct.Counter*, align 8
   %Counter.obj = alloca %struct.Counter, align 8
@@ -71,6 +82,8 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

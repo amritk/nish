@@ -1,4 +1,7 @@
 declare void @nish_panic_div(i1 noundef zeroext) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #0
 
 define internal noundef double @scale(double noundef %v, double noundef %k) #0 {
 entry:
@@ -29,50 +32,80 @@ entry:
   %3 = sub nsw i32 %2, 3
   store i32 %3, i32* %x.addr, align 4
   %4 = load i32, i32* %x.addr, align 4
-  %5 = mul nsw i32 %4, 4
-  store i32 %5, i32* %x.addr, align 4
-  %6 = load i32, i32* %x.addr, align 4
-  %7 = icmp eq i32 5, 0
-  %8 = icmp eq i32 %6, -2147483648
-  %9 = icmp eq i32 5, -1
-  %10 = and i1 %8, %9
-  %11 = or i1 %7, %10
-  br i1 %11, label %div.fail, label %div.ok
+  %5 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %4, i32 4)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %x.addr, align 4
+  %8 = load i32, i32* %x.addr, align 4
+  %9 = icmp eq i32 5, 0
+  %10 = icmp eq i32 %8, -2147483648
+  %11 = icmp eq i32 5, -1
+  %12 = and i1 %10, %11
+  %13 = or i1 %9, %12
+  br i1 %13, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %7)
+  call void @nish_panic_div(i1 zeroext %9)
   unreachable
 
 div.ok:
-  %12 = sdiv i32 %6, 5
-  store i32 %12, i32* %x.addr, align 4
-  %13 = load i32, i32* %x.addr, align 4
-  %14 = icmp eq i32 4, 0
-  %15 = icmp eq i32 %13, -2147483648
-  %16 = icmp eq i32 4, -1
-  %17 = and i1 %15, %16
-  %18 = or i1 %14, %17
-  br i1 %18, label %div.fail.1, label %div.ok.1
+  %14 = sdiv i32 %8, 5
+  store i32 %14, i32* %x.addr, align 4
+  %15 = load i32, i32* %x.addr, align 4
+  %16 = icmp eq i32 4, 0
+  %17 = icmp eq i32 %15, -2147483648
+  %18 = icmp eq i32 4, -1
+  %19 = and i1 %17, %18
+  %20 = or i1 %16, %19
+  br i1 %20, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @nish_panic_div(i1 zeroext %14)
+  call void @nish_panic_div(i1 zeroext %16)
   unreachable
 
 div.ok.1:
-  %19 = srem i32 %13, 4
-  store i32 %19, i32* %x.addr, align 4
+  %21 = srem i32 %15, 4
+  store i32 %21, i32* %x.addr, align 4
   store i32 2, i32* %y.addr, align 4
-  %20 = load i32, i32* %y.addr, align 4
-  %21 = load i32, i32* %x.addr, align 4
-  %22 = add nsw i32 %21, 1
-  store i32 %22, i32* %x.addr, align 4
-  %23 = add nsw i32 %20, %22
-  store i32 %23, i32* %y.addr, align 4
-  %24 = load i32, i32* %x.addr, align 4
-  %25 = mul nsw i32 %24, 100
-  %26 = load i32, i32* %y.addr, align 4
-  %27 = add nsw i32 %25, %26
-  ret i32 %27
+  %22 = load i32, i32* %y.addr, align 4
+  %23 = load i32, i32* %x.addr, align 4
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %23, i32 1)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %25, i32* %x.addr, align 4
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %22, i32 %25)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok.2
+
+ovf.ok.2:
+  store i32 %28, i32* %y.addr, align 4
+  %30 = load i32, i32* %x.addr, align 4
+  %31 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %30, i32 100)
+  %32 = extractvalue { i32, i1 } %31, 0
+  %33 = extractvalue { i32, i1 } %31, 1
+  br i1 %33, label %ovf.fail, label %ovf.ok.3
+
+ovf.ok.3:
+  %34 = load i32, i32* %y.addr, align 4
+  %35 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %32, i32 %34)
+  %36 = extractvalue { i32, i1 } %35, 0
+  %37 = extractvalue { i32, i1 } %35, 1
+  br i1 %37, label %ovf.fail, label %ovf.ok.4
+
+ovf.ok.4:
+  ret i32 %36
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %entry ], [ 0, %div.ok.1 ], [ 0, %ovf.ok.1 ], [ 2, %ovf.ok.2 ], [ 0, %ovf.ok.3 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn readnone }

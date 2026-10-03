@@ -3,7 +3,9 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"left\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"right\00" }, align 8
 
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define noundef i32 @test() #0 {
 entry:
@@ -28,8 +30,17 @@ entry:
   %8 = load i32, i32* %first.addr, align 4
   %9 = load %struct.Chooser*, %struct.Chooser** %c.addr, align 8
   %10 = call i32 @Chooser.pick$i32(%struct.Chooser* %9, i32 10, i32 20)
-  %11 = add nsw i32 %8, %10
-  ret i32 %11
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %12
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal noundef i32 @Chooser.pick$i32(%struct.Chooser* noundef nonnull readonly align 8 dereferenceable(1) nocapture %this, i32 noundef %a, i32 noundef %b) #1 {
@@ -66,8 +77,11 @@ cond.end:
   ret i8* %2
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

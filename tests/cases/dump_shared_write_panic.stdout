@@ -15,7 +15,7 @@ function head(s: string, n: i32): string -> @head
   stackSites=0 stackLocals=0
 function run(xs: i32[]): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: head nish_arena_mark nish_arena_release pick ratio
+  calls: head nish_arena_mark nish_arena_release nish_panic_overflow pick ratio
   pointer xs: size=0 writesThrough=false captured=false passedTo=pick#0
   stackSites=0 stackLocals=0
   callee 12:46 ratio -> @ratio

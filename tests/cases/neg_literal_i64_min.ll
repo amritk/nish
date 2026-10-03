@@ -8,6 +8,8 @@ declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -34,12 +36,21 @@ entry:
   %13 = call i8* @nish_str_concat(i8* %10, i8* %12)
   %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %15 = load i64, i64* %min.addr, align 8
-  %16 = add nsw i64 %15, 1
-  %17 = call i8* @nish_str_from_i64(i64 %16)
-  %18 = call i8* @nish_str_concat(i8* %14, i8* %17)
-  call void @nish_print(i8* %18)
+  %16 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %15, i64 1)
+  %17 = extractvalue { i64, i1 } %16, 0
+  %18 = extractvalue { i64, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %19 = call i8* @nish_str_from_i64(i64 %17)
+  %20 = call i8* @nish_str_concat(i8* %14, i8* %19)
+  call void @nish_print(i8* %20)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
@@ -51,3 +62,5 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }

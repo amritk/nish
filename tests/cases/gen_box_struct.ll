@@ -4,9 +4,11 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -39,7 +41,7 @@ entry:
   ret void
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %b.addr = alloca %struct.Box$$Point*, align 8
   %Box$$Point.obj = alloca %struct.Box$$Point, align 8
@@ -58,8 +60,17 @@ entry:
   %7 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %8 = getelementptr inbounds %struct.Point, %struct.Point* %7, i32 0, i32 1
   %9 = load i32, i32* %8, align 4, !tbaa !5
-  %10 = add nsw i32 %6, %9
-  ret i32 %10
+  %10 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %6, i32 %9)
+  %11 = extractvalue { i32, i1 } %10, 0
+  %12 = extractvalue { i32, i1 } %10, 1
+  br i1 %12, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %11
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @Box$$Point.constructor(%struct.Box$$Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %v) #0 {
@@ -69,7 +80,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @Box$$Point.get(%struct.Box$$Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @Box$$Point.get(%struct.Box$$Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Box$$Point, %struct.Box$$Point* %this, i32 0, i32 0
   %1 = load %struct.Point*, %struct.Point** %0, align 8, !tbaa !8
@@ -77,9 +88,12 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

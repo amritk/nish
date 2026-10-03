@@ -4,13 +4,15 @@
 
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_panic_div(i1 noundef zeroext) #4
+declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -56,13 +58,22 @@ entry:
 if.then:
   %9 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
   %10 = load i32, i32* %9, align 4
-  %11 = sub nsw i32 0, %10
-  ret i32 %11
+  %11 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %12
 
 if.end:
-  %12 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
-  %13 = load i32, i32* %12, align 4
-  ret i32 %13
+  %14 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
+  %15 = load i32, i32* %14, align 4
+  ret i32 %15
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 3)
+  unreachable
 }
 
 define internal noundef nonnull align 8 dereferenceable(8) %struct.Box* @boxed({ i1, i32, i32 } %r) #1 {
@@ -85,7 +96,7 @@ entry:
   ret %struct.Box* %9
 }
 
-define internal { i1, i32, i32 } @half(i32 noundef %n) #2 {
+define internal { i1, i32, i32 } @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -125,7 +136,7 @@ div.ok.1:
   ret { i1, i32, i32 } %14
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #0 {
 entry:
   %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
   %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
@@ -205,16 +216,16 @@ if.end:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }

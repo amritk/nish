@@ -7,7 +7,9 @@ declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_wipe(%struct.nish_array* noundef nonnull align 8 nocapture) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare i64 @llvm.smax.i64(i64, i64) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define internal noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b) #0 {
 entry:
@@ -35,19 +37,28 @@ forof.body:
   %9 = load i32, i32* %s.addr, align 4
   %10 = load i8, i8* %x.addr, align 1
   %11 = zext i8 %10 to i32
-  %12 = add nsw i32 %9, %11
-  store i32 %12, i32* %s.addr, align 4
+  %12 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %11)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %13, i32* %s.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %13 = load i64, i64* %forof.idx, align 8
-  %14 = add i64 %13, 1
-  store i64 %14, i64* %forof.idx, align 8
+  %15 = load i64, i64* %forof.idx, align 8
+  %16 = add i64 %15, 1
+  store i64 %16, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %15 = load i32, i32* %s.addr, align 4
-  ret i32 %15
+  %17 = load i32, i32* %s.addr, align 4
+  ret i32 %17
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define internal void @forget(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %key) #1 {
@@ -56,7 +67,7 @@ entry:
   ret void
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #0 {
 entry:
   %key.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -155,16 +166,16 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
 attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}

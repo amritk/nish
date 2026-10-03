@@ -413,14 +413,15 @@ const aesMixColumns = (q: u64[]): void => {
 
 /** AddRoundKey (FIPS 197 §5.1.4): the eight words of `rk` from `at` into the state. */
 const aesAddRoundKey = (q: u64[], rk: u64[], at: i32): void => {
-  q[0] = q[0] ^ rk[at]
-  q[1] = q[1] ^ rk[at + 1]
-  q[2] = q[2] ^ rk[at + 2]
-  q[3] = q[3] ^ rk[at + 3]
-  q[4] = q[4] ^ rk[at + 4]
-  q[5] = q[5] ^ rk[at + 5]
-  q[6] = q[6] ^ rk[at + 6]
-  q[7] = q[7] ^ rk[at + 7]
+  const p: u32 = toU32(at)
+  q[0] = q[0] ^ rk[p]
+  q[1] = q[1] ^ rk[p + 1]
+  q[2] = q[2] ^ rk[p + 2]
+  q[3] = q[3] ^ rk[p + 3]
+  q[4] = q[4] ^ rk[p + 4]
+  q[5] = q[5] ^ rk[p + 5]
+  q[6] = q[6] ^ rk[p + 6]
+  q[7] = q[7] ^ rk[p + 7]
 }
 
 /**

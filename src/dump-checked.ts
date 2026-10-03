@@ -41,7 +41,7 @@ export const main = (): number => {
       // The constant folder reads it, so the *dump* depends on it: without it
       // a fold that leaves its width is an error here and a value in stage0,
       // and the two dumps cannot agree (`tests/cases/const_wrap.ts`).
-      opts.nsw = false
+      opts.wrapping = true
     } else if (value.startsWith("-")) {
       // Refused rather than taken as the path, which is what the `else` below
       // used to do with it: a flag this entry point does not know silently

@@ -49,10 +49,12 @@ export const main = (): number => {
   for (let k = 0; k < table.length; k++) {
     table[k] = toU8(k)
   }
-  let checksum: i64 = 0
+  // A checksum, so `u64`: it is folded rather than counted, and unsigned
+  // arithmetic is defined to wrap and never checked.
+  let checksum: u64 = 0
   for (let round = 0; round < ROUNDS; round++) {
     for (let k = 0; k < table.length; k++) {
-      checksum = checksum + toI64(sumInline(table)) + toI64(sumCalled(table))
+      checksum = checksum + toU64(sumInline(table)) + toU64(sumCalled(table))
       table[k] = toU8(round + 1)
     }
   }

@@ -17,6 +17,8 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
 define internal void @Label.constructor(%struct.Label* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
 entry:
@@ -144,11 +146,20 @@ bounds.ok:
   %51 = bitcast i8* %50 to i32*
   %52 = getelementptr inbounds i32, i32* %51, i64 0
   %53 = load i32, i32* %52, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %54 = add nsw i32 %44, %53
-  %55 = call i8* @nish_str_from_i32(i32 %54)
-  call void @nish_print(i8* %55)
+  %54 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %44, i32 %53)
+  %55 = extractvalue { i32, i1 } %54, 0
+  %56 = extractvalue { i32, i1 } %54, 1
+  br i1 %56, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %57 = call i8* @nish_str_from_i32(i32 %55)
+  call void @nish_print(i8* %57)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -163,6 +174,7 @@ attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { nounwind noreturn cold }
+attributes #5 = { nounwind willreturn readnone }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

@@ -548,6 +548,7 @@ export class Instantiation {
   nodeProvenIndex: boolean[]
   nodeProvenClamp: boolean[]
   nodeProvenRange: boolean[]
+  nodeProvenNoOverflow: boolean[]
   /** The `dst.set(src)` calls whose two arrays are proven distinct, per instantiation like the proofs above. */
   nodeDisjointCopy: boolean[]
   /** WP32 S5: the fused lookups of this body, which may differ by type argument like every table above. */
@@ -597,6 +598,7 @@ export class Instantiation {
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
+    this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     this.fusion = new FusionTable()
     this.from = null
@@ -626,6 +628,7 @@ export class Instantiation {
     this.nodeProvenIndex = outer.nodeProvenIndex
     this.nodeProvenClamp = outer.nodeProvenClamp
     this.nodeProvenRange = outer.nodeProvenRange
+    this.nodeProvenNoOverflow = outer.nodeProvenNoOverflow
     this.nodeDisjointCopy = outer.nodeDisjointCopy
     this.fusion = outer.fusion
   }
@@ -1194,6 +1197,7 @@ export class CheckedProgram {
   savedNodeProvenIndex: boolean[]
   savedNodeProvenClamp: boolean[]
   savedNodeProvenRange: boolean[]
+  savedNodeProvenNoOverflow: boolean[]
   savedNodeDisjointCopy: boolean[]
   savedFusion: FusionTable
   /**
@@ -1344,6 +1348,17 @@ export class CheckedProgram {
    */
   nodeProvenRange: boolean[]
   /**
+   * A signed `+ - *`, negation, `++`/`--` or `+= -= *=` node id -> the same
+   * analysis proved its result fits the type, so the emitter writes the plain
+   * instruction with `nsw` — a flag that is then a fact rather than an
+   * assumption — and no `llvm.s*.with.overflow` and no branch to
+   * `nish_panic_overflow`; the attribute pass leaves that panic out of the
+   * callee set for it. Every node not in here is checked, unless the build
+   * is `--wrapping`, where nothing is. Per instantiation, like the proofs
+   * above it.
+   */
+  nodeProvenNoOverflow: boolean[]
+  /**
    * WP34 N2: a `dst.set(src)` call node id -> the checker proved the two
    * arrays' element buffers distinct (`disjointCopy` in `src/arrays.ts`), so
    * the emitter copies with `llvm.memcpy`. Every other `set` is an
@@ -1401,6 +1416,7 @@ export class CheckedProgram {
     this.savedNodeProvenIndex = []
     this.savedNodeProvenClamp = []
     this.savedNodeProvenRange = []
+    this.savedNodeProvenNoOverflow = []
     this.savedNodeDisjointCopy = []
     this.fusion = new FusionTable()
     this.savedFusion = this.fusion
@@ -1437,6 +1453,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
+    this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     let i = 0
     while (i < nodeCount) {
@@ -1696,6 +1713,7 @@ export class CheckedProgram {
     this.savedNodeProvenIndex = this.nodeProvenIndex
     this.savedNodeProvenClamp = this.nodeProvenClamp
     this.savedNodeProvenRange = this.nodeProvenRange
+    this.savedNodeProvenNoOverflow = this.nodeProvenNoOverflow
     this.savedNodeDisjointCopy = this.nodeDisjointCopy
     this.savedFusion = this.fusion
     this.nodeTypes = info.nodeTypes
@@ -1707,6 +1725,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = info.nodeProvenIndex
     this.nodeProvenClamp = info.nodeProvenClamp
     this.nodeProvenRange = info.nodeProvenRange
+    this.nodeProvenNoOverflow = info.nodeProvenNoOverflow
     this.nodeDisjointCopy = info.nodeDisjointCopy
     this.fusion = info.fusion
     this.activeInstance = info
@@ -1723,6 +1742,7 @@ export class CheckedProgram {
     this.nodeProvenIndex = this.savedNodeProvenIndex
     this.nodeProvenClamp = this.savedNodeProvenClamp
     this.nodeProvenRange = this.savedNodeProvenRange
+    this.nodeProvenNoOverflow = this.savedNodeProvenNoOverflow
     this.nodeDisjointCopy = this.savedNodeDisjointCopy
     this.fusion = this.savedFusion
     this.activeInstance = null

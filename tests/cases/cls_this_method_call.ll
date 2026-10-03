@@ -8,6 +8,8 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
 
 define internal void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
 entry:
@@ -18,18 +20,27 @@ entry:
   ret void
 }
 
-define internal void @Account.charge(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this) #0 {
+define internal void @Account.charge(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4, !tbaa !5
-  %4 = sub nsw i32 %1, %3
-  store i32 %4, i32* %0, align 4
+  %4 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %1, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %5, i32* %0, align 4
   ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
-define internal noundef zeroext i1 @Account.withdraw(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %amount) #0 {
+define internal noundef zeroext i1 @Account.withdraw(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %amount) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4, !tbaa !4
@@ -42,10 +53,19 @@ if.then:
 if.end:
   %3 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %4 = load i32, i32* %3, align 4
-  %5 = sub nsw i32 %4, %amount
-  store i32 %5, i32* %3, align 4
+  %5 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %4, i32 %amount)
+  %6 = extractvalue { i32, i1 } %5, 0
+  %7 = extractvalue { i32, i1 } %5, 1
+  br i1 %7, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %6, i32* %3, align 4
   call void @Account.charge(%struct.Account* %this)
   ret i1 true
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 1)
+  unreachable
 }
 
 define internal noundef i32 @Account.drain(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #1 {
@@ -115,6 +135,7 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn readnone }
+attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

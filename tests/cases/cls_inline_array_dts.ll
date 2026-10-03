@@ -9,8 +9,10 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -132,23 +134,38 @@ bounds.ok:
   %12 = call i32 @tallyAt(%struct.Tally* %11, i32 1)
   %13 = load %struct.Tally*, %struct.Tally** %t.addr, align 8
   %14 = call i32 @tallyAt(%struct.Tally* %13, i32 2)
-  %15 = add nsw i32 %12, %14
-  %16 = load %struct.Tally*, %struct.Tally** %t.addr, align 8
-  %17 = getelementptr inbounds %struct.Tally, %struct.Tally* %16, i32 0, i32 0
-  %18 = load %struct.nish_array*, %struct.nish_array** %17, align 8, !tbaa !15
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0
-  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %21 = trunc i64 %20 to i32
-  %22 = add nsw i32 %15, %21
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %14)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %18 = load %struct.Tally*, %struct.Tally** %t.addr, align 8
+  %19 = getelementptr inbounds %struct.Tally, %struct.Tally* %18, i32 0, i32 0
+  %20 = load %struct.nish_array*, %struct.nish_array** %19, align 8, !tbaa !15
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
+  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %23 = trunc i64 %22 to i32
+  %24 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %16, i32 %23)
+  %25 = extractvalue { i32, i1 } %24, 0
+  %26 = extractvalue { i32, i1 } %24, 1
+  br i1 %26, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %22
+  ret i32 %25
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

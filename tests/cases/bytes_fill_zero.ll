@@ -1,6 +1,8 @@
 %struct.nish_array = type { i64, i64, i8* }
 
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define void @clear(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
@@ -83,30 +85,45 @@ bounds.ok.1:
   %24 = bitcast i8* %23 to i32*
   %25 = getelementptr inbounds i32, i32* %24, i64 1
   %26 = load i32, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %27 = add nsw i32 %17, %26
-  %28 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 0
-  %30 = load i64, i64* %29, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %31 = icmp ult i64 2, %30
-  br i1 %31, label %bounds.ok.2, label %bounds.fail.2
+  %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %17, i32 %26)
+  %28 = extractvalue { i32, i1 } %27, 0
+  %29 = extractvalue { i32, i1 } %27, 1
+  br i1 %29, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %30 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %31 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 0
+  %32 = load i64, i64* %31, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %33 = icmp ult i64 2, %32
+  br i1 %33, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @nish_panic_index(i64 2, i64 %30)
+  call void @nish_panic_index(i64 2, i64 %32)
   unreachable
 
 bounds.ok.2:
-  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 2
-  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %34 = bitcast i8* %33 to i32*
-  %35 = getelementptr inbounds i32, i32* %34, i64 2
-  %36 = load i32, i32* %35, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %37 = add nsw i32 %27, %36
-  ret i32 %37
+  %34 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %30, i64 0, i32 2
+  %35 = load i8*, i8** %34, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %36 = bitcast i8* %35 to i32*
+  %37 = getelementptr inbounds i32, i32* %36, i64 2
+  %38 = load i32, i32* %37, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %39 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %28, i32 %38)
+  %40 = extractvalue { i32, i1 } %39, 0
+  %41 = extractvalue { i32, i1 } %39, 1
+  br i1 %41, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  ret i32 %40
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -2,10 +2,10 @@
 
 define internal noundef i32 @base64urlRangeMask(i32 noundef %c, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
-  %0 = sub nsw i32 %lo, 1
-  %1 = sub nsw i32 %0, %c
-  %2 = sub nsw i32 %c, %hi
-  %3 = sub nsw i32 %2, 1
+  %0 = sub i32 %lo, 1
+  %1 = sub i32 %0, %c
+  %2 = sub i32 %c, %hi
+  %3 = sub i32 %2, 1
   %4 = and i32 %1, %3
   %5 = ashr i32 %4, 31
   ret i32 %5
@@ -13,19 +13,19 @@ entry:
 
 define noundef i32 @base64urlCharOf(i32 noundef %v) #0 {
 entry:
-  %0 = add nsw i32 65, %v
+  %0 = add i32 65, %v
   %1 = call i32 @base64urlRangeMask(i32 %v, i32 26, i32 63)
   %2 = and i32 %1, 6
-  %3 = add nsw i32 %0, %2
+  %3 = add i32 %0, %2
   %4 = call i32 @base64urlRangeMask(i32 %v, i32 52, i32 63)
   %5 = and i32 %4, 75
-  %6 = sub nsw i32 %3, %5
+  %6 = sub i32 %3, %5
   %7 = call i32 @base64urlRangeMask(i32 %v, i32 62, i32 63)
   %8 = and i32 %7, 13
-  %9 = sub nsw i32 %6, %8
+  %9 = sub i32 %6, %8
   %10 = call i32 @base64urlRangeMask(i32 %v, i32 63, i32 63)
   %11 = and i32 %10, 49
-  %12 = add nsw i32 %9, %11
+  %12 = add i32 %9, %11
   ret i32 %12
 }
 
@@ -48,14 +48,14 @@ entry:
   %4 = call i32 @base64urlRangeMask(i32 %c, i32 95, i32 95)
   store i32 %4, i32* %underscore.addr, align 4
   %5 = load i32, i32* %upper.addr, align 4
-  %6 = sub nsw i32 %c, 65
+  %6 = sub i32 %c, 65
   %7 = and i32 %5, %6
   %8 = load i32, i32* %lower.addr, align 4
-  %9 = sub nsw i32 %c, 71
+  %9 = sub i32 %c, 71
   %10 = and i32 %8, %9
   %11 = or i32 %7, %10
   %12 = load i32, i32* %digit.addr, align 4
-  %13 = add nsw i32 %c, 4
+  %13 = add i32 %c, 4
   %14 = and i32 %12, %13
   %15 = or i32 %11, %14
   %16 = load i32, i32* %dash.addr, align 4
@@ -114,7 +114,7 @@ for.body:
   %15 = and i32 %14, 4095
   store i32 %15, i32* %acc.addr, align 4
   %16 = load i32, i32* %bits.addr, align 4
-  %17 = add nsw i32 %16, 8
+  %17 = add i32 %16, 8
   store i32 %17, i32* %bits.addr, align 4
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
   %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
@@ -122,12 +122,12 @@ for.body:
 
 while.cond:
   %20 = load i32, i32* %bits.addr, align 4
-  %21 = icmp sge i32 %20, 6
+  %21 = icmp uge i32 %20, 6
   br i1 %21, label %while.body, label %while.end
 
 while.body:
   %22 = load i32, i32* %bits.addr, align 4
-  %23 = sub nsw i32 %22, 6
+  %23 = sub i32 %22, 6
   store i32 %23, i32* %bits.addr, align 4
   %24 = load i32, i32* %j.addr, align 4
   %25 = sext i32 %24 to i64
@@ -142,7 +142,7 @@ while.body:
   %34 = getelementptr inbounds i8, i8* %33, i64 %25
   store i8 %32, i8* %34, align 1, !alias.scope !4, !noalias !3, !tbaa !12
   %35 = load i32, i32* %j.addr, align 4
-  %36 = add nsw i32 %35, 1
+  %36 = add i32 %35, 1
   store i32 %36, i32* %j.addr, align 4
   br label %while.cond
 

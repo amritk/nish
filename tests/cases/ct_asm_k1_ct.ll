@@ -94,7 +94,7 @@ for.end:
   ret i1 %23
 }
 
-define noundef zeroext i1 @timingSafeEqualAt16(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %aOff, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %bOff) #0 {
+define noundef zeroext i1 @timingSafeEqualAt16(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i16 noundef %aOff, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i16 noundef %bOff) #0 {
 entry:
   %diff.addr = alloca i32, align 4
   %k.addr = alloca i32, align 4
@@ -113,34 +113,36 @@ for.cond:
 
 for.body:
   %6 = load i32, i32* %diff.addr, align 4
-  %7 = load i32, i32* %k.addr, align 4
-  %8 = add nsw i32 %aOff, %7
-  %9 = sext i32 %8 to i64
-  %10 = bitcast i8* %1 to i8*
-  %11 = getelementptr inbounds i8, i8* %10, i64 %9
-  %12 = load i8, i8* %11, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %13 = load i32, i32* %k.addr, align 4
-  %14 = add nsw i32 %bOff, %13
-  %15 = sext i32 %14 to i64
-  %16 = bitcast i8* %3 to i8*
-  %17 = getelementptr inbounds i8, i8* %16, i64 %15
-  %18 = load i8, i8* %17, align 1, !alias.scope !4, !noalias !3, !tbaa !12
-  %19 = xor i8 %12, %18
-  %20 = zext i8 %19 to i32
-  %21 = or i32 %6, %20
-  store i32 %21, i32* %diff.addr, align 4
+  %7 = zext i16 %aOff to i32
+  %8 = load i32, i32* %k.addr, align 4
+  %9 = add nsw i32 %7, %8
+  %10 = sext i32 %9 to i64
+  %11 = bitcast i8* %1 to i8*
+  %12 = getelementptr inbounds i8, i8* %11, i64 %10
+  %13 = load i8, i8* %12, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %14 = zext i16 %bOff to i32
+  %15 = load i32, i32* %k.addr, align 4
+  %16 = add nsw i32 %14, %15
+  %17 = sext i32 %16 to i64
+  %18 = bitcast i8* %3 to i8*
+  %19 = getelementptr inbounds i8, i8* %18, i64 %17
+  %20 = load i8, i8* %19, align 1, !alias.scope !4, !noalias !3, !tbaa !12
+  %21 = xor i8 %13, %20
+  %22 = zext i8 %21 to i32
+  %23 = or i32 %6, %22
+  store i32 %23, i32* %diff.addr, align 4
   br label %for.inc
 
 for.inc:
-  %22 = load i32, i32* %k.addr, align 4
-  %23 = add nsw i32 %22, 1
-  store i32 %23, i32* %k.addr, align 4
+  %24 = load i32, i32* %k.addr, align 4
+  %25 = add nsw i32 %24, 1
+  store i32 %25, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %24 = load i32, i32* %diff.addr, align 4
-  %25 = icmp eq i32 %24, 0
-  ret i1 %25
+  %26 = load i32, i32* %diff.addr, align 4
+  %27 = icmp eq i32 %26, 0
+  ret i1 %27
 }
 
 attributes #0 = { nounwind willreturn readonly }

@@ -1,11 +1,13 @@
 %struct.nish_array = type { i64, i64, i8* }
 
 declare noundef i32 @base() #0
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare void @nish_free_arena() #3
+declare noundef i64 @nish_arena_mark() #3
+declare void @nish_arena_release(i64 noundef) #3
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @weight(i32 noundef %k) #0 {
 entry:
@@ -99,17 +101,22 @@ entry:
   %8 = load %struct.nish_array*, %struct.nish_array** %kinds.addr, align 8
   %9 = call i32 @heaviest(%struct.nish_array* %8)
   %10 = call i32 @base()
-  %11 = add nsw i32 %9, %10
-  %12 = call i8* @nish_str_from_i32(i32 %11)
-  call void @nish_print(i8* %12)
-  %13 = load %struct.nish_array*, %struct.nish_array** %kinds.addr, align 8
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %16 = bitcast i8* %15 to i32*
-  %17 = getelementptr inbounds i32, i32* %16, i64 2
-  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %19 = icmp eq i32 %18, 2
-  br i1 %19, label %cond.true, label %cond.false
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %14 = call i8* @nish_str_from_i32(i32 %12)
+  call void @nish_print(i8* %14)
+  %15 = load %struct.nish_array*, %struct.nish_array** %kinds.addr, align 8
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %18 = bitcast i8* %17 to i32*
+  %19 = getelementptr inbounds i32, i32* %18, i64 2
+  %20 = load i32, i32* %19, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  %21 = icmp eq i32 %20, 2
+  br i1 %21, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -118,12 +125,16 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %20 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  %22 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %20
+  ret i32 %22
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -132,8 +143,9 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -155,10 +155,10 @@ same `i32`).
 
 | Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`wrappingAdd`/`wrappingSub`/`wrappingMul` from [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) wrap). |
+| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow panics ([Semantics decisions](#semantics-decisions)); `wrappingAdd`/`wrappingSub`/`wrappingMul` from [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) wrap. |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
 | `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow is undefined (the `nish:unsafe` `wrapping*` functions wrap); literals only by context. |
+| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow panics (the `nish:unsafe` `wrapping*` functions wrap); literals only by context. |
 | `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
 | `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
 | `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
@@ -457,7 +457,7 @@ tightly as a C `uint8_t` does.
 
 | Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
 | --- | --- | --- |
-| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw`; plain through `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe`, and in the entry package under the deprecated `--wrapping` | the same instructions, never flagged: unsigned overflow wraps in both modes |
+| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw` where proven to fit, else `llvm.s{add,sub,mul}.with.overflow` and a branch to the panic; plain through `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe`, and in the entry package under the deprecated `--wrapping` | the same instructions, never flagged or checked: unsigned overflow wraps in both modes |
 | `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
 | `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
 | `>>` | `ashr` | `lshr` |
@@ -469,7 +469,7 @@ tightly as a C `uint8_t` does.
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
 | `console.log(x)`, `` `${x}` `` | `nish_str_from_i32` / `_i64` | `zext` to i64, then `nish_str_from_u64` |
-| overflow (WP9, WP15 §3) | `add nsw` …, except a `nish:unsafe` `wrapping*` call (and the entry package under the deprecated `--wrapping`) | nothing, in either mode: unsigned overflow is defined as wrapping |
+| overflow | a panic, "attempt to add with overflow", exit 1, except a `nish:unsafe` `wrapping*` call (and the entry package under the deprecated `--wrapping`) | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
 
@@ -482,10 +482,10 @@ The consequences worth knowing:
   (`tests/cases/u_div_one_check`).
 - **Overflow wraps**, and unlike the signed types it wraps in *every* mode:
   `(255: u8) + 1` is `0` and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
-  `tests/differential/corpus/u_wrap`). No `nuw` is ever emitted, and neither is
-  `nsw`: wrapping is what hashing and bit-packing are written against, and it
-  is half the reason the unsigned widths exist. `--wrapping` therefore changes
-  nothing for them (`tests/cases/opt_wrapping`).
+  `tests/differential/corpus/u_wrap`). No `nuw` is ever emitted, neither is
+  `nsw`, and nothing is checked: wrapping is what hashing and bit-packing are
+  written against, and it is half the reason the unsigned widths exist.
+  `--wrapping` therefore changes nothing for them (`tests/cases/opt_wrapping`).
 - **Mixing is an error.** `u32` and `i32` are different types even though both
   are `i32` in the IR, and so are `u8` and `u32`; there is no implicit
   conversion anywhere in this language
@@ -1054,10 +1054,10 @@ having no top-level code and therefore no initialisation order.
   can compute exactly what a runtime expression can.
 - **Folding follows the language's own arithmetic**, whichever mode the
   compiler is in, because a constant must compute what the instruction it
-  replaces computes. By default that instruction carries `nsw`, so a fold that
+  replaces computes. By default that instruction is checked, so a fold that
   overflows is
-  `` attempt to compute with overflow in a constant `` — the compiler will not
-  hand back the one value the optimiser is entitled to assume cannot happen
+  `` attempt to compute with overflow in a constant `` — the run-time
+  operation would panic, and a constant has no run time to panic at
   (`tests/cases/reject_const_overflow_arith`). A wrap the program means is
   written `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`, the
   one call a constant's initialiser may make, and that fold wraps:
@@ -3024,7 +3024,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); `nsw` on the signed integer widths unless `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); on the signed integer widths `nsw` where proven to fit and otherwise `llvm.s*.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](#semantics-decisions)), plain under `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `ovf_checked`, `ovf_matrix`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -3243,8 +3243,10 @@ scanner's cursor check-free (`tests/cases/str_bounds_proven`). The increment
 exception needs `nsw`: under `--wrapping` the step past `INT_MAX` is *defined*
 to land on `INT_MIN`, so an incremented counter has no lower bound and the
 check stays — **`--wrapping` therefore costs the bounds-check elimination on
-counted loops**, which is the one thing besides the overflow flags that the
-flag changes (`tests/cases/opt_wrapping` pins both halves). An `f64` index is never proved, because a bound on the double is
+counted loops**, which is the one thing besides the overflow checks that the
+flag changes (`tests/cases/opt_wrapping` pins both halves). By default the step
+past `INT_MAX` panics instead, so the lower bound holds for the same reason the
+overflow check is there. An `f64` index is never proved, because a bound on the double is
 not a bound on its truncation. `tests/cases/arr_bounds_proven` and
 `perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
 
@@ -3691,9 +3693,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 | --- | --- | --- | --- |
 | `uncheckedGet(xs: T[], i: i32): T` | the GEP and load `xs[i]` lowers to, with no `len` load, no compare and no branch to the bounds panic | read | `unsafe_get_set`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `uncheckedSet(xs: T[], i: i32, v: T): void` | the GEP and store `xs[i] = v` lowers to, likewise unchecked; a statement | write | `unsafe_get_set`; `reject_unsafe_arity`, `reject_unsafe_type`, `reject_unsafe_par_shared_write` |
-| `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
-| `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_type` |
-| `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_type` |
+| `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
+| `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
+| `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 
 - **The import is required.** The five are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
@@ -3719,7 +3721,7 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   (`reject_unsafe_par_shared_write`).
 - **`wrappingAdd`, `wrappingSub` and `wrappingMul` take two operands of one
   type, `i32` or `i64`**, which is also the answer: the signed words are the
-  ones whose operators carry `nsw`, and an unsigned operator already wraps.
+  ones whose operators are checked, and an unsigned operator already wraps.
   `` `wrappingMul` takes i32 or i64 operands (convert with toI32 or toI64), got u32 ``
   is NL2454, and two widths are
   `` `wrappingAdd` needs every operand of one type, got i32 and i64 `` (NL2400,
@@ -5458,42 +5460,92 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 
 ## Semantics decisions
 
-- **Signed integer overflow is undefined behaviour; `wrappingAdd`,
-  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap.** By default every
-  user-level `i32`/`i64` `add`/`sub`/`mul` (binary operators, unary minus,
-  `op=` on locals, fields and elements, `++`/`--`) carries `nsw`, as in C, so
-  LLVM may widen induction variables and strength-reduce loops. A program that
-  overflows a signed integer on purpose — a hash, an LCG, a wrap-around
-  counter — writes that operation as a `wrapping*` call, and then
-  `wrappingAdd(2147483647, 1)` is `-2147483648`, like Rust's `wrapping_add`
-  (`tests/cases/opt_nsw` for the default, `tests/cases/unsafe_wrapping` for the
-  call). The deprecated `--wrapping` still drops `nsw` from every operator of
-  the entry package's modules, never a dependency's
-  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping);
-  `tests/cases/opt_wrapping` and `i64_basic`;
-  `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
-  This withdraws a guarantee the language used to make, and it is the one place
-  where a correct program can become an incorrect one by upgrading; the
-  `wrapping*` calls are the remedy. It is not free, though: the bounds proof
-  ([Element access](#element-access)) may not carry a lower bound across
-  `i = i + 1` when the wrap is *defined*, so a counted loop compiled with
-  `--wrapping` keeps the bounds checks the default build removes. That is the
-  only other thing the flag changes, and `tests/cases/opt_wrapping` pins both
-  halves: no `nsw` anywhere, and — with the checks taken out of both builds —
-  no other difference at all.
+- **Signed integer overflow is a checked panic; `wrappingAdd`,
+  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap.** Every user-level `i32`/`i64` `add`/`sub`/
+  `mul` — the binary operators, unary minus, `op=` on locals, fields and
+  elements, `++`/`--` — either fits its type or stops the program with Rust's
+  words, `attempt to add with overflow` (`subtract`, `multiply`, `negate`
+  likewise), exit 1, the way [checked integer division](#checked-integer-division)
+  does. It is never undefined: `x + 1 > x` cannot be folded to `true` while
+  `x + 1` prints `-2147483648` (`tests/cases/ovf_repro`, built at
+  `--profile speed`; `ovf_matrix` for every operator at both widths, on
+  locals, elements and fields).
+
+  An operation the compiler **proves** fits is the plain instruction with
+  `nsw`, and that flag is then a fact rather than an assumption: it is what
+  lets LLVM widen an induction variable. The proof reads what the bounds
+  analysis knows ([Element access](#element-access)) and the declared ranges,
+  as interval arithmetic: a literal, a folded constant, `w.length`, `toI32` of
+  a `u8` or `u16`, an `integer<Lo, Hi>`, a mask `x & c`, a shift or a division
+  by a literal, and a local narrowed by the facts in force. The shapes it
+  proves (`tests/cases/ovf_proven_*`, one golden each):
+
+  - `i + 1`, `i++`, `i += 1` under `i < n` for any `i32` `n`, or
+    `i < xs.length` — `i` is below `INT_MAX` (`ovf_proven_below`);
+  - `i - 1`, `i--` under `i > 0`, or `n - 1` past `if (n < 2) return`
+    (`ovf_proven_floor`);
+  - arithmetic on declared ranges whose interval fits: `integer<0, 100>`
+    operands, `toI32(hi) * 256 + toI32(lo)` on bytes (`ovf_proven_range`);
+  - a local only ever assigned `(...) & c`, at every pass of a loop
+    (`ovf_proven_mask`);
+  - a bounded accumulation: a local that each pass of a counted `for` loop
+    moves by a bounded step stays within the steps the loop can take —
+    `sum += toI32(buf[i])` over 256 bytes, `count++` under `i <= n`
+    (`ovf_proven_accumulate`);
+  - what every caller passes: a parameter every call site bounds is bounded in
+    the callee, recursion included (`ovf_proven_callsite`);
+  - what a function returns: a call to a plain function is the join of its
+    returns' ranges, a `Result`'s `Ok` payload included, and a
+    `return r.value` hands on the range of the payload the caller passed —
+    `clamp(a) + clamp(b)`, `acc + orMinus(half(i & 0xff))`
+    (`ovf_proven_return`; `ovf_return_unproven` keeps the checks when a
+    return, or an argument, is unbounded);
+  - `i * i <= n` bounds `i` by the square root of `n`'s bound
+    (`ovf_proven_square`).
+
+  Anything else is `llvm.s{add,sub,mul}.with.overflow` and a branch on its
+  flag to one cold block per function (per source location under `-g`) that
+  calls `nish_panic_overflow`
+  (`ovf_checked`). The check is not free where nothing proves the operation:
+  a sum folded over a whole array, a recursive `fib(n - 1) + fib(n - 2)`, a
+  counter in a field. Such a loop is not vectorised, and a sum the optimiser
+  used to re-associate keeps its order (`docs/BENCHMARKS.md` has the cost
+  measured).
+
+  A program that overflows a signed integer **on purpose** — a hash, an LCG,
+  a wrap-around counter — says so at the operation. Write the arithmetic in
+  `u32` or `u64`, which are defined to wrap and never checked (the
+  conversions back are free), or write it as a `wrappingAdd`, `wrappingSub`
+  or `wrappingMul` call from
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), the
+  plain instruction with no check, like Rust's `wrapping_add`
+  (`tests/cases/unsafe_wrapping`). The deprecated `--wrapping` still makes
+  every operator of the entry package's modules wrap, never a dependency's or
+  the standard library's, and then `2147483647 + 1` is `-2147483648` with no
+  check there (`tests/cases/opt_nsw` for the default, `opt_wrapping`,
+  `ovf_repro_wrapping` and `i64_basic` for the flag;
+  `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`). There is no
+  flag that makes overflow undefined again: `--nsw`, which did, is refused.
+  `--wrapping` is not free either: the bounds proof may not carry a lower
+  bound across `i = i + 1` when the wrap is *defined*, so a counted loop
+  compiled with it keeps the bounds checks the default build removes.
+  `tests/cases/opt_wrapping` pins both halves: no `nsw` and no check anywhere,
+  and one plain instruction for each operation the default build proves or
+  checks.
 - **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
   `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
   (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
   make, and `nsw` on a value that has merely passed 2^31 would poison an
   ordinary result. Write the deliberately-overflowing arithmetic in an unsigned
   type and it needs no flag at all.
-- **What is never flagged**, whatever the mode: division, remainder and shifts
-  (they have no such form), `Math.abs(-2147483648)`, which still wraps to
-  itself because `llvm.abs` is emitted with its poison flag off, the
-  conversions, which `trunc` and therefore wrap by definition, and every piece
-  of the compiler's own index, length and allocator arithmetic
-  (`tests/cases/opt_nsw` pins exactly which operations carry `nsw` and which do
-  not).
+- **What is never flagged or checked**, whatever the mode: division and
+  remainder (which have [checks of their own](#checked-integer-division)),
+  shifts, `Math.abs(-2147483648)`, which still answers itself because
+  `llvm.abs` is emitted with its poison flag off, the conversions, which
+  `trunc` and therefore wrap by definition, and every piece of the compiler's
+  own index, length and allocator arithmetic (`tests/cases/opt_nsw` pins
+  exactly which operations are proven, which are checked, and which are
+  neither).
 - **`f32` is a distinct type, not a rounding mode.** It never mixes with
   `f64` and is never what `number` means; every `f32` result is a real 32-bit
   float, so `0.1 + 0.1` is `0.20000000298023224` there and
@@ -5795,15 +5847,20 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
-- **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is
-  undefined behaviour* above (`tests/cases/opt_nsw`, `opt_wrapping`). It
-  reaches the entry package's modules only
+- **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is a
+  checked panic* above (`tests/cases/opt_nsw`, `opt_wrapping`,
+  `ovf_repro_wrapping`). It reaches the entry package's modules only
   ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-strict-exports`**: see *Linkage* above
   (`tests/cases/export_no_strict`).
-- **`--nsw`** and **`--strict-exports`** are still accepted and now say
-  explicitly what the compiler does anyway; they exist so a build script
-  written before the defaults changed still runs (`tests/cases/export_strict`).
+- **`--strict-exports`** is still accepted and now says explicitly what the
+  compiler does anyway; it exists so a build script written before the default
+  changed still runs (`tests/cases/export_strict`).
+- **`--nsw`** is refused, a usage error with exit 2. It said that signed
+  overflow was undefined behaviour the optimiser could assume away, which is
+  the default no longer: overflow is checked, and no flag brings the
+  assumption back. The refusal names the `nish:unsafe` `wrapping*` functions
+  and `--wrapping`, the ways to ask for a wrap (`tests/nish/cli.ts`).
 - **`--unchecked-indexing`** (deprecated, NL9014): see *Bounds checks* above.
   It reaches the entry package's modules only
   ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
@@ -5914,9 +5971,9 @@ by the caller.
     whose pass can `return` what it allocated, which no bracket could
     release, so there is no rewrite to name.
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
-    literals whose exact value does not fit the `i32` it is computed in. The
-    default `nsw` makes that undefined behaviour rather than a wrap, so the
-    hint is to widen the operands with `toI64` or to pass `--wrapping`
+    literals whose exact value does not fit the `i32` it is computed in. By
+    default that operation panics when it runs, so the hint is to widen the
+    operands with `toI64` or to pass `--wrapping`
     (`tests/cases/perf_overflow_const`). Reported on the innermost expression
     that overflows, so `100000 * 100000 + 1` warns once. Silent under
     `--wrapping`, where the wrap is the defined answer
@@ -5926,10 +5983,11 @@ by the caller.
     value large enough that the fold itself would have to overflow to find out
     (`tests/cases/perf_overflow_quiet`). A *module-level* `const` needs no
     warning: its fold is eager and an overflow there is a hard error.
-  - **a product widened after it has already wrapped** — `toI64(a * b)` or
+  - **a product widened after it has already overflowed** — `toI64(a * b)` or
     `toF64(a * b)` where the operand expression is `i32`. The multiplication
-    happens in `i32` and has overflowed by the time the conversion sees it, so
-    the wider type never holds the value the reader expects; the hint is to
+    happens in `i32`, where a product past its range panics (or wraps, under
+    `--wrapping`) before the conversion sees it, so the wider type never holds
+    the value the reader expects; the hint is to
     convert the operands first (`tests/cases/perf_overflow`). Not reported when
     the arithmetic is already done in the wider type (`toI64(a) * toI64(b)`),
     which is the rewrite itself, and not for `+` or `-`, which can overflow
@@ -6246,6 +6304,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `pop` | `a.pop()` on an empty array | nothing yet: every `pop` is checked (`tests/cases/panics_pop`) |
 | `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
 | `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | nothing yet: every integer division is checked, a constant divisor included, and a float division is not a site (`tests/cases/panics_divide`) |
+| `overflow` | a signed `i32`/`i64` `+`, `-`, `*`, unary `-`, `++`, `--` or `op=` whose result does not fit: `attempt to add with overflow` and its siblings | the overflow proof of [Semantics decisions](#semantics-decisions): an operation the bounds walk proves fits is `nsw` with no check (`tests/cases/panics_overflow_proven`); every other one is checked (`tests/cases/panics_overflow`). Under the deprecated `--wrapping`, and for a `nish:unsafe` `wrappingAdd`, `wrappingSub` or `wrappingMul`, nothing is checked and nothing is a site (`tests/cases/panics_overflow_wrapping`) |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
 | `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
 | `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
@@ -6261,16 +6320,21 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   (`tests/cases/panics_unchecked_indexing`).
 - **A `call` names its callee and the kind it reaches** (`"via"`), and is
   decided over the whole program, the standard library and dependencies
-  included. A generic function's sites are its instantiations', each under its
+  included. The kind is the one the callee reaches first at run time, its own
+  checks and its calls taken together: an operation checks its operands once
+  they are evaluated, so `pick(xs, i) + 1`, `1 + pick(xs, i)`,
+  `x += pick(xs, i)` and `100 / pick(xs, i)` reach `pick`'s `index` before
+  their own `overflow` or `divide`, while `pick(xs, i - 1)` reaches its
+  argument's `overflow` before the call (`tests/cases/panics_overflow_via`).
+  The list itself stays in source order, by where each site starts. A generic function's sites are its instantiations', each under its
   own symbol and decided over its own side tables
   (`tests/cases/panics_generic`).
-- **Three ways a program can stop are not sites**, because no proof the checker
+- **Two ways a program can stop are not sites**, because no proof the checker
   makes could remove them. Out of memory is listed, as `oom`, but excluded: every
   allocation can fail and no guard in the source prevents it. Stack overflow is
   a fault the operating system raises, with no handler in the runtime and no
-  check in the IR. Signed overflow is not checked at all: `+`, `-` and `*` are
-  `nsw`, undefined on overflow rather than a panic, until checked overflow lands
-  (see *Signed integer overflow is undefined behaviour* above). Neither are
+  check in the IR. Signed overflow is a site, `overflow`, because it is checked
+  (see *Signed integer overflow is a checked panic* above). Neither are
   `process.exit(n)`, which is a deliberate exit, or a call into a `declare
   function`, whose body is C the compiler does not see.
 - **The file is a contract**, like `--json`: one `{"functions":[...]}` object,

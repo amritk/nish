@@ -1,5 +1,8 @@
 %struct.nish_array = type { i64, i64, i8* }
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
 define noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca i32, align 4
@@ -25,22 +28,31 @@ forof.body:
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
-  %11 = add nsw i32 %9, %10
-  store i32 %11, i32* %total.addr, align 4
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %9, i32 %10)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %12, i32* %total.addr, align 4
   br label %forof.inc
 
 forof.inc:
-  %12 = load i64, i64* %forof.idx, align 8
-  %13 = add i64 %12, 1
-  store i64 %13, i64* %forof.idx, align 8
+  %14 = load i64, i64* %forof.idx, align 8
+  %15 = add i64 %14, 1
+  store i64 %15, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %14 = load i32, i32* %total.addr, align 4
-  ret i32 %14
+  %16 = load i32, i32* %total.addr, align 4
+  ret i32 %16
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
-define void @fill(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %v) #1 {
+define void @fill(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %v) #0 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
@@ -71,8 +83,9 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

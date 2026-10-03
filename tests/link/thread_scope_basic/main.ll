@@ -18,9 +18,12 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare void @nish_panic_div(i1 noundef zeroext) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare void @nish_scope_join(i8* noundef nonnull) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -107,29 +110,34 @@ for.body:
 for.cond.1:
   %2 = load i32, i32* %d.addr, align 4
   %3 = load i32, i32* %d.addr, align 4
-  %4 = mul nsw i32 %2, %3
-  %5 = load i32, i32* %k.addr, align 4
-  %6 = icmp sle i32 %4, %5
-  br i1 %6, label %for.body.1, label %for.end.1
+  %4 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %2, i32 %3)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = load i32, i32* %k.addr, align 4
+  %8 = icmp sle i32 %5, %7
+  br i1 %8, label %for.body.1, label %for.end.1
 
 for.body.1:
-  %7 = load i32, i32* %k.addr, align 4
-  %8 = load i32, i32* %d.addr, align 4
-  %9 = icmp eq i32 %8, 0
-  %10 = icmp eq i32 %7, -2147483648
-  %11 = icmp eq i32 %8, -1
-  %12 = and i1 %10, %11
-  %13 = or i1 %9, %12
-  br i1 %13, label %div.fail, label %div.ok
+  %9 = load i32, i32* %k.addr, align 4
+  %10 = load i32, i32* %d.addr, align 4
+  %11 = icmp eq i32 %10, 0
+  %12 = icmp eq i32 %9, -2147483648
+  %13 = icmp eq i32 %10, -1
+  %14 = and i1 %12, %13
+  %15 = or i1 %11, %14
+  br i1 %15, label %div.fail, label %div.ok
 
 div.fail:
-  call void @nish_panic_div(i1 zeroext %9)
+  call void @nish_panic_div(i1 zeroext %11)
   unreachable
 
 div.ok:
-  %14 = srem i32 %7, %8
-  %15 = icmp eq i32 %14, 0
-  br i1 %15, label %if.then, label %if.end
+  %16 = srem i32 %9, %10
+  %17 = icmp eq i32 %16, 0
+  br i1 %17, label %if.then, label %if.end
 
 if.then:
   store i1 false, i1* %prime.addr, align 1
@@ -139,33 +147,43 @@ if.end:
   br label %for.inc.1
 
 for.inc.1:
-  %16 = load i32, i32* %d.addr, align 4
-  %17 = add nsw i32 %16, 1
-  store i32 %17, i32* %d.addr, align 4
+  %18 = load i32, i32* %d.addr, align 4
+  %19 = add nsw i32 %18, 1
+  store i32 %19, i32* %d.addr, align 4
   br label %for.cond.1
 
 for.end.1:
-  %18 = load i1, i1* %prime.addr, align 1
-  br i1 %18, label %if.then.1, label %if.end.1
+  %20 = load i1, i1* %prime.addr, align 1
+  br i1 %20, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %19 = load i32, i32* %count.addr, align 4
-  %20 = add nsw i32 %19, 1
-  store i32 %20, i32* %count.addr, align 4
+  %21 = load i32, i32* %count.addr, align 4
+  %22 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %21, i32 1)
+  %23 = extractvalue { i32, i1 } %22, 0
+  %24 = extractvalue { i32, i1 } %22, 1
+  br i1 %24, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %23, i32* %count.addr, align 4
   br label %if.end.1
 
 if.end.1:
   br label %for.inc
 
 for.inc:
-  %21 = load i32, i32* %k.addr, align 4
-  %22 = add nsw i32 %21, 1
-  store i32 %22, i32* %k.addr, align 4
+  %25 = load i32, i32* %k.addr, align 4
+  %26 = add nsw i32 %25, 1
+  store i32 %26, i32* %k.addr, align 4
   br label %for.cond
 
 for.end:
-  %23 = load i32, i32* %count.addr, align 4
-  ret i32 %23
+  %27 = load i32, i32* %count.addr, align 4
+  ret i32 %27
+
+ovf.fail:
+  %ovf.op = phi i32 [ 2, %for.cond.1 ], [ 0, %if.then.1 ]
+  call void @nish_panic_overflow(i32 %ovf.op)
+  unreachable
 }
 
 define noundef i32 @nish_main() #1 {
@@ -283,7 +301,8 @@ attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind willreturn readnone }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

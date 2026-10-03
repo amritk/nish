@@ -5,6 +5,8 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
 define internal noundef i32 @pureDouble(i32 noundef %n) #0 {
 entry:
@@ -15,8 +17,17 @@ entry:
 define internal noundef i32 @callsC(i32 noundef %n) #1 {
 entry:
   %0 = call i32 @abs(i32 %n)
-  %1 = add nsw i32 %0, 1
-  ret i32 %1
+  %1 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 1)
+  %2 = extractvalue { i32, i1 } %1, 0
+  %3 = extractvalue { i32, i1 } %1, 1
+  br i1 %3, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  ret i32 %2
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 define noundef i32 @nish_main() #1 {
@@ -60,3 +71,4 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

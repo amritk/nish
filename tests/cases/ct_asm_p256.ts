@@ -42,7 +42,7 @@
 // ct-check: p256PointAdd secret=contents
 // ct-check: p256WindowStep secret=digit,contents
 
-import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
 
 /**
  * fiat's `addcarryx_u32`: `arg1 + arg2 + arg3` with `arg1` a carry of 0 or 1.
@@ -3180,13 +3180,13 @@ export const p256FiatScalarMul = (out1: u32[], arg1: u32[], arg2: u32[]): void =
  */
 export const p256TableMove = (out: u32[], table: u32[], at: i32, hit: u32): void => {
   uncheckedSet(out, 0, p256FiatCmovznzU32(hit, uncheckedGet(out, 0), uncheckedGet(table, at)));
-  uncheckedSet(out, 1, p256FiatCmovznzU32(hit, uncheckedGet(out, 1), uncheckedGet(table, at + 1)));
-  uncheckedSet(out, 2, p256FiatCmovznzU32(hit, uncheckedGet(out, 2), uncheckedGet(table, at + 2)));
-  uncheckedSet(out, 3, p256FiatCmovznzU32(hit, uncheckedGet(out, 3), uncheckedGet(table, at + 3)));
-  uncheckedSet(out, 4, p256FiatCmovznzU32(hit, uncheckedGet(out, 4), uncheckedGet(table, at + 4)));
-  uncheckedSet(out, 5, p256FiatCmovznzU32(hit, uncheckedGet(out, 5), uncheckedGet(table, at + 5)));
-  uncheckedSet(out, 6, p256FiatCmovznzU32(hit, uncheckedGet(out, 6), uncheckedGet(table, at + 6)));
-  uncheckedSet(out, 7, p256FiatCmovznzU32(hit, uncheckedGet(out, 7), uncheckedGet(table, at + 7)));
+  uncheckedSet(out, 1, p256FiatCmovznzU32(hit, uncheckedGet(out, 1), uncheckedGet(table, wrappingAdd(at, 1))));
+  uncheckedSet(out, 2, p256FiatCmovznzU32(hit, uncheckedGet(out, 2), uncheckedGet(table, wrappingAdd(at, 2))));
+  uncheckedSet(out, 3, p256FiatCmovznzU32(hit, uncheckedGet(out, 3), uncheckedGet(table, wrappingAdd(at, 3))));
+  uncheckedSet(out, 4, p256FiatCmovznzU32(hit, uncheckedGet(out, 4), uncheckedGet(table, wrappingAdd(at, 4))));
+  uncheckedSet(out, 5, p256FiatCmovznzU32(hit, uncheckedGet(out, 5), uncheckedGet(table, wrappingAdd(at, 5))));
+  uncheckedSet(out, 6, p256FiatCmovznzU32(hit, uncheckedGet(out, 6), uncheckedGet(table, wrappingAdd(at, 6))));
+  uncheckedSet(out, 7, p256FiatCmovznzU32(hit, uncheckedGet(out, 7), uncheckedGet(table, wrappingAdd(at, 7))));
 }
 
 /** fiat's `fiat_p256_add`: adds two field elements in the Montgomery domain. */

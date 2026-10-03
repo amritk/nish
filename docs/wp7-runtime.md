@@ -496,6 +496,31 @@ feature has to pay for itself.
 on `build/test/runtime_test.txt`, `nish_argv_init` (an empty argument, a UTF-8
 one, survival of `nish_reset_arena`, `argc == 0`), and the 45 parsing inputs.
 
+### Checked arithmetic: 3,606 bytes
+
+Signed `+ - *`, negation and the steps panic on overflow rather than wrap or
+carry an unproven `nsw` (docs/LANGUAGE.md, "Semantics decisions"), so the core
+gained `nish_panic_overflow(op)`: "attempt to add with overflow" and its three
+siblings, exit 1, the division panic's shape. It cannot live anywhere but the
+core, because every program with an unproven `+` can call it.
+
+Measured with clang 18.1.3 on linux-x64, every `.text*` section summed, on top
+of `nish_wipe` (#385), which had just taken the ceiling to 3,605:
+
+| | `runtime.c` | `-DNISH_THREADS=1` |
+| --- | ---: | ---: |
+| before | 3,604 | 3,729 |
+| one table of six messages for both panics, `nish_panic_div` a call into it | **3,606** | **3,731** |
+
+A second function beside `nish_panic_div` with its own four strings, the
+first shape tried, measured 23 bytes over the base before the wipe landed;
+sharing the table costs 2. The core was one byte under its ceiling
+before the change, so even 2 bytes did not fit. Splitting the panic into a
+unit of its own would cost every link line a file for 22 bytes of code, so the
+ceiling moved instead, by the one byte that was missing, as the wipe's did:
+the core is a closed set, and the room it should have is almost none. The
+threaded ceiling, 3,840, still has 109 bytes.
+
 ### 2026-09-12: two files, two budgets
 
 The budget above moved for the wrong reason. `readdirSync`, `spawnSyncTo` and

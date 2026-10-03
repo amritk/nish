@@ -1,5 +1,8 @@
 @.str.0 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"ab cd ef\00" }, align 8
 
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
+
 define internal noundef zeroext i1 @isAlpha(i32 noundef %c) #0 {
 entry:
   %0 = icmp sge i32 %c, 97
@@ -46,56 +49,66 @@ while.body:
 
 if.then:
   %14 = load i32, i32* %words.addr, align 4
-  %15 = add nsw i32 %14, 1
-  store i32 %15, i32* %words.addr, align 4
+  %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 1)
+  %16 = extractvalue { i32, i1 } %15, 0
+  %17 = extractvalue { i32, i1 } %15, 1
+  br i1 %17, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %16, i32* %words.addr, align 4
   br label %while.cond.1
 
 while.cond.1:
-  %16 = load i32, i32* %i.addr, align 4
-  %17 = load i8*, i8** %s.addr, align 8
-  %18 = bitcast i8* %17 to i64*
-  %19 = load i64, i64* %18, align 8
-  %20 = trunc i64 %19 to i32
-  %21 = icmp slt i32 %16, %20
-  br i1 %21, label %land.rhs, label %land.end
+  %18 = load i32, i32* %i.addr, align 4
+  %19 = load i8*, i8** %s.addr, align 8
+  %20 = bitcast i8* %19 to i64*
+  %21 = load i64, i64* %20, align 8
+  %22 = trunc i64 %21 to i32
+  %23 = icmp slt i32 %18, %22
+  br i1 %23, label %land.rhs, label %land.end
 
 land.rhs:
-  %22 = load i8*, i8** %s.addr, align 8
-  %23 = load i32, i32* %i.addr, align 4
-  %24 = sext i32 %23 to i64
-  %25 = getelementptr inbounds i8, i8* %22, i64 8
-  %26 = getelementptr inbounds i8, i8* %25, i64 %24
-  %27 = load i8, i8* %26, align 1
-  %28 = zext i8 %27 to i32
-  %29 = call i1 @isAlpha(i32 %28)
+  %24 = load i8*, i8** %s.addr, align 8
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = sext i32 %25 to i64
+  %27 = getelementptr inbounds i8, i8* %24, i64 8
+  %28 = getelementptr inbounds i8, i8* %27, i64 %26
+  %29 = load i8, i8* %28, align 1
+  %30 = zext i8 %29 to i32
+  %31 = call i1 @isAlpha(i32 %30)
   br label %land.end
 
 land.end:
-  %30 = phi i1 [ false, %while.cond.1 ], [ %29, %land.rhs ]
-  br i1 %30, label %while.body.1, label %while.end.1
+  %32 = phi i1 [ false, %while.cond.1 ], [ %31, %land.rhs ]
+  br i1 %32, label %while.body.1, label %while.end.1
 
 while.body.1:
-  %31 = load i32, i32* %i.addr, align 4
-  %32 = add nsw i32 %31, 1
-  store i32 %32, i32* %i.addr, align 4
+  %33 = load i32, i32* %i.addr, align 4
+  %34 = add nsw i32 %33, 1
+  store i32 %34, i32* %i.addr, align 4
   br label %while.cond.1
 
 while.end.1:
   br label %if.end
 
 if.else:
-  %33 = load i32, i32* %i.addr, align 4
-  %34 = add nsw i32 %33, 1
-  store i32 %34, i32* %i.addr, align 4
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = add nsw i32 %35, 1
+  store i32 %36, i32* %i.addr, align 4
   br label %if.end
 
 if.end:
   br label %while.cond
 
 while.end:
-  %35 = load i32, i32* %words.addr, align 4
-  ret i32 %35
+  %37 = load i32, i32* %words.addr, align 4
+  ret i32 %37
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }

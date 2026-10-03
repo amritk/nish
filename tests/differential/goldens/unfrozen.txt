@@ -229,6 +229,9 @@ cases/os_random added after R6: no rewriter to freeze it with
 cases/os_random_limit added after R6: no rewriter to freeze it with
 cases/os_signal added after R6: no rewriter to freeze it with
 cases/os_signal_import added after R6: no rewriter to freeze it with
+cases/ovf_matrix added after R6: no rewriter to freeze it with
+cases/ovf_repro added after R6: no rewriter to freeze it with
+cases/ovf_repro_wrapping added after R6: no rewriter to freeze it with
 cases/owner_checks added after R6: no rewriter to freeze it with
 cases/panics_array_length added after R6: no rewriter to freeze it with
 cases/panics_call added after R6: no rewriter to freeze it with
@@ -239,6 +242,10 @@ cases/panics_index added after R6: no rewriter to freeze it with
 cases/panics_index_recheck added after R6: no rewriter to freeze it with
 cases/panics_io_exit added after R6: no rewriter to freeze it with
 cases/panics_oom added after R6: no rewriter to freeze it with
+cases/panics_overflow added after R6: no rewriter to freeze it with
+cases/panics_overflow_proven added after R6: no rewriter to freeze it with
+cases/panics_overflow_via added after R6: no rewriter to freeze it with
+cases/panics_overflow_wrapping added after R6: no rewriter to freeze it with
 cases/panics_panic added after R6: no rewriter to freeze it with
 cases/panics_pop added after R6: no rewriter to freeze it with
 cases/panics_range added after R6: no rewriter to freeze it with
