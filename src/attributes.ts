@@ -2199,7 +2199,10 @@ const collectRound = (
   return facts
 }
 
-/** Whether evaluating `node` can run a call or a constructor. */
+/**
+ * Whether evaluating `node` can run a call or a constructor: a superset of
+ * `rightSideMayResize` in `src/emit-arrays.ts`, which the fixpoint narrows.
+ */
 const callsAnything = (node: Node): boolean => {
   if (node.kind === N_CALL || node.kind === N_NEW) {
     return true
@@ -2257,19 +2260,18 @@ const visitCycles = (walk: CycleWalk, facts: FactsTable, v: FunctionFacts): void
   if (v.cycleLow !== v.cycleOrder) {
     return
   }
-  // `v` roots a component: itself and everything pushed after it.
-  const members: FunctionFacts[] = []
+  // `v` roots a component: itself and everything pushed after it. The first
+  // one off the stack is `v` itself exactly when `v` is alone in it.
+  let cyclic = false
   let more = true
   while (more) {
     // @ts-expect-error `pop` is `T` in Nish and `T | undefined` in lib.es5 (runtime/nish.d.ts).
     const w: FunctionFacts = walk.stack.pop()
     w.onCycleStack = false
-    members.push(w)
     more = w !== v
-  }
-  if (members.length > 1) {
-    for (const m of members) {
-      m.willReturn = false
+    cyclic = cyclic || more
+    if (cyclic) {
+      w.willReturn = false
     }
   }
 }

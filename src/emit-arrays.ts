@@ -74,6 +74,14 @@ const MEMMOVE: string = "llvm.memmove.p0i8.p0i8.i64"
 const I32_MAX: i32 = 2147483647
 
 /**
+ * 2^62 bytes: a block no `malloc` can return, and small enough that the inline
+ * allocator's rounding and offset sum cannot wrap on it. `new Array` keeps its
+ * byte count under it (`newArrayLimit`), and a `join` too long to make asks for
+ * exactly this much, so that the allocator's slow path fails it.
+ */
+const allocRefusedBytes = (): i64 => toI64(1) << toI64(62)
+
+/**
  * WP15 section 2a: the record stored inline in this array's slots, or `null`
  * when a slot holds a value. `inlineElementStruct` in `src/program.ts`
  * carries the rule and the two exclusions.
@@ -552,7 +560,9 @@ const callMayResize = (emitter: Emitter, node: Node): boolean => {
 /**
  * Whether the right side of a compound element assignment can move the array
  * it stores into (CG-10): `loopMayResize`'s question, and a `new` of a class
- * too, since a constructor is a call `nodeCallees` does not hold.
+ * too, since a constructor is a call `nodeCallees` does not hold. The attribute
+ * pass answers a coarser form of it before the fixpoint exists
+ * (`callsAnything` in `src/attributes.ts`), and must stay a superset of this.
  */
 const rightSideMayResize = (emitter: Emitter, node: Node): boolean => {
   if (callMayResize(emitter, node)) {
@@ -1095,7 +1105,7 @@ export const newArrayLengthChecked = (
  */
 const newArrayLimit = (emitter: Emitter, size: i32): i64 => {
   const most: i64 = emitter.opts.numberMode === NUMBER_MODE_I32 ? toI64(I32_MAX) : toI64(1) << toI64(53)
-  const fits: i64 = (toI64(1) << toI64(62)) / toI64(size)
+  const fits: i64 = allocRefusedBytes() / toI64(size)
   return fits < most ? fits : most
 }
 
@@ -1360,14 +1370,6 @@ const emitArrayIndexOf = (emitter: Emitter, expr: Node, arr: string, elem: i32):
 }
 
 /**
- * What `join` asks the allocator for when its result would be too long: 2^62
- * bytes, a block no `malloc` can return, and small enough that the inline
- * allocator's rounding and offset sum cannot wrap on it (`newArrayLimit` keeps
- * `new Array` under the same figure for the same reason).
- */
-const JOIN_REFUSED_BYTES: string = "4611686018427387904"
-
-/**
  * `parts.join(sep)` on a `string[]`: one pass over the lengths, one
  * allocation, one `memcpy` per part. Building the same text with `+` in a loop
  * copies everything again per part and never reclaims, which measured 180 MB
@@ -1434,7 +1436,7 @@ const emitJoin = (emitter: Emitter, expr: Node, arr: string): string => {
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`)
   const tooLong = fn.emitValue(`icmp ugt i64 ${size}, ${I32_MAX}`)
   const exact = fn.emitValue(`add i64 ${size}, 9`)
-  const bytes = fn.emitValue(`select i1 ${tooLong}, i64 ${JOIN_REFUSED_BYTES}, i64 ${exact}`)
+  const bytes = fn.emitValue(`select i1 ${tooLong}, i64 ${allocRefusedBytes()}, i64 ${exact}`)
   const out = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`)
   const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`)
   fn.emit(`store i64 ${size}, i64* ${outHeader}${emitter.align8()}`)

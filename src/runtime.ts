@@ -242,8 +242,9 @@ export class RuntimeTable {
     )
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
-    // `nish_str_concat` is not `willreturn`: a result past 2^31 - 1 bytes
-    // exits as an allocation failure does (RT-2).
+    // `nish_str_concat` is not `willreturn`: a result past 2^31 - 1 bytes, a
+    // length the program's input decides, exits as an allocation failure does
+    // (RT-2). Running out of memory is not counted: the allocator keeps it.
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -725,8 +726,8 @@ export class RuntimeTable {
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
     // C hosts do, so it is part of the declared ABI and of nish.h. Not
-    // `willreturn`: a length past 2^31 - 1, or a block that overflows, exits as
-    // an allocation failure does (RT-7).
+    // `willreturn`: a length past 2^31 - 1, or a block that overflows, both
+    // decided by the caller's input, exits as an allocation failure does (RT-7).
     this.addWrites(
       WRITES_ALLOC,
       mayNotReturn(
