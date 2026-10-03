@@ -57,21 +57,40 @@ export class BuiltinExport {
  */
 export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME)
 
+/**
+ * `nish:unsafe`: the functions whose behaviour depends on the program being
+ * right, where every other builtin checks. An unchecked element access is
+ * undefined behaviour out of range, and a wrapping operation is defined where
+ * the operator it replaces is not, so a call to either has to be visible where
+ * it is written: the five are reached only through an import of this module
+ * (`isUnsafeExport`, and `checkBuiltinFunction` for the global spelling).
+ */
+export const unsafeModule = (): string => `${BUILTIN_SCHEME}unsafe`
+
+/** Whether `nish:unsafe` exports `name`. */
+export const isUnsafeExport = (name: string): boolean =>
+  name === "uncheckedGet" ||
+  name === "uncheckedSet" ||
+  name === "wrappingAdd" ||
+  name === "wrappingSub" ||
+  name === "wrappingMul"
+
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
   specifier === `${BUILTIN_SCHEME}process` ||
   specifier === `${BUILTIN_SCHEME}io` ||
   specifier === `${BUILTIN_SCHEME}net` ||
+  specifier === unsafeModule() ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
- * "Secrets"). It is a builtin module that, unlike the other four, has source
+ * "Secrets"). It is a builtin module that, unlike the others, has source
  * behind it: `Secret<T>` is a generic class and `expose` a template taking a
  * function parameter, and both are ordinary Nish once the checker knows which
  * module declared them. So the specifier resolves to `std/secret.ts`, loaded
@@ -101,6 +120,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+  }
+  if (specifier === unsafeModule()) {
+    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul"
   }
   return "write, writeError, panic"
 }
@@ -267,6 +289,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return isNetExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === unsafeModule()) {
+    return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }

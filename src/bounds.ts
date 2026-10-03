@@ -4012,11 +4012,11 @@ export const proveSliceBounds = (
     program,
     new DiagnosticSink(),
     opts.numberMode,
-    !opts.nsw,
-    opts.uncheckedIndexing,
+    program.wrapping,
+    program.uncheckedIndexing,
     opts.strictExports
   )
-  const walk = new BoundsWalk(ctx, opts.uncheckedIndexing)
+  const walk = new BoundsWalk(ctx, program.uncheckedIndexing)
   const proved: Node[] = []
   walk.record = false
   walk.sliceClamps = proved

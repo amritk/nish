@@ -1,0 +1,8 @@
+`wrappingAdd` needs every operand of one type, got i32 and i64
+`wrappingMul` takes i32 or i64 operands (convert with toI32 or toI64), got u32
+`wrappingSub` takes i32 or i64 operands (convert with toI32 or toI64), got f64
+`uncheckedGet` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got string[]
+`uncheckedGet` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got i32
+`uncheckedGet` expects an argument of type i32, got f64
+Cannot `uncheckedSet` through readonly u8[] (declare it u8[] to write through it)
+`uncheckedSet` expects an argument of type i32, got i64

@@ -143,7 +143,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
  * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
  * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
- * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`. A user function that shares a builtin's name wins it, as it wins
+ * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`; `uncheckedSet` is `w`, for its
+ * receiver. A user function that shares a builtin's name wins it, as it wins
  * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks
  * `isArrayWriteMethod`; a string rather than a list, because they ask it of
@@ -158,8 +159,10 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
     if (program.nodeCallees[call.id] !== null) {
       return ""
     }
+    // `uncheckedSet(xs, i, v)` (`nish:unsafe`) writes an element of `xs`, as
+    // `xs[i] = v` does; the index and the value are numbers.
     const name = builtinNameOf(program, call)
-    return name === "secureZero" ? "w" : netSignature(name)
+    return name === "secureZero" || name === "uncheckedSet" ? "w" : netSignature(name)
   }
   const fills =
     dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])
@@ -177,6 +180,20 @@ export const isWrittenArgument = (letters: string, index: i32): boolean =>
 export const builtinNameOf = (program: CheckedProgram, call: Node): string => {
   const imported = program.nodeBuiltins[call.id]
   return imported.length > 0 ? imported : call.children[0].text
+}
+
+/**
+ * `uncheckedGet(xs, i)` or `uncheckedSet(xs, i, v)` from `nish:unsafe`: an
+ * element access with no bounds check, which reads `xs`'s `data` and never its
+ * `len`. The loop-header hoist asks, so these lift their receiver's header as
+ * `xs[i]` does.
+ */
+export const isUncheckedAccess = (program: CheckedProgram, call: Node): boolean => {
+  if (call.kind !== N_CALL || call.children[0].kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
+    return false
+  }
+  const name = builtinNameOf(program, call)
+  return (name === "uncheckedGet" || name === "uncheckedSet") && call.children[1].children.length > 0
 }
 
 /**

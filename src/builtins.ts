@@ -20,9 +20,11 @@ import {
   isNetBufferLetter,
   isNetExport,
   isNetWrittenLetter,
+  isUnsafeExport,
   NET_STRING,
   NET_WORDS,
   netSignature,
+  unsafeModule,
 } from "./nish-modules"
 import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes"
 import { Scope } from "./symbols"
@@ -152,7 +154,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "readSignal" ||
     name === "arena" ||
     name === "secureZero" ||
-    isNetExport(name)
+    isNetExport(name) ||
+    isUnsafeExport(name)
   )
 }
 
@@ -206,14 +209,60 @@ const checkArgumentType = (ctx: CheckContext, arg: Node, scope: Scope, name: str
  *
  * Only the two unsigned words, because a mask is a bit pattern: all-ones in a
  * signed type reads as -1, and a mask narrower than a word is not what the
- * limb arithmetic the crypto lanes write deals in. A bare numeric literal takes
+ * limb arithmetic the crypto lanes write deals in.
+ */
+const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 =>
+  checkOneWordType(
+    ctx,
+    call,
+    scope,
+    name,
+    args,
+    name === "ctSelect" ? 3 : 2,
+    T_U32,
+    T_U64,
+    "u32 or u64 operands (convert with toU32 or toU64)"
+  )
+
+/**
+ * `wrappingAdd(a, b)`, `wrappingSub(a, b)` and `wrappingMul(a, b)`, from
+ * `nish:unsafe`: both operands one type, and that type `i32` or `i64`, which
+ * is also the answer. Only the signed words, because they are the ones whose
+ * `+ - *` carry `nsw`: an unsigned operator already wraps, and a narrower
+ * width than a word has no instruction of its own to wrap in.
+ */
+const checkWrapping = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 =>
+  checkOneWordType(
+    ctx,
+    call,
+    scope,
+    name,
+    args,
+    2,
+    T_I32,
+    T_I64,
+    "i32 or i64 operands (convert with toI32 or toI64)"
+  )
+
+/**
+ * Every operand one type, and that type `narrow` or `wide`, which is also the
+ * answer; `takes` names the two in the refusal. A bare numeric literal takes
  * its type from the first operand that is not one, so `ctEq(x, 0)` and
- * `ctSelect(m, a, 0)` read naturally whichever side the literal is on; what
+ * `wrappingAdd(1, n)` read naturally whichever side the literal is on; what
  * counts as the literal (`-1` and `(0)` do) is the operators' rule,
  * `literalOperand`.
  */
-const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
-  const arity = name === "ctSelect" ? 3 : 2
+const checkOneWordType = (
+  ctx: CheckContext,
+  call: Node,
+  scope: Scope,
+  name: string,
+  args: Node,
+  arity: i32,
+  narrow: i32,
+  wide: i32,
+  takes: string
+): i32 => {
   if (!checkBuiltinArity(ctx, call, name, args, arity)) {
     return T_ERROR
   }
@@ -228,12 +277,9 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
   // (`ctSelect(m, 0x80000000, 0)` on an `i32` mask is NL2399, not "does not
   // fit in i32"). Every other operand is still checked, so an error inside
   // one is reported too.
-  const admitted = type === T_U32 || type === T_U64
+  const admitted = type === narrow || type === wide
   if (type !== T_ERROR && !admitted) {
-    ctx.error(
-      args.children[lead],
-      `\`${name}\` takes u32 or u64 operands (convert with toU32 or toU64), got ${ctx.table.typeName(type)}`
-    )
+    ctx.error(args.children[lead], `\`${name}\` takes ${takes}, got ${ctx.table.typeName(type)}`)
   }
   let other = -1
   let failed = !admitted
@@ -258,6 +304,61 @@ const checkConstantTime = (ctx: CheckContext, call: Node, scope: Scope, name: st
   }
   return type
 }
+
+/**
+ * `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)`, from `nish:unsafe`: the
+ * element `xs[i]` reads or writes, with no bounds check. The receiver is an
+ * array of numbers, the index an `i32`, as `runtime/nish.d.ts` declares it,
+ * and the value of a store the element type itself.
+ *
+ * Numbers only, because an element of any other type is a pointer or a
+ * struct that a store would make the array hold, and what an array holds is a
+ * fact the escape and inline-array analyses read off `xs[i] = v` alone. A
+ * number is copied in and out and is held by nothing. A `readonly` array is
+ * read and never written, as everywhere else.
+ */
+const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 => {
+  const store = name === "uncheckedSet"
+  if (!checkBuiltinArity(ctx, call, name, args, store ? 3 : 2)) {
+    return store ? T_VOID : T_ERROR
+  }
+  const receiver = args.children[0]
+  const array = checkExpression(ctx, receiver, scope, -1)
+  let elem = T_ERROR
+  if (array !== T_ERROR) {
+    if (!ctx.table.isArray(array) || !isNumeric(ctx.table.refOf(array))) {
+      ctx.error(
+        receiver,
+        `\`${name}\` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got ${ctx.table.typeName(array)}`
+      )
+    } else if (store && ctx.table.isReadonlyArray(array)) {
+      ctx.error(receiver, readonlyWriteMessage(ctx, array, `\`${name}\` through`))
+    } else {
+      elem = ctx.table.refOf(array)
+    }
+  }
+  checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+  if (!store) {
+    return elem
+  }
+  if (elem === T_ERROR) {
+    checkExpression(ctx, args.children[2], scope, -1)
+  } else {
+    checkArgumentType(ctx, args.children[2], scope, name, elem)
+  }
+  requireStatementPosition(ctx, call, name)
+  return T_VOID
+}
+
+/**
+ * A `nish:unsafe` function called by its global name. The five are declared
+ * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
+ * program reaches them only through the import: an unchecked index and a
+ * defined wrap are each a decision about one site, and the import is what
+ * makes every module that takes one say so where a reader looks first.
+ */
+const unsafeImportMessage = (name: string): string =>
+  `\`${name}\` is a \`${unsafeModule()}\` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add \`import { ${name} } from "${unsafeModule()}"\``
 
 // ---- Namespace properties -----------------------------------------------------------
 
@@ -587,8 +688,13 @@ const checkCrypto = (
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
-export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope): i32 =>
-  checkBuiltinFunctionNamed(ctx, call, scope, call.children[0].text)
+export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope): i32 => {
+  const name = call.children[0].text
+  if (isUnsafeExport(name)) {
+    return ctx.errorType(call.children[0], unsafeImportMessage(name))
+  }
+  return checkBuiltinFunctionNamed(ctx, call, scope, name)
+}
 
 /**
  * The same, under a name the call site does not spell. A `nish:` import binds
@@ -624,6 +730,15 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   }
   if (name === "ctSelect" || name === "ctEq") {
     return checkConstantTime(ctx, call, scope, name, args)
+  }
+  // Reached only through a `nish:unsafe` import (`checkBuiltinFunction`), so
+  // every call here is a site the module chose; each is recorded for the
+  // `--emit-checked` dump, whatever its arguments turn out to be.
+  if (isUnsafeExport(name)) {
+    ctx.program.noteUnsafeCall(call, name)
+    return name === "uncheckedGet" || name === "uncheckedSet"
+      ? checkUncheckedAccess(ctx, call, scope, name, args)
+      : checkWrapping(ctx, call, scope, name, args)
   }
   if (name === "parseInt" || name === "parseFloat") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {

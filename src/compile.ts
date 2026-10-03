@@ -61,7 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
-import { Compilation, EmittedModule } from "./compilation"
+import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
 import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
@@ -209,9 +209,26 @@ const report = (compilation: Compilation, json: boolean): void => {
  * an accident of placement: advice about code that does not compile is noise,
  * and the caller returns before this on an error.
  */
-const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
+const reportPerformance = (
+  compilation: Compilation,
+  enabled: boolean,
+  deprecationsOnly: boolean,
+  json: boolean
+): void => {
   if (enabled) {
     reportWarnings(compilation.sink.warnings, "performance", json)
+    return
+  }
+  // `nish run` keeps the IR advice to itself but still says that a flag it was
+  // handed is deprecated: that is about the command line, not the program.
+  if (deprecationsOnly) {
+    const kept: Diagnostic[] = []
+    for (const warning of compilation.sink.warnings) {
+      if (isDeprecationWarning(warning)) {
+        kept.push(warning)
+      }
+    }
+    reportWarnings(kept, "performance", json)
   }
 }
 
@@ -391,6 +408,7 @@ export const main = (): number => {
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
+  let deprecationsOnly = false
   let arg = runMode ? 2 : 1
   while (arg < process.argv.length) {
     const value = process.argv[arg]
@@ -586,7 +604,10 @@ export const main = (): number => {
     }
     // Advice about the IR is for the compile a reader asked for; a script
     // prints it on every run, into the stream the script's own errors use.
+    // A deprecated flag's warning (NL9014, NL9015) is not advice about the IR,
+    // so it still prints unless `--no-warn-performance` asked for silence.
     // `--warn-portability` is left alone: it is off unless the line asks.
+    deprecationsOnly = warnPerformance
     warnPerformance = false
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
@@ -673,7 +694,7 @@ export const main = (): number => {
       return 1
     }
     reportDeprecations(outcome.compilation, json)
-    reportPerformance(outcome.compilation, warnPerformance, json)
+    reportPerformance(outcome.compilation, warnPerformance, false, json)
     reportPortability(outcome.compilation, json)
     return 0
   }
@@ -709,7 +730,7 @@ export const main = (): number => {
     return 1
   }
   reportDeprecations(compilation, json)
-  reportPerformance(compilation, warnPerformance, json)
+  reportPerformance(compilation, warnPerformance, deprecationsOnly, json)
   reportPortability(compilation, json)
   // `--link` needs an entry point, and stage0 says so before it emits
   // anything rather than letting the linker answer `undefined reference to

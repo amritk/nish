@@ -159,7 +159,7 @@ const wrapFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[
  * and `u64` are NL8009's: the declaration is reported, not each operation.
  */
 const wrapsHere = (walk: PortabilityWalk, type: i32): boolean =>
-  (isUnsigned(type) && !isWide(type)) || (type === T_I32 && !walk.opts.nsw)
+  (isUnsigned(type) && !isWide(type)) || (type === T_I32 && walk.program.wrapping)
 
 /** "this `/` on i32 truncates here, ...": the operator as written and the type it runs at. */
 const operatorFinding = (
