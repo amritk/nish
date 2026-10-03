@@ -3211,6 +3211,9 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     )
   } else {
     skip("deprecation: `nish run` needs clang")
+  }
+}
+
 // ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
 // A diagnostic may carry `fix`, a list of edits that `nish --fix` applies
 // (`src/fix.ts`, AGENTS.md "Machine-readable surfaces"). Each case runs on a copy
