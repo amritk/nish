@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_ffi.ts",
+  "deterministic": false,
+  "capabilities": ["ffi"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["ffi"],
+      "modules": [
+        {
+          "path": "caps_ffi.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "main", "at": "caps_ffi.ts:10:15", "calls": "magnitude" },
+                  { "function": "magnitude", "at": "caps_ffi.ts:6:36", "calls": "labs" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
