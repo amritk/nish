@@ -1,3 +1,0 @@
-PASS  the text is 2^31 + 4 bytes
-PASS  a 2^31 + 4 byte text answers null
-base64url long: 2 passed, 0 failed, 0 skipped
