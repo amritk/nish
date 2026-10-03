@@ -80,10 +80,11 @@ test is **data, not code**: a source file next to the output it must produce.
   with the released seed**, and there are two such places: `tests/nish-cmp.js`'s
   `DECLARED` for the corpus, and `DECLARED` in `tests/differential/fuzz.js` for
   generated programs, which names the function and its attribute group's text
-  on each side. Each entry carries the `changelog` subject that made the change
-  and a `why`; a declared difference is reported, an undeclared one fails, and
-  an entry that matches nothing fails as stale, so the reseed after the release
-  retires it. Declare only what the comparison reaches. The example is #427:
+  on each side. Each entry carries a `why` and the `changelog` words the
+  release notes carry for the change, which both lists check against
+  `CHANGELOG.md` and the pending notes; a declared difference is reported, an
+  undeclared one fails, and an entry that matches nothing fails as stale, so the
+  reseed after the release retires it. Declare only what the comparison reaches. The example is #427:
   CG-8 took `willreturn` from `nish_str_concat`, nish-cmp's list named the
   programs it moved, the fuzzer had no list, and every seeded `npm test` failed
   until #438 gave it one. CI's `nish-cmp` job runs both against the seed, since

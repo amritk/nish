@@ -60,7 +60,9 @@ import path from "node:path"
 import * as lib from "./lib.js"
 import * as cmp from "../nish-cmp.js"
 import ts from "typescript"
+import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+import { root } from "../self/corpus.js"
 
 /** mulberry32: small, seedable, good enough for program shapes. */
 const rng = (seed) => {
@@ -503,9 +505,15 @@ const generateProgram = (seed, opts = {}) => {
  *     function: "nish_str_concat",       // the `@name` on a `declare` or `define` line
  *     seed: "{ nounwind willreturn }",   // its attribute group's text in the seed's IR
  *     head: "{ nounwind }",              // and in HEAD's
- *     changelog: "the subject of the commit that made the change",
+ *     changelog: "the words the release notes carry for it",
  *     why: "one sentence somebody is willing to sign",
  *   }
+ *
+ * `changelog` is held to the release notes exactly as `tests/nish-cmp.js`
+ * holds its own: `CHANGELOG.md`, or the section `scripts/changelog-gen.mjs`
+ * would render for the commits not yet released, where a subject appears with
+ * its scope dropped and its first letter raised. An entry whose words are in
+ * neither fails the run.
  *
  * The list is for one release: once the seed is a release that carries the
  * change, the entry covers nothing and the run fails until it is deleted.
@@ -521,7 +529,7 @@ const DECLARED = [
     function: "nish_str_concat",
     seed: "{ nounwind willreturn }",
     head: "{ nounwind }",
-    changelog: "fix(codegen): close CG-2, CG-3, CG-4, CG-8 and CG-10",
+    changelog: "Close CG-2, CG-3, CG-4, CG-8 and CG-10",
     why: "CG-8: a concatenation past 2^31 - 1 bytes exits, so `nish_str_concat` is no longer `willreturn`",
   },
 ]
@@ -551,7 +559,8 @@ const splitGroups = (text) => {
  * `declarations` is the list to judge them by (`DECLARED`, or the fabricated
  * lists of `selfCheckDeclarations`).
  *
- * Every line but the attribute groups must be the same once each `#N` is read
+ * Every group must be referred to, on both sides. Every line but the
+ * attribute groups must be the same once each `#N` is read
  * as its group's text. A line whose group text still differs must be a
  * function's `declare` or `define`, and a declaration must name that function
  * with exactly those two texts. Renumbered groups alone, with no declared
@@ -567,6 +576,21 @@ const explainDifference = (reference, candidate, declarations) => {
   const covered = new Set()
   if (a.body.length !== b.body.length) {
     return { covered, undeclared: "the modules differ in more than their attribute groups" }
+  }
+  // A group no line refers to changes nothing the optimiser sees, but it is
+  // still bytes the other compiler did not write, and resolving references
+  // alone would never look at it.
+  for (const [side, split] of [
+    ["the seed", a],
+    ["HEAD", b],
+  ]) {
+    const referenced = new Set(
+      split.body.flatMap((line) => [...line.matchAll(GROUP_REFERENCE)].map((m) => m[1]))
+    )
+    const orphan = [...split.groups.keys()].find((n) => !referenced.has(n))
+    if (orphan !== undefined) {
+      return { covered, undeclared: `${side} defines attributes #${orphan} and no line refers to it` }
+    }
   }
   const resolve = (line, groups) => line.replace(GROUP_REFERENCE, (ref, n) => ` #${groups.get(n) ?? ref}`)
   for (let i = 0; i < a.body.length; i++) {
@@ -626,12 +650,24 @@ const selfCheckDeclarations = () => {
   const undeclared = explainDifference(seed, head, [other])
   const declared = explainDifference(seed, head, [entry])
   const extra = explainDifference(seed, head.replace("ret i32 0", "ret i32 1"), [entry])
+  const orphan = explainDifference(seed, `${head}attributes #2 = { cold }\n`, [entry])
   const stale = staleDeclarations([entry, other], declared.covered)
+  const notes = { text: "### Fixed\n\n- codegen: Close CG-8 ([#427])\n" }
+  const unnamed = unnamedDeclarations(
+    [
+      { ...entry, changelog: "Close CG-8" },
+      { ...other, changelog: "Close CG-9" },
+    ],
+    "## [Unreleased]\n",
+    notes
+  )
   let declaredFailure = null
   if (declared.undeclared !== null || !declared.covered.has(entry)) {
     declaredFailure = `it was not explained: ${declared.undeclared}`
   } else if (extra.undeclared === null) {
     declaredFailure = "a module that also differs in an instruction was explained"
+  } else if (orphan.undeclared === null) {
+    declaredFailure = "a module that also defines a group nothing refers to was explained"
   }
   return [
     [
@@ -643,11 +679,61 @@ const selfCheckDeclarations = () => {
       "a declaration that matches nothing fails as stale",
       stale.length === 1 && stale[0] === other ? null : `stale: ${JSON.stringify(stale)}`,
     ],
+    [
+      "a declaration whose words the release notes do not carry fails",
+      unnamed.length === 1 && unnamed[0].changelog === "Close CG-9"
+        ? null
+        : `unnamed: ${JSON.stringify(unnamed)}`,
+    ],
   ]
 }
 
 /** The declarations no difference in a run used, each of which fails it. */
 const staleDeclarations = (declarations, used) => declarations.filter((d) => !used.has(d))
+
+/**
+ * The declarations whose `changelog` words neither `CHANGELOG.md`'s text nor
+ * the pending notes carry, judged by `tests/nish-cmp.js`'s own `isNamed`, so
+ * the two lists are held to one rule.
+ */
+const unnamedDeclarations = (declarations, changelogText, pending) =>
+  declarations.filter((d) => !cmp.isNamed(d.changelog, changelogText, pending))
+
+/**
+ * The release section `scripts/changelog-gen.mjs` would render for the
+ * commits since the last release, as `{ text }` or `{ error }`. This is
+ * `tests/nish-cmp.js`'s `pendingNotes`, which that file does not export: a
+ * shallow checkout or one with no tags is deepened first, because the
+ * generator would otherwise render the fetched commits as a first release
+ * rather than fail. In CI the `nish-cmp` step before this one has already
+ * deepened it.
+ */
+const pendingNotes = () => {
+  const git = (args) => spawnSync("git", args, { cwd: root, encoding: "utf8" })
+  const describe = () => git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
+  const shallow = () => git(["rev-parse", "--is-shallow-repository"]).stdout.trim() === "true"
+  if (shallow()) {
+    git(["fetch", "--quiet", "--unshallow", "--tags", "origin"])
+  } else if (describe().status !== 0) {
+    git(["fetch", "--quiet", "--tags", "origin"])
+  }
+  if (shallow() || describe().status !== 0) {
+    return {
+      error:
+        "the commits since the last release tag cannot be read: the checkout is shallow or has no v* tag",
+    }
+  }
+  const rendered = spawnSync(
+    process.execPath,
+    [path.join(root, "scripts", "changelog-gen.mjs"), "--stdout", "md"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    }
+  )
+  return rendered.status === 0 ? { text: rendered.stdout } : { error: rendered.stderr.trim() }
+}
 
 /**
  * The reference and the candidate this mode compares, resolved the way
@@ -730,6 +816,8 @@ const explainAll = (pair, work, differences) => {
  * Returns `{ seed, count, pair, agreed, declared, stale, files, lines,
  * disagreements }`, where `declared` counts the programs whose only
  * differences `DECLARED` names, `stale` lists the entries none of them used,
+ * `unnamed` the entries whose words the release notes do not carry (with
+ * `pending`, the notes they were looked for in),
  * and a disagreement is `{ seed, verdict, detail, file }` with `file` the
  * saved reproducer. `pair === null` means a compiler was missing or would not link
  * and nothing was compared.
@@ -752,6 +840,8 @@ const stage1Run = ({
       agreed: 0,
       declared: 0,
       stale: [],
+      unnamed: [],
+      pending: null,
       files: 0,
       lines: 0,
       disagreements: [],
@@ -806,7 +896,11 @@ const stage1Run = ({
   }
   fs.rmSync(work, { recursive: true, force: true })
   const stale = staleDeclarations(DECLARED, used)
-  return { seed, count, pair, agreed, declared, stale, files, lines, disagreements }
+  const changelogFile = path.join(root, "CHANGELOG.md")
+  const changelogText = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : ""
+  const pending = DECLARED.some((d) => !changelogText.includes(d.changelog)) ? pendingNotes() : null
+  const unnamed = unnamedDeclarations(DECLARED, changelogText, pending)
+  return { seed, count, pair, agreed, declared, stale, unnamed, pending, files, lines, disagreements }
 }
 
 export { generateProgram, selfCheckDeclarations, stage1Run }
@@ -896,5 +990,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         "or the generator no longer reaches it, so the declaration goes"
     )
   }
-  process.exit(res.disagreements.length === 0 && res.stale.length === 0 ? 0 : 1)
+  for (const d of res.unnamed) {
+    console.log(
+      `  FAIL neither CHANGELOG.md nor the pending release notes name this difference: the declaration asks for "${d.changelog}"`
+    )
+  }
+  if (res.unnamed.length > 0 && res.pending?.error !== undefined) {
+    console.log(`  FAIL the pending release notes could not be read: ${res.pending.error}`)
+  }
+  const failed = res.disagreements.length + res.stale.length + res.unnamed.length
+  process.exit(failed === 0 ? 0 : 1)
 }
