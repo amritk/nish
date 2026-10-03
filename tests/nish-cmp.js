@@ -3721,6 +3721,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 export {
   buildCandidate,
   compare,
+  compile,
+  pendingNotes,
   corpus,
   packageRootOf,
   resolveCompiler,

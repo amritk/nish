@@ -11867,6 +11867,13 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // and it prints a popped value, the `pop` divergence above.
       "a typed array flowing into `T[]`, refused by lib.es5 at the assignment (docs/LANGUAGE.md)",
     ],
+    [
+      "deny_panics_clean.ts",
+      // The no-panic scope's clean module returns a guarded `xs.pop()`, the
+      // proof `if (xs.length > 0)` gives (docs/LANGUAGE.md, "The no-panic
+      // scope"): `T` here, `T | undefined` in lib.es5, the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
   ])
   const acceptedCases = fs
     .readdirSync(casesDir)

@@ -14748,7 +14748,9 @@ with a witness chain for each — but nothing in the IR reads them. The listing
 below is the same with `--emit-capabilities` and without it, and `tests/run.js`
 compiles every `caps_*` case both ways to hold that. `load` is `readFileSync`
 under another name, and `lineCount` and `main` reach it through one and two
-calls; what the flag adds is this file, written beside the IR:
+calls; what the flag adds is this file, written beside the IR. Each function
+also lists its `"panics"` — here the `io-exit` that `readFileSync` is, reached
+through the same calls — the sites `--emit-panics` writes:
 
 <!-- capabilities-report builtin-capabilities -->
 ```json
@@ -14775,7 +14777,11 @@ calls; what the flag adds is this file, written beside the IR:
                   { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
                   { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "call", "at": "builtin-capabilities.ts:4:16", "callee": "load", "via": "io-exit" },
+                { "kind": "index", "at": "builtin-capabilities.ts:7:9", "proven": true }
+              ]
             },
             {
               "name": "main",
@@ -14787,7 +14793,11 @@ calls; what the flag adds is this file, written beside the IR:
                   { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
                   { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "builtin-capabilities.ts:15:3", "allowed": true },
+                { "kind": "call", "at": "builtin-capabilities.ts:15:15", "callee": "lineCount", "via": "io-exit" }
+              ]
             }
           ]
         }
