@@ -75,16 +75,22 @@ const churn = (): i32 => {
 };
 
 export const main = (): void => {
-  const m = Arena.mark();
-  const before = Arena.used();
-  const a = letters(5).n;
-  const small = Arena.used() - before;
-  Arena.release(m);
-  const m2 = Arena.mark();
-  const before2 = Arena.used();
-  const b = letters(500).n;
-  const large = Arena.used() - before2;
-  Arena.release(m2);
+  let a = 0;
+  let small: i64 = 0;
+  {
+    using arenaA = arena();
+    const before = Arena.used();
+    a = letters(5).n;
+    small = Arena.used() - before;
+  }
+  let b = 0;
+  let large: i64 = 0;
+  {
+    using arenaB = arena();
+    const before = Arena.used();
+    b = letters(500).n;
+    large = Arena.used() - before;
+  }
   console.log(`${a} ${b} ${small === large ? "flat" : "grows"}`);
   const ws = words(40);
   const best = longest(ws);
