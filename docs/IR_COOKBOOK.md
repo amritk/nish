@@ -14608,6 +14608,184 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin-read-bytes -->
 
+### Capabilities: a report, not a lowering
+
+Every builtin carries one capability label (`docs/LANGUAGE.md` ->
+Capabilities), and the attribute pass carries the labels up the call graph
+with a witness chain for each — but nothing in the IR reads them. The listing
+below is the same with `--emit-capabilities` and without it, and `tests/run.js`
+compiles every `caps_*` case both ways to hold that. `load` is `readFileSync`
+under another name, and `lineCount` and `main` reach it through one and two
+calls; what the flag adds is this file, written beside the IR:
+
+<!-- capabilities-report builtin-capabilities -->
+```json
+{
+  "version": 1,
+  "entry": "builtin-capabilities.ts",
+  "deterministic": false,
+  "capabilities": ["fs.read"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["fs.read"],
+      "modules": [
+        {
+          "path": "builtin-capabilities.ts",
+          "capabilities": ["fs.read"],
+          "functions": [
+            {
+              "name": "lineCount",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
+                  { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
+                ]
+              }
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["fs.read"],
+              "witnesses": {
+                "fs.read": [
+                  { "function": "main", "at": "builtin-capabilities.ts:15:15", "calls": "lineCount" },
+                  { "function": "lineCount", "at": "builtin-capabilities.ts:4:16", "calls": "load" },
+                  { "function": "load", "at": "builtin-capabilities.ts:1:40", "calls": "readFileSync" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+The chains are the shortest ones, ties broken by the earlier call in the
+source, and every path is relative to the entry's directory, so the file is
+byte-stable: `tests/run.js` compiles this snippet with the flag and compares
+the block above with what it writes. `load` is not listed on its own, because
+only what is exported is; it appears where a chain passes through it.
+
+<!-- cookbook:begin builtin-capabilities -->
+```ts
+const load = (path: string): string => readFileSync(path)
+
+export const lineCount = (path: string): i32 => {
+  const text = load(path)
+  let lines = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) {
+      lines = lines + 1
+    }
+  }
+  return lines
+}
+
+export const main = (): number => {
+  console.log(lineCount("settings.txt"))
+  return 0
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"settings.txt\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define internal noundef nonnull align 8 i8* @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %0 = call i8* @nish_read_file(i8* %path)
+  ret i8* %0
+}
+
+define noundef i32 @lineCount(i8* noundef nonnull noalias readonly align 8 %path) #1 {
+entry:
+  %text.addr = alloca i8*, align 8
+  %lines.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish_arena_mark()
+  %1 = call i8* @load(i8* %path)
+  %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
+  store i8* %2, i8** %text.addr, align 8
+  store i32 0, i32* %lines.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = load i8*, i8** %text.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
+  %8 = icmp slt i32 %3, %7
+  br i1 %8, label %for.body, label %for.end
+
+for.body:
+  %9 = load i8*, i8** %text.addr, align 8
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = sext i32 %10 to i64
+  %12 = getelementptr inbounds i8, i8* %9, i64 8
+  %13 = getelementptr inbounds i8, i8* %12, i64 %11
+  %14 = load i8, i8* %13, align 1
+  %15 = zext i8 %14 to i32
+  %16 = icmp eq i32 %15, 10
+  br i1 %16, label %if.then, label %if.end
+
+if.then:
+  %17 = load i32, i32* %lines.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %lines.addr, align 4
+  br label %if.end
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %21 = load i32, i32* %lines.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %21
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @lineCount(i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*))
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  call void @nish_print(i8* %1)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end builtin-capabilities -->
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
