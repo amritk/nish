@@ -27,6 +27,22 @@
  * to exactly what the checked-in one is. The pair is the seed release
  * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run.
  *
+ * **An intended change is declared, not waved through.** HEAD is meant to
+ * differ from the seed when a release changes what the emitter writes, and
+ * such a change shows up in random programs exactly as it does in the
+ * corpus. `DECLARED` below is this mode's counterpart of `tests/nish-cmp.js`'s
+ * list, narrowed to what a generated program can reach: one function's
+ * attribute group, keyed by the group's text on each side rather than by its
+ * `#N`, because the numbers are assigned in order of first use and say nothing
+ * about what changed. A difference an entry covers is reported and passes;
+ * anything else still fails; and an entry that covers nothing in a run fails
+ * as stale, so that the reseed after the release that ships the change is
+ * what retires it. `explainDifference` decides, and `selfCheckDeclarations`
+ * drives it over fabricated modules on every `npm test`. A change that
+ * removes instructions rather than attributes, such as a check a new proof
+ * leaves out, is a `DECLARED_CHECKS` entry instead, which states its
+ * direction as a predicate over the two modules.
+ *
  * There used to be a second, default mode that ran each program natively and
  * under Node through the live rewrite. The rewriter was stage0's checker and
  * went with it (R6), and a generated program has nothing a frozen store could
@@ -48,6 +64,7 @@ import * as lib from "./lib.js"
 import * as cmp from "../nish-cmp.js"
 import ts from "typescript"
 import { fileURLToPath } from "node:url"
+import { root } from "../self/corpus.js"
 
 /** mulberry32: small, seedable, good enough for program shapes. */
 const rng = (seed) => {
@@ -483,42 +500,51 @@ const generateProgram = (seed, opts = {}) => {
 }
 
 /**
- * The reference and the candidate this mode compares, resolved the way
- * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
- * `NISH_BOOTSTRAP` naming the seed. With no seed there is nothing to compare
- * against, and the run refuses, naming what to set: the stage0 fallback that
- * used to stand in here went with stage0 (R6).
+ * The seed-against-HEAD differences this mode accepts, one per function and
+ * attribute group. An entry reads:
  *
- * Returns `{ reference, candidate }` or `{ error }`.
+ *   {
+ *     function: "nish_str_concat",       // the `@name` on a `declare` or `define` line
+ *     seed: "{ nounwind willreturn }",   // its attribute group's text in the seed's IR
+ *     head: "{ nounwind }",              // and in HEAD's
+ *     changelog: "the words the release notes carry for it",
+ *     why: "one sentence somebody is willing to sign",
+ *   }
+ *
+ * `changelog` is held to the release notes exactly as `tests/nish-cmp.js`
+ * holds its own: `CHANGELOG.md`, or the section `scripts/changelog-gen.mjs`
+ * would render for the commits not yet released, where a subject appears with
+ * its scope dropped and its first letter raised. An entry whose words are in
+ * neither fails the run.
+ *
+ * The list is for one release: once the seed is a release that carries the
+ * change, the entry covers nothing and the run fails until it is deleted.
+ * Only reachable functions belong here. #427's CG-8 also took `willreturn`
+ * from `nish_read_file`, `nish_write_file`, `nish_append_file`,
+ * `nish_alloc_array`, `nish_read_file_or_null` and `nish_read_file_bytes`,
+ * but a generated program reads no file and builds no array, and 200
+ * programs from seed 7000 differ only at `nish_str_concat`, so declaring them
+ * would only be an entry nothing can make stale.
  */
-const stage1Pair = ({ reference = null, candidate = null } = {}) => {
-  const referenceSpec = reference ?? cmp.seedFromEnvironment()
-  if (referenceSpec === null) {
-    return { error: "no reference: pass --reference <nish> or set NISH_BOOTSTRAP to a released nish" }
-  }
-  let candidateSpec = candidate
-  if (candidateSpec === null) {
-    const built = cmp.buildCandidate(referenceSpec)
-    if (built.error !== undefined) {
-      return { error: built.error }
-    }
-    candidateSpec = built.path
-  }
-  return cmp.resolvePair(referenceSpec, candidateSpec)
-}
+const DECLARED = [
+  {
+    function: "nish_str_concat",
+    seed: "{ nounwind willreturn }",
+    head: "{ nounwind }",
+    changelog: "Close CG-2, CG-3, CG-4, CG-8 and CG-10",
+    why: "CG-8: a concatenation past 2^31 - 1 bytes exits, so `nish_str_concat` is no longer `willreturn`",
+  },
+]
 
 /**
- * Output changes declared on the generated programs, the way `DECLARED` in
- * `tests/nish-cmp.js` declares them on the corpus: a program the reference and
- * the candidate disagree on is excused only when one of these explains the
- * whole difference *and* its words are in the release notes (`CHANGELOG.md`,
- * or the section the commits since the last release render to). An entry is
- * a statement about direction, checked on both IRs, never a program list: a
- * generated program differs for whatever reason it differs, and the reason has
- * to be read off the IR. The list is a record for one release, emptied when
- * the release that carries the change becomes the seed.
+ * The changes a group comparison cannot state: a program whose IR loses
+ * instructions, not only attributes. An entry carries the same `changelog`
+ * and `why`, and `explains(reference, candidate)` decides one module from the
+ * two texts. A module only an entry here explains still has to show every
+ * group change it makes under a function `DECLARED` names, or it counts
+ * toward none of them (`groupTransitions`).
  */
-const DECLARED_CHANGES = [
+const DECLARED_CHECKS = [
   {
     changelog: "--deny-panics and noPanic refuse every remaining panic site",
     why: "a divisor proven to be neither 0 nor -1, and a `pop` behind a test that its array holds an element, lose their check",
@@ -578,12 +604,193 @@ const onlyDropsChecks = (reference, candidate) => {
   return true
 }
 
+const ATTRIBUTE_GROUP = /^attributes #(\d+) = (.*)$/
+const GROUP_REFERENCE = / #(\d+)(?=$| )/g
+const FUNCTION_LINE = /^(?:declare|define) [^@]*@("[^"]+"|[^\s(]+)\(/
+
+/** One module's lines apart from its attribute groups, and the groups as `number -> text`. */
+const splitGroups = (text) => {
+  const groups = new Map()
+  const body = []
+  for (const line of text.split("\n")) {
+    const group = ATTRIBUTE_GROUP.exec(line)
+    if (group === null) {
+      body.push(line)
+    } else {
+      groups.set(group[1], group[2])
+    }
+  }
+  return { groups, body }
+}
+
 /**
- * `onlyDropsChecks` over fabricated pairs, every run: a comparison whose
- * excuse nothing exercises is the gap `tests/nish-cmp.js`'s self-checks close.
- * Answers the first case that comes out wrong, or `""`.
+ * The `DECLARED` entries a module shows, read off its `declare` and `define`
+ * lines: each whose function carries the entry's `seed` group in the
+ * reference and its `head` group in the candidate. A module a
+ * `DECLARED_CHECKS` entry explains differs in its instructions, so
+ * `explainDifference` cannot read it, and this is what still lets it keep an
+ * attribute entry from going stale.
  */
-const selfCheckDeclared = () => {
+const groupTransitions = (reference, candidate, declarations) => {
+  const groupsOf = (text) => {
+    const { groups, body } = splitGroups(text)
+    const byFunction = new Map()
+    for (const line of body) {
+      const fn = FUNCTION_LINE.exec(line)?.[1]
+      const ref = [...line.matchAll(GROUP_REFERENCE)].pop()?.[1]
+      if (fn !== undefined && ref !== undefined) {
+        byFunction.set(fn, groups.get(ref))
+      }
+    }
+    return byFunction
+  }
+  const a = groupsOf(reference)
+  const b = groupsOf(candidate)
+  return declarations.filter((d) => a.get(d.function) === d.seed && b.get(d.function) === d.head)
+}
+
+/**
+ * Whether one differing module is the declared change and nothing else.
+ * `reference` and `candidate` are the two texts of one `.ll`, and
+ * `declarations` is the list to judge them by (`DECLARED`, or the fabricated
+ * lists of `selfCheckDeclarations`).
+ *
+ * Every group must be referred to, on both sides. Every line but the
+ * attribute groups must be the same once each `#N` is read
+ * as its group's text. A line whose group text still differs must be a
+ * function's `declare` or `define`, and a declaration must name that function
+ * with exactly those two texts. Renumbered groups alone, with no declared
+ * change behind them, are still a difference: they are bytes the seed did not
+ * write, and nothing has said why.
+ *
+ * Returns `{ covered, undeclared }`: the entries the module used, and the
+ * reason it is not explained (null when it is).
+ */
+const explainDifference = (reference, candidate, declarations) => {
+  const a = splitGroups(reference)
+  const b = splitGroups(candidate)
+  const covered = new Set()
+  if (a.body.length !== b.body.length) {
+    return { covered, undeclared: "the modules differ in more than their attribute groups" }
+  }
+  // A group no line refers to changes nothing the optimiser sees, but it is
+  // still bytes the other compiler did not write, and resolving references
+  // alone would never look at it.
+  for (const [side, split] of [
+    ["the seed", a],
+    ["HEAD", b],
+  ]) {
+    const referenced = new Set(
+      split.body.flatMap((line) => [...line.matchAll(GROUP_REFERENCE)].map((m) => m[1]))
+    )
+    const orphan = [...split.groups.keys()].find((n) => !referenced.has(n))
+    if (orphan !== undefined) {
+      return { covered, undeclared: `${side} defines attributes #${orphan} and no line refers to it` }
+    }
+  }
+  const resolve = (line, groups) => line.replace(GROUP_REFERENCE, (ref, n) => ` #${groups.get(n) ?? ref}`)
+  for (let i = 0; i < a.body.length; i++) {
+    const want = a.body[i]
+    const got = b.body[i]
+    if (want === got) {
+      continue
+    }
+    if (want.replace(GROUP_REFERENCE, " #") !== got.replace(GROUP_REFERENCE, " #")) {
+      return { covered, undeclared: `line ${i + 1} differs in more than its attribute group` }
+    }
+    const seed = resolve(want, a.groups)
+    const head = resolve(got, b.groups)
+    if (seed === head) {
+      continue // renumbered: the same group under another number
+    }
+    const fn = FUNCTION_LINE.exec(want)?.[1]
+    const groupOf = (line, groups) => groups.get([...line.matchAll(GROUP_REFERENCE)].pop()?.[1] ?? "")
+    const from = groupOf(want, a.groups)
+    const to = groupOf(got, b.groups)
+    const entry = declarations.find((d) => d.function === fn && d.seed === from && d.head === to)
+    if (fn === undefined || entry === undefined) {
+      return {
+        covered,
+        undeclared: `line ${i + 1}: ${fn === undefined ? "a non-function line" : `@${fn}`}'s attributes go from ${from} to ${to}, and no declaration names it`,
+      }
+    }
+    covered.add(entry)
+  }
+  if (covered.size === 0) {
+    return { covered, undeclared: "the attribute groups differ and no declared change explains it" }
+  }
+  return { covered, undeclared: null }
+}
+
+/**
+ * `explainDifference` and the stale rule over modules no compiler wrote, for
+ * the reason `tests/nish-cmp.js`'s `selfCheckRoots` gives: this decides
+ * whether a difference is excused, and the run that uses it only happens with
+ * a seed. Returns `[label, reason it failed or null]` per property.
+ */
+const selfCheckDeclarations = () => {
+  const module = (concat, groups) =>
+    [
+      "define i32 @main() #0 {",
+      "  ret i32 0",
+      "}",
+      `declare i8* @nish_str_concat(i8*, i8*) #${concat}`,
+      "declare void @nish_print(i8*) #1",
+      ...groups.map((g, n) => `attributes #${n} = ${g}`),
+      "",
+    ].join("\n")
+  const seed = module(1, ["{ nounwind }", "{ nounwind willreturn }"])
+  const head = module(0, ["{ nounwind }", "{ nounwind willreturn }"])
+  const entry = { function: "nish_str_concat", seed: "{ nounwind willreturn }", head: "{ nounwind }" }
+  const other = { function: "nish_print", seed: "{ nounwind willreturn }", head: "{ nounwind }" }
+  const undeclared = explainDifference(seed, head, [other])
+  const declared = explainDifference(seed, head, [entry])
+  const extra = explainDifference(seed, head.replace("ret i32 0", "ret i32 1"), [entry])
+  const orphan = explainDifference(seed, `${head}attributes #2 = { cold }\n`, [entry])
+  const stale = staleDeclarations([entry, other], declared.covered)
+  const notes = { text: "### Fixed\n\n- codegen: Close CG-8 ([#427])\n" }
+  const unnamed = unnamedDeclarations(
+    [
+      { ...entry, changelog: "Close CG-8" },
+      { ...other, changelog: "Close CG-9" },
+    ],
+    "## [Unreleased]\n",
+    notes
+  )
+  let declaredFailure = null
+  if (declared.undeclared !== null || !declared.covered.has(entry)) {
+    declaredFailure = `it was not explained: ${declared.undeclared}`
+  } else if (extra.undeclared === null) {
+    declaredFailure = "a module that also differs in an instruction was explained"
+  } else if (orphan.undeclared === null) {
+    declaredFailure = "a module that also defines a group nothing refers to was explained"
+  }
+  return [
+    [
+      "an undeclared attribute-group difference fails",
+      undeclared.undeclared === null ? "it was explained by a declaration for another function" : null,
+    ],
+    ["a declared attribute-group difference passes, and only that", declaredFailure],
+    [
+      "a declaration that matches nothing fails as stale",
+      stale.length === 1 && stale[0] === other ? null : `stale: ${JSON.stringify(stale)}`,
+    ],
+    ["a dropped division or `pop` check is explained, and only that", checksFailure()],
+    [
+      "a declaration whose words the release notes do not carry fails",
+      unnamed.length === 1 && unnamed[0].changelog === "Close CG-9"
+        ? null
+        : `unnamed: ${JSON.stringify(unnamed)}`,
+    ],
+  ]
+}
+
+/**
+ * `onlyDropsChecks` over fabricated pairs: a dropped division or `pop` check
+ * is explained, and a dropped bounds check, an added check or a function more
+ * is not. Answers the first case that comes out wrong, or null.
+ */
+const checksFailure = () => {
   const fn = (body) => `define internal i32 @f(i32 %a) {\nentry:\n${body}}\n`
   const div =
     "  br i1 %0, label %div.fail, label %div.ok\ndiv.fail:\n  call void @nish_panic_div(i1 zeroext %0)\n  unreachable\n"
@@ -602,43 +809,88 @@ const selfCheckDeclared = () => {
       return `onlyDropsChecks is ${!want} for ${what}`
     }
   }
-  return ""
+  return null
+}
+
+/** The declarations no difference in a run used, each of which fails it. */
+const staleDeclarations = (declarations, used) => declarations.filter((d) => !used.has(d))
+
+/**
+ * The declarations whose `changelog` words neither `CHANGELOG.md`'s text nor
+ * the pending notes carry, judged by `tests/nish-cmp.js`'s own `isNamed`, so
+ * the two lists are held to one rule.
+ */
+const unnamedDeclarations = (declarations, changelogText, pending) =>
+  declarations.filter((d) => !cmp.isNamed(d.changelog, changelogText, pending))
+
+/**
+ * The reference and the candidate this mode compares, resolved the way
+ * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
+ * `NISH_BOOTSTRAP` naming the seed. With no seed there is nothing to compare
+ * against, and the run refuses, naming what to set: the stage0 fallback that
+ * used to stand in here went with stage0 (R6).
+ *
+ * Returns `{ reference, candidate }` or `{ error }`.
+ */
+const stage1Pair = ({ reference = null, candidate = null } = {}) => {
+  const referenceSpec = reference ?? cmp.seedFromEnvironment()
+  if (referenceSpec === null) {
+    return { error: "no reference: pass --reference <nish> or set NISH_BOOTSTRAP to a released nish" }
+  }
+  let candidateSpec = candidate
+  if (candidateSpec === null) {
+    const built = cmp.buildCandidate(referenceSpec)
+    if (built.error !== undefined) {
+      return { error: built.error }
+    }
+    candidateSpec = built.path
+  }
+  return cmp.resolvePair(referenceSpec, candidateSpec)
 }
 
 /**
- * The declared change that explains why `file` compiles differently, or null:
- * both compilers compile it again into a directory of their own, and each
- * entry is asked about the two IRs. `notes` is the release notes, read once.
+ * Whether every difference `compare` reported for one program is a declared
+ * one. `compare` leaves the two compilers' output in `<work>/reference` and
+ * `<work>/candidate` until its next call, so the texts are read from there,
+ * with each side's own root and version removed as `compare` removes them. A
+ * refusal, a missing module or a file that is not IR is never declared.
+ *
+ * Returns `{ covered, undeclared }`, as `explainDifference` does, over all of
+ * the program's modules.
  */
-const declaredChange = (pair, work, file, notes) => {
-  const irOf = (compiler, dir) => {
-    fs.rmSync(dir, { recursive: true, force: true })
-    fs.mkdirSync(dir, { recursive: true })
-    const r = cmp.compile(compiler, [file, "-o", `${dir}${path.sep}`])
-    if (r.status !== 0) {
-      return null
+const explainAll = (pair, work, differences) => {
+  const covered = new Set()
+  for (const difference of differences) {
+    const read = (side) => {
+      const file = path.join(work, side, difference.surface)
+      return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null
     }
-    return fs
-      .readdirSync(dir)
-      .filter((f) => f.endsWith(".ll"))
-      .sort()
-      .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
-      .join("\n")
-  }
-  const reference = irOf(pair.reference, path.join(work, "declared-reference"))
-  const candidate = irOf(pair.candidate, path.join(work, "declared-candidate"))
-  if (reference === null || candidate === null) {
-    return null
-  }
-  for (const change of DECLARED_CHANGES) {
-    if (
-      cmp.isNamed(change.changelog, notes.changelog, notes.pending()) &&
-      change.explains(reference, candidate)
-    ) {
-      return change
+    const reference = read("reference")
+    const candidate = read("candidate")
+    if (!difference.surface.endsWith(".ll") || reference === null || candidate === null) {
+      return { covered, undeclared: `${difference.surface}: only IR both compilers wrote can be declared` }
+    }
+    const normal = (text, compiler) =>
+      cmp.withoutOwnVersion(cmp.withoutOwnRoot(text, compiler.packageRoot), compiler.version)
+    const seedText = normal(reference, pair.reference)
+    const headText = normal(candidate, pair.candidate)
+    const one = explainDifference(seedText, headText, DECLARED)
+    if (one.undeclared === null) {
+      for (const d of one.covered) {
+        covered.add(d)
+      }
+      continue
+    }
+    const change = DECLARED_CHECKS.find((c) => c.explains(seedText, headText))
+    if (change === undefined) {
+      return { covered, undeclared: `${difference.surface}: ${one.undeclared}` }
+    }
+    covered.add(change)
+    for (const d of groupTransitions(seedText, headText, DECLARED)) {
+      covered.add(d)
     }
   }
-  return null
+  return { covered, undeclared: null }
 }
 
 /**
@@ -655,9 +907,13 @@ const declaredChange = (pair, work, file, notes) => {
  * mode is for is the emitter on shapes nobody wrote, and the WP8 generators
  * read the same checked program the corpus run already puts them through.
  *
- * Returns `{ seed, count, pair, agreed, files, lines, disagreements }`, where a
- * disagreement is `{ seed, verdict, detail, file }` and `file` is the saved
- * reproducer. `pair === null` means a compiler was missing or would not link
+ * Returns `{ seed, count, pair, agreed, declared, stale, files, lines,
+ * disagreements }`, where `declared` counts the programs whose only
+ * differences `DECLARED` names, `stale` lists the entries none of them used,
+ * `unnamed` the entries whose words the release notes do not carry (with
+ * `pending`, the notes they were looked for in),
+ * and a disagreement is `{ seed, verdict, detail, file }` with `file` the
+ * saved reproducer. `pair === null` means a compiler was missing or would not link
  * and nothing was compared.
  */
 const stage1Run = ({
@@ -677,6 +933,9 @@ const stage1Run = ({
       error: pair.error,
       agreed: 0,
       declared: 0,
+      stale: [],
+      unnamed: [],
+      pending: null,
       files: 0,
       lines: 0,
       disagreements: [],
@@ -686,20 +945,9 @@ const stage1Run = ({
   fs.mkdirSync(dir, { recursive: true })
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fuzz-ir-"))
   const disagreements = []
+  const used = new Set()
   let agreed = 0
   let declared = 0
-  // The release notes, read only once a disagreement needs them.
-  let pending
-  const changelogFile = path.resolve(import.meta.dirname, "..", "..", "CHANGELOG.md")
-  const notes = {
-    changelog: fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : "",
-    pending: () => {
-      if (pending === undefined) {
-        pending = cmp.pendingNotes()
-      }
-      return pending
-    },
-  }
   let files = 0
   let lines = 0
   for (let i = 0; i < count; i++) {
@@ -712,16 +960,20 @@ const stage1Run = ({
     // none of the outcomes below can happen for a benign reason: every verdict
     // other than an agreement is a failure worth saving.
     const entry = { seed: s, name: `fuzz/${s}`, verdict: "agree", detail: "", ms: Date.now() - t0, file }
-    if (result.differences !== undefined) {
+    const explained = result.differences === undefined ? null : explainAll(pair, work, result.differences)
+    if (explained?.undeclared === null) {
+      entry.verdict = "declared"
+      entry.detail = [...explained.covered]
+        .map((d) => (d.function === undefined ? d.why : `@${d.function} ${d.seed} -> ${d.head}`))
+        .join(", ")
+      for (const d of explained.covered) {
+        used.add(d)
+      }
+      declared++
+    } else if (result.differences !== undefined) {
       const first = result.differences[0]
       entry.verdict = first.surface === "exit" ? "refusal-differs" : "ir-mismatch"
-      entry.detail = `${first.surface}: ${first.detail}`
-      const change = entry.verdict === "ir-mismatch" ? declaredChange(pair, work, file, notes) : null
-      if (change !== null) {
-        entry.verdict = "declared"
-        entry.detail = change.why
-        declared++
-      }
+      entry.detail = `${first.surface}: ${first.detail}\n${explained.undeclared}`
     } else if (result.refused !== undefined) {
       entry.verdict = "refused-by-both"
       entry.detail = result.refused
@@ -739,10 +991,16 @@ const stage1Run = ({
     log(entry)
   }
   fs.rmSync(work, { recursive: true, force: true })
-  return { seed, count, pair, agreed, declared, files, lines, disagreements }
+  const every = [...DECLARED, ...DECLARED_CHECKS]
+  const stale = staleDeclarations(every, used)
+  const changelogFile = path.join(root, "CHANGELOG.md")
+  const changelogText = fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : ""
+  const pending = every.some((d) => !changelogText.includes(d.changelog)) ? cmp.pendingNotes() : null
+  const unnamed = unnamedDeclarations(every, changelogText, pending)
+  return { seed, count, pair, agreed, declared, stale, unnamed, pending, files, lines, disagreements }
 }
 
-export { generateProgram, stage1Run }
+export { generateProgram, selfCheckDeclarations, stage1Run }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
@@ -776,11 +1034,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.stdout.write(generateProgram(seed, { depth }))
     process.exit(0)
   }
-  const broken = selfCheckDeclared()
-  if (broken !== "") {
-    console.error(`fuzz: self-check failed: ${broken}`)
-    process.exit(1)
-  }
   if (!lib.hasClang()) {
     console.error("clang not installed")
     process.exit(2)
@@ -797,7 +1050,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     reference,
     candidate,
     log: (e) => {
-      const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase()
+      const tag = { agree: "ok  ", declared: "decl" }[e.verdict] ?? e.verdict.toUpperCase()
       // The detail is a bounded diff excerpt and therefore several lines;
       // indenting its continuations keeps one program to one visual block.
       const detail = e.detail ? `  ${e.detail.replace(/\n/g, "\n      ")}` : ""
@@ -809,7 +1062,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   console.log(
-    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} declared=${res.declared} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
+    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} declared=${res.declared} disagreements=${res.disagreements.length} stale=${res.stale.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
   )
   // The pair is part of the reproduction now that it is a parameter: a
   // failure against one seed release says nothing about another, and the
@@ -821,5 +1074,27 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`      ${d.detail.replace(/\n/g, "\n      ")}`)
     console.log(`      reproduce: node tests/differential/fuzz.js --seed ${d.seed} --count 1${pairArgs}`)
   }
-  process.exit(res.disagreements.length === 0 ? 0 : 1)
+  for (const d of DECLARED) {
+    if (!res.stale.includes(d)) {
+      console.log(`  declared: @${d.function} ${d.seed} -> ${d.head} (${d.changelog}): ${d.why}`)
+    }
+  }
+  // A stale entry fails even a one-program reproduction that does not reach
+  // it; the line says which, so it does not read as the program's own fault.
+  for (const d of res.stale) {
+    console.log(
+      `  STALE: no program differs at @${d.function} ${d.seed} -> ${d.head}; the seed carries the change ` +
+        "or the generator no longer reaches it, so the declaration goes"
+    )
+  }
+  for (const d of res.unnamed) {
+    console.log(
+      `  FAIL neither CHANGELOG.md nor the pending release notes name this difference: the declaration asks for "${d.changelog}"`
+    )
+  }
+  if (res.unnamed.length > 0 && res.pending?.error !== undefined) {
+    console.log(`  FAIL the pending release notes could not be read: ${res.pending.error}`)
+  }
+  const failed = res.disagreements.length + res.stale.length + res.unnamed.length
+  process.exit(failed === 0 ? 0 : 1)
 }

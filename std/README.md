@@ -38,16 +38,15 @@ Every module here was security-audited (#363); the records are in
 [`docs/security/`](../docs/security/README.md), and how to report a
 vulnerability is in [`SECURITY.md`](../SECURITY.md). Two limits hold across the
 modules. **Lengths stop at 2^31 − 1.** No array built by `push` or `new Array`,
-and no array or string the runtime makes (a file read, a concatenation, a
-template), can pass 2^31 − 1 elements or bytes, and the one-shot functions
-below refuse a longer input as each row says. A string built by `join` still
-can, and under `--number-mode i32` its `length` is then wrong, which nothing in
-`std` can tell (CG-3, open): a program built in that mode must not hand these
-functions anything built from such a string. **Private keys are `Secret`s.**
-`crypto/p256.ts`, `crypto/x25519.ts` and `crypto/x509.ts` take and give a
-private key as a `Secret<u8[]>` from `nish:secret`, compute on it only inside
-`expose`, and wipe every intermediate the key reaches before they return, with
-a store the optimiser may not remove (ECC-2, X509-7, closed). The other modules
+no array or string the runtime makes (a file read, a concatenation, a
+template) and no string built by `join` can pass 2^31 − 1 elements or bytes
+(K1-6, CG-3, closed), so `length` is right in both number modes, and the
+one-shot functions below refuse a longer input as each row says. **Private
+keys are `Secret`s.** `crypto/p256.ts`, `crypto/x25519.ts` and
+`crypto/x509.ts` take and give a private key as a `Secret<u8[]>` from
+`nish:secret`, compute on it only inside `expose`, and wipe every intermediate
+the key reaches before they return, with a store the optimiser may not remove
+(ECC-2, X509-7, closed). The other modules
 take their keys as plain arrays and do not wipe them yet.
 
 | Module | What it is | Reproduces |
@@ -148,7 +147,8 @@ reads one, and it still takes its randomness as an argument.
 | [`net/quic-conn-params.ts`](./net/quic-conn-params.ts) | Transport parameters (RFC 9000 §18): a `QuicTransportParameters` that starts at every default, `quicEncodeTransportParameters` (a parameter only when it is not its default) and `quicParseTransportParameters`, which refuses with TRANSPORT_PARAMETER_ERROR, naming the parameter, a parameter that does not frame, a known one sent twice, a varint-valued one that is not exactly one varint, a server-only one from a client, and every value §18.2 bounds. Unknown parameters are skipped | RFC 9000 §7.4, §18; RFC 9001 A.2's client parameters |
 | [`net/quic-conn-ack.ts`](./net/quic-conn-ack.ts) | `QuicAckRanges`: the packet numbers one space received, as at most 32 disjoint ranges, for duplicate detection (`record`, `contains`) and for the ACK frame written from them (`pushAck`). Past 32 ranges the lowest is dropped and a floor raised over it, below which every packet number reads as already received | RFC 9000 §12.3, §13.2, §19.3 |
 | [`net/quic-conn-cid.ts`](./net/quic-conn-cid.ts) | `QuicCidTable`: the connection IDs a connection issued (routed by `ownsLocal`, retired by the peer with `retireLocal`) and the ones its peer issued (`addPeer`, with Retire Prior To retiring older ones into `retirePending`, and `currentPeer` the one sent to). A reused sequence number, an ID under two sequence numbers and retiring the ID a packet was sent to are PROTOCOL_VIOLATION; more active IDs than advertised, or more owed retirements than twice that, CONNECTION_ID_LIMIT_ERROR | RFC 9000 §5.1, §19.15, §19.16 |
-| [`net/quic.ts`](./net/quic.ts) | The server side of a QUIC connection (WP34 Q2, first part): `new QuicConnection(config, entropy)`, `receive(datagram)`, `signatureInput()` / `sign(signature)`, `takeDatagram()` until `null`, and `readStream()` / `writeStream(id, data, fin)` once connected; `close(code)` and `release()`. TLS 1.3 runs over CRYPTO frames at the Initial, Handshake and 1-RTT levels (`TlsServer` with `quic` set), the keys of each level come from `nish/net/quic-packet` as the secrets appear and are discarded and wiped as RFC 9001 §4.9 says, transport parameters go both ways and the client's are checked, every ack-eliciting packet is acknowledged in its space, the client gets new connection IDs once the handshake is confirmed, PATH_CHALLENGE is answered, and an ack-eliciting Initial is padded to 1200 bytes and held to three times what the unvalidated client sent. A protocol violation closes the connection with the RFC's transport error, a TLS alert with CRYPTO_ERROR; a packet that cannot be used is dropped and counted. Not here yet: loss recovery (Q3), flow-control updates and server-opened or unidirectional streams (Q4), Retry, Version Negotiation, stateless reset, the idle timer and key update (Q2b) | RFC 9000; RFC 9001 §4, §5.7, §8; a handshake and stream echo against aioquic, recorded and replayed byte for byte |
+| [`net/quic.ts`](./net/quic.ts) | The server side of a QUIC connection (WP34 Q2): `new QuicConnection(config, entropy)`, `receive(datagram, now)`, `signatureInput()` / `sign(signature)`, `takeDatagram(now)` until `null`, `deadline()` / `handleTimer(now)` for its timers, and `readStream()` / `writeStream(id, data, fin)` once connected; `updateKeys()`, `close(code)` and `release()`; `acceptRetry(originalDcid, retryScid)` for a connection a Retry token opened; `quicStatelessResetToken(key, cid)`. TLS 1.3 runs over CRYPTO frames at the Initial, Handshake and 1-RTT levels (`TlsServer` with `quic` set), the keys of each level come from `nish/net/quic-packet` as the secrets appear and are discarded and wiped as RFC 9001 §4.9 says, transport parameters go both ways and the client's are checked, every ack-eliciting packet is acknowledged in its space, the client gets new connection IDs once the handshake is confirmed, PATH_CHALLENGE is answered, and an ack-eliciting Initial is padded to 1200 bytes and held to three times what the unvalidated client sent. A protocol violation closes the connection with the RFC's transport error, a TLS alert with CRYPTO_ERROR; a packet that cannot be used is dropped and counted. The idle timeout is the smaller of both sides' `max_idle_timeout`, at least three probe timeouts, and closes silently; key update runs both ways, the client's followed (at most `QUIC_CONN_MAX_KEY_UPDATES`, QUIC-4) and the server's started by `updateKeys()`, with the next read keys derived in advance and the previous kept a probe timeout for reordered packets; every connection ID carries the stateless reset token the configuration's static key gives it. Not here yet: loss recovery (Q3), flow-control updates and server-opened or unidirectional streams (Q4), and the AEAD limits of RFC 9001 §6.6 (QUIC-6) | RFC 9000 §10.1, §10.3.2; RFC 9001 §4, §5.7, §6, §8; a handshake and stream echo, and an update each way, against aioquic, recorded and replayed byte for byte |
+| [`net/quic-listener.ts`](./net/quic-listener.ts) | What a QUIC server answers to a datagram no connection owns (WP34 Q2, second part): `new QuicListener(config, entropy)` and `handle(datagram, address, now)`, which answers a `QuicListenerAnswer` whose `kind` is `QUIC_LISTEN_DROP`, `_ACCEPT` (make a `QuicConnection`; after a Retry, `acceptRetry` it with the answer's IDs), or a `reply` to send: `_VERSION_NEGOTIATION` for another version in a full-sized datagram, `_RETRY` with an address-validation token when `config.retry` is set, `_INVALID_TOKEN` for a Retry token that is forged, moved, expired or for another ID, and `_STATELESS_RESET` for a short header to an ID the server has no connection for. A token is 128 bits of HMAC-SHA256 under `config.retryTokenKey` over its issue time, the original DCID, the new ID and the client's address and port, good for `config.retryTokenLifetime`. A reset ends in `quicStatelessResetToken` of the packet's ID, is always shorter than the datagram it answers and never under 21 bytes, and is rate limited. Its own unpredictable bytes come from an HMAC generator seeded once by the caller | RFC 9000 §5.2.2, §6, §8.1, §10.3, §17.2.1, §17.2.5; Version Negotiation, Retry, a stateless reset and the idle timeout against aioquic, recorded and replayed byte for byte |
 | [`net/hpack.ts`](./net/hpack.ts) | HPACK, HTTP/2's header compression: `HpackEncoder` and `HpackDecoder`, one per direction of a connection, each with its `HpackTable`; and beneath them the §5.1 integer (`hpackEncodeInteger` / `hpackDecodeInteger`), the §5.2 string (`hpackEncodeString` / `hpackDecodeString`) and Appendix B's Huffman code (`HpackHuffman`, `hpackHuffmanEncode`, `hpackHuffmanDecode`, `hpackHuffmanLength`). Names and values are `u8[]`. The encoder takes the representation and the Huffman choice per field, and sends a never-indexed field as a literal even when a table holds it. The decoder answers a negative `HPACK_ERR_*` code, and stays spent, for a truncated block, an integer past 2^31 - 1, an index of zero or out of range, bad Huffman padding, EOS, a size update above the SETTINGS limit, after a field or missing when a lowered limit requires one; a header list past the caller's limit is decoded to the end, its excess dropped, and answered with `HPACK_LIST_TOO_LARGE`, which is not fatal. A window outside its buffer, a negative size or limit, and an integer prefix outside 1 to 8 bits are the program's mistakes and panic | RFC 7541 Appendix C (C.1–C.6, with the dynamic table after every step) and every code of Appendix B |
 | [`net/http1.ts`](./net/http1.ts) | `Http1Parser`, an incremental HTTP/1.1 request parser: `feed(buf, off, len)` any slice, then `next()` answers `HTTP1_NEED_MORE`, `HTTP1_HEAD` (`method`, `target`, `minor`, lowercased `names` beside `values`, `header(name)`, `contentLength` or `chunked`, `keepAlive`, `upgrade`), `HTTP1_BODY` (a window onto its buffer, de-chunked), `HTTP1_END`, or one of three final events: `HTTP1_UPGRADE` (`upgradeBytes()` and `declineUpgrade()`), `HTTP1_CLOSED` and `HTTP1_ERROR` with the `status` to answer. It refuses with 400 every request-smuggling shape — `Content-Length` with `Transfer-Encoding`, a repeated or non-digit `Content-Length`, an obs-fold, a bare LF, whitespace before a colon, a malformed chunk size or terminator — and with 413, 414, 431, 501 and 505 what those mean. The writer is `http1ResponseHead(status, reason, names, values, bodyLength)`, which adds the framing field itself and refuses (`null`) a CR, LF or other control character anywhere a caller's string lands, and `http1Chunk` and `http1LastChunk` for a chunked body | RFC 9112 §2–§7 and §9.3, RFC 9110 §5, §6.2, §7.2 and §7.8; a corpus fed at every split point (`tests/link/net_http1`) |
 | [`net/websocket.ts`](./net/websocket.ts) | `WsDecoder(expectMasked, maxMessage)`, the same `feed` and `next()` over WebSocket frames: `WS_MESSAGE` (fragments joined, text checked as UTF-8 fragment by fragment), `WS_PING`, `WS_PONG`, and the final `WS_CLOSE` and `WS_ERROR`, whose `closeCode` is the 1002, 1007 or 1009 to close with. `websocketFrame` encodes a frame with the mask key the caller supplies, `websocketClosePayload` a close frame's code and reason, and `websocketIsUtf8` checks a window. The handshake is `websocketRequestKey(parser)` over an `Http1Parser`'s head, `websocketAcceptKey`, `websocketKeyIsValid` and `websocketUpgradeResponse`, the 101 | RFC 6455 §1.3's accept key, the §5.7 example frames byte for byte, §5.5's control-frame rules, §7.4's close codes |
@@ -199,26 +199,38 @@ it has what it needs from them, which narrows TLS-1.
 `tests/link/net_tls_record_*` are its programs, and the `net_tls_tcp` block
 of `tests/run.js` drives the carrier with openssl and curl.
 
-**How a server drives `QuicConnection`.** Make one per connection when a
-client's first Initial arrives, with `QUIC_CONN_ENTROPY_SIZE` bytes from
+**How a server drives `QuicConnection`.** Keep one `QuicListener` for the
+server, with the same `QuicServerConfig` its connections use: two static keys
+of `QUIC_CONN_STATIC_KEY_SIZE` bytes (the stateless reset key, which has to
+survive a restart to be any use, and the Retry token key; both are the
+caller's to keep, QUIC-5) and whether to ask for Retry. Route each datagram by
+its first packet's DCID: to the connection whose `ownsConnectionId` says it
+is its, and anything else to `listener.handle(datagram, address, now)`, which
+answers what to send back or says to make a connection — and must see nothing
+a live connection owns, or a stateless reset would end that connection.
+Make the connection when it says so, with `QUIC_CONN_ENTROPY_SIZE` bytes from
 `crypto.getRandomValues`: the TLS server random and x25519 key, the server's
-first connection ID and the seed its later IDs and reset tokens are derived
-from all come out of them, so a test injects fixed bytes and a recorded
-exchange replays byte for byte. Hand it every datagram the client sends;
+first connection ID and the seed its later IDs are derived from all come out
+of them, so a test injects fixed bytes and a recorded exchange replays byte
+for byte. Neither has a clock: `now` is the caller's monotonic time in
+milliseconds, and `deadline()` says when to call `handleTimer(now)` next.
+Hand the connection every datagram the client sends;
 when `signatureInput()` answers bytes, sign them (`tlsSignEcdsaP256`) and hand
-the signature to `sign`; then send whatever `takeDatagram()` answers until it
+the signature to `sign`; then send whatever `takeDatagram(now)` answers until it
 answers `null`, to the address the datagram came from. `ownsConnectionId`
 says whether a datagram's DCID is the connection's, which is how a server
 with many routes them. Stream data comes out of `readStream()` in order per
 stream, and `writeStream` queues a reply within the credit the client gave.
 `state` says where it is, and `error` why it closed. The keys of each level
-are wiped when the level is discarded and the rest by `release()`; what no wipe
+are wiped when the level is discarded, each key generation when an update
+replaces it, and the rest by `release()` or the idle timeout; what no wipe
 reaches is QUIC-2 in [`docs/security/quic.md`](../docs/security/quic.md).
-`tests/link/net_quic_frame`, `net_quic_conn_parts`, `net_quic_conn` and
-`net_quic_conn_replay` are its programs, each also run under
-`--number-mode f64`; the last replays, over loopback from a Nish UDP client,
-a handshake and echo recorded against aioquic by
-`tests/link/net_quic_conn_replay/record.sh`.
+`tests/link/net_quic_frame`, `net_quic_conn_parts`, `net_quic_conn`,
+`net_quic_conn_replay`, `net_quic_lifecycle` and `net_quic_lifecycle_replay`
+are its programs, each also run under `--number-mode f64`; the two replays
+send, over loopback from a Nish UDP client, exchanges recorded against
+aioquic by their `record.sh`: a handshake and echo, and Version Negotiation,
+Retry, key update both ways, the idle timeout and a stateless reset.
 
 `net/http1.ts` and `net/websocket.ts` run their checks again under
 `--number-mode f64` (`net_http1_f64`, `net_websocket_f64`). Neither handles a

@@ -2943,6 +2943,34 @@ const DECLARED = [
     changelog: "Nish/net/quic — QUIC connections, the handshake and stream data (WP34 Q2, first part)",
     why: "a new program: the aioquic replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic",
   },
+  {
+    program: "tests/link/net_quic_lifecycle/main.ts",
+    file: "exit",
+    changelog:
+      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
+    why: "a new program: Version Negotiation, Retry tokens, stateless resets, the idle timeout and key update, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+  },
+  {
+    program: "tests/link/net_quic_lifecycle_f64/main.ts",
+    file: "exit",
+    changelog:
+      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
+    why: "a new program: the lifecycle checks under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+  },
+  {
+    program: "tests/link/net_quic_lifecycle_replay/main.ts",
+    file: "exit",
+    changelog:
+      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
+    why: "a new program: five aioquic scenarios replayed over loopback, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+  },
+  {
+    program: "tests/link/net_quic_lifecycle_replay_f64/main.ts",
+    file: "exit",
+    changelog:
+      "Nish/net/quic — Retry, version negotiation, stateless reset, idle timeout and key update (WP34 Q2, second part)",
+    why: "a new program: the aioquic lifecycle replay under --number-mode f64, which the released compiler refuses because its std/ has no nish/net/quic-listener",
+  },
   ...declareMoved(
     DENY_PANICS_MOVED,
     "--deny-panics and noPanic refuse every remaining panic site",
@@ -3886,10 +3914,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 export {
   buildCandidate,
   compare,
-  compile,
-  pendingNotes,
   corpus,
   packageRootOf,
+  pendingNotes,
   resolveCompiler,
   resolvePair,
   seedFromEnvironment,

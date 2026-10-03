@@ -8,12 +8,13 @@
  *     import { QuicConnection, QuicServerConfig } from "nish/net/quic";
  *
  *     const conn = new QuicConnection(config, entropy);   // entropy: QUIC_CONN_ENTROPY_SIZE random bytes
- *     conn.receive(datagram);                              // every datagram the client sends
+ *     conn.receive(datagram, now);                         // every datagram the client sends; now in ms
  *     const input: u8[] | null = conn.signatureInput();
  *     if (input !== null) { conn.sign(tlsSignEcdsaP256(key, input)); }
- *     let out: u8[] | null = conn.takeDatagram();
- *     while (out !== null) { … send it to the client … ; out = conn.takeDatagram(); }
+ *     let out: u8[] | null = conn.takeDatagram(now);
+ *     while (out !== null) { … send it to the client … ; out = conn.takeDatagram(now); }
  *     let data: QuicStreamData | null = conn.readStream();  // what the client sent on its streams
+ *     … and at conn.deadline(), conn.handleTimer(now)
  *
  * **What it is.** One connection, from the client's first Initial to a
  * CONNECTION_CLOSE either way. The handshake is `nish/net/tls`'s `TlsServer`,
@@ -31,15 +32,39 @@
  * retransmitted, so a lost packet is lost, and the handshake completes only
  * where nothing is (loopback). Streams with flow-control updates are Q4: the
  * credit the server advertises is never raised, so a stream carries at most
- * `maxStreamData` bytes each way and the connection `maxData`. Retry, Version
- * Negotiation, stateless reset, the idle timeout and key update are Q2b. The
- * server opens no stream of its own and accepts no unidirectional stream.
+ * `maxStreamData` bytes each way and the connection `maxData`. The server
+ * opens no stream of its own and accepts no unidirectional stream. What a
+ * server answers before a connection exists — Version Negotiation, Retry and
+ * a stateless reset — is `nish/net/quic-listener`'s.
+ *
+ * **Time.** The connection has no clock: `receive`, `takeDatagram` and
+ * `handleTimer` take the caller's monotonic time in milliseconds, and
+ * `deadline()` says when `handleTimer` is next due. Two things run on it.
+ * The idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
+ * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR`; once it passes with
+ * nothing received, the connection closes silently (`QUIC_STATE_TIMED_OUT`)
+ * and wipes its keys. And after a key update the previous read keys are kept
+ * for `QUIC_CONN_PTO`, for packets the network reordered, before the next
+ * generation's are derived (RFC 9001 §6.5).
+ *
+ * **Key update** (RFC 9001 §6), both ways. A 1-RTT packet whose Key Phase
+ * bit differs from the current one is opened with the next generation's read
+ * keys, which are derived ahead of time so that a forged bit costs no
+ * derivation and shows no timing difference (§6.3); if it opens, the client
+ * has updated, and the server's write keys follow before anything is
+ * acknowledged (§6.2). `updateKeys()` starts an update from the server once
+ * the client has acknowledged a packet of the current phase (§6.1). Each
+ * update the client starts costs two key derivations, which stay in the arena
+ * (QUIC-4 in `docs/security/quic.md`), so a connection takes at most
+ * `QUIC_CONN_MAX_KEY_UPDATES` of them and closes on the next with
+ * KEY_UPDATE_ERROR.
  *
  * **Sans-IO and deterministic.** No socket, no clock and no random device:
  * every random choice (the TLS server random and ephemeral key, the server's
- * first connection ID, and the seed later IDs and their reset tokens are
- * derived from) comes from the `entropy` the constructor takes, and every ACK
- * says a delay of zero. So a recorded exchange replays byte for byte.
+ * first connection ID, and the seed later IDs are derived from) comes from
+ * the `entropy` the constructor takes, every stateless reset token from the
+ * configuration's static key (RFC 9000 §10.3.2), and every ACK says a delay
+ * of zero. So a recorded exchange replays byte for byte.
  *
  * **What a peer cannot do.** Nothing it sends makes this module panic. A
  * datagram that does not parse, a packet that does not authenticate, a
@@ -48,20 +73,23 @@
  * A frame that breaks the protocol closes the connection with the transport
  * error RFC 9000 names (`QUIC_ERROR_*` in `nish/net/quic-frame`), a TLS alert
  * closes it with CRYPTO_ERROR (0x100 + the alert), and the CONNECTION_CLOSE
- * is the next datagram out. Before the client's address is validated the
- * server sends at most three times what it received (§8.1). Every buffer a
- * peer can fill is bounded: CRYPTO reassembly by `QUIC_CONN_CRYPTO_WINDOW`,
+ * is the next datagram out. Before the client's address is validated — by a
+ * Handshake packet, or by a Retry token `nish/net/quic-listener` checked —
+ * the server sends at most three times what it received (§8.1). Every buffer
+ * a peer can fill is bounded: CRYPTO reassembly by `QUIC_CONN_CRYPTO_WINDOW`,
  * streams by the credit advertised, the connection-ID table by the limit
  * advertised, and the received packet numbers by `QUIC_ACK_MAX_RANGES`.
  *
  * **Secrets.** The packet keys of each level live in this connection's
- * fields as long as the level does, and in `TlsServer`'s (TLS-1). A `Secret`
- * may not be a field (NL2430), so they are plain bytes; `secureZero` wipes
- * each level's key, IV and header-protection key when the level is
- * discarded, and `release()` wipes the rest — the 1-RTT keys, the traffic
- * secrets `TlsServer` holds, its ephemeral key and the connection-ID seed.
- * What no wipe reaches (the expanded AES key schedules, the HKDF and HMAC
- * intermediates in arena memory) is recorded as QUIC-2 in
+ * fields as long as the level does, and in `TlsServer`'s (TLS-1); so do the
+ * 1-RTT secrets the next key generation is derived from, and the next
+ * generation's read keys. A `Secret` may not be a field (NL2430), so they are
+ * plain bytes; `secureZero` wipes each level's key, IV and header-protection
+ * key when the level is discarded, each generation's key, IV and secret when
+ * a key update replaces it, and `release()` the rest — the 1-RTT keys, the
+ * traffic secrets `TlsServer` holds, its ephemeral key and the
+ * connection-ID seed. What no wipe reaches (the expanded AES key schedules,
+ * the HKDF and HMAC intermediates in arena memory) is recorded as QUIC-2 in
  * `docs/security/quic.md`, with #430, the follow-up that moves these structs
  * onto `nish:secret`.
  *
@@ -77,6 +105,7 @@ import {
   QUIC_AEAD_CHACHA20_POLY1305,
   QUIC_AEAD_TAG_SIZE,
   QUIC_ERR_RESERVED_BITS,
+  QUIC_MAX_CID_LENGTH,
   QUIC_MAX_VARINT,
   QUIC_PACKET_HANDSHAKE,
   QUIC_PACKET_INITIAL,
@@ -88,7 +117,9 @@ import {
   QuicPacket,
   quicDecryptPacket,
   quicInitialSecrets,
+  quicKeyUpdateSecret,
   quicKeys,
+  quicKeysUpdate,
   quicLongHeader,
   quicPacketNumberLength,
   quicParseHeader,
@@ -103,6 +134,7 @@ import {
   QUIC_ERROR_FINAL_SIZE,
   QUIC_ERROR_FLOW_CONTROL,
   QUIC_ERROR_INTERNAL,
+  QUIC_ERROR_KEY_UPDATE,
   QUIC_ERROR_NO_ERROR,
   QUIC_ERROR_PROTOCOL_VIOLATION,
   QUIC_ERROR_STREAM_LIMIT,
@@ -126,6 +158,7 @@ import {
   QUIC_FRAME_STREAM,
   QUIC_FRAME_STREAM_DATA_BLOCKED,
   QUIC_PATH_DATA_SIZE,
+  QUIC_RESET_TOKEN_SIZE,
   QuicFrame,
   quicCryptoOverhead,
   quicFrameAckEliciting,
@@ -188,6 +221,29 @@ export const QUIC_CONN_LOCAL_CIDS: i32 = 4
 export const QUIC_CONN_MAX_STREAM_DATA: i64 = 1048576
 /** The most bidirectional streams a configuration may let the client open. */
 export const QUIC_CONN_MAX_STREAMS: i64 = 1024
+/** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
+export const QUIC_CONN_STATIC_KEY_SIZE: i32 = 32
+/**
+ * The probe timeout, in milliseconds, this module times by. Measuring the
+ * round trip is loss recovery's (WP34 Q3), so until then it is RFC 9002
+ * §6.2.2's for a path with no sample yet: an initial RTT of 333 ms, which
+ * gives about one second.
+ */
+export const QUIC_CONN_PTO: i64 = 1000
+/**
+ * The shortest idle timeout the server keeps, three times `QUIC_CONN_PTO`:
+ * RFC 9000 §10.1 has an endpoint raise a smaller negotiated value to this, so
+ * that several probes can be lost before the connection is given up.
+ */
+export const QUIC_CONN_IDLE_FLOOR: i64 = 3000
+/**
+ * How many key updates a connection takes from its client (RFC 9001 §6).
+ * Each costs two key derivations whose temporaries stay in the arena, so the
+ * cap bounds what a client can make the server derive (QUIC-4); the next one
+ * closes the connection with KEY_UPDATE_ERROR. A client also has to wait
+ * `QUIC_CONN_PTO` between two of them, so 64 is over a minute of updating.
+ */
+export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
 
 // ---- States ---------------------------------------------------------------------
 
@@ -201,6 +257,13 @@ export const QUIC_STATE_CONNECTED: i32 = 2
 export const QUIC_STATE_CLOSING: i32 = 3
 /** The client closed the connection: nothing more goes out (RFC 9000 §10.2.2). `error` is its code. */
 export const QUIC_STATE_DRAINING: i32 = 4
+/**
+ * The idle timeout passed (RFC 9000 §10.1): the connection closed silently,
+ * its keys wiped, and nothing more goes out. Its state is to be discarded:
+ * drop the connection, so that a later packet to its IDs reaches
+ * `nish/net/quic-listener`, whose stateless reset tells the client.
+ */
+export const QUIC_STATE_TIMED_OUT: i32 = 5
 
 // ---- writeStream's answers ------------------------------------------------------
 
@@ -231,16 +294,33 @@ export interface QuicServerConfig {
   alpn: string[]
   /** The signature scheme the caller's key signs with, as `TlsServerConfig` takes it. */
   signatureScheme: i32
+  /** Whether `nish/net/quic-listener` answers a client's first Initial with a Retry (§8.1.2). */
+  retry: boolean
   /** `initial_max_data`: the most stream bytes the client may send over the connection, 0 to 2^62 − 1. */
   maxData: i64
   /** `initial_max_stream_data_bidi_remote`: the most bytes the client may send on each stream, 1 to 1 MiB. */
   maxStreamData: i64
   /** `initial_max_streams_bidi`: how many bidirectional streams the client may open, 0 to 1024. */
   maxStreamsBidi: i64
-  /** `max_idle_timeout` in milliseconds, advertised only: the timer is Q2b's. 0 for none, at most 2^62 − 1. */
+  /**
+   * `max_idle_timeout` in milliseconds: 0 for none, at most 2^62 − 1. The
+   * connection times out after the smaller of this and the client's, and
+   * never sooner than `QUIC_CONN_IDLE_FLOOR`.
+   */
   maxIdleTimeout: i64
   /** `active_connection_id_limit`: how many of its connection IDs the client may give the server, 2 to 8. */
   activeConnectionIdLimit: i64
+  /** How long, in milliseconds, a Retry token is accepted after it was issued: 1 to 60000. */
+  retryTokenLifetime: i64
+  /**
+   * The static key every stateless reset token is derived from
+   * (`quicStatelessResetToken`, RFC 9000 §10.3.2), `QUIC_CONN_STATIC_KEY_SIZE`
+   * bytes. Keep it across restarts: a server that lost a connection resets it
+   * with the token this key gives for the connection ID the client sends to.
+   */
+  statelessResetKey: u8[]
+  /** The key `nish/net/quic-listener` authenticates its Retry tokens with (§8.1.4), `QUIC_CONN_STATIC_KEY_SIZE` bytes. */
+  retryTokenKey: u8[]
 }
 
 /** One run of stream data the client sent, in order: `fin` when it ends the stream. */
@@ -461,11 +541,37 @@ const quicConnAead = (suite: i32): i32 => {
 
 /** Wipes a level's key, IV and header-protection key; the expanded AES schedules are out of reach (QUIC-2). */
 const quicConnWipeKeys = (keys: QuicKeys | null): void => {
+  quicConnWipePacketKey(keys)
+  if (keys !== null) {
+    secureZero(keys.hp)
+  }
+}
+
+/**
+ * Wipes a key generation's packet key and IV that a key update replaced. The
+ * header-protection key is left alone: every generation shares it (RFC 9001
+ * §6), so it goes only when the level does.
+ */
+const quicConnWipePacketKey = (keys: QuicKeys | null): void => {
   if (keys !== null) {
     secureZero(keys.key)
     secureZero(keys.iv)
-    secureZero(keys.hp)
   }
+}
+
+/**
+ * The stateless reset token for the connection ID `cid` (RFC 9000 §10.3.2):
+ * the first 16 bytes of HMAC-SHA256 under the server's static `key`. A
+ * connection hands it to the client with each ID it issues, and
+ * `nish/net/quic-listener` derives the same token from a packet's ID alone
+ * once the connection is gone, which is what lets a server that lost its
+ * state end the connection.
+ */
+export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
+  const mac: u8[] = hmacSha256(key, cid)
+  const token: u8[] = quicConnSlice(mac, 0, QUIC_RESET_TOKEN_SIZE)
+  secureZero(mac)
+  return token
 }
 
 /** Whether the configuration's limits are ones this module can honour. */
@@ -479,7 +585,8 @@ const quicConnConfigFits = (config: QuicServerConfig): boolean =>
   config.maxIdleTimeout >= 0 &&
   config.maxIdleTimeout <= QUIC_MAX_VARINT &&
   config.activeConnectionIdLimit >= 2 &&
-  config.activeConnectionIdLimit <= 8
+  config.activeConnectionIdLimit <= 8 &&
+  toI32(config.statelessResetKey.length) === QUIC_CONN_STATIC_KEY_SIZE
 
 /**
  * One server connection. Make one when a client's first Initial arrives,
@@ -534,10 +641,38 @@ export class QuicConnection {
   /** Stream bytes the client sent, counted at each stream's highest offset, against `config.maxData`. */
   receivedData: i64 = 0
   frame: QuicFrame
+  /** For a connection `acceptRetry` set up: the DCID of the client's Initial before the Retry, and the Retry's SCID. */
+  retryOriginalDcid: u8[]
+  retryScid: u8[]
+  /** The latest time the caller gave, in milliseconds; time never runs backwards here. */
+  now: i64 = 0
+  /** When the idle timer last restarted (RFC 9000 §10.1), or -1 before the first packet. */
+  idleSince: i64 = -1
+  /**
+   * The 1-RTT secrets of the current generation, the next generation's read
+   * secret, and its read keys (RFC 9001 §6.1, §6.3). `otherReadKeys` holds
+   * the next generation's while `otherIsNext`, and for `QUIC_CONN_PTO` after
+   * an update the previous one's, for reordered packets (§6.5).
+   */
+  appReadSecret: u8[]
+  appWriteSecret: u8[]
+  nextReadSecret: u8[]
+  otherReadKeys: QuicKeys | null = null
+  /** The lowest and highest packet numbers opened with the current read keys, or -1. */
+  readPhaseLowest: i64 = -1
+  readPhaseHighest: i64 = -1
+  /** The first packet number sent with the current write keys. */
+  writePhaseFirst: i64 = 0
+  /** When the previous read keys go and the next are derived, or -1. */
+  keyRetainUntil: i64 = -1
   state: i32 = 0
   /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
   dropped: i32 = 0
   eventHead: i32 = 0
+  /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
+  keyUpdates: i32 = 0
+  /** How long the ACK opening the payload `buildPayload` last wrote is: 0 for none. */
+  ackLength: i32 = 0
   /** Whether `error` is an application code (CONNECTION_CLOSE 0x1d) rather than a transport error. */
   errorIsApplication: boolean = false
   /** Whether the one CONNECTION_CLOSE this side owes has gone out. */
@@ -547,6 +682,15 @@ export class QuicConnection {
   /** Whether the handshake is complete, which for a server is also confirmed (RFC 9001 §4.1.2). */
   handshakeComplete: boolean = false
   handshakeDonePending: boolean = false
+  /** Whether the connection was set up by `acceptRetry`. */
+  retried: boolean = false
+  /** Whether an ack-eliciting packet went out since the last packet was received. */
+  elicitingSent: boolean = false
+  /** Whether `otherReadKeys` are the next generation's rather than the previous one's. */
+  otherIsNext: boolean = false
+  /** The Key Phase bit of the current read keys, and of the current write keys. */
+  readPhase: boolean = false
+  writePhase: boolean = false
 
   /**
    * A connection under `config`, with `entropy` its `QUIC_CONN_ENTROPY_SIZE`
@@ -572,6 +716,11 @@ export class QuicConnection {
     this.events = []
     this.pathResponses = []
     this.frame = new QuicFrame()
+    this.retryOriginalDcid = []
+    this.retryScid = []
+    this.appReadSecret = []
+    this.appWriteSecret = []
+    this.nextReadSecret = []
     const fits: boolean = toI32(entropy.length) === QUIC_CONN_ENTROPY_SIZE && quicConnConfigFits(config)
     secureZero(entropy)
     if (!fits) {
@@ -590,7 +739,35 @@ export class QuicConnection {
 
   /** Whether the connection has closed, either way. */
   closed(): boolean {
-    return this.state === QUIC_STATE_CLOSING || this.state === QUIC_STATE_DRAINING
+    return (
+      this.state === QUIC_STATE_CLOSING ||
+      this.state === QUIC_STATE_DRAINING ||
+      this.state === QUIC_STATE_TIMED_OUT
+    )
+  }
+
+  /**
+   * Sets up a connection whose client came back with a Retry token that
+   * `nish/net/quic-listener` checked (RFC 9000 §8.1.2): `originalDcid` is the
+   * DCID of the client's Initial before the Retry, and `retryScid` the
+   * Retry's SCID, which the client now sends to. The server's transport
+   * parameters then name both (§7.3), and the client's address counts as
+   * validated, so the anti-amplification limit does not apply. Call it
+   * before the first `receive`; answers whether it took: not once the
+   * connection has started, and not for an ID over 20 bytes.
+   */
+  acceptRetry(originalDcid: u8[], retryScid: u8[]): boolean {
+    if (
+      this.state !== QUIC_STATE_WAIT_INITIAL ||
+      toI32(originalDcid.length) > QUIC_MAX_CID_LENGTH ||
+      toI32(retryScid.length) > QUIC_MAX_CID_LENGTH
+    ) {
+      return false
+    }
+    this.retryOriginalDcid = quicConnSlice(originalDcid, 0, toI32(originalDcid.length))
+    this.retryScid = quicConnSlice(retryScid, 0, toI32(retryScid.length))
+    this.retried = true
+    return true
   }
 
   /** Closes the connection with transport error `code`, caused by a frame of `frameType` (0 for none). */
@@ -645,7 +822,8 @@ export class QuicConnection {
   /**
    * Whether a datagram whose first packet is sent to `dcid` belongs to this
    * connection: one of its active connection IDs, or, until the handshake is
-   * done, the DCID of the client's first Initial.
+   * done, the DCID of the client's first Initial. A closed connection still
+   * answers for its IDs; the caller drops it once it is done with it.
    */
   ownsConnectionId(dcid: u8[]): boolean {
     if (this.cids.ownsLocal(dcid)) {
@@ -659,13 +837,16 @@ export class QuicConnection {
   }
 
   /**
-   * Takes one datagram from the client: every packet in it is opened and its
-   * frames acted on, in order. Answers 0, or the error the connection closed
-   * with — in which case `takeDatagram` answers the CONNECTION_CLOSE to send.
-   * A packet that cannot be used is dropped and counted (see the module
-   * header). Once the connection has closed every datagram is ignored.
+   * Takes one datagram from the client, which arrived at `now` (the
+   * caller's monotonic time in milliseconds): every packet in it is opened
+   * and its frames acted on, in order. Answers 0, or the error the
+   * connection closed with — in which case `takeDatagram` answers the
+   * CONNECTION_CLOSE to send. A packet that cannot be used is dropped and
+   * counted (see the module header). Once the connection has closed, or its
+   * idle timeout has passed by `now`, every datagram is ignored.
    */
-  receive(datagram: u8[]): i64 {
+  receive(datagram: u8[], now: i64): i64 {
+    this.handleTimer(now)
     if (this.closed()) {
       return this.error
     }
@@ -701,8 +882,9 @@ export class QuicConnection {
    * Starts the connection from the client's first Initial, `header`: the
    * original DCID and the client's SCID, the Initial keys (RFC 9001 §5.2),
    * the first local connection ID, and a `TlsServer` whose transport
-   * parameters name both IDs (RFC 9000 §7.3). Answers whether it could: the
-   * client's DCID must be at least 8 bytes (§7.2).
+   * parameters name both IDs (RFC 9000 §7.3), the Retry's when `acceptRetry`
+   * set one up, and the first ID's stateless reset token (§18.2). Answers
+   * whether it could: the client's DCID must be at least 8 bytes (§7.2).
    */
   start(header: QuicHeader): boolean {
     if (toI32(header.dcid.length) < 8) {
@@ -717,14 +899,21 @@ export class QuicConnection {
     this.originalDcid = header.dcid
     this.peerScid = header.scid
     const none: u8[] = []
-    this.cids.addLocal(this.localScid, none)
+    const resetToken: u8[] = quicStatelessResetToken(this.config.statelessResetKey, this.localScid)
+    this.cids.addLocal(this.localScid, resetToken)
     this.cids.addPeer(QUIC_CONN_NONE, QUIC_CONN_NONE, header.scid, none)
+    // §8.1.2: a Retry token the listener checked has validated the address.
+    this.addressValidated = this.retried
 
     const params: QuicTransportParameters = new QuicTransportParameters()
-    params.originalDcid = header.dcid
+    params.originalDcid = this.retried ? this.retryOriginalDcid : header.dcid
     params.hasOriginalDcid = true
     params.initialScid = this.localScid
     params.hasInitialScid = true
+    params.retryScid = this.retryScid
+    params.hasRetryScid = this.retried
+    params.statelessResetToken = resetToken
+    params.hasStatelessResetToken = true
     params.maxIdleTimeout = this.config.maxIdleTimeout
     params.initialMaxData = this.config.maxData
     params.initialMaxStreamDataBidiRemote = this.config.maxStreamData
@@ -771,6 +960,8 @@ export class QuicConnection {
   unstart(): void {
     const none: u8[] = []
     this.state = QUIC_STATE_WAIT_INITIAL
+    this.addressValidated = false
+    this.idleSince = -1
     this.tls = null
     this.initial = new QuicConnSpace(TLS_LEVEL_INITIAL)
     this.cids = new QuicCidTable(this.config.activeConnectionIdLimit)
@@ -792,8 +983,12 @@ export class QuicConnection {
       this.drop()
       return false
     }
+    // Every key generation shares the header-protection key (RFC 9001 §6),
+    // so the current keys take it off whatever the Key Phase bit says.
     const packet: QuicPacket = quicRemoveHeaderProtection(keys, datagram, header, space.received.largest)
-    if (!quicDecryptPacket(keys, datagram, header, packet) || packet.packetNumber < 0) {
+    const other: boolean = type === QUIC_PACKET_SHORT && packet.keyPhase !== this.readPhase
+    const open: QuicKeys | null = other ? this.otherReadKeys : keys
+    if (open === null || !quicDecryptPacket(open, datagram, header, packet) || packet.packetNumber < 0) {
       this.drop()
       return false
     }
@@ -806,11 +1001,17 @@ export class QuicConnection {
       this.drop()
       return true
     }
+    if (type === QUIC_PACKET_SHORT && !this.notePhase(packet.packetNumber, other)) {
+      return true
+    }
     const eliciting: boolean = this.receiveFrames(space, type, packet.payload, header.dcid)
     if (this.closed()) {
       return true
     }
     space.received.record(packet.packetNumber, eliciting)
+    // §10.1: a packet received and processed restarts the idle timer.
+    this.idleSince = this.now
+    this.elicitingSent = false
     if (type === QUIC_PACKET_HANDSHAKE) {
       // §8.1: a Handshake packet proves the client holds its address; RFC
       // 9001 §4.9.1: the server is then done with the Initial keys.
@@ -819,6 +1020,119 @@ export class QuicConnection {
     }
     this.afterTls()
     return true
+  }
+
+  /**
+   * Books a 1-RTT packet `pn` that opened under the current read keys, or,
+   * when `other`, under the other set (RFC 9001 §6.2, §6.4, §6.5). Under the
+   * next generation's it is a key update: the read keys move on, and the
+   * write keys too unless the server started this update. Under the previous
+   * generation's it is a packet the network delayed. Either is
+   * KEY_UPDATE_ERROR when it breaks §6.4's order — a higher packet number
+   * under older keys than a lower one already had — and an update past
+   * `QUIC_CONN_MAX_KEY_UPDATES` is too. Answers whether the connection is
+   * still open.
+   */
+  notePhase(pn: i64, other: boolean): boolean {
+    if (other && !this.otherIsNext) {
+      if (this.readPhaseLowest >= 0 && pn > this.readPhaseLowest) {
+        this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
+        return false
+      }
+      return true
+    }
+    if (!other) {
+      if (this.readPhaseLowest < 0 || pn < this.readPhaseLowest) {
+        this.readPhaseLowest = pn
+      }
+      if (pn > this.readPhaseHighest) {
+        this.readPhaseHighest = pn
+      }
+      return true
+    }
+    if (pn < this.readPhaseHighest) {
+      this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
+      return false
+    }
+    if (this.writePhase === this.readPhase) {
+      // The client started this update: §6.2 has the write keys follow
+      // before anything acknowledges the packet that carried it.
+      if (this.keyUpdates >= QUIC_CONN_MAX_KEY_UPDATES) {
+        this.fail(QUIC_ERROR_KEY_UPDATE, QUIC_CONN_NONE)
+        return false
+      }
+      this.keyUpdates = this.keyUpdates + 1
+      if (!this.updateWriteKeys()) {
+        this.fail(QUIC_ERROR_INTERNAL, QUIC_CONN_NONE)
+        return false
+      }
+    }
+    const previous: QuicKeys | null = this.application.readKeys
+    this.application.readKeys = this.otherReadKeys
+    this.otherReadKeys = previous
+    this.otherIsNext = false
+    secureZero(this.appReadSecret)
+    this.appReadSecret = this.nextReadSecret
+    this.nextReadSecret = []
+    this.readPhase = !this.readPhase
+    this.readPhaseLowest = pn
+    this.readPhaseHighest = pn
+    this.keyRetainUntil = this.now + QUIC_CONN_PTO
+    return true
+  }
+
+  /**
+   * Moves the write keys to the next generation (RFC 9001 §6.1): the next
+   * secret by `quic ku`, its key and IV, the Key Phase bit toggled; the old
+   * key, IV and secret wiped. Answers whether it could, which it cannot only
+   * for keys `quicKeys` did not make.
+   */
+  updateWriteKeys(): boolean {
+    const keys: QuicKeys | null = this.application.writeKeys
+    if (keys === null) {
+      return false
+    }
+    const secret: u8[] | null = quicKeyUpdateSecret(keys.aead, this.appWriteSecret)
+    if (secret === null) {
+      return false
+    }
+    const next: QuicKeys | null = quicKeysUpdate(keys, secret)
+    if (next === null) {
+      secureZero(secret)
+      return false
+    }
+    quicConnWipePacketKey(keys)
+    secureZero(this.appWriteSecret)
+    this.application.writeKeys = next
+    this.appWriteSecret = secret
+    this.writePhase = !this.writePhase
+    this.writePhaseFirst = this.application.nextPn
+    return true
+  }
+
+  /**
+   * Derives the next generation's read secret and keys from the current
+   * ones, into `otherReadKeys`, wiping the previous generation's key and IV
+   * that sat there (RFC 9001 §6.3, §6.5). It runs when the 1-RTT keys are
+   * installed and `QUIC_CONN_PTO` after each update, never while a packet is
+   * being opened, so what a packet's Key Phase bit says shows in no timing.
+   */
+  prepareNextReadKeys(): void {
+    const keys: QuicKeys | null = this.application.readKeys
+    quicConnWipePacketKey(this.otherReadKeys)
+    this.otherReadKeys = null
+    this.otherIsNext = false
+    this.keyRetainUntil = -1
+    if (keys === null) {
+      return
+    }
+    const secret: u8[] | null = quicKeyUpdateSecret(keys.aead, this.appReadSecret)
+    if (secret === null) {
+      return
+    }
+    this.nextReadSecret = secret
+    this.otherReadKeys = quicKeysUpdate(keys, secret)
+    this.otherIsNext = this.otherReadKeys !== null
   }
 
   /**
@@ -1171,9 +1485,15 @@ export class QuicConnection {
       tls.state !== TLS_STATE_WAIT_SIGNATURE
     ) {
       const write: u8[] | null = tls.writeSecret(TLS_LEVEL_APPLICATION)
-      if (write !== null) {
+      const read: u8[] | null = tls.readSecret(TLS_LEVEL_APPLICATION)
+      if (write !== null && read !== null) {
         this.application.writeKeys = this.keysFor(aead, write)
-        this.application.readKeys = this.keysFor(aead, tls.readSecret(TLS_LEVEL_APPLICATION))
+        this.application.readKeys = this.keysFor(aead, read)
+        // The key update secrets start from `TlsServer`'s own arrays, so the
+        // first update wipes those too, rather than leaving a copy behind.
+        this.appWriteSecret = write
+        this.appReadSecret = read
+        this.prepareNextReadKeys()
       }
     }
     if (tls.state === TLS_STATE_CONNECTED && !this.handshakeComplete) {
@@ -1230,10 +1550,10 @@ export class QuicConnection {
   }
 
   /**
-   * The local connection ID of sequence number `sequence` and its reset
-   * token: the first 8 and next 16 bytes of HMAC-SHA256 under the
-   * connection's seed of the sequence number, so the IDs are unlinkable to
-   * anyone without the seed and need no more entropy.
+   * The HMAC-SHA256 under the connection's seed of the sequence number
+   * `sequence`, whose first 8 bytes are the local connection ID of that
+   * number: so the IDs are unlinkable to anyone without the seed and need no
+   * more entropy.
    */
   deriveConnectionId(sequence: i64): u8[] {
     const counter: u8[] = new Array<u8>(8)
@@ -1246,7 +1566,8 @@ export class QuicConnection {
   /**
    * Issues local connection IDs until the client holds as many as it said it
    * would take (its `active_connection_id_limit`), up to
-   * `QUIC_CONN_LOCAL_CIDS`; each goes out in a NEW_CONNECTION_ID frame.
+   * `QUIC_CONN_LOCAL_CIDS`; each goes out in a NEW_CONNECTION_ID frame with
+   * the stateless reset token the configuration's static key gives it.
    */
   topUpConnectionIds(): void {
     if (!this.handshakeComplete) {
@@ -1258,11 +1579,9 @@ export class QuicConnection {
     }
     while (toI64(this.cids.activeLocal()) < want) {
       const mac: u8[] = this.deriveConnectionId(this.cids.nextLocal)
-      this.cids.addLocal(
-        quicConnSlice(mac, 0, QUIC_CONN_CID_LENGTH),
-        quicConnSlice(mac, QUIC_CONN_CID_LENGTH, 16)
-      )
+      const cid: u8[] = quicConnSlice(mac, 0, QUIC_CONN_CID_LENGTH)
       secureZero(mac)
+      this.cids.addLocal(cid, quicStatelessResetToken(this.config.statelessResetKey, cid))
     }
   }
 
@@ -1293,6 +1612,100 @@ export class QuicConnection {
     }
     this.afterTls()
     return QUIC_ERROR_NO_ERROR
+  }
+
+  /**
+   * The effective idle timeout in milliseconds (RFC 9000 §10.1): the smaller
+   * of the two sides' `max_idle_timeout`, or the one that is not 0, raised to
+   * `QUIC_CONN_IDLE_FLOOR`; -1 when both are 0, for none. Until the client's
+   * transport parameters are read, the server's own alone.
+   */
+  idleTimeout(): i64 {
+    const local: i64 = this.config.maxIdleTimeout
+    const peer: i64 = this.peerParameters.maxIdleTimeout
+    let timeout: i64 = local
+    if (local === 0 || (peer !== 0 && peer < local)) {
+      timeout = peer
+    }
+    if (timeout === 0) {
+      return -1
+    }
+    return timeout < QUIC_CONN_IDLE_FLOOR ? QUIC_CONN_IDLE_FLOOR : timeout
+  }
+
+  /** When the idle timeout passes, or -1 when there is none or the timer has not started. */
+  idleDeadline(): i64 {
+    const timeout: i64 = this.idleTimeout()
+    return timeout >= 0 && this.idleSince >= 0 ? this.idleSince + timeout : -1
+  }
+
+  /**
+   * When `handleTimer` is next due, in the caller's milliseconds: the idle
+   * timeout, or the end of a key update's `QUIC_CONN_PTO`, whichever comes
+   * first. -1 when nothing is timed: before the first packet, once the
+   * connection has closed, and with no idle timeout and no update pending.
+   */
+  deadline(): i64 {
+    if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
+      return -1
+    }
+    const idle: i64 = this.idleDeadline()
+    if (this.keyRetainUntil >= 0 && (idle < 0 || this.keyRetainUntil < idle)) {
+      return this.keyRetainUntil
+    }
+    return idle
+  }
+
+  /**
+   * Runs whatever is due by `now`, the caller's monotonic time in
+   * milliseconds; call it at `deadline()`, or any time. Past the idle timeout
+   * the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1):
+   * no CONNECTION_CLOSE, every key wiped. Past a key update's
+   * `QUIC_CONN_PTO` the previous read keys are wiped and the next
+   * generation's derived (RFC 9001 §6.5). `receive` and `takeDatagram` run
+   * it themselves. Time never runs backwards here: an earlier `now` than
+   * one already given counts as that one.
+   */
+  handleTimer(now: i64): void {
+    if (now > this.now) {
+      this.now = now
+    }
+    if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
+      return
+    }
+    const idle: i64 = this.idleDeadline()
+    if (idle >= 0 && this.now >= idle) {
+      this.state = QUIC_STATE_TIMED_OUT
+      this.error = QUIC_ERROR_NO_ERROR
+      this.closeSent = true
+      this.wipeAll()
+      return
+    }
+    if (this.keyRetainUntil >= 0 && this.now >= this.keyRetainUntil) {
+      this.prepareNextReadKeys()
+    }
+  }
+
+  /**
+   * Starts a key update from the server (RFC 9001 §6.1): the write keys move
+   * to the next generation and the Key Phase bit of every packet after
+   * toggles; the client follows when it reads one. Answers whether it did.
+   * It does not while it may not: before the handshake is confirmed, while
+   * an update is still in flight (the client has not answered the last one,
+   * or answered it less than `QUIC_CONN_PTO` ago, so the next read keys are
+   * not ready), and until the client has acknowledged a packet sent with the
+   * current keys.
+   */
+  updateKeys(): boolean {
+    if (
+      this.state !== QUIC_STATE_CONNECTED ||
+      this.writePhase !== this.readPhase ||
+      !this.otherIsNext ||
+      this.application.largestAcked < this.writePhaseFirst
+    ) {
+      return false
+    }
+    return this.updateWriteKeys()
   }
 
   /**
@@ -1357,10 +1770,19 @@ export class QuicConnection {
    * and before the client's address is validated sends only while three
    * times what was received allows (§8.1). After a close it answers the
    * CONNECTION_CLOSE once, then `null`. While the handshake waits for a
-   * signature it answers `null`, so the server's flight leaves whole.
+   * signature it answers `null`, so the server's flight leaves whole. `now`
+   * is the caller's time in milliseconds: a datagram that elicits an
+   * acknowledgement restarts the idle timer when it is the first since the
+   * client's last packet (RFC 9000 §10.1), and once the idle timeout has
+   * passed nothing goes out.
    */
-  takeDatagram(): u8[] | null {
-    if (this.state === QUIC_STATE_WAIT_INITIAL || this.state === QUIC_STATE_DRAINING) {
+  takeDatagram(now: i64): u8[] | null {
+    this.handleTimer(now)
+    if (
+      this.state === QUIC_STATE_WAIT_INITIAL ||
+      this.state === QUIC_STATE_DRAINING ||
+      this.state === QUIC_STATE_TIMED_OUT
+    ) {
       return null
     }
     if (this.state === QUIC_STATE_CLOSING) {
@@ -1378,6 +1800,7 @@ export class QuicConnection {
     const payloads: u8[][] = []
     let remaining: i32 = QUIC_CONN_DATAGRAM_SIZE
     let paddedInitial: boolean = false
+    let eliciting: boolean = false
     for (let level: i32 = 0; level < 3; level += 1) {
       const space: QuicConnSpace = this.spaceAt(level)
       const overhead: i32 = this.overhead(space)
@@ -1389,6 +1812,7 @@ export class QuicConnection {
       if (toI32(payload.length) === 0) {
         continue
       }
+      eliciting = eliciting || toI32(payload.length) > this.ackLength
       // An Initial carries only ACK and CRYPTO, so it elicits an
       // acknowledgement exactly when it carries CRYPTO data.
       if (level === TLS_LEVEL_INITIAL) {
@@ -1404,6 +1828,10 @@ export class QuicConnection {
     }
     if (paddedInitial && remaining > 0) {
       quicPushPadding(payloads[count - 1], remaining)
+    }
+    if (eliciting && !this.elicitingSent) {
+      this.idleSince = this.now
+      this.elicitingSent = true
     }
     return this.seal(levels, payloads)
   }
@@ -1442,10 +1870,13 @@ export class QuicConnection {
    * The frames of one packet of `space`, at most `room` bytes: an ACK when
    * one is due, CRYPTO data, and at the application level HANDSHAKE_DONE,
    * RETIRE_CONNECTION_ID, NEW_CONNECTION_ID, PATH_RESPONSE and stream data.
-   * Empty when nothing is due.
+   * Empty when nothing is due. Every frame but the ACK elicits an
+   * acknowledgement, so the payload does exactly when it is longer than
+   * `ackLength`, which this sets.
    */
   buildPayload(space: QuicConnSpace, room: i32): u8[] {
     let out: u8[] = []
+    this.ackLength = 0
     if (space.received.ackPending) {
       // The ACK opens the payload, so its array becomes the payload; one too
       // large for the room is left out and stays due.
@@ -1453,6 +1884,7 @@ export class QuicConnection {
       if (space.received.pushAck(ack, QUIC_CONN_NONE)) {
         if (toI32(ack.length) <= room) {
           out = ack
+          this.ackLength = toI32(ack.length)
         } else {
           space.received.ackPending = true
         }
@@ -1564,7 +1996,7 @@ export class QuicConnection {
     const none: u8[] = []
     const header: u8[] | null =
       space.level === TLS_LEVEL_APPLICATION
-        ? quicShortHeader(this.cids.currentPeer(), false, false, pn, pnLength)
+        ? quicShortHeader(this.cids.currentPeer(), false, this.writePhase, pn, pnLength)
         : quicLongHeader(
             space.level === TLS_LEVEL_INITIAL ? QUIC_PACKET_INITIAL : QUIC_PACKET_HANDSHAKE,
             this.peerScid,
@@ -1625,18 +2057,52 @@ export class QuicConnection {
 
   /**
    * Wipes everything secret the connection and its `TlsServer` still hold:
-   * every level's packet keys, the traffic secrets, the ephemeral key and the
-   * connection-ID seed (QUIC-2). Call it when the connection is done with;
+   * every level's packet keys, the next generation's read keys, the traffic
+   * secrets and expected client Finished, the ephemeral key, the
+   * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when the connection is done with;
    * the connection is closed after it and sends nothing more.
    */
   release(): void {
+    this.wipeAll()
+    if (!this.closed()) {
+      this.state = QUIC_STATE_CLOSING
+      this.error = QUIC_ERROR_NO_ERROR
+    }
+    this.closeSent = true
+  }
+
+  /**
+   * Wipes every key and secret the connection holds and discards every
+   * level: `release()`'s work, and the idle timeout's. That takes in both
+   * sides' stateless reset tokens and `TlsServer`'s expected client Finished.
+   */
+  wipeAll(): void {
     this.discard(this.initial)
     this.discard(this.handshake)
     this.discard(this.application)
+    quicConnWipePacketKey(this.otherReadKeys)
+    this.otherReadKeys = null
+    this.otherIsNext = false
+    this.keyRetainUntil = -1
+    secureZero(this.appReadSecret)
+    secureZero(this.appWriteSecret)
+    secureZero(this.nextReadSecret)
     secureZero(this.cidSeed)
     secureZero(this.ephemeralPrivate)
+    // The stateless reset tokens of both sides' IDs: either one ends the
+    // connection for whoever learns it (RFC 9000 §10.3).
+    for (const entry of this.cids.local) {
+      secureZero(entry.resetToken)
+    }
+    for (const entry of this.cids.peer) {
+      secureZero(entry.resetToken)
+    }
+    secureZero(this.peerParameters.statelessResetToken)
     const tls: TlsServer | null = this.tls
     if (tls !== null) {
+      // The server's encoded transport parameters carry its first ID's token.
+      secureZero(tls.config.quicTransportParameters)
+      secureZero(tls.expectedClientFinished)
       secureZero(tls.handshakeSecret)
       secureZero(tls.clientHandshakeSecret)
       secureZero(tls.serverHandshakeSecret)
@@ -1644,10 +2110,5 @@ export class QuicConnection {
       secureZero(tls.serverApplicationSecret)
       secureZero(tls.exporterSecret)
     }
-    if (!this.closed()) {
-      this.state = QUIC_STATE_CLOSING
-      this.error = QUIC_ERROR_NO_ERROR
-    }
-    this.closeSent = true
   }
 }

@@ -8,7 +8,7 @@ import { QUIC_STATE_CONNECTED, QUIC_STATE_WAIT_INITIAL, QuicConnection } from "n
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
-import { CLIENT_ODCID, CLIENT_SCID, QcClient, qcConnect, qcHello, qcParams } from "./client";
+import { CLIENT_ODCID, CLIENT_SCID, QC_T0, QcClient, qcConnect, qcHello, qcParams } from "./client";
 import { QcFound, qcDefaultConfig, qcFind, qcFrameTypes, qcServer } from "./common";
 import { quicConnRefusalChecks } from "./refusals";
 import { quicConnDataChecks } from "./data";
@@ -17,7 +17,7 @@ import { quicConnDataChecks } from "./data";
  * The server's transport parameters, read out of the EncryptedExtensions in
  * its Handshake CRYPTO stream: the extension of type 0x39.
  */
-const serverParamsOf = (c: QcClient): QuicTransportParameters => {
+export const serverParamsOf = (c: QcClient): QuicTransportParameters => {
   const ee: u8[] = c.cryptoHandshake;
   // EncryptedExtensions: type (1), length (3), the extensions' length (2), then each type (2), length (2), body.
   let at: i32 = 6;
@@ -96,7 +96,7 @@ const handshakeChecks = (t: Suite): void => {
   t.ok("the server owns its new IDs", conn.ownsConnectionId(ncid.frame.connectionId) && conn.ownsConnectionId(c.serverScid));
   t.ok("but no longer the original DCID", !conn.ownsConnectionId(fromHex(CLIENT_ODCID)));
   t.eqI32("the table holds four active local IDs", conn.cids.activeLocal(), n32(4));
-  t.ok("nothing more is due", conn.takeDatagram() === null);
+  t.ok("nothing more is due", conn.takeDatagram(QC_T0) === null);
 
   handshakeUnder(t, TLS_CHACHA20_POLY1305_SHA256, "ChaCha20-Poly1305");
   handshakeUnder(t, TLS_AES_256_GCM_SHA384, "AES-256-GCM");
