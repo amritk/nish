@@ -2248,6 +2248,81 @@ const DECLARED = [
     changelog: "A surrogate-pair escape is the code point it spells",
     why: "`\\u{10000D800}` is refused as above 0x10FFFF, where the reference wraps it in i32 to a lone high surrogate",
   },
+  // WP34 H1: three std/ modules the released compiler does not ship, so it
+  // refuses every program that imports one. These go one release later,
+  // when the seed carries the modules.
+  {
+    program: "tests/link/crypto_sha1/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/crypto_sha1_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/crypto_sha1_long_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/crypto/sha1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_http1/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/http1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_http1_chunk_window/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/http1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_http1_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/http1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_http1_feed_window/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/http1`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_websocket/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_websocket_f64/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_websocket_feed_window/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_websocket_frame_window/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
+  },
+  {
+    program: "tests/link/net_websocket_utf8_window/main.ts",
+    file: "exit",
+    changelog: "Nish/net/http1 and nish/net/websocket — the HTTP/1.1 parser and RFC 6455 framing (WP34 H1)",
+    why: "it imports `nish/net/websocket`, which the reference does not ship and so refuses",
+  },
   {
     program: "tests/cases/obj_lit_nullable_ternary.ts",
     changelog: "Type an object literal in an `I | null` context as the struct, not the union",

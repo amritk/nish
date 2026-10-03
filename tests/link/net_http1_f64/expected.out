@@ -1,0 +1,162 @@
+PASS  two pipelined GETs on a kept-alive connection: transcript
+PASS  two pipelined GETs on a kept-alive connection: the same cut at every byte and fed a byte at a time
+PASS  a POST with Content-Length, field names lowered and values trimmed: transcript
+PASS  a POST with Content-Length, field names lowered and values trimmed: the same cut at every byte and fed a byte at a time
+PASS  a chunked POST with an extension and a trailer, then a GET: transcript
+PASS  a chunked POST with an extension and a trailer, then a GET: the same cut at every byte and fed a byte at a time
+PASS  an HTTP/1.0 request closes, and what follows it is not read: transcript
+PASS  an HTTP/1.0 request closes, and what follows it is not read: the same cut at every byte and fed a byte at a time
+PASS  HTTP/1.0 with keep-alive, an empty line before the next request, and Connection: close: transcript
+PASS  HTTP/1.0 with keep-alive, an empty line before the next request, and Connection: close: the same cut at every byte and fed a byte at a time
+PASS  a WebSocket upgrade, and the bytes after it: transcript
+PASS  a WebSocket upgrade, and the bytes after it: the same cut at every byte and fed a byte at a time
+PASS  a body that has not all arrived: transcript
+PASS  a body that has not all arrived: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Content-Length and Transfer-Encoding together: transcript
+PASS  smuggling: Content-Length and Transfer-Encoding together: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Content-Length twice, after a good request: transcript
+PASS  smuggling: Content-Length twice, after a good request: the same cut at every byte and fed a byte at a time
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: transcript
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a bare LF ending a field line: transcript
+PASS  smuggling: a bare LF ending a field line: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a chunk size written as 0x5: transcript
+PASS  smuggling: a chunk size written as 0x5: the same cut at every byte and fed a byte at a time
+PASS  smuggling: chunk data longer than its size: transcript
+PASS  smuggling: chunk data longer than its size: the same cut at every byte and fed a byte at a time
+PASS  a 1.2 KB header section grows the buffer and is read whole
+PASS  its last field arrives intact
+PASS  forty pipelined requests fed seven bytes at a time give forty heads
+PASS  and the last of them is /39
+PASS  refused with 400: a bare LF after the request line
+PASS  refused with 400: a CR inside the request line
+PASS  refused with 400: an empty method
+PASS  refused with 400: a method that is not a token
+PASS  refused with 400: two spaces after the method
+PASS  refused with 400: no request target
+PASS  refused with 400: a non-ASCII byte in the target
+PASS  refused with 400: a lowercase version
+PASS  refused with 400: a three-digit version
+PASS  refused with 400: a version without a dot
+PASS  refused with 400: a space after the version
+PASS  refused with 400: a 33-byte method
+PASS  refused with 400: a 33-byte method whose line has not ended
+PASS  a 32-byte method is read
+PASS  refused with 400: a bare LF after a field line
+PASS  refused with 400: a bare LF ending the header section
+PASS  refused with 400: an obs-fold
+PASS  refused with 400: whitespace before the first field
+PASS  refused with 400: whitespace between a field name and its colon
+PASS  refused with 400: a field line with no colon
+PASS  refused with 400: an empty field name
+PASS  refused with 400: a NUL in a field value
+PASS  refused with 400: a bare CR in a field value
+PASS  refused with 400: a DEL in a field value
+PASS  refused with 400: HTTP/1.1 without Host
+PASS  refused with 400: HTTP/1.1 with two Host fields
+PASS  refused with 400: HTTP/1.0 with two Host fields
+PASS  refused with 400: Transfer-Encoding before Content-Length
+PASS  refused with 400: Content-Length as a list
+PASS  refused with 400: a signed Content-Length
+PASS  refused with 400: a negative Content-Length
+PASS  refused with 400: an empty Content-Length
+PASS  refused with 400: Transfer-Encoding in HTTP/1.0
+PASS  refused with 400: chunked not last
+PASS  refused with 400: chunked twice, across two fields
+PASS  refused with 400: an empty Transfer-Encoding
+PASS  refused with 400: a chunk size with a sign
+PASS  refused with 400: a chunk size after a space
+PASS  refused with 400: a chunk size with a trailing space and no extension
+PASS  refused with 400: a chunk size with trailing whitespace and no extension, after a good chunk
+PASS  refused with 400: a chunk size of two numbers
+PASS  refused with 400: an empty chunk size
+PASS  refused with 400: a chunk size that is not hex
+PASS  refused with 400: a chunk size ending in a bare LF
+PASS  refused with 400: a NUL in a chunk extension
+PASS  refused with 400: chunk data followed by LF alone
+PASS  refused with 400: a chunk-size line longer than the header limit
+PASS  refused with 400: a malformed trailer
+PASS  refused with 413: Content-Length one over the limit
+PASS  refused with 413: a Content-Length of 30 digits
+PASS  refused with 413: a chunk over the limit
+PASS  refused with 413: a chunk size of 20 hex digits
+PASS  refused with 413: chunks that pass the limit together
+PASS  a body limit of zero refuses Content-Length: 5
+PASS  with 413
+PASS  Content-Length at the limit is read
+PASS  chunks up to the limit are read
+PASS  refused with 414: a 33-byte target
+PASS  refused with 414: a long target whose line has not ended
+PASS  a 32-byte target is read
+PASS  refused with 431: nine fields
+PASS  refused with 431: a header section over 256 bytes
+PASS  refused with 431: a field line over the limit that has not ended
+PASS  refused with 431: trailers past the field count
+PASS  refused with 501: a transfer coding other than chunked
+PASS  refused with 505: HTTP/2.0
+PASS  refused with 505: HTTP/0.9
+PASS  HTTP/1.2 is read as 1.1 (RFC 9110 §6.2)
+PASS  HTTP/1.1 keeps the connection by default
+PASS  HTTP/1.1 closes when Connection lists close, among other options and in any case
+PASS  HTTP/1.0 closes by default
+PASS  HTTP/1.0 keeps the connection for keep-alive
+PASS  HTTP/1.0 closes for keep-alive and close together
+PASS  an Upgrade without Connection: upgrade is not an upgrade
+PASS  an Upgrade in HTTP/1.0 is ignored (RFC 9110 §7.8)
+PASS  two Upgrade fields are one list
+PASS  a head is the first event
+PASS  header() is case-insensitive and answers the first
+PASS  header() answers null for a field that is not there
+PASS  the second field of a name is in values
+PASS  an upgrade request ends
+PASS  and then the parser stops at the upgrade
+PASS  and stays stopped
+PASS  upgradeBytes() holds what followed the request, and what was fed after
+PASS  declineUpgrade() reads the next request as HTTP
+PASS  which is the one after the upgrade
+PASS  declineUpgrade() anywhere else does nothing
+PASS  a closing request ends
+PASS  and input after the close is dropped
+PASS  an empty upgradeBytes() when nothing upgraded
+PASS  a refused request answers HTTP1_ERROR
+PASS  with its reason
+PASS  and does not keep the connection
+PASS  and stays refused whatever follows
+PASS  a body event
+PASS  is a window onto the parser's buffer
+PASS  limits of 2^31 - 1 read a request
+PASS  a negative target limit refuses any target
+PASS  with 414
+PASS  a response with Content-Length
+PASS  a chunked response
+PASS  an empty body is Content-Length: 0
+PASS  101 with no body field
+PASS  204 with no body field
+PASS  304 may carry a Content-Length
+PASS  an empty reason phrase
+PASS  refused: status 99
+PASS  refused: status 600
+PASS  refused: a CR LF in the reason
+PASS  refused: a LF in a value
+PASS  refused: a space in a name
+PASS  refused: an empty name
+PASS  refused: names and values of different lengths
+PASS  refused: the caller's Content-Length
+PASS  refused: the caller's Transfer-Encoding
+PASS  refused: 204 with a length
+PASS  refused: 101 chunked
+PASS  refused: a body length of -3
+PASS  a chunk of ten bytes
+PASS  a chunk of seventeen bytes from an offset
+PASS  an empty chunk writes nothing
+PASS  the last chunk
+PASS  5000 bytes round-trip in 1-byte chunks
+PASS  5000 bytes round-trip in 15-byte chunks
+PASS  5000 bytes round-trip in 16-byte chunks
+PASS  5000 bytes round-trip in 17-byte chunks
+PASS  5000 bytes round-trip in 255-byte chunks
+PASS  5000 bytes round-trip in 256-byte chunks
+PASS  5000 bytes round-trip in 4096-byte chunks
+PASS  5000 bytes round-trip in 5000-byte chunks
+PASS  an empty chunked body round-trips
+http1: 161 passed, 0 failed, 0 skipped
