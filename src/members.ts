@@ -178,6 +178,15 @@ const checkStructProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 
 export const structOf = (ctx: CheckContext, type: i32): StructInfo | null =>
   ctx.program.struct(ctx.table.nameOf(type))
 
+/** Whether `type` (a `-1` for no type at all) is an instantiation of the global `Map`, not a class of that name. */
+export const isGlobalMapType = (ctx: CheckContext, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  const info = structOf(ctx, ctx.table.stripNull(type))
+  return info !== null && isMapOwner(info) && isCollectionStruct(info)
+}
+
 /** `receiver.method(args)` where `receiver` is a value. */
 export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const access = expr.children[0]
@@ -291,12 +300,7 @@ export const mapReadSpelling = (ctx: CheckContext, call: Node, scope: Scope): st
   if (access.kind !== N_MEMBER || (access.text !== "get" && access.text !== "values")) {
     return ""
   }
-  const holder = ctx.program.nodeTypes[access.children[0].id]
-  if (holder < 0) {
-    return ""
-  }
-  const info = ctx.program.struct(ctx.table.nameOf(ctx.table.stripNull(holder)))
-  if (info === null || !isMapOwner(info) || !isCollectionStruct(info)) {
+  if (!isGlobalMapType(ctx, ctx.program.nodeTypes[access.children[0].id])) {
     return ""
   }
   const value = peelSpelling(typedArraySpelling(ctx, access.children[0], scope), MAP_LEVEL)

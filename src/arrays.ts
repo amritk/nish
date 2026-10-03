@@ -7,8 +7,8 @@ import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from ".
 import { CheckContext } from "./context"
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
-import { genericCallSpelling, isCollectionStruct, isMapOwner } from "./generics"
-import { checkIndexArgument, mapReadSpelling } from "./members"
+import { genericCallSpelling, indexOfName } from "./generics"
+import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
 import {
   N_ARRAY,
   N_ARROW,
@@ -241,16 +241,11 @@ export const typedArraySpelling = (ctx: CheckContext, expr: Node, scope: Scope):
   }
   // `c ? t : xs` is `Float64Array | number[]` to TypeScript, which has no
   // `push` either, so one spelled branch is enough; `v ?? xs` is the same union.
-  if (e.kind === N_CONDITIONAL) {
+  if (e.kind === N_CONDITIONAL || (e.kind === N_BINARY && e.text === "??")) {
+    const first = e.kind === N_CONDITIONAL ? 1 : 0
     return eitherSpelling(
-      typedArraySpelling(ctx, e.children[1], scope),
-      typedArraySpelling(ctx, e.children[2], scope)
-    )
-  }
-  if (e.kind === N_BINARY && e.text === "??") {
-    return eitherSpelling(
-      typedArraySpelling(ctx, e.children[0], scope),
-      typedArraySpelling(ctx, e.children[1], scope)
+      typedArraySpelling(ctx, e.children[first], scope),
+      typedArraySpelling(ctx, e.children[first + 1], scope)
     )
   }
   // `[new Float64Array(n)]` is a `Float64Array[]` to TypeScript.
@@ -284,12 +279,7 @@ const eitherSpelling = (a: string, b: string): string => (a.length > 0 ? a : b)
  */
 const newMapSpelling = (ctx: CheckContext, e: Node): string => {
   const typeArgs = e.children[1]
-  const made = ctx.program.nodeTypes[e.id]
-  if (typeArgs.children.length !== 2 || made < 0) {
-    return ""
-  }
-  const info = ctx.program.struct(ctx.table.nameOf(made))
-  if (info === null || !isMapOwner(info) || !isCollectionStruct(info)) {
+  if (typeArgs.children.length !== 2 || !isGlobalMapType(ctx, ctx.program.nodeTypes[e.id])) {
     return ""
   }
   const value = annotationSpelling(ctx, true, typeArgs.children[1])
@@ -333,11 +323,8 @@ export const spellAnnotation = (
     if (name === null) {
       return ""
     }
-    let bound = 0
-    while (bound < names.length && names[bound] !== name.text) {
-      bound = bound + 1
-    }
-    if (bound < names.length && bound < spellings.length) {
+    const bound = indexOfName(names, name.text)
+    if (bound >= 0 && bound < spellings.length) {
       return levelled(spellings[bound], levels)
     }
     if (typedArrayElement(name.text) >= 0) {

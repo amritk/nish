@@ -2497,6 +2497,12 @@ export const genericCallSpelling = (
     return ""
   }
   const names = collectTypeParamNames(decl)
+  // A return type that is not a type parameter behind its levels has no
+  // spelling to bind, so its arguments are not worth spelling.
+  const returned = annotationName(decl.children[2], [])
+  if (returned === null || indexOfName(names, returned.text) < 0) {
+    return ""
+  }
   const spellings: string[] = []
   while (spellings.length < names.length) {
     spellings.push("")
@@ -2526,7 +2532,7 @@ export const genericCallSpelling = (
 }
 
 /** The position of `name` in `names`, or -1. */
-const indexOfName = (names: string[], name: string): i32 => {
+export const indexOfName = (names: string[], name: string): i32 => {
   let i = 0
   while (i < names.length) {
     if (names[i] === name) {
