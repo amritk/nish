@@ -7,7 +7,7 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
@@ -35,7 +35,7 @@ entry:
   ret i32 %4
 }
 
-define internal noundef nonnull align 8 i8* @Version.render(%struct.Version* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #0 {
+define internal noundef nonnull align 8 i8* @Version.render(%struct.Version* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Version, %struct.Version* %this, i32 0, i32 2
   %1 = load i8*, i8** %0, align 8, !tbaa !5
@@ -56,7 +56,7 @@ entry:
   ret i8* %15
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %v.addr = alloca %struct.Version*, align 8
   %Version.obj = alloca %struct.Version, align 8

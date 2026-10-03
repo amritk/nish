@@ -12,13 +12,13 @@
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare noundef i64 @nish_arena_mark() #0
-declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #2 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -110,21 +110,21 @@ entry:
   ret i32 %41
 }
 
-define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #0 {
+define internal void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$i32, %struct.Box$i32* %this, i32 0, i32 0
   store i32 %value, i32* %0, align 4, !tbaa !16
   ret void
 }
 
-define internal void @Box$str.constructor(%struct.Box$str* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %value) #0 {
+define internal void @Box$str.constructor(%struct.Box$str* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %value) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Box$str, %struct.Box$str* %this, i32 0, i32 0
   store i8* %value, i8** %0, align 8, !tbaa !18
   ret void
 }
 
-define internal void @Pair$i32$i32.constructor(%struct.Pair$i32$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %first, i32 noundef %second) #0 {
+define internal void @Pair$i32$i32.constructor(%struct.Pair$i32$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %first, i32 noundef %second) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Pair$i32$i32, %struct.Pair$i32$i32* %this, i32 0, i32 0
   store i32 %first, i32* %0, align 4, !tbaa !12
@@ -133,7 +133,7 @@ entry:
   ret void
 }
 
-define internal void @Pair$i32$str.constructor(%struct.Pair$i32$str* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %first, i8* noundef nonnull noalias readonly align 8 %second) #0 {
+define internal void @Pair$i32$str.constructor(%struct.Pair$i32$str* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %first, i8* noundef nonnull noalias readonly align 8 %second) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Pair$i32$str, %struct.Pair$i32$str* %this, i32 0, i32 0
   store i32 %first, i32* %0, align 4, !tbaa !19
@@ -142,7 +142,7 @@ entry:
   ret void
 }
 
-define internal void @Pair$str$i32.constructor(%struct.Pair$str$i32* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %first, i32 noundef %second) #0 {
+define internal void @Pair$str$i32.constructor(%struct.Pair$str$i32* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %first, i32 noundef %second) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Pair$str$i32, %struct.Pair$str$i32* %this, i32 0, i32 0
   store i8* %first, i8** %0, align 8, !tbaa !7
@@ -151,7 +151,7 @@ entry:
   ret void
 }
 
-define internal void @Pair$str$str.constructor(%struct.Pair$str$str* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %first, i8* noundef nonnull noalias readonly align 8 %second) #0 {
+define internal void @Pair$str$str.constructor(%struct.Pair$str$str* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %first, i8* noundef nonnull noalias readonly align 8 %second) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Pair$str$str, %struct.Pair$str$str* %this, i32 0, i32 0
   store i8* %first, i8** %0, align 8, !tbaa !9
@@ -160,7 +160,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair$i32$i32* @Box$i32.pair$i32(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %other) #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair$i32$i32* @Box$i32.pair$i32(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i32 noundef %other) #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair$i32$i32*
@@ -170,7 +170,7 @@ entry:
   ret %struct.Pair$i32$i32* %1
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$i32$str* @Box$i32.pair$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$i32$str* @Box$i32.pair$str(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Pair$i32$str*
@@ -180,7 +180,7 @@ entry:
   ret %struct.Pair$i32$str* %1
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$str$i32* @Box$str.pair$i32(%struct.Box$str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %other) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$str$i32* @Box$str.pair$i32(%struct.Box$str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i32 noundef %other) #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Pair$str$i32*
@@ -190,7 +190,7 @@ entry:
   ret %struct.Pair$str$i32* %1
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$str$str* @Box$str.pair$str(%struct.Box$str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Pair$str$str* @Box$str.pair$str(%struct.Box$str* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %other) #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Pair$str$str*
@@ -200,9 +200,10 @@ entry:
   ret %struct.Pair$str$str* %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

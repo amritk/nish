@@ -11,7 +11,7 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
@@ -25,7 +25,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @describe(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal noundef nonnull align 8 i8* @describe(i8* noundef nonnull noalias readonly align 8 nocapture %name) #1 {
 entry:
   %0 = call i8* @nish_str_concat(i8* %name, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   %1 = bitcast i8* %name to i64*
@@ -37,7 +37,7 @@ entry:
   ret i8* %6
 }
 
-define internal noundef i32 @room(i8* noundef nonnull noalias readonly align 8 nocapture %name, i32 noundef %column) #1 {
+define internal noundef i32 @room(i8* noundef nonnull noalias readonly align 8 nocapture %name, i32 noundef %column) #2 {
 entry:
   %0 = bitcast i8* %name to i64*
   %1 = load i64, i64* %0, align 8
@@ -46,7 +46,7 @@ entry:
   ret i32 %3
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #1 {
 entry:
   %name.addr = alloca i8*, align 8
   %n.addr = alloca i32, align 4
@@ -151,7 +151,7 @@ bounds.ok:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -159,8 +159,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn readonly }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { nounwind noreturn cold }
 

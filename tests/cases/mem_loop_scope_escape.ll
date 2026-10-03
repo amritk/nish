@@ -13,7 +13,7 @@ declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
@@ -60,14 +60,14 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 i8* @word(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @word(i32 noundef %i) #1 {
 entry:
   %0 = call i8* @nish_str_from_i32(i32 %i)
   %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %0)
   ret i8* %1
 }
 
-define internal noundef nonnull align 8 i8* @keepLast(i32 noundef %rounds) #0 {
+define internal noundef nonnull align 8 i8* @keepLast(i32 noundef %rounds) #1 {
 entry:
   %last.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
@@ -102,7 +102,7 @@ for.end:
   ret i8* %9
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @keepAll(i32 noundef %rounds) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @keepAll(i32 noundef %rounds) #1 {
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %i.addr = alloca i32, align 4
@@ -162,7 +162,7 @@ for.end:
   ret %struct.nish_array* %25
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @growAll(i32 noundef %rounds) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @growAll(i32 noundef %rounds) #1 {
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %i.addr = alloca i32, align 4
@@ -228,7 +228,7 @@ for.end:
   ret %struct.nish_array* %29
 }
 
-define internal void @keepField(%struct.Log* noundef nonnull align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #0 {
+define internal void @keepField(%struct.Log* noundef nonnull align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #1 {
 entry:
   %i.addr = alloca i32, align 4
   %w.addr = alloca i8*, align 8
@@ -288,7 +288,7 @@ push.store:
   ret void
 }
 
-define internal noundef i32 @keepThroughCallee(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #0 {
+define internal noundef i32 @keepThroughCallee(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -323,7 +323,7 @@ for.end:
   ret i32 %10
 }
 
-define internal void @note(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %i) #0 {
+define internal void @note(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %i) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Log, %struct.Log* %log, i32 0, i32 1
   %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !16
@@ -353,7 +353,7 @@ push.store:
   ret void
 }
 
-define internal noundef i32 @keepInCallee(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #0 {
+define internal noundef i32 @keepInCallee(%struct.Log* noundef nonnull readonly align 8 dereferenceable(16) nocapture %log, i32 noundef %rounds) #1 {
 entry:
   %n.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -385,7 +385,7 @@ for.end:
   ret i32 %7
 }
 
-define internal noundef nonnull align 8 i8* @joined(i32 noundef %rounds) #0 {
+define internal noundef nonnull align 8 i8* @joined(i32 noundef %rounds) #1 {
 entry:
   %s.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
@@ -419,7 +419,7 @@ for.end:
   ret i8* %10
 }
 
-define internal noundef nonnull align 8 i8* @firstLong(i32 noundef %rounds, i32 noundef %want) #0 {
+define internal noundef nonnull align 8 i8* @firstLong(i32 noundef %rounds, i32 noundef %want) #1 {
 entry:
   %i.addr = alloca i32, align 4
   %w.addr = alloca i8*, align 8
@@ -461,7 +461,7 @@ for.end:
   ret i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*)
 }
 
-define internal noundef i32 @churn() #0 {
+define internal noundef i32 @churn() #1 {
 entry:
   %t.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

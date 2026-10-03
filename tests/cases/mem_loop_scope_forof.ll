@@ -17,7 +17,7 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noundef i64 @nish_arena_used() #0
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
@@ -54,7 +54,7 @@ entry:
   ret void
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @words(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @words(i32 noundef %n) #1 {
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %i.addr = alloca i32, align 4
@@ -270,7 +270,7 @@ for.end:
   ret %struct.Box* %37
 }
 
-define internal noundef nonnull align 8 i8* @longest(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %ws) #0 {
+define internal noundef nonnull align 8 i8* @longest(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %ws) #1 {
 entry:
   %best.addr = alloca i8*, align 8
   %w.addr = alloca i8*, align 8
@@ -351,7 +351,7 @@ forof.end:
   ret i8* %34
 }
 
-define internal noundef nonnull align 8 i8* @lastWord(i32 noundef %rounds) #0 {
+define internal noundef nonnull align 8 i8* @lastWord(i32 noundef %rounds) #1 {
 entry:
   %last.addr = alloca i8*, align 8
   %r.addr = alloca i32, align 4
@@ -411,7 +411,7 @@ for.end:
   ret i8* %19
 }
 
-define internal noundef i32 @churn() #0 {
+define internal noundef i32 @churn() #1 {
 entry:
   %t.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

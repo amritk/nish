@@ -11,7 +11,7 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
@@ -97,7 +97,7 @@ for.end:
   ret %struct.nish_array* %22
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Log* @collect(i32 noundef %rounds, %struct.Log* noundef nonnull align 8 dereferenceable(16) %log) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Log* @collect(i32 noundef %rounds, %struct.Log* noundef nonnull align 8 dereferenceable(16) %log) #1 {
 entry:
   %i.addr = alloca i32, align 4
   %a.addr = alloca i64, align 8
@@ -145,7 +145,7 @@ for.end:
   ret %struct.Log* %log
 }
 
-define void @nish_main() #0 {
+define void @nish_main() #1 {
 entry:
   %log.addr = alloca %struct.Log*, align 8
   %arena.mark = call i64 @nish_arena_mark()

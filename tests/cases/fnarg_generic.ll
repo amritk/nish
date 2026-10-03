@@ -8,16 +8,16 @@
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare void @nish_free_arena() #4
+declare noundef i64 @nish_arena_mark() #4
+declare void @nish_arena_release(i64 noundef) #4
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #4
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #4
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
@@ -144,20 +144,20 @@ bounds.ok:
   ret i32 0
 }
 
-define internal noundef nonnull align 8 i8* @nish_main$arrow0(i32 noundef %n) #2 {
+define internal noundef nonnull align 8 i8* @nish_main$arrow0(i32 noundef %n) #1 {
 entry:
   %0 = call i8* @nish_str_from_i32(i32 %n)
   %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i8* %0)
   ret i8* %1
 }
 
-define internal noundef double @nish_main$arrow1(double noundef %x) #3 {
+define internal noundef double @nish_main$arrow1(double noundef %x) #2 {
 entry:
   %0 = fdiv double %x, 0x4000000000000000
   ret double %0
 }
 
-define internal noundef double @nish_main$arrow2(double noundef %a, double noundef %b) #3 {
+define internal noundef double @nish_main$arrow2(double noundef %a, double noundef %b) #2 {
 entry:
   %0 = fadd double %a, %b
   ret double %0
@@ -395,9 +395,9 @@ entry:
 
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn readnone }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind willreturn readnone }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind willreturn }
 attributes #5 = { nounwind noreturn cold }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
