@@ -173,8 +173,9 @@ assumed:
 - `npm run check` green.
 - `npm test` green **and not degraded**. Read the skip count, per *Trusting a
   test run* above: a `DEGRADED:` banner, or a skip that is not one of the three
-  environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset, no `jq` for the
-  WP19 seed-matrix states), means the run did not prove what a green summary
+  environmental ones (no WASI sysroot on a local machine, though never in CI,
+  whose `test` job installs one; `NISH_BOOTSTRAP` unset; no `jq` for the WP19
+  seed-matrix states), means the run did not prove what a green summary
   looks like it proved, and the change is therefore untested whatever the exit
   code said.
 - `npm run lint` and `npm run lint:dead` clean: every rule is an error.

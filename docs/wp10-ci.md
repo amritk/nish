@@ -12,7 +12,7 @@ comment above the `on:` block has the details.
 
 | Job | Runner | Steps |
 | --- | --- | --- |
-| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test`, which builds its own compiler with the seed, then that compiler kept as `build/nish` rather than built a second time, the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
+| `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`), and the WASI sysroot (`wasi-libc libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test`, which builds its own compiler with the seed, then that compiler kept as `build/nish` rather than built a second time, the smoke test, the cookbook check, `gen-diagnostic-codes.mjs --check` and the size report, the compiling ones with `build/nish` |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on six remaining measured failures rather than on cost. It is the one macOS gap in the file: `bootstrap` and `nish-cmp` have had darwin rows since the 0.4.0 seeds. See below |
 | `seeds` | Ubuntu | asks the last release which seed binaries it attaches, and builds the `bootstrap` matrix from the answer. Green means it looked; **red** means a seed that should exist does not |
 | `bootstrap (x86_64-linux)` | Ubuntu | builds `src/` with that seed, which is the only thing that checks WP19's rolling freeze. One row per seed that exists, so a platform with no seed has no row rather than a green one |
@@ -436,11 +436,25 @@ probe for exactly those:
   formula only if that ever stops being true, because `lld` pulls in the
   newest LLVM as a dependency.
 
+Ubuntu also installs `wasi-libc` and `libclang-rt-18-dev-wasm32`, and the
+`Test` step sets `WASI_SYSROOT=/usr`, because Debian's wasi-libc lives under
+`/usr/lib/wasm32-wasi` rather than in a sysroot directory of its own. With
+them the suite's wasi checks run instead of being counted as skips ("no WASI
+sysroot"): `argv_echo` built with `--profile wasi` and run under Node's WASI,
+`src/` linked into one wasi module and driven through `web/`, and
+`range_export`'s `--profile wasi` build. A sysroot that is found and still
+cannot link is a failure, not a skip. That is the guard #396 lacked: the
+runtime had stopped building against this wasi-libc, which has no `realpath`,
+and nothing in CI said so. `node tests/run.js wasi` runs those checks alone.
+
 After the tests, the job compiles `examples/add.ts` with `build/nish`, runs
 `scripts/size-report.sh --markdown`, and appends the table to the job summary
 so the size of every profile (`debug`, `speed`, `size`, `wasm`) is visible on
-the run page for each OS. A `concurrency` group cancels superseded runs of
-the same branch.
+the run page for each OS. A `concurrency` group cancels a pull request's
+superseded runs. A push to `main` is never cancelled: each one is a merge, its
+run is the only record of whether `main` was green after it, and while every
+event cancelled, a merge landing during the previous merge's run left that run
+cancelled, neither green nor red (#396's and #397's).
 
 ## Where the wall clock goes
 
@@ -575,7 +589,19 @@ npm run build           # the seeded bootstrap: build/nish
 npm test                # stage1 from the seed + tests/run.js (goldens, llvm-as, native, runtime, size, wasm)
 npm run lint            # only if package.json defines it
 npm run size-report     # the plain table; add --markdown via scripts/size-report.sh
+
+# the wasi checks, as CI runs them (Ubuntu / Debian)
+sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+WASI_SYSROOT=/usr node tests/run.js wasi
 ```
+
+The per-module goldens of the `tests/link/` programs (`tests/link/<name>/<module>.ll`)
+are not written by `npm run test:update`, which writes a missing case golden: a
+link program compares only the modules that have one. When a change moves them,
+`node tests/run.js <name> --update-link-goldens` rewrites each one that differs
+from what this tree's compiler emits and prints `WROTE link/<name>/<module>.ll`
+per file; leave out `<name>` to rewrite them all. Read the diff before
+committing it, as for every regenerated golden.
 
 There is no compiler to build with `tsc`: `npm run check` type-checks `src/`
 against `runtime/nish.d.ts` and emits nothing, and every compiler the steps
