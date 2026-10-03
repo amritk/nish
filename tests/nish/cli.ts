@@ -54,6 +54,7 @@
 import { sha256 } from "../../std/crypto/sha256";
 import { jsonField } from "../../std/json";
 import { VERSION } from "../../src/branding";
+import { hexDigitLower } from "../../src/strings";
 import { Suite } from "../../std/testing";
 import { contains, splitLines, trim } from "../../std/text";
 
@@ -906,12 +907,11 @@ const modeLine = (path: string): string => {
 
 /** `bytes` as lowercase hex, two digits a byte. */
 const hexOf = (bytes: u8[]): string => {
-  const digits = "0123456789abcdef";
   const out: string[] = [];
   for (const b of bytes) {
     const v = toI32(b);
-    out.push(digits.substring(v >> 4, (v >> 4) + 1));
-    out.push(digits.substring(v & 15, (v & 15) + 1));
+    out.push(hexDigitLower(v >> 4));
+    out.push(hexDigitLower(v));
   }
   return out.join("");
 };

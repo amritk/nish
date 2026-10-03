@@ -78,10 +78,7 @@ const sha256Constants = (): u32[] => [
 ]
 
 /** `x` rotated right by `n` bits, `0 < n < 32` (FIPS 180-4 §3.2, ROTR). */
-const rotr = (x: u32, n: u32): u32 => {
-  const thirtyTwo: u32 = 32
-  return (x >> n) | (x << (thirtyTwo - n))
-}
+const rotr = (x: u32, n: u32): u32 => (x >> n) | (x << (32 - n))
 
 /**
  * Byte `j` of `text` once FIPS 180-4 §5.1.1 has padded it to `padded` bytes:
@@ -101,9 +98,8 @@ const paddedByte = (text: string, j: i32, padded: i32): u32 => {
   if (fromEnd >= 8) {
     return 0
   }
-  const eight: u64 = 8
-  const bits: u64 = toU64(n) * eight
-  return toU32((bits >> toU64(fromEnd * 8)) & toU64(255))
+  const bits: u64 = toU64(n) * 8
+  return toU32((bits >> toU64(fromEnd * 8)) & 255)
 }
 
 /**
@@ -122,26 +118,25 @@ export const sha256Hex = (text: string): string => {
   const n = text.length
   // The text, one byte of 0x80 and eight of length, rounded up to a block.
   const padded = (((n + 8) >> 6) + 1) << 6
-  const eight: u32 = 8
-  const sixteen: u32 = 16
-  const twentyFour: u32 = 24
   let block = 0
   while (block < padded) {
     let t = 0
     while (t < 16) {
       const at = block + t * 4
       let word: u32 = 0
-      if (at + 4 <= n) {
+      // `at >= 0` and `text.length` rather than `n` are for the bounds proof,
+      // which then drops the check on every `charCodeAt` here.
+      if (at >= 0 && at + 4 <= text.length) {
         word =
-          (toU32(text.charCodeAt(at)) << twentyFour) |
-          (toU32(text.charCodeAt(at + 1)) << sixteen) |
-          (toU32(text.charCodeAt(at + 2)) << eight) |
+          (toU32(text.charCodeAt(at)) << 24) |
+          (toU32(text.charCodeAt(at + 1)) << 16) |
+          (toU32(text.charCodeAt(at + 2)) << 8) |
           toU32(text.charCodeAt(at + 3))
       } else {
         word =
-          (paddedByte(text, at, padded) << twentyFour) |
-          (paddedByte(text, at + 1, padded) << sixteen) |
-          (paddedByte(text, at + 2, padded) << eight) |
+          (paddedByte(text, at, padded) << 24) |
+          (paddedByte(text, at + 1, padded) << 16) |
+          (paddedByte(text, at + 2, padded) << 8) |
           paddedByte(text, at + 3, padded)
       }
       w[t] = word
@@ -150,10 +145,8 @@ export const sha256Hex = (text: string): string => {
     while (t < 64) {
       const w15 = w[t - 15]
       const w2 = w[t - 2]
-      const three: u32 = 3
-      const ten: u32 = 10
-      const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >> three)
-      const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >> ten)
+      const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >> 3)
+      const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >> 10)
       w[t] = w[t - 16] + s0 + w[t - 7] + s1
       t = t + 1
     }
@@ -166,7 +159,8 @@ export const sha256Hex = (text: string): string => {
     let g = h[6]
     let hh = h[7]
     t = 0
-    while (t < 64) {
+    // `k` has 64 entries; `t < k.length` is what proves `k[t]` in range.
+    while (t < 64 && t < k.length) {
       const big1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
       const choose = (e & f) ^ (~e & g)
       const t1 = hh + big1 + choose + k[t] + w[t]
@@ -197,7 +191,7 @@ export const sha256Hex = (text: string): string => {
   for (const word of h) {
     let shift = 28
     while (shift >= 0) {
-      out.add(hexDigitLower(toI32((word >> toU32(shift)) & toU32(15))))
+      out.add(hexDigitLower(toI32((word >> toU32(shift)) & 15)))
       shift = shift - 4
     }
   }
