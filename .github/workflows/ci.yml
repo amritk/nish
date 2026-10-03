@@ -68,9 +68,17 @@ permissions:
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
 
+# A newer push to a pull request makes the older run's answer worthless, so
+# that run is cancelled. A push to main is never superseded that way: each one
+# is a merge, and its run is the only record of whether main was green after
+# it. With `cancel-in-progress: true` for every event, the next merge landing
+# within the half hour a run takes cancelled the one before it, and #396's and
+# #397's runs on main ended cancelled -- neither green nor red, and nothing
+# said which merge broke main if one had. So only a pull request's runs cancel;
+# main's queue up in the same group and each finishes.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -165,7 +173,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind
+          # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
+          # `wasi` profile links against (scripts/build.sh). Without them the
+          # suite's wasi checks -- argv_echo under Node's WASI, the compiler as
+          # one wasi module (web/), range_export's `--profile wasi` -- are
+          # counted skips, "no WASI sysroot", and nothing here would notice a
+          # runtime that stops building against wasi-libc, as runtime-os.c did
+          # when it called a `realpath` wasi-libc does not have (#396).
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind \
+            wasi-libc libclang-rt-18-dev-wasm32
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
           # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,
@@ -225,7 +241,14 @@ jobs:
       # The WP14 section of tests/run.js says when it honours the flag, and a
       # check there fails if this step asks for it while `bootstrap` has
       # stopped running `scripts/bootstrap.sh --verify`.
+      #
+      # `WASI_SYSROOT=/usr` because Debian's wasi-libc installs under
+      # /usr/lib/wasm32-wasi and /usr/include/wasm32-wasi rather than in a
+      # sysroot directory of its own, so none of the default locations
+      # scripts/build.sh and tests/run.js look in exists.
       - name: Test
+        env:
+          WASI_SYSROOT: /usr
         run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point
 
       # `build/nish` is what the steps after the suite drive: stage1, one
