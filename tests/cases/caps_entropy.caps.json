@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_entropy.ts",
+  "deterministic": false,
+  "capabilities": ["entropy"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["entropy"],
+      "modules": [
+        {
+          "path": "caps_entropy.ts",
+          "capabilities": ["entropy"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["entropy"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "main", "at": "caps_entropy.ts:7:13", "calls": "roll" },
+                  { "function": "roll", "at": "caps_entropy.ts:4:25", "calls": "Math.random" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,7 @@
 // `BuiltinCall` object, so that what a builtin *emits* and what the attribute
 // analysis is *told* it emits cannot drift apart. The language has no function
 // values, so the pair is kept by locality instead: `emitBuiltinCall` and
-// `builtinCallees` are the same `if` chain in the same order, and so are
+// `builtinCalleesNamed` are the same `if` chain in the same order, and so are
 // `emitIdentifierBuiltinCall` and `identifierBuiltinCallees`. An omission in
 // either half is a wrong attribute on the caller, which is what the IR oracle
 // is there to catch.
@@ -534,20 +534,13 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
 }
 
 /**
- * The runtime symbols and intrinsics the dotted lowerings above may call. The
- * order of the tests is theirs, so a reader can diff the two halves.
- */
-export const builtinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => {
-  const access = call.children[0]
-  return builtinCalleesNamed(program, table, call, `${access.children[0].text}.${access.text}`)
-}
-
-/**
- * The same, under a name the call site does not spell. A `nish:` import can
- * bring a dotted builtin in as a plain identifier (`exit` for `process.exit`),
- * and the analysis has to be told what that call emits whichever way the
- * program spelled it — an omission here is a wrong attribute, not a cosmetic
- * difference.
+ * The runtime symbols and intrinsics the dotted lowerings above may call, by
+ * the builtin's dotted name: the call site's own spelling (`dottedName`), or
+ * the one a `nish:` import renamed (`exit` for `process.exit`), because the
+ * analysis has to be told what the call emits whichever way the program
+ * spelled it -- an omission here is a wrong attribute, not a cosmetic
+ * difference. The order of the tests is the lowerings', so a reader can diff
+ * the two halves.
  */
 export const builtinCalleesNamed = (
   program: CheckedProgram,
@@ -752,6 +745,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "monotonicNanos") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_monotonic_nanos")}()`)
   }
+  // The mark a `using a = arena()` block releases to (`openScope`).
+  if (name === "arena") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
+  }
   // WP14 §7a: one `stat`, and the C answer is already the language's `boolean`.
   if (name === "isDirectorySync") {
     return emitter.fn.emitValue(
@@ -790,6 +787,14 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "readSignal") {
     const fd = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
+  }
+  // #385: the header goes to the runtime as `crypto.getRandomValues`'s does,
+  // and `nish_wipe` reads `len` and `data` from it.
+  if (name === "secureZero") {
+    emitter.declareType(ARRAY_TYPE)
+    const bytes = emitter.emitExpression(firstArgument(expr))
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_wipe")}(${ARRAY_STRUCT}* ${bytes})`)
+    return "void"
   }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
@@ -903,6 +908,15 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_monotonic_nanos")
     return out
   }
+  // The release every exit of the block makes. The mark the call itself takes
+  // is left out: it only reads, the release already writes, and a
+  // `nish_arena_mark` among the callees is what `readsArenaState` and
+  // `managesArena` read as `Arena.mark`, which a checked block is not
+  // (`FunctionFacts.opensArena` is its fact).
+  if (name === "arena") {
+    out.push("nish_arena_release")
+    return out
+  }
   if (name === "isDirectorySync") {
     out.push("nish_is_dir")
     return out
@@ -929,6 +943,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "readSignal") {
     out.push("nish_read_signal")
+    return out
+  }
+  if (name === "secureZero") {
+    out.push("nish_wipe")
     return out
   }
   if (name === "write" || name === "writeError") {

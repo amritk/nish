@@ -52,6 +52,7 @@ import {
   builtinArgumentLetters,
   builtinNameOf,
   dottedName,
+  isArenaCall,
   isWrittenArgument,
   isTemplateExpression,
   unwrapParens,
@@ -113,7 +114,8 @@ export const DISPOSE_METHOD: string = "[Symbol.dispose]"
 /** The refusal of a `[Symbol.dispose]` method anywhere but `nish/threads`'s `ThreadScope`. */
 export const disposeElsewhereMessage = (owner: string): string =>
   `\`${owner}\` cannot declare \`[Symbol.dispose]\`: in this version \`using\` takes only a \`scope()\` from ` +
-  "`nish/threads`, whose join the compiler emits itself, so a disposal method of any other class would never be called"
+  "`nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method " +
+  "of any other class would never be called"
 
 /** `std/threads.ts`: the name `nish/threads` loads under, and the module its templates are recognised in. */
 export const threadsModuleName = (): string => stdModuleName(`${STD_PREFIX}threads`)
@@ -296,12 +298,13 @@ export const recyclesPerElement = (f: FunctionFacts): boolean =>
  */
 export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || (!own.readsArenaState && !own.usesArenaControl)) {
+  if (own === null || (!own.readsArenaState && !own.usesArenaControl && !own.opensArena)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
-    "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`"
+    "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or " +
+    "`Arena.reset`, nor open a `using a = arena()` block"
   )
 }
 
@@ -736,8 +739,17 @@ export class ScopeFinding {
 }
 
 const usingNotScopeMessage = (): string =>
-  "`using` takes only `scope()` from `nish/threads` in this version: a scope is the one value whose disposal " +
-  "the language defines — it joins the scope's tasks — so a `using` of anything else would promise a disposal nothing performs"
+  "`using` takes only `scope()` from `nish/threads` or the builtin `arena()` in this version: they are the values " +
+  "whose disposal the language defines — a scope joins its tasks, an arena releases what its block allocated — so a " +
+  "`using` of anything else would promise a disposal nothing performs"
+
+const arenaNotUsingMessage = (): string =>
+  "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was " +
+  "allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end"
+
+const arenaBindingMessage = (name: string): string =>
+  `\`${name}\` is the binding of a \`using\` declaration of \`arena()\` and cannot be read: it holds the mark ` +
+  "its block releases to when it ends, and nothing but that release may see or move the mark"
 
 const scopeNotUsingMessage = (): string =>
   "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that " +
@@ -831,6 +843,7 @@ const walkScopes = (
   node: Node,
   parents: Node[],
   scopeType: i32,
+  arenas: Local[],
   out: ScopeFinding[]
 ): void => {
   const n = parents.length
@@ -842,21 +855,33 @@ const walkScopes = (
     }
     for (const decl of node.children[0].children) {
       const init = unwrapParens(decl.children[2])
-      if (!isScopeCall(program, init, scopeType)) {
+      const local = program.nodeLocals[decl.id]
+      if (isArenaCall(program, init)) {
+        if (local !== null) {
+          arenas.push(local)
+        }
+      } else if (!isScopeCall(program, init, scopeType)) {
         out.push(new ScopeFinding(decl, usingNotScopeMessage()))
       }
     }
   }
   const declaresName =
     parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node
+  // A parenthesised call or name is judged as what it wraps, where it stands.
+  let at = node
+  let depth = n
+  while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
+    at = parents[depth - 1]
+    depth = depth - 1
+  }
+  if (isArenaCall(program, node) && !isUsingInitialiser(at, parents, depth)) {
+    out.push(new ScopeFinding(node, arenaNotUsingMessage()))
+  }
+  const named: Local | null = node.kind === N_IDENT && !declaresName ? program.nodeLocals[node.id] : null
+  if (named !== null && arenas.indexOf(named) >= 0) {
+    out.push(new ScopeFinding(node, arenaBindingMessage(named.name)))
+  }
   if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
-    // A parenthesised scope is judged as what it wraps, where it stands.
-    let at = node
-    let depth = n
-    while (depth > 0 && parents[depth - 1].kind === N_PAREN) {
-      at = parents[depth - 1]
-      depth = depth - 1
-    }
     if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
       if (!isUsingInitialiser(at, parents, depth)) {
         out.push(new ScopeFinding(node, scopeNotUsingMessage()))
@@ -867,7 +892,7 @@ const walkScopes = (
   }
   parents.push(node)
   for (const child of node.children) {
-    walkScopes(program, child, parents, scopeType, out)
+    walkScopes(program, child, parents, scopeType, arenas, out)
   }
   parents.pop()
 }
@@ -886,10 +911,11 @@ export const scopeFindings = (
 ): ScopeFinding[] => {
   const out: ScopeFinding[] = []
   // Without `nish/threads` there is no scope, and all that can be wrong is a
-  // `using` of something else, which a module that never spells the word
-  // cannot have: the text answers that without a walk.
+  // `using` of something else, or an `arena()` out of place, which a module
+  // that spells neither word cannot have: the text answers that without a walk.
   const loaded = threadsLoaded(programs)
-  if (isThreadsModule(program) || (!loaded && program.source.text.indexOf("using") < 0)) {
+  const text = program.source.text
+  if (isThreadsModule(program) || (!loaded && text.indexOf("using") < 0 && text.indexOf("arena") < 0)) {
     return out
   }
   // No node has type -2, so without the module only the `using` rule applies.
@@ -904,7 +930,8 @@ export const scopeFindings = (
       program.enterInstance(instance)
     }
     const parents: Node[] = []
-    walkScopes(program, body, parents, scopeType, out)
+    const arenas: Local[] = []
+    walkScopes(program, body, parents, scopeType, arenas, out)
     if (loaded) {
       checkBody(program, table, facts, body, out)
     }

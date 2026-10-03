@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["clock"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["clock"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["clock"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["clock"],
+              "witnesses": {
+                "clock": [
+                  { "function": "main", "at": "main.ts:16:17", "calls": "monotonicNanos" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nish",
+      "capabilities": [],
+      "modules": [
+        {
+          "path": "std/threads.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "parallelMapInto<i32, i32, square>",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "scope",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

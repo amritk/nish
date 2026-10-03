@@ -35,6 +35,7 @@ and it is the only authority.
 
 ```bash
 nish program.ts --json            # one JSON object per diagnostic, on stdout
+nish --fix program.ts             # apply every machine-applicable fix, then report what is left
 nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
 nish run program.ts a b           # build into a cache, then run it with `a b`
@@ -66,6 +67,24 @@ exclusive:
   status after that.
 - Every failure is a `--json` object, toolchain and internal errors included,
   so you never have to parse stderr to find out why a run failed.
+
+Some diagnostics carry a **`fix`**: the edits that make the line compile,
+when the rewrite is mechanical and keeps the program's meaning. It comes last,
+and each edit is placed exactly as the diagnostic is — `text` replaces the span,
+and a span whose start equals its end is an insertion:
+
+```json
+{"file":"p.ts","line":2,"column":10,"endLine":2,"endColumn":16,"severity":"error","code":"NL1047","message":"Loose equality is forbidden; use === / !==","fix":[{"line":2,"column":12,"endLine":2,"endColumn":14,"text":"==="}]}
+```
+
+A diagnostic with no safe rewrite has no `fix` key at all. `nish --fix
+program.ts` applies every fix to the files named on its command line (never to
+an import from `std/` or `node_modules`), recompiles, and repeats until nothing
+changes or five rounds pass; then it reports what is left exactly as a plain
+run would, `--json` included, and exits with that run's code. It writes no IR,
+so it refuses `-o` and `--link`. It rewrites your files in place, with no
+backup, so run it on a committed or backed-up tree. Run it first, then read
+what remains.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
@@ -801,7 +820,8 @@ export const main = (): i32 => {
   you only index; never pass it on. Between the first `spawn` and the block's
   end, don't read a destination, and don't write memory a task could read (a
   store into an argument, a call that writes through its argument).
-- **`using` takes only `scope()`**, and `scope()` only comes from `using`.
+- **`using` takes only `scope()`** (or `arena()`, under [Memory](#memory)), and
+  `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
 - **The task is a named top-level function**, not an arrow, and it follows the
@@ -1166,6 +1186,44 @@ constants `Math.PI` / `Math.E`. The f64-only ones reject an `i32`: write
 barrier, so neither ever becomes a branch; select and compare on a secret with
 these, never with `if`, `?:`, `===` or `table[secret]`, which they cannot fix.
 
+**Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
+array or a record of integer fields). It is opaque: no printing, interpolating,
+comparing with a value, branching, indexing, `.value`, field, array element or
+`Result` payload, and no builtin takes one. Read it only with `expose(s, f)` or
+`exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
+declares its return type, reaches no I/O and no C, keeps nothing of the value
+and returns no `Secret` — that return is what leaves. A `Secret` your function
+makes must be `wipe`d or returned **on every path** (each `return`, `break`,
+`orReturn()`), is moved by `const j = k`, and is never read after `wipe`;
+`secret(local)` moves the local too. `std/crypto`'s `p256`, `x25519` and
+`x509ParseP256PrivateKey` take and give keys this way.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  const n: i32 = expose(k, width);
+  wipe(k);
+  return n === 3 ? 0 : 1;
+};
+```
+
+```ts nish:err NL2440
+import { Secret, expose, secret } from "nish:secret";
+
+const key = (): u8[] => [7, 1, 9];
+const width = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const k: Secret<u8[]> = secret(key());
+  return expose(k, width); // NL2440: `k` leaves unwiped
+};
+```
+
 **Arrays.** `a.length` (read-only), `a.push(v)`, `a.pop()` (panics when empty —
 there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` is
 `string[]` only** — and, on an array of numbers only, `dst.set(src[, offset])`
@@ -1213,8 +1271,10 @@ backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
 `netLocalPort(fd)` and `netAddress(out, host, port)`. Every one answers an
 `i32`: **a negative number is a failure, not an exception** — `-11` means "would
 block, call again", `-32` a peer that has gone (never SIGPIPE), `-98` the port
-is in use, `-22` a bad argument. Every socket is non-blocking, and there is no
-`async`, no callback and no `tcpConnect` yet: your `main` is the loop. Buffers
+is in use, `-111` refused, `-22` a bad argument. Every socket is non-blocking,
+and there is no `async` and no callback: your `main` is the loop. A client calls
+`tcpConnect(addr)`, which answers the descriptor while it is still connecting;
+wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
 the port big-endian); hosts are numeric literals, because there is no DNS.
 `netRead` / `netWrite` panic on a range outside the buffer. UDP is
@@ -1234,8 +1294,8 @@ many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
 unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
 exists on a wasm target, and under Node each throws.
 
-**Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`
-— see below.
+**Arena.** `Arena.mark()`, `Arena.release(m)`, `Arena.reset()`, `Arena.used()`,
+and `using a = arena()` — see below.
 
 ### Map and Set
 
@@ -1370,10 +1430,28 @@ it, and mostly you should not try:
 4. **Explicit control** with the `Arena` builtins, for code that manages
    batches itself.
 
+**To free a batch, wrap it in a block with `using a = arena()`**: everything
+the block allocates after that line is released when the block ends, on every
+exit, and the compiler refuses the block if anything allocated in it could
+outlive it — so allocate what must outlive the block before it, and let only
+numbers, booleans and enums out. `arena()` is only ever a `using` initialiser,
+and `a` is never read.
+
+```ts nish:ok-body
+const rows: string[] = ["a", "bb"];
+let total = 0;
+for (const row of rows) {
+  using a = arena();
+  const line = `${row}: ${row.length}`;
+  total = total + line.length;
+}
+```
+
 Everything else is bumped from the arena, which is released when `main`
 returns. **Safety rule**: `Arena.release` / `Arena.reset` while any object,
 array or string allocated after the mark is still referenced is undefined
-behaviour. Reach for them only when you are deliberately managing a batch.
+behaviour. Reach for `using a = arena()` instead; the explicit calls are for
+when you are deliberately managing a batch the compiler cannot see.
 
 ## Recipes for what is missing
 
@@ -1468,7 +1546,12 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined` or `??` (outside `Map.get`), `?.`, a cast, a
    stored or returned callback, a generic *alias*, or `extends`?
-9. If you are adding to this repository: `npm run check` and `npm test` green,
+9. Does it reach only what you meant it to? `nish file.ts --emit-capabilities
+   caps.json` lists every capability each function can reach — files, processes,
+   the network, the environment, the clock, entropy, signals, `exit`, C calls —
+   with the call chain that reaches it, and `nish run --capabilities file.ts`
+   prints the one-line summary ([LANGUAGE.md](LANGUAGE.md#capabilities)).
+10. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
    `CHANGELOG.md` line.

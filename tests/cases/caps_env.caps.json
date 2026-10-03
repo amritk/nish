@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entry": "caps_env.ts",
+  "deterministic": false,
+  "capabilities": ["env"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["env"],
+      "modules": [
+        {
+          "path": "caps_env.ts",
+          "capabilities": ["env"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["env"],
+              "witnesses": {
+                "env": [
+                  { "function": "main", "at": "caps_env.ts:9:15", "calls": "setting" },
+                  { "function": "setting", "at": "caps_env.ts:4:17", "calls": "getenv" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

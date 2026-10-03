@@ -79,8 +79,12 @@ _Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bum
 _Static_assert(offsetof(struct nish_arena, cap) == 16, "the inlined allocator reads field 2");
 _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI");
 
+/* `fputs` rather than one `write`: libc's own loop finishes a short write,
+   which a bare `write` would cut off (docs/security/runtime.md, RT-11), and
+   stderr is unbuffered, so the message leaves before `_exit`. A C host that
+   gives stderr a buffer of its own would lose it here. */
 static NISH_COLD void nish_die(const char *msg) {
-  (void)!write(2, msg, strlen(msg));
+  fputs(msg, stderr);
   _exit(1);
 }
 /* A function rather than a macro around `nish_die`: seven call sites each
@@ -214,7 +218,7 @@ nish_str *nish_str_concat(const nish_str *a, const nish_str *b) {
   s->len = len;
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);
-  s->data[s->len] = 0;
+  s->data[len] = 0;
   return s;
 }
 
@@ -262,9 +266,22 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) {
 }
 
 /* `console.log` / `console.error` / `write` / `writeError` and the message of
-   `panic`: fd 1 or 2, with or without the trailing newline. */
+   `panic`: fd 1 or 2, with or without the trailing newline.
+
+   A pipe or a socket can take part of a long string and answer the count it
+   took: a signal that lands mid-write ends the call early, and a full pipe
+   does the same. So the bytes are written until all of them are out, or until
+   a write fails (docs/security/runtime.md, RT-11). A failure still ends the
+   output, `EAGAIN` on a non-blocking stdout included, since spinning on it
+   would burn a core. `EINTR` is not retried here: it needs a handler
+   installed without `SA_RESTART`, and the only one this runtime installs
+   (runtime-host.c) has it, so an interrupted write either restarts in the
+   kernel or comes back short. The newline needs no loop: one byte is never
+   written in part. */
 void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
-  (void)!write(fd, s->data, s->len);
+  uint64_t done = 0;
+  ssize_t k;
+  while (done < s->len && (k = write(fd, s->data + done, s->len - done)) > 0) done += k;
   if (newline) (void)!write(fd, "\n", 1);
 }
 /* console.log(s) */
@@ -1201,6 +1218,20 @@ __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;
   a->cap = cap;
+}
+
+/* `secureZero(bytes)` (#385): every byte of the array set to zero, in stores
+ * no optimisation may remove. A `memset` here would be a dead store wherever
+ * the buffer's life ends straight after the call -- a key in a frame that
+ * returns, a block that is freed -- and links use `-flto`, which inlines this
+ * body into that caller and lets dead-store elimination see it. Each store goes
+ * through a `volatile` pointer, so each is behaviour the C standard keeps
+ * whatever the optimiser can see, and `noinline` keeps the call itself in the
+ * binary for a reader of the disassembly. A byte at a time, because a secret
+ * is a key or a scalar of tens of bytes, not a buffer worth a vector loop. */
+__attribute__((noinline)) void nish_wipe(nish_array *bytes) {
+  volatile char *p = bytes->data;
+  for (uint64_t i = 0; i < bytes->len; i++) p[i] = 0;
 }
 
 void nish_panic_index(uint64_t idx, uint64_t len) {

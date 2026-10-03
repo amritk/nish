@@ -15,6 +15,12 @@
 // is being checked *into*, or -1 for none. It is a hint and never a coercion:
 // the result is still checked against what the sink expects.
 
+import {
+  conditionMessage as secretConditionMessage,
+  equalityMessage as secretEqualityMessage,
+  refuseSecretArguments,
+  templateMessage as secretTemplateMessage,
+} from "./secret"
 import { LANGUAGE } from "./branding"
 import { isFractional, numericLiteralValue, parseIntegerLiteral, TWO_53 } from "./constants"
 import { nullableOfChecked, resolveType } from "./annotations"
@@ -447,6 +453,10 @@ const checkTemplate = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     const hole = checkExpression(ctx, part, scope, -1)
     if (hole === T_ERROR) {
+      continue
+    }
+    if (ctx.table.isSecret(hole)) {
+      ctx.error(part, secretTemplateMessage())
       continue
     }
     if (!isNumeric(hole) && hole !== T_BOOL && hole !== T_STRING) {
@@ -990,6 +1000,12 @@ const checkEquality = (
   leftNode: Node,
   rightNode: Node
 ): i32 => {
+  // `nish:secret`: a `Secret` against a value answers a question about the key.
+  const secretLeft = ctx.table.isSecret(left)
+  const secretRight = ctx.table.isSecret(right)
+  if (secretLeft !== secretRight && leftNode.kind !== N_NULL && rightNode.kind !== N_NULL) {
+    return ctx.errorType(expr, secretEqualityMessage())
+  }
   const a = ctx.table.typeName(left)
   const b = ctx.table.typeName(right)
   if (left !== right || left === T_VOID) {
@@ -1075,6 +1091,10 @@ const ternaryResult = (ctx: CheckContext, expr: Node, type: i32): i32 => {
 /** A condition is a boolean: the language has no truthiness. */
 export const checkCondition = (ctx: CheckContext, expr: Node, scope: Scope): void => {
   const type = checkExpression(ctx, expr, scope, T_BOOL)
+  if (type !== T_ERROR && ctx.table.isSecret(type)) {
+    ctx.error(expr, secretConditionMessage())
+    return
+  }
   if (type !== T_BOOL && type !== T_ERROR) {
     ctx.error(
       expr,
@@ -1546,9 +1566,19 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   if (callee.kind === N_MEMBER) {
     // `value.method(...)` dispatches on the receiver's type; `console.log(...)`
     // is a dotted builtin, told apart by whether the receiver is a value.
-    return isValueReceiver(ctx, callee.children[0], scope)
-      ? checkMethodCall(ctx, expr, scope)
-      : checkBuiltinCall(ctx, expr, scope)
+    if (isValueReceiver(ctx, callee.children[0], scope)) {
+      return checkMethodCall(ctx, expr, scope)
+    }
+    // `nish:secret`: a builtin is never handed a `Secret`, said before its
+    // own argument rules say something vaguer about the same mistake.
+    const receiver = callee.children[0]
+    if (
+      receiver.kind === N_IDENT &&
+      refuseSecretArguments(ctx, expr, scope, `${receiver.text}.${callee.text}`)
+    ) {
+      return T_ERROR
+    }
+    return checkBuiltinCall(ctx, expr, scope)
   }
   if (callee.kind !== N_IDENT) {
     return ctx.errorType(expr, "Only direct calls to named functions are supported")
@@ -1577,6 +1607,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     // function of the same name is rejected at the import itself.
     const imported = ctx.program.builtinImport(callee.text)
     if (imported !== null) {
+      if (refuseSecretArguments(ctx, expr, scope, imported.canonical)) {
+        return T_ERROR
+      }
       return checkImportedBuiltin(ctx, expr, scope, imported)
     }
     if (isResultConstructor(callee.text)) {
@@ -1586,6 +1619,9 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
       return checkResultConstructor(ctx, expr, scope, want) // WP16: `Ok(v)` / `Err(e)`
     }
     if (isBuiltinFunction(callee.text)) {
+      if (refuseSecretArguments(ctx, expr, scope, callee.text)) {
+        return T_ERROR
+      }
       return checkBuiltinFunction(ctx, expr, scope)
     }
     // A local whose initializer was refused is `T_ERROR`, and calling it

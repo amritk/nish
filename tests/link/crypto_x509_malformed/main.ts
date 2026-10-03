@@ -35,9 +35,9 @@ import {
   x509DerSignatureRS,
   x509ParseCertificate,
   x509ParseChain,
-  x509ParseP256PrivateKey,
   x509VerifySignature,
 } from "nish/crypto/x509"
+import { x509ParseP256PrivateKeyPlain as x509ParseP256PrivateKey } from "../crypto_x509/plain"
 import {
   A25_PRIVATE,
   CA_PEM,

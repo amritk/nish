@@ -28,10 +28,17 @@
 // have one. They print after the performance warnings, on the same streams,
 // and neither flag says anything about the other class.
 //
+// `--fix` rewrites the files on the command line with the machine-applicable
+// fixes their diagnostics carry, round after round (`src/fix.ts`), and then
+// reports what is left as this driver reports any compile, less the IR.
+//
 // `--emit-header`, `--emit-dts` and `--emit-napi` write the WP8 sidecars
 // beside the IR, spelled and placed exactly as stage0 spells and places them
 // (`tests/self/interop_oracle.js` compares every byte), each into a directory
-// made the way the IR's is.
+// made the way the IR's is. `--emit-capabilities` writes the WP35 report the
+// same way (`src/capability-report.ts`), and `--capabilities` prints its one
+// line summary on stderr after the compile — before the program starts, under
+// `run`, so the program's own stdout stays untouched.
 //
 // `-o`, `--link` and `--profile` are stage1's too, which is D4 answered rather
 // than kept: `mkdirSync` and `spawnSync` are two runtime calls, and with them
@@ -52,6 +59,7 @@
 // this one's) because there is nothing between them to be an oracle.
 
 import { astText } from "./ast-text"
+import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
 import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
@@ -66,12 +74,13 @@ import { basenameWithout, dirname } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
-import { internalErrorFor, simulatedInternalError } from "./ice"
+import { fixProgram, loadRoots } from "./fix"
+import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import { fnv1a64Hex, runBinaryName, runCacheKey, runCacheRoot } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-capabilities <file.json>] [--capabilities]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -247,6 +256,22 @@ const reportRootFailure = (message: string, json: boolean): void => {
 }
 
 /**
+ * A program that did not load: a root that could not be opened, or the
+ * diagnostics of the module that failed to parse or Phase 0.
+ */
+const reportLoadFailure = (compilation: Compilation, json: boolean): void => {
+  if (compilation.unreadableRoot.length > 0) {
+    // stage0 answers a root it cannot open with the syscall it failed at,
+    // on stderr with an `error:` prefix, or as one JSON object under
+    // `--json` (stage0's `src/index.ts`). The errno itself stays stage0's: Node names
+    // it, and `readFileSyncOrNull` answers null without saying why.
+    reportRootFailure(`cannot open ${compilation.unreadableRoot}`, json)
+  } else if (compilation.sink.hasErrors()) {
+    report(compilation, json)
+  }
+}
+
+/**
  * A `--link` failure: the C toolchain could not be used, so the run is wrong
  * rather than the program. stage0 shapes it the same way (`failureJson` in
  * stage0's `src/index.ts`) and both carry the band-0 code, so a reader parses one shape
@@ -328,14 +353,19 @@ export const main = (): number => {
   // a `std/` the checkout it was run in supplied (docs/security/cli.md, CLI-2).
   // The import then fails naming where the library should have been.
   opts.packageRoot = libraryRoot()
+  opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
   // `nish run [flags] <file.ts> [args ...]`: the flags before the file are the
   // compiler's and everything after it is the program's, so a script is run by
   // the same line a shebang writes. The debug recipe is the default because a
   // script is relinked on every edit, and its link is the fast one.
   const runMode = process.argv.length >= 2 && process.argv[1] === "run"
-  // The first flag seen that writes a product `run` keeps to itself, refused
-  // once the whole line is read rather than wherever it happened to appear.
+  // The first flag seen that asks for a product — IR at a chosen path, a
+  // binary, a sidecar or a dump — which neither `run` nor `--fix` writes, and
+  // the first of the others `run` refuses (`--target`, `--fix`). Both are
+  // refused once the whole line is read rather than wherever they appeared.
+  let productFlag = ""
   let notForRun = ""
+  let fix = false
   let runArgsFrom = process.argv.length
   const roots: string[] = []
   let output = ""
@@ -344,6 +374,10 @@ export const main = (): number => {
   let json = false
   let emitChecked = false
   let emitAst = false
+  // WP35: the report file, and whether to print the one-line summary. Both are
+  // driver-level, like the warnings: they change no byte of the IR.
+  let capabilitiesFile = ""
+  let capabilitiesLine = false
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
@@ -366,7 +400,7 @@ export const main = (): number => {
       }
       opts.numberMode = mode === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32
     } else if (value === "-o" || value === "--output") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: -o needs a file or a directory")
@@ -374,7 +408,7 @@ export const main = (): number => {
       }
       output = process.argv[arg]
     } else if (value === "--link") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --link needs an output name")
@@ -414,7 +448,7 @@ export const main = (): number => {
       // own flag loop, so the emitter never asks the machine anything.
       opts.target = resolved.triple
     } else if (value === "--emit-header") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --emit-header needs a file")
@@ -422,7 +456,7 @@ export const main = (): number => {
       }
       opts.emitHeader = process.argv[arg]
     } else if (value === "--emit-dts") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --emit-dts needs a file")
@@ -430,7 +464,7 @@ export const main = (): number => {
       }
       opts.emitDts = process.argv[arg]
     } else if (value === "--emit-napi") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --emit-napi needs a file")
@@ -438,13 +472,26 @@ export const main = (): number => {
       }
       opts.emitNapi = process.argv[arg]
     } else if (value === "--emit-napi-async") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
       if (arg >= process.argv.length) {
         console.error("compile: --emit-napi-async needs a file")
         return 2
       }
       opts.emitNapiAsync = process.argv[arg]
+    } else if (value === "--emit-capabilities") {
+      productFlag = productFlag.length === 0 ? value : productFlag
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-capabilities needs a file")
+        return 2
+      }
+      capabilitiesFile = process.argv[arg]
+    } else if (value === "--capabilities") {
+      capabilitiesLine = true
+    } else if (value === "--fix") {
+      notForRun = notForRun.length === 0 ? value : notForRun
+      fix = true
     } else if (value === "--plain") {
       opts.optimizeAttributes = false
     } else if (value === "--strict-exports") {
@@ -476,10 +523,10 @@ export const main = (): number => {
       json = true
       opts.json = true
     } else if (value === "--emit-checked") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       emitChecked = true
     } else if (value === "--emit-ast") {
-      notForRun = notForRun.length === 0 ? value : notForRun
+      productFlag = productFlag.length === 0 ? value : productFlag
       emitAst = true
     } else if (value === "-h" || value === "--help") {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
@@ -516,9 +563,10 @@ export const main = (): number => {
     return 2
   }
   if (runMode) {
-    if (notForRun.length > 0) {
+    if (notForRun.length > 0 || productFlag.length > 0) {
+      const refused = productFlag.length > 0 ? productFlag : notForRun
       console.error(
-        `run: \`${notForRun}\` cannot be used with \`${CLI} run\`, which builds the program into its cache and runs it; compile with \`${CLI} <file.ts>\` to write it`
+        `run: \`${refused}\` cannot be used with \`${CLI} run\`, which builds the program into its cache and runs it; compile with \`${CLI} <file.ts>\` to write it`
       )
       return 2
     }
@@ -530,6 +578,31 @@ export const main = (): number => {
     // prints it on every run, into the stream the script's own errors use.
     // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
+  }
+  // After the `run` refusals, which already cover `--fix` under `run`, so
+  // that this one is only ever about a compile.
+  if (fix && productFlag.length > 0) {
+    console.error(
+      `compile: \`${productFlag}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
+    )
+    return 2
+  }
+  // `--capabilities` is no product, so `run` takes it, but `--fix` answers
+  // before the checker the line is read from: refused rather than dropped.
+  if (fix && capabilitiesLine) {
+    console.error(
+      "compile: `--capabilities` cannot be used with --fix, which answers before the program is analysed; fix first, then ask"
+    )
+    return 2
+  }
+  // `--emit-ast` answers before the checker runs, and a capability is a fact
+  // about a checked program, so the two would otherwise meet in silence.
+  // After `run`'s own refusals, which name the flag `run` cannot take.
+  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine)) {
+    console.error(
+      `compile: \`${capabilitiesLine ? "--capabilities" : "--emit-capabilities"}\` reports on a checked program, and --emit-ast stops before the check`
+    )
+    return 2
   }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.
@@ -576,30 +649,30 @@ export const main = (): number => {
     return internalErrorFor(`simulated internal compiler error while compiling ${roots[0]}`, json)
   }
 
+  // `--fix` (`src/fix.ts`): rewrite the named files until no fix applies, then
+  // answer what is left exactly as a run without the flag would — the same
+  // report, the same warnings, the same exit code — less the IR.
+  if (fix) {
+    const outcome = fixProgram(opts, roots, warnPerformance)
+    if (!outcome.loaded) {
+      reportLoadFailure(outcome.compilation, json)
+      return 1
+    }
+    if (!outcome.checked) {
+      report(outcome.compilation, json)
+      return 1
+    }
+    reportPerformance(outcome.compilation, warnPerformance, json)
+    reportPortability(outcome.compilation, json)
+    return 0
+  }
+
   const compilation = new Compilation(opts)
   // The tree is printed from what parsed and validated, so pass 1's refusals
   // do not stop the load — stage0 records them and reaches its dump first.
   compilation.dumpOnly = emitAst
-  let loaded = true
-  for (const root of roots) {
-    // A root is named by the path it was given, but its identity is
-    // `identityOf` that path, so a root the entry already imports under
-    // another spelling is found in `byPath` rather than loaded twice.
-    if (!compilation.load(root, root, "")) {
-      loaded = false
-      break
-    }
-  }
-  if (!loaded) {
-    if (compilation.unreadableRoot.length > 0) {
-      // stage0 answers a root it cannot open with the syscall it failed at,
-      // on stderr with an `error:` prefix, or as one JSON object under
-      // `--json` (stage0's `src/index.ts`). The errno itself stays stage0's: Node names
-      // it, and `readFileSyncOrNull` answers null without saying why.
-      reportRootFailure(`cannot open ${compilation.unreadableRoot}`, json)
-    } else if (compilation.sink.hasErrors()) {
-      report(compilation, json)
-    }
+  if (!loadRoots(compilation, roots, false)) {
+    reportLoadFailure(compilation, json)
     return 1
   }
   // `--emit-ast` needs only the parsed and Phase 0 validated modules, so it
@@ -626,20 +699,40 @@ export const main = (): number => {
   }
   reportPerformance(compilation, warnPerformance, json)
   reportPortability(compilation, json)
+  // `--link` needs an entry point, and stage0 says so before it emits
+  // anything rather than letting the linker answer `undefined reference to
+  // main` two steps later. It is asked before the capability line too, so a
+  // run that will not start prints the refusal alone (WP35): the line is
+  // promised for a program about to run. The checked dump writes no binary
+  // and needs no entry, as it never has.
+  if (
+    !emitChecked &&
+    (link.length > 0 || runMode) &&
+    compilation.entry().checker.program.entryMain === null
+  ) {
+    console.error(
+      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
+    )
+    return 1
+  }
+  // WP35: read off the checked program, so answered here, before the dump
+  // returns and before `run` starts the program -- the line is the last
+  // thing on stderr before the program's own output.
+  if (capabilitiesLine) {
+    console.error(capabilitySummary(compilation))
+  }
+  if (capabilitiesFile.length > 0) {
+    if (!makeDirectoryFor(capabilitiesFile)) {
+      return 1
+    }
+    writeCapabilityReport(compilation, capabilitiesFile)
+    console.error(`wrote ${capabilitiesFile}`)
+  }
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {
     write(checkedText(compilation))
     return 0
-  }
-  // `--link` needs an entry point, and stage0 says so before it emits
-  // anything rather than letting the linker answer `undefined reference to
-  // main` two steps later.
-  if ((link.length > 0 || runMode) && compilation.entry().checker.program.entryMain === null) {
-    console.error(
-      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
-    )
-    return 1
   }
   // A sidecar that cannot describe the program is refused before any IR is
   // emitted or written, so a failed compile leaves nothing behind that the

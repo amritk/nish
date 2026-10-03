@@ -35,8 +35,9 @@
 //   - **Parent links come from a side table** (`src/parents.ts`), since the
 //     tree has none. The walks are otherwise the same walks.
 
+import { WIPE_MEMSET } from "./emit-secret"
+import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
 import {
-  builtinCallees,
   builtinCalleesNamed,
   checksRangesInPrologue,
   identifierBuiltinCallees,
@@ -44,9 +45,12 @@ import {
   isSpawnCall,
   panicTailCallees,
 } from "./emit-builtins"
+import { isBuiltinFunction } from "./builtins"
 import { numericLiteralValue } from "./constants"
+import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
 import { stringifyCallee, stringConstructCallees } from "./emit-strings"
+import { unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
   decideLoopScopes,
@@ -59,11 +63,13 @@ import {
 } from "./escape"
 import {
   arrayMethodName,
+  builtinNameOf,
   isArrayWriteMethod,
   dottedName,
   intrinsicType,
   isAssignmentOperator,
   isAssignmentTarget,
+  isArenaCall,
   isPushCall,
   builtinArgumentLetters,
   isWrittenArgument,
@@ -77,6 +83,7 @@ import {
   unwrapParens,
 } from "./emit-util"
 import { StringMap, StringSet } from "./map"
+import { compareStrings } from "./strings"
 import {
   N_ARRAY,
   N_BINARY,
@@ -98,6 +105,7 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
+  N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_THIS,
@@ -123,7 +131,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
-import { resultLayout } from "./result"
+import { isResultConstructor, resultLayout } from "./result"
 import {
   isInteger,
   K_ARRAY,
@@ -318,6 +326,17 @@ export class FunctionFacts {
    * carries `sharedWrite`; `""` when `writeSite` is set.
    */
   writeVia: string
+  /**
+   * `nish:secret`: the first thing this body *itself* does that reaches the
+   * world — a builtin that reads or writes a file, a process, the
+   * environment, a socket, the clock, entropy or a stream, or a `panic`,
+   * `process.exit` or `expect` whose message or status is computed — named as
+   * the program spells it, or "". A `panic("...")` or `process.exit(1)` with a
+   * literal is left out: what leaves then is a constant the program wrote. Not
+   * a fixpoint: `exposeMessages` walks the callees itself, so it can name the
+   * path.
+   */
+  worldVia: string
   effect: i32
   willReturn: boolean
   /** Can reach a `noreturn` runtime call, directly or through a callee. */
@@ -371,6 +390,14 @@ export class FunctionFacts {
    * the position invalidates nothing, so it must not cost a function its scope.
    */
   readsArenaState: boolean
+  /**
+   * Opens a `using a = arena()` block, directly or through a callee
+   * (fixpoint). Kept apart from `readsArenaState` and `managesArena`, which
+   * read `nish_arena_mark` out of `callees`: the block's mark is the
+   * compiler's, checked like a pass's, so it costs no function its scopes. It
+   * is what refuses the block in a parallel body (`arenaMessage`).
+   */
+  opensArena: boolean
   /** Calls to pointer-returning user functions and where each result flows. */
   callSites: CallSite[]
   /** `EscapeResult.escapingNodes`: the sites whose value escapes. */
@@ -426,6 +453,26 @@ export class FunctionFacts {
    */
   hoistedHeaders: HoistedHeader[]
   hoistedScopeStarts: i32[]
+  // ---- WP35 capabilities (docs/wp35-capabilities.md) ----
+  /**
+   * The capabilities this function can reach, one bit each (`src/capabilities.ts`),
+   * directly or through a callee (`propagateCapabilities`). Round 2 only: round
+   * 1's facts carry none, because nothing reads them before the report.
+   */
+  caps: i32
+  /**
+   * The witness of each capability in `caps`, by the capability's index:
+   * what the chain calls next (a builtin's name, a `declare function`'s name,
+   * or a user callee's symbol), the call that does it, and how many calls
+   * away the builtin is (0 when `via` is the builtin itself). Empty until the
+   * first bit is set, so a function that reaches nothing allocates nothing.
+   */
+  capVia: string[]
+  capSite: (Node | null)[]
+  capDist: i32[]
+  /** Every call to a user function, by callee symbol and call node, in walk order: the edges the witnesses follow. */
+  capCallees: string[]
+  capSites: Node[]
 
   constructor(paramNames: string[], nodeCount: i32) {
     this.hasLoops = false
@@ -436,6 +483,7 @@ export class FunctionFacts {
     this.sharedWrite = false
     this.writeSite = null
     this.writeVia = ""
+    this.worldVia = ""
     this.effect = EFFECT_NONE
     this.willReturn = true
     this.callsNoReturn = false
@@ -459,6 +507,7 @@ export class FunctionFacts {
     this.returnsAllocation = false
     this.usesArenaControl = false
     this.readsArenaState = false
+    this.opensArena = false
     this.callSites = []
     this.escapingNodes = []
     this.arenaNodes = []
@@ -470,6 +519,53 @@ export class FunctionFacts {
     this.allocatesItself = false
     this.managesArena = false
     this.netAllocates = false
+    this.caps = 0
+    this.capVia = []
+    this.capSite = []
+    this.capDist = []
+    this.capCallees = []
+    this.capSites = []
+  }
+
+  /**
+   * WP35: offer `site` as the witness of the capability with index `index`,
+   * `dist` calls from the builtin, through `via`; answers whether it was
+   * taken. The shorter chain wins, then the earlier site in this function's
+   * source, then the smaller `via`, so the witness the fixpoint settles on is
+   * the same whatever order it visited the program in.
+   */
+  offerCapability(index: i32, via: string, site: Node, dist: i32): boolean {
+    if (this.capVia.length === 0) {
+      const none: Node | null = null
+      let i = 0
+      while (i < CAPABILITY_COUNT) {
+        this.capVia.push("")
+        this.capSite.push(none)
+        this.capDist.push(0)
+        i = i + 1
+      }
+    }
+    const bit = 1 << index
+    const held = this.capSite[index]
+    if ((this.caps & bit) !== 0 && held !== null) {
+      const heldDist = this.capDist[index]
+      if (dist > heldDist) {
+        return false
+      }
+      if (dist === heldDist) {
+        if (site.start > held.start) {
+          return false
+        }
+        if (site.start === held.start && compareStrings(via, this.capVia[index]) >= 0) {
+          return false
+        }
+      }
+    }
+    this.caps = this.caps | bit
+    this.capVia[index] = via
+    this.capSite[index] = site
+    this.capDist[index] = dist
+    return true
   }
 
   /** The pointer facts of the parameter called `name`, or `null` when it is not one. */
@@ -1246,18 +1342,20 @@ class FactCollector {
     const fused: FunctionSig[] | null =
       node.kind === N_CALL ? fusedCalleesOf(program, this.table, node) : null
     if (fused !== null) {
-      this.addSigs(fused)
+      for (const sig of fused) {
+        this.addUserCallee(sig.name, node)
+      }
     } else if (node.kind === N_CALL) {
       const callee = program.nodeCallees[node.id]
       if (callee !== null) {
-        this.facts.callees.add(callee.name)
+        this.addCallee(callee, node)
       }
       // WP32: `m.get(k)`, whose type is a maybe, is a `probe` and, when it
       // finds the key, that table's `valueAt` (`checkMapGet`).
       const reads: FunctionSig | null =
         callee !== null && this.table.isMaybe(program.nodeTypes[node.id]) ? valueReaderOf(callee) : null
       if (reads !== null) {
-        this.facts.callees.add(reads.name)
+        this.addUserCallee(reads.name, node)
       }
     }
     // WP32: a walk of a `Map` or `Set` calls the table's four walk methods
@@ -1266,7 +1364,7 @@ class FactCollector {
       const read = program.nodeCallees[node.id]
       if (read !== null) {
         for (const sig of walkMethodsOf(read)) {
-          this.facts.callees.add(sig.name)
+          this.addUserCallee(sig.name, node)
         }
       }
     }
@@ -1287,15 +1385,85 @@ class FactCollector {
     }
   }
 
-  addSigs(sigs: FunctionSig[]): void {
-    for (const sig of sigs) {
-      this.facts.callees.add(sig.name)
+  /**
+   * A call to a user function: a callee for the attribute fixpoint and, in
+   * round 2, an edge a capability can arrive along (WP35). One helper for
+   * both, so that no kind of call can reach the first and miss the second.
+   */
+  addUserCallee(callee: string, site: Node): void {
+    this.facts.callees.add(callee)
+    if (this.known !== null) {
+      this.facts.capCallees.push(callee)
+      this.facts.capSites.push(site)
+    }
+  }
+
+  /**
+   * A call whose callee has a signature. A `declare function`'s body is C, so
+   * the call is where `ffi` is exercised and the chain ends there, named by the
+   * declaration as written (WP35); any other callee is a user one.
+   */
+  addCallee(callee: FunctionSig, call: Node): void {
+    if (!callee.foreign()) {
+      this.addUserCallee(callee.name, call)
+      return
+    }
+    this.facts.callees.add(callee.name)
+    if (this.known !== null) {
+      this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
+    }
+  }
+
+  /**
+   * WP35: a builtin call, by the name the checker knows it by, seeds its one
+   * label (`builtinCapability`); round 2 only, which its callers check. A
+   * builtin with no row is a broken invariant rather than a program error --
+   * the table is meant to be total, and `tests/capabilities.js` holds it to
+   * that -- so it ends the compile with the exit-70 report. `Options.unlabelledBuiltin` is the suite's way of
+   * provoking that path (`NISH_SIMULATE_ICE=unlabelled:<name>`).
+   */
+  noteBuiltin(name: string, call: Node, resolved: boolean): void {
+    const label = name === this.opts.unlabelledBuiltin ? CAP_UNLABELLED : builtinCapability(name)
+    if (label === CAP_UNLABELLED) {
+      // `resolved` says the checker recorded the call as a builtin. A plain
+      // name with no row is one only if the checker accepts it as one; any
+      // other call with no recorded callee is none this table speaks for.
+      if (!resolved && !isBuiltinFunction(name) && !isResultConstructor(name)) {
+        return
+      }
+      process.exit(unlabelledBuiltinError(name, this.opts.json))
+    }
+    if (label !== CAP_NONE) {
+      this.facts.offerCapability(label, name, call, 0)
     }
   }
 
   addCallees(names: string[]): void {
     for (const name of names) {
       this.facts.callees.add(name)
+    }
+  }
+
+  /**
+   * `nish:secret`: whether the builtin call `node`, spelled `name`, which
+   * lowers to `symbols`, reaches the world (`FunctionFacts.worldVia`). A
+   * `panic` or an exit given a literal is the one call that ends the process
+   * without saying anything computed, and it is let through.
+   */
+  noteWorld(node: Node, symbols: string[], name: string): void {
+    if (this.facts.worldVia.length > 0) {
+      return
+    }
+    const args = node.children[1].children
+    const constant = args.length === 1 && (args[0].kind === N_STRING || isNumericLiteral(args[0]))
+    if (constant && (name === "panic" || name === "process.exit")) {
+      return
+    }
+    for (const symbol of symbols) {
+      if (!isPureRuntime(symbol)) {
+        this.facts.worldVia = `\`${name}\``
+        return
+      }
     }
   }
 
@@ -1312,7 +1480,13 @@ class FactCollector {
       node.children[0].kind === N_MEMBER &&
       !receiverIsValue(program, node.children[0].children[0])
     ) {
-      this.addCallees(builtinCallees(program, table, node))
+      const name = dottedName(node.children[0])
+      const dotted = builtinCalleesNamed(program, table, node, name)
+      this.addCallees(dotted)
+      this.noteWorld(node, dotted, name)
+      if (this.known !== null) {
+        this.noteBuiltin(name, node, true)
+      }
       // WP34 N3: the entropy fill writes its argument's elements, which is
       // a write to a shared array unless the array is this function's own.
       this.noteWrittenArguments(node)
@@ -1405,7 +1579,7 @@ class FactCollector {
       }
       const ctor = constructorOf(program, table, intrinsicType(program, node))
       if (ctor !== null) {
-        this.facts.callees.add(ctor.name)
+        this.addUserCallee(ctor.name, node)
       }
       return
     }
@@ -1455,6 +1629,10 @@ class FactCollector {
           const tail: string[] = []
           panicTailCallees(tail)
           this.addCallees(tail)
+          const args = node.children[1].children
+          if (this.facts.worldVia.length === 0 && (args.length === 0 || args[0].kind !== N_STRING)) {
+            this.facts.worldVia = "`expect` with a computed message"
+          }
         }
         return
       }
@@ -1687,14 +1865,23 @@ class FactCollector {
     // it has not earned.
     const unchecked = this.opts.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
+    if (this.known !== null) {
+      this.noteBuiltin(builtinNameOf(this.unit.program, node), node, imported.length > 0)
+    }
     if (imported.length > 0) {
-      this.addCallees(
+      const named =
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
           : builtinCalleesNamed(this.unit.program, this.table, node, imported)
-      )
+      this.addCallees(named)
+      this.noteWorld(node, named, imported)
     } else {
-      this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node, unchecked))
+      const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
+      this.addCallees(plain)
+      this.noteWorld(node, plain, node.children[0].text)
+    }
+    if (isArenaCall(this.unit.program, node)) {
+      this.facts.opensArena = true
     }
     // WP34 N5: `netAddress`, `tcpAccept` and `netRead` write a `u8[]` they
     // are handed.
@@ -1772,6 +1959,7 @@ const collectFacts = (
   if (sig.foreign()) {
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true // no site and no callee to name: the body is C
+    facts.worldVia = `the C function \`${sig.sourceName}\`` // `nish:secret`: nothing about C is proved
     facts.willReturn = false
     facts.readsMemory = true
     // S1's boundary is scalars only, so a C body cannot reach an array header
@@ -1810,6 +1998,16 @@ const collectFacts = (
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
+    // WP35: the routed code runs in place of the body, so its capabilities
+    // are this instance's, arriving at the declaration (no call names them).
+    if (known !== null) {
+      for (const callee of routeCalleesOf(table, sig)) {
+        collector.addUserCallee(callee.name, sig.decl)
+      }
+    }
+  }
+  if (secretRoleOf(sig) === SECRET_WIPE) {
+    markWipe(facts)
   }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
@@ -1888,6 +2086,28 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
   }
 }
 
+/**
+ * `nish:secret`'s `wipe`: the source body is empty and the emitter writes the
+ * real one, a volatile `llvm.memset` over the target's storage
+ * (`src/emit-secret.ts`). Facts read off the empty body would call the
+ * instance `readnone` and its parameter `readonly`, and a caller's buffer
+ * `readonly` through it — a store into memory LLVM was told is never written,
+ * which is undefined behaviour and the licence to drop the wipe. So the
+ * instance says what its emitted body does: it reads the header or the field
+ * that leads to the bytes, writes through its parameter, and the write is one
+ * its caller can see, because the caller's key is what it zeroes. It keeps
+ * nothing, so the parameter stays uncaptured.
+ */
+const markWipe = (facts: FunctionFacts): void => {
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.sharedWrite = true
+  facts.callees.add(WIPE_MEMSET)
+  if (facts.pointerParams.length > 0) {
+    facts.pointerParams[0].writesThrough = true
+  }
+}
+
 // ---- The fixpoint ------------------------------------------------------------------------
 
 /**
@@ -1932,6 +2152,7 @@ export const analyzeFunctions = (
   // then: it is syntax plus the call graph, and neither moves between rounds.
   const facts = collectRound(units, table, opts, escapes, first)
   propagate(facts, runtime)
+  propagateCapabilities(facts)
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
     f.contained = f.contained || !f.allocEscapes
@@ -2305,11 +2526,147 @@ const propagateCallee = (
       f.readsArenaState = true
       changed = true
     }
+    if (calleeFacts.opensArena && !f.opensArena) {
+      f.opensArena = true
+      changed = true
+    }
   }
   return changed
 }
 
 const hasAttr = (attrs: string[], name: string): boolean => attrs.indexOf(name) >= 0
+
+/**
+ * WP35: carry every function's capabilities to its callers, over the edges
+ * round 2's walk recorded, until nothing moves (docs/wp35-capabilities.md
+ * §3). A caller reaches what each callee reaches, one call further away, and
+ * keeps the shortest chain per capability (`offerCapability`).
+ *
+ * It is a relaxation of its own rather than more of `propagateCallee`: no
+ * attribute reads a capability, so the attribute fixpoint converges exactly
+ * as it did, and a witness needs each edge's call site, which `callees` -- a
+ * set of symbols -- does not keep.
+ *
+ * A worklist over the edges turned round, rather than whole passes over the
+ * program until one changes nothing: only a function whose witnesses just
+ * moved can move its callers', and on `src/` the passes cost three times what
+ * this does. The order the list is worked in cannot change the answer. A
+ * callee's offers only ever get shorter, so the smallest offer a caller holds
+ * at the end is the smallest of the callees' final ones, and that minimum is
+ * one value whichever order it was reached in. It terminates because a bit is
+ * only ever set and a witness only ever replaced by a shorter or earlier one.
+ */
+const propagateCapabilities = (facts: FactsTable): void => {
+  const list = facts.list
+  // The edges turned round, as one flat list grouped by callee: the callers of
+  // the function at index g are `fromFn[starts[g]]` up to `ends[g]`, and
+  // `fromEdge` is the edge's index in that caller's `capCallees`.
+  const calleeAt: i32[] = []
+  const counts: i32[] = []
+  while (counts.length < list.length) {
+    counts.push(0)
+  }
+  for (const f of list) {
+    for (const callee of f.capCallees) {
+      const g = facts.indexOf(callee)
+      calleeAt.push(g)
+      if (g >= 0 && g < counts.length) {
+        counts[g] = counts[g] + 1
+      }
+    }
+  }
+  const starts: i32[] = []
+  const ends: i32[] = []
+  let total = 0
+  for (const count of counts) {
+    starts.push(total)
+    total = total + count
+    ends.push(total)
+  }
+  const next: i32[] = []
+  for (const start of starts) {
+    next.push(start)
+  }
+  const fromFn: i32[] = []
+  const fromEdge: i32[] = []
+  let slot = 0
+  while (slot < total) {
+    fromFn.push(0)
+    fromEdge.push(0)
+    slot = slot + 1
+  }
+  let k = 0
+  let fi = 0
+  for (const f of list) {
+    let e = 0
+    while (e < f.capCallees.length && k < calleeAt.length) {
+      const g = calleeAt[k]
+      if (g >= 0 && g < next.length) {
+        const at = next[g]
+        next[g] = at + 1
+        if (at >= 0 && at < fromFn.length && at < fromEdge.length) {
+          fromFn[at] = fi
+          fromEdge[at] = e
+        }
+      }
+      e = e + 1
+      k = k + 1
+    }
+    fi = fi + 1
+  }
+  // Every function that reaches something starts on the list.
+  const queue: i32[] = []
+  const queued: boolean[] = []
+  let i = 0
+  for (const f of list) {
+    const seeded = f.caps !== 0
+    queued.push(seeded)
+    if (seeded) {
+      queue.push(i)
+    }
+    i = i + 1
+  }
+  let head = 0
+  while (head < queue.length) {
+    const gi = queue[head]
+    head = head + 1
+    if (gi < 0 || gi >= list.length || gi >= queued.length || gi >= starts.length || gi >= ends.length) {
+      continue
+    }
+    queued[gi] = false
+    const g = list[gi]
+    let r = starts[gi]
+    const end = ends[gi]
+    while (r >= 0 && r < end && r < fromFn.length && r < fromEdge.length) {
+      const ci = fromFn[r]
+      const e = fromEdge[r]
+      // The call ends what a guard before it proved, so `queued` is guarded after it.
+      if (ci >= 0 && ci < list.length && relaxEdge(list[ci], e, g)) {
+        if (ci < queued.length && !queued[ci]) {
+          queued[ci] = true
+          queue.push(ci)
+        }
+      }
+      r = r + 1
+    }
+  }
+}
+
+/** Offer each of `g`'s capabilities to `f` along `f`'s edge `e`; answers whether any witness of `f`'s moved. */
+const relaxEdge = (f: FunctionFacts, e: i32, g: FunctionFacts): boolean => {
+  if (e < 0 || e >= f.capCallees.length || e >= f.capSites.length) {
+    return false
+  }
+  let moved = false
+  let c = 0
+  while (c < CAPABILITY_COUNT && c < g.capDist.length) {
+    if ((g.caps & (1 << c)) !== 0 && f.offerCapability(c, f.capCallees[e], f.capSites[e], g.capDist[c] + 1)) {
+      moved = true
+    }
+    c = c + 1
+  }
+  return moved
+}
 
 /**
  * WP29 P1: calling `callee`, whose facts and runtime entry the caller has
@@ -2740,3 +3097,7 @@ export const returnAttributes = (
   }
   return attrs
 }
+
+/** A numeric literal, negated or not: `process.exit(1)`, `process.exit(-1)`. */
+const isNumericLiteral = (node: Node): boolean =>
+  node.kind === N_NUMBER || (node.kind === N_UNARY && node.text === "-" && node.children[0].kind === N_NUMBER)
