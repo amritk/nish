@@ -114,6 +114,14 @@ export class Options {
    */
   rangeReference: boolean
   /**
+   * WP35: a builtin the capability audit is to treat as having no row, so the
+   * suite can reach the exit-70 path an unlabelled builtin takes
+   * (`noteBuiltin` in `src/attributes.ts`). A test hook read from
+   * `NISH_SIMULATE_ICE=unlabelled:<name>` (`src/ice.ts`), never a flag; `""`
+   * otherwise.
+   */
+  unlabelledBuiltin: string
+  /**
    * `--warn-portability` (WP33, docs/wp33-round-trip.md §5.2): run the
    * portability pass after checking and report the sites where the program's
    * TypeScript reading answers differently. It changes no byte of the IR; it
@@ -151,6 +159,7 @@ export class Options {
     this.packageRoot = ""
     this.json = false
     this.rangeReference = false
+    this.unlabelledBuiltin = ""
     this.warnPortability = false
     this.emitPanics = ""
   }

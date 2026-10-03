@@ -35,6 +35,7 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 [Declarations](#declarations) ·
 [Statements](#statements) · [Expressions](#expressions) ·
 [Builtins](#builtins) · [`Map` and `Set`](#map-and-set) ·
+[Capabilities](#capabilities) ·
 [Semantics decisions](#semantics-decisions) ·
 [Memory model](#memory-model) ·
 [Forbidden constructs](#forbidden-constructs-phase-0-validator) ·
@@ -5246,6 +5247,62 @@ export const main = (): i32 => {
   hold one it was given and pass it back; `--emit-dts` and `--emit-napi` leave
   a function that takes or returns one unbridged, with the comment they write
   for a class.
+
+### Capabilities
+
+Every builtin carries exactly one **capability** label, or a deliberate none,
+and the compiler works out which capabilities every function, module and
+package can reach — directly, through any chain of calls, across packages — with
+one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
+**It is a report today**: no program is refused for what it reaches.
+
+| Capability | Builtins |
+| --- | --- |
+| `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
+| `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
+| `env` | `getenv` (`caps_env`) |
+| `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
+| `ffi` | any call to a `declare function` (`caps_ffi`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync` (`caps_fs_read`) |
+| `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
+| `net` | every `nish:net` export (`caps_net`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
+| `signal` | `signalFd`, `readSignal` (`caps_signal`) |
+| `unsafe` | reserved; nothing carries it yet |
+
+Everything else is none: printing (`console.*`, `write`, `writeError`),
+`process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
+`Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
+string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
+`nish:` import carries the label of the builtin it renames.
+
+- A function is judged **per instantiation**: `pick<i32, double>` and
+  `pick<string, firstLine>`, or `apply<lengthOf>` and `apply<(name) => ...>`,
+  are separate entries with separate sets (`caps_generic`, `caps_fnarg`). A
+  module's set is the union over its functions, a package's over its modules,
+  and the program's is `main`'s closure (`tests/link/caps_package`). A
+  parallel body cannot reach a capability at all: every builtin that carries one
+  writes memory the runtime shares (`tests/link/caps_parallel`,
+  `reject_caps_parallel_clock`).
+- A program is **deterministic** when it reaches none of `clock`, `entropy`,
+  `env`, `ffi`, `fs.read`, `fs.write`, `net` and `process.spawn`: the same argv
+  and stdin then give the same output. `exit` and `signal` keep a program
+  deterministic (`caps_exit`, `caps_signal`).
+- `--emit-capabilities <file.json>` writes the report: version, entry,
+  `deterministic`, the program's set, then each package, module and exported
+  function (and every instantiation of one) with its set and a witness chain
+  per capability, `{ "function", "at": "path:line:col", "calls" }` per call.
+  Keys are in a fixed order, sets in the order of the table above, packages,
+  modules and functions sorted, and every path relative to the entry's
+  directory, so the file is byte-stable and diffable (`.caps.json` beside each
+  `caps_*` case). `nish run --capabilities` — or `--capabilities` on a compile —
+  prints one line on stderr, `capabilities: fs.read (not deterministic)` or
+  `capabilities: none (deterministic)`, before the program runs, and leaves its
+  stdout alone. `--emit-capabilities` without a file is a usage error, exit 2,
+  and so is either flag with `--emit-ast`, which stops before the checker;
+  with `--emit-checked` both are answered beside the dump, and
+  `--fix`, which answers before the program is analysed, takes neither. `nish run` refuses
+  `--emit-capabilities` as it refuses every product it keeps to itself.
 
 ## Semantics decisions
 
