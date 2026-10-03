@@ -543,12 +543,6 @@ export const main = (): number => {
     console.error(usageText())
     return 2
   }
-  if (fix && productFlag.length > 0) {
-    console.error(
-      `compile: \`${productFlag}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
-    )
-    return 2
-  }
   if (runMode) {
     if (notForRun.length > 0 || productFlag.length > 0) {
       const refused = productFlag.length > 0 ? productFlag : notForRun
@@ -565,6 +559,14 @@ export const main = (): number => {
     // prints it on every run, into the stream the script's own errors use.
     // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
+  }
+  // After the `run` refusals, which already cover `--fix` under `run`, so
+  // that this one is only ever about a compile.
+  if (fix && productFlag.length > 0) {
+    console.error(
+      `compile: \`${productFlag}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
+    )
+    return 2
   }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.

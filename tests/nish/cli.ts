@@ -512,6 +512,15 @@ const checkFixField = (t: Suite, cli: Cli): void => {
 
   const withOutput = cli.plain("fix_output", ["--fix", copy, "-o", `${WORK}/fix_copy.ll`]);
   t.eqI32("--fix with -o is a usage error, exit 2", withOutput.status, 2);
+  t.eqBool("and is refused as a compile", withOutput.stderr.startsWith("compile: "), true);
+
+  // Under `run` the refusal is `run`'s, in its words, whichever flag it names.
+  const underRun = cli.plain("fix_run", ["run", "--fix", copy]);
+  t.eqI32("`nish run --fix` is a usage error, exit 2", underRun.status, 2);
+  t.eqBool("refused as a run, naming --fix", underRun.stderr.startsWith("run: `--fix` cannot be used"), true);
+  const underRunOutput = cli.plain("fix_run_output", ["run", "--fix", "-o", `${WORK}/fix_copy.ll`, copy]);
+  t.eqI32("`nish run --fix -o` is a usage error, exit 2", underRunOutput.status, 2);
+  t.eqBool("refused as a run too, not as a compile", underRunOutput.stderr.startsWith("run: "), true);
 };
 
 /**

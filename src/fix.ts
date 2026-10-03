@@ -47,15 +47,22 @@ export class FixOutcome {
   }
 }
 
-/** Load every root and check the program, as one run of the compiler would. */
+/**
+ * Load every root and check the program, as one run of the compiler would —
+ * except that a root that fails to load does not stop the others. A plain run
+ * stops there because it has no IR to write after it; this one writes none
+ * anyway, and a Phase 0 refusal is exactly what a fix answers, so every named
+ * file is loaded each round and each one's fixes are collected in it.
+ */
 const compileRoots = (opts: Options, roots: string[]): FixOutcome => {
   const compilation = new Compilation(opts)
+  let loaded = true
   for (const root of roots) {
     if (!compilation.load(root, root, "")) {
-      return new FixOutcome(compilation, false, false)
+      loaded = false
     }
   }
-  return new FixOutcome(compilation, true, compilation.check())
+  return new FixOutcome(compilation, loaded, loaded && compilation.check())
 }
 
 /**

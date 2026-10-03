@@ -2967,9 +2967,77 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // in a directory of its own, because `--fix` rewrites the file it is given:
 // `<name>.ts` must come out as `<name>.fixed.ts` byte for byte and that must
 // compile clean, and `<name>.nofix.ts` must be reported with no `fix` key and
-// come out untouched. `tests/fix/README.md` is the table.
+// come out untouched. A directory is a case with more than one file, for what
+// the command line decides: which files are named, and which may be rewritten.
+// `tests/fix/README.md` is the table.
 {
   const fixDir = path.join(root, "tests", "fix")
+  // Every file of a directory case, as paths relative to it, depth first.
+  const filesUnder = (dir, prefix = "") =>
+    fs
+      .readdirSync(path.join(dir, prefix), { withFileTypes: true })
+      .flatMap((e) =>
+        e.isDirectory() ? filesUnder(dir, path.join(prefix, e.name)) : [path.join(prefix, e.name)]
+      )
+      .sort()
+  // A case's `node-modules/` is its `node_modules/`, renamed so git keeps it.
+  const workPath = (rel) => rel.replace(/^node-modules(?=\/)/, "node_modules")
+  const CONTROL = new Set(["argv", "exit", "rewrites"])
+  for (const name of fs.readdirSync(fixDir).sort()) {
+    const caseDir = path.join(fixDir, name)
+    if (!fs.statSync(caseDir).isDirectory() || (only && !name.includes(only) && !"fix".includes(only))) {
+      continue
+    }
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fix-"))
+    const sources = filesUnder(caseDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))
+    for (const rel of filesUnder(caseDir).filter((f) => !CONTROL.has(f) && !f.endsWith(".fixed.ts"))) {
+      fs.mkdirSync(path.dirname(path.join(work, workPath(rel))), { recursive: true })
+      fs.copyFileSync(path.join(caseDir, rel), path.join(work, workPath(rel)))
+    }
+    const argv = fs.readFileSync(path.join(caseDir, "argv"), "utf8").trim().split(/\s+/)
+    const exitFile = path.join(caseDir, "exit")
+    const wantExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : 0
+    const plain = spawnSync(NISH, ["--json", ...argv, "-o", "plain/"], { cwd: work, encoding: "utf8" })
+    check(
+      `fix ${name}: --json carries a \`fix\``,
+      plain.status === 1 && diagnosticsOf(plain.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+      shown(plain)
+    )
+    const fixed = spawnSync(NISH, ["--fix", "--json", ...argv], { cwd: work, encoding: "utf8" })
+    // Each source comes out as its `.fixed.ts`, or byte-identical when it has none.
+    const wrong = sources.filter((rel) => {
+      const expectedFile = path.join(caseDir, rel.replace(/\.ts$/, ".fixed.ts"))
+      const expected = fs.readFileSync(fs.existsSync(expectedFile) ? expectedFile : path.join(caseDir, rel))
+      return !fs.readFileSync(path.join(work, workPath(rel))).equals(expected)
+    })
+    check(
+      `fix ${name}: --fix exits ${wantExit}, rewrites each file with a .fixed.ts to it and leaves every other byte-identical`,
+      fixed.status === wantExit && wrong.length === 0,
+      `${shown(fixed)}\nnot as expected: ${wrong.join(", ")}`
+    )
+    const rewritesFile = path.join(caseDir, "rewrites")
+    if (fs.existsSync(rewritesFile)) {
+      const want = Number(fs.readFileSync(rewritesFile, "utf8").trim())
+      const rewrites = fixed.stderr.split("\n").filter((l) => l.startsWith("fixed ")).length
+      check(`fix ${name}: --fix rewrites a file ${want} times`, rewrites === want, shown(fixed))
+    }
+    if (wantExit === 0) {
+      const clean = spawnSync(NISH, ["--json", ...argv, "-o", "clean/"], { cwd: work, encoding: "utf8" })
+      check(
+        `fix ${name}: the fixed program compiles with no error`,
+        clean.status === 0 && diagnosticsOf(clean.stdout).every((d) => d.severity !== "error"),
+        shown(clean)
+      )
+    } else {
+      // What --fix may not apply is still reported, fix and all.
+      check(
+        `fix ${name}: the fix --fix may not apply is still reported with it`,
+        diagnosticsOf(fixed.stdout).some((d) => Array.isArray(d.fix) && d.fix.length > 0),
+        shown(fixed)
+      )
+    }
+    fs.rmSync(work, { recursive: true, force: true })
+  }
   const inputs = fs
     .readdirSync(fixDir)
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".fixed.ts"))

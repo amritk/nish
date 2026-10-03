@@ -124,7 +124,9 @@ Every `--json` object is flat:
   nothing or five have. Then it reports the last compile exactly as a run
   without `--fix` would, human or `--json`, and exits with its code; it writes
   no IR, so `-o`, `--link` and the other product flags are a usage error
-  (exit 2). Each rewrite prints `fixed <file> (N edits)` on stderr.
+  (exit 2). Each rewrite prints `fixed <file> (N edits)` on stderr. It
+  rewrites files **in place**, with no backup and no atomic swap, so run it on
+  a committed or backed-up tree.
 - A failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is still one JSON line,
   `{"severity","code","message"}`. Under `--json` you never have to read stderr

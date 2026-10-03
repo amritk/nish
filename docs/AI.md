@@ -82,7 +82,9 @@ program.ts` applies every fix to the files named on its command line (never to
 an import from `std/` or `node_modules`), recompiles, and repeats until nothing
 changes or five rounds pass; then it reports what is left exactly as a plain
 run would, `--json` included, and exits with that run's code. It writes no IR,
-so it refuses `-o` and `--link`. Run it first, then read what remains.
+so it refuses `-o` and `--link`. It rewrites your files in place, with no
+backup, so run it on a committed or backed-up tree. Run it first, then read
+what remains.
 
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both

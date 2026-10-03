@@ -30,13 +30,7 @@
 // Not shipped in the npm package.
 import { execFileSync } from "node:child_process"
 
-const FIXTURE_ROOTS = [
-  "tests/cases/",
-  "tests/wordings/",
-  "tests/link/",
-  "tests/differential/corpus/",
-  "tests/fix/",
-]
+const FIXTURE_ROOTS = ["tests/cases/", "tests/wordings/", "tests/link/", "tests/differential/corpus/"]
 
 const KEBAB_PART = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const SHOUTED_DOCUMENT = /^[A-Z][A-Z0-9]*([_-][A-Za-z0-9]+)*(\.[a-z]+)?$/
