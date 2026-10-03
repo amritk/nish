@@ -497,9 +497,22 @@ export function readFileBytesSync(path) {
   }
 }
 
+/**
+ * The flags `runtime-os.c` opens a file it writes with, `O_NOFOLLOW` included
+ * (docs/security/runtime.md, RT-4): a symbolic link as the last component of
+ * the path is refused rather than followed, so `writeFileSync`,
+ * `appendFileSync` and `spawnSyncTo` fail here where they fail natively. Node's
+ * `"w"` and `"a"` follow the link. A link among the directories on the way is
+ * still followed, as it is natively. Windows has no `O_NOFOLLOW`, and there the
+ * flag is 0.
+ */
+const { O_WRONLY, O_CREAT, O_TRUNC, O_APPEND, O_NOFOLLOW = 0 } = fs.constants;
+const WRITE_FLAGS = O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
+const APPEND_FLAGS = O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW;
+
 export function writeFileSync(path, data) {
   try {
-    fs.writeFileSync(path, data, "utf8");
+    fs.writeFileSync(path, data, { encoding: "utf8", flag: WRITE_FLAGS });
   } catch {
     ioFail("write", path);
   }
@@ -507,7 +520,7 @@ export function writeFileSync(path, data) {
 
 export function appendFileSync(path, data) {
   try {
-    fs.appendFileSync(path, data, "utf8");
+    fs.appendFileSync(path, data, { encoding: "utf8", flag: APPEND_FLAGS });
   } catch {
     ioFail("write", path);
   }
@@ -623,8 +636,9 @@ export function getenv(name) {
  *
  * `out` and `err` are paths for the child's stdout and stderr, and an **empty**
  * string leaves that stream inherited. Each file is created or truncated at
- * 0644, which is what `"w"` asks `open(2)` for (`O_WRONLY | O_CREAT | O_TRUNC`)
- * and what the runtime's file actions ask for. The descriptors opened here are
+ * 0644 with `WRITE_FLAGS`, which is what the runtime's file actions ask for:
+ * `O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW`, so a symbolic link at the path
+ * is refused and the answer is -1, on both sides. The descriptors opened here are
  * closed again whichever way the child went; natively the child opens them and
  * its exit drops them.
  */
@@ -633,7 +647,7 @@ function spawnImpl(argv, out, err) {
   const opened = [];
   const stream = (target) => {
     if (target.length === 0) return "inherit";
-    const fd = fs.openSync(target, "w", 0o644);
+    const fd = fs.openSync(target, WRITE_FLAGS, 0o644);
     opened.push(fd);
     return fd;
   };

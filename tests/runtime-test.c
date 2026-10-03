@@ -699,6 +699,73 @@ static void sec_dirty_stack(void) {
   for (size_t i = 0; i < sizeof junk; i++) junk[i] = 0xA5;
 }
 
+/* RT-10 to RT-13 each need a system call to misbehave on cue: a write that
+   takes only part of what it was given, a call that a signal interrupts
+   before it moves a byte, a second thread that makes the signal pipe first.
+   None of those can be made to happen on time from outside the process, so,
+   as with `strcmp` above, the definitions below are the ones the link
+   resolves the runtime's calls to. Until a check arms them they do the real
+   work through a neighbouring call (`writev`, `lseek` and `read`, `pipe` and
+   `fcntl`), so the rest of this file sees the system calls it always did. */
+#include <errno.h>
+#include <sys/uio.h>
+
+void nish_write(const nish_str *, int32_t, _Bool);
+
+static size_t sec_write_max;   /* nonzero: no write takes more bytes than this */
+static int sec_write_eintr;    /* writes left to fail with EINTR */
+static int sec_pread_eintr;    /* preads left to fail with EINTR */
+static int sec_watch;          /* record the descriptor flags of each call */
+static int sec_cloexec = -1;   /* FD_CLOEXEC of the last descriptor recorded */
+
+ssize_t write(int fd, const void *buf, size_t n) {
+  if (sec_watch) sec_cloexec = fcntl(fd, F_GETFD) & FD_CLOEXEC;
+  if (sec_write_eintr > 0) {
+    sec_write_eintr--;
+    errno = EINTR;
+    return -1;
+  }
+  struct iovec v = {(void *)buf, sec_write_max && n > sec_write_max ? sec_write_max : n};
+  return writev(fd, &v, 1);
+}
+
+ssize_t pread(int fd, void *buf, size_t n, off_t at) {
+  if (sec_watch) sec_cloexec = fcntl(fd, F_GETFD) & FD_CLOEXEC;
+  if (sec_pread_eintr > 0) {
+    sec_pread_eintr--;
+    errno = EINTR;
+    return -1;
+  }
+  return lseek(fd, at, SEEK_SET) < 0 ? -1 : read(fd, buf, n);
+}
+
+/* RT-10: armed, the next `pipe2` lets a whole other first `signalFd()` run
+   to completion before it returns, which is the interleaving two threads
+   reach only by luck. Linux only, because that is where the runtime makes the
+   pipe with `pipe2`. */
+#ifdef __linux__
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 02000000 /* <fcntl.h> spells it only above strict C11 */
+#endif
+static int sec_race;          /* armed for the next pipe2 */
+static int sec_race_pipe[2];  /* the ends the interrupted call made */
+static int32_t sec_race_first; /* what the call that ran in between answered */
+int pipe2(int p[2], int flags) {
+  if (pipe(p) != 0) return -1;
+  for (int i = 0; i < 2; i++) {
+    if (flags & O_CLOEXEC) fcntl(p[i], F_SETFD, FD_CLOEXEC);
+    if (flags & O_NONBLOCK) fcntl(p[i], F_SETFL, O_NONBLOCK);
+  }
+  if (sec_race) {
+    sec_race = 0;
+    sec_race_pipe[0] = p[0];
+    sec_race_pipe[1] = p[1];
+    sec_race_first = nish_signal_fd();
+  }
+  return 0;
+}
+#endif
+
 static int32_t sec_recv_from(int fd, nish_array *from) {
   static char into[16];
   nish_array buf = {16, 16, into};
@@ -1026,6 +1093,74 @@ static void test_security(void) {
   expect_f64(-0.0000012345678901234567, "-0.0000012345678901234567");
   expect_f64(-123456789012345680000.0, "-123456789012345680000");
   expect_f64(-1.2345678901234567e21, "-1.2345678901234568e+21");
+
+  /* RT-11: a write that takes three bytes at a time still delivers the
+     whole line. One `write` that ignored the count sent "hel" and the
+     newline. */
+  int out[2];
+  sec_check(pipe(out) == 0, "RT-11", "the pipe could not be made");
+  sec_write_max = 3;
+  nish_write(lit("hello, world"), out[1], 1);
+  sec_write_max = 0;
+  close(out[1]);
+  char line[64];
+  ssize_t have = 0, n_read;
+  while ((n_read = read(out[0], line + have, sizeof line - (size_t)have)) > 0) have += n_read;
+  close(out[0]);
+  sec_check(have == 13 && memcmp(line, "hello, world\n", 13) == 0, "RT-11", "console.log lost the rest of a short write");
+
+  /* RT-12: the descriptors the file reads and writes open are close-on-exec,
+     so a child another thread spawns meanwhile does not inherit them. */
+  snprintf(path, sizeof path, "%s/cloexec.txt", dir);
+  sec_watch = 1;
+  sec_cloexec = -1;
+  nish_write_file(lit(path), lit("x"));
+  sec_check(sec_cloexec == FD_CLOEXEC, "RT-12", "writeFileSync's descriptor is not close-on-exec");
+  sec_cloexec = -1;
+  nish_read_file_or_null(lit(path));
+  sec_check(sec_cloexec == FD_CLOEXEC, "RT-12", "readFileSyncOrNull's descriptor is not close-on-exec");
+  sec_watch = 0;
+
+  /* RT-13: a `pread` or a `write` that a signal interrupts before it moves a
+     byte is retried. The read stopped there and answered "" for the whole
+     file; the write said `cannot write` and exited, so it runs in a child. */
+  snprintf(path, sizeof path, "%s/eintr.txt", dir);
+  nish_write_file(lit(path), lit("hello"));
+  sec_pread_eintr = 1;
+  nish_str *whole = nish_read_file_or_null(lit(path));
+  sec_check(sec_pread_eintr == 0 && whole && whole->len == 5 && memcmp(whole->data, "hello", 5) == 0, "RT-13",
+            "readFileSyncOrNull took an interrupted pread for the end of the file");
+  sec_pread_eintr = 0;
+  child = fork();
+  if (child == 0) {
+    close(2);
+    sec_write_eintr = 1;
+    sec_write_max = 2;
+    nish_write_file(lit(path), lit("again"));
+    sec_write_max = 0;
+    _exit(sec_file_is(path, "again") ? 0 : 3);
+  }
+  sec_check(sec_status(child) == 0, "RT-13", "writeFileSync failed on an interrupted write");
+
+#if defined(__linux__) && !defined(NISH_THREADS)
+  /* RT-10: two first `signalFd()` calls that overlap answer one descriptor,
+     the one the handler writes to, and the pipe that lost is closed. Before
+     the compare-and-swap the call that finished last answered its own pipe,
+     and the other caller's read end never heard a signal. Not in the threads
+     build, whose `test_host_signal_threads` needs the first call to happen
+     after its thread has started. */
+  sec_race = 1;
+  int32_t sig_fd = nish_signal_fd();
+  sec_check(sec_race == 0 && sig_fd >= 0 && sig_fd == sec_race_first, "RT-10",
+            "two overlapping first signalFd() calls answered different descriptors");
+  sec_check(fcntl(sec_race_pipe[0], F_GETFD) < 0 && fcntl(sec_race_pipe[1], F_GETFD) < 0, "RT-10",
+            "the pipe that lost the race was left open");
+  sec_check(nish_signal_fd() == sig_fd, "RT-10", "a later signalFd() answered another descriptor");
+  if (sig_fd >= 0 && sig_fd == sec_race_first) {
+    raise(SIGINT);
+    sec_check(nish_read_signal(sig_fd) == SIGINT, "RT-10", "the descriptor did not hear SIGINT");
+  }
+#endif
 
 #ifdef NISH_THREADS
   /* RT-8: a range within `grain` of 2^63 is still divided, rather than

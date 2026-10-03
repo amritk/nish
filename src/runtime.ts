@@ -230,6 +230,9 @@ export class RuntimeTable {
     )
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
+    // `nish_str_concat` can also exit, on a result past 2^31 - 1 bytes or out of
+    // memory, so its `willreturn` is the approximation docs/security/codegen.md
+    // records as CG-8: it holds on every path that returns. The fix is #382's.
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -332,6 +335,12 @@ export class RuntimeTable {
     )
     exit.noreturn = true
     this.add(exit)
+    // `nish_read_file`, `nish_write_file` and `nish_append_file` `_exit(1)` on a
+    // path they cannot read or write, and all four `open`s wait on a FIFO with
+    // no writer, so `willreturn` here is the approximation
+    // docs/security/codegen.md records as CG-8: it holds on every path that
+    // returns. No miscompile follows, because each call writes memory and LLVM
+    // cannot delete it; dropping the attribute is #382's.
     this.add(
       plain(
         "nish_read_file",
@@ -672,7 +681,8 @@ export class RuntimeTable {
     )
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of nish.h.
+    // C hosts do, so it is part of the declared ABI and of nish.h. It exits on a
+    // length past 2^31 - 1, so its `willreturn` is CG-8's approximation too.
     this.addWrites(
       WRITES_ALLOC,
       plain(
