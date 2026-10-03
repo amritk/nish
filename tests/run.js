@@ -10861,6 +10861,24 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       shown(withAst)
     )
   }
+  // Under `run`, `--emit-ast` is refused as a product `run` keeps to itself,
+  // and that refusal is the one a reader gets, whatever capability flag is beside it.
+  const runAst = spawnSync(
+    NISH,
+    ["run", "--emit-ast", "--capabilities", path.join(casesDir, "caps_pure.ts")],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "capabilities: `nish run --emit-ast --capabilities` is refused by `run`'s rule, exit 2",
+    runAst.status === 2 &&
+      runAst.stdout === "" &&
+      runAst.stderr.includes("`--emit-ast` cannot be used with `nish run`") &&
+      !runAst.stderr.includes("reports on a checked program"),
+    shown(runAst)
+  )
   // `--emit-checked` does stop after it, and both are answered before the dump.
   const withChecked = spawnSync(
     NISH,

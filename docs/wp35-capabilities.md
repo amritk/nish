@@ -171,7 +171,11 @@ a builtin (`dist` 0).
   as diagnostics name them (`FunctionSig.sourceName`).
 - A **module**'s set is the union over every function defined in it.
 - A **package**'s set is the union over its modules. The root package is named
-  `<root>`, the standard library `nish`, and a dependency by its name.
+  `<root>`, the standard library `nish`, and a dependency by its name. A
+  module belongs to the standard library when it was resolved there
+  (`isStdModule`, `src/std-modules.ts`), not when its package is called
+  `nish`: nothing refuses a dependency of that name, and it gets an entry of
+  its own (`tests/link/caps_package_named_nish`).
 - The **program**'s set is the entry's closure: `main`'s, or, for an entry with
   no `main`, the union over the entry module's exported functions.
 - A **parallel body** cannot reach a capability at all, which the brief's

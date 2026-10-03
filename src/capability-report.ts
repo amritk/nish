@@ -22,6 +22,7 @@ import { CAPABILITY_COUNT, capabilityName, capabilityNames, isDeterministic } fr
 import { Compilation, ModuleUnit } from "./compilation"
 import { StringMap } from "./map"
 import { ROOT_PACKAGE } from "./packages"
+import { isStdModule } from "./std-modules"
 import { dirname, relativePath } from "./paths"
 import { Node } from "./nodes"
 import { FunctionSig } from "./program"
@@ -31,13 +32,21 @@ import { compareStrings, jsonQuote } from "./strings"
 const ROOT_NAME: string = "<root>"
 
 /**
+ * Whether `unit` is a standard-library module, asked by where it was resolved
+ * (`isStdModule`) rather than by its package name: a dependency may itself be
+ * called `nish`, and nothing refuses one.
+ */
+const isLibrary = (compilation: Compilation, unit: ModuleUnit): boolean =>
+  isStdModule(compilation.libraryRoot(), unit.name, unit.path)
+
+/**
  * The report's name for a module: its path from the entry's directory, or,
  * for a standard-library module, the package-relative name its diagnostics
  * carry (`std/threads.ts`), which says nothing about where the compiler is
  * installed.
  */
-const modulePath = (root: string, unit: ModuleUnit): string =>
-  unit.packageName === CLI ? unit.name : relativePath(root, unit.path)
+const modulePath = (compilation: Compilation, root: string, unit: ModuleUnit): string =>
+  isLibrary(compilation, unit) ? unit.name : relativePath(root, unit.path)
 
 /** The facts' mask for `sig`, or 0 when the fixpoint has none for it. */
 const capsOf = (facts: FactsTable, sig: FunctionSig): i32 => {
@@ -148,23 +157,38 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
         }
       }
     }
-    paths.push(modulePath(root, unit))
+    paths.push(modulePath(compilation, root, unit))
     moduleMasks.push(mask)
     m = m + 1
   }
 
-  // Packages, sorted with the root first and the rest by name.
+  // Packages, sorted with the root first and the rest by name. A module's
+  // group is its package, except that the standard library is a group of its
+  // own whatever a dependency calls itself: ` nish/` is no package's name,
+  // because npm puts a `/` only in a scoped name, which starts with `@`.
+  const unitGroups: string[] = []
+  for (const unit of modules) {
+    if (isLibrary(compilation, unit)) {
+      unitGroups.push(` ${CLI}/`)
+    } else {
+      unitGroups.push(unit.packageName === ROOT_PACKAGE ? "" : ` ${unit.packageName}`)
+    }
+  }
   const packageKeys: string[] = []
   const packageTies: string[] = []
   const packageNames: string[] = []
   const packageOrder: i32[] = []
-  for (const unit of modules) {
-    if (packageNames.indexOf(unit.packageName) < 0) {
+  let u = 0
+  while (u < modules.length && u < unitGroups.length) {
+    const group = unitGroups[u]
+    const label = group === ` ${CLI}/` ? CLI : modules[u].packageName
+    if (packageKeys.indexOf(group) < 0) {
       packageOrder.push(packageNames.length)
-      packageNames.push(unit.packageName)
-      packageKeys.push(unit.packageName === ROOT_PACKAGE ? "" : ` ${unit.packageName}`)
+      packageNames.push(label)
+      packageKeys.push(group)
       packageTies.push("")
     }
+    u = u + 1
   }
   sortTogether(packageKeys, packageTies, packageOrder)
 
@@ -173,7 +197,7 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
   out.push("{\n")
   out.push('  "version": 1,\n')
   out.push('  "entry": ')
-  out.push(jsonQuote(modulePath(root, compilation.entry())))
+  out.push(jsonQuote(modulePath(compilation, root, compilation.entry())))
   out.push(",\n")
   out.push(`  "deterministic": ${isDeterministic(program) ? "true" : "false"},\n`)
   out.push('  "capabilities": [')
@@ -181,18 +205,19 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
   out.push("],\n")
   out.push('  "packages": [\n')
   let p = 0
-  while (p < packageOrder.length) {
+  while (p < packageOrder.length && p < packageKeys.length) {
     const at = packageOrder[p]
     const name = at >= 0 && at < packageNames.length ? packageNames[at] : ""
+    const key = packageKeys[p]
     // This package's modules, by path.
     const inPackage: i32[] = []
     const modulePaths: string[] = []
     const pathTies: string[] = []
     let packageMask = 0
     let k = 0
-    while (k < modules.length && k < paths.length && k < moduleMasks.length) {
+    while (k < unitGroups.length && k < paths.length && k < moduleMasks.length) {
       // Read before the pushes below, which end what the loop's test proved.
-      const inThis = modules[k].packageName === name
+      const inThis = unitGroups[k] === key
       const path = paths[k]
       const mask = moduleMasks[k]
       if (inThis) {

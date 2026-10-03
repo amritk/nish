@@ -534,14 +534,6 @@ export const main = (): number => {
     console.error(usageText())
     return 2
   }
-  // `--emit-ast` answers before the checker runs, and a capability is a fact
-  // about a checked program, so the two would otherwise meet in silence.
-  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine)) {
-    console.error(
-      `compile: \`${capabilitiesLine ? "--capabilities" : "--emit-capabilities"}\` reports on a checked program, and --emit-ast stops before the check`
-    )
-    return 2
-  }
   if (runMode) {
     if (notForRun.length > 0) {
       console.error(
@@ -557,6 +549,15 @@ export const main = (): number => {
     // prints it on every run, into the stream the script's own errors use.
     // `--warn-portability` is left alone: it is off unless the line asks.
     warnPerformance = false
+  }
+  // `--emit-ast` answers before the checker runs, and a capability is a fact
+  // about a checked program, so the two would otherwise meet in silence.
+  // After `run`'s own refusals, which name the flag `run` cannot take.
+  if (emitAst && (capabilitiesFile.length > 0 || capabilitiesLine)) {
+    console.error(
+      `compile: \`${capabilitiesLine ? "--capabilities" : "--emit-capabilities"}\` reports on a checked program, and --emit-ast stops before the check`
+    )
+    return 2
   }
   // What the build hands on decides who else may call the program's exports
   // (`hostVisible` in `src/visibility.ts`), so the checker is told.
