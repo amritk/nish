@@ -521,6 +521,19 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  * hoists nothing rather than hoisting wrongly.
  */
 const loopMayResize = (emitter: Emitter, node: Node): boolean => {
+  if (callMayResize(emitter, node)) {
+    return true
+  }
+  for (const child of node.children) {
+    if (loopMayResize(emitter, child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** `node` itself, not its operands, is a `push`, a `pop` or a call the fixpoint says may grow an array. */
+const callMayResize = (emitter: Emitter, node: Node): boolean => {
   if (isResizeCall(emitter.program, emitter.table, node)) {
     return true
   }
@@ -533,8 +546,26 @@ const loopMayResize = (emitter: Emitter, node: Node): boolean => {
       }
     }
   }
+  return false
+}
+
+/**
+ * Whether the right side of a compound element assignment can move the array
+ * it stores into (CG-10): `loopMayResize`'s question, and a `new` of a class
+ * too, since a constructor is a call `nodeCallees` does not hold.
+ */
+const rightSideMayResize = (emitter: Emitter, node: Node): boolean => {
+  if (callMayResize(emitter, node)) {
+    return true
+  }
+  if (node.kind === N_NEW) {
+    const type = emitter.program.nodeTypes[node.id]
+    if (type >= 0 && emitter.table.isStruct(type)) {
+      return true
+    }
+  }
   for (const child of node.children) {
-    if (loopMayResize(emitter, child)) {
+    if (rightSideMayResize(emitter, child)) {
       return true
     }
   }
@@ -1152,7 +1183,12 @@ export const emitElementAccess = (emitter: Emitter, expr: Node): string => {
 /**
  * `a[i] = v`: array, index, value, then the check and the store (the value is
  * the expression's result). `a[i] op= v`: array, index, check, load, value,
- * op, store, matching JavaScript's read-before-right-operand order.
+ * op, store, matching JavaScript's read-before-right-operand order. When the
+ * right side can push to or pop from the array, the store takes the slot's
+ * address again after it, and checks the index again against the length the
+ * right side left: JavaScript stores into the array as it is then, so
+ * `xs[0] += grow(xs)` writes the block `grow` moved the elements to rather
+ * than the one they left (docs/security/codegen.md, CG-10).
  */
 export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0]
@@ -1185,8 +1221,15 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
       : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
   }
   emitRangedStore(emitter, expr, value)
+  // A hoisted header is only hoisted out of a loop nothing in it resizes, and
+  // an inline field's slots never move, so only a plain base is taken again.
+  let store = slot
+  if (base.header === null && base.owner === null && rightSideMayResize(emitter, expr.children[1])) {
+    emitRangeCheck(emitter, idx, baseLength(emitter, base))
+    store = elementPointer(emitter, base, elem, idx)
+  }
   emitter.fn.emit(
-    `store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
+    `store ${ty} ${value}, ${ty}* ${store}${emitter.alignSuffix(elem)}${valueSlotAccess(emitter, elem)}`
   )
   return value
 }

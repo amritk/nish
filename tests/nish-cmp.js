@@ -480,6 +480,9 @@ const CG3_MOVED = [
   "tests/link/cg_sec_join_limit/main.ts",
 ]
 
+/** CG-10: a compound element assignment whose right side can resize the array takes the slot again after it. */
+const CG10_MOVED = ["tests/cases/cg_sec_compound_element_order.ts"]
+
 /**
  * Output differences that are decided rather than broken, each with the words
  * `CHANGELOG.md` must carry before this run can go green. Shape:
@@ -2314,6 +2317,11 @@ const DECLARED = [
     CG3_MOVED,
     "CG-3",
     "it calls `join`, whose allocation size is now selected against 2^31 - 1 bytes so that a longer result fails as an allocation does"
+  ),
+  ...declareMoved(
+    CG10_MOVED,
+    "CG-10",
+    "a new program: its compound element assignments resize the array on their right side, and the reference stores into the old block"
   ),
 ]
 

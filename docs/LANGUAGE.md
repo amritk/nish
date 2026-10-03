@@ -5043,7 +5043,11 @@ export const main = (): i32 => {
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
-  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
+  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`),
+  and when `v` can push to or pop from `a` the store goes into `a` as `v`
+  left it, its index checked again against the length then: `xs[0] +=
+  grow(xs)` writes the block `grow` moved the elements to, and an index `v`
+  shrank past panics (`tests/cases/cg_sec_compound_element_order`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
   the target expression is evaluated **once** whichever `op=` it is, so
   `a[next()] |= 1` calls `next()` a single time and pays for a single bounds

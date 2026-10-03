@@ -1542,6 +1542,20 @@ class FactCollector {
     if (node.kind === N_BINARY && isAssignmentOperator(node.text) && node.children[0].kind === N_INDEX) {
       this.facts.effect = EFFECT_WRITE
       this.noteArrayWrite(node, node.children[0].children[0])
+      // A compound store whose right side can resize the array checks its
+      // index again after it (`emitElementAssignment`, CG-10), even where the
+      // first check was proved away. The emitter asks the fixpoint which calls
+      // resize, which is not settled yet here, so any call or `new` counts:
+      // a function may lose `willreturn` for a check its IR turns out not to
+      // hold, and never keeps it past one its IR does.
+      if (
+        node.text !== "=" &&
+        !this.opts.uncheckedIndexing &&
+        program.nodeProvenIndex[node.children[0].id] &&
+        callsAnything(node.children[1])
+      ) {
+        this.facts.callees.add("nish_panic_index")
+      }
     }
   }
 
@@ -2170,6 +2184,19 @@ const collectRound = (
     }
   }
   return facts
+}
+
+/** Whether evaluating `node` can run a call or a constructor. */
+const callsAnything = (node: Node): boolean => {
+  if (node.kind === N_CALL || node.kind === N_NEW) {
+    return true
+  }
+  for (const child of node.children) {
+    if (callsAnything(child)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The state of one `clearRecursiveWillReturn` walk: the visit counter and Tarjan's stack. */

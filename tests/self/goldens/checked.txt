@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 838 programs, 59460 dump lines.
+# 839 programs, 59492 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3934,6 +3934,39 @@ function test(): i32 -> @test [exported]
   stackSites=0 stackLocals=0
   callee 22:10 countDigits -> @countDigits
   callee 22:38 firstPowerOver -> @firstPowerOver
+program tests/cases/cg_sec_compound_element_order.ts
+module tests/cases/cg_sec_compound_element_order.ts (entry)
+function grow(xs: i32[]): i32 -> @grow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 12:5
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 10:7 i: i32 (let)
+function shrink(zs: i32[]): i32 -> @shrink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 19:3
+  calls: nish_panic_index
+  pointer zs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function shrinkPastEnd(): i32 -> @shrinkPastEnd [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via shrink
+  calls: nish_panic_index shrink
+  stackSites=1 stackLocals=1
+  local 25:9 zs: i32[] (const)
+  callee 26:12 shrink -> @shrink
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via grow
+  calls: grow nish_arena_mark nish_arena_release nish_panic_index
+  stackSites=3 stackLocals=3
+  local 31:9 xs: i32[] (const)
+  callee 32:12 grow -> @grow
+  local 33:9 ys: i32[] (const)
+  callee 34:12 grow -> @grow
+  local 35:9 bits: i32[] (const)
+  callee 36:14 grow -> @grow
 program tests/cases/cg_sec_exiting_runtime.ts
 module tests/cases/cg_sec_exiting_runtime.ts (entry)
 function load(path: string): string -> @load
