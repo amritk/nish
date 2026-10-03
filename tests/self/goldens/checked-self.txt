@@ -17881,37 +17881,37 @@ function newArrayLengthChecked(length: Node, type: i32, numberMode: i32, table: 
   pointer length: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer table: size=72 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.rangeLo#0
   stackSites=0 stackLocals=0
-  local 1084:9 literal: Node (const)
-  callee 1084:19 unwrapParens -> @unwrapParens
-  callee 1085:36 numericLiteralValue -> @numericLiteralValue
-  callee 1088:7 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 1089:12 TypeTable.rangeLo -> @TypeTable.rangeLo
-  callee 1092:5 isFloat -> @isFloat
-  callee 1093:5 intBits -> @intBits
+  local 1085:9 literal: Node (const)
+  callee 1085:19 unwrapParens -> @unwrapParens
+  callee 1086:36 numericLiteralValue -> @numericLiteralValue
+  callee 1089:7 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 1090:12 TypeTable.rangeLo -> @TypeTable.rangeLo
+  callee 1093:5 isFloat -> @isFloat
+  callee 1094:5 intBits -> @intBits
 function newArrayLimit(emitter: Emitter, size: i32): i64 -> @newArrayLimit
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: allocRefusedBytes nish_panic_div
   pointer emitter: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1107:9 most: i64 (const)
-  local 1108:9 fits: i64 (const)
-  callee 1108:21 allocRefusedBytes -> @allocRefusedBytes
+  local 1108:9 most: i64 (const)
+  local 1109:9 fits: i64 (const)
+  callee 1109:21 allocRefusedBytes -> @allocRefusedBytes
 function emitLengthCheck(emitter: Emitter, ok: string): void -> @emitLengthCheck
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.stringConstant IRFunction.emit IRFunction.newBlock IRFunction.placeBlock emitPanicTail nish_str_concat
   pointer emitter: size=208 writesThrough=false captured=false passedTo=emitPanicTail#0 Emitter.stringConstant#0
   stackSites=0 stackLocals=0
-  local 1114:9 fn: IRFunction (const)
-  local 1115:9 failBlock: IRBlock (const)
-  callee 1115:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1116:9 okBlock: IRBlock (const)
-  callee 1116:19 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1117:3 IRFunction.emit -> @IRFunction.emit
-  callee 1118:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1119:3 emitPanicTail -> @emitPanicTail
-  callee 1119:26 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 1120:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1115:9 fn: IRFunction (const)
+  local 1116:9 failBlock: IRBlock (const)
+  callee 1116:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1117:9 okBlock: IRBlock (const)
+  callee 1117:19 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1118:3 IRFunction.emit -> @IRFunction.emit
+  callee 1119:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1120:3 emitPanicTail -> @emitPanicTail
+  callee 1120:26 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 1121:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitNewArrayLength(emitter: Emitter, length: Node, size: i32): string -> @emitNewArrayLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -17920,30 +17920,30 @@ function emitNewArrayLength(emitter: Emitter, length: Node, size: i32): string -
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitIndex#0 newArrayLimit#0 emitIndex#0 emitLengthCheck#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.llvm#0 emitLengthCheck#0
   pointer length: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 newArrayLengthChecked#0 emitIndex#1 emitIndex#1 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
-  local 1125:9 type: i32 (const)
-  callee 1125:16 Emitter.typeOf -> @Emitter.typeOf
-  callee 1126:8 newArrayLengthChecked -> @newArrayLengthChecked
-  callee 1127:12 emitIndex -> @emitIndex
-  local 1129:9 fn: IRFunction (const)
-  local 1130:9 limit: i64 (const)
-  callee 1130:17 newArrayLimit -> @newArrayLimit
-  callee 1131:8 isFloat -> @isFloat
-  local 1132:11 n: string (const)
-  callee 1132:15 emitIndex -> @emitIndex
-  callee 1133:5 emitLengthCheck -> @emitLengthCheck
-  callee 1133:30 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1139:7 value: string (let)
-  callee 1139:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1140:7 Emitter.llvm -> @Emitter.llvm
-  callee 1141:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1141:35 Emitter.llvm -> @Emitter.llvm
-  local 1143:9 atLeast: string (const)
-  callee 1143:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1144:9 atMost: string (const)
-  callee 1144:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1145:3 emitLengthCheck -> @emitLengthCheck
-  callee 1145:28 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1146:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1126:9 type: i32 (const)
+  callee 1126:16 Emitter.typeOf -> @Emitter.typeOf
+  callee 1127:8 newArrayLengthChecked -> @newArrayLengthChecked
+  callee 1128:12 emitIndex -> @emitIndex
+  local 1130:9 fn: IRFunction (const)
+  local 1131:9 limit: i64 (const)
+  callee 1131:17 newArrayLimit -> @newArrayLimit
+  callee 1132:8 isFloat -> @isFloat
+  local 1133:11 n: string (const)
+  callee 1133:15 emitIndex -> @emitIndex
+  callee 1134:5 emitLengthCheck -> @emitLengthCheck
+  callee 1134:30 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1140:7 value: string (let)
+  callee 1140:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 1141:7 Emitter.llvm -> @Emitter.llvm
+  callee 1142:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1142:35 Emitter.llvm -> @Emitter.llvm
+  local 1144:9 atLeast: string (const)
+  callee 1144:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1145:9 atMost: string (const)
+  callee 1145:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1146:3 emitLengthCheck -> @emitLengthCheck
+  callee 1146:28 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1147:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitNewArray(emitter: Emitter, expr: Node): string -> @emitNewArray [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -17951,29 +17951,29 @@ function emitNewArray(emitter: Emitter, expr: Node): string -> @emitNewArray [ex
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 elementSize#0 emitNewArrayLength#0 emitHeader#0 Emitter.isStackSite#0 Emitter.isStackSite#0 emitData#0 Emitter.declare#0 elementAccess#0 storeData#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitHeader#2 Emitter.isStackSite#1 Emitter.isStackSite#1 emitData#1
   stackSites=0 stackLocals=0
-  local 1157:9 elem: i32 (const)
-  callee 1157:16 TypeTable.refOf -> @TypeTable.refOf
-  callee 1157:36 Emitter.typeOf -> @Emitter.typeOf
-  local 1158:9 size: i32 (const)
-  callee 1158:16 elementSize -> @elementSize
-  local 1159:9 n: string (const)
-  callee 1159:13 emitNewArrayLength -> @emitNewArrayLength
-  local 1160:9 arr: string (const)
-  callee 1160:15 emitHeader -> @emitHeader
-  local 1161:9 bytes: string (const)
-  callee 1161:34 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1168:9 count: i32 (const)
-  callee 1168:17 Emitter.isStackSite -> @Emitter.isStackSite
-  callee 1168:45 literalLength -> @literalLength
-  callee 1169:20 Emitter.isStackSite -> @Emitter.isStackSite
-  callee 1170:18 internalErrorFor -> @internalErrorFor
-  local 1172:9 data: string (const)
-  callee 1172:16 emitData -> @emitData
-  callee 1173:3 Emitter.declare -> @Emitter.declare
-  local 1174:9 dataArg: string (const)
-  callee 1177:3 IRFunction.emit -> @IRFunction.emit
-  callee 1177:84 elementAccess -> @elementAccess
-  callee 1178:3 storeData -> @storeData
+  local 1158:9 elem: i32 (const)
+  callee 1158:16 TypeTable.refOf -> @TypeTable.refOf
+  callee 1158:36 Emitter.typeOf -> @Emitter.typeOf
+  local 1159:9 size: i32 (const)
+  callee 1159:16 elementSize -> @elementSize
+  local 1160:9 n: string (const)
+  callee 1160:13 emitNewArrayLength -> @emitNewArrayLength
+  local 1161:9 arr: string (const)
+  callee 1161:15 emitHeader -> @emitHeader
+  local 1162:9 bytes: string (const)
+  callee 1162:34 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1169:9 count: i32 (const)
+  callee 1169:17 Emitter.isStackSite -> @Emitter.isStackSite
+  callee 1169:45 literalLength -> @literalLength
+  callee 1170:20 Emitter.isStackSite -> @Emitter.isStackSite
+  callee 1171:18 internalErrorFor -> @internalErrorFor
+  local 1173:9 data: string (const)
+  callee 1173:16 emitData -> @emitData
+  callee 1174:3 Emitter.declare -> @Emitter.declare
+  local 1175:9 dataArg: string (const)
+  callee 1178:3 IRFunction.emit -> @IRFunction.emit
+  callee 1178:84 elementAccess -> @elementAccess
+  callee 1179:3 storeData -> @storeData
 function emitElementAccess(emitter: Emitter, expr: Node): string -> @emitElementAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -17981,15 +17981,15 @@ function emitElementAccess(emitter: Emitter, expr: Node): string -> @emitElement
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 emitBoundsCheck#0 loadElement#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitBoundsCheck#3
   stackSites=0 stackLocals=0
-  local 1185:9 elem: i32 (const)
-  callee 1185:16 Emitter.typeOf -> @Emitter.typeOf
-  callee 1186:3 Emitter.declareType -> @Emitter.declareType
-  local 1187:9 base: ArrayBase (const)
-  callee 1187:16 emitArrayBase -> @emitArrayBase
-  local 1188:9 idx: string (const)
-  callee 1188:15 emitIndex -> @emitIndex
-  callee 1189:3 emitBoundsCheck -> @emitBoundsCheck
-  callee 1190:10 loadElement -> @loadElement
+  local 1186:9 elem: i32 (const)
+  callee 1186:16 Emitter.typeOf -> @Emitter.typeOf
+  callee 1187:3 Emitter.declareType -> @Emitter.declareType
+  local 1188:9 base: ArrayBase (const)
+  callee 1188:16 emitArrayBase -> @emitArrayBase
+  local 1189:9 idx: string (const)
+  callee 1189:15 emitIndex -> @emitIndex
+  callee 1190:3 emitBoundsCheck -> @emitBoundsCheck
+  callee 1191:10 loadElement -> @loadElement
 function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitElementAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -17997,47 +17997,47 @@ function emitElementAssignment(emitter: Emitter, expr: Node): string -> @emitEle
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.llvm#0 Emitter.declareType#0 emitArrayBase#0 emitIndex#0 Emitter.emitExpression#0 emitBoundsCheck#0 storeElement#0 elementPointer#0 emitBoundsCheck#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 emitRangedStore#0 rightSideMayResize#0 emitRangeCheck#0 baseLength#0 elementPointer#0 Emitter.alignSuffix#0 valueSlotAccess#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitRangedStore#1
   stackSites=0 stackLocals=0
-  local 1204:9 target: Node (const)
-  local 1205:9 elem: i32 (const)
-  callee 1205:16 Emitter.typeOf -> @Emitter.typeOf
-  local 1206:9 ty: string (const)
-  callee 1206:14 Emitter.llvm -> @Emitter.llvm
-  callee 1207:3 Emitter.declareType -> @Emitter.declareType
-  local 1208:9 base: ArrayBase (const)
-  callee 1208:16 emitArrayBase -> @emitArrayBase
-  local 1209:9 idx: string (const)
-  callee 1209:15 emitIndex -> @emitIndex
-  local 1211:11 value: string (const)
-  callee 1211:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1212:5 emitBoundsCheck -> @emitBoundsCheck
-  callee 1213:5 storeElement -> @storeElement
-  callee 1213:27 elementPointer -> @elementPointer
-  callee 1219:3 emitBoundsCheck -> @emitBoundsCheck
-  local 1220:9 slot: string (const)
-  callee 1220:16 elementPointer -> @elementPointer
-  local 1221:9 old: string (const)
-  callee 1221:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1222:34 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee 1222:62 valueSlotAccess -> @valueSlotAccess
-  local 1224:7 value: string (let)
-  callee 1225:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee 1226:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local 1228:11 rhs: string (const)
-  callee 1228:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1229:13 isFloat -> @isFloat
-  callee 1230:9 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1230:33 compoundFloatOpcode -> @compoundFloatOpcode
-  callee 1231:9 emitIntBinary -> @emitIntBinary
-  callee 1231:32 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee 1233:3 emitRangedStore -> @emitRangedStore
-  local 1236:7 store: string (let)
-  callee 1237:54 rightSideMayResize -> @rightSideMayResize
-  callee 1238:5 emitRangeCheck -> @emitRangeCheck
-  callee 1238:34 baseLength -> @baseLength
-  callee 1239:13 elementPointer -> @elementPointer
-  callee 1241:3 IRFunction.emit -> @IRFunction.emit
-  callee 1242:45 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee 1242:73 valueSlotAccess -> @valueSlotAccess
+  local 1205:9 target: Node (const)
+  local 1206:9 elem: i32 (const)
+  callee 1206:16 Emitter.typeOf -> @Emitter.typeOf
+  local 1207:9 ty: string (const)
+  callee 1207:14 Emitter.llvm -> @Emitter.llvm
+  callee 1208:3 Emitter.declareType -> @Emitter.declareType
+  local 1209:9 base: ArrayBase (const)
+  callee 1209:16 emitArrayBase -> @emitArrayBase
+  local 1210:9 idx: string (const)
+  callee 1210:15 emitIndex -> @emitIndex
+  local 1212:11 value: string (const)
+  callee 1212:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 1213:5 emitBoundsCheck -> @emitBoundsCheck
+  callee 1214:5 storeElement -> @storeElement
+  callee 1214:27 elementPointer -> @elementPointer
+  callee 1220:3 emitBoundsCheck -> @emitBoundsCheck
+  local 1221:9 slot: string (const)
+  callee 1221:16 elementPointer -> @elementPointer
+  local 1222:9 old: string (const)
+  callee 1222:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1223:34 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee 1223:62 valueSlotAccess -> @valueSlotAccess
+  local 1225:7 value: string (let)
+  callee 1226:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee 1227:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local 1229:11 rhs: string (const)
+  callee 1229:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 1230:13 isFloat -> @isFloat
+  callee 1231:9 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1231:33 compoundFloatOpcode -> @compoundFloatOpcode
+  callee 1232:9 emitIntBinary -> @emitIntBinary
+  callee 1232:32 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee 1234:3 emitRangedStore -> @emitRangedStore
+  local 1237:7 store: string (let)
+  callee 1238:54 rightSideMayResize -> @rightSideMayResize
+  callee 1239:5 emitRangeCheck -> @emitRangeCheck
+  callee 1239:34 baseLength -> @baseLength
+  callee 1240:13 elementPointer -> @elementPointer
+  callee 1242:3 IRFunction.emit -> @IRFunction.emit
+  callee 1243:45 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee 1243:73 valueSlotAccess -> @valueSlotAccess
 function emitArrayLength(emitter: Emitter, expr: Node): string -> @emitArrayLength [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType
@@ -18045,21 +18045,21 @@ function emitArrayLength(emitter: Emitter, expr: Node): string -> @emitArrayLeng
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.declareType#0 emitArrayBase#0 emitNumberFromI64#0 baseLength#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNumberFromI64#2
   stackSites=0 stackLocals=0
-  callee 1251:3 Emitter.declareType -> @Emitter.declareType
-  local 1252:9 base: ArrayBase (const)
-  callee 1252:16 emitArrayBase -> @emitArrayBase
-  callee 1253:10 emitNumberFromI64 -> @emitNumberFromI64
-  callee 1253:37 baseLength -> @baseLength
+  callee 1252:3 Emitter.declareType -> @Emitter.declareType
+  local 1253:9 base: ArrayBase (const)
+  callee 1253:16 emitArrayBase -> @emitArrayBase
+  callee 1254:10 emitNumberFromI64 -> @emitNumberFromI64
+  callee 1254:37 baseLength -> @baseLength
 function stringLength(emitter: Emitter, str: string): string -> @stringLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.align8 IRFunction.emitValue nish_str_concat
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.align8#0
   stackSites=0 stackLocals=0
-  local 1258:9 header: string (const)
-  callee 1258:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1259:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1259:58 Emitter.align8 -> @Emitter.align8
+  local 1259:9 header: string (const)
+  callee 1259:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1260:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1260:58 Emitter.align8 -> @Emitter.align8
 function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): string -> @emitElementEquals
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -18067,12 +18067,12 @@ function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): s
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emitValue isFloat nish_str_concat
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.llvm#0
   stackSites=0 stackLocals=0
-  callee 1270:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1270:52 Emitter.useRuntime -> @Emitter.useRuntime
-  local 1272:9 opcode: string (const)
-  callee 1272:18 isFloat -> @isFloat
-  callee 1273:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1273:44 Emitter.llvm -> @Emitter.llvm
+  callee 1271:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1271:52 Emitter.useRuntime -> @Emitter.useRuntime
+  local 1273:9 opcode: string (const)
+  callee 1273:18 isFloat -> @isFloat
+  callee 1274:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1274:44 Emitter.llvm -> @Emitter.llvm
 function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string -> @emitPush
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -18081,39 +18081,39 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 headerFieldPointer#0 Emitter.align8#0 headerAccess#0 loadHeaderField#0 Emitter.useRuntime#0 elementSize#0 storeElement#0 elementPointer#0 Emitter.align8#0 headerAccess#0 emitNumberFromI64#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNumberFromI64#2
   stackSites=1 stackLocals=0
-  local 1278:9 fn: IRFunction (const)
-  local 1279:9 value: string (const)
-  callee 1279:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1280:9 lenPtr: string (const)
-  callee 1280:18 headerFieldPointer -> @headerFieldPointer
-  local 1281:9 len: string (const)
-  callee 1281:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1281:55 Emitter.align8 -> @Emitter.align8
-  callee 1281:74 headerAccess -> @headerAccess
-  local 1282:9 cap: string (const)
-  callee 1282:15 loadHeaderField -> @loadHeaderField
-  local 1283:9 full: string (const)
-  callee 1283:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1284:9 growBlock: IRBlock (const)
-  callee 1284:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1285:9 storeBlock: IRBlock (const)
-  callee 1285:22 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1286:3 IRFunction.emit -> @IRFunction.emit
-  callee 1287:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1288:3 IRFunction.emit -> @IRFunction.emit
-  callee 1289:18 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1289:85 elementSize -> @elementSize
-  callee 1291:3 IRFunction.emit -> @IRFunction.emit
-  callee 1292:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1293:3 storeElement -> @storeElement
-  callee 1293:25 elementPointer -> @elementPointer
-  callee 1293:49 new ArrayBase -> @ArrayBase.constructor
-  local 1294:9 newLen: string (const)
-  callee 1294:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1295:3 IRFunction.emit -> @IRFunction.emit
-  callee 1295:49 Emitter.align8 -> @Emitter.align8
-  callee 1295:68 headerAccess -> @headerAccess
-  callee 1296:10 emitNumberFromI64 -> @emitNumberFromI64
+  local 1279:9 fn: IRFunction (const)
+  local 1280:9 value: string (const)
+  callee 1280:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1281:9 lenPtr: string (const)
+  callee 1281:18 headerFieldPointer -> @headerFieldPointer
+  local 1282:9 len: string (const)
+  callee 1282:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1282:55 Emitter.align8 -> @Emitter.align8
+  callee 1282:74 headerAccess -> @headerAccess
+  local 1283:9 cap: string (const)
+  callee 1283:15 loadHeaderField -> @loadHeaderField
+  local 1284:9 full: string (const)
+  callee 1284:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1285:9 growBlock: IRBlock (const)
+  callee 1285:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1286:9 storeBlock: IRBlock (const)
+  callee 1286:22 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1287:3 IRFunction.emit -> @IRFunction.emit
+  callee 1288:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1289:3 IRFunction.emit -> @IRFunction.emit
+  callee 1290:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1290:85 elementSize -> @elementSize
+  callee 1292:3 IRFunction.emit -> @IRFunction.emit
+  callee 1293:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1294:3 storeElement -> @storeElement
+  callee 1294:25 elementPointer -> @elementPointer
+  callee 1294:49 new ArrayBase -> @ArrayBase.constructor
+  local 1295:9 newLen: string (const)
+  callee 1295:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1296:3 IRFunction.emit -> @IRFunction.emit
+  callee 1296:49 Emitter.align8 -> @Emitter.align8
+  callee 1296:68 headerAccess -> @headerAccess
+  callee 1297:10 emitNumberFromI64 -> @emitNumberFromI64
 function emitPop(emitter: Emitter, arr: string, elem: i32): string -> @emitPop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via headerFieldPointer
@@ -18121,32 +18121,32 @@ function emitPop(emitter: Emitter, arr: string, elem: i32): string -> @emitPop
   calls: ArrayBase.constructor Emitter.align8 Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock headerAccess headerFieldPointer loadElement nish_str_concat
   pointer emitter: size=208 writesThrough=false captured=false passedTo=headerFieldPointer#0 Emitter.align8#0 headerAccess#0 Emitter.useRuntime#0 Emitter.align8#0 headerAccess#0 loadElement#0
   stackSites=1 stackLocals=0
-  local 1306:9 fn: IRFunction (const)
-  local 1307:9 lenPtr: string (const)
-  callee 1307:18 headerFieldPointer -> @headerFieldPointer
-  local 1308:9 len: string (const)
-  callee 1308:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1308:55 Emitter.align8 -> @Emitter.align8
-  callee 1308:74 headerAccess -> @headerAccess
-  local 1310:11 empty: string (const)
-  callee 1310:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1311:11 failBlock: IRBlock (const)
-  callee 1311:23 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1312:11 okBlock: IRBlock (const)
-  callee 1312:21 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1313:5 IRFunction.emit -> @IRFunction.emit
-  callee 1314:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1315:5 IRFunction.emit -> @IRFunction.emit
-  callee 1315:26 Emitter.useRuntime -> @Emitter.useRuntime
+  local 1307:9 fn: IRFunction (const)
+  local 1308:9 lenPtr: string (const)
+  callee 1308:18 headerFieldPointer -> @headerFieldPointer
+  local 1309:9 len: string (const)
+  callee 1309:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1309:55 Emitter.align8 -> @Emitter.align8
+  callee 1309:74 headerAccess -> @headerAccess
+  local 1311:11 empty: string (const)
+  callee 1311:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1312:11 failBlock: IRBlock (const)
+  callee 1312:23 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1313:11 okBlock: IRBlock (const)
+  callee 1313:21 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1314:5 IRFunction.emit -> @IRFunction.emit
+  callee 1315:5 IRFunction.placeBlock -> @IRFunction.placeBlock
   callee 1316:5 IRFunction.emit -> @IRFunction.emit
-  callee 1317:5 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1319:9 last: string (const)
-  callee 1319:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1320:3 IRFunction.emit -> @IRFunction.emit
-  callee 1320:47 Emitter.align8 -> @Emitter.align8
-  callee 1320:66 headerAccess -> @headerAccess
-  callee 1324:10 loadElement -> @loadElement
-  callee 1324:31 new ArrayBase -> @ArrayBase.constructor
+  callee 1316:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1317:5 IRFunction.emit -> @IRFunction.emit
+  callee 1318:5 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1320:9 last: string (const)
+  callee 1320:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1321:3 IRFunction.emit -> @IRFunction.emit
+  callee 1321:47 Emitter.align8 -> @Emitter.align8
+  callee 1321:66 headerAccess -> @headerAccess
+  callee 1325:10 loadElement -> @loadElement
+  callee 1325:31 new ArrayBase -> @ArrayBase.constructor
 function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32): string -> @emitArrayIndexOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -18155,49 +18155,49 @@ function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32):
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 loadLength#0 loadElement#0 emitElementEquals#0 emitNumberFromI64#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNumberFromI64#2
   stackSites=1 stackLocals=0
-  local 1334:9 fn: IRFunction (const)
-  local 1335:9 value: string (const)
-  callee 1335:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1336:9 len: string (const)
-  callee 1336:15 loadLength -> @loadLength
-  local 1337:9 slot: string (const)
-  callee 1337:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 1338:3 IRFunction.emit -> @IRFunction.emit
-  local 1339:9 scanBlock: IRBlock (const)
-  callee 1339:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1340:9 testBlock: IRBlock (const)
+  local 1335:9 fn: IRFunction (const)
+  local 1336:9 value: string (const)
+  callee 1336:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1337:9 len: string (const)
+  callee 1337:15 loadLength -> @loadLength
+  local 1338:9 slot: string (const)
+  callee 1338:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 1339:3 IRFunction.emit -> @IRFunction.emit
+  local 1340:9 scanBlock: IRBlock (const)
   callee 1340:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1341:9 nextBlock: IRBlock (const)
+  local 1341:9 testBlock: IRBlock (const)
   callee 1341:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1342:9 missBlock: IRBlock (const)
+  local 1342:9 nextBlock: IRBlock (const)
   callee 1342:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1343:9 endBlock: IRBlock (const)
-  callee 1343:20 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1345:3 IRFunction.emit -> @IRFunction.emit
-  callee 1346:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1347:9 at: string (const)
-  callee 1347:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1348:9 more: string (const)
-  callee 1348:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1349:3 IRFunction.emit -> @IRFunction.emit
-  callee 1351:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1355:9 element: string (const)
-  callee 1355:19 loadElement -> @loadElement
-  callee 1355:40 new ArrayBase -> @ArrayBase.constructor
-  local 1356:9 hit: string (const)
-  callee 1356:15 emitElementEquals -> @emitElementEquals
-  callee 1357:3 IRFunction.emit -> @IRFunction.emit
-  callee 1359:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1360:9 next: string (const)
-  callee 1360:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1361:3 IRFunction.emit -> @IRFunction.emit
+  local 1343:9 missBlock: IRBlock (const)
+  callee 1343:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1344:9 endBlock: IRBlock (const)
+  callee 1344:20 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1346:3 IRFunction.emit -> @IRFunction.emit
+  callee 1347:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1348:9 at: string (const)
+  callee 1348:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1349:9 more: string (const)
+  callee 1349:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1350:3 IRFunction.emit -> @IRFunction.emit
+  callee 1352:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1356:9 element: string (const)
+  callee 1356:19 loadElement -> @loadElement
+  callee 1356:40 new ArrayBase -> @ArrayBase.constructor
+  local 1357:9 hit: string (const)
+  callee 1357:15 emitElementEquals -> @emitElementEquals
+  callee 1358:3 IRFunction.emit -> @IRFunction.emit
+  callee 1360:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1361:9 next: string (const)
+  callee 1361:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1362:3 IRFunction.emit -> @IRFunction.emit
-  callee 1364:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1365:3 IRFunction.emit -> @IRFunction.emit
-  callee 1367:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1368:9 found: string (const)
-  callee 1368:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1369:10 emitNumberFromI64 -> @emitNumberFromI64
+  callee 1363:3 IRFunction.emit -> @IRFunction.emit
+  callee 1365:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1366:3 IRFunction.emit -> @IRFunction.emit
+  callee 1368:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1369:9 found: string (const)
+  callee 1369:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1370:10 emitNumberFromI64 -> @emitNumberFromI64
 function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -18206,132 +18206,132 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string -> @emitJoi
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 Emitter.stringConstant#0 loadLength#0 stringLength#0 Emitter.declare#0 elementPointer#0 Emitter.align8#0 valueSlotAccess#0 stringLength#0 Emitter.useRuntime#0 Emitter.align8#0 elementPointer#0 Emitter.align8#0 valueSlotAccess#0 stringLength#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=0
-  local 1383:9 fn: IRFunction (const)
-  local 1384:9 args: Node (const)
-  local 1385:9 sep: string (const)
-  callee 1386:32 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1386:75 Emitter.stringConstant -> @Emitter.stringConstant
-  local 1387:9 len: string (const)
-  callee 1387:15 loadLength -> @loadLength
-  local 1388:9 sepLen: string (const)
-  callee 1388:18 stringLength -> @stringLength
-  callee 1389:3 Emitter.declare -> @Emitter.declare
-  local 1394:9 gaps: string (const)
-  callee 1394:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1395:9 sepBytes: string (const)
-  callee 1395:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1396:9 empty: string (const)
-  callee 1396:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1397:9 totalSlot: string (const)
-  callee 1397:21 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 1398:9 indexSlot: string (const)
+  local 1384:9 fn: IRFunction (const)
+  local 1385:9 args: Node (const)
+  local 1386:9 sep: string (const)
+  callee 1387:32 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 1387:75 Emitter.stringConstant -> @Emitter.stringConstant
+  local 1388:9 len: string (const)
+  callee 1388:15 loadLength -> @loadLength
+  local 1389:9 sepLen: string (const)
+  callee 1389:18 stringLength -> @stringLength
+  callee 1390:3 Emitter.declare -> @Emitter.declare
+  local 1395:9 gaps: string (const)
+  callee 1395:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1396:9 sepBytes: string (const)
+  callee 1396:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1397:9 empty: string (const)
+  callee 1397:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1398:9 totalSlot: string (const)
   callee 1398:21 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 1399:9 cursorSlot: string (const)
-  callee 1399:22 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 1400:9 base: string (const)
-  callee 1400:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1401:3 IRFunction.emit -> @IRFunction.emit
+  local 1399:9 indexSlot: string (const)
+  callee 1399:21 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  local 1400:9 cursorSlot: string (const)
+  callee 1400:22 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  local 1401:9 base: string (const)
+  callee 1401:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1402:3 IRFunction.emit -> @IRFunction.emit
-  local 1404:9 sumBlock: IRBlock (const)
-  callee 1404:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1405:9 sumBodyBlock: IRBlock (const)
-  callee 1405:24 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1406:9 copyBlock: IRBlock (const)
-  callee 1406:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1407:9 copyBodyBlock: IRBlock (const)
-  callee 1407:25 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1408:9 endBlock: IRBlock (const)
-  callee 1408:20 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1410:3 IRFunction.emit -> @IRFunction.emit
-  callee 1411:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1412:9 sumAt: string (const)
-  callee 1412:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1413:9 sumMore: string (const)
-  callee 1413:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1414:3 IRFunction.emit -> @IRFunction.emit
-  callee 1416:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1417:9 partPtr: string (const)
-  callee 1417:19 elementPointer -> @elementPointer
-  callee 1417:43 new ArrayBase -> @ArrayBase.constructor
-  local 1418:9 part: string (const)
-  callee 1418:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1419:33 Emitter.align8 -> @Emitter.align8
-  callee 1419:52 valueSlotAccess -> @valueSlotAccess
-  local 1421:9 total: string (const)
-  callee 1421:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1422:9 grown: string (const)
+  callee 1403:3 IRFunction.emit -> @IRFunction.emit
+  local 1405:9 sumBlock: IRBlock (const)
+  callee 1405:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1406:9 sumBodyBlock: IRBlock (const)
+  callee 1406:24 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1407:9 copyBlock: IRBlock (const)
+  callee 1407:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1408:9 copyBodyBlock: IRBlock (const)
+  callee 1408:25 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1409:9 endBlock: IRBlock (const)
+  callee 1409:20 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1411:3 IRFunction.emit -> @IRFunction.emit
+  callee 1412:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1413:9 sumAt: string (const)
+  callee 1413:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1414:9 sumMore: string (const)
+  callee 1414:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1415:3 IRFunction.emit -> @IRFunction.emit
+  callee 1417:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1418:9 partPtr: string (const)
+  callee 1418:19 elementPointer -> @elementPointer
+  callee 1418:43 new ArrayBase -> @ArrayBase.constructor
+  local 1419:9 part: string (const)
+  callee 1419:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1420:33 Emitter.align8 -> @Emitter.align8
+  callee 1420:52 valueSlotAccess -> @valueSlotAccess
+  local 1422:9 total: string (const)
   callee 1422:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1422:51 stringLength -> @stringLength
-  callee 1423:3 IRFunction.emit -> @IRFunction.emit
-  local 1424:9 sumNext: string (const)
-  callee 1424:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1425:3 IRFunction.emit -> @IRFunction.emit
+  local 1423:9 grown: string (const)
+  callee 1423:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1423:51 stringLength -> @stringLength
+  callee 1424:3 IRFunction.emit -> @IRFunction.emit
+  local 1425:9 sumNext: string (const)
+  callee 1425:19 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1426:3 IRFunction.emit -> @IRFunction.emit
-  callee 1435:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1436:9 size: string (const)
-  callee 1436:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1437:9 tooLong: string (const)
-  callee 1437:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1438:9 exact: string (const)
-  callee 1438:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1439:9 bytes: string (const)
+  callee 1427:3 IRFunction.emit -> @IRFunction.emit
+  callee 1436:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1437:9 size: string (const)
+  callee 1437:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1438:9 tooLong: string (const)
+  callee 1438:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1439:9 exact: string (const)
   callee 1439:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1439:59 allocRefusedBytes -> @allocRefusedBytes
-  local 1440:9 out: string (const)
-  callee 1440:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1440:40 Emitter.useRuntime -> @Emitter.useRuntime
-  local 1441:9 outHeader: string (const)
-  callee 1441:21 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1442:3 IRFunction.emit -> @IRFunction.emit
-  callee 1442:50 Emitter.align8 -> @Emitter.align8
-  local 1443:9 outData: string (const)
-  callee 1443:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1444:3 IRFunction.emit -> @IRFunction.emit
+  local 1440:9 bytes: string (const)
+  callee 1440:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1440:59 allocRefusedBytes -> @allocRefusedBytes
+  local 1441:9 out: string (const)
+  callee 1441:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1441:40 Emitter.useRuntime -> @Emitter.useRuntime
+  local 1442:9 outHeader: string (const)
+  callee 1442:21 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1443:3 IRFunction.emit -> @IRFunction.emit
+  callee 1443:50 Emitter.align8 -> @Emitter.align8
+  local 1444:9 outData: string (const)
+  callee 1444:19 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1445:3 IRFunction.emit -> @IRFunction.emit
   callee 1446:3 IRFunction.emit -> @IRFunction.emit
-  callee 1448:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1449:9 copyAt: string (const)
-  callee 1449:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1450:9 copyMore: string (const)
-  callee 1450:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1451:9 copyPartBlock: IRBlock (const)
-  callee 1451:25 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1452:3 IRFunction.emit -> @IRFunction.emit
-  callee 1454:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1455:9 cursor: string (const)
-  callee 1455:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1456:9 first: string (const)
-  callee 1456:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1457:9 gapLen: string (const)
-  callee 1457:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1458:9 sepData: string (const)
-  callee 1458:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1459:3 IRFunction.emit -> @IRFunction.emit
-  local 1460:9 afterGap: string (const)
-  callee 1460:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1461:9 itemPtr: string (const)
-  callee 1461:19 elementPointer -> @elementPointer
-  callee 1461:43 new ArrayBase -> @ArrayBase.constructor
-  local 1462:9 item: string (const)
-  callee 1462:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1463:33 Emitter.align8 -> @Emitter.align8
-  callee 1463:52 valueSlotAccess -> @valueSlotAccess
-  local 1465:9 itemLen: string (const)
-  callee 1465:19 stringLength -> @stringLength
-  local 1466:9 itemData: string (const)
-  callee 1466:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1467:3 IRFunction.emit -> @IRFunction.emit
-  local 1468:9 afterItem: string (const)
-  callee 1468:21 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1469:3 IRFunction.emit -> @IRFunction.emit
-  local 1470:9 copyNext: string (const)
-  callee 1470:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1471:3 IRFunction.emit -> @IRFunction.emit
+  callee 1447:3 IRFunction.emit -> @IRFunction.emit
+  callee 1449:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1450:9 copyAt: string (const)
+  callee 1450:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1451:9 copyMore: string (const)
+  callee 1451:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1452:9 copyPartBlock: IRBlock (const)
+  callee 1452:25 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1453:3 IRFunction.emit -> @IRFunction.emit
+  callee 1455:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1456:9 cursor: string (const)
+  callee 1456:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1457:9 first: string (const)
+  callee 1457:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1458:9 gapLen: string (const)
+  callee 1458:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1459:9 sepData: string (const)
+  callee 1459:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1460:3 IRFunction.emit -> @IRFunction.emit
+  local 1461:9 afterGap: string (const)
+  callee 1461:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1462:9 itemPtr: string (const)
+  callee 1462:19 elementPointer -> @elementPointer
+  callee 1462:43 new ArrayBase -> @ArrayBase.constructor
+  local 1463:9 item: string (const)
+  callee 1463:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1464:33 Emitter.align8 -> @Emitter.align8
+  callee 1464:52 valueSlotAccess -> @valueSlotAccess
+  local 1466:9 itemLen: string (const)
+  callee 1466:19 stringLength -> @stringLength
+  local 1467:9 itemData: string (const)
+  callee 1467:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1468:3 IRFunction.emit -> @IRFunction.emit
+  local 1469:9 afterItem: string (const)
+  callee 1469:21 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1470:3 IRFunction.emit -> @IRFunction.emit
+  local 1471:9 copyNext: string (const)
+  callee 1471:20 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1472:3 IRFunction.emit -> @IRFunction.emit
-  callee 1474:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1475:9 tail: string (const)
-  callee 1475:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1476:3 IRFunction.emit -> @IRFunction.emit
+  callee 1473:3 IRFunction.emit -> @IRFunction.emit
+  callee 1475:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1476:9 tail: string (const)
+  callee 1476:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1477:3 IRFunction.emit -> @IRFunction.emit
 function elementBytes(emitter: Emitter, arr: string, elem: i32, idx: string): string -> @elementBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via slotType
@@ -18339,12 +18339,12 @@ function elementBytes(emitter: Emitter, arr: string, elem: i32, idx: string): st
   calls: ArrayBase.constructor IRFunction.emitValue elementPointer nish_str_concat nish_str_eq slotType
   pointer emitter: size=208 writesThrough=false captured=false passedTo=slotType#0 elementPointer#0
   stackSites=1 stackLocals=0
-  local 1484:9 ty: string (const)
-  callee 1484:14 slotType -> @slotType
-  local 1485:9 slot: string (const)
-  callee 1485:16 elementPointer -> @elementPointer
-  callee 1485:40 new ArrayBase -> @ArrayBase.constructor
-  callee 1486:31 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1485:9 ty: string (const)
+  callee 1485:14 slotType -> @slotType
+  local 1486:9 slot: string (const)
+  callee 1486:16 elementPointer -> @elementPointer
+  callee 1486:40 new ArrayBase -> @ArrayBase.constructor
+  callee 1487:31 IRFunction.emitValue -> @IRFunction.emitValue
 function emitSet(emitter: Emitter, expr: Node, dst: string, elem: i32): string -> @emitSet
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -18353,32 +18353,32 @@ function emitSet(emitter: Emitter, expr: Node, dst: string, elem: i32): string -
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 emitOffset#0 loadLength#0 emitSliceCheck#0 loadLength#0 elementSize#0 Emitter.declare#0 elementBytes#0 elementBytes#0 elementAccess#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1504:9 fn: IRFunction (const)
-  local 1505:9 args: Node[] (const)
-  local 1506:9 src: string (const)
-  callee 1506:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1507:9 at: string (const)
-  callee 1507:32 emitOffset -> @emitOffset
-  local 1508:9 count: string (const)
-  callee 1508:17 loadLength -> @loadLength
-  local 1509:9 end: string (const)
-  callee 1509:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1511:5 emitSliceCheck -> @emitSliceCheck
-  callee 1511:38 loadLength -> @loadLength
-  local 1513:9 size: i32 (const)
-  callee 1513:16 elementSize -> @elementSize
-  local 1514:9 bytes: string (const)
-  callee 1514:38 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1515:9 disjoint: boolean (const)
-  local 1516:9 copy: string (const)
-  local 1517:9 noalias: string (const)
-  callee 1518:3 Emitter.declare -> @Emitter.declare
-  local 1521:9 to: string (const)
-  callee 1521:14 elementBytes -> @elementBytes
-  local 1522:9 from: string (const)
-  callee 1522:16 elementBytes -> @elementBytes
-  callee 1523:3 IRFunction.emit -> @IRFunction.emit
-  callee 1523:80 elementAccess -> @elementAccess
+  local 1505:9 fn: IRFunction (const)
+  local 1506:9 args: Node[] (const)
+  local 1507:9 src: string (const)
+  callee 1507:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1508:9 at: string (const)
+  callee 1508:32 emitOffset -> @emitOffset
+  local 1509:9 count: string (const)
+  callee 1509:17 loadLength -> @loadLength
+  local 1510:9 end: string (const)
+  callee 1510:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1512:5 emitSliceCheck -> @emitSliceCheck
+  callee 1512:38 loadLength -> @loadLength
+  local 1514:9 size: i32 (const)
+  callee 1514:16 elementSize -> @elementSize
+  local 1515:9 bytes: string (const)
+  callee 1515:38 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1516:9 disjoint: boolean (const)
+  local 1517:9 copy: string (const)
+  local 1518:9 noalias: string (const)
+  callee 1519:3 Emitter.declare -> @Emitter.declare
+  local 1522:9 to: string (const)
+  callee 1522:14 elementBytes -> @elementBytes
+  local 1523:9 from: string (const)
+  callee 1523:16 elementBytes -> @elementBytes
+  callee 1524:3 IRFunction.emit -> @IRFunction.emit
+  callee 1524:80 elementAccess -> @elementAccess
 function emitOffset(emitter: Emitter, expr: Node): string -> @emitOffset
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -18386,17 +18386,17 @@ function emitOffset(emitter: Emitter, expr: Node): string -> @emitOffset
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitIndex#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 emitIndex#1 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
-  local 1540:9 type: i32 (const)
-  callee 1540:16 Emitter.typeOf -> @Emitter.typeOf
-  callee 1541:8 isFloat -> @isFloat
-  callee 1542:12 emitIndex -> @emitIndex
-  local 1544:9 ty: string (const)
-  callee 1544:14 Emitter.llvm -> @Emitter.llvm
-  local 1545:9 value: string (const)
-  callee 1545:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1546:9 intrinsic: string (const)
-  callee 1546:21 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1547:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1541:9 type: i32 (const)
+  callee 1541:16 Emitter.typeOf -> @Emitter.typeOf
+  callee 1542:8 isFloat -> @isFloat
+  callee 1543:12 emitIndex -> @emitIndex
+  local 1545:9 ty: string (const)
+  callee 1545:14 Emitter.llvm -> @Emitter.llvm
+  local 1546:9 value: string (const)
+  callee 1546:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1547:9 intrinsic: string (const)
+  callee 1547:21 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1548:10 IRFunction.emitValue -> @IRFunction.emitValue
 function isIntegerLiteral(emitter: Emitter, expr: Node): boolean -> @isIntegerLiteral
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -18404,9 +18404,9 @@ function isIntegerLiteral(emitter: Emitter, expr: Node): boolean -> @isIntegerLi
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0 Emitter.typeOf#1
   stackSites=0 stackLocals=0
-  callee 1552:3 unwrapParens -> @unwrapParens
-  callee 1552:44 isFloat -> @isFloat
-  callee 1552:52 Emitter.typeOf -> @Emitter.typeOf
+  callee 1553:3 unwrapParens -> @unwrapParens
+  callee 1553:44 isFloat -> @isFloat
+  callee 1553:52 Emitter.typeOf -> @Emitter.typeOf
 function relativeIndex(emitter: Emitter, end: Node, k: string, len: string): string -> @relativeIndex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -18414,25 +18414,25 @@ function relativeIndex(emitter: Emitter, end: Node, k: string, len: string): str
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.useRuntime#0 isIntegerLiteral#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer end: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 isIntegerLiteral#1
   stackSites=0 stackLocals=0
-  local 1565:9 fn: IRFunction (const)
-  callee 1566:7 isUnsigned -> @isUnsigned
-  callee 1566:18 Emitter.typeOf -> @Emitter.typeOf
-  callee 1567:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1567:37 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1569:7 isIntegerLiteral -> @isIntegerLiteral
-  callee 1570:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1570:37 Emitter.useRuntime -> @Emitter.useRuntime
-  local 1572:9 negative: string (const)
-  callee 1572:20 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1573:9 back: string (const)
-  callee 1573:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1574:9 low: string (const)
-  callee 1574:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1574:40 Emitter.useRuntime -> @Emitter.useRuntime
-  local 1575:9 high: string (const)
-  callee 1575:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1575:41 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1576:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1566:9 fn: IRFunction (const)
+  callee 1567:7 isUnsigned -> @isUnsigned
+  callee 1567:18 Emitter.typeOf -> @Emitter.typeOf
+  callee 1568:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1568:37 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1570:7 isIntegerLiteral -> @isIntegerLiteral
+  callee 1571:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1571:37 Emitter.useRuntime -> @Emitter.useRuntime
+  local 1573:9 negative: string (const)
+  callee 1573:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1574:9 back: string (const)
+  callee 1574:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1575:9 low: string (const)
+  callee 1575:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1575:40 Emitter.useRuntime -> @Emitter.useRuntime
+  local 1576:9 high: string (const)
+  callee 1576:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1576:41 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1577:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitFill(emitter: Emitter, expr: Node, arr: string, elem: i32): string -> @emitFill
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
@@ -18441,56 +18441,56 @@ function emitFill(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 emitOffset#0 emitOffset#0 loadLength#0 relativeIndex#0 relativeIndex#0 slotType#0 Emitter.useRuntime#0 Emitter.declare#0 elementBytes#0 elementAccess#0 storeElement#0 elementPointer#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=0
-  local 1588:9 fn: IRFunction (const)
-  local 1589:9 args: Node[] (const)
-  local 1590:9 value: string (const)
-  callee 1590:17 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1591:9 start: string (const)
-  callee 1591:35 emitOffset -> @emitOffset
-  local 1592:9 stop: string (const)
-  callee 1592:34 emitOffset -> @emitOffset
-  local 1593:9 len: string (const)
-  callee 1593:15 loadLength -> @loadLength
-  local 1594:9 from: string (const)
-  callee 1594:35 relativeIndex -> @relativeIndex
-  local 1595:9 to: string (const)
-  callee 1595:32 relativeIndex -> @relativeIndex
-  callee 1596:7 slotType -> @slotType
-  local 1597:11 span: string (const)
-  callee 1597:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1598:11 count: string (const)
-  callee 1598:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1598:44 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 1599:5 Emitter.declare -> @Emitter.declare
-  local 1600:11 at: string (const)
-  callee 1600:16 elementBytes -> @elementBytes
-  callee 1601:5 IRFunction.emit -> @IRFunction.emit
-  callee 1601:84 elementAccess -> @elementAccess
-  local 1604:9 slot: string (const)
-  callee 1604:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 1605:3 IRFunction.emit -> @IRFunction.emit
-  local 1606:9 condBlock: IRBlock (const)
-  callee 1606:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1607:9 bodyBlock: IRBlock (const)
+  local 1589:9 fn: IRFunction (const)
+  local 1590:9 args: Node[] (const)
+  local 1591:9 value: string (const)
+  callee 1591:17 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1592:9 start: string (const)
+  callee 1592:35 emitOffset -> @emitOffset
+  local 1593:9 stop: string (const)
+  callee 1593:34 emitOffset -> @emitOffset
+  local 1594:9 len: string (const)
+  callee 1594:15 loadLength -> @loadLength
+  local 1595:9 from: string (const)
+  callee 1595:35 relativeIndex -> @relativeIndex
+  local 1596:9 to: string (const)
+  callee 1596:32 relativeIndex -> @relativeIndex
+  callee 1597:7 slotType -> @slotType
+  local 1598:11 span: string (const)
+  callee 1598:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1599:11 count: string (const)
+  callee 1599:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1599:44 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 1600:5 Emitter.declare -> @Emitter.declare
+  local 1601:11 at: string (const)
+  callee 1601:16 elementBytes -> @elementBytes
+  callee 1602:5 IRFunction.emit -> @IRFunction.emit
+  callee 1602:84 elementAccess -> @elementAccess
+  local 1605:9 slot: string (const)
+  callee 1605:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 1606:3 IRFunction.emit -> @IRFunction.emit
+  local 1607:9 condBlock: IRBlock (const)
   callee 1607:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1608:9 endBlock: IRBlock (const)
-  callee 1608:20 IRFunction.newBlock -> @IRFunction.newBlock
-  callee 1609:3 IRFunction.emit -> @IRFunction.emit
-  callee 1610:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1611:9 at: string (const)
-  callee 1611:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 1612:9 more: string (const)
-  callee 1612:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1613:3 IRFunction.emit -> @IRFunction.emit
-  callee 1614:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 1615:3 storeElement -> @storeElement
-  callee 1615:25 elementPointer -> @elementPointer
-  callee 1615:49 new ArrayBase -> @ArrayBase.constructor
-  local 1616:9 next: string (const)
-  callee 1616:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1617:3 IRFunction.emit -> @IRFunction.emit
+  local 1608:9 bodyBlock: IRBlock (const)
+  callee 1608:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1609:9 endBlock: IRBlock (const)
+  callee 1609:20 IRFunction.newBlock -> @IRFunction.newBlock
+  callee 1610:3 IRFunction.emit -> @IRFunction.emit
+  callee 1611:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1612:9 at: string (const)
+  callee 1612:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local 1613:9 more: string (const)
+  callee 1613:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1614:3 IRFunction.emit -> @IRFunction.emit
+  callee 1615:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1616:3 storeElement -> @storeElement
+  callee 1616:25 elementPointer -> @elementPointer
+  callee 1616:49 new ArrayBase -> @ArrayBase.constructor
+  local 1617:9 next: string (const)
+  callee 1617:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1618:3 IRFunction.emit -> @IRFunction.emit
-  callee 1619:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1619:3 IRFunction.emit -> @IRFunction.emit
+  callee 1620:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32): string -> @emitArrayMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType
@@ -18499,84 +18499,84 @@ function emitArrayMethodCall(emitter: Emitter, expr: Node, receiver: i32): strin
   pointer emitter: size=208 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.emitExpression#0 emitPush#0 emitPop#0 emitArrayIndexOf#0 emitSet#0 emitFill#0 emitJoin#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitPush#1 emitArrayIndexOf#1 emitSet#1 emitFill#1 emitJoin#1
   stackSites=0 stackLocals=0
-  local 1624:9 elem: i32 (const)
-  callee 1624:16 TypeTable.refOf -> @TypeTable.refOf
-  callee 1625:3 Emitter.declareType -> @Emitter.declareType
-  local 1626:9 arr: string (const)
-  callee 1626:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 1627:9 name: string (const)
-  callee 1629:12 emitPush -> @emitPush
-  callee 1632:12 emitPop -> @emitPop
-  callee 1635:12 emitArrayIndexOf -> @emitArrayIndexOf
-  callee 1638:12 emitSet -> @emitSet
-  callee 1641:12 emitFill -> @emitFill
-  callee 1643:10 emitJoin -> @emitJoin
+  local 1625:9 elem: i32 (const)
+  callee 1625:16 TypeTable.refOf -> @TypeTable.refOf
+  callee 1626:3 Emitter.declareType -> @Emitter.declareType
+  local 1627:9 arr: string (const)
+  callee 1627:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 1628:9 name: string (const)
+  callee 1630:12 emitPush -> @emitPush
+  callee 1633:12 emitPop -> @emitPop
+  callee 1636:12 emitArrayIndexOf -> @emitArrayIndexOf
+  callee 1639:12 emitSet -> @emitSet
+  callee 1642:12 emitFill -> @emitFill
+  callee 1644:10 emitJoin -> @emitJoin
 function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1695:3
+  sharedWrite: 1696:3
   calls: ArrayBase.constructor DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.declareType Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor emitWalk internalErrorFor loadElement loadLength nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=208 writesThrough=true captured=false passedTo=emitWalk#0 Emitter.llvm#0 Emitter.declareType#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.align8#0 Emitter.align8#0 loadLength#0 loadElement#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.align8#0 Emitter.align8#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=emitWalk#1
   stackSites=1 stackLocals=0
-  callee 1656:5 emitWalk -> @emitWalk
-  local 1659:9 decl: Node (const)
-  local 1660:9 local: Local | null (const)
-  callee 1662:18 internalErrorFor -> @internalErrorFor
-  local 1664:9 elem: i32 (const)
-  local 1665:9 ty: string (const)
-  callee 1665:14 Emitter.llvm -> @Emitter.llvm
-  local 1666:9 fn: IRFunction (const)
-  callee 1667:3 Emitter.declareType -> @Emitter.declareType
-  local 1669:9 condBlock: IRBlock (const)
-  callee 1669:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1670:9 bodyBlock: IRBlock (const)
+  callee 1657:5 emitWalk -> @emitWalk
+  local 1660:9 decl: Node (const)
+  local 1661:9 local: Local | null (const)
+  callee 1663:18 internalErrorFor -> @internalErrorFor
+  local 1665:9 elem: i32 (const)
+  local 1666:9 ty: string (const)
+  callee 1666:14 Emitter.llvm -> @Emitter.llvm
+  local 1667:9 fn: IRFunction (const)
+  callee 1668:3 Emitter.declareType -> @Emitter.declareType
+  local 1670:9 condBlock: IRBlock (const)
   callee 1670:21 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1671:9 incBlock: IRBlock (const)
-  callee 1671:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1672:9 endBlock: IRBlock (const)
+  local 1671:9 bodyBlock: IRBlock (const)
+  callee 1671:21 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1672:9 incBlock: IRBlock (const)
   callee 1672:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 1673:9 slot: string (const)
-  callee 1673:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 1673:56 Emitter.align -> @Emitter.align
-  callee 1674:3 Emitter.setSlot -> @Emitter.setSlot
-  local 1675:9 debug: DebugInfo | null (const)
-  callee 1677:5 DebugInfo.declareLocal -> @DebugInfo.declareLocal
-  local 1679:9 idxSlot: string (const)
-  callee 1679:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  local 1681:9 arr: string (const)
-  callee 1681:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 1682:3 IRFunction.emit -> @IRFunction.emit
-  callee 1682:42 Emitter.align8 -> @Emitter.align8
+  local 1673:9 endBlock: IRBlock (const)
+  callee 1673:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 1674:9 slot: string (const)
+  callee 1674:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 1674:56 Emitter.align -> @Emitter.align
+  callee 1675:3 Emitter.setSlot -> @Emitter.setSlot
+  local 1676:9 debug: DebugInfo | null (const)
+  callee 1678:5 DebugInfo.declareLocal -> @DebugInfo.declareLocal
+  local 1680:9 idxSlot: string (const)
+  callee 1680:19 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  local 1682:9 arr: string (const)
+  callee 1682:15 Emitter.emitExpression -> @Emitter.emitExpression
   callee 1683:3 IRFunction.emit -> @IRFunction.emit
-  callee 1685:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1686:9 idx: string (const)
-  callee 1686:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1686:56 Emitter.align8 -> @Emitter.align8
-  local 1687:9 more: string (const)
-  callee 1687:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1687:53 loadLength -> @loadLength
-  callee 1688:3 IRFunction.emit -> @IRFunction.emit
-  callee 1690:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1693:9 value: string (const)
-  callee 1693:17 loadElement -> @loadElement
-  callee 1693:38 new ArrayBase -> @ArrayBase.constructor
-  callee 1694:3 IRFunction.emit -> @IRFunction.emit
-  callee 1694:50 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee 1695:22 new LoopTarget -> @LoopTarget.constructor
-  callee 1696:3 Emitter.emitStatement -> @Emitter.emitStatement
-  callee 1698:8 IRBlock.terminated -> @IRBlock.terminated
-  callee 1698:8 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 1699:5 IRFunction.emit -> @IRFunction.emit
-  callee 1702:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 1703:9 current: string (const)
-  callee 1703:19 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1703:60 Emitter.align8 -> @Emitter.align8
-  local 1704:9 next: string (const)
-  callee 1704:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 1705:3 IRFunction.emit -> @IRFunction.emit
-  callee 1705:48 Emitter.align8 -> @Emitter.align8
+  callee 1683:42 Emitter.align8 -> @Emitter.align8
+  callee 1684:3 IRFunction.emit -> @IRFunction.emit
+  callee 1686:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1687:9 idx: string (const)
+  callee 1687:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1687:56 Emitter.align8 -> @Emitter.align8
+  local 1688:9 more: string (const)
+  callee 1688:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1688:53 loadLength -> @loadLength
+  callee 1689:3 IRFunction.emit -> @IRFunction.emit
+  callee 1691:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1694:9 value: string (const)
+  callee 1694:17 loadElement -> @loadElement
+  callee 1694:38 new ArrayBase -> @ArrayBase.constructor
+  callee 1695:3 IRFunction.emit -> @IRFunction.emit
+  callee 1695:50 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee 1696:22 new LoopTarget -> @LoopTarget.constructor
+  callee 1697:3 Emitter.emitStatement -> @Emitter.emitStatement
+  callee 1699:8 IRBlock.terminated -> @IRBlock.terminated
+  callee 1699:8 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 1700:5 IRFunction.emit -> @IRFunction.emit
+  callee 1703:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 1704:9 current: string (const)
+  callee 1704:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 1704:60 Emitter.align8 -> @Emitter.align8
+  local 1705:9 next: string (const)
+  callee 1705:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee 1706:3 IRFunction.emit -> @IRFunction.emit
-  callee 1708:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 1706:48 Emitter.align8 -> @Emitter.align8
+  callee 1707:3 IRFunction.emit -> @IRFunction.emit
+  callee 1709:3 IRFunction.placeBlock -> @IRFunction.placeBlock
 module src/bounds.ts
 import CheckContext from "./context" -> struct CheckContext
 import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink

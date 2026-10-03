@@ -1070,8 +1070,9 @@ export const emitArrayLiteral = (emitter: Emitter, expr: Node): string => {
  *     rounding wraps on it, and the zero fill wrote until it faulted (CG-2).
  *     The compare is the same unsigned one, so a negative `n` fails it.
  *
- * A narrower unsigned and a range that starts at zero or above cannot reach
- * any of those. A literal is in range when it is at most 2^31 - 1.
+ * A narrower unsigned cannot reach any of those, and a literal is in range
+ * when it is at most 2^31 - 1. A ranged local is read as an `i32` (WP31), so
+ * it is checked as one whatever its range.
  * `collectArrayFacts` in `src/attributes.ts` asks the same question, because
  * the check is a call to a `noreturn` panic.
  */

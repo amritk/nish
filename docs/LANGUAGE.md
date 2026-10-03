@@ -3113,10 +3113,9 @@ divide with overflow` is simply unreachable on an unsigned type.
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
   A length no array can hold panics with `array length out of range` before
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
-  under `f64`, a negative `i32` or `i64`, a negative value of a ranged integer
-  whose range reaches below zero, or a NaN. A narrower unsigned length, a
-  range that starts at zero or above, and a literal up to 2^31 − 1 are not
-  checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
+  `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
+  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
   `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
