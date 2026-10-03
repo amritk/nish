@@ -1,8 +1,8 @@
 // The check `new Array<T>(n)` makes on a length whose type can leave the range
-// an array may have (docs/security/codegen.md, CG-1 and K1-6): one unsigned
-// compare for an `i64` or a `u32`, two float compares before the `fptosi` of an
-// `f64`, and none at all for an `i32` or a literal. Under the default number
-// mode the bound is 2^31 - 1; a block of 2^62 bytes or more is refused too.
+// an array may have (docs/security/codegen.md, CG-1, CG-2 and K1-6): one
+// unsigned compare for an `i64`, a `u32` or an `i32` (a negative one fails it),
+// two float compares before the `fptosi` of an `f64`, and none for a literal.
+// Under the default number mode the bound is 2^31 - 1; 2^62 bytes is refused.
 export const test = (): number => {
   const wide: i64 = toI64(parseInt("3"));
   const a: f64[] = new Array<f64>(wide);

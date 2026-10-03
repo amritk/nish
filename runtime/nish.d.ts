@@ -179,6 +179,33 @@ declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
  * once it is used. A statement.
  */
 declare function secureZero(bytes: u8[]): void;
+/**
+ * One `lstat` of `path`, so a symbolic link answers for itself: the owner's uid
+ * in the high 32 bits and `st_mode` in the low 32, or -1 when the path does not
+ * resolve (#386).
+ */
+declare function lstatOwnerModeSync(path: string): i64;
+/** The effective user id, the one to compare an owner from `lstatOwnerModeSync` with. */
+declare function geteuid(): i64;
+/** Whether the real user may run `path`: `access(path, X_OK)`. */
+declare function isExecutableSync(path: string): boolean;
+
+// ---- Unsafe (`nish:unsafe`) --------------------------------------------------
+//
+// Declared as globals so `tsc` reads a program that imports them, as every
+// `nish:` export is, but `nish` refuses a call to any of the five that is not
+// imported from `nish:unsafe`: the import is the module's visible opt-in.
+
+/** `xs[i]` with no bounds check: undefined behaviour when `i` is out of range. */
+declare function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
+/** `xs[i] = v` with no bounds check: undefined behaviour when `i` is out of range. */
+declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
+/** `a + b` wrapped to the operands' width, `i32` or `i64`: defined for every pair. */
+declare function wrappingAdd<T extends i32 | i64>(a: T, b: T): T;
+/** `a - b` wrapped to the operands' width. */
+declare function wrappingSub<T extends i32 | i64>(a: T, b: T): T;
+/** `a * b` wrapped to the operands' width. */
+declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -434,6 +461,19 @@ declare module "nish:net" {
   export function pollRemove(loop: i32, fd: i32): i32;
   /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
   export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+}
+
+declare module "nish:unsafe" {
+  /** `xs[i]` with no bounds check: undefined behaviour when `i` is out of range. */
+  export function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
+  /** `xs[i] = v` with no bounds check: undefined behaviour when `i` is out of range. */
+  export function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
+  /** `a + b` wrapped to the operands' width, `i32` or `i64`. */
+  export function wrappingAdd<T extends i32 | i64>(a: T, b: T): T;
+  /** `a - b` wrapped to the operands' width. */
+  export function wrappingSub<T extends i32 | i64>(a: T, b: T): T;
+  /** `a * b` wrapped to the operands' width. */
+  export function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
 }
 
 declare module "nish:io" {

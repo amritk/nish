@@ -140,7 +140,7 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Control flow | `if`/`else`, `while`, `do`, `for`, `for...of`, `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
 | Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
-| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `--unchecked-indexing`), `.length`, `push`, `for...of` | [Arrays](docs/LANGUAGE.md#array-literals) |
+| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`, `for...of` | [Arrays](docs/LANGUAGE.md#array-literals) |
 | Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout | [Classes](docs/LANGUAGE.md#classes) |
 | Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
 | Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `Arena.reset/mark/release/used` for explicit control | [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
@@ -149,8 +149,8 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io`, which is the same builtin under a name nothing can shadow | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
 | Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic type aliases, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 Semantics that differ from JavaScript on purpose: signed integer overflow is
-undefined behaviour (`--wrapping` restores two's-complement wrapping; the
-unsigned widths wrap either way), integer division by zero panics instead of
+undefined behaviour (`wrappingAdd`, `wrappingSub` and `wrappingMul` from
+`nish:unsafe` wrap two's-complement; the unsigned widths wrap either way), integer division by zero panics instead of
 yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 `toI32` saturates, `Math.min`/`max` take two arguments. The reasons are in the
 [FAQ](docs/FAQ.md); [docs/wp13-differential.md](docs/wp13-differential.md)
@@ -249,7 +249,7 @@ Not any one of them; it is more useful to say which piece came from where.
 | Bounds and panics | Rust with `panic=abort` | C |
 | Null | Kotlin and C# nullable reference types: flow narrowing, not a wrapper type | Rust's `Option<T>` |
 | Errors | Rust: `Result<T, E>`, and `orReturn()` is `?` | exceptions, or Go's second return value |
-| Signed overflow | C: undefined by default, `--wrapping` to opt out | Rust, where it is defined in both profiles |
+| Signed overflow | C: undefined by default; Rust's `wrapping_add` as an imported call to opt out at one site | Rust, where it is defined in both profiles |
 | Syntax | TypeScript | |
 
 The older relative is region inference as in Cyclone and MLKit: regions the
@@ -267,14 +267,21 @@ weaker: one global arena, per-function granularity, no region polymorphism.
   undefined behaviour. The compiler protects its own marks — a function that
   touches either, directly or through a callee, never gets an automatic
   scope — and not yours ([`Arena`](docs/LANGUAGE.md#arena)).
-- **`--unchecked-indexing`** drops the bounds checks, after which an
-  out-of-range index is undefined behaviour. It is there for benchmarks
-  (`tests/cases/arr_unchecked`), and it is a different thing from the proof
-  above: the proof removes a check the compiler showed was never going to
-  fire, and changes nothing about what the program means.
+- **`uncheckedGet` and `uncheckedSet`** from `nish:unsafe` read and write an
+  element with no bounds check, after which an out-of-range index at that site
+  is undefined behaviour. A module reaches them only through the import, so
+  every module that gives up a check says so at its top and every site is a
+  call (`tests/cases/unsafe_get_set`). That is a different thing from the
+  proof above: the proof removes a check the compiler showed was never going
+  to fire, and changes nothing about what the program means. The deprecated
+  `--unchecked-indexing` does the same to every index of your own package and
+  never reaches a dependency or `nish/`
+  ([`nish:unsafe`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **Signed integer overflow is undefined** by default, so LLVM may widen
-  induction variables and strength-reduce loops; `--wrapping` restores
-  two's-complement wrapping for a hash or an LCG that overflows on purpose
+  induction variables and strength-reduce loops; `wrappingAdd`, `wrappingSub`
+  and `wrappingMul` from `nish:unsafe` wrap two's-complement for a hash or an
+  LCG that overflows on purpose, and the deprecated `--wrapping` does it for
+  your own package's operators
   ([Semantics](docs/LANGUAGE.md#semantics-decisions)).
 - **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
   it there is the host's business
@@ -307,12 +314,14 @@ nish run [options] <file.ts> [args ...]
   --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus
                              <file>.mjs, a loader that marshals typed arrays
   --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)
-  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)
+  --unchecked-indexing       deprecated: drop the bounds checks of the entry package's modules
+                             (use uncheckedGet/uncheckedSet from nish:unsafe)
   --target <triple>|host     emit `target datalayout`/`target triple` for that machine
                              (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin,
                              aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
-  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they
-                             carry `nsw`, so signed overflow is undefined, like C)
+  --wrapping                 deprecated: signed add/sub/mul of the entry package's modules wrap
+                             (default: they carry `nsw`, so signed overflow is undefined, like C;
+                             use wrappingAdd/wrappingSub/wrappingMul from nish:unsafe)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
   --threads                  give every thread its own arena and random seed; the runtime is
                              built to match by --link (no language surface: nothing in the

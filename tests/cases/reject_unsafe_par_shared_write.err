@@ -1,0 +1,2 @@
+`bump` writes memory its caller can see at 
+reject_unsafe_par_shared_write.ts:15:3, and `parallelMapInto`

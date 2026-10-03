@@ -173,7 +173,7 @@ export const emitSliceCheck = (
   hasEnd: boolean,
   label: string
 ): void => {
-  if (emitter.opts.uncheckedIndexing) {
+  if (emitter.program.uncheckedIndexing) {
     return
   }
   const fn = emitter.fn

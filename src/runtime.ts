@@ -151,6 +151,18 @@ const plain = (name: string, signature: string, effect: i32): RuntimeFunction =>
   new RuntimeFunction(name, signature, attrs2("nounwind", "willreturn"), effect)
 
 /**
+ * `nounwind` alone, for a call that may never come back on what the program
+ * was handed: it `_exit(1)`s on a missing or unwritable file or a length past
+ * 2^31 - 1, or `open()` blocks on a FIFO nobody opens the other end of.
+ * `willreturn` would let LLVM assume the call returns, and every caller would
+ * inherit it through the fixpoint (docs/security/codegen.md, CG-8). Nothing
+ * else is dropped: the call still writes what its effect says and unwinds
+ * nothing.
+ */
+const mayNotReturn = (name: string, signature: string, effect: i32): RuntimeFunction =>
+  new RuntimeFunction(name, signature, attrs1("nounwind"), effect)
+
+/**
  * The runtime ABI as one ordered table, with a name index beside it.
  *
  * Built once per compilation rather than being a module constant, because a
@@ -230,9 +242,9 @@ export class RuntimeTable {
     )
     // A fresh arena string, written before anyone holds it: an allocation. The
     // same holds for `nish_str_concat` and the `nish_str_from_*` formatters.
-    // `nish_str_concat` can also exit, on a result past 2^31 - 1 bytes or out of
-    // memory, so its `willreturn` is the approximation docs/security/codegen.md
-    // records as CG-8: it holds on every path that returns. The fix is #382's.
+    // `nish_str_concat` is not `willreturn`: a result past 2^31 - 1 bytes, a
+    // length the program's input decides, exits as an allocation failure does
+    // (RT-2). Running out of memory is not counted: the allocator keeps it.
     this.addWrites(
       WRITES_ALLOC,
       plain(
@@ -243,7 +255,7 @@ export class RuntimeTable {
     )
     this.addWrites(
       WRITES_ALLOC,
-      plain(
+      mayNotReturn(
         "nish_str_concat",
         `declare noalias noundef nonnull align 8 i8* @nish_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
         EFFECT_WRITE
@@ -335,31 +347,37 @@ export class RuntimeTable {
     )
     exit.noreturn = true
     this.add(exit)
-    // `nish_read_file`, `nish_write_file` and `nish_append_file` `_exit(1)` on a
-    // path they cannot read or write, and all four `open`s wait on a FIFO with
-    // no writer, so `willreturn` here is the approximation
-    // docs/security/codegen.md records as CG-8: it holds on every path that
-    // returns. No miscompile follows, because each call writes memory and LLVM
-    // cannot delete it; dropping the attribute is #382's.
+    // The file calls are not `willreturn`: `nish_read_file` exits on a missing,
+    // unreadable or too long file, the writers on one they cannot open or
+    // write, and every one of them, `nish_read_file_or_null` included, blocks
+    // in `open()` on a FIFO until something opens its other end.
     this.add(
-      plain(
+      mayNotReturn(
         "nish_read_file",
         `declare noalias noundef nonnull align 8 i8* @nish_read_file(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     )
     this.add(
-      plain(
+      mayNotReturn(
         "nish_read_file_or_null",
         `declare noalias noundef align 8 i8* @nish_read_file_or_null(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     )
     this.add(
-      plain("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+      mayNotReturn(
+        "nish_write_file",
+        `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
     )
     this.add(
-      plain("nish_append_file", `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+      mayNotReturn(
+        "nish_append_file",
+        `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
     )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
@@ -474,9 +492,10 @@ export class RuntimeTable {
     // header per call, so `noalias`, and null for a file that cannot be read,
     // so no `nonnull` — for `nish_read_file_or_null`'s reasons: it allocates,
     // and the file is not memory LLVM tracks, so two reads either side of a
-    // `writeFileSync` must not fold into one.
+    // `writeFileSync` must not fold into one. Not `willreturn`, for the FIFO
+    // `nish_read_file_or_null` can block on.
     this.add(
-      plain(
+      mayNotReturn(
         "nish_read_file_bytes",
         `declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(${STR_NOCAP})`,
         EFFECT_WRITE
@@ -516,6 +535,17 @@ export class RuntimeTable {
     // not memory LLVM tracks, so two reads either side of a `writeFileSync`
     // must not fold, and a failed `stat` stores `errno`.
     this.add(plain("nish_stat_mtime", `declare double @nish_stat_mtime(${STR_NOCAP})`, EFFECT_WRITE))
+    // #386, runtime-host.c (RT-9): `nish_stat_mtime`'s shape and for its
+    // reasons. `lstat` and `access` read the file system, which is not memory
+    // LLVM tracks, and a failure stores `errno`, so neither may fold across a
+    // `writeFileSync`. `geteuid` cannot fail, but it is a system call whose
+    // answer a caller compares with the file system's, and it costs nothing to
+    // order it with them.
+    this.add(plain("nish_lstat_owner_mode", `declare i64 @nish_lstat_owner_mode(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(plain("nish_euid", "declare i64 @nish_euid()", EFFECT_WRITE))
+    this.add(
+      plain("nish_is_executable", `declare zeroext i1 @nish_is_executable(${STR_NOCAP})`, EFFECT_WRITE)
+    )
     // Changes the process's signal mask and dispositions once, and answers
     // the same descriptor after: a write, and `willreturn`.
     this.add(plain("nish_signal_fd", "declare noundef i32 @nish_signal_fd()", EFFECT_WRITE))
@@ -706,11 +736,12 @@ export class RuntimeTable {
     )
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of nish.h. It exits on a
-    // length past 2^31 - 1, so its `willreturn` is CG-8's approximation too.
+    // C hosts do, so it is part of the declared ABI and of nish.h. Not
+    // `willreturn`: a length past 2^31 - 1, or a block that overflows, both
+    // decided by the caller's input, exits as an allocation failure does (RT-7).
     this.addWrites(
       WRITES_ALLOC,
-      plain(
+      mayNotReturn(
         "nish_alloc_array",
         "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef)",
         EFFECT_WRITE

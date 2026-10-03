@@ -155,10 +155,10 @@ same `i32`).
 
 | Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`--wrapping` wraps). |
+| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`wrappingAdd`/`wrappingSub`/`wrappingMul` from [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) wrap). |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
 | `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow is undefined (`--wrapping` wraps); literals only by context. |
+| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow is undefined (the `nish:unsafe` `wrapping*` functions wrap); literals only by context. |
 | `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
 | `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
 | `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
@@ -457,7 +457,7 @@ tightly as a C `uint8_t` does.
 
 | Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
 | --- | --- | --- |
-| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw`; plain under `--wrapping` | the same instructions, never flagged: unsigned overflow wraps in both modes |
+| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw`; plain through `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe`, and in the entry package under the deprecated `--wrapping` | the same instructions, never flagged: unsigned overflow wraps in both modes |
 | `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
 | `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
 | `>>` | `ashr` | `lshr` |
@@ -469,7 +469,7 @@ tightly as a C `uint8_t` does.
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
 | `console.log(x)`, `` `${x}` `` | `nish_str_from_i32` / `_i64` | `zext` to i64, then `nish_str_from_u64` |
-| overflow (WP9, WP15 §3) | `add nsw` … unless `--wrapping` | nothing, in either mode: unsigned overflow is defined as wrapping |
+| overflow (WP9, WP15 §3) | `add nsw` …, except a `nish:unsafe` `wrapping*` call (and the entry package under the deprecated `--wrapping`) | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
 
@@ -1058,11 +1058,14 @@ having no top-level code and therefore no initialisation order.
   overflows is
   `` attempt to compute with overflow in a constant `` — the compiler will not
   hand back the one value the optimiser is entitled to assume cannot happen
-  (`tests/cases/reject_const_overflow_arith`). Under `--wrapping` the
-  instruction wraps, so the fold wraps:
-  `const WRAPPED: i32 = 2147483647 + 1` is `-2147483648`
-  (`tests/cases/const_wrap`, whose `.args` is `--wrapping` for exactly this
-  reason). Negation is arithmetic too, so `-2147483648` is fine in both modes
+  (`tests/cases/reject_const_overflow_arith`). A wrap the program means is
+  written `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`, the
+  one call a constant's initialiser may make, and that fold wraps:
+  `const WRAPPED: i32 = wrappingAdd(2147483647, 1)` is `-2147483648`
+  (`tests/cases/unsafe_wrapping`). Under the deprecated `--wrapping` the
+  instruction wraps too, in the entry package's modules, so there
+  `2147483647 + 1` folds to the same value (`tests/cases/const_wrap`, whose
+  `.args` is `--wrapping` for exactly this reason). Negation is arithmetic too, so `-2147483648` is fine in both modes
   (its result fits) while `-(-2147483648)` is refused by default. A bare
   integer literal takes the width of the constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
   64 bits (`const_i64`). Mixing widths is an error, as it is anywhere else
@@ -3114,11 +3117,10 @@ divide with overflow` is simply unreachable on an unsigned type.
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
   A length no array can hold panics with `array length out of range` before
   anything is allocated: past 2^31 − 1 under `--number-mode i32`, past 2^53
-  under `f64`, a negative `i64`, or a NaN. An `i32` length, a narrower
-  unsigned one, a ranged integer and a literal are not checked, so a negative
-  `i32` length is not refused yet: it wraps the allocator and the zero fill
-  faults (CG-2, open) (`tests/cases/cg_sec_new_array_guard`,
-  `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1).
+  under `f64`, a negative `i32` or `i64` (a ranged integer is read as an
+  `i32`, so it is checked as one), or a NaN. A narrower unsigned length and a
+  literal up to 2^31 − 1 are not checked (`tests/cases/cg_sec_new_array_guard`, `cg_sec_new_array_negative`,
+  `tests/link/cg_sec_new_array_*`; [docs/security/codegen.md](security/codegen.md), CG-1 and CG-2).
 - `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
   same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
   the same lowering (`tests/cases/arr_typed_views`), and no `push` or `pop`
@@ -3380,8 +3382,12 @@ may keep its check in another (`arr_bounds_generic_instances`, and the
 
 The proof changes what the program *costs*, never what it *means*: an
 out-of-range index that reaches a check still panics.
-`--unchecked-indexing` is the opposite trade and is still a separate thing —
-it removes every check and makes an out-of-range index undefined behaviour.
+`uncheckedGet` and `uncheckedSet` from
+[`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping) are the
+opposite trade and a separate thing: each removes the check at its own site
+and makes an out-of-range index there undefined behaviour. The deprecated
+`--unchecked-indexing` does the same to every index of the entry package's
+modules.
 
 String-keyed access is forbidden by the
 validator (`reject_string_key_access`, `reject_non_numeric_index`), and so
@@ -3532,9 +3538,9 @@ hole is `s` itself (`tests/cases/str_param_passthrough`).
 
 A concatenation or a template whose result would pass 2^31 − 1 bytes fails as
 an allocation does, `nish: out of memory` and exit 1, in both number modes
-([docs/security/runtime.md](security/runtime.md), RT-2). `join` does not check
-yet, so a string it builds can pass that length, and under `--number-mode i32`
-its `length` is then wrong (CG-3 in [docs/security/codegen.md](security/codegen.md)).
+([docs/security/runtime.md](security/runtime.md), RT-2), and so does a `join`
+whose result would (CG-3 in [docs/security/codegen.md](security/codegen.md);
+`tests/link/cg_sec_join_limit`). No string can therefore pass that length.
 
 ### `this` and object literals
 
@@ -3566,6 +3572,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -3662,6 +3669,88 @@ are `NaN`, `Number("0x1A")` is `26` (as in JavaScript; hex floats such as
 2 `parseInt`, the last followed by `llvm.fptosi.sat.i32.f64`); their effect
 is write (`strtod`/`strtoll` may set `errno`), so a function that parses is
 never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
+
+### `nish:unsafe`: unchecked access and defined wrapping
+
+Two things the language otherwise never does are each a decision about one
+site: reading or writing an element without the bounds check, and letting a
+signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
+and a program reaches them only through an import, so every module that gives
+up a check or defines a wrap says so at its top and every site that does is a
+call a reader can find.
+
+```ts
+import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
+
+export const mix = (h: i32[], i: i32, x: i32): void => {
+  uncheckedSet(h, i, wrappingAdd(uncheckedGet(h, i), x));
+};
+```
+
+| Signature | Lowering | Effect | Test |
+| --- | --- | --- | --- |
+| `uncheckedGet(xs: T[], i: i32): T` | the GEP and load `xs[i]` lowers to, with no `len` load, no compare and no branch to the bounds panic | read | `unsafe_get_set`; `reject_unsafe_arity`, `reject_unsafe_type` |
+| `uncheckedSet(xs: T[], i: i32, v: T): void` | the GEP and store `xs[i] = v` lowers to, likewise unchecked; a statement | write | `unsafe_get_set`; `reject_unsafe_arity`, `reject_unsafe_type`, `reject_unsafe_par_shared_write` |
+| `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
+| `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_type` |
+| `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` | none | `unsafe_wrapping`; `reject_unsafe_type` |
+
+- **The import is required.** The five are declared as globals in
+  `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
+  spelling; the compiler refuses the global one with
+  `` `uncheckedGet` is a `nish:unsafe` function and is called only through an import of it ``
+  (NL2456, `reject_unsafe_no_import`). An import may rename (`as`) and cannot
+  be shadowed, as every builtin import (above). A user function of the same
+  name, with no import, is the user's function, as with every builtin.
+- **`uncheckedGet` and `uncheckedSet` take an array of numbers**: `i32`,
+  `i64`, `u8`, `u16`, `u32`, `u64`, `f32` or `f64` elements, and nothing else
+  is `` `uncheckedGet` takes an array of numbers (i32, i64, u8, u16, u32, u64, f32 or f64), got string[] ``
+  (NL2455). A number is copied in and out and held by nothing, so the store
+  needs none of the escape and inline-array reasoning `xs[i] = v` carries. The
+  index is an `i32`, as the declaration says, and an `f64` one is
+  `` `uncheckedGet` expects an argument of type i32, got f64 ``; the value of a
+  store is the element type. A `readonly` array may be read and not written
+  (`` Cannot `uncheckedSet` through readonly u8[] ``). An index outside
+  `[0, xs.length)` is undefined behaviour, which is the whole of the trade.
+  The receiver is an argument, so an array field handed to either is a value
+  and is not stored inline ([Fixed-length array fields are stored
+  inline](#fixed-length-array-fields-are-stored-inline)); a store is a write
+  of the receiver for every rule that asks, the parallel-body rule included
+  (`reject_unsafe_par_shared_write`).
+- **`wrappingAdd`, `wrappingSub` and `wrappingMul` take two operands of one
+  type, `i32` or `i64`**, which is also the answer: the signed words are the
+  ones whose operators carry `nsw`, and an unsigned operator already wraps.
+  `` `wrappingMul` takes i32 or i64 operands (convert with toI32 or toI64), got u32 ``
+  is NL2454, and two widths are
+  `` `wrappingAdd` needs every operand of one type, got i32 and i64 `` (NL2400,
+  as `ctSelect`'s). A bare literal takes the other operand's type, wherever it
+  stands. The answer is the two's-complement wrap at that width, defined for
+  every pair: `wrappingAdd(2147483647, 1)` is `-2147483648` and
+  `wrappingMul(INT64_MAX, 2)` is `-2` (`unsafe_wrapping`). In a module
+  constant's initialiser the call folds, wrapping, where `2147483647 + 1` is
+  refused ([Module constants](#module-constants)).
+- **Under Node** `runtime/nish.mjs` answers the import, and the five are
+  `xs[i]`, `xs[i] = v`, `(a + b) | 0`, `(a - b) | 0` and `Math.imul` on an
+  `i32`, and `BigInt.asIntN(64, …)` on the BigInt an `i64` is there; a program
+  that stays in range prints the same as natively (`unsafe_get_set` and
+  `unsafe_wrapping` are run both ways by `tests/run.js`).
+- **Every import and every call is a recorded fact.** `--emit-checked` prints,
+  per module, an `unsafe import <line>:<col> <name> from "nish:unsafe"` line for
+  each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
+  for each site, so a report of where a program opts out of a check reads them
+  rather than the source (`tests/self/goldens/checked.txt`).
+- **`--unchecked-indexing` and `--wrapping` are deprecated**, and reach only
+  the **entry package**: the modules in the entry's own package, never a
+  `node_modules` dependency and never a `nish/` standard-library module. A
+  dependency compiled beside an entry that passes both keeps every bounds check
+  and every `nsw` it was written with, byte for byte
+  (`tests/link/unsafe_flag_scope`). Each flag still prints one performance
+  warning per compilation, at the top of the entry, naming its replacement —
+  `` --unchecked-indexing is deprecated and reaches only the modules of the entry package `` (NL9014) and
+  `` --wrapping is deprecated and reaches only the modules of the entry package `` (NL9015)
+  — which `--no-warn-performance` silences with the rest. `nish run`, which
+  prints no other performance warning, prints these two (`tests/nish/cli.ts`).
+  The flags are removed in a later release.
 
 ### Constant time: `ctSelect` and `ctEq`
 
@@ -3829,6 +3918,58 @@ The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
 to zero, and `wipe_bytes` prints the same lines under the prelude as natively.
 What Node cannot promise is the native build's stronger claim, because a
 collector that moved the array may have left the old bytes behind.
+
+### Who owns a path: `lstatOwnerModeSync`, `geteuid` and `isExecutableSync`
+
+What a driver asks before it trusts a directory or a program it found on its
+own: who owns this path, may anyone else write to it, and will the shell run
+it (#386; [security/cli.md](security/cli.md), CLI-7 and CLI-9).
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `lstatOwnerModeSync(path: string): i64` | one `lstat` of `path`: the owner's uid in the high 32 bits and `st_mode` (the file type and the permission bits) in the low 32, or **-1** when the path does not resolve or holds a NUL. A symbolic link answers for **itself**, not for what it names | write | `owner_checks`; `reject_owner_arity`, `reject_owner_i32`, `reject_owner_wasm` |
+| `geteuid(): i64` | the effective user id, the one to compare an owner with | write | `owner_checks`; `reject_owner_euid_arity`, `reject_owner_euid_wasm` |
+| `isExecutableSync(path: string): boolean` | `access(path, X_OK)`: whether the real user may run `path`. `false` for a path that does not resolve or holds a NUL | write | `owner_checks`; `reject_owner_type`, `reject_owner_exec_wasm` |
+
+- **The owner and the mode are one answer.** Both come out of one `lstat`, so
+  they describe the same file however the path changes in between; two calls
+  could describe two. Take them apart with `(om >> 32) & 0xffffffff` (the
+  owner) and `om & 0xfff` (the permission bits) or `om & 0xf000` (the type:
+  `0x8000` a regular file, `0x4000` a directory, `0xa000` a symbolic link).
+  The mask is not optional: a uid is unsigned and one of 2^31 or more fills
+  bit 63, which `>>` on an `i64` copies down, so `om >> 32` alone answers a
+  negative owner for a file such a user owns and never equals their
+  `geteuid()`. `>>>` would say the same natively, but a BigInt has no `>>>`, so
+  the mask is the spelling that reads the same under Node (`owner_checks`). A uid fills
+  32 bits, so the answer is an `i64` in both number modes, as `geteuid`'s is,
+  and an `i32` is refused rather than truncated
+  (`` Cannot initialize i32 variable `om` with i64 ``, `reject_owner_i32`).
+- **Not following a link is the point.** A directory that is a symbolic link
+  to one this user owns is not a directory this user owns, and the test of a
+  path that has to be trusted is of the path as written. That a link answers
+  for itself is pinned by RT-9 in `tests/runtime-test.c`, since a program
+  cannot make one.
+- **`isExecutableSync` is the shell's question,** asked for the real user as
+  `access` asks it: a file with no execute bit is not executable, root
+  included, and a readable file is not the same answer.
+- **Refused on a wasm32 build,** as `statMtimeSync` is: there is no file system
+  and no user there, so each is
+  `` `lstatOwnerModeSync` reaches the operating system, and a wasm32 build has none to reach ``
+  (`reject_owner_wasm`, `reject_owner_euid_wasm`, `reject_owner_exec_wasm`).
+  Each takes exactly its arguments (NL2061, `reject_owner_arity`,
+  `reject_owner_euid_arity`), and a path is a `string`
+  (`reject_owner_type`).
+- **The lowering is one call each,** `call i64 @nish_lstat_owner_mode(i8* %p)`,
+  `call i64 @nish_euid()` and `call zeroext i1 @nish_is_executable(i8* %p)`,
+  declared `nounwind willreturn` and ordered with every write, because the file
+  system is not memory LLVM tracks and a failure stores `errno`
+  ([IR_COOKBOOK.md](IR_COOKBOOK.md#lstatownermodesync-geteuid-and-isexecutablesync)).
+- **Globals, and not in a `nish:` module** yet, as `secureZero` is.
+
+The TypeScript reading ([wp33-round-trip.md](wp33-round-trip.md) §2) is
+**class A**: `runtime/nish.mjs` supplies `fs.lstatSync`'s `uid` and `mode`
+packed the same way as a BigInt, `process.geteuid()`, and `fs.accessSync` with
+`X_OK`, and `owner_checks` prints the same lines under the prelude as natively.
 
 ### Secrets: `nish:secret`
 
@@ -4479,7 +4620,7 @@ returns to it.
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
-| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Unlike a concatenation, its result is not yet held to 2^31 − 1 bytes (CG-3, open) | `arr_join`; `reject_arr_join_elem` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
 | `a.fill(value: T, start: number = 0, end: number = a.length): void` | stores `value` into every slot of `[start, end)`, each end relative and clamped as `TypedArray.prototype.fill`'s are. **Arrays of numbers only**. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_fill`, `bytes_fill_zero`, `bytes_offset_float`, `bytes_offset_u64`; `reject_bytes_fill_record`, `reject_bytes_fill_arity`, `reject_bytes_fill_value`, `reject_bytes_fill_index`, `reject_bytes_fill_value_position`, `reject_bytes_fill_readonly` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
@@ -5260,10 +5401,10 @@ one witness call chain for each ([wp35-capabilities.md](wp35-capabilities.md)).
 | --- | --- |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
 | `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
-| `env` | `getenv` (`caps_env`) |
+| `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
 | `ffi` | any call to a `declare function` (`caps_ffi`) |
-| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync` (`caps_fs_read`) |
+| `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
@@ -5306,19 +5447,23 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 
 ## Semantics decisions
 
-- **Signed integer overflow is undefined behaviour; `--wrapping` restores
-  two's-complement wrapping.** By default every user-level `i32`/`i64`
-  `add`/`sub`/`mul` (binary operators, unary minus, `op=` on locals, fields and
-  elements, `++`/`--`) carries `nsw`, as in C, so LLVM may widen induction
-  variables and strength-reduce loops. A program that overflows a signed
-  integer on purpose — a hash, an LCG, a wrap-around counter — must be compiled
-  with `--wrapping`, and then `2147483647 + 1` is `-2147483648` again, like a
-  Rust release build (`tests/cases/opt_nsw` for the default,
-  `tests/cases/opt_wrapping` and `i64_basic` for the opt-out;
+- **Signed integer overflow is undefined behaviour; `wrappingAdd`,
+  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap.** By default every
+  user-level `i32`/`i64` `add`/`sub`/`mul` (binary operators, unary minus,
+  `op=` on locals, fields and elements, `++`/`--`) carries `nsw`, as in C, so
+  LLVM may widen induction variables and strength-reduce loops. A program that
+  overflows a signed integer on purpose — a hash, an LCG, a wrap-around
+  counter — writes that operation as a `wrapping*` call, and then
+  `wrappingAdd(2147483647, 1)` is `-2147483648`, like Rust's `wrapping_add`
+  (`tests/cases/opt_nsw` for the default, `tests/cases/unsafe_wrapping` for the
+  call). The deprecated `--wrapping` still drops `nsw` from every operator of
+  the entry package's modules, never a dependency's
+  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping);
+  `tests/cases/opt_wrapping` and `i64_basic`;
   `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
   This withdraws a guarantee the language used to make, and it is the one place
-  where a correct program can become an incorrect one by upgrading; the flag is
-  the whole remedy. It is not free, though: the bounds proof
+  where a correct program can become an incorrect one by upgrading; the
+  `wrapping*` calls are the remedy. It is not free, though: the bounds proof
   ([Element access](#element-access)) may not carry a lower bound across
   `i = i + 1` when the wrap is *defined*, so a counted loop compiled with
   `--wrapping` keeps the bounds checks the default build removes. That is the
@@ -5414,9 +5559,11 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
   (`tests/cases/arr_bounds_panic`), and the same unsigned compare guards
   `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
-  (`tests/cases/str_slice_panic`); `--unchecked-indexing` removes all of them
-  (`tests/cases/arr_unchecked`), after which out-of-range is undefined
-  behaviour.
+  (`tests/cases/str_slice_panic`). `uncheckedGet` and `uncheckedSet` from
+  `nish:unsafe` remove the one at their own site (`tests/cases/unsafe_get_set`),
+  and the deprecated `--unchecked-indexing` removes all of them in the entry
+  package's modules (`tests/cases/arr_unchecked`, `tests/link/unsafe_flag_scope`);
+  past either, out-of-range is undefined behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
   types are rejected because a zeroed pointer would be null
   (`tests/cases/arr_new_zeroed`, `reject_arr_new_string`).
@@ -5440,7 +5587,11 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
-  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
+  checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`),
+  and when `v` can push to or pop from `a` the store goes into `a` as `v`
+  left it, its index checked again against the length then: `xs[0] +=
+  grow(xs)` writes the block `grow` moved the elements to, and an index `v`
+  shrank past panics (`tests/cases/cg_sec_compound_element_order`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
   the target expression is evaluated **once** whichever `op=` it is, so
   `a[next()] |= 1` calls `next()` a single time and pays for a single bounds
@@ -5633,14 +5784,18 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
-- **`--wrapping`**: see *Signed integer overflow is undefined behaviour*
-  above (`tests/cases/opt_nsw`, `opt_wrapping`).
+- **`--wrapping`** (deprecated, NL9015): see *Signed integer overflow is
+  undefined behaviour* above (`tests/cases/opt_nsw`, `opt_wrapping`). It
+  reaches the entry package's modules only
+  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-strict-exports`**: see *Linkage* above
   (`tests/cases/export_no_strict`).
 - **`--nsw`** and **`--strict-exports`** are still accepted and now say
   explicitly what the compiler does anyway; they exist so a build script
   written before the defaults changed still runs (`tests/cases/export_strict`).
-- **`--unchecked-indexing`**: see *Bounds checks* above.
+- **`--unchecked-indexing`** (deprecated, NL9014): see *Bounds checks* above.
+  It reaches the entry package's modules only
+  ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-stack-alloc`**: see *Memory model* above.
 
 ### Diagnostics and debugging flags

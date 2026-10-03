@@ -18,7 +18,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @Permute.benchmark(%struct.Permute* noundef nonnull align 8 dereferenceable(56) nocapture %this) #0 {
+define internal noundef i32 @Permute.benchmark(%struct.Permute* noundef nonnull align 8 dereferenceable(56) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Permute, %struct.Permute* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !4
@@ -34,7 +34,7 @@ entry:
   ret i32 %6
 }
 
-define internal void @Permute.permute(%struct.Permute* noundef nonnull align 8 dereferenceable(56) nocapture %this, i32 noundef %n) #0 {
+define internal void @Permute.permute(%struct.Permute* noundef nonnull align 8 dereferenceable(56) nocapture %this, i32 noundef %n) #1 {
 entry:
   %n1.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -119,7 +119,7 @@ entry:
   ret void
 }
 
-define noundef i32 @nish_main() #0 {
+define noundef i32 @nish_main() #1 {
 entry:
   %p.addr = alloca %struct.Permute*, align 8
   %Permute.obj = alloca %struct.Permute, align 8
