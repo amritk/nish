@@ -787,6 +787,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "signalFd") {
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_signal_fd")}()`)
   }
+  if (name === "readSignal") {
+    const fd = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
+  }
   // #385: the header goes to the runtime as `crypto.getRandomValues`'s does,
   // and `nish_wipe` reads `len` and `data` from it.
   if (name === "secureZero") {
@@ -794,10 +798,6 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const bytes = emitter.emitExpression(firstArgument(expr))
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_wipe")}(${ARRAY_STRUCT}* ${bytes})`)
     return "void"
-  }
-  if (name === "readSignal") {
-    const fd = emitter.emitExpression(firstArgument(expr))
-    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_read_signal")}(i32 ${fd})`)
   }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1)
