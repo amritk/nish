@@ -362,6 +362,34 @@ export const refusalChecks = (): i32 => {
     ),
     TLS_ALERT_DECODE_ERROR
   );
+  // A list declared shorter than its last entry, inside an extension whose
+  // own length balances: the entry must lie inside the list, not merely inside
+  // the extension.
+  const share: u8[] = cat([u16(TLS_GROUP_X25519), vec16(clientShare())]);
+  t.eqI32(
+    "a key_share list declared one byte shorter than its last share is decode_error",
+    refusal(
+      hello([
+        extSupportedVersions([TLS_VERSION_13]),
+        extSupportedGroups([TLS_GROUP_X25519]),
+        extSignatureAlgorithms([TLS_SIGNATURE_ECDSA_SECP256R1_SHA256]),
+        extension(TLS_EXT_KEY_SHARE, cat([u16(toI32(share.length) - 1), share])),
+      ])
+    ),
+    TLS_ALERT_DECODE_ERROR
+  );
+  const hostEntry: u8[] = cat([[toU8(0)], vec16(bytesOf("a.test"))]);
+  t.eqI32(
+    "a server_name list declared one byte shorter than its last name is decode_error",
+    refusal(hello(standardWith([extension(TLS_EXT_SERVER_NAME, cat([u16(toI32(hostEntry.length) - 1), hostEntry]))]))),
+    TLS_ALERT_DECODE_ERROR
+  );
+  const alpnEntry: u8[] = vec8(bytesOf("h2"));
+  t.eqI32(
+    "an ALPN list declared one byte shorter than its last name is decode_error",
+    refusal(hello(standardWith([extension(TLS_EXT_ALPN, cat([u16(toI32(alpnEntry.length) - 1), alpnEntry]))]))),
+    TLS_ALERT_DECODE_ERROR
+  );
   t.eqI32(
     "a byte after the extensions block is decode_error",
     refusal(

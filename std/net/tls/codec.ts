@@ -165,6 +165,19 @@ const tlsReadBytes = (r: TlsReader, n: i32): u8[] => {
   return out
 }
 
+/**
+ * Narrows the reader to a list that ends at `listEnd`, which a vector read just
+ * opened, and answers the end to restore (`r.end = outer`) once its entries
+ * are read. Every entry of a TLS list must lie inside the list's declared
+ * length, not merely inside the message or the extension around it, so an
+ * entry whose own length runs past the list fails the reader.
+ */
+const tlsReadList = (r: TlsReader, listEnd: i32): i32 => {
+  const outer: i32 = r.end
+  r.end = listEnd
+  return outer
+}
+
 /** Moves to `to`, the end of a vector this reader opened. */
 const tlsReadSkipTo = (r: TlsReader, to: i32): void => {
   if (to < r.at || to > r.end) {
@@ -266,6 +279,8 @@ export const tlsListHas = (list: i32[], value: i32): boolean => list.indexOf(val
  */
 const tlsReadServerName = (r: TlsReader, hello: TlsClientHello): void => {
   const listEnd: i32 = tlsReadVector(r, 2, 1, 65535)
+  // The list's own end bounds every entry in it (see `tlsReadList`).
+  const outerEnd: i32 = tlsReadList(r, listEnd)
   while (!r.failed && r.at < listEnd) {
     const nameType: i32 = tlsReadU8(r)
     const nameEnd: i32 = tlsReadVector(r, 2, 1, 65535)
@@ -286,6 +301,7 @@ const tlsReadServerName = (r: TlsReader, hello: TlsClientHello): void => {
     }
     tlsReadSkipTo(r, nameEnd)
   }
+  r.end = outerEnd
 }
 
 /**
@@ -297,6 +313,8 @@ const tlsReadServerName = (r: TlsReader, hello: TlsClientHello): void => {
 const tlsReadKeyShare = (r: TlsReader, hello: TlsClientHello): void => {
   hello.hasKeyShare = true
   const listEnd: i32 = tlsReadVector(r, 2, 0, 65535)
+  // The list's own end bounds every entry in it (see `tlsReadList`).
+  const outerEnd: i32 = tlsReadList(r, listEnd)
   while (!r.failed && r.at < listEnd) {
     const group: i32 = tlsReadU16(r)
     const shareEnd: i32 = tlsReadVector(r, 2, 1, 65535)
@@ -310,16 +328,20 @@ const tlsReadKeyShare = (r: TlsReader, hello: TlsClientHello): void => {
     }
     tlsReadSkipTo(r, shareEnd)
   }
+  r.end = outerEnd
 }
 
 /** `application_layer_protocol_negotiation` (RFC 7301 §3.1): ProtocolName<1..2^8-1> names in a list<2..2^16-1>. */
 const tlsReadAlpn = (r: TlsReader, hello: TlsClientHello): void => {
   hello.hasAlpn = true
   const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
+  // The list's own end bounds every entry in it (see `tlsReadList`).
+  const outerEnd: i32 = tlsReadList(r, listEnd)
   while (!r.failed && r.at < listEnd) {
     const nameEnd: i32 = tlsReadVector(r, 1, 1, 255)
     hello.alpn.push(tlsReadBytes(r, nameEnd - r.at))
   }
+  r.end = outerEnd
 }
 
 /** Reads one extension body, `r.at .. end`, of type `type`; an unknown type is skipped. */
@@ -396,8 +418,7 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
     // The extensions vector's own end bounds every extension in it: one whose
     // length runs past it is malformed even when the message's length still
     // balances.
-    const messageEnd: i32 = r.end
-    r.end = extensionsEnd
+    const messageEnd: i32 = tlsReadList(r, extensionsEnd)
     while (!r.failed && r.at < extensionsEnd) {
       const type: i32 = tlsReadU16(r)
       const bodyEnd: i32 = tlsReadVector(r, 2, 0, 65535)
@@ -415,8 +436,7 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
       hello.extensionTypes.push(type)
       // The extension's own end bounds every read inside it, so a vector in
       // one extension cannot run on into the next.
-      const outerEnd: i32 = r.end
-      r.end = bodyEnd
+      const outerEnd: i32 = tlsReadList(r, bodyEnd)
       tlsReadExtension(r, type, bodyEnd, hello)
       r.end = outerEnd
     }
