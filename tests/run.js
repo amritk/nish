@@ -3050,7 +3050,6 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
   const compile = (source, out, extra = []) =>
     spawnSync(NISH, [source, "-o", path.join(buildDir, out), ...extra], { cwd: root, encoding: "utf8" })
   const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: deprecation: /.test(l))
-  const objects = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{"))
   const builtins = path.join(casesDir, "mem_arena_builtins.ts")
   const tail =
     "is still referenced is undefined behaviour the compiler does not check. Bracket the work with " +
@@ -3078,7 +3077,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 
   // --json: one object per call on stdout, keyed by its code and severity.
   const json = compile(builtins, "deprecation_builtins_json.ll", ["--json"])
-  const jsonObjects = objects(json.stdout).map((l) => JSON.parse(l))
+  const jsonObjects = diagnosticsOf(json.stdout)
   check(
     "deprecation: under --json each call is one object with code NL7001 and severity `deprecation`, and exit 0",
     json.status === 0 &&
@@ -3106,7 +3105,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
     reads.status === 0 &&
       summaries(reads.stderr).length === 0 &&
       readsJson.status === 0 &&
-      objects(readsJson.stdout).length === 0,
+      diagnosticsOf(readsJson.stdout).length === 0,
     reads.stderr + readsJson.stdout
   )
 
@@ -3124,8 +3123,8 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
       broken.stderr.includes(": error: ") &&
       !broken.stderr.includes(": deprecation: ") &&
       brokenJson.status === 1 &&
-      objects(brokenJson.stdout).length > 0 &&
-      objects(brokenJson.stdout).every((l) => JSON.parse(l).severity === "error"),
+      diagnosticsOf(brokenJson.stdout).length > 0 &&
+      diagnosticsOf(brokenJson.stdout).every((d) => d.severity === "error"),
     broken.stderr + brokenJson.stdout
   )
 
@@ -3141,8 +3140,7 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
   check(
     "deprecation: a call in a generic body instantiated twice warns once",
     generic.status === 0 &&
-      objects(generic.stdout)
-        .map((l) => JSON.parse(l))
+      diagnosticsOf(generic.stdout)
         .filter((o) => o.severity === "deprecation")
         .map((o) => `${o.code} ${o.line}:${o.column}`)
         .join(",") === "NL7001 3:3",
@@ -3166,8 +3164,8 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
       both.stderr.indexOf(": deprecation: ") >= 0 &&
       both.stderr.indexOf(": deprecation: ") < both.stderr.indexOf(": performance: ") &&
       bothJson.status === 0 &&
-      objects(bothJson.stdout)
-        .map((l) => `${JSON.parse(l).severity} ${JSON.parse(l).code}`)
+      diagnosticsOf(bothJson.stdout)
+        .map((d) => `${d.severity} ${d.code}`)
         .join(",") === "deprecation NL7001,performance NL9002",
     both.stderr + bothJson.stdout + bothJson.stderr
   )

@@ -323,7 +323,7 @@ export class Diagnostic {
   json(): string {
     const endLine = this.source.lineOf(this.end)
     const endColumn = this.source.columnOf(this.end)
-    const warning = this.kind === PERFORMANCE || this.kind === PORTABILITY || this.kind === DEPRECATION
+    const warning = this.kind !== "error" && this.kind !== "syntax error"
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
@@ -438,17 +438,8 @@ export class DiagnosticSink {
     this.insertWarning(this.portability, new Diagnostic(source, start, end, PORTABILITY, text))
   }
 
-  /**
-   * Record a deprecation warning, at its place in the report order of its own
-   * list, once per position: a generic template's body is checked once per
-   * instantiation, and the call it names is still one call in the source.
-   */
+  /** Record a deprecation warning, at its place in the report order of its own list. */
   reportDeprecation(source: SourceFile, start: i32, end: i32, text: string): void {
-    for (const seen of this.deprecations) {
-      if (seen.source === source && seen.start === start && seen.text === text) {
-        return
-      }
-    }
     this.insertWarning(this.deprecations, new Diagnostic(source, start, end, DEPRECATION, text))
   }
 

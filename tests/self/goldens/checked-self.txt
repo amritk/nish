@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 76 programs, 1255707 dump lines live, 76 distinct modules.
+# 76 programs, 1255808 dump lines live, 76 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/arrays.ts src/builtins.ts src/expressions.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/arrays.ts: src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts src/constants.ts src/lexer.ts src/tokens.ts src/generics.ts src/checker.ts src/expressions.ts src/builtins.ts src/result.ts src/structs.ts src/parallel.ts src/attributes.ts src/emit-builtins.ts src/emit.ts src/debug.ts src/ir.ts src/escape.ts src/emit-util.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/tbaa.ts src/emit-strings.ts src/runtime.ts src/emit-map.ts src/validator.ts src/target.ts src/parents.ts src/declarations.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts
 entry src/assignment.ts: src/assignment.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/std-modules.ts src/paths.ts src/symbols.ts src/types.ts src/ice.ts
@@ -520,36 +520,39 @@ function CheckContext.performance(this: CheckContext, node: Node, message: strin
   callee 300:5 DiagnosticSink.reportPerformance -> @DiagnosticSink.reportPerformance
 function CheckContext.deprecation(this: CheckContext, node: Node, message: string): void -> @CheckContext.deprecation [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via DiagnosticSink.reportDeprecation
+  sharedWrite: via StringSet.add
   escaping: message
-  calls: DiagnosticSink.reportDeprecation
+  calls: DiagnosticSink.reportDeprecation StringSet.add StringSet.has nish_str_concat nish_str_from_i32
   pointer this: size=192 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 308:5 DiagnosticSink.reportDeprecation -> @DiagnosticSink.reportDeprecation
+  local 311:11 key: string (const)
+  callee 312:10 StringSet.has -> @StringSet.has
+  callee 313:7 StringSet.add -> @StringSet.add
+  callee 314:7 DiagnosticSink.reportDeprecation -> @DiagnosticSink.reportDeprecation
 function CheckContext.errorOnce(this: CheckContext, node: Node, start: i32, message: string): void -> @CheckContext.errorOnce [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 321:7
+  sharedWrite: 328:7
   escaping: message start
   calls: CheckContext.errorAtSpan StringSet.add StringSet.has nish_str_from_i32
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.errorAtSpan#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 319:11 key: string (const)
-  callee 320:9 StringSet.has -> @StringSet.has
-  callee 323:7 StringSet.add -> @StringSet.add
-  callee 324:7 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
-  local 326:11 current: FunctionSig | null (const)
+  local 326:11 key: string (const)
+  callee 327:9 StringSet.has -> @StringSet.has
+  callee 330:7 StringSet.add -> @StringSet.add
+  callee 331:7 CheckContext.errorAtSpan -> @CheckContext.errorAtSpan
+  local 333:11 current: FunctionSig | null (const)
 function CheckContext.capturesOuter(this: CheckContext, name: string): boolean -> @CheckContext.capturesOuter [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FunctionBindings.get Scope.lookup
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 339:16 scope: Scope (const)
-  callee 340:11 Scope.lookup -> @Scope.lookup
-  local 344:16 bindings: FunctionBindings (const)
-  callee 345:11 FunctionBindings.get -> @FunctionBindings.get
+  local 346:16 scope: Scope (const)
+  callee 347:11 Scope.lookup -> @Scope.lookup
+  local 351:16 bindings: FunctionBindings (const)
+  callee 352:11 FunctionBindings.get -> @FunctionBindings.get
 function CheckContext.errorType(this: CheckContext, node: Node, message: string): i32 -> @CheckContext.errorType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -558,7 +561,7 @@ function CheckContext.errorType(this: CheckContext, node: Node, message: string)
   pointer this: size=192 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 354:5 CheckContext.error -> @CheckContext.error
+  callee 361:5 CheckContext.error -> @CheckContext.error
 function CheckContext.textOf(this: CheckContext, node: Node): string -> @CheckContext.textOf [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
@@ -575,38 +578,38 @@ function CheckContext.signature(this: CheckContext, name: string): FunctionSig |
   calls: StringMap.get nish_panic_index
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 370:11 at: i32 (const)
-  callee 370:16 StringMap.get -> @StringMap.get
+  local 377:11 at: i32 (const)
+  callee 377:16 StringMap.get -> @StringMap.get
 function CheckContext.template(this: CheckContext, name: string): TemplateInfo | null -> @CheckContext.template [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: CheckedProgram.template
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 376:12 CheckedProgram.template -> @CheckedProgram.template
+  callee 383:12 CheckedProgram.template -> @CheckedProgram.template
 function CheckContext.addFunction(this: CheckContext, sig: FunctionSig): void -> @CheckContext.addFunction [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 382:5
+  sharedWrite: 389:5
   escaping: sig
   calls: StringMap.set nish_array_grow
   pointer this: size=192 writesThrough=false captured=false
   pointer sig: size=112 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 381:5 StringMap.set -> @StringMap.set
+  callee 388:5 StringMap.set -> @StringMap.set
 function CheckContext.pushLoop(this: CheckContext, kind: i32): void -> @CheckContext.pushLoop [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 387:5
+  sharedWrite: 394:5
   escaping: kind
   calls: nish_array_grow
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function CheckContext.popLoop(this: CheckContext): boolean -> @CheckContext.popLoop [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 394:5
+  sharedWrite: 401:5
   calls: nish_panic_index
   pointer this: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 393:11 broke: boolean (const)
+  local 400:11 broke: boolean (const)
 module src/diagnostics.ts
 import codeFor from "./codes" -> function @codeFor
 import compareStrings from "./strings" -> function @compareStrings
@@ -865,30 +868,29 @@ function DiagnosticSink.reportPortability(this: DiagnosticSink, source: SourceFi
   callee 438:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
   callee 438:42 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.reportDeprecation(this: DiagnosticSink, source: SourceFile, start: i32, end: i32, text: string): void -> @DiagnosticSink.reportDeprecation [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.insertWarning
   escaping: end start text
-  calls: Diagnostic.constructor DiagnosticSink.insertWarning nish_alloc_struct nish_str_eq
+  calls: Diagnostic.constructor DiagnosticSink.insertWarning nish_alloc_struct
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.insertWarning#0
   pointer source: size=24 writesThrough=true captured=true passedTo=Diagnostic.constructor#1
   stackSites=0 stackLocals=0
-  local 447:16 seen: Diagnostic (const)
-  callee 452:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
-  callee 452:43 new Diagnostic -> @Diagnostic.constructor
+  callee 443:5 DiagnosticSink.insertWarning -> @DiagnosticSink.insertWarning
+  callee 443:43 new Diagnostic -> @Diagnostic.constructor
 function DiagnosticSink.insertWarning(this: DiagnosticSink, list: Diagnostic[], warning: Diagnostic): void -> @DiagnosticSink.insertWarning [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 460:5
+  sharedWrite: 451:5
   escaping: warning
   calls: DiagnosticSink.compareWarnings StringMap.has StringMap.set StringMap.size nish_array_grow nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.compareWarnings#0
   pointer list: size=0 writesThrough=true captured=false
   pointer warning: size=40 writesThrough=true captured=true passedTo=DiagnosticSink.compareWarnings#2
   stackSites=0 stackLocals=0
-  callee 457:10 StringMap.has -> @StringMap.has
-  callee 458:7 StringMap.set -> @StringMap.set
-  callee 458:54 StringMap.size -> @StringMap.size
-  local 461:9 i: i32 (let)
-  callee 462:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
+  callee 448:10 StringMap.has -> @StringMap.has
+  callee 449:7 StringMap.set -> @StringMap.set
+  callee 449:54 StringMap.size -> @StringMap.size
+  local 452:9 i: i32 (let)
+  callee 453:21 DiagnosticSink.compareWarnings -> @DiagnosticSink.compareWarnings
 function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: Diagnostic): i32 -> @DiagnosticSink.compareWarnings [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: StringMap.get codeFor compareStrings nish_arena_mark nish_arena_release
@@ -896,13 +898,13 @@ function DiagnosticSink.compareWarnings(this: DiagnosticSink, a: Diagnostic, b: 
   pointer a: size=40 writesThrough=false captured=false
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 482:11 fileA: i32 (const)
-  callee 482:19 StringMap.get -> @StringMap.get
-  local 483:11 fileB: i32 (const)
-  callee 483:19 StringMap.get -> @StringMap.get
-  callee 493:12 compareStrings -> @compareStrings
-  callee 493:27 codeFor -> @codeFor
-  callee 493:52 codeFor -> @codeFor
+  local 473:11 fileA: i32 (const)
+  callee 473:19 StringMap.get -> @StringMap.get
+  local 474:11 fileB: i32 (const)
+  callee 474:19 StringMap.get -> @StringMap.get
+  callee 484:12 compareStrings -> @compareStrings
+  callee 484:27 codeFor -> @codeFor
+  callee 484:52 codeFor -> @codeFor
 function DiagnosticSink.hasErrors(this: DiagnosticSink): boolean -> @DiagnosticSink.hasErrors [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=48 writesThrough=false captured=false
@@ -922,53 +924,53 @@ function DiagnosticSink.compare(this: DiagnosticSink, a: Diagnostic, b: Diagnost
   pointer a: size=40 writesThrough=false captured=false
   pointer b: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 510:11 fileA: i32 (const)
-  callee 510:19 StringMap.get -> @StringMap.get
-  local 511:11 fileB: i32 (const)
-  callee 511:19 StringMap.get -> @StringMap.get
+  local 501:11 fileA: i32 (const)
+  callee 501:19 StringMap.get -> @StringMap.get
+  local 502:11 fileB: i32 (const)
+  callee 502:19 StringMap.get -> @StringMap.get
 function DiagnosticSink.sorted(this: DiagnosticSink): Diagnostic[] -> @DiagnosticSink.sorted [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 536:7
+  sharedWrite: 527:7
   calls: DiagnosticSink.compare nish_array_grow nish_panic_index
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.compare#0
   stackSites=0 stackLocals=0
-  local 533:9 source: Diagnostic[] (let)
-  local 534:9 target: Diagnostic[] (let)
-  local 535:16 item: Diagnostic (const)
-  local 539:9 width: i32 (let)
-  local 541:11 low: i32 (let)
-  local 543:15 mid: i32 (const)
-  local 544:15 high: i32 (const)
-  local 545:13 left: i32 (let)
-  local 546:13 right: i32 (let)
-  local 547:13 out: i32 (let)
-  local 549:17 takeLeft: boolean (const)
-  callee 549:60 DiagnosticSink.compare -> @DiagnosticSink.compare
-  local 561:13 swap: Diagnostic[] (const)
+  local 524:9 source: Diagnostic[] (let)
+  local 525:9 target: Diagnostic[] (let)
+  local 526:16 item: Diagnostic (const)
+  local 530:9 width: i32 (let)
+  local 532:11 low: i32 (let)
+  local 534:15 mid: i32 (const)
+  local 535:15 high: i32 (const)
+  local 536:13 left: i32 (let)
+  local 537:13 right: i32 (let)
+  local 538:13 out: i32 (let)
+  local 540:17 takeLeft: boolean (const)
+  callee 540:60 DiagnosticSink.compare -> @DiagnosticSink.compare
+  local 552:13 swap: Diagnostic[] (const)
 function DiagnosticSink.format(this: DiagnosticSink, max: i32): string -> @DiagnosticSink.format [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.sorted
   calls: Diagnostic.message DiagnosticSink.sorted nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=48 writesThrough=false captured=false passedTo=DiagnosticSink.sorted#0
   stackSites=1 stackLocals=1
-  local 575:11 errors: Diagnostic[] (const)
-  callee 575:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 577:14 Diagnostic.message -> @Diagnostic.message
-  local 579:11 lines: string[] (const)
-  local 580:9 i: i32 (let)
-  callee 582:18 Diagnostic.message -> @Diagnostic.message
-  local 585:11 hidden: i32 (const)
+  local 566:11 errors: Diagnostic[] (const)
+  callee 566:20 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 568:14 Diagnostic.message -> @Diagnostic.message
+  local 570:11 lines: string[] (const)
+  local 571:9 i: i32 (let)
+  callee 573:18 Diagnostic.message -> @Diagnostic.message
+  local 576:11 hidden: i32 (const)
 function formatList(list: Diagnostic[], kind: string, max: i32): string -> @formatList [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Diagnostic.message
   calls: Diagnostic.message nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer list: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  callee 606:12 Diagnostic.message -> @Diagnostic.message
-  local 608:9 lines: string[] (const)
-  local 609:7 i: i32 (let)
-  callee 611:16 Diagnostic.message -> @Diagnostic.message
-  local 614:9 hidden: i32 (const)
+  callee 597:12 Diagnostic.message -> @Diagnostic.message
+  local 599:9 lines: string[] (const)
+  local 600:7 i: i32 (let)
+  callee 602:16 Diagnostic.message -> @Diagnostic.message
+  local 605:9 hidden: i32 (const)
 module src/codes.ts
 const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"

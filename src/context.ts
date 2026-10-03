@@ -303,9 +303,16 @@ export class CheckContext {
   /**
    * Report a deprecation warning against a node's own span: a call that still
    * compiles, exactly as it did, and that the language is going to take away.
+   * Once per node, through `reportedOnce` as `errorOnce` does it: a template's
+   * body is checked once per instantiation, and the call is still one call in
+   * the source. The key is prefixed so it never answers for an error's.
    */
   deprecation(node: Node, message: string): void {
-    this.sink.reportDeprecation(this.source, node.start, node.end, message)
+    const key = `deprecation ${node.id}`
+    if (!this.reportedOnce.has(key)) {
+      this.reportedOnce.add(key)
+      this.sink.reportDeprecation(this.source, node.start, node.end, message)
+    }
   }
 
   /**
