@@ -14,6 +14,7 @@
 // `resolveTypeNode`'s signature unchanged for recursive callers; here the
 // context is one argument that is already being threaded.
 
+import { containerMessage as secretContainerMessage } from "./secret"
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
 import { AliasInfo } from "./program"
@@ -132,6 +133,10 @@ const elementType = (node: Node, ctx: CheckContext): i32 => {
   const elem = resolveType(node, ctx)
   if (rejectForeignPointer(ctx, elem, "an array element", node)) {
     return T_ERROR
+  }
+  // `nish:secret`: an element outlives the function that made the secret.
+  if (ctx.table.holdsSecret(elem)) {
+    return ctx.errorType(node, secretContainerMessage(`${ctx.table.typeName(elem)}[]`))
   }
   return elem
 }
@@ -478,6 +483,10 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   }
   if (rejectForeignPointer(ctx, err, "a `Result` arm", args.children[1])) {
     return T_ERROR
+  }
+  if (ctx.table.holdsSecret(ok) || ctx.table.holdsSecret(err)) {
+    const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
+    return ctx.errorType(node, secretContainerMessage(spelled))
   }
   if (err === T_VOID) {
     return ctx.errorType(

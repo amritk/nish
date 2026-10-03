@@ -235,6 +235,13 @@ export class TypeTable {
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap
   /**
+   * `nish:secret`: the struct id of every `Secret<T>` instance -> the id of
+   * its `T`, recorded when the instance is laid out (`src/generics.ts`). On the
+   * table rather than on a module, because a `Secret` crosses modules as any
+   * struct does and every module asks the same question of the same id.
+   */
+  secrets: StringMap
+  /**
    * `Options.json`, copied here by `Compilation` because the table is what
    * `llvmType` and the N-API generator can reach when an invariant breaks, and
    * the report they make has to know whether it is owed as a `--json` object.
@@ -251,6 +258,7 @@ export class TypeTable {
     this.readonlys = []
     this.displays = []
     this.index = new StringMap()
+    this.secrets = new StringMap()
     let scalar = 0
     while (scalar < T_FIRST_DERIVED) {
       this.kinds.push(scalar)
@@ -582,6 +590,43 @@ export class TypeTable {
 
   isStruct(type: i32): boolean {
     return this.kinds[type] === K_STRUCT
+  }
+
+  /** Record that the struct id `secret` is `Secret<inner>` (`nish:secret`). */
+  markSecret(secret: i32, inner: i32): void {
+    this.secrets.set(`${secret}`, inner)
+  }
+
+  /** The `T` of `Secret<T>`, or -1 when `type` is not a `Secret`, a nullable one included. */
+  secretInner(type: i32): i32 {
+    return type >= 0 && this.kinds[type] === K_STRUCT ? this.secrets.get(`${type}`, -1) : -1
+  }
+
+  /** Whether `type` is `Secret<T>` or `Secret<T> | null`. */
+  isSecret(type: i32): boolean {
+    return type >= 0 && this.secretInner(this.stripNull(type)) >= 0
+  }
+
+  /**
+   * Whether `type` holds a `Secret` anywhere a value of it could reach: the
+   * type itself, an element, a nullable's inner type, or either arm of a
+   * `Result`. A struct is not looked inside, because no field may be one.
+   */
+  holdsSecret(type: i32): boolean {
+    if (type < 0) {
+      return false
+    }
+    if (this.isSecret(type)) {
+      return true
+    }
+    const kind = this.kinds[type]
+    if (kind === K_ARRAY || kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.holdsSecret(this.refs[type])
+    }
+    if (kind === K_RESULT) {
+      return this.holdsSecret(this.refs[type]) || this.holdsSecret(this.errs[type])
+    }
+    return false
   }
 
   /**

@@ -16,12 +16,11 @@ import {
   X509Certificate,
   derToPem,
   pemToDer,
-  x509MintSelfSigned,
   x509ParseCertificate,
   x509ParseChain,
-  x509ParseP256PrivateKey,
   x509VerifySignature,
 } from "nish/crypto/x509"
+import { x509MintSelfSignedPlain as x509MintSelfSigned, x509ParseP256PrivateKeyPlain as x509ParseP256PrivateKey } from "../crypto_x509/plain"
 import {
   A25_PRIVATE,
   CA_PEM,
