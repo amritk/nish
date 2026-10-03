@@ -200,7 +200,14 @@ declare function readFileSyncOrNull(path: string): string | null;
  * `readFileSyncOrNull` answers `null` for.
  */
 declare function readFileBytesSync(path: string): u8[] | null;
+/**
+ * The file's contents replaced by `data`, created at 0644 when missing. A
+ * symbolic link as the last component of the path is refused rather than
+ * followed, natively and under Node alike, and a path that cannot be written
+ * prints `nish: cannot write <path>` and exits 1.
+ */
 declare function writeFileSync(path: string, data: string): void;
+/** `data` added at the end of the file, with the same refusal of a symbolic link. */
 declare function appendFileSync(path: string, data: string): void;
 /** One directory, not recursive; whether a directory is there afterwards. */
 declare function mkdirSync(path: string): boolean;
@@ -221,7 +228,8 @@ declare function realpathSync(path: string): string | null;
 declare function spawnSync(argv: string[]): number;
 /**
  * The same run with each non-empty path receiving that stream, created or
- * truncated; an empty string leaves that stream inherited.
+ * truncated; an empty string leaves that stream inherited. A symbolic link at
+ * either path is refused, as `writeFileSync` refuses one, and the answer is -1.
  */
 declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
@@ -325,7 +333,9 @@ declare module "nish:fs" {
   export function readFileSync(path: string): string;
   export function readFileSyncOrNull(path: string): string | null;
   export function readFileBytesSync(path: string): u8[] | null;
+  /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function writeFileSync(path: string, data: string): void;
+  /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function appendFileSync(path: string, data: string): void;
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
@@ -347,7 +357,8 @@ declare module "nish:process" {
   export function spawnSync(argv: string[]): number;
   /**
    * The same run with each non-empty path receiving that stream, created or
-   * truncated; an empty string leaves that stream inherited.
+   * truncated; an empty string leaves that stream inherited. A symbolic link
+   * at either path is refused, and the answer is -1.
    */
   export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
   /**
