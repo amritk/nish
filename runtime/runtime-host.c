@@ -156,46 +156,65 @@ _Bool nish_is_executable(const nish_str *path) {
  * async-signal-safe. The write end is non-blocking, so a thousand unread
  * signals lose the newest rather than wedge the handler, and `errno` is put
  * back for the code the signal interrupted. The descriptor is made once and
- * every later `signalFd()` answers the same one. */
-static int nish_signal_read_end = -1;
-static int nish_signal_write_end = -1;
+ * every later `signalFd()` answers the same one.
+ *
+ * Both ends live in one word, the read end in the high half and the write end
+ * in the low, -1 until the pipe exists, so that publishing them is a single
+ * compare-and-swap (docs/security/runtime.md, RT-10). Two threads whose first
+ * calls overlap can each make a pipe; one swap wins, the other caller closes
+ * its own pipe and answers the winner's read end. With two separate words the
+ * call that finished last answered its own pipe while the handler wrote to
+ * the other, so one caller never heard a signal and a pipe leaked. Each first
+ * caller installs the handler itself before it returns, so neither can hand
+ * back a descriptor before a signal reaches it. */
+static int64_t nish_signal_pipe = -1;
 
 static void nish_on_signal(int sig) {
   int saved = errno;
   unsigned char b = (unsigned char)sig;
-  (void)!write(nish_signal_write_end, &b, 1);
+  /* The low half: the write end. */
+  (void)!write((int)__atomic_load_n(&nish_signal_pipe, __ATOMIC_RELAXED), &b, 1);
   errno = saved;
 }
 
 int32_t nish_signal_fd(void) {
-  if (nish_signal_read_end >= 0) return nish_signal_read_end;
-  int p[2];
+  int64_t cur = __atomic_load_n(&nish_signal_pipe, __ATOMIC_ACQUIRE);
+  if (cur < 0) {
+    int p[2];
 #if defined(__linux__)
-  /* Both ends close-on-exec from the moment they exist, so a child a sibling
-     thread spawns meanwhile cannot inherit either. */
-  if (pipe2(p, O_CLOEXEC) != 0) return -1;
+    /* Both ends close-on-exec from the moment they exist, so a child a sibling
+       thread spawns meanwhile cannot inherit either. */
+    if (pipe2(p, O_CLOEXEC) != 0) return -1;
 #else
-  /* Darwin has no `pipe2`, so there is a window between `pipe` and the two
-     `fcntl`s in which a child spawned by another thread inherits the ends. */
-  if (pipe(p) != 0) return -1;
-  fcntl(p[0], F_SETFD, FD_CLOEXEC);
-  fcntl(p[1], F_SETFD, FD_CLOEXEC);
+    /* Darwin has no `pipe2`, so there is a window between `pipe` and the two
+       `fcntl`s in which a child spawned by another thread inherits the ends. */
+    if (pipe(p) != 0) return -1;
+    fcntl(p[0], F_SETFD, FD_CLOEXEC);
+    fcntl(p[1], F_SETFD, FD_CLOEXEC);
 #endif
-  fcntl(p[1], F_SETFL, O_NONBLOCK);
-  nish_signal_write_end = p[1];
-  struct sigaction sa;
-  sa.sa_handler = nish_on_signal;
-  sa.sa_flags = SA_RESTART;
-  sigemptyset(&sa.sa_mask);
-  sigaction(SIGINT, &sa, 0);
-  sigaction(SIGTERM, &sa, 0);
-  return nish_signal_read_end = p[0];
+    fcntl(p[1], F_SETFL, O_NONBLOCK);
+    int64_t mine = (int64_t)p[0] << 32 | (uint32_t)p[1];
+    /* A failed swap leaves the winner's pair in `cur`. */
+    if (__atomic_compare_exchange_n(&nish_signal_pipe, &cur, mine, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+      cur = mine;
+    } else {
+      close(p[0]);
+      close(p[1]);
+    }
+    struct sigaction sa;
+    sa.sa_handler = nish_on_signal;
+    sa.sa_flags = SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, 0);
+    sigaction(SIGTERM, &sa, 0);
+  }
+  return (int32_t)(cur >> 32);
 }
 
 /* Block until a signal's byte arrives and answer it: 15 or 2, or -1 for any
    `fd` that is not the signal descriptor and for a read that fails. */
 int32_t nish_read_signal(int32_t fd) {
-  if (fd != nish_signal_read_end) return -1;
+  if (fd != (int32_t)(__atomic_load_n(&nish_signal_pipe, __ATOMIC_ACQUIRE) >> 32)) return -1;
   unsigned char b;
   ssize_t n;
   do n = read(fd, &b, 1);
