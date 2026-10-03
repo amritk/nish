@@ -653,6 +653,22 @@ export const main = (): number => {
   }
   reportPerformance(compilation, warnPerformance, json)
   reportPortability(compilation, json)
+  // `--link` needs an entry point, and stage0 says so before it emits
+  // anything rather than letting the linker answer `undefined reference to
+  // main` two steps later. It is asked before the capability line too, so a
+  // run that will not start prints the refusal alone (WP35): the line is
+  // promised for a program about to run. The checked dump writes no binary
+  // and needs no entry, as it never has.
+  if (
+    !emitChecked &&
+    (link.length > 0 || runMode) &&
+    compilation.entry().checker.program.entryMain === null
+  ) {
+    console.error(
+      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
+    )
+    return 1
+  }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
   // thing on stderr before the program's own output.
@@ -671,15 +687,6 @@ export const main = (): number => {
   if (emitChecked) {
     write(checkedText(compilation))
     return 0
-  }
-  // `--link` needs an entry point, and stage0 says so before it emits
-  // anything rather than letting the linker answer `undefined reference to
-  // main` two steps later.
-  if ((link.length > 0 || runMode) && compilation.entry().checker.program.entryMain === null) {
-    console.error(
-      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
-    )
-    return 1
   }
   // A sidecar that cannot describe the program is refused before any IR is
   // emitted or written, so a failed compile leaves nothing behind that the

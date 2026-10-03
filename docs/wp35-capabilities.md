@@ -244,8 +244,8 @@ The stability promise, which `tests/nish/cli.ts` checks byte for byte:
   version can list private functions without changing the shape.
 
 The report is laid out by `src/capability-report.ts`, which reads the masks
-and witnesses and decides nothing; the driver writes it after the IR, as it
-writes the interop sidecars.
+and witnesses and decides nothing; the driver writes it once the program has
+checked, before the IR, into a directory made the way a sidecar's is.
 
 `nish run --capabilities main.ts` prints exactly one line on **stderr** before
 the program runs — `capabilities: clock, fs.read (not deterministic)`, or
@@ -256,7 +256,9 @@ the run-cache key. Without `run` the same line is printed once the program
 has checked. Both flags are answered there, after the checker and before the
 emitter, so `--emit-checked` still gets them; `--emit-ast` stops before the
 checker, and either flag beside it is a usage error rather than a report
-silently not written.
+silently not written. A program that will not run prints no line: under `run`
+or beside `--link`, an entry with no `main` is refused first, and the refusal
+is all it prints (`tests/run.js`, the WP35 block).
 
 ## 6. Cost
 

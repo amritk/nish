@@ -10913,6 +10913,27 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     shownReport === null ? "no capabilities-report block in docs/IR_COOKBOOK.md" : shown(cookbookRun)
   )
 
+  // A program that will not run gets the refusal alone: the line is promised
+  // for a program about to start, so it never precedes the missing-`main`
+  // refusal, under `run` or beside `--link`. `std/json.ts` has no `main`.
+  for (const head of [
+    ["run", "--capabilities"],
+    ["--capabilities", "--link", path.join(capsDir, "no-main")],
+  ]) {
+    const noMain = spawnSync(NISH, [...head, path.join(root, "std", "json.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(capsDir, "cache") },
+    })
+    check(
+      `capabilities: \`${head.join(" ")}\` on a module with no main prints the refusal and no capability line, exit 1`,
+      noMain.status === 1 &&
+        noMain.stderr.includes("must declare `export const main") &&
+        !noMain.stderr.includes("capabilities: "),
+      shown(noMain)
+    )
+  }
+
   // Under `run` the line comes before the program starts, and stdout is the
   // program's alone.
   if (!HAS_CLANG) {
