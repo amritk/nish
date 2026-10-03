@@ -2,6 +2,11 @@
 // S3, pass 2): literals, indexing, `length`, the six methods, `new Array<T>`
 // and element assignment.
 
+import {
+  containerMessage as secretContainerMessage,
+  indexMessage as secretIndexMessage,
+  namesSecret,
+} from "./secret"
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
@@ -65,6 +70,10 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   }
   const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
   let elem = -1
+  // `nish:secret`: the first element that holds a `Secret`, refused after the
+  // loop so the message is built once (an element outlives its function).
+  let secretAt: Node | null = null
+  let secretType = -1
   for (const element of expr.children) {
     const type = unproven(ctx, checkExpression(ctx, element, scope, hint))
     if (type === T_ERROR) {
@@ -73,6 +82,11 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     if (type === T_VOID) {
       ctx.error(element, "Array elements cannot be void")
       continue
+    }
+    if (ctx.table.holdsSecret(type)) {
+      secretAt = element
+      secretType = type
+      break
     }
     if (elem < 0) {
       elem = type
@@ -84,6 +98,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
       )
     }
   }
+  if (secretAt !== null) {
+    return ctx.errorType(secretAt, secretContainerMessage(`${ctx.table.typeName(secretType)}[]`))
+  }
   return elem < 0 ? T_ERROR : ctx.table.arrayOf(elem)
 }
 
@@ -92,6 +109,10 @@ export const checkIndex = (ctx: CheckContext, expr: Node, scope: Scope): i32 => 
   const base = checkExpression(ctx, expr.children[0], scope, -1)
   if (base === T_ERROR) {
     return T_ERROR
+  }
+  // `nish:secret`: neither `key[0]` nor `table[key]` (the second asked by name, unchecked).
+  if (ctx.table.isSecret(base) || namesSecret(ctx, expr.children[1], scope)) {
+    return ctx.errorType(ctx.table.isSecret(base) ? expr.children[0] : expr.children[1], secretIndexMessage())
   }
   if (ctx.table.isNullable(base)) {
     return ctx.errorType(
@@ -633,6 +654,9 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
     elem = resolveType(typeArgs.children[0], ctx)
     if (rejectForeignPointer(ctx, elem, "an array element", typeArgs.children[0])) {
       return T_ERROR
+    }
+    if (ctx.table.holdsSecret(elem)) {
+      return ctx.errorType(typeArgs.children[0], secretContainerMessage(`${ctx.table.typeName(elem)}[]`))
     }
   } else {
     const alias = typedArrayElement(name)

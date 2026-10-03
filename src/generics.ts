@@ -25,6 +25,7 @@
 //     and it is refused by name. The caps are the backstop for anything the
 //     rule does not see, and they say they are a limit rather than a rule.
 
+import { isNishSourceModule } from "./nish-modules"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer } from "./annotations"
@@ -42,6 +43,17 @@ import {
 } from "./arrays"
 import { StringMap, StringSet } from "./map"
 import { isSpawnTemplate, parallelRole, recordParallelCall, reduceElementMessage } from "./parallel"
+import {
+  isSecretPayload,
+  isSecretTemplate,
+  recordExposeCall,
+  SECRET_EXPOSE,
+  SECRET_EXPOSE_WITH,
+  secretArgumentRefusal,
+  secretArgumentShapeMessage,
+  secretRoleOf,
+  secretShapeMessage,
+} from "./secret"
 import {
   collectMethodSignature,
   collectStructMembers,
@@ -708,7 +720,13 @@ export const deferInstantiation = (ctx: CheckContext, imp: ImportBinding, writte
     }
   }
   ctx.program.deferredInstances.push(new DeferredInstance(imp, args, at))
-  return instanceStructType(ctx.table, imp.importedName, args)
+  const type = instanceStructType(ctx.table, imp.importedName, args)
+  // `nish:secret`: the id is a `Secret` from the moment it is written, so a
+  // signature's `Secret<u8[]>[]` is refused before the request is answered.
+  if (isNishSourceModule(imp.specifier) && imp.importedName === "Secret" && args.length === 1) {
+    ctx.table.markSecret(type, args[0])
+  }
+  return type
 }
 
 /**
@@ -923,6 +941,20 @@ const instantiateStructHere = (
       return null
     }
   }
+  // `nish:secret`: what a `Secret` may hold, and that no other class may hold
+  // one, are both asked of the arguments where the type was written.
+  if (isSecretTemplate(template)) {
+    if (args.length === 1 && args[0] !== T_ERROR && !isSecretPayload(site.asker, args[0])) {
+      site.asker.error(at, secretShapeMessage(ctx.table, args[0]))
+      return null
+    }
+  } else {
+    const holding = secretArgumentRefusal(ctx.table, template.sourceName, args)
+    if (holding.length > 0) {
+      site.asker.error(at, holding)
+      return null
+    }
+  }
   adoptArgumentLayouts(ctx, args, site)
   // WP18 G6: before the tuple is looked up, so every request is held to the
   // constraint where it was written, not only the first one to name the tuple.
@@ -1006,6 +1038,9 @@ const instantiateStructHere = (
   info.exported = template.exported
   const instance = new StructInstantiation(template, args, info, bindings)
   instance.from = site.fromStruct
+  if (isSecretTemplate(template) && args.length === 1) {
+    ctx.table.markSecret(type, args[0])
+  }
   template.count = template.count + 1
   // Registered before the members are collected, so a field that mentions the
   // struct's own instantiation (`next: Node<i32> | null`) finds it rather than
@@ -1387,6 +1422,12 @@ export const checkGenericCall = (
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }
+  // `nish:secret`: what `secret` may wrap and what `wipe` can zero, said at the
+  // argument rather than inside the instance the call would have made.
+  const secretRefusal = secretArgumentShapeMessage(ctx, template, tuple)
+  if (secretRefusal.length > 0) {
+    return ctx.errorType(args.children[0], secretRefusal)
+  }
   const sig = instantiate(ctx, template, tuple, functions, expr)
   if (sig === null) {
     return T_ERROR
@@ -1415,6 +1456,11 @@ export const checkGenericCall = (
   // question about the whole program, so it is asked once the fixpoint has an
   // answer (`Compilation.checkParallel`); the call is where it will be told.
   recordParallelCall(ctx.program, expr, sig)
+  // `nish:secret`: an `expose` is judged once the facts are in (`Compilation.checkSecrets`).
+  const role = secretRoleOf(sig)
+  if (role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH) {
+    recordExposeCall(ctx.program, expr, sig)
+  }
   return sig.returnType
 }
 
