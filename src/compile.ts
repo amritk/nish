@@ -216,6 +216,16 @@ const reportPortability = (compilation: Compilation, json: boolean): void => {
 }
 
 /**
+ * The deprecation warnings, printed the way the other two classes are and
+ * ahead of both. There is no flag to silence them and `nish run` prints them
+ * too: a deprecated call is one the next breaking release refuses, and the
+ * program's author is the reader who has to hear it.
+ */
+const reportDeprecations = (compilation: Compilation, json: boolean): void => {
+  reportWarnings(compilation.sink.deprecations, "deprecation", json)
+}
+
+/**
  * One warning list: its objects on stdout under `--json`, else its report on
  * stderr, capped at the twenty the error report is; nothing when it is empty.
  */
@@ -624,6 +634,7 @@ export const main = (): number => {
     report(compilation, json)
     return 1
   }
+  reportDeprecations(compilation, json)
   reportPerformance(compilation, warnPerformance, json)
   reportPortability(compilation, json)
   // The checked dump is what pass 2 leaves behind, so it is written here

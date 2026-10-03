@@ -1990,7 +1990,7 @@ const checkLoopAllocation = (walk: PerfWalk, decl: Node): void => {
     name,
     `\`${local.name}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
       "past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, " +
-      "or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
+      "or open the loop body with `using a = arena()`"
   )
 }
 
@@ -2289,7 +2289,7 @@ const checkArenaReassignment = (walk: PerfWalk, expr: Node): void => {
     `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
       "here and nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
       "memory at all, so both allocations live until the program exits. Give each value its own `const`, or " +
-      "bracket the body with `Arena.mark()` and `Arena.release(m)`"
+      "bracket the body in a block that opens with `using a = arena()`"
   )
 }
 

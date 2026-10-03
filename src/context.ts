@@ -301,6 +301,14 @@ export class CheckContext {
   }
 
   /**
+   * Report a deprecation warning against a node's own span: a call that still
+   * compiles, exactly as it did, and that the language is going to take away.
+   */
+  deprecation(node: Node, message: string): void {
+    this.sink.reportDeprecation(this.source, node.start, node.end, message)
+  }
+
+  /**
    * Report a mistake in a generic template's body the first time one of its
    * instantiations reaches it, and refuse it without a word every time after
    * (WP18 G6). The statement and the body are poisoned either way, exactly as

@@ -55,6 +55,14 @@
 // questions — what this costs natively, and where the TypeScript reading of
 // the same source answers differently — and a reader asks for them separately
 // (`--no-warn-performance`, `--warn-portability`).
+//
+// The deprecation warnings are the third kind that is not an error: `kind` is
+// `deprecation`, a fourth list on the same terms — the same report order,
+// dropped the same way when the compilation failed — and printed by default
+// with no flag to silence it, because what it reports is a call the language
+// is going to take away. It is a list of its own rather than a ride on the
+// performance one because a deprecation is not a claim about the IR, and
+// `--no-warn-performance` is not a reader asking to hear nothing about it.
 
 import { codeFor } from "./codes"
 import { compareStrings, jsonQuote, StringBuilder } from "./strings"
@@ -72,6 +80,9 @@ const PERFORMANCE: string = "performance"
 
 /** The `kind` word of a WP33 portability warning, in the summary line and in `--json`. */
 const PORTABILITY: string = "portability"
+
+/** The `kind` word of a deprecation warning, in the summary line and in `--json`. */
+const DEPRECATION: string = "deprecation"
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are
@@ -299,8 +310,8 @@ export class Diagnostic {
 
   /**
    * The `--json` form: one flat object, no excerpt. `severity` is the field a
-   * tool filters on, so a WP15 §8 warning says `performance` there and a WP33
-   * one says `portability`; a syntax
+   * tool filters on, so a WP15 §8 warning says `performance` there, a WP33
+   * one says `portability` and a deprecation says `deprecation`; a syntax
    * error keeps its `syntax error: ` prefix inside `message`, because its
    * severity is still `error`. `code` is the stable identifier from
    * `src/codes.ts` — the field to key on rather than the prose, since the
@@ -312,7 +323,7 @@ export class Diagnostic {
   json(): string {
     const endLine = this.source.lineOf(this.end)
     const endColumn = this.source.columnOf(this.end)
-    const warning = this.kind === PERFORMANCE || this.kind === PORTABILITY
+    const warning = this.kind === PERFORMANCE || this.kind === PORTABILITY || this.kind === DEPRECATION
     const severity = warning ? this.kind : "error"
     const message = this.kind === "error" || warning ? this.text : `${this.kind}: ${this.text}`
     const code = codeFor(this.kind, this.text)
@@ -353,6 +364,12 @@ export class DiagnosticSink {
    * because the portability pass runs after the last of those is in.
    */
   portability: Diagnostic[]
+  /**
+   * The deprecation warnings, in the same report order and kept by the same
+   * insertion: a call the language still compiles but is going to take away.
+   * The driver prints them by default, apart from the other two reports.
+   */
+  deprecations: Diagnostic[]
 
   constructor() {
     this.items = []
@@ -360,6 +377,7 @@ export class DiagnosticSink {
     this.fileOrder = new StringMap()
     this.warningFileOrder = new StringMap()
     this.portability = []
+    this.deprecations = []
   }
 
   report(source: SourceFile, start: i32, end: i32, text: string): void {
@@ -416,7 +434,21 @@ export class DiagnosticSink {
     this.insertWarning(this.portability, new Diagnostic(source, start, end, PORTABILITY, text))
   }
 
-  /** The stable insertion both warning lists are kept sorted by (`compareWarnings`). */
+  /**
+   * Record a deprecation warning, at its place in the report order of its own
+   * list, once per position: a generic template's body is checked once per
+   * instantiation, and the call it names is still one call in the source.
+   */
+  reportDeprecation(source: SourceFile, start: i32, end: i32, text: string): void {
+    for (const seen of this.deprecations) {
+      if (seen.source === source && seen.start === start && seen.text === text) {
+        return
+      }
+    }
+    this.insertWarning(this.deprecations, new Diagnostic(source, start, end, DEPRECATION, text))
+  }
+
+  /** The stable insertion every warning list are kept sorted by (`compareWarnings`). */
   insertWarning(list: Diagnostic[], warning: Diagnostic): void {
     if (!this.warningFileOrder.has(warning.source.path)) {
       this.warningFileOrder.set(warning.source.path, this.warningFileOrder.size())
@@ -556,10 +588,10 @@ export class DiagnosticSink {
 }
 
 /**
- * A warning report — the performance list (WP15 §8) or the portability one
- * (WP33), `kind` naming which — shaped exactly like `format` so there is one
- * layout to read on either side: each warning's summary and excerpt, at most
- * `max` of them, then `...and N more <kind> warnings` and a count line. A lone
+ * A warning report — the performance list (WP15 §8), the portability one
+ * (WP33) or the deprecation one, `kind` naming which — shaped exactly like
+ * `format` so there is one layout to read on either side: each warning's
+ * summary and excerpt, at most `max` of them, then `...and N more <kind> warnings` and a count line. A lone
  * warning prints exactly its message, and an empty list prints nothing.
  */
 export const formatList = (list: Diagnostic[], kind: string, max: i32): string => {

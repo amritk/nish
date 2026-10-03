@@ -511,6 +511,7 @@ const checkArena = (
   if (member === "reset") {
     checkBuiltinArity(ctx, call, name, args, 0)
     requireStatementPosition(ctx, call, name)
+    deprecateArenaControl(ctx, call, name, "resetting the arena while anything allocated in it")
     return T_VOID
   }
   if (member === "release") {
@@ -518,9 +519,26 @@ const checkArena = (
       checkArgumentType(ctx, args.children[0], scope, name, T_I64)
     }
     requireStatementPosition(ctx, call, name)
+    deprecateArenaControl(ctx, call, name, "releasing to a mark while anything allocated after it")
     return T_VOID
   }
   return unknownBuiltin(ctx, call.children[0], name)
+}
+
+/**
+ * NL7001: `Arena.release` and `Arena.reset` still compile, to the call they
+ * always did, and warn. They are the one way left for a program to free memory
+ * it still references with no opt-in anywhere in its source, and
+ * `using a = arena()` is the same release with the escape check done by the
+ * compiler (docs/LANGUAGE.md, "`using a = arena()`").
+ */
+const deprecateArenaControl = (ctx: CheckContext, call: Node, name: string, what: string): void => {
+  ctx.deprecation(
+    call,
+    `\`${name}\` is deprecated: ${what} is still referenced is undefined behaviour the compiler does not ` +
+      "check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses " +
+      "whatever would outlive it"
+  )
 }
 
 /**

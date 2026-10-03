@@ -1828,6 +1828,22 @@ if (!only || "diagnostics".includes(only)) {
     ],
     ["a gap in the NL8xxx codes", "portabilityRules", (t) => t.replace('"NL8006",', '"NL8012",')],
     [
+      "a stray fragment in deprecationRules",
+      "deprecationRules",
+      (t) => t.replace("const deprecationRules = (): string[] => [\n", (open) => open + codesStray),
+    ],
+    ["a gap in the NL7xxx codes", "deprecationRules", (t) => t.replace('"NL7001",', '"NL7002",')],
+    [
+      "a deprecation code outside deprecationRules",
+      "diagnosticRules",
+      (t) => t.replace('"NL2186",', '"NL7002",'),
+    ],
+    [
+      "a non-deprecation code inside deprecationRules",
+      "deprecationRules",
+      (t) => t.replace('"NL7001",', '"NL2186",'),
+    ],
+    [
       "a portability code outside portabilityRules",
       "diagnosticRules",
       (t) => t.replace('"NL2186",', '"NL8012",'),
@@ -2271,7 +2287,7 @@ if (!only || "performance".includes(only)) {
         ":10:11: performance: `row` allocates a dynamically sized array on every iteration of this loop"
       ) &&
       allocLines[0].includes(
-        "hoist the allocation above the loop and reuse it, or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
+        "hoist the allocation above the loop and reuse it, or open the loop body with `using a = arena()`"
       ),
     alloc.stderr
   )
@@ -2290,7 +2306,7 @@ if (!only || "performance".includes(only)) {
         "`p` already holds an allocation and this one drops it: nothing can reach the old value from here and " +
           "nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
           "memory at all, so both allocations live until the program exits. Give each value its own `const`, or " +
-          "bracket the body with `Arena.mark()` and `Arena.release(m)`"
+          "bracket the body in a block that opens with `using a = arena()`"
       ) &&
       dropLines[1].includes("`xs` already holds an allocation") &&
       dropLines[2].includes("`s` already holds an allocation"),
@@ -2762,6 +2778,20 @@ if (!only || "performance".includes(only)) {
     )
   }
 
+  // What ships calls nothing deprecated either: a deprecation in `std/` would
+  // reach every program that imports the module, and one in an example is
+  // what a reader copies.
+  const deprecated = gateRuns.flatMap(({ source, mode }, at) =>
+    diagnosticsOf(gateResults[at].stdout)
+      .filter((d) => d.severity === "deprecation")
+      .map((d) => `${diagnosticLine(d)} (--number-mode ${mode}, ${source})`)
+  )
+  check(
+    `performance gate: none of the ${gateSources.length} std/ modules and examples calls anything deprecated`,
+    gateSources.length > 0 && deprecated.length === 0,
+    deprecated.join("\n")
+  )
+
   // The flag decides what is printed and nothing else.
   const off = compile("perf_str_concat_loop", "perf_str_off.ll", ["--no-warn-performance"])
   check(
@@ -3006,6 +3036,184 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
   )
+}
+
+// ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------
+// A call the language still compiles, to the bytes it always did, and is going
+// to take away: `Arena.release` and `Arena.reset`, whose undefined behaviour
+// `using a = arena()` replaces with a check. On by default with no flag to turn
+// it off, printed `file:line:col: deprecation: <text>` with the usual excerpt,
+// or with `"severity":"deprecation"` and its NL7xxx code under `--json`, ahead
+// of the other two warning classes and on the same streams. It never changes
+// the exit code, and a program with an error prints none.
+if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)) {
+  const compile = (source, out, extra = []) =>
+    spawnSync(NISH, [source, "-o", path.join(buildDir, out), ...extra], { cwd: root, encoding: "utf8" })
+  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: deprecation: /.test(l))
+  const objects = (stdout) => stdout.split("\n").filter((l) => l.startsWith("{"))
+  const builtins = path.join(casesDir, "mem_arena_builtins.ts")
+  const tail =
+    "is still referenced is undefined behaviour the compiler does not check. Bracket the work with " +
+    "`using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it"
+
+  // The human form: one summary per call, the excerpt under it, and the count,
+  // and the program still compiles, to the IR its golden pins.
+  const warned = compile(builtins, "deprecation_builtins.ll")
+  const warnedLines = warned.stderr.split("\n")
+  check(
+    "deprecation: Arena.release and Arena.reset each warn `file:line:col: deprecation: <text>`, with an excerpt and a count, and exit 0",
+    warned.status === 0 &&
+      summaries(warned.stderr).length === 2 &&
+      warnedLines[0] ===
+        `${builtins}:27:3: deprecation: \`Arena.release\` is deprecated: releasing to a mark while anything allocated after it ${tail}` &&
+      warnedLines[1] === "  27 |   Arena.release(m);" &&
+      warnedLines[2] === "     |   ^~~~~~~~~~~~~~~~" &&
+      warnedLines[3] ===
+        `${builtins}:31:3: deprecation: \`Arena.reset\` is deprecated: resetting the arena while anything allocated in it ${tail}` &&
+      warned.stderr.includes("\n2 deprecation warnings\n") &&
+      stripHeader(fs.readFileSync(path.join(buildDir, "deprecation_builtins.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(casesDir, "mem_arena_builtins.ll"), "utf8")),
+    warned.stderr
+  )
+
+  // --json: one object per call on stdout, keyed by its code and severity.
+  const json = compile(builtins, "deprecation_builtins_json.ll", ["--json"])
+  const jsonObjects = objects(json.stdout).map((l) => JSON.parse(l))
+  check(
+    "deprecation: under --json each call is one object with code NL7001 and severity `deprecation`, and exit 0",
+    json.status === 0 &&
+      jsonObjects.length === 2 &&
+      jsonObjects.every((o) => o.code === "NL7001" && o.severity === "deprecation") &&
+      jsonObjects.map((o) => `${o.line}:${o.column}-${o.endLine}:${o.endColumn}`).join(",") ===
+        "27:3-27:19,31:3-31:16" &&
+      jsonObjects[0].message.startsWith("`Arena.release` is deprecated: ") &&
+      jsonObjects[1].message.startsWith("`Arena.reset` is deprecated: ") &&
+      summaries(json.stderr).length === 0,
+    json.stdout + json.stderr
+  )
+
+  // `Arena.mark` and `Arena.used` are not deprecated: they read the arena and
+  // free nothing.
+  const readsSrc = path.join(buildDir, "deprecation_reads.ts")
+  fs.writeFileSync(
+    readsSrc,
+    "export const main = (): i32 => {\n  const m = Arena.mark();\n  return Arena.used() >= m ? 0 : 1;\n};\n"
+  )
+  const reads = compile(readsSrc, "deprecation_reads.ll")
+  const readsJson = compile(readsSrc, "deprecation_reads_json.ll", ["--json"])
+  check(
+    "deprecation: Arena.mark and Arena.used alone print nothing, in either form",
+    reads.status === 0 &&
+      summaries(reads.stderr).length === 0 &&
+      readsJson.status === 0 &&
+      objects(readsJson.stdout).length === 0,
+    reads.stderr + readsJson.stdout
+  )
+
+  // A program with an error gets the error report and nothing else.
+  const brokenSrc = path.join(buildDir, "deprecation_error.ts")
+  fs.writeFileSync(
+    brokenSrc,
+    "export const main = (): i32 => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return m + true;\n};\n"
+  )
+  const broken = compile(brokenSrc, "deprecation_error.ll")
+  const brokenJson = compile(brokenSrc, "deprecation_error_json.ll", ["--json"])
+  check(
+    "deprecation: a program with an error prints no deprecation warning, in either form",
+    broken.status === 1 &&
+      broken.stderr.includes(": error: ") &&
+      !broken.stderr.includes(": deprecation: ") &&
+      brokenJson.status === 1 &&
+      objects(brokenJson.stdout).length > 0 &&
+      objects(brokenJson.stdout).every((l) => JSON.parse(l).severity === "error"),
+    broken.stderr + brokenJson.stdout
+  )
+
+  // A generic body is checked once per instantiation, and the call it holds is
+  // still one call in the source: it warns once.
+  const genericSrc = path.join(buildDir, "deprecation_generic.ts")
+  fs.writeFileSync(
+    genericSrc,
+    "const keep = <T>(x: T): T => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return x;\n};\n\n" +
+      'export const main = (): i32 => {\n  const s = keep("ab");\n  return keep(s.length);\n};\n'
+  )
+  const generic = compile(genericSrc, "deprecation_generic.ll", ["--json"])
+  check(
+    "deprecation: a call in a generic body instantiated twice warns once",
+    generic.status === 0 &&
+      objects(generic.stdout)
+        .map((l) => JSON.parse(l))
+        .filter((o) => o.severity === "deprecation")
+        .map((o) => `${o.code} ${o.line}:${o.column}`)
+        .join(",") === "NL7001 3:3",
+    generic.stdout + generic.stderr
+  )
+
+  // Independent of the performance class in both directions, and printed
+  // before it. The program has one of each: a string rebuilt in a loop
+  // (NL9002) and an `Arena.reset()`.
+  const bothSrc = path.join(buildDir, "deprecation_both.ts")
+  fs.writeFileSync(
+    bothSrc,
+    'export const main = (): number => {\n  let s = "";\n  for (let i = 0; i < 3; i = i + 1) {\n    s = s + "x";\n  }\n  const n = s.length;\n  Arena.reset();\n  return n;\n};\n'
+  )
+  const both = compile(bothSrc, "deprecation_both.ll")
+  const bothJson = compile(bothSrc, "deprecation_both_json.ll", ["--json"])
+  const quietPerf = compile(bothSrc, "deprecation_quiet_perf.ll", ["--no-warn-performance"])
+  check(
+    "deprecation: printed before the performance warnings, on stderr, and as objects on stdout under --json",
+    both.status === 0 &&
+      both.stderr.indexOf(": deprecation: ") >= 0 &&
+      both.stderr.indexOf(": deprecation: ") < both.stderr.indexOf(": performance: ") &&
+      bothJson.status === 0 &&
+      objects(bothJson.stdout)
+        .map((l) => `${JSON.parse(l).severity} ${JSON.parse(l).code}`)
+        .join(",") === "deprecation NL7001,performance NL9002",
+    both.stderr + bothJson.stdout + bothJson.stderr
+  )
+  check(
+    "deprecation: --no-warn-performance does not silence it",
+    quietPerf.status === 0 &&
+      summaries(quietPerf.stderr).length === 1 &&
+      !quietPerf.stderr.includes(": performance: "),
+    quietPerf.stderr
+  )
+
+  // The cap the other reports have, with the class's own words.
+  const manySrc = path.join(buildDir, "deprecation_many.ts")
+  fs.writeFileSync(
+    manySrc,
+    Array.from({ length: 25 }, (_, i) => `export const f${i} = (): void => {\n  Arena.reset();\n};`).join(
+      "\n"
+    ) + "\n"
+  )
+  const many = compile(manySrc, "deprecation_many.ll")
+  check(
+    "deprecation: 25 warnings print 20, then `...and 5 more deprecation warnings` and `25 deprecation warnings`",
+    many.status === 0 &&
+      summaries(many.stderr).length === 20 &&
+      many.stderr.includes("\n...and 5 more deprecation warnings\n25 deprecation warnings"),
+    many.stderr
+  )
+
+  // `nish run` prints it too, ahead of the program's own output: the author
+  // of a script is the reader who has to hear it.
+  if (HAS_CLANG) {
+    const ran = spawnSync(NISH, ["run", builtins], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: path.join(buildDir, "deprecation-run-cache") },
+    })
+    check(
+      "deprecation: `nish run` prints the warnings on stderr and runs the program, whose stdout is its own",
+      ran.status === 0 &&
+        summaries(ran.stderr).length === 2 &&
+        ran.stdout === fs.readFileSync(path.join(casesDir, "mem_arena_builtins.out"), "utf8"),
+      ran.stdout + ran.stderr
+    )
+  } else {
+    skip("deprecation: `nish run` needs clang")
+  }
 }
 
 // ---- WP5: link -------------------------------------------------------------------

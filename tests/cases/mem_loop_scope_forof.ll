@@ -472,45 +472,50 @@ for.end:
 
 define void @nish_main() #1 {
 entry:
-  %m.addr = alloca i64, align 8
-  %before.addr = alloca i64, align 8
   %a.addr = alloca i32, align 4
   %small.addr = alloca i64, align 8
-  %m2.addr = alloca i64, align 8
-  %before2.addr = alloca i64, align 8
+  %arenaA.addr = alloca i64, align 8
+  %before.addr = alloca i64, align 8
   %b.addr = alloca i32, align 4
   %large.addr = alloca i64, align 8
+  %arenaB.addr = alloca i64, align 8
+  %before.addr.1 = alloca i64, align 8
   %ws.addr = alloca %struct.nish_array*, align 8
   %best.addr = alloca i8*, align 8
   %last.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 0, i32* %a.addr, align 4
+  store i64 0, i64* %small.addr, align 8
   %0 = call i64 @nish_arena_mark()
-  store i64 %0, i64* %m.addr, align 8
-  %1 = call i64 @nish_arena_used()
-  store i64 %1, i64* %before.addr, align 8
-  %2 = call %struct.Box* @letters(i32 5)
-  %3 = getelementptr inbounds %struct.Box, %struct.Box* %2, i32 0, i32 0
-  %4 = load i32, i32* %3, align 4, !tbaa !4
-  store i32 %4, i32* %a.addr, align 4
-  %5 = call i64 @nish_arena_used()
-  %6 = load i64, i64* %before.addr, align 8
-  %7 = sub nsw i64 %5, %6
-  store i64 %7, i64* %small.addr, align 8
-  %8 = load i64, i64* %m.addr, align 8
-  call void @nish_arena_release(i64 %8)
+  store i64 %0, i64* %arenaA.addr, align 8
+  %1 = load i64, i64* %arenaA.addr, align 8
+  %2 = call i64 @nish_arena_used()
+  store i64 %2, i64* %before.addr, align 8
+  %3 = call %struct.Box* @letters(i32 5)
+  %4 = getelementptr inbounds %struct.Box, %struct.Box* %3, i32 0, i32 0
+  %5 = load i32, i32* %4, align 4, !tbaa !4
+  store i32 %5, i32* %a.addr, align 4
+  %6 = call i64 @nish_arena_used()
+  %7 = load i64, i64* %before.addr, align 8
+  %8 = sub nsw i64 %6, %7
+  store i64 %8, i64* %small.addr, align 8
+  call void @nish_arena_release(i64 %1)
+  store i32 0, i32* %b.addr, align 4
+  store i64 0, i64* %large.addr, align 8
   %9 = call i64 @nish_arena_mark()
-  store i64 %9, i64* %m2.addr, align 8
-  %10 = call i64 @nish_arena_used()
-  store i64 %10, i64* %before2.addr, align 8
-  %11 = call %struct.Box* @letters(i32 500)
-  %12 = getelementptr inbounds %struct.Box, %struct.Box* %11, i32 0, i32 0
-  %13 = load i32, i32* %12, align 4, !tbaa !4
-  store i32 %13, i32* %b.addr, align 4
-  %14 = call i64 @nish_arena_used()
-  %15 = load i64, i64* %before2.addr, align 8
-  %16 = sub nsw i64 %14, %15
-  store i64 %16, i64* %large.addr, align 8
-  %17 = load i64, i64* %m2.addr, align 8
-  call void @nish_arena_release(i64 %17)
+  store i64 %9, i64* %arenaB.addr, align 8
+  %10 = load i64, i64* %arenaB.addr, align 8
+  %11 = call i64 @nish_arena_used()
+  store i64 %11, i64* %before.addr.1, align 8
+  %12 = call %struct.Box* @letters(i32 500)
+  %13 = getelementptr inbounds %struct.Box, %struct.Box* %12, i32 0, i32 0
+  %14 = load i32, i32* %13, align 4, !tbaa !4
+  store i32 %14, i32* %b.addr, align 4
+  %15 = call i64 @nish_arena_used()
+  %16 = load i64, i64* %before.addr.1, align 8
+  %17 = sub nsw i64 %15, %16
+  store i64 %17, i64* %large.addr, align 8
+  call void @nish_arena_release(i64 %10)
   %18 = load i32, i32* %a.addr, align 4
   %19 = call i8* @nish_str_from_i32(i32 %18)
   %20 = call i8* @nish_str_concat(i8* %19, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
@@ -550,6 +555,7 @@ cond.end:
   %40 = load i8*, i8** %last.addr, align 8
   %41 = call i8* @nish_str_concat(i8* %39, i8* %40)
   call void @nish_print(i8* %41)
+  call void @nish_arena_release(i64 %arena.mark)
   ret void
 }
 

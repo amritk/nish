@@ -41193,27 +41193,27 @@ function summarise(rounds: i32): Box -> @summarise
   callee 30:10 new Box -> @Box.constructor
 function grows(rounds: i32): string -> @grows
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via summarise
+  sharedWrite: via nish_arena_release
   escaping: rounds
-  calls: nish_arena_mark nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 nish_str_from_i64 summarise
+  calls: nish_arena_release nish_arena_used nish_str_concat nish_str_from_i32 nish_str_from_i64 summarise
   stackSites=0 stackLocals=0
-  local 35:9 m: i64 (const)
-  local 36:9 before: i64 (const)
-  local 37:9 box: Box (const)
-  callee 37:15 summarise -> @summarise
-  local 38:9 grown: i64 (const)
-  local 39:9 total: i32 (const)
+  local 35:7 grown: i64 (let)
+  local 36:7 total: i32 (let)
+  local 38:11 a: i64 (const)
+  local 39:11 before: i64 (const)
+  local 40:11 box: Box (const)
+  callee 40:17 summarise -> @summarise
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via grows
-  calls: grows nish_print nish_str_at nish_str_eq nish_str_new
+  calls: grows nish_arena_mark nish_arena_release nish_print nish_str_at nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local 45:9 one: string (const)
-  callee 45:15 grows -> @grows
-  local 46:9 many: string (const)
-  callee 46:16 grows -> @grows
-  local 49:9 g1: string (const)
-  local 50:9 g2: string (const)
+  local 48:9 one: string (const)
+  callee 48:15 grows -> @grows
+  local 49:9 many: string (const)
+  callee 49:16 grows -> @grows
+  local 52:9 g1: string (const)
+  local 53:9 g2: string (const)
 program tests/cases/mem_loop_scope_chunk.ts
 module tests/cases/mem_loop_scope_chunk.ts (entry)
 struct Box (class) size=4 align=4
@@ -41528,27 +41528,27 @@ function churn(): i32 -> @churn
   local 70:7 t: i32 (let)
   local 71:12 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via letters
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_arena_release
   calls: churn lastWord letters longest nish_arena_mark nish_arena_release nish_arena_used nish_print nish_str_concat nish_str_from_i32 words
   stackSites=0 stackLocals=0
-  local 78:9 m: i64 (const)
-  local 79:9 before: i64 (const)
-  local 80:9 a: i32 (const)
-  callee 80:13 letters -> @letters
-  local 81:9 small: i64 (const)
-  local 83:9 m2: i64 (const)
-  local 84:9 before2: i64 (const)
-  local 85:9 b: i32 (const)
-  callee 85:13 letters -> @letters
-  local 86:9 large: i64 (const)
-  local 89:9 ws: string[] (const)
-  callee 89:14 words -> @words
-  local 90:9 best: string (const)
-  callee 90:16 longest -> @longest
-  local 91:9 last: string (const)
-  callee 91:16 lastWord -> @lastWord
-  callee 92:18 churn -> @churn
+  local 78:7 a: i32 (let)
+  local 79:7 small: i64 (let)
+  local 81:11 arenaA: i64 (const)
+  local 82:11 before: i64 (const)
+  callee 83:9 letters -> @letters
+  local 86:7 b: i32 (let)
+  local 87:7 large: i64 (let)
+  local 89:11 arenaB: i64 (const)
+  local 90:11 before: i64 (const)
+  callee 91:9 letters -> @letters
+  local 95:9 ws: string[] (const)
+  callee 95:14 words -> @words
+  local 96:9 best: string (const)
+  callee 96:16 longest -> @longest
+  local 97:9 last: string (const)
+  callee 97:16 lastWord -> @lastWord
+  callee 98:18 churn -> @churn
 program tests/cases/mem_loop_scope_interior.ts
 module tests/cases/mem_loop_scope_interior.ts (entry)
 struct P (interface) size=8 align=4
