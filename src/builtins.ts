@@ -150,6 +150,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "statMtimeSync" ||
     name === "signalFd" ||
     name === "readSignal" ||
+    name === "secureZero" ||
     isNetExport(name)
   )
 }
@@ -775,6 +776,20 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  // #385. Every byte of a `u8[]` set to zero by `nish_wipe`, whose stores no
+  // optimisation may drop: the one way to clear a key once it is used, since
+  // `fill(0)` on an array nothing reads again is a dead store at `-O2`. A
+  // `u8[]` only, as `crypto.getRandomValues`'s is, because the byte is the unit
+  // a secret is written in; written, so a `readonly u8[]` is refused; and a
+  // statement, because there is nothing to answer. Not refused on wasm:
+  // `nish_wipe` is in runtime.c, which the wasi profile links.
+  if (name === "secureZero") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkBuffer(ctx, args.children[0], scope, name, T_U8, true)
+    }
+    requireStatementPosition(ctx, call, name)
+    return T_VOID
+  }
   if (isNetExport(name)) {
     return checkNet(ctx, call, scope, name)
   }
@@ -806,8 +821,8 @@ const checkNet = (ctx: CheckContext, call: Node, scope: Scope, name: string): i3
 }
 
 /**
- * A `u8[]` a builtin writes (`written`) or only reads: `crypto.getRandomValues`'s
- * and the `nish:net` buffers. Only a `u8[]`: bytes are what a key, a nonce and
+ * A `u8[]` a builtin writes (`written`) or only reads: `crypto.getRandomValues`'s,
+ * `secureZero`'s and the `nish:net` buffers. Only a `u8[]`: bytes are what a key, a nonce and
  * a socket are written in, and a wider element would make the byte order a
  * fact about the machine. A `readonly u8[]` is refused where the call writes
  * it, with the words every write through a readonly array gets, and accepted
