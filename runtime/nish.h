@@ -225,6 +225,11 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
  * elements themselves — which is why the checker refuses to let a program hold
  * a pointer to one across a `push` (WP15 section 2a). */
 void nish_array_grow(nish_array *a, uint64_t elem_size);
+/* `secureZero(bytes)` (#385): sets every byte of `bytes` to zero through
+ * `volatile` stores, out of line, so that neither `-O2` nor `-flto` can drop
+ * them as dead when the buffer's life ends straight after the call. For
+ * secret material -- a private key, a secret scalar -- once it is used. */
+void nish_wipe(nish_array *bytes);
 void nish_panic_index(uint64_t idx, uint64_t len);
 /* The failed range check of `s.slice(start, end)` (WP15 section 4): prints the
    half-open interval that was asked for and the byte length it left, then

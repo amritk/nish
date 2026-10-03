@@ -1955,6 +1955,22 @@ const DECLARED = [
     changelog: "push and pop on typed arrays reached through Map/Set reads, generics and imported aliases",
     why: "a new negative: `pop` on a return type and a field spelled through another module's `Float64Array` alias, which the reference compiler compiled",
   },
+  {
+    program: "tests/cases/wipe_bytes.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "it calls `secureZero`, which this tree adds and the reference does not know, so the reference refuses it with `Unknown function` and this tree lowers it to a call to `nish_wipe`",
+  },
+  {
+    program: "docs/cookbook/builtin-wipe.ts",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "the cookbook entry for `secureZero`, which this tree adds and the reference refuses with `Unknown function`",
+  },
+  {
+    program: "docs/cookbook/runtime-prelude.ts",
+    file: "runtime-prelude.ll",
+    changelog: "A secure-wipe builtin the optimiser cannot drop",
+    why: "`--runtime-decls` declares every runtime function, and this tree's runtime gains `nish_wipe`, so the prelude has one more `declare` line and every line after it moves down one",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */

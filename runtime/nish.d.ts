@@ -173,6 +173,12 @@ declare function bitsToF64(bits: i64): f64;
 declare function ctSelect<T extends u32 | u64>(mask: T, a: T, b: T): T;
 /** All-ones of the operands' type when `a === b`, zero otherwise, without a branch. */
 declare function ctEq<T extends u32 | u64>(a: T, b: T): T;
+/**
+ * Every byte of `bytes` set to zero, in stores neither `-O2` nor `-flto` may
+ * drop as dead (#385): how a key, a secret scalar or another secret is cleared
+ * once it is used. A statement.
+ */
+declare function secureZero(bytes: u8[]): void;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 

@@ -711,6 +711,19 @@ export function statMtimeSync(path) {
 }
 
 /**
+ * `secureZero(bytes)` (#385): every element set to zero, which is what the
+ * native `nish_wipe` leaves. Nothing here can drop a store to an array the
+ * caller still holds, so a loop is the whole of it. What it cannot promise is
+ * what the native build does: a collector that moved the array may have left a
+ * copy of the old bytes behind, and JavaScript has no way to reach it.
+ */
+export function secureZero(bytes) {
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = 0;
+  }
+}
+
+/**
  * Node's own fill, taken before `runtime/nish.mjs` puts the one below in its
  * place on the same object: `webcrypto` is the global `crypto`.
  */
