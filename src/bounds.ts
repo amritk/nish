@@ -1905,23 +1905,36 @@ const judgeClampBound = (walk: BoundsWalk, state: State, holder: Local | null, b
 }
 
 /**
+ * What a `slice` call's first bound left for its second one to be ordered
+ * against: whether `provesClamp` proved it, and the largest value it can have
+ * when it was proven at all (-1 otherwise).
+ */
+class SliceStart {
+  ceiling: i32
+  clamped: boolean
+
+  constructor() {
+    this.ceiling = -1
+    this.clamped = false
+  }
+}
+
+/**
  * `judgeClampBound` for a `slice` bound: the same proof in the same state,
  * since `emitSlice` also reads the receiver's length first and each bound in
  * order, with the literal receiver's length (`provesLiteralSlice`) added. The
  * verdict goes to `sliceClamps` and nowhere else, whatever the walk's
  * `record` says.
  *
- * `start` is what this answered for the call's first bound: that bound's
- * largest value when it is proven and known, and -1 otherwise.
- *
- * On a known-length receiver the second bound is recorded only when
- * `start <= end` is known as well (`boundsOrdered`, #326). The two bounds are
- * proven one at a time, but `emitSlice` also panics on `start > end`. Before
- * the literal proof, such a receiver never had both ends proven, so
- * `"abcdef".slice(5, 2)` warned, and it has to keep warning. The first bound
- * is recorded as it always was, so the warning names the bound that fails. The
- * general proof does not relate a parameter's two bounds, which
- * `src/portability-strings.ts` states.
+ * The literal proof judges each bound alone, but `emitSlice` also panics on
+ * `start > end`. Before it, a receiver whose length only its text gives never
+ * had both ends proven, so `"abcdef".slice(5, 2)` warned, and it has to keep
+ * warning (#326). So when the literal proof proved either bound, the second
+ * one is recorded only when `start <= end` is known as well
+ * (`boundsOrdered`). A pair `provesClamp` proved alone is recorded as it
+ * always was: that proof does not relate a call's two bounds, which
+ * `src/portability-strings.ts` states. The first bound is recorded whenever
+ * it is proven, so the warning names the bound that fails.
  */
 const judgeSliceBound = (
   walk: BoundsWalk,
@@ -1929,28 +1942,27 @@ const judgeSliceBound = (
   call: Node,
   holder: Local | null,
   bound: Node,
-  start: i32
-): i32 => {
+  start: SliceStart
+): void => {
   const proved = walk.sliceClamps
   if (proved === null) {
-    return -1
+    return
   }
   const receiver = unwrapBoundsParens(call.children[0]).children[0]
-  const proven =
-    provesClamp(walk.ctx, state, holder, bound) || provesLiteralSlice(walk, state, receiver, bound)
-  if (!proven) {
-    return -1
+  const clamped = provesClamp(walk.ctx, state, holder, bound)
+  if (!clamped && !provesLiteralSlice(walk, state, receiver, bound)) {
+    return
   }
-  const bounds = call.children[1].children
-  if (bound === bounds[0]) {
+  if (bound === call.children[1].children[0]) {
     proved.push(bound)
-    return boundCeiling(walk, state, bound)
+    start.clamped = clamped
+    start.ceiling = boundCeiling(walk, state, bound)
+    return
   }
-  const known = asciiLiteralLength(walk, receiver) >= 0
-  if (!known || (start >= 0 && boundsOrdered(start, boundFloor(walk, state, bound)))) {
+  const paired = clamped && start.clamped
+  if (paired || (start.ceiling >= 0 && boundsOrdered(start.ceiling, boundFloor(walk, state, bound)))) {
     proved.push(bound)
   }
-  return -1
 }
 
 /** `start <= end`, from the largest `start` can be and the smallest `end` can be. */
@@ -2215,8 +2227,8 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
     const slice = walk.sliceClamps !== null && isSliceCall(ctx, e)
     const clamped = slice || isSubstringCall(ctx, e)
     let holder: Local | null = null
-    // The first `slice` bound's ceiling, for the second to be ordered against (`judgeSliceBound`).
-    let start = -1
+    // What the first `slice` bound proved, for the second to be ordered against (`judgeSliceBound`).
+    const start: SliceStart | null = slice ? new SliceStart() : null
     if (clamped) {
       holder = lengthHolder(ctx, callee.children[0])
     }
@@ -2229,8 +2241,8 @@ const walkOperands = (walk: BoundsWalk, state: State, expr: Node): void => {
         if (holder !== null && writesLocal(ctx.program, arg, holder)) {
           holder = null
         }
-        if (slice) {
-          start = judgeSliceBound(walk, state, e, holder, arg, start)
+        if (start !== null) {
+          judgeSliceBound(walk, state, e, holder, arg, start)
         } else {
           judgeClampBound(walk, state, holder, arg)
         }
