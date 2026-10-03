@@ -28,11 +28,21 @@ run's stops) and `eq-missing-roots` (with two missing roots, the report names
 the first, as a plain run does). Each was checked by
 reverting the behaviour it pins and watching it fail.
 
-**Not pinned here yet: dropping an overlapping fix.** Every loose-equality
-fix is one edit on its own operator token, so two can never overlap, and
-`acceptedEdits`'s overlap branch (and `overlapsAny`'s two edits at one
-offset) is unreachable from this stage's fixes. The decl-fixes stage, whose
-fixes carry more than one edit, must pin it with a case of its own.
+Two cases pin how the driver drops a fix that overlaps. `decl-fs-two-names`
+imports two names from a missing `fs`, so two NL3015s carry the same edit of
+the one specifier: the first is applied and the second dropped, in one round,
+and the specifier is rewritten once. `decl-export-list-twice` is a fix whose
+own edits overlap — `export { f, f }` asks for `export ` before `f` twice — so
+it is dropped whole every round and the file is left as it was. Each fails when
+its half of `acceptedEdits`'s overlap test is taken out.
+
+A performance warning's fix cannot have a case here yet: both forms above need
+a plain run that exits 1, which a program whose only diagnostics are warnings
+never does, and `same-as-plain` compares the human report, where a plain run
+that compiles prints `wrote <file>` and `--fix` does not. No warning carries a
+fix today — NL9007's would need the bounds analysis to credit a `panic` guard,
+which it does not — so nothing is uncovered, but the stage that adds one
+extends the runner first.
 
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

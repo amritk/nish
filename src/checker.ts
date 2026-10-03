@@ -24,7 +24,7 @@ import {
   nishModuleNames,
   unsafeModule,
 } from "./nish-modules"
-import { DiagnosticSink, SourceFile } from "./diagnostics"
+import { DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations"
 import {
   checkDeferredConstraints,
@@ -42,9 +42,11 @@ import {
   resolveTemplateConstraints,
 } from "./generics"
 import {
+  FLAG_COMPUTED,
   FLAG_CONST,
   FLAG_FOREIGN,
   FLAG_PREFIX,
+  FLAG_TYPE_ONLY,
   FLAG_VAR,
   N_ARROW,
   N_BINARY,
@@ -2643,12 +2645,17 @@ const noteAnnotatedNew = (decl: Node, program: CheckedProgram, hideMap: boolean,
  */
 export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
   if (stmt.kind === N_EXPORT_DECLARATION) {
-    ctx.error(
+    ctx.errorFix(
       stmt,
-      "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself"
+      "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
+      exportListFix(ctx, stmt)
     )
   } else if (stmt.kind === N_EXPORT_ASSIGNMENT) {
-    ctx.error(stmt, "`export default` / `export =` are not supported; use a named `export function`")
+    ctx.errorFix(
+      stmt,
+      "`export default` / `export =` are not supported; use a named `export function`",
+      exportDefaultFix(ctx, stmt)
+    )
   } else if (isExported(stmt)) {
     ctx.error(
       stmt,
@@ -2661,6 +2668,152 @@ export const refuseTopLevelForm = (ctx: CheckContext, stmt: Node): void => {
     )
   }
 }
+
+/**
+ * The fix for `export default f` (NL2129): delete the statement and write
+ * `export ` before the declaration of `f`. The module then exports `f` by its
+ * own name, which is the only way an importer here can name it anyway, since
+ * a default import is refused too. Empty, so no fix, for `export =`, for a
+ * value that is not a bare name, and for a name `exportableDeclaration` does
+ * not find.
+ */
+const exportDefaultFix = (ctx: CheckContext, stmt: Node): Edit[] => {
+  const edits: Edit[] = []
+  const value = stmt.children[0]
+  if (stmt.text !== "default" || value.kind !== N_IDENT) {
+    return edits
+  }
+  const decl = exportableDeclaration(ctx, value.text)
+  if (decl === null) {
+    return edits
+  }
+  edits.push(statementDeletion(ctx, stmt))
+  edits.push(ctx.edit(decl.start, decl.start, "export "))
+  return edits
+}
+
+/**
+ * The fix for `export { f, g }` (NL2128): delete the list and write `export `
+ * before each declaration it names. All or nothing, so empty when any entry is
+ * not a plain local name this module declares once and does not yet export —
+ * a re-export (`from`), an `export *`, a type-only list or entry, and a
+ * renamed one (`f as g`), which no `export` on a declaration can spell. A name
+ * listed twice is not caught here: its two insertions land on one offset, and
+ * `nish --fix` refuses a fix whose own edits overlap (`src/fix.ts`).
+ */
+const exportListFix = (ctx: CheckContext, stmt: Node): Edit[] => {
+  const none: Edit[] = []
+  const list = stmt.children[0]
+  if (
+    stmt.text.length > 0 ||
+    (stmt.flags & (FLAG_TYPE_ONLY | FLAG_COMPUTED)) !== 0 ||
+    list.kind !== N_LIST ||
+    list.children.length === 0
+  ) {
+    return none
+  }
+  const edits: Edit[] = []
+  for (const spec of list.children) {
+    const local = spec.children[0]
+    if (local.kind !== N_IDENT || spec.text !== local.text || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
+      return none
+    }
+    const decl = exportableDeclaration(ctx, local.text)
+    if (decl === null) {
+      return none
+    }
+    edits.push(ctx.edit(decl.start, decl.start, "export "))
+  }
+  edits.push(statementDeletion(ctx, stmt))
+  return edits
+}
+
+/**
+ * The one top-level declaration of `name` in this module that `export ` can be
+ * written in front of, or null. Null when there is none (an import, or a name
+ * declared nowhere), when there is more than one, and when it is already
+ * exported, `export default` included. A constant must be a `const`
+ * declaring nothing else, because `export` on `const f = 1, g = 2` would
+ * export `g` too.
+ */
+const exportableDeclaration = (ctx: CheckContext, name: string): Node | null => {
+  let found: Node | null = null
+  let count = 0
+  for (const stmt of ctx.program.file.children) {
+    if (declaredName(stmt) === name) {
+      found = stmt
+      count = count + 1
+    }
+  }
+  if (found === null || count !== 1 || isExported(found)) {
+    return null
+  }
+  return found
+}
+
+/**
+ * The name a top-level declaration binds, or "" for one `exportableDeclaration`
+ * does not move `export` onto. A `const` bound to an arrow is an N_FUNCTION,
+ * and one that goes on to bind a second name has it as a sixth child (NL2274).
+ */
+const declaredName = (stmt: Node): string => {
+  if (stmt.kind === N_FUNCTION && stmt.children.length > 5) {
+    return ""
+  }
+  if (
+    stmt.kind === N_FUNCTION ||
+    stmt.kind === N_CLASS ||
+    stmt.kind === N_INTERFACE ||
+    stmt.kind === N_TYPE_ALIAS ||
+    stmt.kind === N_ENUM
+  ) {
+    return stmt.children[0].kind === N_IDENT ? stmt.children[0].text : ""
+  }
+  if (stmt.kind !== N_MODULE_CONST || (stmt.flags & FLAG_CONST) === 0) {
+    return ""
+  }
+  const decls = stmt.children[0].children
+  if (decls.length !== 1 || decls[0].children[0].kind !== N_IDENT) {
+    return ""
+  }
+  return decls[0].children[0].text
+}
+
+/**
+ * The edit that deletes a top-level statement, with the `;` after it. When the
+ * statement is alone on its line, the whole line goes, so the file is left
+ * without a blank line where it stood.
+ */
+const statementDeletion = (ctx: CheckContext, stmt: Node): Edit => {
+  const text = ctx.source.text
+  const after = skipBlanks(text, stmt.end)
+  const end = after < text.length && text.charCodeAt(after) === 59 ? skipBlanks(text, after + 1) : stmt.end
+  let start = stmt.start
+  while (start > 0 && start <= text.length && isBlank(text.charCodeAt(start - 1))) {
+    start = start - 1
+  }
+  const lineStart = start === 0 || (start <= text.length && text.charCodeAt(start - 1) === 10)
+  const lineEnd = skipBlanks(text, end)
+  if (lineStart && lineEnd >= text.length) {
+    return ctx.edit(start, text.length, "")
+  }
+  if (lineStart && text.charCodeAt(lineEnd) === 10) {
+    return ctx.edit(start, lineEnd + 1, "")
+  }
+  return ctx.edit(stmt.start, end, "")
+}
+
+/** The offset of the first byte at or after `at` that is not a space, a tab or a carriage return. */
+export const skipBlanks = (text: string, at: i32): i32 => {
+  let end = at
+  while (end >= 0 && end < text.length && isBlank(text.charCodeAt(end))) {
+    end = end + 1
+  }
+  return end
+}
+
+/** A space, a tab or a carriage return: what may stand beside a deleted statement on its line. */
+const isBlank = (byte: i32): boolean => byte === 32 || byte === 9 || byte === 13
 
 /**
  * The `SyntaxKind` TypeScript gives a statement found at the top level, which
