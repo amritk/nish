@@ -1,0 +1,122 @@
+PASS  WS_GUID is §1.3's
+PASS  the §1.3 accept key: dGhlIHNhbXBsZSBub25jZQ== gives s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+PASS  an accept key with + and /
+PASS  the §1.3 key is valid
+PASS  a key with + and / is valid
+PASS  refused key: 23 characters
+PASS  refused key: no padding
+PASS  refused key: a URL-alphabet character
+PASS  refused key: a character outside the alphabet
+PASS  refused key: nonzero unused bits
+PASS  refused key: padding inside
+PASS  the §1.3 request's key
+PASS  Upgrade: WebSocket in another case
+PASS  not a handshake: POST
+PASS  not a handshake: HTTP/1.0
+PASS  not a handshake: no Connection: upgrade
+PASS  not a handshake: Upgrade: h2c
+PASS  not a handshake: version 8
+PASS  not a handshake: no version
+PASS  not a handshake: no key
+PASS  not a handshake: a key of 15 bytes
+PASS  the §1.3 response, with the protocol the server chose
+PASS  a response with no protocol
+PASS  refused response: an invalid key
+PASS  refused response: a protocol that would split the response
+PASS  §5.7: a single-frame unmasked text message
+PASS  §5.7: a single-frame masked text message
+PASS  §5.7: the first fragment of an unmasked text message
+PASS  §5.7: the second fragment
+PASS  §5.7: an unmasked ping
+PASS  §5.7: a masked pong answering it
+PASS  §5.7: 256 bytes of binary in a single unmasked frame (the header)
+PASS  and its length
+PASS  §5.7: 64 KiB of binary in a single unmasked frame (the header)
+PASS  and its length
+PASS  a 125-byte ping keeps the 7-bit length
+PASS  126 bytes take the 16-bit length
+PASS  65535 bytes masked keep the 16-bit length
+PASS  refused frame: opcode 3
+PASS  refused frame: opcode 11
+PASS  refused frame: a ping that is not FIN
+PASS  refused frame: a 126-byte pong
+PASS  refused frame: a 3-byte mask
+PASS  a close payload: 1000 and "bye"
+PASS  a close payload: 4999, no reason
+PASS  refused close payload: code 999
+PASS  refused close payload: code 1004
+PASS  refused close payload: code 1005
+PASS  refused close payload: code 1006
+PASS  refused close payload: code 1015
+PASS  refused close payload: code 1016
+PASS  refused close payload: code 2999
+PASS  refused close payload: code 5000
+PASS  a 123-byte reason fills a control frame
+PASS  refused close payload: a 124-byte reason
+PASS  refused close payload: a reason that is not UTF-8
+PASS  §5.7 unmasked text, read by a client
+PASS  §5.7 masked text, read by a server
+PASS  §5.7 fragments, read as one message
+PASS  §5.7 ping
+PASS  §5.7 masked pong
+PASS  §5.7 256 bytes of binary
+PASS  §5.7 64 KiB of binary
+PASS  a server's stream, whole
+PASS  the same stream cut at every byte
+PASS  a client's stream with a ping between fragments, whole
+PASS  the client's stream cut at every byte
+PASS  a close frame with no payload
+PASS  reports no status
+PASS  and the close is final
+PASS  input after it is dropped
+PASS  refused with 1002: RSV1 set
+PASS  refused with 1002: RSV2 set
+PASS  refused with 1002: RSV3 set
+PASS  refused with 1002: opcode 3
+PASS  refused with 1002: opcode 11
+PASS  refused with 1002: a fragmented ping
+PASS  refused with 1002: a 126-byte ping
+PASS  refused with 1002: a masked frame to a client
+PASS  refused with 1002: a 16-bit length of 125
+PASS  refused with 1002: a 64-bit length of 65535
+PASS  refused with 1002: a 64-bit length with its top bit set
+PASS  refused with 1002: a continuation with no message
+PASS  refused with 1002: a text message inside a fragmented one
+PASS  refused with 1002: a close with a one-byte payload
+PASS  refused with 1002: close code 999
+PASS  refused with 1002: close code 1004
+PASS  refused with 1002: close code 1005
+PASS  refused with 1002: close code 1006
+PASS  refused with 1002: close code 1015
+PASS  refused with 1002: close code 2999
+PASS  refused with 1002: close code 5000
+PASS  refused with 1002: an unmasked frame to a server
+PASS  refused with 1007: an overlong NUL
+PASS  refused with 1007: a surrogate
+PASS  refused with 1007: a code point past U+10FFFF
+PASS  refused with 1007: the byte f5
+PASS  refused with 1007: the byte ff
+PASS  refused with 1007: a stray continuation byte
+PASS  refused with 1007: a character cut by the end of the message
+PASS  refused with 1007: a bad byte in the second fragment
+PASS  refused with 1007: a close reason that is not UTF-8
+PASS  refused with 1007 at the first fragment: c0 never starts a character
+PASS  refused with 1009: a 301-byte message
+PASS  refused with 1009 from the header alone
+PASS  refused with 1009: fragments that pass the limit together
+PASS  refused with 1009: a 64-bit length past 2^31
+PASS  a 300-byte message is read
+PASS  a negative message limit reads an empty message
+PASS  and refuses a one-byte one
+PASS  with 1009
+PASS  an error is reported
+PASS  with its reason
+PASS  and is final
+PASS  UTF-8 of one to four bytes, NUL and the largest code point
+PASS  a window ending inside a character is not
+PASS  the empty window is
+PASS  WS_MAX_CONTROL is 125 (§5.5)
+PASS  WS_OP_CLOSE is 8 (§5.2)
+PASS  WS_MESSAGE follows WS_NEED_MORE
+PASS  WS_CLOSE_TOO_BIG is 1009 (§7.4.1)
+websocket: 121 passed, 0 failed, 0 skipped
