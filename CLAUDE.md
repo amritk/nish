@@ -12,7 +12,7 @@ example compiled by `npm test`.
 Developer guidelines live in the `.claude/` directory:
 
 - **orientation.md** — start here: what the repo is, where the code is, what to run
-- **selfhost.md** — the compiler in `src/`: Nish-0, the seed, the module map, how it is tested
+- **selfhost.md** — the compiler in `src/`: Nish-0, the seed, the module map, how it is tested, the files a new builtin touches, and the lines `tests/run.js`'s mutation checks need byte-identical
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
 - **linting.md** — What the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, knip and the format hook
 - **typescript.md** — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling

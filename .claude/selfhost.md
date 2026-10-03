@@ -168,6 +168,56 @@ Cyclic imports between family modules are fine and already used
 (`expressions.ts` ↔ `members.ts`), because the dispatch entry point and its
 handlers live on opposite sides of the cycle.
 
+## Adding a builtin
+
+A builtin is a function the checker knows by name, lowered by the emitter and
+supplied by both runtimes. It touches more files than its size suggests, and
+`tests/capabilities.js` and `tests/nish-cmp.js` fail the change that adds it,
+before any program calls it, so take the list whole. The worked examples are `secureZero` (#417), one call to a new
+`nish_wipe` in `runtime/runtime.c`, and the owner builtins `lstatOwnerModeSync`,
+`geteuid` and `isExecutableSync` (#425), each one call to an RT-9 primitive
+`runtime/runtime-host.c` already carried. #425 shows the whole list; #417
+predates #423's capabilities audit, so its `CAP_NONE` row came later.
+
+- **`src/builtins.ts`**: the name in `isBuiltinFunction`, and its rule in
+  `checkBuiltinFunctionNamed` (arity, argument types, a statement position
+  where there is nothing to answer, a refusal on wasm32 where its runtime unit
+  is empty).
+- **`src/runtime.ts`**: the `declare` of the runtime function it calls, in the
+  runtime ABI table, with the effect and attributes the C keeps — an LLVM
+  attribute the runtime does not honour is a finding (CG-8).
+- **`src/emit-builtins.ts`**: the lowering in `emitIdentifierBuiltinCall`, and
+  the runtime functions it reaches in `identifierBuiltinCalleesNamed`, which
+  the attribute fixpoint reads.
+- **`src/emit-util.ts`**: only for a builtin that writes an argument's
+  elements: its letters in `builtinArgumentLetters` (`secureZero` is `w`), so
+  the attribute fixpoint (`src/attributes.ts`) and the region rules
+  (`src/parallel.ts`) see the write.
+- **`src/capabilities.ts`**: exactly one row in `builtinCapability`, a
+  capability or a deliberate `CAP_NONE`. `tests/capabilities.js` audits the
+  table against the checker's own lists and fails a builtin with no row, two
+  rows, or a row for a name the checker no longer accepts — before any program
+  calls it.
+- **`runtime/nish.h`** and a runtime unit, when the builtin needs a new runtime
+  function, inside that unit's `.text*` ceiling in `tests/run.js` (#417 raised
+  `runtime.c`'s by the measured 21 bytes, with its reason beside the number).
+- **`runtime/shim.mjs`** (the Node twin, answering what the C answers),
+  **`runtime/nish.mjs`** (its `provide` line), and **`runtime/nish.d.ts`** (the
+  ambient declaration `npm run check` reads).
+- **`tests/nish-cmp.js`**: the released compiler refuses the new case and the
+  new cookbook entry with `Unknown function`, so each gets its own `DECLARED`
+  entry, one `program` (and one `file` where only one moves: a new runtime
+  function adds a `declare` to `docs/cookbook/runtime-prelude.ll`, as #417's
+  did), never an every-program declaration. Its
+  `changelog` is the pull request's subject as the generator renders it.
+- The construct's usual set besides: a golden case with its `.ll` and `.out`,
+  a `reject_*` case for each refusal, its `docs/LANGUAGE.md` rule, its
+  `docs/IR_COOKBOOK.md` entry and `docs/cookbook/` program, and a line in
+  `tests/differential/goldens/unfrozen.txt` for a case with no frozen rewrite.
+
+`src/` may not call the builtin until the seed declares it (the rolling
+freeze), which is why CLI-7 and CLI-9 wait a release after #425.
+
 ## How `src/` is tested
 
 Every tool below builds its compiler from `src/` with the seed
@@ -209,6 +259,25 @@ corpus file whose `.args` names a flag a tool does not know is dropped from
 the comparison in silence — the WP15 `--wrapping` cases once took a tool from
 one skip to seven without failing anything. Run the tools with `--verbose` and read the reasons before believing
 a count.
+
+### The mutation checks
+
+Some checks in `tests/run.js` prove a gate can fail by feeding it a copy of
+`src/` with one line changed: `codes: --check rejects …` edits
+`src/codes.ts` for `scripts/gen-diagnostic-codes.mjs --check`, and
+`capabilities: the audit check refuses …` edits `src/builtins.ts` and
+`src/capabilities.ts` for `tests/capabilities.js --src`. Each finds its line
+by exact text with `String.replace` — `'  if (name === "getenv") {'`,
+`'    name === "getenv" ||\n'`, `'"NL2186",'` — which replaces the first match
+and nothing else. **When an edit touches a line one of them targets, keep that
+line byte-identical and add the change beside it.** Folded into the line, the
+text no longer matches and the check fails with "the mutation did not apply";
+moved, it can match somewhere else first, and the mutation then tests a line
+the gate was never about. #425 met this against #423's capabilities audit:
+`geteuid` is `CAP_ENV` like `getenv`, and it went in as its own
+`if (name === "geteuid")` below the untouched `if (name === "getenv") {`
+rather than into that condition. Before editing `src/codes.ts`,
+`src/builtins.ts` or `src/capabilities.ts`, grep `tests/run.js` for the text.
 
 ### Running one
 
