@@ -12,7 +12,7 @@
 // `BuiltinCall` object, so that what a builtin *emits* and what the attribute
 // analysis is *told* it emits cannot drift apart. The language has no function
 // values, so the pair is kept by locality instead: `emitBuiltinCall` and
-// `builtinCallees` are the same `if` chain in the same order, and so are
+// `builtinCalleesNamed` are the same `if` chain in the same order, and so are
 // `emitIdentifierBuiltinCall` and `identifierBuiltinCallees`. An omission in
 // either half is a wrong attribute on the caller, which is what the IR oracle
 // is there to catch.
@@ -534,20 +534,13 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
 }
 
 /**
- * The runtime symbols and intrinsics the dotted lowerings above may call. The
- * order of the tests is theirs, so a reader can diff the two halves.
- */
-export const builtinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] => {
-  const access = call.children[0]
-  return builtinCalleesNamed(program, table, call, `${access.children[0].text}.${access.text}`)
-}
-
-/**
- * The same, under a name the call site does not spell. A `nish:` import can
- * bring a dotted builtin in as a plain identifier (`exit` for `process.exit`),
- * and the analysis has to be told what that call emits whichever way the
- * program spelled it — an omission here is a wrong attribute, not a cosmetic
- * difference.
+ * The runtime symbols and intrinsics the dotted lowerings above may call, by
+ * the builtin's dotted name: the call site's own spelling (`dottedName`), or
+ * the one a `nish:` import renamed (`exit` for `process.exit`), because the
+ * analysis has to be told what the call emits whichever way the program
+ * spelled it -- an omission here is a wrong attribute, not a cosmetic
+ * difference. The order of the tests is the lowerings', so a reader can diff
+ * the two halves.
  */
 export const builtinCalleesNamed = (
   program: CheckedProgram,

@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["env"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["env"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["env"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["env"],
+              "witnesses": {
+                "env": [
+                  { "function": "main", "at": "main.ts:10:63", "calls": "three" },
+                  { "function": "three", "at": "node_modules/nish/src/index.ts:3:34", "calls": "getenv" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nish",
+      "capabilities": ["env"],
+      "modules": [
+        {
+          "path": "node_modules/nish/src/index.ts",
+          "capabilities": ["env"],
+          "functions": [
+            {
+              "name": "three",
+              "exported": true,
+              "capabilities": ["env"],
+              "witnesses": {
+                "env": [
+                  { "function": "three", "at": "node_modules/nish/src/index.ts:3:34", "calls": "getenv" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nish",
+      "capabilities": [],
+      "modules": [
+        {
+          "path": "std/text.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "contains",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "firstDifference",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "replaceAll",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "splitLines",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "splitWhitespace",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "trim",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "trimEnd",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            },
+            {
+              "name": "trimStart",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
