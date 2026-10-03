@@ -2065,6 +2065,66 @@ const DECLARED = [
     changelog: "for the owner checks, and a cryptographic run-cache name",
     why: "the cookbook entry for the owner builtins, which this tree adds and the reference refuses with `Unknown function`",
   },
+  {
+    program: "tests/link/net_tls_rfc8448/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: RFC 8448 §3 replayed through the server, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_rfc8448_f64/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: RFC 8448 §3 replayed through the server under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ecdsa/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: a P-256-signed handshake under the three suites, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ecdsa_f64/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: a P-256-signed handshake under the three suites, under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_alpn/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: ALPN negotiation, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_sni/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: server_name read and acknowledged, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_quic/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: quic_transport_parameters carried for QUIC only, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_hrr/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: HelloRetryRequest and its transcript, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_refusals/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: every refusal as its alert, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
+  {
+    program: "tests/link/net_tls_ext_f64/main.ts",
+    file: "exit",
+    changelog: "the TLS 1.3 server handshake",
+    why: "a new program: the extension, retry and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
+  },
 ]
 
 /** Differing files printed in full before the rest are only counted. */
