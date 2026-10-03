@@ -9,7 +9,6 @@ declare void @nish_arena_release(i64 noundef) #0
 declare noundef i64 @nish_arena_used() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define internal void @Vec.constructor(%struct.Vec* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
@@ -36,7 +35,7 @@ entry:
   ret i32 %10
 }
 
-define internal noundef i32 @accumulate(i32 noundef %n) #2 {
+define internal noundef i32 @accumulate(i32 noundef %n) #0 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -64,35 +63,23 @@ for.body:
   %5 = load %struct.Vec*, %struct.Vec** %v.addr, align 8
   %6 = load %struct.Vec*, %struct.Vec** %w.addr, align 8
   %7 = call i32 @Vec.dot(%struct.Vec* %5, %struct.Vec* %6)
-  %8 = icmp eq i32 7, 0
-  %9 = icmp eq i32 %7, -2147483648
-  %10 = icmp eq i32 7, -1
-  %11 = and i1 %9, %10
-  %12 = or i1 %8, %11
-  br i1 %12, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %8)
-  unreachable
-
-div.ok:
-  %13 = srem i32 %7, 7
-  %14 = add nsw i32 %4, %13
-  store i32 %14, i32* %total.addr, align 4
+  %8 = srem i32 %7, 7
+  %9 = add nsw i32 %4, %8
+  store i32 %9, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = add nsw i32 %15, 1
-  store i32 %16, i32* %i.addr, align 4
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = add nsw i32 %10, 1
+  store i32 %11, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %17 = load i32, i32* %total.addr, align 4
-  ret i32 %17
+  %12 = load i32, i32* %total.addr, align 4
+  ret i32 %12
 }
 
-define noundef i32 @nish_main() #2 {
+define noundef i32 @nish_main() #0 {
 entry:
   %before.addr = alloca i64, align 8
   %total.addr = alloca i32, align 4
@@ -126,7 +113,6 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind }
-attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

@@ -178,36 +178,88 @@ const manifestEndOfValue = (text: string, at: i32): i32 => {
  * nothing, which is the narrowing the module header states.
  */
 const manifestField = (object: string, name: string): string => {
+  const at = manifestFieldAt(object, name)
+  return at < 0 ? "" : object.substring(at, manifestEndOfValue(object, at))
+}
+
+/** Where `object`'s `name` field's value starts, or -1 when it has none (`manifestField`). */
+const manifestFieldAt = (object: string, name: string): i32 => {
   let i = manifestSkipBlank(object, 0)
   if (i >= object.length || object.charCodeAt(i) !== OPEN_BRACE) {
-    return ""
+    return -1
   }
   i = manifestSkipBlank(object, i + 1)
   while (i < object.length && object.charCodeAt(i) === QUOTE) {
     const keyEnd = manifestEndOfString(object, i)
     if (keyEnd < 0) {
-      return ""
+      return -1
     }
     const key = object.substring(i + 1, keyEnd - 1)
     i = manifestSkipBlank(object, keyEnd)
     if (i >= object.length || object.charCodeAt(i) !== COLON) {
-      return ""
+      return -1
     }
     const valueAt = manifestSkipBlank(object, i + 1)
     const valueEnd = manifestEndOfValue(object, valueAt)
     if (valueEnd < 0) {
-      return ""
+      return -1
     }
     if (key === name) {
-      return object.substring(valueAt, valueEnd)
+      return valueAt
     }
     i = manifestSkipBlank(object, valueEnd)
     if (i >= object.length || object.charCodeAt(i) !== COMMA) {
-      return ""
+      return -1
     }
     i = manifestSkipBlank(object, i + 1)
   }
-  return ""
+  return -1
+}
+
+/**
+ * The entries of a root package's `"nish": { "noPanic": [...] }`, each as
+ * written between its quotes and beside the offset of its opening quote in
+ * `manifest`, so that an entry naming no module is reported where it is
+ * written. An entry that is not a string is kept as written, and so names no
+ * module and is reported, rather than dropped: a list the reader cannot follow
+ * must not quietly shrink the scope it promises. Empty when there is no list.
+ */
+export class NoPanicList {
+  entries: string[]
+  offsets: i32[]
+
+  constructor() {
+    this.entries = []
+    this.offsets = []
+  }
+}
+
+export const manifestNoPanic = (manifest: string, condition: string): NoPanicList => {
+  const out = new NoPanicList()
+  const nishAt = manifestFieldAt(manifest, condition)
+  if (nishAt < 0) {
+    return out
+  }
+  const nish = manifest.substring(nishAt, manifestEndOfValue(manifest, nishAt))
+  const listAt = manifestFieldAt(nish, "noPanic")
+  if (listAt < 0 || nish.charCodeAt(listAt) !== OPEN_BRACKET) {
+    return out
+  }
+  const base = nishAt + listAt
+  let i = manifestSkipBlank(manifest, base + 1)
+  while (i >= 0 && i < manifest.length && manifest.charCodeAt(i) !== CLOSE_BRACKET) {
+    const end = manifestEndOfValue(manifest, i)
+    if (end <= i) {
+      return out
+    }
+    out.entries.push(manifestUnquoted(manifest.substring(i, end)))
+    out.offsets.push(i)
+    i = manifestSkipBlank(manifest, end)
+    if (i >= 0 && i < manifest.length && manifest.charCodeAt(i) === COMMA) {
+      i = manifestSkipBlank(manifest, i + 1)
+    }
+  }
+  return out
 }
 
 /**

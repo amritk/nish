@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 573
+export const RULE_COUNT: i32 = 576
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -71,6 +71,8 @@ const diagnosticRules = (): string[] => [
   "NL2444",
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only a `scope()` from `nish/threads` or the builtin `arena()`, whose join and release the compiler emits itself, so a disposal method of any other class would never be called",
   "NL2393",
+  "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
+  "NL3031",
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end",
   "NL2416",
   "`: a key is hashed and compared by value, or by identity for a class instance, so it is a string, a number of any width, a boolean, an enum or a class, and not an interface, an array, a nullable type or a `Result`",
@@ -125,6 +127,8 @@ const diagnosticRules = (): string[] => [
   "NL2388",
   " and cannot be a template literal hole: there is no `undefined` to print; give it a default with `??`, or bind it to a `const` and print it where `!== undefined` has narrowed it",
   "NL2366",
+  ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
+  "NL2458",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
   "NL2419",
   "` is made here and nobody owns it: a `Secret` leaves the function that made it returned or wiped, so bind it to a local (`const s = ...`) and `wipe(s)` once done, or return it",
@@ -209,6 +213,8 @@ const diagnosticRules = (): string[] => [
   "NL2426",
   "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
   "NL2035",
+  "` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: ",
+  "NL2457",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
   "NL2442",
   "` of a `Secret` is read only by `nish:secret` itself: compute with the value inside `expose(key, f)`, which runs `f` with it",

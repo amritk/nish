@@ -332,7 +332,14 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
     const rhs = emitter.emitExpression(expr.children[1])
     value = isFloat(field.type)
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), field.type, old, rhs)
+      : emitIntBinary(
+          emitter,
+          compoundIntegerOpcode(expr.text, emitter.opts.json),
+          field.type,
+          old,
+          rhs,
+          expr
+        )
   }
   emitRangedStore(emitter, expr, value)
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`)

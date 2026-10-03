@@ -1,0 +1,2 @@
+error: `divide` may panic here
+the divisor `d` may be 0 here, or -1 with a dividend that may be the minimum: guard it with a test that reaches the division — `if (d !== 0 && d !== -1)` proves it, and so does `d > 0`

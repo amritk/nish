@@ -1,8 +1,6 @@
 %struct.Acc = type { i32 }
 %struct.nish_array = type { i64, i64, i8* }
 
-declare void @nish_panic_div(i1 noundef zeroext) #3
-
 define internal void @Acc.constructor(%struct.Acc* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Acc, %struct.Acc* %this, i32 0, i32 0
@@ -61,45 +59,21 @@ for.body:
   %24 = bitcast i8* %3 to i32*
   %25 = getelementptr inbounds i32, i32* %24, i64 %23
   %26 = load i32, i32* %25, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %27 = icmp eq i32 2, 0
-  %28 = icmp eq i32 %26, -2147483648
-  %29 = icmp eq i32 2, -1
-  %30 = and i1 %28, %29
-  %31 = or i1 %27, %30
-  br i1 %31, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %27)
-  unreachable
-
-div.ok:
-  %32 = sdiv i32 %26, 2
-  %33 = sub nsw i32 %21, %32
-  store i32 %33, i32* %20, align 4
+  %27 = sdiv i32 %26, 2
+  %28 = sub nsw i32 %21, %27
+  store i32 %28, i32* %20, align 4
   br label %for.inc
 
 for.inc:
-  %34 = load i32, i32* %i.addr, align 4
-  %35 = add nsw i32 %34, 1
-  store i32 %35, i32* %i.addr, align 4
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = add nsw i32 %29, 1
+  store i32 %30, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %36 = load i32, i32* %s.addr, align 4
-  %37 = icmp eq i32 1000, 0
-  %38 = icmp eq i32 %36, -2147483648
-  %39 = icmp eq i32 1000, -1
-  %40 = and i1 %38, %39
-  %41 = or i1 %37, %40
-  br i1 %41, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %37)
-  unreachable
-
-div.ok.1:
-  %42 = srem i32 %36, 1000
-  ret i32 %42
+  %31 = load i32, i32* %s.addr, align 4
+  %32 = srem i32 %31, 1000
+  ret i32 %32
 }
 
 define internal noundef i32 @mix(i32 noundef %a, i32 noundef %b) #1 {
@@ -170,7 +144,6 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
-attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

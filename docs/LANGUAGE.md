@@ -3060,8 +3060,14 @@ check is two compares and a branch to a cold `div.fail` block that calls the
 `noreturn` `nish_panic_div`; because that path exists, a function containing
 an integer division is neither `willreturn` nor `readnone`, exactly like one
 containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
-locals, fields, and elements, with constant divisors too (LLVM folds the
-check away at `-O1`). Floating-point division is never checked: `x / 0` on
+locals, fields, and elements. **A divisor the checker proves is left
+unchecked**, as a proven index is: one that is neither 0 nor -1 — a constant
+(`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor
+whose declared range leaves both out, a local behind `d > 0` or behind
+`d !== 0 && d !== -1` — or one that is not 0 against a dividend known to be
+non-negative, which cannot be the minimum. Such a division is the bare
+`sdiv` / `srem` and no `div.fail` block (`tests/cases/panics_divide`,
+`deny_panics_clean`). Floating-point division is never checked: `x / 0` on
 `f64` is `Infinity` and `0 / 0` is `NaN`.
 
 **Unsigned division is checked more cheaply.** `udiv` and `urem` have no
@@ -4618,7 +4624,7 @@ returns to it.
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length. An array never grows past 2^31 − 1 elements, in either number mode: the push that would fails as an allocation does, `nish: out of memory` and exit 1 (`tests/link/cg_sec_push_limit`) | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
-| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
+| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return; behind a test that the array holds an element, such as `if (a.length > 0)`, the check is proven away (`panics_pop`). The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3). Like a concatenation, its result is held to 2^31 − 1 bytes: a longer one fails as an allocation does, `nish: out of memory` and exit 1, before anything is allocated ([CG-3](security/codegen.md)) | `arr_join`, `cg_sec_join_limit`; `reject_arr_join_elem` |
 | `a.set(src: T[], offset: number = 0): void` | copies every element of `src` into `a` from `offset` on, with `TypedArray.prototype.set`'s meaning. **Arrays of numbers only**, of any width and ranged integers included, and `src` has `a`'s own element type. A statement. See [Bulk writes](#bulk-writes-set-and-fill) | `bytes_set_disjoint`, `bytes_set_self`, `bytes_set_end`, `bytes_set_oob`, `bytes_set_overlap`, `bytes_set_float_oob`, `bytes_set_u64_oob`; `reject_bytes_set_string`, `reject_bytes_set_type`, `reject_bytes_set_arity`, `reject_bytes_set_readonly`, `reject_bytes_set_value` |
@@ -5443,7 +5449,10 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 - `--emit-capabilities <file.json>` writes the report: version, entry,
   `deterministic`, the program's set, then each package, module and exported
   function (and every instantiation of one) with its set and a witness chain
-  per capability, `{ "function", "at": "path:line:col", "calls" }` per call.
+  per capability, `{ "function", "at": "path:line:col", "calls" }` per call,
+  and then its `"panics"`: every [panic site](#panic-sites) the function has,
+  `{ "kind", "at": "path:line:col" }` followed by the keys `--emit-panics`
+  writes after its position (`"proven"`, `"callee"`, `"via"`, `"allowed"`).
   Keys are in a fixed order, sets in the order of the table above, packages,
   modules and functions sorted, and every path relative to the entry's
   directory, so the file is byte-stable and diffable (`.caps.json` beside each
@@ -6243,9 +6252,9 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | kind | what fails | what proves it away |
 | --- | --- | --- |
 | `index` | `a[i]`, read or written, and `s.charCodeAt(i)`: `i` outside `[0, length)`; and the second check of a compound store `a[i] += f()` whose right side may resize the array | the bounds proof of [Element access](#element-access): a dominating guard, a loop bounded by the length, or every call site proving the argument (`tests/cases/panics_index`); nothing removes the second check of a compound store, which is made after the call however the first was proved (`tests/cases/panics_index_recheck`) |
-| `pop` | `a.pop()` on an empty array | nothing yet: every `pop` is checked (`tests/cases/panics_pop`) |
+| `pop` | `a.pop()` on an empty array | a dominating `if (a.length > 0)`, the length fact the bounds proof already keeps (`tests/cases/panics_pop`) |
 | `slice` | `s.slice(a, b)`, `dst.set(src, at)` and the buffer range of `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`: the range outside the receiver | nothing yet: `substring` clamps instead, and is not a site (`tests/cases/panics_slice`) |
-| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | nothing yet: every integer division is checked, a constant divisor included, and a float division is not a site (`tests/cases/panics_divide`) |
+| `divide` | integer `/`, `%`, `/=` and `%=`: a zero divisor, or `MIN / -1` when signed | a divisor that is not 0, and not -1 unless the dividend is known non-negative: a constant (`a / 2`, `a % -3`, a folded module constant), a ranged or unsigned divisor whose declared range leaves those values out, or a guard on a local divisor — `if (d !== 0 && d !== -1)`, `if (d > 0)`, or `if (d !== 0)` on an unsigned one. A float division is not a site (`tests/cases/panics_divide`) |
 | `range` | a value entering `integer<Lo, Hi>`, the store of `+=` or `++` into a ranged place, and an exported function's check of a ranged parameter on entry | the range proof of [wp31-ranged-integers.md](wp31-ranged-integers.md) §8 ([Types](#types)): a dominating guard such as `if (n >= 0 && n <= 9)`, or every call site proving the argument (`tests/cases/panics_range`) |
 | `array-length` | `new Array<T>(n)` whose length type could make a bad header or a negative byte count (an `i64`, a float, an `i32` or a ranged integer, a `u32` under `--number-mode i32`) | a narrower unsigned length or a literal up to 2^31 - 1, which is not checked and not a site (`tests/cases/panics_array_length`) |
 | `panic` | `panic(message)` | nothing: a path the program never takes is still a site (`tests/cases/panics_panic`) |
@@ -6253,6 +6262,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
+| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing: the call is the author's word that the index is in range, not a proof, so it is listed as a site that is never proven (`tests/cases/reject_deny_panics_unchecked`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
 
 - **`--unchecked-indexing` is not a proof.** It removes a check and makes the
@@ -6285,6 +6295,60 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
   beside its dump. `--emit-ast`, which stops before the check, refuses it with
   a usage error (exit 2) rather than leaving the file unwritten, and so do
   `nish run`, which keeps its build to itself, and `--fix`, which writes no IR.
+
+### The no-panic scope
+
+A module can be **required** to have no panic site left. `--deny-panics` puts
+every module of the program's own package in the scope; the root package's
+`package.json` — the one nearest above the entry file — puts the modules it
+lists there, by their path relative to that file:
+
+```json
+{ "nish": { "noPanic": ["src/parser.ts", "src/lexer.ts"] } }
+```
+
+Both together put the union in scope; with neither, nothing changes. In a
+module of the scope, every site of the table above that is not proven is an
+error, NL2457, which names the kind and, where a proof the checker makes would
+remove the check, the guard that gives it — the same sentence the performance
+warnings use for an index (NL9007) and a range entry (NL9013), so one way of
+writing each is taught (`tests/cases/reject_deny_panics_<kind>`, one per kind;
+`tests/cases/deny_panics_clean` is the module that passes, and its IR has no
+`nish_panic_` call and no panic tail). Where a refused site sits in a loop, the
+performance warning about the same check is not printed beside the error.
+
+- **A call out of the scope is refused at the call** (NL2458): the standard
+  library and a dependency are not in the scope — their author, not this one,
+  proves them — but a call from the scope into one of their functions that may
+  panic names the callee and the site it reaches (`reject_deny_panics_call`,
+  `tests/link/no_panic_transitive`). A call into a function that is itself in
+  the scope is not refused again: its own sites are.
+- **A module the list does not name keeps its checks**: the same unproven index
+  is refused in a listed module and compiles in an unlisted one
+  (`tests/link/no_panic_module`, `tests/link/no_panic_unlisted`).
+- **An entry that names no module of the program is an error** (NL3031),
+  reported in `package.json` where the entry is written: a typo would
+  otherwise leave the module it meant outside the scope without a word
+  (`tests/link/no_panic_unknown_entry`).
+- **Neither `--unchecked-indexing` nor `nish:unsafe` is a proof.** Both remove
+  a check and make an access out of range undefined behaviour, which is not
+  what the scope promises, so an index the flag left unchecked is still
+  refused (`reject_deny_panics_unchecked_indexing`), and so is every
+  `uncheckedGet` and `uncheckedSet`, as the `unchecked` kind
+  (`reject_deny_panics_unchecked`). A module that wants them is left out of
+  `noPanic`.
+- **What the scope does not cover.** Out of memory is listed but never
+  refused: every allocation can fail and no guard prevents it. Stack overflow
+  is a fault the operating system raises, with no check in the IR to refuse.
+  Signed overflow is `nsw`, undefined rather than checked, until checked
+  overflow lands. So a module in the scope cannot *panic* except by running
+  out of memory, and that is the whole claim: it is not a claim that it has no
+  undefined behaviour, since an overflowing `+`, `-` or `*` still has some
+  (*Signed integer overflow is undefined behaviour*, above), and
+  `wrappingAdd` and its siblings are the operations that define it.
+- `--deny-panics` changes no byte of the IR: a program it accepts is the one the
+  build compiles without it. With `--emit-ast`, which stops before the checker,
+  it is a usage error (exit 2).
 
 ## Forbidden constructs (Phase 0 validator)
 

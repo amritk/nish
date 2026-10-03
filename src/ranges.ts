@@ -928,6 +928,11 @@ const answeredBy = (ctx: CheckContext, warning: Diagnostic, proved: Node[]): boo
     return false
   }
   for (const access of proved) {
+    // A division or a `pop` is proved here too (`judgeDivision`, `judgePop`),
+    // and has no index the warning could sit on.
+    if (access.kind !== N_INDEX && (access.kind !== N_CALL || access.children[1].children.length !== 1)) {
+      continue
+    }
     const index = access.kind === N_INDEX ? access.children[1] : access.children[1].children[0]
     if (warning.start === index.start && warning.end === index.end) {
       return true

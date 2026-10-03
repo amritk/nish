@@ -21,7 +21,8 @@
                   { "function": "main", "at": "caps_signal.ts:7:15", "calls": "listen" },
                   { "function": "listen", "at": "caps_signal.ts:4:27", "calls": "signalFd" }
                 ]
-              }
+              },
+              "panics": []
             }
           ]
         }

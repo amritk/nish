@@ -1252,7 +1252,7 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
     const rhs = emitter.emitExpression(expr.children[1])
     value = isFloat(elem)
       ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text, emitter.opts.json)} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), elem, old, rhs, expr)
   }
   emitRangedStore(emitter, expr, value)
   // A hoisted header is only hoisted out of a loop nothing in it resizes, and
@@ -1326,11 +1326,12 @@ const emitPush = (emitter: Emitter, expr: Node, arr: string, elem: i32): string 
  * `0 >= 0`, which is the access being attempted — because there is no
  * `undefined` to return and no second return type to widen to.
  */
-const emitPop = (emitter: Emitter, arr: string, elem: i32): string => {
+const emitPop = (emitter: Emitter, expr: Node, arr: string, elem: i32): string => {
   const fn = emitter.fn
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
-  if (!emitter.program.uncheckedIndexing) {
+  // A receiver known to hold an element (`judgePop`) needs no check.
+  if (!emitter.program.uncheckedIndexing && !emitter.program.nodeProvenIndex[expr.id]) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`)
     const failBlock = fn.newBlock("pop.empty")
     const okBlock = fn.newBlock("pop.ok")
@@ -1653,7 +1654,7 @@ export const emitArrayMethodCall = (emitter: Emitter, expr: Node, receiver: i32)
     return emitPush(emitter, expr, arr, elem)
   }
   if (name === "pop") {
-    return emitPop(emitter, arr, elem)
+    return emitPop(emitter, expr, arr, elem)
   }
   if (name === "indexOf") {
     return emitArrayIndexOf(emitter, expr, arr, elem)

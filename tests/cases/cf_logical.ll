@@ -33,31 +33,19 @@ land.end:
   ret i1 %2
 }
 
-define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #0 {
+define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #1 {
 entry:
   %0 = icmp eq i32 %x, 0
   br i1 %0, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %1 = icmp eq i32 %x, 0
-  %2 = icmp eq i32 100, -2147483648
-  %3 = icmp eq i32 %x, -1
-  %4 = and i1 %2, %3
-  %5 = or i1 %1, %4
-  br i1 %5, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %1)
-  unreachable
-
-div.ok:
-  %6 = sdiv i32 100, %x
-  %7 = icmp slt i32 %6, 50
+  %1 = sdiv i32 100, %x
+  %2 = icmp slt i32 %1, 50
   br label %lor.end
 
 lor.end:
-  %8 = phi i1 [ true, %entry ], [ %7, %div.ok ]
-  ret i1 %8
+  %3 = phi i1 [ true, %entry ], [ %2, %lor.rhs ]
+  ret i1 %3
 }
 
 define internal noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #1 {

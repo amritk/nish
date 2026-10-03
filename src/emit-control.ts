@@ -393,7 +393,7 @@ export const emitCompoundAssignment = (emitter: Emitter, expr: Node): string => 
     ? emitter.fn.emitValue(
         `${compoundFloatOpcode(expr.text, emitter.opts.json)} ${emitter.llvm(local.type)} ${old}, ${rhs}`
       )
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs)
+    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text, emitter.opts.json), local.type, old, rhs, expr)
   emitRangedStore(emitter, expr, value)
   storeLocal(emitter, local, value)
   return value

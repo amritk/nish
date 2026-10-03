@@ -11,9 +11,8 @@ declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_panic_div(i1 noundef zeroext) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -39,54 +38,30 @@ slow:
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @half(i32 noundef %n) #0 {
 entry:
-  %0 = icmp eq i32 2, 0
-  %1 = icmp eq i32 %n, -2147483648
-  %2 = icmp eq i32 2, -1
-  %3 = and i1 %1, %2
-  %4 = or i1 %0, %3
-  br i1 %4, label %div.fail, label %div.ok
-
-div.fail:
-  call void @nish_panic_div(i1 zeroext %0)
-  unreachable
-
-div.ok:
-  %5 = srem i32 %n, 2
-  %6 = icmp ne i32 %5, 0
-  br i1 %6, label %if.then, label %if.end
+  %0 = srem i32 %n, 2
+  %1 = icmp ne i32 %0, 0
+  br i1 %1, label %if.then, label %if.end
 
 if.then:
-  %7 = call i8* @nish_str_from_i32(i32 %n)
-  %8 = call i8* @nish_str_concat(i8* %7, i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*))
+  %2 = call i8* @nish_str_from_i32(i32 %n)
+  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*))
+  %4 = call i8* @nish_alloc_struct(i64 16)
+  %5 = bitcast i8* %4 to %struct.nish_result.i32.str*
+  %6 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %5, i32 0, i32 0
+  store i1 false, i1* %6, align 1
+  %7 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %5, i32 0, i32 2
+  store i8* %3, i8** %7, align 8
+  ret %struct.nish_result.i32.str* %5
+
+if.end:
+  %8 = sdiv i32 %n, 2
   %9 = call i8* @nish_alloc_struct(i64 16)
   %10 = bitcast i8* %9 to %struct.nish_result.i32.str*
   %11 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 0
-  store i1 false, i1* %11, align 1
-  %12 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 2
-  store i8* %8, i8** %12, align 8
+  store i1 true, i1* %11, align 1
+  %12 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %10, i32 0, i32 1
+  store i32 %8, i32* %12, align 4
   ret %struct.nish_result.i32.str* %10
-
-if.end:
-  %13 = icmp eq i32 2, 0
-  %14 = icmp eq i32 %n, -2147483648
-  %15 = icmp eq i32 2, -1
-  %16 = and i1 %14, %15
-  %17 = or i1 %13, %16
-  br i1 %17, label %div.fail.1, label %div.ok.1
-
-div.fail.1:
-  call void @nish_panic_div(i1 zeroext %13)
-  unreachable
-
-div.ok.1:
-  %18 = sdiv i32 %n, 2
-  %19 = call i8* @nish_alloc_struct(i64 16)
-  %20 = bitcast i8* %19 to %struct.nish_result.i32.str*
-  %21 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %20, i32 0, i32 0
-  store i1 true, i1* %21, align 1
-  %22 = getelementptr inbounds %struct.nish_result.i32.str, %struct.nish_result.i32.str* %20, i32 0, i32 1
-  store i32 %18, i32* %22, align 4
-  ret %struct.nish_result.i32.str* %20
 }
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @quarter(i32 noundef %n) #0 {
@@ -168,5 +143,4 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }

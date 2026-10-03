@@ -152,18 +152,22 @@ const intMin = (ty: string): string => (ty === "i32" ? "-2147483648" : "-9223372
  * `<opcode> <ty> lhs, rhs` for an integer type, with the checked division
  * described above. `opcode` is the *signed* spelling; the unsigned form is
  * selected from `type`, so every caller names one opcode per operator.
+ * `site` is the operator's node: a division whose divisor the bounds walk
+ * proved neither zero nor, signed, `-1` against a dividend that may be the
+ * minimum (`judgeDivision` in `src/bounds.ts`) is written with no check.
  */
 export const emitIntBinary = (
   emitter: Emitter,
   opcode: string,
   type: i32,
   lhs: string,
-  rhs: string
+  rhs: string,
+  site: Node
 ): string => {
   const ty = emitter.llvm(type)
   const op = signedOpcode(opcode, type)
   const fn = emitter.fn
-  if (!isDivision(op)) {
+  if (!isDivision(op) || emitter.program.nodeProvenIndex[site.id]) {
     return fn.emitValue(`${intOpcode(emitter, op, type)} ${ty} ${lhs}, ${rhs}`)
   }
   const byZero = fn.emitValue(`icmp eq ${ty} ${rhs}, 0`)
@@ -382,7 +386,7 @@ export const emitBinary = (emitter: Emitter, expr: Node): string => {
   const lhs = emitter.emitExpression(expr.children[0])
   const rhs = emitter.emitExpression(expr.children[1])
   if (isInteger(type)) {
-    return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs)
+    return emitIntBinary(emitter, integerOpcode(op, emitter.opts.json), type, lhs, rhs, expr)
   }
   return emitter.fn.emitValue(`${floatOpcode(op, emitter.opts.json)} ${emitter.llvm(type)} ${lhs}, ${rhs}`)
 }

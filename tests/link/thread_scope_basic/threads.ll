@@ -10,19 +10,19 @@
 @nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
 
 declare noundef double @sumOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture) #3
-declare noundef i32 @primesBelow(i32 noundef) #1
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare noundef i32 @primesBelow(i32 noundef) #4
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #5
 declare noundef i64 @nish_arena_mark() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_exit(i32 noundef) #5
+declare void @nish_exit(i32 noundef) #6
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #1
 declare double @llvm.floor.f64(double) #0
 declare double @llvm.ceil.f64(double) #0
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -331,9 +331,10 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn readonly }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind readnone }
+attributes #5 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #6 = { noreturn nounwind }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

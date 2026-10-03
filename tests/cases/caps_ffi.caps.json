@@ -21,7 +21,10 @@
                   { "function": "main", "at": "caps_ffi.ts:10:15", "calls": "magnitude" },
                   { "function": "magnitude", "at": "caps_ffi.ts:6:36", "calls": "labs" }
                 ]
-              }
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_ffi.ts:10:3", "allowed": true }
+              ]
             }
           ]
         }

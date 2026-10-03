@@ -508,6 +508,140 @@ const stage1Pair = ({ reference = null, candidate = null } = {}) => {
 }
 
 /**
+ * Output changes declared on the generated programs, the way `DECLARED` in
+ * `tests/nish-cmp.js` declares them on the corpus: a program the reference and
+ * the candidate disagree on is excused only when one of these explains the
+ * whole difference *and* its words are in the release notes (`CHANGELOG.md`,
+ * or the section the commits since the last release render to). An entry is
+ * a statement about direction, checked on both IRs, never a program list: a
+ * generated program differs for whatever reason it differs, and the reason has
+ * to be read off the IR. The list is a record for one release, emptied when
+ * the release that carries the change becomes the seed.
+ */
+const DECLARED_CHANGES = [
+  {
+    changelog: "--deny-panics and noPanic refuse every remaining panic site",
+    why: "a divisor proven to be neither 0 nor -1, and a `pop` behind a test that its array holds an element, lose their check",
+    explains: (reference, candidate) => onlyDropsChecks(reference, candidate),
+  },
+]
+
+/** How many times each runtime panic is called, and each check block opened, in an IR text. */
+const panicCounts = (ir) => {
+  const counts = new Map()
+  const bump = (key) => counts.set(key, (counts.get(key) ?? 0) + 1)
+  for (const m of ir.matchAll(/call void @(nish_panic_\w+|nish_exit)\(/g)) {
+    bump(m[1])
+  }
+  for (const m of ir.matchAll(/^(div\.fail|pop\.empty)\d*:/gm)) {
+    bump(m[1])
+  }
+  return counts
+}
+
+/** The functions an IR text defines, in order. */
+const definedNames = (ir) => [...ir.matchAll(/^define [^@]*@([\w.$]+)\(/gm)].map((m) => m[1]).join(" ")
+
+/**
+ * The candidate defines the same functions, and differs from the reference
+ * only by division and `pop` checks it no longer writes: every removed
+ * `div.fail` block takes its `nish_panic_div` call with it, every removed
+ * `pop.empty` block its `nish_panic_index` call, at least one is removed, and
+ * every other panic is called exactly as often. A dropped bounds check
+ * anywhere else is not explained by this, and stays a disagreement.
+ */
+const onlyDropsChecks = (reference, candidate) => {
+  if (definedNames(reference) !== definedNames(candidate)) {
+    return false
+  }
+  const ref = panicCounts(reference)
+  const cand = panicCounts(candidate)
+  const n = (map, key) => map.get(key) ?? 0
+  const divs = n(ref, "div.fail") - n(cand, "div.fail")
+  const pops = n(ref, "pop.empty") - n(cand, "pop.empty")
+  if (divs < 0 || pops < 0 || divs + pops === 0) {
+    return false
+  }
+  if (n(ref, "nish_panic_div") - n(cand, "nish_panic_div") !== divs) {
+    return false
+  }
+  if (n(ref, "nish_panic_index") - n(cand, "nish_panic_index") !== pops) {
+    return false
+  }
+  for (const key of new Set([...ref.keys(), ...cand.keys()])) {
+    if (key !== "div.fail" && key !== "pop.empty" && key !== "nish_panic_div" && key !== "nish_panic_index") {
+      if (n(ref, key) !== n(cand, key)) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
+/**
+ * `onlyDropsChecks` over fabricated pairs, every run: a comparison whose
+ * excuse nothing exercises is the gap `tests/nish-cmp.js`'s self-checks close.
+ * Answers the first case that comes out wrong, or `""`.
+ */
+const selfCheckDeclared = () => {
+  const fn = (body) => `define internal i32 @f(i32 %a) {\nentry:\n${body}}\n`
+  const div =
+    "  br i1 %0, label %div.fail, label %div.ok\ndiv.fail:\n  call void @nish_panic_div(i1 zeroext %0)\n  unreachable\n"
+  const pop = "pop.empty:\n  call void @nish_panic_index(i64 0, i64 0)\n  unreachable\n"
+  const index = "arr.oob:\n  call void @nish_panic_index(i64 %i, i64 %n)\n  unreachable\n"
+  const cases = [
+    [fn(div + index), fn(index), true, "a dropped division check"],
+    [fn(pop + index), fn(index), true, "a dropped pop check"],
+    [fn(div + index), fn(div), false, "a dropped bounds check"],
+    [fn(div), fn(div), false, "no check dropped"],
+    [fn(div), fn(div + pop), false, "a check added"],
+    [fn(div), `${fn("")}define internal i32 @g() {\n}\n`, false, "a function more"],
+  ]
+  for (const [reference, candidate, want, what] of cases) {
+    if (onlyDropsChecks(reference, candidate) !== want) {
+      return `onlyDropsChecks is ${!want} for ${what}`
+    }
+  }
+  return ""
+}
+
+/**
+ * The declared change that explains why `file` compiles differently, or null:
+ * both compilers compile it again into a directory of their own, and each
+ * entry is asked about the two IRs. `notes` is the release notes, read once.
+ */
+const declaredChange = (pair, work, file, notes) => {
+  const irOf = (compiler, dir) => {
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const r = cmp.compile(compiler, [file, "-o", `${dir}${path.sep}`])
+    if (r.status !== 0) {
+      return null
+    }
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".ll"))
+      .sort()
+      .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+      .join("\n")
+  }
+  const reference = irOf(pair.reference, path.join(work, "declared-reference"))
+  const candidate = irOf(pair.candidate, path.join(work, "declared-candidate"))
+  if (reference === null || candidate === null) {
+    return null
+  }
+  for (const change of DECLARED_CHANGES) {
+    if (
+      cmp.isNamed(change.changelog, notes.changelog, notes.pending()) &&
+      change.explains(reference, candidate)
+    ) {
+      return change
+    }
+  }
+  return null
+}
+
+/**
  * The stage1 mode: generate `count` programs and require `IR(reference, p) ==
  * IR(candidate, p)` for each, byte for byte and module set included — the same
  * equality `tests/nish-cmp.js` asserts over the checked-in corpus, on programs
@@ -536,13 +670,36 @@ const stage1Run = ({
 } = {}) => {
   const pair = stage1Pair({ reference, candidate })
   if (pair.error !== undefined) {
-    return { seed, count, pair: null, error: pair.error, agreed: 0, files: 0, lines: 0, disagreements: [] }
+    return {
+      seed,
+      count,
+      pair: null,
+      error: pair.error,
+      agreed: 0,
+      declared: 0,
+      files: 0,
+      lines: 0,
+      disagreements: [],
+    }
   }
   const dir = path.join(lib.buildDir, "fuzz")
   fs.mkdirSync(dir, { recursive: true })
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fuzz-ir-"))
   const disagreements = []
   let agreed = 0
+  let declared = 0
+  // The release notes, read only once a disagreement needs them.
+  let pending
+  const changelogFile = path.resolve(import.meta.dirname, "..", "..", "CHANGELOG.md")
+  const notes = {
+    changelog: fs.existsSync(changelogFile) ? fs.readFileSync(changelogFile, "utf8") : "",
+    pending: () => {
+      if (pending === undefined) {
+        pending = cmp.pendingNotes()
+      }
+      return pending
+    },
+  }
   let files = 0
   let lines = 0
   for (let i = 0; i < count; i++) {
@@ -559,6 +716,12 @@ const stage1Run = ({
       const first = result.differences[0]
       entry.verdict = first.surface === "exit" ? "refusal-differs" : "ir-mismatch"
       entry.detail = `${first.surface}: ${first.detail}`
+      const change = entry.verdict === "ir-mismatch" ? declaredChange(pair, work, file, notes) : null
+      if (change !== null) {
+        entry.verdict = "declared"
+        entry.detail = change.why
+        declared++
+      }
     } else if (result.refused !== undefined) {
       entry.verdict = "refused-by-both"
       entry.detail = result.refused
@@ -567,7 +730,7 @@ const stage1Run = ({
       files += result.files
       lines += result.lines
     }
-    if (entry.verdict !== "agree") {
+    if (entry.verdict !== "agree" && entry.verdict !== "declared") {
       const failFile = path.join(lib.buildDir, `fuzz-stage1-fail-${s}.ts`)
       fs.copyFileSync(file, failFile)
       entry.file = failFile
@@ -576,7 +739,7 @@ const stage1Run = ({
     log(entry)
   }
   fs.rmSync(work, { recursive: true, force: true })
-  return { seed, count, pair, agreed, files, lines, disagreements }
+  return { seed, count, pair, agreed, declared, files, lines, disagreements }
 }
 
 export { generateProgram, stage1Run }
@@ -613,6 +776,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.stdout.write(generateProgram(seed, { depth }))
     process.exit(0)
   }
+  const broken = selfCheckDeclared()
+  if (broken !== "") {
+    console.error(`fuzz: self-check failed: ${broken}`)
+    process.exit(1)
+  }
   if (!lib.hasClang()) {
     console.error("clang not installed")
     process.exit(2)
@@ -641,7 +809,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   console.log(
-    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
+    `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} declared=${res.declared} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
   )
   // The pair is part of the reproduction now that it is a parameter: a
   // failure against one seed release says nothing about another, and the
