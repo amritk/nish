@@ -72,6 +72,7 @@ import { hmacSha256 } from "nish/crypto/hmac"
 import {
   QUIC_AEAD_AES_128_GCM,
   QUIC_ERR_VERSION,
+  QUIC_MAX_CID_LENGTH,
   QUIC_PACKET_INITIAL,
   QUIC_PACKET_OK,
   QUIC_PACKET_SHORT,
@@ -87,11 +88,10 @@ import {
   quicRetryPacket,
   quicSealPacket,
 } from "nish/net/quic-packet"
-import { QUIC_ERROR_INVALID_TOKEN, quicPushConnectionClose } from "nish/net/quic-frame"
+import { QUIC_ERROR_INVALID_TOKEN, QUIC_RESET_TOKEN_SIZE, quicPushConnectionClose } from "nish/net/quic-frame"
 import {
   QUIC_CONN_CID_LENGTH,
   QUIC_CONN_DATAGRAM_SIZE,
-  QUIC_CONN_RESET_TOKEN_SIZE,
   QUIC_CONN_STATIC_KEY_SIZE,
   QuicServerConfig,
   quicStatelessResetToken,
@@ -188,6 +188,9 @@ const quicListenerPushNumber = (out: u8[], value: i64, size: i32): void => {
  * `scid` to `dcid`: the IDs swapped, version 0, and version 1 as the only one
  * supported. `unused` fills the first byte's low six bits, under the 0x40 the
  * RFC asks for so the packet looks like QUIC to a demultiplexer.
+ *
+ * TODO(WP34 Q1): every other packet format is `nish/net/quic-packet`'s; this
+ * belongs beside `quicRetryPacket` there, which this stage may not edit.
  */
 const quicListenerVersionNegotiation = (dcid: u8[], scid: u8[], unused: i32): u8[] => {
   const out: u8[] = []
@@ -373,7 +376,7 @@ export class QuicListener {
     }
     const odcidLength: i32 = toI32(token[QUIC_LISTENER_TOKEN_HEAD - 1])
     const head: i32 = QUIC_LISTENER_TOKEN_HEAD + odcidLength
-    if (odcidLength > 20 || head + QUIC_LISTENER_TOKEN_MAC_SIZE !== length) {
+    if (odcidLength > QUIC_MAX_CID_LENGTH || head + QUIC_LISTENER_TOKEN_MAC_SIZE !== length) {
       return false
     }
     const mac: u8[] = this.tokenMac(quicListenerSlice(token, 0, head), dcid, address)
@@ -424,12 +427,15 @@ export class QuicListener {
       return answer
     }
     const read: QuicKeys | null = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client)
-    const write: QuicKeys | null = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server)
-    if (read === null || write === null) {
+    if (read === null) {
       return answer
     }
     const opened: QuicPacket = quicOpenPacket(read, datagram, header, -1)
-    if (opened.error !== QUIC_PACKET_OK) {
+    // The write keys are derived only for an Initial that opened, so a forged
+    // token on noise costs one derivation, not two.
+    const write: QuicKeys | null =
+      opened.error === QUIC_PACKET_OK ? quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server) : null
+    if (write === null) {
       return answer
     }
     const payload: u8[] = []
@@ -497,7 +503,7 @@ export class QuicListener {
       const r: i32 = toI32(pick.length) > 1 ? (toI32(pick[0]) << 8) | toI32(pick[1]) : 0
       size = QUIC_LISTENER_SHORT_TRIGGER + (span > 0 ? r % span : 0)
     }
-    const reply: u8[] = this.random(size - QUIC_CONN_RESET_TOKEN_SIZE)
+    const reply: u8[] = this.random(size - QUIC_RESET_TOKEN_SIZE)
     if (toI32(reply.length) > 0) {
       reply[0] = toU8((toI32(reply[0]) & 0x3f) | 0x40)
     }

@@ -30,7 +30,7 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { CLIENT_SCID, QC_T0, QcClient, qcConnect, qcHello, qcParams, qcShortWith } from "../net_quic_conn/client";
 import { qcConnected, qcDefaultConfig, qcServer } from "../net_quic_conn/common";
 import { qcStream } from "../net_quic_conn/data";
-import { lcCloseIn } from "./common";
+import { lcAllZero, lcCloseIn } from "./common";
 
 /**
  * One direction of the client's 1-RTT keys, a generation at a time: the
@@ -115,15 +115,6 @@ const lcAck = (pn: i64): u8[] => {
   const out: u8[] = [];
   quicPushAck(out, [pn, pn], n32(1), n64(0));
   return out;
-};
-
-/** Whether every byte of `bytes` is zero. */
-const lcAllZero = (bytes: u8[]): boolean => {
-  let zero: boolean = true;
-  for (const b of bytes) {
-    zero = zero && toI32(b) === 0;
-  }
-  return zero;
 };
 
 /** A client-started update, the server's answer, and an update the server starts in turn. */

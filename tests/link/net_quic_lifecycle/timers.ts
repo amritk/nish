@@ -18,6 +18,7 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { CLIENT_SCID, QC_T0, QcClient, qcConnect, qcCrypto, qcExchange, qcHello, qcInitial, qcParams, qcShort } from "../net_quic_conn/client";
 import { qcConfig, qcServer } from "../net_quic_conn/common";
 import { qcStream } from "../net_quic_conn/data";
+import { lcAllZero } from "./common";
 
 /** A connection and the client that completed a handshake with it. */
 class LcPair {
@@ -48,15 +49,6 @@ const lcIdlePair = (serverIdle: i64, clientIdle: i64): LcPair => {
   return new LcPair(conn, c);
 };
 
-/** Whether every byte of `bytes` is zero. */
-const lcZero = (bytes: u8[]): boolean => {
-  let zero: boolean = true;
-  for (const b of bytes) {
-    zero = zero && toI32(b) === 0;
-  }
-  return zero;
-};
-
 /** A PING in a 1-RTT packet: the least a client sends to keep a connection alive. */
 const lcPing = (c: QcClient): u8[] => qcShort(c, fromHex("01"));
 
@@ -74,7 +66,7 @@ export const timerChecks = (t: Suite): void => {
   p.conn.handleTimer(QC_T0 + n64(30000));
   t.eqI32("at it, the connection has timed out", p.conn.state, QUIC_STATE_TIMED_OUT);
   t.ok("silently: nothing goes out, not even a CONNECTION_CLOSE (§10.1)", p.conn.takeDatagram(QC_T0 + n64(30000)) === null);
-  t.ok("its keys are discarded and wiped", p.conn.application.discarded && writeKeys !== null && lcZero(writeKeys.key) && lcZero(writeKeys.hp));
+  t.ok("its keys are discarded and wiped", p.conn.application.discarded && writeKeys !== null && lcAllZero(writeKeys.key) && lcAllZero(writeKeys.hp));
   t.ok("and nothing is timed any more", p.conn.deadline() === n64(-1));
   p.conn.receive(qcShort(p.c, qcStream(n64(0), n64(0), "late", true)), QC_T0 + n64(30001));
   t.ok("a packet after that is ignored", p.conn.readStream() === null && p.conn.state === QUIC_STATE_TIMED_OUT);

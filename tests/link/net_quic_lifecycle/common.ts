@@ -14,7 +14,8 @@ import {
 import { QuicServerConfig } from "nish/net/quic";
 import { fromHex } from "../crypto_x509/hex";
 import { n64 } from "../net_quic_frame/typed";
-import { qcDefaultConfig } from "../net_quic_conn/common";
+import { QcFound, qcDefaultConfig, qcFind } from "../net_quic_conn/common";
+import { bytesFrom } from "../net_tls_common/client";
 
 /** The entropy every listener in these checks and in the recordings is made with: 0x60, 0x61, … */
 export const lcListenerEntropy = (): u8[] => {
@@ -95,14 +96,15 @@ export const lcShortTo = (dcid: u8[], size: i32): u8[] => {
 };
 
 /** The last `n` bytes of `bytes`. */
-export const lcTail = (bytes: u8[], n: i32): u8[] => {
-  const out: u8[] = [];
-  for (let k: i32 = toI32(bytes.length) - n; k < toI32(bytes.length); k++) {
-    if (k >= 0) {
-      out.push(bytes[k]);
-    }
+export const lcTail = (bytes: u8[], n: i32): u8[] => bytesFrom(bytes, toI32(bytes.length) - n);
+
+/** Whether every byte of `bytes` is zero: a wipe happened. */
+export const lcAllZero = (bytes: u8[]): boolean => {
+  let zero: boolean = true;
+  for (const b of bytes) {
+    zero = zero && toI32(b) === 0;
   }
-  return out;
+  return zero;
 };
 
 /** One NEW_CONNECTION_ID the server sent: the ID and its reset token. */
@@ -137,18 +139,6 @@ export const lcIssuedIds = (payloads: u8[][]): LcIssuedId[] => {
 
 /** The error code and frame type of the first CONNECTION_CLOSE in `payloads`, as `code type`, or "no close". */
 export const lcCloseIn = (payloads: u8[][]): string => {
-  const frame = new QuicFrame();
-  for (const payload of payloads) {
-    let at: i32 = 0;
-    while (at < toI32(payload.length)) {
-      if (quicParseFrame(frame, payload, at, toI32(payload.length)) !== n64(0) || frame.end <= at) {
-        break;
-      }
-      if (frame.type === QUIC_FRAME_CONNECTION_CLOSE) {
-        return `${frame.errorCode} ${frame.frameType}`;
-      }
-      at = frame.end;
-    }
-  }
-  return "no close";
+  const f: QcFound = qcFind(payloads, QUIC_FRAME_CONNECTION_CLOSE);
+  return f.found ? `${f.frame.errorCode} ${f.frame.frameType}` : "no close";
 };

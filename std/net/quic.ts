@@ -158,6 +158,7 @@ import {
   QUIC_FRAME_STREAM,
   QUIC_FRAME_STREAM_DATA_BLOCKED,
   QUIC_PATH_DATA_SIZE,
+  QUIC_RESET_TOKEN_SIZE,
   QuicFrame,
   quicCryptoOverhead,
   quicFrameAckEliciting,
@@ -222,8 +223,6 @@ export const QUIC_CONN_MAX_STREAM_DATA: i64 = 1048576
 export const QUIC_CONN_MAX_STREAMS: i64 = 1024
 /** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
 export const QUIC_CONN_STATIC_KEY_SIZE: i32 = 32
-/** A stateless reset token's length (RFC 9000 §10.3). */
-export const QUIC_CONN_RESET_TOKEN_SIZE: i32 = 16
 /**
  * The probe timeout, in milliseconds, this module times by. Measuring the
  * round trip is loss recovery's (WP34 Q3), so until then it is RFC 9002
@@ -542,9 +541,8 @@ const quicConnAead = (suite: i32): i32 => {
 
 /** Wipes a level's key, IV and header-protection key; the expanded AES schedules are out of reach (QUIC-2). */
 const quicConnWipeKeys = (keys: QuicKeys | null): void => {
+  quicConnWipePacketKey(keys)
   if (keys !== null) {
-    secureZero(keys.key)
-    secureZero(keys.iv)
     secureZero(keys.hp)
   }
 }
@@ -571,7 +569,7 @@ const quicConnWipePacketKey = (keys: QuicKeys | null): void => {
  */
 export const quicStatelessResetToken = (key: u8[], cid: u8[]): u8[] => {
   const mac: u8[] = hmacSha256(key, cid)
-  const token: u8[] = quicConnSlice(mac, 0, QUIC_CONN_RESET_TOKEN_SIZE)
+  const token: u8[] = quicConnSlice(mac, 0, QUIC_RESET_TOKEN_SIZE)
   secureZero(mac)
   return token
 }
@@ -848,7 +846,7 @@ export class QuicConnection {
    * idle timeout has passed by `now`, every datagram is ignored.
    */
   receive(datagram: u8[], now: i64): i64 {
-    this.advance(now)
+    this.handleTimer(now)
     if (this.closed()) {
       return this.error
     }
@@ -1635,6 +1633,12 @@ export class QuicConnection {
     return timeout < QUIC_CONN_IDLE_FLOOR ? QUIC_CONN_IDLE_FLOOR : timeout
   }
 
+  /** When the idle timeout passes, or -1 when there is none or the timer has not started. */
+  idleDeadline(): i64 {
+    const timeout: i64 = this.idleTimeout()
+    return timeout >= 0 && this.idleSince >= 0 ? this.idleSince + timeout : -1
+  }
+
   /**
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
    * timeout, or the end of a key update's `QUIC_CONN_PTO`, whichever comes
@@ -1645,8 +1649,7 @@ export class QuicConnection {
     if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
       return -1
     }
-    const timeout: i64 = this.idleTimeout()
-    const idle: i64 = timeout >= 0 && this.idleSince >= 0 ? this.idleSince + timeout : -1
+    const idle: i64 = this.idleDeadline()
     if (this.keyRetainUntil >= 0 && (idle < 0 || this.keyRetainUntil < idle)) {
       return this.keyRetainUntil
     }
@@ -1660,22 +1663,18 @@ export class QuicConnection {
    * no CONNECTION_CLOSE, every key wiped. Past a key update's
    * `QUIC_CONN_PTO` the previous read keys are wiped and the next
    * generation's derived (RFC 9001 §6.5). `receive` and `takeDatagram` run
-   * it themselves.
+   * it themselves. Time never runs backwards here: an earlier `now` than
+   * one already given counts as that one.
    */
   handleTimer(now: i64): void {
-    this.advance(now)
-  }
-
-  /** Moves the connection's time to `now`, never back, and runs what is due (see `handleTimer`). */
-  advance(now: i64): void {
     if (now > this.now) {
       this.now = now
     }
     if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
       return
     }
-    const timeout: i64 = this.idleTimeout()
-    if (timeout >= 0 && this.idleSince >= 0 && this.now >= this.idleSince + timeout) {
+    const idle: i64 = this.idleDeadline()
+    if (idle >= 0 && this.now >= idle) {
       this.state = QUIC_STATE_TIMED_OUT
       this.error = QUIC_ERROR_NO_ERROR
       this.closeSent = true
@@ -1778,7 +1777,7 @@ export class QuicConnection {
    * passed nothing goes out.
    */
   takeDatagram(now: i64): u8[] | null {
-    this.advance(now)
+    this.handleTimer(now)
     if (
       this.state === QUIC_STATE_WAIT_INITIAL ||
       this.state === QUIC_STATE_DRAINING ||
