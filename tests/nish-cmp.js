@@ -2769,6 +2769,36 @@ const DECLARED = [
     changelog: "the TLS 1.3 server handshake",
     why: "a new program: the extension, retry and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls",
   },
+  {
+    program: "tests/link/net_tls_record_rfc8448/main.ts",
+    file: "exit",
+    changelog: "records over TCP (WP34 T2)",
+    why: "a new program: RFC 8448 §3's records sealed, opened and replayed through the record server, which the reference compiler refuses because its std/ has no nish/net/tls/record",
+  },
+  {
+    program: "tests/link/net_tls_record_refusals/main.ts",
+    file: "exit",
+    changelog: "records over TCP (WP34 T2)",
+    why: "a new program: every refusal of the record layer and the record server as its alert, which the reference compiler refuses because its std/ has no nish/net/tls/record",
+  },
+  {
+    program: "tests/link/net_tls_record_f64/main.ts",
+    file: "exit",
+    changelog: "records over TCP (WP34 T2)",
+    why: "a new program: the record layer's RFC 8448 and refusal checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls/record",
+  },
+  {
+    program: "tests/link/net_tls_record_tcp/main.ts",
+    file: "exit",
+    changelog: "records over TCP (WP34 T2)",
+    why: "a new program: a Nish client against the TLS-over-TCP carrier over loopback, which the reference compiler refuses because its std/ has no nish/net/tls-tcp",
+  },
+  {
+    program: "tests/link/net_tls_record_tcp_f64/main.ts",
+    file: "exit",
+    changelog: "records over TCP (WP34 T2)",
+    why: "a new program: the TLS-over-TCP loopback checks under --number-mode f64, which the reference compiler refuses because its std/ has no nish/net/tls-tcp",
+  },
   ...declareMoved(
     CG8_MOVED,
     "CG-8",

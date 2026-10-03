@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, net/hpack, net/http1, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-frame, net/quic-packet, net/tls, net/tls/codec, net/tls/schedule, net/websocket, pair, secret, testing, text, threads"
+  "collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, net/hpack, net/http1, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-frame, net/quic-packet, net/tls, net/tls-tcp, net/tls/codec, net/tls/record, net/tls/record-server, net/tls/schedule, net/websocket, pair, secret, testing, text, threads"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in

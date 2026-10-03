@@ -1,0 +1,48 @@
+PASS  accept with no connection waiting answers -11
+PASS  a Nish client connects through the loop
+PASS  {server} the ServerHello record arrives byte for byte
+PASS  {server} and the 679-byte flight record, byte for byte
+PASS  the client's Finished and data in one write: the fifty bytes come back under the trace's server keys
+PASS  the client's close_notify is answered with the server's
+PASS  and the server closes the socket
+PASS  leaving its slot free
+PASS  with nothing gone wrong in the loop
+PASS  ChaCha20: the ServerHello comes in the clear
+PASS  then the compatibility change_cipher_spec, for the client's session id
+PASS  the flight opens, its P-256 CertificateVerify verifies, and so does its Finished
+PASS  its change_cipher_spec, Finished and first data in one write, echoed
+PASS  a writable socket with nothing to send: the connection only wants to read
+PASS  two hundred echoes come back intact
+PASS  and the server's calls moved the arena not at all (0 bytes)
+PASS  the client's KeyUpdate asking for one is answered under the server's old keys
+PASS  and data under the client's next keys is echoed under the server's
+PASS  the program asks for a KeyUpdate of its own, wanting one back
+PASS  it arrives asking
+PASS  both sides move on, and the echo follows
+PASS  the last record the key may protect
+PASS  the next is preceded by the writer's own KeyUpdate
+PASS  and comes under the next key
+PASS  the program shuts the connection down
+PASS  the client reads the server's close_notify
+PASS  and, once it is done, the program closes the socket
+PASS  a third client at once for two slots is accepted and shed
+PASS  the first two hold both slots, the first reused
+PASS  two clients that hang up without a word are closed: the stream was cut short
+PASS  a client that resets the connection mid-handshake is closed
+PASS  as a socket failure, not as a cut stream, and with nothing sent
+PASS  every connection was accepted into a slot but the one shed
+PASS  each accept copied the key into its slot and wiped the one buffer the program refills
+PASS  two pending handshakes whose randoms the program drew into one buffer each send their own (the slot keeps a copy)
+PASS  and both are closed when their clients hang up
+PASS  a random of 31 bytes is refused with -22 before any connection is taken, and both arrays are left as they were
+PASS  so is a key of 33 bytes, which stays unwiped
+PASS  a slot that holds nothing: done to every call, -22 to reads, writes and key updates, no descriptor
+PASS  and signing on one answers done
+PASS  closing it does nothing; a slot out of range names the first
+PASS  with nothing gone wrong in the loop
+PASS  a pool of no slots has one; accept on a descriptor that is not a socket answers tcpAccept's -9
+PASS  a key that is not a P-256 key: the ServerHello goes out
+PASS  then internal_error, under the handshake keys like everything after the ServerHello
+PASS  and the connection is closed
+PASS  with nothing gone wrong in the loop
+tls over tcp: 47 passed, 0 failed, 0 skipped
