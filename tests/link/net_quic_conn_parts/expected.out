@@ -75,5 +75,7 @@ PASS  an ID that arrives already below Retire Prior To is retired at once
 PASS  and queued
 PASS  four queued retirements, twice the limit, are allowed
 PASS  a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)
-PASS  prune leaves the newest active
-quic connection parts: 78 passed, 0 failed, 0 skipped
+PASS  and the refused frame leaves the table within its bounds
+PASS  with the ID sent to unchanged
+PASS  prune leaves it as it was
+quic connection parts: 80 passed, 0 failed, 0 skipped

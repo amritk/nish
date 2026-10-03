@@ -291,13 +291,17 @@ const partsCidChecks = (t: Suite): void => {
   moving.addPeer(n64(4), n64(4), fromHex("e4"), tok);
   moving.addPeer(n64(5), n64(5), fromHex("e5"), tok);
   t.eqI64("four queued retirements, twice the limit, are allowed", moving.addPeer(n64(6), n64(6), fromHex("e6"), tok), QUIC_ERROR_NO_ERROR);
+  const before: string = toHex(moving.currentPeer());
+  const owed: i32 = toI32(moving.retirePending.length);
   t.eqI64(
     "a fifth is CONNECTION_ID_LIMIT_ERROR (RFC 9000 §5.1.2)",
     moving.addPeer(n64(7), n64(7), fromHex("e7"), tok),
     QUIC_ERROR_CONNECTION_ID_LIMIT
   );
+  t.ok("and the refused frame leaves the table within its bounds", toI64(moving.activePeer()) <= n64(2) && toI32(moving.retirePending.length) === owed);
+  t.eqStr("with the ID sent to unchanged", toHex(moving.currentPeer()), before);
   moving.prune();
-  t.eqStr("prune leaves the newest active", toHex(moving.currentPeer()), "e7");
+  t.eqStr("prune leaves it as it was", toHex(moving.currentPeer()), "e6");
 };
 
 /** Runs every check and answers the exit code. */

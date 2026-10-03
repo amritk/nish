@@ -150,8 +150,9 @@ export class QuicCidTable {
    * `QUIC_ERROR_PROTOCOL_VIOLATION` for a sequence number reused with another
    * ID or token or an ID reused under another sequence number, or
    * `QUIC_ERROR_CONNECTION_ID_LIMIT` when the active IDs or the queued
-   * retirements pass what §5.1 allows. The tokens are compared in constant
-   * time, since a token is what a stateless reset is checked against.
+   * retirements would pass what §5.1 allows, in which case the table is left
+   * as it was. The tokens are compared in constant time, since a token is
+   * what a stateless reset is checked against.
    */
   addPeer(sequence: i64, retirePriorTo: i64, cid: u8[], resetToken: u8[]): i64 {
     for (const entry of this.peer) {
@@ -167,23 +168,32 @@ export class QuicCidTable {
         return QUIC_ERROR_PROTOCOL_VIOLATION
       }
     }
-    const entry: QuicCidEntry = new QuicCidEntry(sequence, cid, resetToken)
-    this.peer.push(entry)
-    if (retirePriorTo > this.peerRetirePriorTo) {
-      this.peerRetirePriorTo = retirePriorTo
+    // Count what the frame would leave before changing anything, so a frame
+    // refused for a limit leaves the table as it was.
+    const priorTo: i64 = retirePriorTo > this.peerRetirePriorTo ? retirePriorTo : this.peerRetirePriorTo
+    let active: i64 = sequence < priorTo ? 0 : 1
+    let pending: i64 = toI64(toI32(this.retirePending.length)) + (sequence < priorTo ? 1 : 0)
+    for (const old of this.peer) {
+      if (old.sequence < priorTo) {
+        pending += 1
+      } else {
+        active += 1
+      }
     }
+    if (active > this.limit || pending > this.limit * 2) {
+      return QUIC_ERROR_CONNECTION_ID_LIMIT
+    }
+    this.peer.push(new QuicCidEntry(sequence, cid, resetToken))
+    this.peerRetirePriorTo = priorTo
     // §19.15: an ID already below Retire Prior To is retired as it arrives,
     // and every older one with it.
     for (const old of this.peer) {
-      if (!old.retired && old.sequence < this.peerRetirePriorTo) {
+      if (!old.retired && old.sequence < priorTo) {
         old.retired = true
         this.retirePending.push(old.sequence)
       }
     }
     this.prune()
-    if (toI64(this.activePeer()) > this.limit || toI64(toI32(this.retirePending.length)) > this.limit * 2) {
-      return QUIC_ERROR_CONNECTION_ID_LIMIT
-    }
     return QUIC_ERROR_NO_ERROR
   }
 
