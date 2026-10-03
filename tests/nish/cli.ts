@@ -94,6 +94,7 @@ const advertisedFlags = (): string[] => [
   "--emit-dts",
   "--emit-napi",
   "--emit-napi-async",
+  "--emit-panics",
   "--target",
   "--profile",
   "--warn-portability",
@@ -726,6 +727,32 @@ const checkDumps = (t: Suite, cli: Cli): void => {
   t.eqI32("--emit-checked exits 0", checked.status, 0);
   t.contains("and names the module it dumped", checked.stdout, FIXTURE_OK);
   t.eqBool("and writes no IR either", readFileSyncOrNull(irPath) === null, true);
+};
+
+/**
+ * `--emit-panics <file.json>`: the panic sites, written beside the IR with the
+ * same `wrote` line on stderr, stdout untouched, and not one byte of the IR
+ * changed by asking. What the file says about each kind is the goldens'
+ * (`tests/cases/panics_*.panics`); what is asked here is the shape a reader
+ * keys on, and the usage error a missing path is.
+ */
+const checkPanicSites = (t: Suite, cli: Cli): void => {
+  const source = `${WORK}/${FIXTURE_OK}`;
+  const irPath = `${WORK}/panics.ll`;
+  const listPath = `${WORK}/panics.json`;
+  const run = cli.plain("emit_panics", [source, "-o", irPath, "--emit-panics", listPath]);
+  if (!t.eqI32("--emit-panics exits 0", run.status, 0)) {
+    return;
+  }
+  t.eqStr("and leaves stdout empty", trim(run.stdout), "");
+  t.contains("and says on stderr where it wrote the sites", run.stderr, listPath);
+  const list = readOrEmpty(listPath);
+  t.eqBool('and the file is one `{"functions":[...]}` object', list.startsWith('{"functions":['), true);
+  t.contains("which lists the entry's `main` with its sites", list, '"name":"main","symbol":');
+  t.eqStr("and the IR is the bytes a compile without it writes", readOrEmpty(irPath), readOrEmpty(`${WORK}/ok.ll`));
+
+  const noValue = cli.plain("emit_panics_no_value", [source, "--emit-panics"]);
+  t.eqI32("--emit-panics with no file exits 2", noValue.status, 2);
 };
 
 /** An input that cannot be read: band 1, and an object under `--json` like any other failure. */
@@ -1400,6 +1427,7 @@ export const main = (): number => {
   checkDeprecationObjects(t, cli);
   checkFixField(t, cli);
   checkDumps(t, cli);
+  checkPanicSites(t, cli);
   checkCapabilities(t, cli, env);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);

@@ -132,6 +132,16 @@ export const f32Hex = (value: f64): string => f64Hex(toF64(toF32(value)))
  */
 export const jsonQuote = (s: string): string => {
   const out = new StringBuilder()
+  addJsonQuoted(out, s)
+  return out.toText()
+}
+
+/**
+ * `jsonQuote(s)` written straight into `out`, for a writer that quotes in a
+ * loop: the quoted copy would be one more arena string per pass, which a
+ * loop cannot release (NL9011).
+ */
+export const addJsonQuoted = (out: StringBuilder, s: string): void => {
   out.addChar(34)
   let i = 0
   while (i < s.length) {
@@ -160,7 +170,6 @@ export const jsonQuote = (s: string): string => {
     i = i + 1
   }
   out.addChar(34)
-  return out.toText()
 }
 
 /**

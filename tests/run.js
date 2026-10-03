@@ -46,6 +46,7 @@ import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typechec
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { panicOracle } from "./panics-oracle.js"
 import {
   packageRootOf,
   selfCheckNotes,
@@ -620,7 +621,7 @@ const runCase = async (name) => {
     steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
   const r = await spawnAsync(NISH, [src, "-o", outLl, ...args], { cwd: root })
-  const done = { compiled: r, steps }
+  const done = { compiled: r, steps, panicFunctions: 0 }
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("err"))) {
@@ -745,6 +746,43 @@ const runCase = async (name) => {
     expect(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr))
   }
 
+  // `--emit-panics`: every golden compiles a second time with the flag, which
+  // must change no byte of the IR, and the sites it writes are held against
+  // that IR (`tests/panics-oracle.js`). A `<name>.panics` file is the golden
+  // of the list itself, paths taken back to the repository's. The flag is not
+  // written into `.args`, for the reason `.portability`'s is not: the tools
+  // that compile `tests/cases/` with the last release would refuse it.
+  const panicsLl = path.join(buildDir, `${name}.panics.ll`)
+  const panicsFile = path.join(buildDir, `${name}.panics.json`)
+  const listed = await spawnAsync(NISH, [src, "-o", panicsLl, ...args, "--emit-panics", panicsFile], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const listedIr = fs.existsSync(panicsLl) ? fs.readFileSync(panicsLl, "utf8") : null
+  const listText = fs.existsSync(panicsFile) ? fs.readFileSync(panicsFile, "utf8") : null
+  if (listed.status !== 0 || listedIr === null || listText === null) {
+    expect(`${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+  } else {
+    // The case is the program's only module that writes a `.ll`, so every
+    // function of its own must be found in it (`panicOracle`'s `module`).
+    const oracle = panicOracle(listedIr, JSON.parse(listText), src)
+    done.panicFunctions = oracle.checked
+    expect(
+      `${name}: --emit-panics changes no byte of the IR, and agrees with it`,
+      listedIr === fs.readFileSync(outLl, "utf8") && oracle.failures.length === 0,
+      oracle.failures.length > 0 ? oracle.failures.join("\n") : "the two .ll files differ"
+    )
+    if (fs.existsSync(side("panics"))) {
+      const want = fs.readFileSync(side("panics"), "utf8").trim()
+      const got = listText.split(`${root}/`).join("").trim()
+      expect(
+        `${name}: --emit-panics matches .panics`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
+  }
+
   if (fs.existsSync(side("out"))) {
     const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
@@ -821,6 +859,63 @@ await pool(selectedCases, defaultJobs(), async (name, at) => {
 })
 /** Each selected case's own compile, in corpus order, for the checks below that read it again. */
 const caseResults = caseRuns.map((run) => run.compiled)
+
+// The oracle is only as good as its reading of the IR, so it is handed each
+// panic path it claims to recognise, in a function listed as clean, and must
+// refuse every one; and the same function with an unproven site, which it
+// must leave alone.
+{
+  const fn = (panics) => ({ functions: [{ name: "f", symbol: "f", module: "m.ts", panics }] })
+  const clean = fn([{ kind: "oom" }, { kind: "index", proven: true }])
+  const unproven = fn([{ kind: "index", proven: false }])
+  const define = (lines) => ["define internal i32 @f(i32 %x) {", ...lines, "  ret i32 0", "}"].join("\n")
+  const paths = [
+    "  call void @nish_panic_index(i64 %0, i64 %1)",
+    "  call void @nish_panic_slice(i64 %0, i64 %1, i64 %2)",
+    "  call void @nish_panic_div(i1 zeroext %0)",
+    "  %1 = call i8* @nish_read_file(i8* %0)",
+    "  call void @nish_write_file(i8* %0, i8* %1)",
+    "  call void @nish_append_file(i8* %0, i8* %1)",
+    "  call void @nish_random_fill(%struct.nish_array* %0)",
+    "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
+  ]
+  const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
+  const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
+  const quiet = [
+    "  call void @nish_write(i8* %0, i32 2, i1 false)",
+    "  %1 = call i8* @nish_read_file_or_null(i8* %0)",
+    "  call void @nish_exit(i32 %0)",
+  ].filter((line) => panicOracle(define([line]), clean, null).failures.length > 0)
+  check(
+    "--emit-panics: the IR oracle refuses each panic path in a clean function, and nothing else",
+    missed.length === 0 && flagged.length === 0 && quiet.length === 0,
+    `missed: ${missed.join(" | ")}\nflagged despite a site: ${flagged.join(" | ")}\nnot a panic: ${quiet.join(" | ")}`
+  )
+  // A listed function the IR does not define: a failure for the module whose
+  // IR is in hand, whatever its sites, and skipped for one of another module;
+  // and the count of the module's own functions the link check asserts on.
+  const absent = define([]).replace("@f(", "@g(")
+  const own = [clean, unproven].map((report) => panicOracle(absent, report, "m.ts").failures.length)
+  const other = [clean, unproven].map((report) => panicOracle(absent, report, "other.ts").failures.length)
+  const counted = [panicOracle(absent, clean, "m.ts").own, panicOracle(absent, clean, "other.ts").own]
+  check(
+    "--emit-panics: the IR oracle fails a listed function its own module's IR does not define",
+    own.every((n) => n === 1) && other.every((n) => n === 0) && counted[0] === 1 && counted[1] === 0,
+    `failures for the module's own function: ${own.join(", ")}; for another module's: ${other.join(", ")}; own counted: ${counted.join(", ")}`
+  )
+}
+
+// The oracle above passes vacuously on a function it never finds, so the run
+// says how many it read: every golden with a clean function contributes, and
+// a symbol spelling the oracle stopped recognising would take this to zero.
+if (only === undefined) {
+  const read = caseRuns.reduce((sum, run) => sum + run.panicFunctions, 0)
+  check(
+    `--emit-panics: the IR oracle read ${read} functions with nothing left that can panic`,
+    read >= 500,
+    "fewer than 500: the oracle is no longer finding the functions it is handed"
+  )
+}
 
 // ---- Programs the world answers, built and run by the blocks below -----------------
 
@@ -3592,6 +3687,50 @@ for (const name of linkTests) {
       missing.length === 0,
       missing.map((l) => `missing: ${l}`).join("\n")
     )
+  }
+
+  // `--emit-panics` over the whole program, std/ and dependency modules
+  // included, held against the IR of every module the same compile wrote
+  // (`tests/panics-oracle.js`), and against `expected.panics` where the
+  // program has one. Without `--link`, so the program is not linked twice:
+  // the list and the IR come from one compile, which is all the oracle needs.
+  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+  fs.rmSync(panicsDir, { recursive: true, force: true })
+  const panicsFile = path.join(panicsDir, "panics.json")
+  const listed = spawnSync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
+    check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+  } else {
+    const listText = fs.readFileSync(panicsFile, "utf8")
+    const ir = fs
+      .readdirSync(panicsDir)
+      .filter((f) => f.endsWith(".ll"))
+      .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
+      .join("\n")
+    // The entry is named by the path it was given, `side("main.ts")`, and its
+    // `.ll` is among those joined above, so its own functions are held to the
+    // drift check too; a module of a library that writes no `.ll` of its own
+    // stays skipped (`panicOracle`'s `module`).
+    const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
+    check(
+      `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
+      oracle.failures.length === 0 && oracle.own > 0,
+      oracle.own > 0
+        ? oracle.failures.join("\n")
+        : `no listed function names ${side("main.ts")} as its module`
+    )
+    if (fs.existsSync(side("expected.panics"))) {
+      const want = read("expected.panics").trim()
+      const got = listText.split(`${root}/`).join("").trim()
+      check(
+        `link/${name}: --emit-panics matches expected.panics`,
+        got === want,
+        `--- expected\n${want}\n--- actual\n${got}`
+      )
+    }
   }
 
   if (capsArgs.length > 0) {
@@ -11111,6 +11250,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--emit-dts",
     "--emit-napi",
     "--emit-napi-async",
+    "--emit-panics",
     "--target",
     "--profile",
     "--warn-portability",
@@ -11449,6 +11589,41 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       shown(withFix)
     )
   }
+  // `--emit-panics` is the same kind of report: refused where the program is
+  // not checked (`--emit-ast`, `--fix`), and written beside `--emit-checked`'s
+  // dump rather than dropped by it (docs/LANGUAGE.md, "Panic sites").
+  const panicsSource = path.join(casesDir, "panics_index.ts")
+  for (const [flag, refusal] of [
+    ["--emit-ast", "`--emit-panics` reports on a checked program, and --emit-ast stops before the check"],
+    ["--fix", "`--emit-panics` cannot be used with --fix"],
+  ]) {
+    const file = path.join(capsDir, `panics${flag}.json`)
+    const refused = spawnSync(NISH, [panicsSource, flag, "--emit-panics", file], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `panic sites: --emit-panics with ${flag} is a usage error, exit 2, and writes nothing`,
+      refused.status === 2 &&
+        refused.stdout === "" &&
+        refused.stderr.includes(refusal) &&
+        !fs.existsSync(file),
+      shown(refused)
+    )
+  }
+  const panicsChecked = path.join(capsDir, "panics-checked.json")
+  const dumped = spawnSync(NISH, [panicsSource, "--emit-checked", "--emit-panics", panicsChecked], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "panic sites: --emit-checked with --emit-panics prints the dump and writes the sites",
+    dumped.status === 0 &&
+      dumped.stdout.includes("panics_index.ts") &&
+      fs.existsSync(panicsChecked) &&
+      fs.readFileSync(panicsChecked, "utf8").startsWith('{"functions":['),
+    shown(dumped)
+  )
   // `--emit-checked` does stop after it, and both are answered before the dump.
   const withChecked = spawnSync(
     NISH,
@@ -11724,6 +11899,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       ["--link", "x"],
       ["-o", "x.ll"],
       ["--emit-header", "x.h"],
+      ["--emit-panics", "x.json"],
       ["--emit-checked"],
       ["--target", "host"],
     ]) {

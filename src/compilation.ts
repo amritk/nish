@@ -67,6 +67,7 @@ import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
+import { panicsJson, resolvePanicSites } from "./panics"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -1143,6 +1144,12 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    // Every panic site, settled once the proofs above are committed and the
+    // fixpoint `reportArenaLoops` paid for has its call graph (`src/panics.ts`).
+    if (this.opts.recordsPanics()) {
+      const facts = this.analyze()
+      resolvePanicSites(this.analysisUnits, facts)
+    }
     if (this.opts.warnPortability) {
       this.reportPortability()
     }
@@ -1733,6 +1740,12 @@ export class Compilation {
     this.analysisUnits = units
     this.facts = facts
     return facts
+  }
+
+  /** The `--emit-panics` file, from the sites `check` settled (`panicsJson`). */
+  panicsText(): string {
+    const facts = this.analyze() // fills `analysisUnits` when nothing has yet
+    return panicsJson(this.analysisUnits, facts)
   }
 
   /** The directory `nish/<module>` resolves under: the package root, or the working directory without one. */
