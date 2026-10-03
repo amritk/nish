@@ -110,6 +110,7 @@ NL2297  the per-template cap (256 instantiations); provokable only by a program 
 NL2211  no import syntax produces a clause with neither a name nor named bindings
 NL2216  an internal invariant: the array method table is only reached for an array receiver
 NL2252  the `new` dispatch has a `*` fallback, so the table never misses and NL2245 answers instead
+NL2425  every callee the checker records has whole-program facts (a function, an instantiation, a lifted arrow, a `declare function`), so a `using arena()` block never calls one it cannot see; the refusal stays so that such a callee is never let through unexamined
 
 # --- Not a diagnostic: the generator collected text that never reaches a sink.
 # `console.error` in the driver and the `fail(...)` helper that writes the

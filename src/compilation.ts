@@ -49,7 +49,7 @@
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
-import { arenaLoopFindings } from "./escape"
+import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, SourceFile } from "./diagnostics"
@@ -1242,9 +1242,16 @@ export class Compilation {
    * WP29 P2: every scope is joined, because none can leave the block that
    * declares it (`scopeFindings`), and every task is one that may run beside
    * the others: the rules a data-parallel body is held to, less the ones about
-   * an element's arena, which a task does not share (`src/parallel.ts`).
+   * an element's arena, which a task does not share (`src/parallel.ts`). And
+   * nothing a `using a = arena()` block allocates outlives the block
+   * (`arenaBlockFindings`, escape.ts), which needs the same facts.
    */
   checkScopes(facts: FactsTable): void {
+    for (const unit of this.analysisUnits) {
+      for (const finding of arenaBlockFindings(unit, this.table, facts)) {
+        this.sink.report(unit.program.source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
     const programs: CheckedProgram[] = []
     for (const unit of this.modules) {
       programs.push(unit.checker.program)

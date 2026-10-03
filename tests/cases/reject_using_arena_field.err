@@ -1,0 +1,1 @@
+`` `box ${b.label.length}` `` may be allocated inside the `using arena()` block at 10:5 and is stored into a field of `b`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)

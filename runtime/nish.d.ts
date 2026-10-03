@@ -112,9 +112,10 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 /**
  * The disposable protocol `using` reads (WP29 P2, docs/wp29-thread-surface.md
- * §5): declared here so that a program using `nish/threads`'s scope needs no
- * `"ESNext.Disposable"` in its `lib`. `nish` itself takes `using` only for a
- * `scope()`, and `[Symbol.dispose]` only in `nish/threads`.
+ * §5): declared here so that a program using `nish/threads`'s scope or
+ * `arena()` needs no `"ESNext.Disposable"` in its `lib`. `nish` itself takes
+ * `using` only for a `scope()` or an `arena()`, and `[Symbol.dispose]` only in
+ * `nish/threads`.
  */
 interface SymbolConstructor {
   readonly dispose: unique symbol;
@@ -489,6 +490,15 @@ declare const Arena: {
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };
+
+/**
+ * `using a = arena()` (docs/LANGUAGE.md -> Arena): everything the block
+ * allocates after this declaration is released when the block ends, on every
+ * exit, and the compiler refuses the block if anything allocated in it could
+ * outlive it. Only a `using` initialiser, and the binding is never read; under
+ * Node there is no arena and the disposal does nothing.
+ */
+declare function arena(): Disposable;
 
 /**
  * `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and
