@@ -1377,12 +1377,38 @@ if (!only || "net_dual_stack".includes(only)) {
   fs.rmSync(netDir, { recursive: true, force: true })
   fs.mkdirSync(netDir, { recursive: true })
 
-  // Why this host cannot listen on IPv6's loopback, or null when it can.
-  const noIpv6 = await new Promise((resolve) => {
+  // What a failed listen on ::1 means. Only two codes say the host has no IPv6
+  // loopback: EAFNOSUPPORT, a kernel without IPv6, and EADDRNOTAVAIL, IPv6
+  // without ::1 on lo (`disable_ipv6`). Any other code (EMFILE, EACCES,
+  // ENOBUFS, ...) is a fault on a host that may well have IPv6, so it fails
+  // the check rather than passing it as not applicable.
+  const ipv6Verdict = (code) => {
+    if (code === null) {
+      return "run"
+    }
+    return code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL" ? "absent" : "fault"
+  }
+  const verdicts = {
+    EAFNOSUPPORT: "absent",
+    EADDRNOTAVAIL: "absent",
+    EMFILE: "fault",
+    EACCES: "fault",
+    ENOBUFS: "fault",
+  }
+  const wrong = Object.keys(verdicts).filter((code) => ipv6Verdict(code) !== verdicts[code])
+  check(
+    "net_dual_stack: the IPv6 probe passes only EAFNOSUPPORT and EADDRNOTAVAIL as a host without IPv6, and fails EMFILE, EACCES and ENOBUFS",
+    wrong.length === 0 && ipv6Verdict(null) === "run",
+    `misjudged: ${wrong.map((code) => `${code} as ${ipv6Verdict(code)}`).join(", ")}`
+  )
+
+  // The code a listen on ::1 fails with here, or null when it succeeds.
+  const probeCode = await new Promise((resolve) => {
     const probe = net.createServer()
-    probe.once("error", (e) => resolve(`listening on ::1 answers ${e.code}`))
+    probe.once("error", (e) => resolve(String(e.code)))
     probe.listen(0, "::1", () => probe.close(() => resolve(null)))
   })
+  const ipv6 = ipv6Verdict(probeCode)
 
   // One connection to `host` that sends a line and waits for it back, then ends
   // its side; its local port, which the program must report, and whether the
@@ -1410,11 +1436,21 @@ if (!only || "net_dual_stack".includes(only)) {
     })
 
   const dualExe = buildCaseIn(netDir, "net_dual_stack")
-  if (noIpv6 !== null) {
-    console.log(
-      `      net_dual_stack does not run here: ${noIpv6}, so "::" is IPv4's 0.0.0.0 on this host (docs/LANGUAGE.md); CI's ubuntu-latest has IPv6 and runs it`
+  if (ipv6 === "fault") {
+    check(
+      `net_dual_stack: listening on ::1 answers ${probeCode}, which is a fault rather than a host without IPv6`,
+      false,
+      "only EAFNOSUPPORT and EADDRNOTAVAIL mean there is no IPv6 loopback to test"
     )
-    check(`net_dual_stack: not applicable on a host without IPv6 (${noIpv6})`, true, "")
+  } else if (ipv6 === "absent") {
+    console.log(
+      `      net_dual_stack does not run here: listening on ::1 answers ${probeCode}, so "::" is IPv4's 0.0.0.0 on this host (docs/LANGUAGE.md); CI's ubuntu-latest has IPv6 and runs it`
+    )
+    check(
+      `net_dual_stack: not applicable on a host without IPv6 (listening on ::1 answers ${probeCode})`,
+      true,
+      ""
+    )
   } else if (dualExe !== null) {
     const r = await runWithPort(dualExe, [], async (port) => [
       await talkOver(port, "127.0.0.1"),
