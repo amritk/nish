@@ -307,9 +307,23 @@ const closeChecks = (t: Suite): void => {
   t.eqI64("and the application cannot close it again", appClosed.error, n64(42));
 
   const released: QuicConnection = qcServer(qcDefaultConfig());
-  qcConnected(released, n64(65536));
+  const rc: QcClient = qcConnected(released, n64(65536));
+  const token: u8[] = fromHex("000102030405060708090a0b0c0d0e0f");
+  const fromClient: u8[] = [];
+  quicPushNewConnectionId(fromClient, n64(1), n64(0), fromHex("d1d2"), token);
+  qcExchange(released, rc, qcShort(rc, fromClient));
   const keys = released.application.writeKeys;
   const key: u8[] = keys === null ? fromHex("ff") : keys.key;
+  const tlsAtRelease = released.tls;
+  const finished: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.expectedClientFinished;
+  const params: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.config.quicTransportParameters;
+  const tokens: u8[][] = [];
+  for (const entry of released.cids.local) {
+    tokens.push(entry.resetToken);
+  }
+  for (const entry of released.cids.peer) {
+    tokens.push(entry.resetToken);
+  }
   released.release();
   t.ok("release() discards the 1-RTT keys", released.application.discarded && released.application.writeKeys === null);
   let zero: boolean = toI32(key.length) > 0;
@@ -317,6 +331,21 @@ const closeChecks = (t: Suite): void => {
     zero = zero && toI32(b) === 0;
   }
   t.ok("wiping the key bytes", zero);
+  let tokensZero: boolean = toI32(tokens.length) === 6;
+  for (const tk of tokens) {
+    for (const b of tk) {
+      tokensZero = tokensZero && toI32(b) === 0;
+    }
+  }
+  t.ok("and both sides' stateless reset tokens, four issued and the client's one beside its first ID", tokensZero);
+  let tlsZero: boolean = toI32(finished.length) === 32 && toI32(params.length) > 0;
+  for (const b of finished) {
+    tlsZero = tlsZero && toI32(b) === 0;
+  }
+  for (const b of params) {
+    tlsZero = tlsZero && toI32(b) === 0;
+  }
+  t.ok("and TLS's expected client Finished and the encoded transport parameters, which carry a token", tlsZero);
   t.ok("and the connection sends nothing more", released.state === QUIC_STATE_CLOSING && released.takeDatagram(QC_T0) === null);
 };
 

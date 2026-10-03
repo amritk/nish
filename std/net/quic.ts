@@ -2058,7 +2058,8 @@ export class QuicConnection {
   /**
    * Wipes everything secret the connection and its `TlsServer` still hold:
    * every level's packet keys, the next generation's read keys, the traffic
-   * secrets, the ephemeral key and the connection-ID seed (QUIC-2). Call it when the connection is done with;
+   * secrets and expected client Finished, the ephemeral key, the
+   * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when the connection is done with;
    * the connection is closed after it and sends nothing more.
    */
   release(): void {
@@ -2070,7 +2071,11 @@ export class QuicConnection {
     this.closeSent = true
   }
 
-  /** Wipes every key and secret the connection holds and discards every level: `release()`'s work, and the idle timeout's. */
+  /**
+   * Wipes every key and secret the connection holds and discards every
+   * level: `release()`'s work, and the idle timeout's. That takes in both
+   * sides' stateless reset tokens and `TlsServer`'s expected client Finished.
+   */
   wipeAll(): void {
     this.discard(this.initial)
     this.discard(this.handshake)
@@ -2084,8 +2089,20 @@ export class QuicConnection {
     secureZero(this.nextReadSecret)
     secureZero(this.cidSeed)
     secureZero(this.ephemeralPrivate)
+    // The stateless reset tokens of both sides' IDs: either one ends the
+    // connection for whoever learns it (RFC 9000 §10.3).
+    for (const entry of this.cids.local) {
+      secureZero(entry.resetToken)
+    }
+    for (const entry of this.cids.peer) {
+      secureZero(entry.resetToken)
+    }
+    secureZero(this.peerParameters.statelessResetToken)
     const tls: TlsServer | null = this.tls
     if (tls !== null) {
+      // The server's encoded transport parameters carry its first ID's token.
+      secureZero(tls.config.quicTransportParameters)
+      secureZero(tls.expectedClientFinished)
       secureZero(tls.handshakeSecret)
       secureZero(tls.clientHandshakeSecret)
       secureZero(tls.serverHandshakeSecret)

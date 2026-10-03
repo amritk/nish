@@ -92,6 +92,8 @@ PASS  an application close from the client drains too, keeping its code
 PASS  and the application cannot close it again
 PASS  release() discards the 1-RTT keys
 PASS  wiping the key bytes
+PASS  and both sides' stateless reset tokens, four issued and the client's one beside its first ID
+PASS  and TLS's expected client Finished and the encoded transport parameters, which carry a token
 PASS  and the connection sends nothing more
 PASS  a first Initial in a datagram under 1200 bytes
 PASS  is dropped, and the connection still waits
@@ -199,4 +201,4 @@ PASS  closed in an Initial and a Handshake packet
 PASS  each naming the frame
 PASS  while TLS waits for the signature nothing is sent
 PASS  an empty signature fails TLS with internal_error
-quic connection: 201 passed, 0 failed, 0 skipped
+quic connection: 203 passed, 0 failed, 0 skipped
